@@ -27,7 +27,11 @@ RUN uv pip install --system -e .
 # Copy application code
 COPY . .
 
-# Default concurrency (can be overridden via env var)
-ENV CELERY_CONCURRENCY=2
+# Environment variables
+ENV WORKER_CONCURRENCY=2
+ENV WORKER_POLL_INTERVAL=2.0
+ENV LOG_LEVEL=INFO
 
-CMD ["celery", "-A", "core.celery_app", "worker", "--loglevel=info"]
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

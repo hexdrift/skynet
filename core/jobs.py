@@ -1,3 +1,8 @@
+"""Job storage backends for DSPy optimization service.
+
+Provides RemoteDBJobStore for persisting job state to a remote database API.
+"""
+
 import json
 import os
 from dataclasses import dataclass, field
@@ -5,8 +10,6 @@ from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Dict, List, Optional, Protocol
 from uuid import uuid4
-
-import redis
 
 from .constants import (
     JOB_SUCCESS_MESSAGE,
@@ -30,7 +33,6 @@ MAX_LOG_ENTRIES = 5000
 
 def _utcnow() -> datetime:
     """Return a timezone-aware UTC timestamp."""
-
     return datetime.now(timezone.utc)
 
 
@@ -52,28 +54,12 @@ class JobRecord:
     payload_overview: Dict[str, Any] = field(default_factory=dict)
 
     def seconds_elapsed(self) -> float:
-        """Return elapsed seconds since job creation.
-
-        Args:
-            None.
-
-        Returns:
-            float: Elapsed seconds using completion timestamp when available.
-        """
-
+        """Return elapsed seconds since job creation."""
         end_time = self.completed_at or _utcnow()
         return max(0.0, (end_time - self.created_at).total_seconds())
 
     def seconds_remaining(self) -> Optional[float]:
-        """Return estimated seconds remaining based on simple heuristics.
-
-        Args:
-            None.
-
-        Returns:
-            Optional[float]: Seconds remaining when an estimate exists.
-        """
-
+        """Return estimated seconds remaining based on simple heuristics."""
         if self.estimated_total_seconds is None:
             return None
         elapsed = self.seconds_elapsed()
@@ -81,33 +67,21 @@ class JobRecord:
 
 
 class JobManager:
-    """In-memory registry for background optimization jobs."""
+    """In-memory registry for background optimization jobs.
+
+    Simple in-memory job storage. Useful for development/testing.
+    Data is lost on restart.
+    """
 
     def __init__(self) -> None:
-        """Initialize the job store.
-
-        Args:
-            None.
-
-        Returns:
-            None
-        """
-
+        """Initialize the job store."""
         self._records: Dict[str, JobRecord] = {}
         self._lock = Lock()
         self._max_progress_events = MAX_PROGRESS_EVENTS
         self._max_log_entries = MAX_LOG_ENTRIES
 
     def create_job(self, estimated_total_seconds: Optional[float]) -> JobRecord:
-        """Create a new job record and return it.
-
-        Args:
-            estimated_total_seconds: Optional wall-clock estimate for completion.
-
-        Returns:
-            JobRecord: Newly tracked job.
-        """
-
+        """Create a new job record and return it."""
         job_id = str(uuid4())
         record = JobRecord(job_id=job_id, estimated_total_seconds=estimated_total_seconds)
         with self._lock:
@@ -115,59 +89,23 @@ class JobManager:
         return record
 
     def get_job(self, job_id: str) -> JobRecord:
-        """Fetch a job record by identifier.
-
-        Args:
-            job_id: Job identifier returned by the submission endpoint.
-
-        Returns:
-            JobRecord: Stored job.
-
-        Raises:
-            KeyError: If the identifier does not exist.
-        """
-
+        """Fetch a job record by identifier."""
         with self._lock:
             return self._records[job_id]
 
     def mark_validating(self, job_id: str) -> None:
-        """Mark the job as validating user inputs.
-
-        Args:
-            job_id: Identifier to update.
-
-        Returns:
-            None
-        """
-
+        """Mark the job as validating user inputs."""
         self._update_status(job_id, JobStatus.validating)
 
     def mark_running(self, job_id: str) -> None:
-        """Mark the job as running optimization logic.
-
-        Args:
-            job_id: Identifier to update.
-
-        Returns:
-            None
-        """
-
+        """Mark the job as running optimization logic."""
         with self._lock:
             record = self._records[job_id]
             record.status = JobStatus.running
             record.started_at = record.started_at or _utcnow()
 
     def mark_succeeded(self, job_id: str, result: RunResponse) -> None:
-        """Mark the job as completed successfully.
-
-        Args:
-            job_id: Identifier to update.
-            result: Final optimization response.
-
-        Returns:
-            None
-        """
-
+        """Mark the job as completed successfully."""
         with self._lock:
             record = self._records[job_id]
             record.status = JobStatus.success
@@ -178,16 +116,7 @@ class JobManager:
             result.run_log = [JobLogEntry(**entry) for entry in record.logs]
 
     def mark_failed(self, job_id: str, message: str) -> None:
-        """Mark the job as failed.
-
-        Args:
-            job_id: Identifier to update.
-            message: Human-readable error description.
-
-        Returns:
-            None
-        """
-
+        """Mark the job as failed."""
         with self._lock:
             record = self._records[job_id]
             record.status = JobStatus.failed
@@ -202,18 +131,7 @@ class JobManager:
         *,
         update_job_message: bool = True,
     ) -> None:
-        """Record intermediate progress for a running job.
-
-        Args:
-            job_id: Identifier to update.
-            message: Optional status message describing the progress event.
-            metrics: Arbitrary metric payload.
-            update_job_message: Whether to update the job's top-level message.
-
-        Returns:
-            None
-        """
-
+        """Record intermediate progress for a running job."""
         event_payload = {
             "timestamp": _utcnow(),
             "event": message,
@@ -239,19 +157,7 @@ class JobManager:
         message: str,
         timestamp: Optional[datetime] = None,
     ) -> None:
-        """Append a log entry for the job.
-
-        Args:
-            job_id: Identifier of the job receiving the log entry.
-            level: Log level string (e.g., INFO, ERROR).
-            logger_name: Fully qualified logger name of the emitter.
-            message: Rendered log message.
-            timestamp: Optional explicit timestamp; defaults to ``datetime.now(timezone.utc)``.
-
-        Returns:
-            None
-        """
-
+        """Append a log entry for the job."""
         entry = {
             "timestamp": timestamp or _utcnow(),
             "level": level,
@@ -267,16 +173,7 @@ class JobManager:
                 record.logs.pop(0)
 
     def set_payload_overview(self, job_id: str, overview: Dict[str, Any]) -> None:
-        """Persist lightweight metadata about the submitted payload.
-
-        Args:
-            job_id: Identifier of the job being updated.
-            overview: Dictionary containing summarized request attributes.
-
-        Returns:
-            None
-        """
-
+        """Persist lightweight metadata about the submitted payload."""
         with self._lock:
             record = self._records.get(job_id)
             if record is None:
@@ -284,29 +181,13 @@ class JobManager:
             record.payload_overview = dict(overview or {})
 
     def snapshot_logs(self, job_id: str) -> List[Dict[str, Any]]:
-        """Return a chronological copy of the accumulated logs.
-
-        Args:
-            job_id: Identifier of the job to inspect.
-
-        Returns:
-            List[Dict[str, Any]]: Copy of stored log dictionaries ordered by time.
-        """
-
+        """Return a chronological copy of the accumulated logs."""
         with self._lock:
             record = self._records[job_id]
             return list(record.logs)
 
     def build_summary(self, job_id: str) -> Dict[str, Any]:
-        """Produce an aggregated summary for the requested job.
-
-        Args:
-            job_id: Identifier of the job to summarize.
-
-        Returns:
-            Dict[str, Any]: Serializable summary payload consumed by API responses.
-        """
-
+        """Produce an aggregated summary for the requested job."""
         with self._lock:
             record = self._records[job_id]
             overview = dict(record.payload_overview)
@@ -332,32 +213,14 @@ class JobManager:
             return summary
 
     def _update_status(self, job_id: str, status: JobStatus) -> None:
-        """Set the status for a job without touching other fields.
-
-        Args:
-            job_id: Identifier to update.
-            status: New job status.
-
-        Returns:
-            None
-        """
-
+        """Set the status for a job without touching other fields."""
         with self._lock:
             record = self._records[job_id]
             record.status = status
 
     @staticmethod
     def _update_estimate(record: JobRecord, metrics: Dict[str, Any]) -> None:
-        """Recompute the estimated duration using tqdm metrics when available.
-
-        Args:
-            record: Job record to update.
-            metrics: Progress metrics emitted by DSPy optimizers.
-
-        Returns:
-            None
-        """
-
+        """Recompute the estimated duration using tqdm metrics when available."""
         total = metrics.get(TQDM_TOTAL_KEY)
         current = metrics.get(TQDM_N_KEY)
         elapsed = metrics.get(TQDM_ELAPSED_KEY)
@@ -399,67 +262,194 @@ class JobStoreProtocol(Protocol):
         ...
 
 
-class RedisJobStore:
-    """Redis-backed job storage for distributed task tracking.
+class RemoteDBJobStore:
+    """Remote database-backed job storage via API.
 
-    This store persists job state to Redis, enabling:
-    - Job state persistence across restarts
-    - Distributed access from multiple workers
-    - Real-time progress tracking
+    This store persists job state to a remote database service, enabling:
+    - Permanent job history and auditing
+    - Centralized storage across deployments
+    - Custom data retention policies
+
+    Currently uses in-memory cache until you implement the _api_request method.
+
+    ============================================================================
+    TODO: IMPLEMENTATION GUIDE
+    ============================================================================
+
+    To connect to your remote DB API, you need to implement these methods using
+    your DB's `insert`, `update`, `query`, `delete` operations.
+
+    REQUIRED DB OPERATIONS:
+    ─────────────────────────────────────────────────────────────────────────────
+    | Method              | DB Operation | Table                | Filter        |
+    ─────────────────────────────────────────────────────────────────────────────
+    | create_job()        | insert       | jobs                 | -             |
+    | update_job()        | update       | jobs                 | job_id=X      |
+    | get_job()           | query        | jobs                 | job_id=X      |
+    | job_exists()        | query        | jobs                 | job_id=X      |
+    | delete_job()        | delete       | jobs                 | job_id=X      |
+    |                     | delete       | job_progress_events  | job_id=X      |
+    |                     | delete       | job_logs             | job_id=X      |
+    | record_progress()   | insert       | job_progress_events  | -             |
+    | get_progress_events | query        | job_progress_events  | job_id=X      |
+    | append_log()        | insert       | job_logs             | -             |
+    | get_logs()          | query        | job_logs             | job_id=X      |
+    | set_payload_overview| update       | jobs                 | job_id=X      |
+    ─────────────────────────────────────────────────────────────────────────────
+
+    EXPECTED DATA SCHEMAS:
+
+       Job:
+       {
+           "job_id": "uuid-string",
+           "status": "pending|validating|running|success|failed",
+           "created_at": "2024-01-01T00:00:00Z",
+           "started_at": "2024-01-01T00:00:00Z" | null,
+           "completed_at": "2024-01-01T00:00:00Z" | null,
+           "message": "string" | null,
+           "latest_metrics": {...},
+           "result": {...} | null,
+           "payload_overview": {...},
+           "payload": {...}  # Full request payload for worker
+       }
+
+       Progress Event:
+       {
+           "timestamp": "2024-01-01T00:00:00Z",
+           "event": "string" | null,
+           "metrics": {...}
+       }
+
+       Log Entry:
+       {
+           "timestamp": "2024-01-01T00:00:00Z",
+           "level": "INFO|WARNING|ERROR",
+           "logger": "logger.name",
+           "message": "string"
+       }
+
+    4. Environment variables:
+       - REMOTE_DB_URL: Base URL for your API (e.g., "https://api.yourdb.com")
+       - REMOTE_DB_API_KEY: Optional authentication token
+
+    5. DATABASE SCHEMA (3 tables):
+
+       ┌─────────────────────────────────────────────────────────────────────┐
+       │ TABLE: jobs                                                         │
+       ├─────────────────────────────────────────────────────────────────────┤
+       │ job_id                  VARCHAR(36)   PRIMARY KEY                   │
+       │ status                  VARCHAR(20)   NOT NULL  -- pending/running/ │
+       │                                                 -- validating/      │
+       │                                                 -- success/failed   │
+       │ created_at              TIMESTAMP     NOT NULL                      │
+       │ started_at              TIMESTAMP     NULL                          │
+       │ completed_at            TIMESTAMP     NULL                          │
+       │ estimated_total_seconds FLOAT         NULL                          │
+       │ message                 TEXT          NULL                          │
+       │ latest_metrics          JSONB         DEFAULT '{}'                  │
+       │ result                  JSONB         NULL      -- optimization     │
+       │                                                 -- result when done │
+       │ payload_overview        JSONB         DEFAULT '{}'                  │
+       │ payload                 JSONB         NULL      -- full request     │
+       │                                                 -- for worker       │
+       └─────────────────────────────────────────────────────────────────────┘
+
+       ┌─────────────────────────────────────────────────────────────────────┐
+       │ TABLE: job_progress_events                                          │
+       ├─────────────────────────────────────────────────────────────────────┤
+       │ id                      SERIAL        PRIMARY KEY                   │
+       │ job_id                  VARCHAR(36)   NOT NULL  FK -> jobs.job_id   │
+       │ timestamp               TIMESTAMP     NOT NULL                      │
+       │ event                   VARCHAR(255)  NULL      -- event name       │
+       │ metrics                 JSONB         DEFAULT '{}'                  │
+       │                                                                     │
+       │ INDEX: idx_progress_job_id ON job_id                                │
+       └─────────────────────────────────────────────────────────────────────┘
+
+       ┌─────────────────────────────────────────────────────────────────────┐
+       │ TABLE: job_logs                                                     │
+       ├─────────────────────────────────────────────────────────────────────┤
+       │ id                      SERIAL        PRIMARY KEY                   │
+       │ job_id                  VARCHAR(36)   NOT NULL  FK -> jobs.job_id   │
+       │ timestamp               TIMESTAMP     NOT NULL                      │
+       │ level                   VARCHAR(20)   NOT NULL  -- INFO/WARNING/    │
+       │                                                 -- ERROR/DEBUG      │
+       │ logger                  VARCHAR(255)  NOT NULL  -- logger name      │
+       │ message                 TEXT          NOT NULL                      │
+       │                                                                     │
+       │ INDEX: idx_logs_job_id ON job_id                                    │
+       └─────────────────────────────────────────────────────────────────────┘
+
+       SQL CREATE STATEMENTS:
+
+       CREATE TABLE jobs (
+           job_id VARCHAR(36) PRIMARY KEY,
+           status VARCHAR(20) NOT NULL DEFAULT 'pending',
+           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           started_at TIMESTAMP,
+           completed_at TIMESTAMP,
+           estimated_total_seconds FLOAT,
+           message TEXT,
+           latest_metrics JSONB DEFAULT '{}',
+           result JSONB,
+           payload_overview JSONB DEFAULT '{}',
+           payload JSONB
+       );
+
+       CREATE TABLE job_progress_events (
+           id SERIAL PRIMARY KEY,
+           job_id VARCHAR(36) NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+           timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           event VARCHAR(255),
+           metrics JSONB DEFAULT '{}'
+       );
+       CREATE INDEX idx_progress_job_id ON job_progress_events(job_id);
+
+       CREATE TABLE job_logs (
+           id SERIAL PRIMARY KEY,
+           job_id VARCHAR(36) NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+           timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           level VARCHAR(20) NOT NULL,
+           logger VARCHAR(255) NOT NULL,
+           message TEXT NOT NULL
+       );
+       CREATE INDEX idx_logs_job_id ON job_logs(job_id);
+
+    ============================================================================
     """
 
-    # Redis key prefixes
-    JOB_PREFIX = "dspy:job:"
-    PROGRESS_PREFIX = "dspy:progress:"
-    LOGS_PREFIX = "dspy:logs:"
-
-    # Limits
-    MAX_PROGRESS_EVENTS = 5000
-    MAX_LOG_ENTRIES = 5000
-
-    # Default TTL for job data (7 days)
-    DEFAULT_TTL = 7 * 24 * 60 * 60
-
-    def __init__(
-        self,
-        config: Optional[Dict[str, str]] = None,
-        ttl: Optional[int] = None,
-    ) -> None:
-        """Initialize Redis connection.
+    def __init__(self, db_client: Any = None) -> None:
+        """Initialize remote DB connection.
 
         Args:
-            config: Optional dict with host, port, db keys.
-            ttl: Time-to-live for job data in seconds.
+            db_client: Your database client instance with insert/update/query/delete methods.
+
+        TODO: Initialize your DB client here. Example:
+            from your_db_module import DatabaseClient
+            self.db = db_client or DatabaseClient(
+                url=os.getenv("REMOTE_DB_URL"),
+                api_key=os.getenv("REMOTE_DB_API_KEY"),
+            )
         """
-        config = config or {}
-        host = config.get("host") or os.getenv("REDIS_HOST", "localhost")
-        port = int(config.get("port") or os.getenv("REDIS_PORT", "6379"))
-        db = int(config.get("db") or os.getenv("REDIS_DB_JOBS", "2"))
+        # TODO: Replace None with your actual DB client
+        # self.db = db_client or YourDatabaseClient()
+        self.db = db_client  # Currently None - implement your DB client
 
-        self._redis = redis.Redis(host=host, port=port, db=db, decode_responses=True)
-        self._ttl = ttl or self.DEFAULT_TTL
-
-    def _job_key(self, job_id: str) -> str:
-        """Generate Redis key for job data."""
-        return f"{self.JOB_PREFIX}{job_id}"
-
-    def _progress_key(self, job_id: str) -> str:
-        """Generate Redis key for progress events."""
-        return f"{self.PROGRESS_PREFIX}{job_id}"
-
-    def _logs_key(self, job_id: str) -> str:
-        """Generate Redis key for log entries."""
-        return f"{self.LOGS_PREFIX}{job_id}"
+        # In-memory cache (works without DB implementation for testing)
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._progress_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._logs_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._lock = Lock()
 
     def create_job(
         self,
         job_id: str,
         estimated_total_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Create a new job record in Redis.
+        """Create a new job record in the remote DB.
 
         Args:
-            job_id: Unique job identifier (typically Celery task ID).
+            job_id: Unique job identifier.
             estimated_total_seconds: Optional time estimate.
 
         Returns:
@@ -470,43 +460,43 @@ class RedisJobStore:
             "job_id": job_id,
             "status": "pending",
             "created_at": now,
-            "started_at": "",
-            "completed_at": "",
-            "estimated_total_seconds": str(estimated_total_seconds) if estimated_total_seconds else "",
-            "message": "",
-            "latest_metrics": "{}",
-            "result": "",
-            "payload_overview": "{}",
+            "started_at": None,
+            "completed_at": None,
+            "estimated_total_seconds": estimated_total_seconds,
+            "message": None,
+            "latest_metrics": {},
+            "result": None,
+            "payload_overview": {},
         }
-        self._redis.hset(self._job_key(job_id), mapping=job_data)
-        self._redis.expire(self._job_key(job_id), self._ttl)
+
+        # TODO: Insert into 'jobs' table
+        # self.db.insert(table="jobs", data=job_data)
+
+        # Cache locally for fast access
+        with self._lock:
+            self._cache[job_id] = job_data
+            self._progress_cache[job_id] = []
+            self._logs_cache[job_id] = []
+
         return job_data
 
     def update_job(self, job_id: str, **kwargs: Any) -> None:
-        """Update job fields in Redis.
+        """Update job fields in the remote DB.
 
         Args:
             job_id: Job identifier.
             **kwargs: Fields to update.
         """
-        key = self._job_key(job_id)
+        # TODO: Update 'jobs' table where job_id=job_id
+        # self.db.update(table="jobs", filter={"job_id": job_id}, data=kwargs)
 
-        # Serialize complex types
-        updates = {}
-        for field_name, value in kwargs.items():
-            if isinstance(value, dict):
-                updates[field_name] = json.dumps(value)
-            elif value is None:
-                updates[field_name] = ""
-            else:
-                updates[field_name] = str(value) if not isinstance(value, str) else value
-
-        if updates:
-            self._redis.hset(key, mapping=updates)
-            self._redis.expire(key, self._ttl)
+        # Update local cache
+        with self._lock:
+            if job_id in self._cache:
+                self._cache[job_id].update(kwargs)
 
     def get_job(self, job_id: str) -> Dict[str, Any]:
-        """Retrieve job data from Redis.
+        """Retrieve job data from the remote DB.
 
         Args:
             job_id: Job identifier.
@@ -517,26 +507,20 @@ class RedisJobStore:
         Raises:
             KeyError: If job does not exist.
         """
-        key = self._job_key(job_id)
-        data = self._redis.hgetall(key)
+        # Try cache first
+        with self._lock:
+            if job_id in self._cache:
+                return dict(self._cache[job_id])
 
-        if not data:
-            raise KeyError(f"Job '{job_id}' not found")
+        # TODO: Query 'jobs' table where job_id=job_id
+        # rows = self.db.query(table="jobs", filter={"job_id": job_id})
+        # if rows:
+        #     data = rows[0]
+        #     with self._lock:
+        #         self._cache[job_id] = data
+        #     return data
 
-        # Deserialize JSON fields
-        for field_name in ("latest_metrics", "payload_overview", "result"):
-            if field_name in data and data[field_name]:
-                try:
-                    data[field_name] = json.loads(data[field_name])
-                except json.JSONDecodeError:
-                    data[field_name] = {}
-
-        # Convert empty strings back to None
-        for field_name in ("started_at", "completed_at", "message", "result"):
-            if field_name in data and data[field_name] == "":
-                data[field_name] = None
-
-        return data
+        raise KeyError(f"Job '{job_id}' not found")
 
     def record_progress(
         self,
@@ -557,23 +541,33 @@ class RedisJobStore:
             "metrics": metrics or {},
         }
 
-        key = self._progress_key(job_id)
-        self._redis.rpush(key, json.dumps(event))
-        self._redis.ltrim(key, -self.MAX_PROGRESS_EVENTS, -1)
-        self._redis.expire(key, self._ttl)
+        # TODO: Insert into 'job_progress_events' table
+        # self.db.insert(table="job_progress_events", data={"job_id": job_id, **event})
+        #
+        # TODO: Also update 'jobs' table with latest_metrics and message
+        # self.db.update(table="jobs", filter={"job_id": job_id}, data={
+        #     "latest_metrics": merged_metrics,
+        #     "message": message
+        # })
 
-        if metrics:
-            job_key = self._job_key(job_id)
-            existing = self._redis.hget(job_key, "latest_metrics")
-            try:
-                current_metrics = json.loads(existing) if existing else {}
-            except json.JSONDecodeError:
-                current_metrics = {}
-            current_metrics.update(metrics)
-            self._redis.hset(job_key, "latest_metrics", json.dumps(current_metrics))
+        with self._lock:
+            # Update local cache
+            if job_id not in self._progress_cache:
+                self._progress_cache[job_id] = []
+            self._progress_cache[job_id].append(event)
 
-        if message:
-            self._redis.hset(self._job_key(job_id), "message", message)
+            # Limit cached events
+            if len(self._progress_cache[job_id]) > MAX_PROGRESS_EVENTS:
+                self._progress_cache[job_id].pop(0)
+
+            # Update job metrics
+            if metrics and job_id in self._cache:
+                if "latest_metrics" not in self._cache[job_id]:
+                    self._cache[job_id]["latest_metrics"] = {}
+                self._cache[job_id]["latest_metrics"].update(metrics)
+
+            if message and job_id in self._cache:
+                self._cache[job_id]["message"] = message
 
     def get_progress_events(self, job_id: str) -> List[Dict[str, Any]]:
         """Retrieve all progress events for a job.
@@ -584,9 +578,11 @@ class RedisJobStore:
         Returns:
             List of progress event dictionaries.
         """
-        key = self._progress_key(job_id)
-        events = self._redis.lrange(key, 0, -1)
-        return [json.loads(e) for e in events]
+        # TODO: Query 'job_progress_events' table where job_id=job_id, order by timestamp
+        # return self.db.query(table="job_progress_events", filter={"job_id": job_id}, order_by="timestamp")
+
+        with self._lock:
+            return list(self._progress_cache.get(job_id, []))
 
     def append_log(
         self,
@@ -613,10 +609,18 @@ class RedisJobStore:
             "message": message,
         }
 
-        key = self._logs_key(job_id)
-        self._redis.rpush(key, json.dumps(entry))
-        self._redis.ltrim(key, -self.MAX_LOG_ENTRIES, -1)
-        self._redis.expire(key, self._ttl)
+        # TODO: Insert into 'job_logs' table
+        # self.db.insert(table="job_logs", data={"job_id": job_id, **entry})
+
+        with self._lock:
+            # Update local cache
+            if job_id not in self._logs_cache:
+                self._logs_cache[job_id] = []
+            self._logs_cache[job_id].append(entry)
+
+            # Limit cached logs
+            if len(self._logs_cache[job_id]) > MAX_LOG_ENTRIES:
+                self._logs_cache[job_id].pop(0)
 
     def get_logs(self, job_id: str) -> List[Dict[str, Any]]:
         """Retrieve all log entries for a job.
@@ -627,9 +631,11 @@ class RedisJobStore:
         Returns:
             List of log entry dictionaries.
         """
-        key = self._logs_key(job_id)
-        logs = self._redis.lrange(key, 0, -1)
-        return [json.loads(entry) for entry in logs]
+        # TODO: Query 'job_logs' table where job_id=job_id, order by timestamp
+        # return self.db.query(table="job_logs", filter={"job_id": job_id}, order_by="timestamp")
+
+        with self._lock:
+            return list(self._logs_cache.get(job_id, []))
 
     def set_payload_overview(self, job_id: str, overview: Dict[str, Any]) -> None:
         """Store payload overview metadata.
@@ -638,14 +644,15 @@ class RedisJobStore:
             job_id: Job identifier.
             overview: Payload overview dictionary.
         """
-        self._redis.hset(
-            self._job_key(job_id),
-            "payload_overview",
-            json.dumps(overview or {}),
-        )
+        # TODO: Update 'jobs' table where job_id=job_id
+        # self.db.update(table="jobs", filter={"job_id": job_id}, data={"payload_overview": overview})
+
+        with self._lock:
+            if job_id in self._cache:
+                self._cache[job_id]["payload_overview"] = overview or {}
 
     def job_exists(self, job_id: str) -> bool:
-        """Check if a job exists in Redis.
+        """Check if a job exists in the remote DB.
 
         Args:
             job_id: Job identifier.
@@ -653,7 +660,17 @@ class RedisJobStore:
         Returns:
             True if job exists.
         """
-        return self._redis.exists(self._job_key(job_id)) > 0
+        # Check cache first
+        with self._lock:
+            if job_id in self._cache:
+                return True
+
+        # TODO: Query 'jobs' table where job_id=job_id, check if any rows returned
+        # rows = self.db.query(table="jobs", filter={"job_id": job_id}, limit=1)
+        # if rows:
+        #     return True
+
+        return False
 
     def delete_job(self, job_id: str) -> None:
         """Delete all data for a job.
@@ -661,8 +678,13 @@ class RedisJobStore:
         Args:
             job_id: Job identifier.
         """
-        self._redis.delete(
-            self._job_key(job_id),
-            self._progress_key(job_id),
-            self._logs_key(job_id),
-        )
+        # TODO: Delete from all 3 tables where job_id=job_id
+        # self.db.delete(table="job_logs", filter={"job_id": job_id})
+        # self.db.delete(table="job_progress_events", filter={"job_id": job_id})
+        # self.db.delete(table="jobs", filter={"job_id": job_id})
+
+        with self._lock:
+            # Clear from cache
+            self._cache.pop(job_id, None)
+            self._progress_cache.pop(job_id, None)
+            self._logs_cache.pop(job_id, None)

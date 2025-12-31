@@ -1,11 +1,13 @@
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Iterable, List, Optional
+from uuid import uuid4
 import logging
-from celery.result import AsyncResult
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from .celery_app import celery_app
+
 from .constants import (
     PAYLOAD_OVERVIEW_COMPILE_KWARGS,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
@@ -16,7 +18,7 @@ from .constants import (
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS
 )
-from .jobs import RedisJobStore
+from .jobs import RemoteDBJobStore
 from .models import (
     HEALTH_STATUS_OK,
     HealthResponse,
@@ -31,23 +33,21 @@ from .models import (
 )
 from .registry import RegistryError, ServiceRegistry
 from .service_gateway import DspyService, ServiceError
-from .tasks import run_optimization
+from .worker import BackgroundWorker, get_worker
 
 logger = logging.getLogger(__name__)
 
 
-def _celery_state_to_job_status(state: str) -> JobStatus:
-    """Map Celery task state to JobStatus enum."""
-    state_map = {
-        "PENDING": JobStatus.pending,
-        "STARTED": JobStatus.running,
-        "VALIDATING": JobStatus.validating,
-        "RUNNING": JobStatus.running,
-        "SUCCESS": JobStatus.success,
-        "FAILURE": JobStatus.failed,
-        "REVOKED": JobStatus.failed,
+def _status_to_job_status(status: str) -> JobStatus:
+    """Map status string to JobStatus enum."""
+    status_map = {
+        "pending": JobStatus.pending,
+        "validating": JobStatus.validating,
+        "running": JobStatus.running,
+        "success": JobStatus.success,
+        "failed": JobStatus.failed,
     }
-    return state_map.get(state, JobStatus.pending)
+    return status_map.get(status, JobStatus.pending)
 
 
 def create_app(
@@ -73,9 +73,27 @@ def create_app(
         registry,
         **(service_kwargs or {}),
     )
-    job_store = RedisJobStore()
 
-    app = FastAPI(title="DSPy as a Service")
+    # TODO: Configure your remote DB API endpoint via environment variables:
+    #   REMOTE_DB_URL - Base URL for your remote DB API
+    #   REMOTE_DB_API_KEY - Optional API key for authentication
+    job_store = RemoteDBJobStore()
+
+    # Background worker for processing jobs
+    worker: Optional[BackgroundWorker] = None
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Manage application lifecycle - start/stop worker."""
+        nonlocal worker
+        worker = get_worker(job_store)
+        logger.info("Background worker started")
+        yield
+        if worker:
+            worker.stop()
+            logger.info("Background worker stopped")
+
+    app = FastAPI(title="DSPy as a Service", lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(
@@ -166,12 +184,13 @@ def create_app(
             logger.warning("Payload validation failed: %s", exc)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        payload_dict = payload.model_dump(mode="json")
-        task = run_optimization.delay(payload_dict)
+        # Generate job ID
+        job_id = str(uuid4())
 
-        job_store.create_job(task.id)
+        # Create job in store
+        job_store.create_job(job_id)
         job_store.set_payload_overview(
-            task.id,
+            job_id,
             {
                 PAYLOAD_OVERVIEW_MODULE_NAME: payload.module_name,
                 PAYLOAD_OVERVIEW_OPTIMIZER_NAME: payload.optimizer_name,
@@ -183,15 +202,20 @@ def create_app(
                 PAYLOAD_OVERVIEW_COMPILE_KWARGS: dict(payload.compile_kwargs),
             },
         )
+
+        # Submit to background worker
+        current_worker = get_worker(job_store)
+        current_worker.submit_job(job_id, payload)
+
         logger.info(
             "Enqueued job %s for module=%s optimizer=%s",
-            task.id,
+            job_id,
             payload.module_name,
             payload.optimizer_name,
         )
 
         return JobSubmissionResponse(
-            job_id=task.id,
+            job_id=job_id,
             status=JobStatus.pending,
             estimated_total_seconds=None,
         )
@@ -210,19 +234,14 @@ def create_app(
             HTTPException: If the job is not found.
         """
 
-        task_result = AsyncResult(job_id, app=celery_app)
-
         try:
             job_data = job_store.get_job(job_id)
         except KeyError:
-            # Job not in Redis - check if it exists in Celery as fallback
-            if task_result.state == "PENDING" and not job_store.job_exists(job_id):
-                logger.warning("Job status requested for unknown job_id=%s", job_id)
-                raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
-            job_data = {"job_id": job_id}
+            logger.warning("Job status requested for unknown job_id=%s", job_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
 
-        status_str = job_data.get("status", task_result.state)
-        status = _celery_state_to_job_status(status_str)
+        status_str = job_data.get("status", "pending")
+        status = _status_to_job_status(status_str)
 
         def parse_timestamp(val: Any) -> Optional[datetime]:
             if val is None or val == "":
@@ -241,10 +260,6 @@ def create_app(
             result_data = job_data.get("result")
             if result_data and isinstance(result_data, dict):
                 result = RunResponse.model_validate(result_data)
-            elif task_result.result and isinstance(task_result.result, dict):
-                result_inner = task_result.result.get("result")
-                if result_inner:
-                    result = RunResponse.model_validate(result_inner)
 
         logger.debug("Returning status for job_id=%s state=%s", job_id, status)
         return JobStatusResponse(
@@ -272,15 +287,11 @@ def create_app(
             JobSummaryResponse: Aggregated job metadata and timing information.
         """
 
-        task_result = AsyncResult(job_id, app=celery_app)
-
         try:
             job_data = job_store.get_job(job_id)
         except KeyError:
-            if task_result.state == "PENDING" and not job_store.job_exists(job_id):
-                logger.warning("Job summary requested for unknown job_id=%s", job_id)
-                raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
-            job_data = {"job_id": job_id}
+            logger.warning("Job summary requested for unknown job_id=%s", job_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
 
         def parse_timestamp(val: Any) -> Optional[datetime]:
             if val is None or val == "":
@@ -291,8 +302,8 @@ def create_app(
                 return datetime.fromisoformat(val)
             return None
 
-        status_str = job_data.get("status", task_result.state)
-        status = _celery_state_to_job_status(status_str)
+        status_str = job_data.get("status", "pending")
+        status = _status_to_job_status(status_str)
         created_at = parse_timestamp(job_data.get("created_at")) or datetime.now()
         completed_at = parse_timestamp(job_data.get("completed_at"))
 
@@ -339,10 +350,8 @@ def create_app(
         """
 
         if not job_store.job_exists(job_id):
-            task_result = AsyncResult(job_id, app=celery_app)
-            if task_result.state == "PENDING":
-                logger.warning("Job logs requested for unknown job_id=%s", job_id)
-                raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            logger.warning("Job logs requested for unknown job_id=%s", job_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
 
         log_entries = job_store.get_logs(job_id)
         return [JobLogEntry(**entry) for entry in log_entries]
@@ -358,21 +367,16 @@ def create_app(
             ProgramArtifactResponse: Serialized program artifact payload.
         """
 
-        task_result = AsyncResult(job_id, app=celery_app)
-
         try:
             job_data = job_store.get_job(job_id)
         except KeyError:
-            if task_result.state == "PENDING" and not job_store.job_exists(job_id):
-                logger.warning("Artifact requested for unknown job_id=%s", job_id)
-                raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
-            job_data = {"job_id": job_id}
+            logger.warning("Artifact requested for unknown job_id=%s", job_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
 
-        status_str = job_data.get("status", task_result.state)
-        status = _celery_state_to_job_status(status_str)
+        status_str = job_data.get("status", "pending")
+        status = _status_to_job_status(status_str)
 
         if status == JobStatus.success:
-            # Try to get result from Redis first
             result_data = job_data.get("result")
             if result_data and isinstance(result_data, dict):
                 result = RunResponse.model_validate(result_data)
@@ -380,15 +384,6 @@ def create_app(
                     program_artifact_path=result.program_artifact_path,
                     program_artifact=result.program_artifact,
                 )
-            # Fall back to Celery result
-            if task_result.result and isinstance(task_result.result, dict):
-                result_inner = task_result.result.get("result")
-                if result_inner:
-                    result = RunResponse.model_validate(result_inner)
-                    return ProgramArtifactResponse(
-                        program_artifact_path=result.program_artifact_path,
-                        program_artifact=result.program_artifact,
-                    )
             raise HTTPException(status_code=404, detail="Job did not produce an artifact.")
 
         if status in {JobStatus.pending, JobStatus.validating, JobStatus.running}:

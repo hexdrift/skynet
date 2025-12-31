@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Iterable, Tuple, Union
-from .jobs import JobManager, RedisJobStore
+from .jobs import JobManager, RemoteDBJobStore
 
 _ITERATION_SCORE_RE = re.compile(
     r"Iteration (?P<iteration>\d+): Selected program (?P<program>\d+) score: (?P<score>[0-9.]+)"
@@ -19,12 +19,12 @@ _NO_MUTATION_RE = re.compile(
 class JobLogHandler(logging.Handler):
     """Route DSPy log records into the job manager for later inspection."""
 
-    def __init__(self, job_id: str, jobs: Union[JobManager, RedisJobStore]) -> None:
+    def __init__(self, job_id: str, jobs: Union[JobManager, RemoteDBJobStore]) -> None:
         """Initialize the handler with job context.
 
         Args:
             job_id: Identifier for the job receiving log entries.
-            jobs: Job manager or Redis store responsible for persisting logs.
+            jobs: Job manager or remote DB store responsible for persisting logs.
 
         Returns:
             None
@@ -57,7 +57,7 @@ class JobLogHandler(logging.Handler):
             timestamp=timestamp,
         )
         for event_name, metrics in _extract_progress_from_log(message):
-            # RedisJobStore.record_progress doesn't have update_job_message parameter
+            # RemoteDBJobStore.record_progress doesn't have update_job_message parameter
             if isinstance(self._jobs, JobManager):
                 self._jobs.record_progress(
                     self._job_id,
