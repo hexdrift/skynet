@@ -9,11 +9,11 @@ import os
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from .jobs import RemoteDBJobStore
 from .logging_utils import JobLogHandler
-from .models import RunRequest, RunResponse
+from .models import RunRequest
 from .registry import ServiceRegistry
 from .service_gateway import DspyService
 

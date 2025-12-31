@@ -1,10 +1,10 @@
 """Job storage backends for DSPy optimization service.
 
-Provides RemoteDBJobStore for persisting job state to a remote database API.
+Provides RemoteDBJobStore for persisting job state to a remote database API,
+with automatic fallback to local SQLite when remote DB is unavailable.
 """
 
-import json
-import os
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
@@ -26,6 +26,8 @@ from .constants import (
     TQDM_TOTAL_KEY
 )
 from .models import JobLogEntry, JobStatus, RunResponse
+
+logger = logging.getLogger(__name__)
 
 MAX_PROGRESS_EVENTS = 5000
 MAX_LOG_ENTRIES = 5000
@@ -419,10 +421,11 @@ class RemoteDBJobStore:
     """
 
     def __init__(self, db_client: Any = None) -> None:
-        """Initialize remote DB connection.
+        """Initialize remote DB connection with local SQLite fallback.
 
         Args:
             db_client: Your database client instance with insert/update/query/delete methods.
+                When None, automatically falls back to local SQLite storage.
 
         TODO: Initialize your DB client here. Example:
             from your_db_module import DatabaseClient
@@ -431,14 +434,14 @@ class RemoteDBJobStore:
                 api_key=os.getenv("REMOTE_DB_API_KEY"),
             )
         """
-        # TODO: Replace None with your actual DB client
-        # self.db = db_client or YourDatabaseClient()
-        self.db = db_client  # Currently None - implement your DB client
+        self.db = db_client
+        self._local_store: Optional["LocalDBJobStore"] = None
 
-        # In-memory cache (works without DB implementation for testing)
-        self._cache: Dict[str, Dict[str, Any]] = {}
-        self._progress_cache: Dict[str, List[Dict[str, Any]]] = {}
-        self._logs_cache: Dict[str, List[Dict[str, Any]]] = {}
+        if self.db is None:
+            from .local_db import LocalDBJobStore
+            self._local_store = LocalDBJobStore()
+            logger.info("Remote DB not configured, using local SQLite fallback")
+
         self._lock = Lock()
 
     def create_job(
@@ -455,6 +458,9 @@ class RemoteDBJobStore:
         Returns:
             Dict containing the initial job state.
         """
+        if self._local_store is not None:
+            return self._local_store.create_job(job_id, estimated_total_seconds)
+
         now = datetime.now(timezone.utc).isoformat()
         job_data = {
             "job_id": job_id,
@@ -472,11 +478,6 @@ class RemoteDBJobStore:
         # TODO: Insert into 'jobs' table
         # self.db.insert(table="jobs", data=job_data)
 
-        with self._lock:
-            self._cache[job_id] = job_data
-            self._progress_cache[job_id] = []
-            self._logs_cache[job_id] = []
-
         return job_data
 
     def update_job(self, job_id: str, **kwargs: Any) -> None:
@@ -486,12 +487,12 @@ class RemoteDBJobStore:
             job_id: Job identifier.
             **kwargs: Fields to update.
         """
+        if self._local_store is not None:
+            return self._local_store.update_job(job_id, **kwargs)
+
         # TODO: Update 'jobs' table where job_id=job_id
         # self.db.update(table="jobs", filter={"job_id": job_id}, data=kwargs)
-
-        with self._lock:
-            if job_id in self._cache:
-                self._cache[job_id].update(kwargs)
+        pass
 
     def get_job(self, job_id: str) -> Dict[str, Any]:
         """Retrieve job data from the remote DB.
@@ -505,17 +506,13 @@ class RemoteDBJobStore:
         Raises:
             KeyError: If job does not exist.
         """
-        with self._lock:
-            if job_id in self._cache:
-                return dict(self._cache[job_id])
+        if self._local_store is not None:
+            return self._local_store.get_job(job_id)
 
         # TODO: Query 'jobs' table where job_id=job_id
         # rows = self.db.query(table="jobs", filter={"job_id": job_id})
         # if rows:
-        #     data = rows[0]
-        #     with self._lock:
-        #         self._cache[job_id] = data
-        #     return data
+        #     return rows[0]
 
         raise KeyError(f"Job '{job_id}' not found")
 
@@ -532,11 +529,8 @@ class RemoteDBJobStore:
             message: Optional status message.
             metrics: Metric payload.
         """
-        event = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "event": message,
-            "metrics": metrics or {},
-        }
+        if self._local_store is not None:
+            return self._local_store.record_progress(job_id, message, metrics)
 
         # TODO: Insert into 'job_progress_events' table
         # self.db.insert(table="job_progress_events", data={"job_id": job_id, **event})
@@ -546,22 +540,7 @@ class RemoteDBJobStore:
         #     "latest_metrics": merged_metrics,
         #     "message": message
         # })
-
-        with self._lock:
-            if job_id not in self._progress_cache:
-                self._progress_cache[job_id] = []
-            self._progress_cache[job_id].append(event)
-
-            if len(self._progress_cache[job_id]) > MAX_PROGRESS_EVENTS:
-                self._progress_cache[job_id].pop(0)
-
-            if metrics and job_id in self._cache:
-                if "latest_metrics" not in self._cache[job_id]:
-                    self._cache[job_id]["latest_metrics"] = {}
-                self._cache[job_id]["latest_metrics"].update(metrics)
-
-            if message and job_id in self._cache:
-                self._cache[job_id]["message"] = message
+        pass
 
     def get_progress_events(self, job_id: str) -> List[Dict[str, Any]]:
         """Retrieve all progress events for a job.
@@ -572,11 +551,13 @@ class RemoteDBJobStore:
         Returns:
             List of progress event dictionaries.
         """
+        if self._local_store is not None:
+            return self._local_store.get_progress_events(job_id)
+
         # TODO: Query 'job_progress_events' table where job_id=job_id, order by timestamp
         # return self.db.query(table="job_progress_events", filter={"job_id": job_id}, order_by="timestamp")
 
-        with self._lock:
-            return list(self._progress_cache.get(job_id, []))
+        return []
 
     def append_log(
         self,
@@ -596,23 +577,18 @@ class RemoteDBJobStore:
             message: Log message.
             timestamp: Optional timestamp.
         """
-        entry = {
-            "timestamp": (timestamp or datetime.now(timezone.utc)).isoformat(),
-            "level": level,
-            "logger": logger_name,
-            "message": message,
-        }
+        if self._local_store is not None:
+            return self._local_store.append_log(
+                job_id,
+                level=level,
+                logger_name=logger_name,
+                message=message,
+                timestamp=timestamp,
+            )
 
         # TODO: Insert into 'job_logs' table
         # self.db.insert(table="job_logs", data={"job_id": job_id, **entry})
-
-        with self._lock:
-            if job_id not in self._logs_cache:
-                self._logs_cache[job_id] = []
-            self._logs_cache[job_id].append(entry)
-
-            if len(self._logs_cache[job_id]) > MAX_LOG_ENTRIES:
-                self._logs_cache[job_id].pop(0)
+        pass
 
     def get_logs(self, job_id: str) -> List[Dict[str, Any]]:
         """Retrieve all log entries for a job.
@@ -623,11 +599,13 @@ class RemoteDBJobStore:
         Returns:
             List of log entry dictionaries.
         """
+        if self._local_store is not None:
+            return self._local_store.get_logs(job_id)
+
         # TODO: Query 'job_logs' table where job_id=job_id, order by timestamp
         # return self.db.query(table="job_logs", filter={"job_id": job_id}, order_by="timestamp")
 
-        with self._lock:
-            return list(self._logs_cache.get(job_id, []))
+        return []
 
     def set_payload_overview(self, job_id: str, overview: Dict[str, Any]) -> None:
         """Store payload overview metadata.
@@ -636,12 +614,12 @@ class RemoteDBJobStore:
             job_id: Job identifier.
             overview: Payload overview dictionary.
         """
+        if self._local_store is not None:
+            return self._local_store.set_payload_overview(job_id, overview)
+
         # TODO: Update 'jobs' table where job_id=job_id
         # self.db.update(table="jobs", filter={"job_id": job_id}, data={"payload_overview": overview})
-
-        with self._lock:
-            if job_id in self._cache:
-                self._cache[job_id]["payload_overview"] = overview or {}
+        pass
 
     def job_exists(self, job_id: str) -> bool:
         """Check if a job exists in the remote DB.
@@ -652,9 +630,8 @@ class RemoteDBJobStore:
         Returns:
             bool: True if job exists.
         """
-        with self._lock:
-            if job_id in self._cache:
-                return True
+        if self._local_store is not None:
+            return self._local_store.job_exists(job_id)
 
         # TODO: Query 'jobs' table where job_id=job_id, check if any rows returned
         # rows = self.db.query(table="jobs", filter={"job_id": job_id}, limit=1)
@@ -669,12 +646,11 @@ class RemoteDBJobStore:
         Args:
             job_id: Job identifier.
         """
+        if self._local_store is not None:
+            return self._local_store.delete_job(job_id)
+
         # TODO: Delete from all 3 tables where job_id=job_id
         # self.db.delete(table="job_logs", filter={"job_id": job_id})
         # self.db.delete(table="job_progress_events", filter={"job_id": job_id})
         # self.db.delete(table="jobs", filter={"job_id": job_id})
-
-        with self._lock:
-            self._cache.pop(job_id, None)
-            self._progress_cache.pop(job_id, None)
-            self._logs_cache.pop(job_id, None)
+        pass
