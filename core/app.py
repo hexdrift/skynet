@@ -217,7 +217,7 @@ def create_app(
         return JobSubmissionResponse(
             job_id=job_id,
             status=JobStatus.pending,
-            estimated_total_seconds=None,
+            estimated_remaining_seconds=None,
         )
 
     @app.get("/jobs/{job_id}", response_model=JobStatusResponse)

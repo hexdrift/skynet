@@ -121,7 +121,7 @@ Every `POST /run` submission must include:
   {
     "job_id": "uuid",
     "status": "pending",
-    "estimated_total_seconds": null
+    "estimated_remaining_seconds": null
   }
   ```
 

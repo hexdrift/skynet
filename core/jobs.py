@@ -21,9 +21,7 @@ from .constants import (
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
-    TQDM_ELAPSED_KEY,
-    TQDM_N_KEY,
-    TQDM_TOTAL_KEY
+    TQDM_REMAINING_KEY,
 )
 from .models import JobLogEntry, JobStatus, RunResponse
 
@@ -47,7 +45,7 @@ class JobRecord:
     created_at: datetime = field(default_factory=_utcnow)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    estimated_total_seconds: Optional[float] = None
+    estimated_remaining_seconds: Optional[float] = None
     message: Optional[str] = None
     latest_metrics: Dict[str, Any] = field(default_factory=dict)
     result: Optional[RunResponse] = None
@@ -61,11 +59,8 @@ class JobRecord:
         return max(0.0, (end_time - self.created_at).total_seconds())
 
     def seconds_remaining(self) -> Optional[float]:
-        """Return estimated seconds remaining based on simple heuristics."""
-        if self.estimated_total_seconds is None:
-            return None
-        elapsed = self.seconds_elapsed()
-        return max(0.0, self.estimated_total_seconds - elapsed)
+        """Return estimated seconds remaining from tqdm progress."""
+        return self.estimated_remaining_seconds
 
 
 class JobManager:
@@ -82,10 +77,10 @@ class JobManager:
         self._max_progress_events = MAX_PROGRESS_EVENTS
         self._max_log_entries = MAX_LOG_ENTRIES
 
-    def create_job(self, estimated_total_seconds: Optional[float]) -> JobRecord:
+    def create_job(self, estimated_remaining_seconds: Optional[float]) -> JobRecord:
         """Create a new job record and return it."""
         job_id = str(uuid4())
-        record = JobRecord(job_id=job_id, estimated_total_seconds=estimated_total_seconds)
+        record = JobRecord(job_id=job_id, estimated_remaining_seconds=estimated_remaining_seconds)
         with self._lock:
             self._records[job_id] = record
         return record
@@ -222,16 +217,10 @@ class JobManager:
 
     @staticmethod
     def _update_estimate(record: JobRecord, metrics: Dict[str, Any]) -> None:
-        """Recompute the estimated duration using tqdm metrics when available."""
-        total = metrics.get(TQDM_TOTAL_KEY)
-        current = metrics.get(TQDM_N_KEY)
-        elapsed = metrics.get(TQDM_ELAPSED_KEY)
-        if not total or not current or not elapsed:
-            return
-        fraction = current / total
-        if fraction <= 0:
-            return
-        record.estimated_total_seconds = elapsed / fraction
+        """Update estimated remaining time from tqdm metrics."""
+        remaining = metrics.get(TQDM_REMAINING_KEY)
+        if remaining is not None:
+            record.estimated_remaining_seconds = remaining
 
 
 class JobStoreProtocol(Protocol):
@@ -346,7 +335,7 @@ class RemoteDBJobStore:
        │ created_at              TIMESTAMP     NOT NULL                      │
        │ started_at              TIMESTAMP     NULL                          │
        │ completed_at            TIMESTAMP     NULL                          │
-       │ estimated_total_seconds FLOAT         NULL                          │
+       │ estimated_remaining_seconds FLOAT         NULL                          │
        │ message                 TEXT          NULL                          │
        │ latest_metrics          JSONB         DEFAULT '{}'                  │
        │ result                  JSONB         NULL      -- optimization     │
@@ -359,13 +348,12 @@ class RemoteDBJobStore:
        ┌─────────────────────────────────────────────────────────────────────┐
        │ TABLE: job_progress_events                                          │
        ├─────────────────────────────────────────────────────────────────────┤
-       │ id                      SERIAL        PRIMARY KEY                   │
        │ job_id                  VARCHAR(36)   NOT NULL  FK -> jobs.job_id   │
        │ timestamp               TIMESTAMP     NOT NULL                      │
        │ event                   VARCHAR(255)  NULL      -- event name       │
        │ metrics                 JSONB         DEFAULT '{}'                  │
        │                                                                     │
-       │ INDEX: idx_progress_job_id ON job_id                                │
+       │ PRIMARY KEY: (job_id, timestamp)                                    │
        └─────────────────────────────────────────────────────────────────────┘
 
        ┌─────────────────────────────────────────────────────────────────────┐
@@ -390,7 +378,7 @@ class RemoteDBJobStore:
            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
            started_at TIMESTAMP,
            completed_at TIMESTAMP,
-           estimated_total_seconds FLOAT,
+           estimated_remaining_seconds FLOAT,
            message TEXT,
            latest_metrics JSONB DEFAULT '{}',
            result JSONB,
@@ -399,13 +387,12 @@ class RemoteDBJobStore:
        );
 
        CREATE TABLE job_progress_events (
-           id SERIAL PRIMARY KEY,
            job_id VARCHAR(36) NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
            timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
            event VARCHAR(255),
-           metrics JSONB DEFAULT '{}'
+           metrics JSONB DEFAULT '{}',
+           PRIMARY KEY (job_id, timestamp)
        );
-       CREATE INDEX idx_progress_job_id ON job_progress_events(job_id);
 
        CREATE TABLE job_logs (
            id SERIAL PRIMARY KEY,
@@ -447,19 +434,19 @@ class RemoteDBJobStore:
     def create_job(
         self,
         job_id: str,
-        estimated_total_seconds: Optional[float] = None,
+        estimated_remaining_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create a new job record in the remote DB.
 
         Args:
             job_id: Unique job identifier.
-            estimated_total_seconds: Optional time estimate.
+            estimated_remaining_seconds: Optional time estimate.
 
         Returns:
             Dict containing the initial job state.
         """
         if self._local_store is not None:
-            return self._local_store.create_job(job_id, estimated_total_seconds)
+            return self._local_store.create_job(job_id, estimated_remaining_seconds)
 
         now = datetime.now(timezone.utc).isoformat()
         job_data = {
@@ -468,7 +455,7 @@ class RemoteDBJobStore:
             "created_at": now,
             "started_at": None,
             "completed_at": None,
-            "estimated_total_seconds": estimated_total_seconds,
+            "estimated_remaining_seconds": estimated_remaining_seconds,
             "message": None,
             "latest_metrics": {},
             "result": None,

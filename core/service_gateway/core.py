@@ -3,6 +3,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import dspy
+
 from ..constants import (
     DETAIL_BASELINE,
     DETAIL_OPTIMIZED,
@@ -113,7 +115,7 @@ class DspyService:
         metric = load_metric_from_code(payload.metric_code)
         metric_identifier = getattr(metric, "__name__", "inline_metric")
 
-        build_language_model(payload.model_settings, configure_global=True)
+        language_model = build_language_model(payload.model_settings)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         optimizer = instantiate_optimizer(
             optimizer_factory,
@@ -151,36 +153,37 @@ class DspyService:
                 },
             )
 
-        baseline_test_metric = None
-        if splits.test:
-            baseline_test_metric = evaluate_on_test(program, splits.test, metric)
-            logger.info("Baseline test metric: %s", baseline_test_metric)
-            if progress_callback and baseline_test_metric is not None:
-                progress_callback(
-                    PROGRESS_BASELINE,
-                    {DETAIL_BASELINE: baseline_test_metric},
-                )
+        with dspy.context(lm=language_model):
+            baseline_test_metric = None
+            if splits.test:
+                baseline_test_metric = evaluate_on_test(program, splits.test, metric)
+                logger.info("Baseline test metric: %s", baseline_test_metric)
+                if progress_callback and baseline_test_metric is not None:
+                    progress_callback(
+                        PROGRESS_BASELINE,
+                        {DETAIL_BASELINE: baseline_test_metric},
+                    )
 
-        logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
-        with capture_tqdm(progress_callback):
-            compiled_program = compile_program(
-                optimizer=optimizer,
-                program=program,
-                splits=splits,
-                metric=metric,
-                compile_kwargs=payload.compile_kwargs,
-            )
-        logger.info("Optimizer compile completed successfully")
-
-        optimized_test_metric = None
-        if splits.test:
-            optimized_test_metric = evaluate_on_test(compiled_program, splits.test, metric)
-            logger.info("Optimized test metric: %s", optimized_test_metric)
-            if progress_callback and optimized_test_metric is not None:
-                progress_callback(
-                    PROGRESS_OPTIMIZED,
-                    {DETAIL_OPTIMIZED: optimized_test_metric},
+            logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
+            with capture_tqdm(progress_callback):
+                compiled_program = compile_program(
+                    optimizer=optimizer,
+                    program=program,
+                    splits=splits,
+                    metric=metric,
+                    compile_kwargs=payload.compile_kwargs,
                 )
+            logger.info("Optimizer compile completed successfully")
+
+            optimized_test_metric = None
+            if splits.test:
+                optimized_test_metric = evaluate_on_test(compiled_program, splits.test, metric)
+                logger.info("Optimized test metric: %s", optimized_test_metric)
+                if progress_callback and optimized_test_metric is not None:
+                    progress_callback(
+                        PROGRESS_OPTIMIZED,
+                        {DETAIL_OPTIMIZED: optimized_test_metric},
+                    )
 
         program_artifact = persist_program(compiled_program, artifact_id, self.artifacts_root)
         if program_artifact and program_artifact.path:

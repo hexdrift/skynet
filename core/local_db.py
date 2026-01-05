@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, Text, create_engine
+from sqlalchemy import JSON, Column, DateTime, Float, Integer, PrimaryKeyConstraint, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class JobModel(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
-    estimated_total_seconds = Column(Float, nullable=True)
+    estimated_remaining_seconds = Column(Float, nullable=True)
     message = Column(Text, nullable=True)
     latest_metrics = Column(JSON, default=dict)
     result = Column(JSON, nullable=True)
@@ -50,11 +50,12 @@ class ProgressEventModel(Base):
 
     __tablename__ = "job_progress_events"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(String(36), nullable=False, index=True)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     event = Column(String(255), nullable=True)
     metrics = Column(JSON, default=dict)
+
+    __table_args__ = (PrimaryKeyConstraint("job_id", "timestamp"),)
 
 
 class LogEntryModel(Base):
@@ -104,13 +105,13 @@ class LocalDBJobStore:
     def create_job(
         self,
         job_id: str,
-        estimated_total_seconds: Optional[float] = None,
+        estimated_remaining_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create a new job record in the local database.
 
         Args:
             job_id: Unique job identifier.
-            estimated_total_seconds: Optional time estimate.
+            estimated_remaining_seconds: Optional time estimate.
 
         Returns:
             Dict containing the initial job state.
@@ -120,7 +121,7 @@ class LocalDBJobStore:
             job_id=job_id,
             status="pending",
             created_at=now,
-            estimated_total_seconds=estimated_total_seconds,
+            estimated_remaining_seconds=estimated_remaining_seconds,
             latest_metrics={},
             payload_overview={},
         )
@@ -139,7 +140,7 @@ class LocalDBJobStore:
             "created_at": now.isoformat(),
             "started_at": None,
             "completed_at": None,
-            "estimated_total_seconds": estimated_total_seconds,
+            "estimated_remaining_seconds": estimated_remaining_seconds,
             "message": None,
             "latest_metrics": {},
             "result": None,
@@ -199,7 +200,7 @@ class LocalDBJobStore:
                     "created_at": job.created_at.isoformat() if job.created_at else None,
                     "started_at": job.started_at.isoformat() if job.started_at else None,
                     "completed_at": job.completed_at.isoformat() if job.completed_at else None,
-                    "estimated_total_seconds": job.estimated_total_seconds,
+                    "estimated_remaining_seconds": job.estimated_remaining_seconds,
                     "message": job.message,
                     "latest_metrics": job.latest_metrics or {},
                     "result": job.result,

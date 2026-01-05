@@ -282,7 +282,7 @@ class JobSubmissionResponse(BaseModel):
 
     job_id: str
     status: JobStatus
-    estimated_total_seconds: Optional[float] = None
+    estimated_remaining_seconds: Optional[float] = None
 
 
 class JobStatusResponse(BaseModel):
