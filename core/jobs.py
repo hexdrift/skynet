@@ -53,10 +53,11 @@ class JobRecord:
     logs: List[Dict[str, Any]] = field(default_factory=list)
     payload_overview: Dict[str, Any] = field(default_factory=dict)
 
-    def seconds_elapsed(self) -> float:
-        """Return elapsed seconds since job creation."""
-        end_time = self.completed_at or _utcnow()
-        return max(0.0, (end_time - self.created_at).total_seconds())
+    def seconds_elapsed(self) -> Optional[float]:
+        """Return elapsed seconds since job creation, only when completed."""
+        if self.completed_at is None:
+            return None
+        return max(0.0, (self.completed_at - self.created_at).total_seconds())
 
     def seconds_remaining(self) -> Optional[float]:
         """Return estimated seconds remaining from tqdm progress."""

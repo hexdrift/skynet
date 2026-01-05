@@ -161,7 +161,7 @@ Every `POST /run` submission must include:
     "created_at": "...",
     "started_at": "...",
     "completed_at": null,
-    "elapsed_seconds": 128.4,
+    "elapsed_seconds": null,
     "estimated_seconds_remaining": 35.6,
     "module_name": "cot",
     "optimizer_name": "miprov2",

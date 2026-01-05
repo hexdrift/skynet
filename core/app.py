@@ -309,8 +309,9 @@ def create_app(
         created_at = parse_timestamp(job_data.get("created_at")) or datetime.now()
         completed_at = parse_timestamp(job_data.get("completed_at"))
 
-        end_time = completed_at or datetime.now()
-        elapsed_seconds = max(0.0, (end_time - created_at).total_seconds())
+        elapsed_seconds = None
+        if completed_at is not None:
+            elapsed_seconds = max(0.0, (completed_at - created_at).total_seconds())
 
         overview = job_data.get("payload_overview", {})
         if isinstance(overview, str):

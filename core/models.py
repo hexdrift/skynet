@@ -310,7 +310,7 @@ class JobSummaryResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
-    elapsed_seconds: float
+    elapsed_seconds: Optional[float] = None
     estimated_seconds_remaining: Optional[float]
     module_name: Optional[str] = None
     optimizer_name: Optional[str] = None
