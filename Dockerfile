@@ -27,9 +27,15 @@ RUN uv pip install --system -e .
 # Copy application code
 COPY . .
 
+# [WORKER-FIX] persistent data directory for SQLite across pod restarts
+RUN mkdir -p /app/data
+VOLUME ["/app/data"]
+
 # Environment variables
+ENV PYTHONUNBUFFERED=1  # [WORKER-FIX] flush logs immediately so they survive crashes
 ENV WORKER_CONCURRENCY=2
 ENV WORKER_POLL_INTERVAL=2.0
+ENV LOCAL_DB_PATH=/app/data/dspy_jobs.db
 ENV LOG_LEVEL=INFO
 
 EXPOSE 8000

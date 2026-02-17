@@ -101,8 +101,11 @@ client = DSPyServiceClient("http://localhost:8000")
 # Health check
 client.health()  # Returns {"status": "ok", "registered_assets": {...}}
 
-# Submit optimization job
+# Submit optimization job (returns job_id)
 job_id = client.submit(payload)
+
+# List all jobs (with optional filters)
+jobs = client.list_jobs(status="running", limit=10)
 
 # Poll job status
 status = client.status(job_id)
@@ -115,6 +118,15 @@ logs = client.logs(job_id)
 
 # Download artifact
 artifact = client.artifact(job_id)
+
+# Cancel a running job
+client.cancel(job_id)
+
+# Delete a completed job
+client.delete(job_id)
+
+# Check queue status
+queue = client.queue()
 
 # Load optimized program directly
 program = client.load_program(job_id)
@@ -131,7 +143,7 @@ result = monitor.poll(interval=3)  # Streams progress until completion
 ```
 
 Output includes:
-- Job status transitions (pending → running → completed/failed)
+- Job status transitions (pending -> running -> completed/failed)
 - Progress percentage and ETA
 - Baseline and optimized metrics
 - DSPy evaluation logs
@@ -152,6 +164,54 @@ payload = {
     # ...
 }
 ```
+
+### Working with DataFrames
+
+Submit pandas DataFrames directly without manual conversion:
+
+**Method 1: Explicit column mapping**
+```python
+import pandas as pd
+
+df = pd.read_csv("my_dataset.csv")
+
+job_id = client.submit_df(
+    df=df,
+    column_mapping={
+        "inputs": {"question": "question_column"},
+        "outputs": {"answer": "answer_column"}
+    },
+    module_name="dspy.ChainOfThought",
+    signature_code=SIGNATURE_CODE,
+    metric_code=METRIC_CODE,
+    optimizer_name="dspy.GEPA",
+    optimizer_kwargs={"auto": "light"},
+    model_config=MODEL_CONFIG,
+    reflection_model_config=MODEL_CONFIG
+)
+```
+
+**Method 2: Simple 1:1 mapping**
+```python
+# When DataFrame columns match signature field names exactly
+job_id = client.submit_df_simple(
+    df=df,
+    input_cols=["question"],
+    output_cols=["answer"],
+    module_name="dspy.ChainOfThought",
+    signature_code=SIGNATURE_CODE,
+    metric_code=METRIC_CODE,
+    optimizer_name="dspy.GEPA",
+    optimizer_kwargs={"auto": "light"},
+    model_config=MODEL_CONFIG
+)
+```
+
+**Benefits:**
+- Automatic column validation before submission
+- No need to manually call `.to_dict('records')`
+- Clear error messages for missing columns
+- Works with any pandas DataFrame source (CSV, Excel, SQL, etc.)
 
 ## Typical Workflow
 

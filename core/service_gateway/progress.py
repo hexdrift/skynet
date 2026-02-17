@@ -1,8 +1,9 @@
+import threading as _threading
 from contextlib import contextmanager
 from functools import wraps
 from typing import Any, Callable, Optional
 
-from .constants import (
+from ..constants import (
     PROGRESS_OPTIMIZER,
     TQDM_DESC_KEY,
     TQDM_ELAPSED_KEY,
@@ -13,16 +14,55 @@ from .constants import (
     TQDM_TOTAL_KEY
 )
 
+# Module-level state for concurrency-safe tqdm patching.
+# Only the first concurrent caller installs the patch; the last removes it.
+# Each thread stores its own callback in _tqdm_thread_local.
+_tqdm_capture_lock = _threading.Lock()
+_tqdm_capture_refs: int = 0
+_tqdm_original: Any = None
+_tqdm_auto_original: Any = None
+_tqdm_thread_local = _threading.local()
+
+
+def _thread_aware_wrap(original_factory: Callable[..., Any]) -> Callable[..., Any]:
+    """Return a tqdm factory that dispatches to the calling thread's callback.
+
+    Args:
+        original_factory: The real tqdm class/factory to wrap.
+
+    Returns:
+        Callable[..., Any]: Wrapper that routes to the per-thread callback.
+    """
+
+    @wraps(original_factory)
+    def _create(*args: Any, **kwargs: Any) -> Any:
+        callback = getattr(_tqdm_thread_local, "progress_callback", None)
+        bar = original_factory(*args, **kwargs)
+        if callback is None:
+            return bar
+        return _TqdmProxy(bar, callback)
+
+    for attr in ("_instances", "monitor_interval", "monitor", "status_printer"):
+        if hasattr(original_factory, attr):
+            setattr(_create, attr, getattr(original_factory, attr))
+
+    return _create
+
 
 @contextmanager
 def capture_tqdm(progress_callback: Optional[Callable[[str, dict[str, Any]], None]]):
-    """Monkeypatch tqdm to relay progress updates via the provided callback.
+    """Relay tqdm progress updates to the provided callback, concurrency-safe.
+
+    Uses a reference count so the global tqdm patch is installed once (by the
+    first concurrent caller) and removed once (by the last). Each thread
+    registers its own callback via threading.local, so concurrent jobs never
+    receive each other's progress events.
 
     Args:
         progress_callback: Callable invoked with progress events.
 
     Returns:
-        Context manager that restores the original tqdm implementations.
+        Context manager that cleans up per-thread state on exit.
     """
 
     if progress_callback is None:
@@ -36,48 +76,27 @@ def capture_tqdm(progress_callback: Optional[Callable[[str, dict[str, Any]], Non
         yield
         return
 
-    original_main = tqdm.tqdm
-    original_auto = tqdm_auto.tqdm
+    global _tqdm_capture_refs, _tqdm_original, _tqdm_auto_original
 
-    def _wrap(factory: Callable[..., Any]) -> Callable[..., Any]:
-        """Produce a factory wrapper that returns proxied tqdm instances.
+    _tqdm_thread_local.progress_callback = progress_callback
 
-        Args:
-            factory: Original tqdm factory to be wrapped.
+    with _tqdm_capture_lock:
+        _tqdm_capture_refs += 1
+        if _tqdm_capture_refs == 1:
+            _tqdm_original = tqdm.tqdm
+            _tqdm_auto_original = tqdm_auto.tqdm
+            tqdm.tqdm = _thread_aware_wrap(_tqdm_original)
+            tqdm_auto.tqdm = _thread_aware_wrap(_tqdm_auto_original)
 
-        Returns:
-            Callable[..., Any]: Wrapper that yields ``_TqdmProxy`` instances.
-        """
-
-        @wraps(factory)
-        def _create(*args: Any, **kwargs: Any) -> Any:
-            """Instantiate a tqdm proxy while mirroring tqdm's API surface.
-
-            Args:
-                *args: Positional arguments forwarded to the tqdm factory.
-                **kwargs: Keyword arguments forwarded to the tqdm factory.
-
-            Returns:
-                Any: ``_TqdmProxy`` wrapping the created tqdm instance.
-            """
-
-            bar = factory(*args, **kwargs)
-            return _TqdmProxy(bar, progress_callback)
-
-        # Preserve attributes expected by downstream libraries (e.g., tqdm._instances)
-        for attr in ("_instances", "monitor_interval", "monitor", "status_printer"):
-            if hasattr(factory, attr):
-                setattr(_create, attr, getattr(factory, attr))
-
-        return _create
-
-    tqdm.tqdm = _wrap(original_main)
-    tqdm_auto.tqdm = _wrap(original_auto)
     try:
         yield
     finally:
-        tqdm.tqdm = original_main
-        tqdm_auto.tqdm = original_auto
+        _tqdm_thread_local.progress_callback = None
+        with _tqdm_capture_lock:
+            _tqdm_capture_refs -= 1
+            if _tqdm_capture_refs == 0:
+                tqdm.tqdm = _tqdm_original
+                tqdm_auto.tqdm = _tqdm_auto_original
 
 
 class _TqdmProxy:

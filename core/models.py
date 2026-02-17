@@ -93,6 +93,7 @@ class RunRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    username: str
     module_name: str
     module_kwargs: Dict[str, Any] = Field(default_factory=dict)
     signature_code: str
@@ -247,6 +248,7 @@ class RunResponse(BaseModel):
     split_counts: SplitCounts
     baseline_test_metric: Optional[float] = None
     optimized_test_metric: Optional[float] = None
+    metric_improvement: Optional[float] = None
     optimization_metadata: Dict[str, Any] = Field(default_factory=dict)
     details: Dict[str, Any] = Field(default_factory=dict)
     program_artifact_path: Optional[str] = None
@@ -275,6 +277,7 @@ class JobStatus(str, Enum):
     running = "running"
     success = "success"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class JobSubmissionResponse(BaseModel):
@@ -282,52 +285,68 @@ class JobSubmissionResponse(BaseModel):
 
     job_id: str
     status: JobStatus
-    estimated_remaining_seconds: Optional[float] = None
+    created_at: datetime
+    username: str
+    module_name: str
+    optimizer_name: str
 
 
-class JobStatusResponse(BaseModel):
-    """Response payload returned by the job-inspection endpoint."""
+class _JobResponseBase(BaseModel):
+    """Shared fields across job response endpoints."""
 
     job_id: str
     status: JobStatus
+    message: Optional[str] = None
     created_at: datetime
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
-    message: Optional[str]
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    elapsed_seconds: Optional[float] = None
+    username: Optional[str] = None
+    module_name: Optional[str] = None
+    module_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    optimizer_name: Optional[str] = None
+    model_name: Optional[str] = None
+    model_settings: Optional[Dict[str, Any]] = None
+    reflection_model_name: Optional[str] = None
+    prompt_model_name: Optional[str] = None
+    task_model_name: Optional[str] = None
+    column_mapping: Optional[ColumnMapping] = None
+    dataset_rows: Optional[int] = None
     latest_metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
+class JobStatusResponse(_JobResponseBase):
+    """Response payload returned by the job-inspection endpoint."""
+
     progress_events: List[ProgressEvent] = Field(default_factory=list)
     logs: List[JobLogEntry] = Field(default_factory=list)
-    estimated_seconds_remaining: Optional[float]
     result: Optional[RunResponse] = None
 
 
-class JobSummaryResponse(BaseModel):
+class JobSummaryResponse(_JobResponseBase):
     """Aggregated view of a job with coarse progress information."""
 
-    job_id: str
-    status: JobStatus
-    message: Optional[str]
-    created_at: datetime
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
-    elapsed_seconds: Optional[float] = None
-    estimated_seconds_remaining: Optional[float]
-    module_name: Optional[str] = None
-    optimizer_name: Optional[str] = None
-    dataset_rows: Optional[int] = None
     split_fractions: Optional[SplitFractions] = None
     shuffle: Optional[bool] = None
     seed: Optional[int] = None
     optimizer_kwargs: Dict[str, Any] = Field(default_factory=dict)
     compile_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    latest_metrics: Dict[str, Any] = Field(default_factory=dict)
+    progress_count: int = 0
+    log_count: int = 0
+class QueueStatusResponse(BaseModel):
+    """Response payload for the queue status endpoint."""
+
+    pending_jobs: int
+    active_jobs: int
+    worker_threads: int
+    workers_alive: bool
+
+
 class ProgramArtifactResponse(BaseModel):
     """Response payload for the artifact retrieval endpoint.
 
     Attributes:
-        program_artifact_path: Server path to artifact (deprecated, always None).
         program_artifact: Serialized artifact containing base64-encoded program pickle.
     """
 
-    program_artifact_path: Optional[str]
     program_artifact: Optional[ProgramArtifact]

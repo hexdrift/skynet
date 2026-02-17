@@ -46,7 +46,7 @@ def _format_prompt_string(
                 if field_obj and hasattr(field_obj, "json_schema_extra"):
                     desc = field_obj.json_schema_extra.get("desc", "")
             except Exception:
-                pass
+                logger.debug("Could not extract description for input field '%s'", field_name)
             if desc:
                 field_lines.append(f"[Input] {field_name}: {desc}")
             else:
@@ -59,7 +59,7 @@ def _format_prompt_string(
                 if field_obj and hasattr(field_obj, "json_schema_extra"):
                     desc = field_obj.json_schema_extra.get("desc", "")
             except Exception:
-                pass
+                logger.debug("Could not extract description for output field '%s'", field_name)
             if desc:
                 field_lines.append(f"[Output] {field_name}: {desc}")
             else:
@@ -122,7 +122,7 @@ def extract_optimized_prompt(program: Any) -> Optional[OptimizedPredictor]:
             input_fields = list(signature.input_fields.keys())
             output_fields = list(signature.output_fields.keys())
         except Exception:
-            pass
+            logger.debug("Could not extract field names from signature")
 
         demos: List[OptimizedDemo] = []
         raw_demos = getattr(predictor, "demos", []) or []
@@ -163,7 +163,6 @@ def extract_optimized_prompt(program: Any) -> Optional[OptimizedPredictor]:
 def persist_program(
     program: Any,
     artifact_id: Optional[str],
-    artifacts_root: Path = None,
 ) -> Optional[ProgramArtifact]:
     """Save the compiled DSPy program to temp, encode to base64, then cleanup.
 
@@ -173,7 +172,6 @@ def persist_program(
     Args:
         program: Compiled DSPy module produced by an optimizer.
         artifact_id: Optional identifier for the artifact.
-        artifacts_root: Ignored - kept for backward compatibility.
 
     Returns:
         Optional[ProgramArtifact]: Serialized metadata bundle with base64 program.
@@ -214,7 +212,6 @@ def persist_program(
         )
 
     finally:
-        # Always cleanup temp directory
         if temp_dir and Path(temp_dir).exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
             logger.debug("Cleaned up temp artifact directory: %s", temp_dir)

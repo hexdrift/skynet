@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import inspect
 from functools import lru_cache, wraps
 from typing import Any, Callable, Dict, Optional, Tuple
-from .constants import RESOLUTION_HINT
+from ..constants import RESOLUTION_HINT
 
 DSPY_PREFIX = "dspy."
 

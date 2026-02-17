@@ -1,6 +1,5 @@
-# user-facing resolution guidance & status copy
+# user-facing resolution guidance
 RESOLUTION_HINT = "Register it via ServiceRegistry or provide a dotted path beginning with 'dspy.'."
-JOB_SUCCESS_MESSAGE = "Optimization completed successfully."
 
 # run-response detail keys
 DETAIL_TRAIN = "train_examples"
@@ -17,8 +16,16 @@ META_MODULE_KWARGS = "module_kwargs"
 META_MODEL_IDENTIFIER = "model_identifier"
 
 # payload overview keys cached per job
+PAYLOAD_OVERVIEW_USERNAME = "username"
 PAYLOAD_OVERVIEW_MODULE_NAME = "module_name"
+PAYLOAD_OVERVIEW_MODULE_KWARGS = "module_kwargs"
 PAYLOAD_OVERVIEW_OPTIMIZER_NAME = "optimizer_name"
+PAYLOAD_OVERVIEW_MODEL_NAME = "model_name"
+PAYLOAD_OVERVIEW_MODEL_SETTINGS = "model_settings"
+PAYLOAD_OVERVIEW_REFLECTION_MODEL = "reflection_model_name"
+PAYLOAD_OVERVIEW_PROMPT_MODEL = "prompt_model_name"
+PAYLOAD_OVERVIEW_TASK_MODEL = "task_model_name"
+PAYLOAD_OVERVIEW_COLUMN_MAPPING = "column_mapping"
 PAYLOAD_OVERVIEW_DATASET_ROWS = "dataset_rows"
 PAYLOAD_OVERVIEW_SPLIT_FRACTIONS = "split_fractions"
 PAYLOAD_OVERVIEW_SHUFFLE = "shuffle"

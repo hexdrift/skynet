@@ -1,6 +1,5 @@
 import logging
 import time
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import dspy
@@ -22,9 +21,14 @@ from ..constants import (
 )
 from ..exceptions import ServiceError
 from ..models import ColumnMapping, RunRequest, RunResponse, SplitCounts
-from ..progress import capture_tqdm
-from ..registry import ServiceRegistry, UnknownRegistrationError
-from ..resolvers import ResolverError, resolve_module_factory, resolve_optimizer_factory
+from .progress import capture_tqdm
+from ..registry import (
+    ResolverError,
+    ServiceRegistry,
+    UnknownRegistrationError,
+    resolve_module_factory,
+    resolve_optimizer_factory,
+)
 from .artifacts import persist_program
 from .data import (
     extract_signature_fields,
@@ -52,20 +56,15 @@ class DspyService:
         self,
         registry: ServiceRegistry,
         default_seed: Optional[int] = None,
-        artifacts_root: str | Path = "artifacts",
     ):
         """Create a new DspyService instance.
 
         Args:
             registry: ServiceRegistry containing registered modules and optimizers.
             default_seed: Default random seed for reproducibility.
-            artifacts_root: Directory path for storing program artifacts.
         """
         self.registry = registry
         self.default_seed = default_seed
-        self.artifacts_root = Path(artifacts_root)
-        self.artifacts_root.mkdir(parents=True, exist_ok=True)
-        self.artifacts_root = self.artifacts_root.resolve()
 
     def run(
         self,
@@ -185,9 +184,9 @@ class DspyService:
                         {DETAIL_OPTIMIZED: optimized_test_metric},
                     )
 
-        program_artifact = persist_program(compiled_program, artifact_id, self.artifacts_root)
-        if program_artifact and program_artifact.path:
-            logger.info("Saved optimized program to %s", program_artifact.path)
+        program_artifact = persist_program(compiled_program, artifact_id)
+        if program_artifact:
+            logger.info("Program artifact created with base64 payload")
 
         split_counts = SplitCounts(
             train=len(splits.train), val=len(splits.val), test=len(splits.test)
@@ -209,6 +208,10 @@ class DspyService:
             META_MODEL_IDENTIFIER: payload.model_settings.normalized_identifier(),
         }
 
+        metric_improvement = None
+        if baseline_test_metric is not None and optimized_test_metric is not None:
+            metric_improvement = optimized_test_metric - baseline_test_metric
+
         runtime_seconds = time.perf_counter() - run_start
         response = RunResponse(
             module_name=payload.module_name,
@@ -217,6 +220,7 @@ class DspyService:
             split_counts=split_counts,
             baseline_test_metric=baseline_test_metric,
             optimized_test_metric=optimized_test_metric,
+            metric_improvement=metric_improvement,
             optimization_metadata=optimization_metadata,
             details=details,
             program_artifact_path=program_artifact.path if program_artifact else None,

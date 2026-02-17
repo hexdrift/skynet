@@ -15,16 +15,22 @@ services:
       # Worker configuration
       - WORKER_CONCURRENCY=2
       - WORKER_POLL_INTERVAL=2.0
+      - LOCAL_DB_PATH=/app/data/dspy_jobs.db
       # TODO: Configure your remote DB API
       - REMOTE_DB_URL=http://your-db-api:9000
       - REMOTE_DB_API_KEY=
       # Logging
       - LOG_LEVEL=INFO
+    volumes:  # [WORKER-FIX] persist SQLite DB across container restarts
+      - dspy-data:/app/data
     restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 4G
+
+volumes:
+  dspy-data:
 
 networks:
   default:

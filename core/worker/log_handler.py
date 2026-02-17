@@ -1,8 +1,9 @@
 import logging
 import re
+import threading
 from datetime import datetime, timezone
-from typing import Any, Iterable, Tuple, Union
-from .jobs import JobManager, RemoteDBJobStore
+from typing import Any, Iterable, Tuple
+from ..storage import RemoteDBJobStore
 
 _ITERATION_SCORE_RE = re.compile(
     r"Iteration (?P<iteration>\d+): Selected program (?P<program>\d+) score: (?P<score>[0-9.]+)"
@@ -19,7 +20,7 @@ _NO_MUTATION_RE = re.compile(
 class JobLogHandler(logging.Handler):
     """Route DSPy log records into the job manager for later inspection."""
 
-    def __init__(self, job_id: str, jobs: Union[JobManager, RemoteDBJobStore]) -> None:
+    def __init__(self, job_id: str, jobs: RemoteDBJobStore) -> None:
         """Initialize the handler with job context.
 
         Args:
@@ -33,9 +34,13 @@ class JobLogHandler(logging.Handler):
         super().__init__()
         self._job_id = job_id
         self._jobs = jobs
+        self._thread_id = threading.get_ident()
 
     def emit(self, record: logging.LogRecord) -> None:
         """Persist log records on the associated job.
+
+        Only processes records from the worker thread that owns this handler,
+        preventing log mixing when multiple jobs run concurrently.
 
         Args:
             record: Log record emitted by DSPy or optimizer components.
@@ -44,33 +49,29 @@ class JobLogHandler(logging.Handler):
             None
         """
 
+        if record.thread != self._thread_id:
+            return
         try:
             message = self.format(record)
         except Exception:
             message = record.getMessage()
         timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
-        self._jobs.append_log(
-            self._job_id,
-            level=record.levelname,
-            logger_name=record.name,
-            message=message,
-            timestamp=timestamp,
-        )
-        for event_name, metrics in _extract_progress_from_log(message):
-            # RemoteDBJobStore.record_progress doesn't have update_job_message parameter
-            if isinstance(self._jobs, JobManager):
-                self._jobs.record_progress(
-                    self._job_id,
-                    event_name,
-                    metrics,
-                    update_job_message=False,
-                )
-            else:
+        try:  # [WORKER-FIX] protect emit() from DB errors that would crash the worker thread
+            self._jobs.append_log(
+                self._job_id,
+                level=record.levelname,
+                logger_name=record.name,
+                message=message,
+                timestamp=timestamp,
+            )
+            for event_name, metrics in _extract_progress_from_log(message):
                 self._jobs.record_progress(
                     self._job_id,
                     event_name,
                     metrics,
                 )
+        except Exception:  # [WORKER-FIX] swallow DB errors instead of killing the optimization
+            self.handleError(record)
 
 
 def _extract_progress_from_log(message: str) -> Iterable[Tuple[str, dict[str, Any]]]:
