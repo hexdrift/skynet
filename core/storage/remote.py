@@ -83,6 +83,8 @@ DATABASE SCHEMA (3 tables):
    │ payload_overview        JSONB         DEFAULT '{}'                  │
    │ payload                 JSONB         NULL      -- full request     │
    │                                                 -- for worker       │
+   │ username                VARCHAR(255)  NULL      -- indexed for      │
+   │                                                 -- fast filtering   │
    └─────────────────────────────────────────────────────────────────────┘
 
    ┌─────────────────────────────────────────────────────────────────────┐
@@ -122,8 +124,10 @@ DATABASE SCHEMA (3 tables):
        latest_metrics JSONB DEFAULT '{}',
        result JSONB,
        payload_overview JSONB DEFAULT '{}',
-       payload JSONB
+       payload JSONB,
+       username VARCHAR(255)
    );
+   CREATE INDEX idx_jobs_username ON jobs(username);
 
    CREATE TABLE job_progress_events (
        job_id VARCHAR(36) NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
@@ -336,6 +340,17 @@ class RemoteDBJobStore:
 
         return False
 
+    def recover_pending_jobs(self) -> List[str]:
+        """Return job_ids that are pending and should be re-queued after a restart.
+
+        Returns:
+            List[str]: Job IDs with status 'pending', ordered by created_at ASC.
+        """
+        # TODO: SELECT job_id FROM jobs WHERE status='pending' ORDER BY created_at ASC
+        # rows = self.db.query(table="jobs", filter={"status": "pending"}, order_by="created_at")
+        # return [row["job_id"] for row in rows]
+        return []
+
     def recover_orphaned_jobs(self) -> int:  # [WORKER-FIX] clean up jobs stuck from previous crash
         """Mark jobs stuck in running/validating as failed after a restart.
 
@@ -405,19 +420,21 @@ class RemoteDBJobStore:
 
         Args:
             status: Filter by job status.
-            username: Filter by username (from payload_overview).
+            username: Filter by username column (SQL-level filter, not Python-side).
             limit: Maximum number of jobs to return.
             offset: Number of jobs to skip.
 
         Returns:
-            List of job data dictionaries.
+            List of job dicts. Each dict MUST include "progress_count" and "log_count"
+            keys (int) so callers don't need extra queries per row.
         """
-        # TODO: Query 'jobs' table with filters, order by created_at DESC
-        # filters = {}
-        # if status:
-        #     filters["status"] = status
-        # return self.db.query(
-        #     table="jobs", filter=filters, order_by="-created_at",
-        #     limit=limit, offset=offset
-        # )
+        # TODO: Query 'jobs' WHERE status=status AND username=username ORDER BY created_at DESC
+        # TODO: Include progress_count and log_count via subqueries or GROUP BY to avoid N+1.
+        # Example (SQL):
+        #   SELECT j.*, pc.cnt as progress_count, lc.cnt as log_count
+        #   FROM jobs j
+        #   LEFT JOIN (SELECT job_id, COUNT(*) as cnt FROM job_progress_events GROUP BY job_id) pc ON pc.job_id = j.job_id
+        #   LEFT JOIN (SELECT job_id, COUNT(*) as cnt FROM job_logs GROUP BY job_id) lc ON lc.job_id = j.job_id
+        #   WHERE j.status = ? AND j.username = ?
+        #   ORDER BY j.created_at DESC LIMIT ? OFFSET ?
         return []

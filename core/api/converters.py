@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from ..constants import (
@@ -52,7 +52,10 @@ def parse_timestamp(val: Any) -> Optional[datetime]:
     if isinstance(val, datetime):
         return val
     if isinstance(val, str):
-        return datetime.fromisoformat(val)
+        try:
+            return datetime.fromisoformat(val.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     return None
 
 

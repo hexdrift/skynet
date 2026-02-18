@@ -6,6 +6,7 @@ to a local SQLite database.
 
 import logging
 import os
+import json
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Dict, List, Optional
@@ -42,6 +43,7 @@ class JobModel(Base):
     result = Column(JSON, nullable=True)
     payload_overview = Column(JSON, default=dict)
     payload = Column(JSON, nullable=True)
+    username = Column(String(255), nullable=True)  # index created by _apply_migrations
 
 
 class ProgressEventModel(Base):
@@ -83,9 +85,50 @@ class LocalDBJobStore:
         self._db_path = db_path or os.getenv("LOCAL_DB_PATH", DEFAULT_DB_PATH)
         self._engine = create_engine(f"sqlite:///{self._db_path}", echo=False)
         Base.metadata.create_all(self._engine)
+        self._apply_migrations()
         self._session_factory = sessionmaker(bind=self._engine)
         self._lock = Lock()
         logger.info("Initialized local SQLite database at %s", self._db_path)
+
+    def _apply_migrations(self) -> None:
+        """Add columns and indexes missing from existing DB files that create_all cannot alter."""
+        from sqlalchemy import text
+        with self._engine.connect() as conn:
+            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(jobs)"))}
+            if "username" not in cols:
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN username TEXT"))
+                logger.info("Migration: added 'username' column to jobs table")
+            # Idempotent: creates index only if it doesn't already exist.
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_jobs_username ON jobs(username)"))
+
+            # Backfill username for rows created before the username column existed.
+            rows = conn.execute(
+                text("SELECT job_id, payload_overview FROM jobs WHERE username IS NULL")
+            ).fetchall()
+            updated = 0
+            for row in rows:
+                job_id = row[0]
+                overview_raw = row[1]
+                overview: Dict[str, Any] = {}
+                if isinstance(overview_raw, dict):
+                    overview = overview_raw
+                elif isinstance(overview_raw, str):
+                    try:
+                        parsed = json.loads(overview_raw)
+                        if isinstance(parsed, dict):
+                            overview = parsed
+                    except Exception:
+                        pass
+                username = overview.get("username")
+                if username:
+                    conn.execute(
+                        text("UPDATE jobs SET username = :username WHERE job_id = :job_id"),
+                        {"username": username, "job_id": job_id},
+                    )
+                    updated += 1
+            if updated:
+                logger.info("Migration: backfilled username for %d existing jobs", updated)
+            conn.commit()
 
     def _get_session(self) -> Session:
         return self._session_factory()
@@ -208,6 +251,20 @@ class LocalDBJobStore:
             finally:
                 session.close()
 
+    def recover_pending_jobs(self) -> List[str]:
+        with self._lock:
+            session = self._get_session()
+            try:
+                jobs = (
+                    session.query(JobModel)
+                    .filter(JobModel.status == "pending")
+                    .order_by(JobModel.created_at.asc())
+                    .all()
+                )
+                return [j.job_id for j in jobs]
+            finally:
+                session.close()
+
     def set_payload_overview(self, job_id: str, overview: Dict[str, Any]) -> None:
         with self._lock:
             session = self._get_session()
@@ -215,6 +272,7 @@ class LocalDBJobStore:
                 job = session.query(JobModel).filter(JobModel.job_id == job_id).first()
                 if job:
                     job.payload_overview = overview or {}
+                    job.username = (overview or {}).get("username")
                     session.commit()
             finally:
                 session.close()
@@ -224,17 +282,19 @@ class LocalDBJobStore:
         with self._lock:
             session = self._get_session()
             try:
+                job = session.query(JobModel).filter(JobModel.job_id == job_id).first()
+                if not job:
+                    return  # job deleted (cancelled); discard to prevent orphan rows
+
                 event = ProgressEventModel(job_id=job_id, timestamp=now, event=message, metrics=metrics or {})
                 session.add(event)
 
-                job = session.query(JobModel).filter(JobModel.job_id == job_id).first()
-                if job:
-                    if metrics:
-                        merged = dict(job.latest_metrics or {})
-                        merged.update(metrics)
-                        job.latest_metrics = merged
-                    if message:
-                        job.message = message
+                if metrics:
+                    merged = dict(job.latest_metrics or {})
+                    merged.update(metrics)
+                    job.latest_metrics = merged
+                if message:
+                    job.message = message
 
                 event_count = session.query(ProgressEventModel).filter(ProgressEventModel.job_id == job_id).count()
                 if event_count > MAX_PROGRESS_EVENTS:
@@ -281,6 +341,10 @@ class LocalDBJobStore:
         with self._lock:
             session = self._get_session()
             try:
+                exists = session.query(JobModel.job_id).filter(JobModel.job_id == job_id).scalar() is not None
+                if not exists:
+                    return  # job deleted (cancelled); discard to prevent orphan rows
+
                 entry = LogEntryModel(job_id=job_id, timestamp=ts, level=level, logger=logger_name, message=message)
                 session.add(entry)
 
@@ -328,15 +392,32 @@ class LocalDBJobStore:
         with self._lock:
             session = self._get_session()
             try:
+                from sqlalchemy import func
                 q = session.query(JobModel).order_by(JobModel.created_at.desc())
                 if status:
                     q = q.filter(JobModel.status == status)
                 if username:
-                    # username is stored inside the payload_overview JSON column
-                    all_jobs = q.all()
-                    filtered = [j for j in all_jobs if (j.payload_overview or {}).get("username") == username]
-                    return [self._job_to_dict(j) for j in filtered[offset:offset + limit]]
+                    q = q.filter(JobModel.username == username)
                 jobs = q.offset(offset).limit(limit).all()
-                return [self._job_to_dict(j) for j in jobs]
+                job_ids = [j.job_id for j in jobs]
+
+                progress_counts = dict(
+                    session.query(ProgressEventModel.job_id, func.count())
+                    .filter(ProgressEventModel.job_id.in_(job_ids))
+                    .group_by(ProgressEventModel.job_id).all()
+                ) if job_ids else {}
+                log_counts = dict(
+                    session.query(LogEntryModel.job_id, func.count())
+                    .filter(LogEntryModel.job_id.in_(job_ids))
+                    .group_by(LogEntryModel.job_id).all()
+                ) if job_ids else {}
+
+                result = []
+                for j in jobs:
+                    d = self._job_to_dict(j)
+                    d["progress_count"] = progress_counts.get(j.job_id, 0)
+                    d["log_count"] = log_counts.get(j.job_id, 0)
+                    result.append(d)
+                return result
             finally:
                 session.close()

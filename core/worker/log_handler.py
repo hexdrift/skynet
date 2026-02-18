@@ -3,7 +3,7 @@ import re
 import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable, Tuple
-from ..storage import RemoteDBJobStore
+from ..storage import JobStore
 
 _ITERATION_SCORE_RE = re.compile(
     r"Iteration (?P<iteration>\d+): Selected program (?P<program>\d+) score: (?P<score>[0-9.]+)"
@@ -20,7 +20,7 @@ _NO_MUTATION_RE = re.compile(
 class JobLogHandler(logging.Handler):
     """Route DSPy log records into the job manager for later inspection."""
 
-    def __init__(self, job_id: str, jobs: RemoteDBJobStore) -> None:
+    def __init__(self, job_id: str, jobs: JobStore) -> None:
         """Initialize the handler with job context.
 
         Args:
@@ -34,13 +34,19 @@ class JobLogHandler(logging.Handler):
         super().__init__()
         self._job_id = job_id
         self._jobs = jobs
-        self._thread_id = threading.get_ident()
+        self._thread_ids = {threading.get_ident()}
+        self._thread_lock = threading.Lock()
+
+    def register_current_thread(self) -> None:
+        """Allow log records emitted by the calling thread for this job."""
+        with self._thread_lock:
+            self._thread_ids.add(threading.get_ident())
 
     def emit(self, record: logging.LogRecord) -> None:
         """Persist log records on the associated job.
 
-        Only processes records from the worker thread that owns this handler,
-        preventing log mixing when multiple jobs run concurrently.
+        Only processes records from threads explicitly registered for this
+        job handler, preventing log mixing when multiple jobs run concurrently.
 
         Args:
             record: Log record emitted by DSPy or optimizer components.
@@ -49,8 +55,9 @@ class JobLogHandler(logging.Handler):
             None
         """
 
-        if record.thread != self._thread_id:
-            return
+        with self._thread_lock:
+            if record.thread not in self._thread_ids:
+                return
         try:
             message = self.format(record)
         except Exception:

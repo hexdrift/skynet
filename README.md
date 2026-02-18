@@ -71,10 +71,13 @@ FastAPI (/run, /jobs/*, /health, /queue)
 BackgroundWorker (thread pool, in-process queue)
         |
         v
-DspyService (validate + compile + evaluate)
+Job subprocess (per running job, cancellable)
         |
         v
-RemoteDBJobStore (your DB backend — implement the TODO stubs)
+DspyService (validate + compile + evaluate inside subprocess)
+        |
+        v
+JobStore backend (default: LocalDBJobStore, optional: RemoteDBJobStore scaffold)
 ```
 
 Package structure:
@@ -88,7 +91,10 @@ core/
 │   ├── app.py               — FastAPI routes and lifecycle
 │   └── converters.py        — job data → response converters
 ├── storage/                 — persistence layer
-│   └── remote.py            — RemoteDBJobStore (implement TODO stubs)
+│   ├── __init__.py          — backend selection (`JOB_STORE_BACKEND`)
+│   ├── base.py              — JobStore protocol
+│   ├── local.py             — LocalDBJobStore (SQLite, default)
+│   └── remote.py            — RemoteDBJobStore scaffold (implement TODO stubs)
 ├── worker/                  — background job processing
 │   ├── engine.py            — threaded worker (WORKER_CONCURRENCY, WORKER_POLL_INTERVAL)
 │   └── log_handler.py       — per-job log capture handler
@@ -110,13 +116,15 @@ Important implementation status:
 ## Configuration
 Environment variables used by runtime:
 - `OPENAI_API_KEY` / provider-specific keys: required by your selected model provider
+- `JOB_STORE_BACKEND`: `local` (default) or `remote`
+- `LOCAL_DB_PATH`: SQLite DB path when `JOB_STORE_BACKEND=local` (default `dspy_jobs.db`)
+- `REMOTE_DB_URL`: required when `JOB_STORE_BACKEND=remote`
+- `REMOTE_DB_API_KEY`: auth token for your remote DB API (optional, backend-specific)
 - `WORKER_CONCURRENCY`: number of worker threads, default `2`
 - `WORKER_POLL_INTERVAL`: queue poll interval in seconds, default `2.0`
+- `CANCEL_POLL_INTERVAL`: cancellation poll interval while a run is executing, default `1.0`
+- `JOB_RUN_START_METHOD`: multiprocessing start method for per-job subprocesses (`fork` default)
 - `WORKER_STALE_THRESHOLD`: max seconds of no worker activity before health check flags it, default `600`
-
-Variables for remote DB integration:
-- `REMOTE_DB_URL`: base URL for your DB API
-- `REMOTE_DB_API_KEY`: authentication token
 
 ## Built-in Resolution and Extensibility
 Built-in aliases (see `core/registry/resolvers.py`):
@@ -277,8 +285,13 @@ Logs:
 ## Operational Notes
 - CORS is currently open (`allow_origins=["*"]`).
 - No built-in auth/rate limiting in this repo.
-- Queue is in-memory inside the API process; pending queue state does not survive process restart.
 - On startup, orphaned jobs (stuck in `running`/`validating` from a previous crash) are automatically marked as `failed`.
+
+## Reliability Contract
+- Cancelled jobs are deleted; `GET /jobs/{id}` returns `404` after cancellation.
+- Pending jobs are recovered from storage and re-queued on startup.
+- Running jobs execute inside per-job subprocesses and are terminated on cancellation.
+- Reliability guarantees are validated for Linux/OpenShift deployments (`fork` start method).
 
 ## Client Usage Guide
 See `usage_guide/README.md` for notebook examples and end-to-end client flow.

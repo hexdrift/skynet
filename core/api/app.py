@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import os
 import signal  # [WORKER-FIX] for SIGTERM graceful shutdown
+import threading
 from typing import Any, Iterable, List, Optional
 from uuid import uuid4
 import logging
@@ -30,7 +31,7 @@ from ..constants import (
     PAYLOAD_OVERVIEW_TASK_MODEL,
     PAYLOAD_OVERVIEW_USERNAME,
 )
-from ..storage import LocalDBJobStore
+from ..storage import get_job_store
 from ..models import (
     HEALTH_STATUS_OK,
     HealthResponse,
@@ -85,7 +86,7 @@ def create_app(
         **(service_kwargs or {}),
     )
 
-    job_store = LocalDBJobStore()
+    job_store = get_job_store()
 
     worker: Optional[BackgroundWorker] = None
 
@@ -94,11 +95,16 @@ def create_app(
         """Manage application lifecycle - start/stop worker."""
         nonlocal worker
         job_store.recover_orphaned_jobs()  # [WORKER-FIX] mark crashed jobs from previous run as failed
-        worker = get_worker(job_store, service=service)
+        pending_ids = job_store.recover_pending_jobs()
+        worker = get_worker(job_store, service=service, pending_job_ids=pending_ids)
+        if pending_ids:
+            logger.info("Re-queued %d pending jobs from previous run", len(pending_ids))
         logger.info("Background worker started")
 
         # [WORKER-FIX] register SIGTERM handler for graceful shutdown on OpenShift
-        original_handler = signal.getsignal(signal.SIGTERM)
+        # only when running on the main interpreter thread.
+        can_register_signal = threading.current_thread() is threading.main_thread()
+        original_handler = signal.getsignal(signal.SIGTERM) if can_register_signal else None
 
         def _graceful_shutdown(signum, frame):
             logger.info("SIGTERM received, stopping worker gracefully")
@@ -107,12 +113,17 @@ def create_app(
             if callable(original_handler) and original_handler not in (signal.SIG_DFL, signal.SIG_IGN):
                 original_handler(signum, frame)
 
-        signal.signal(signal.SIGTERM, _graceful_shutdown)
+        if can_register_signal:
+            signal.signal(signal.SIGTERM, _graceful_shutdown)
 
-        yield
-        if worker:
-            worker.stop()
-            logger.info("Background worker stopped")
+        try:
+            yield
+        finally:
+            if can_register_signal and original_handler is not None:
+                signal.signal(signal.SIGTERM, original_handler)
+            if worker:
+                worker.stop()
+                logger.info("Background worker stopped")
 
     app = FastAPI(title="DSPy as a Service", lifespan=lifespan)
 
@@ -328,8 +339,8 @@ def create_app(
                     optimizer_kwargs=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS, {}),
                     compile_kwargs=overview.get(PAYLOAD_OVERVIEW_COMPILE_KWARGS, {}),
                     latest_metrics=job_data.get("latest_metrics", {}),
-                    progress_count=job_store.get_progress_count(job_id_val),
-                    log_count=job_store.get_log_count(job_id_val),
+                    progress_count=job_data.get("progress_count", 0),
+                    log_count=job_data.get("log_count", 0),
                 )
             )
         return results
@@ -513,14 +524,17 @@ def create_app(
         if worker:
             worker.cancel_job(job_id)
 
-        now = datetime.now(timezone.utc).isoformat()
-        job_store.update_job(
-            job_id,
-            status="cancelled",
-            message="Cancelled by user",
-            completed_at=now,
-        )
-        logger.info("Job %s cancelled by user", job_id)
+        if status == JobStatus.pending:
+            # Pending jobs have never started — safe to delete immediately; no ongoing writes.
+            job_store.delete_job(job_id)
+            logger.info("Job %s (pending) cancelled and deleted", job_id)
+        else:
+            # Running/validating: the worker thread still owns the job until it observes
+            # the cancel signal. Let it call delete_job() after cleaning up log handlers,
+            # so no orphan log/progress rows are left behind.
+            now = datetime.now(timezone.utc).isoformat()
+            job_store.update_job(job_id, status="cancelled", message="Cancelled by user", completed_at=now)
+            logger.info("Job %s (running) signalled for cancellation; worker will delete", job_id)
         return {"job_id": job_id, "status": "cancelled"}
 
     @app.delete("/jobs/{job_id}", status_code=200)

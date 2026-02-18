@@ -1,6 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, MutableMapping
+from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, MutableMapping
+
+if TYPE_CHECKING:
+    import dspy
 
 ModuleFactory = Callable[..., "dspy.Module"]
 MetricFn = Callable[..., float]
