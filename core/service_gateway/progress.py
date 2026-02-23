@@ -239,15 +239,19 @@ class _TqdmProxy:
 
         total = getattr(self._bar, "total", None)
         current = getattr(self._bar, "n", None)
+        rate = format_dict.get("rate")
         percent = None
         if total and current is not None and total > 0:
             percent = 100.0 * (current / total)
+        remaining = None
+        if total and current is not None and rate and rate > 0:
+            remaining = (total - current) / rate
         metrics = {
             TQDM_TOTAL_KEY: total,
             TQDM_N_KEY: current,
             TQDM_ELAPSED_KEY: format_dict.get("elapsed"),
-            TQDM_RATE_KEY: format_dict.get("rate"),
-            TQDM_REMAINING_KEY: format_dict.get("remaining"),
+            TQDM_RATE_KEY: rate,
+            TQDM_REMAINING_KEY: remaining,
             TQDM_PERCENT_KEY: percent,
             TQDM_DESC_KEY: desc,
         }

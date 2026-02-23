@@ -20,7 +20,7 @@ def get_job_store() -> JobStore:
         url = os.getenv("REMOTE_DB_URL")
         if not url:
             raise RuntimeError("JOB_STORE_BACKEND=remote but REMOTE_DB_URL is not set")
-        return RemoteDBJobStore()
+        return RemoteDBJobStore(db_url=url)
     raise RuntimeError(f"Unknown JOB_STORE_BACKEND={backend!r}. Valid values: 'local', 'remote'")
 
 

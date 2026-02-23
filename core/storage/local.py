@@ -421,3 +421,17 @@ class LocalDBJobStore:
                 return result
             finally:
                 session.close()
+
+    def count_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None) -> int:
+        with self._lock:
+            session = self._get_session()
+            try:
+                from sqlalchemy import func
+                q = session.query(func.count(JobModel.job_id))
+                if status:
+                    q = q.filter(JobModel.status == status)
+                if username:
+                    q = q.filter(JobModel.username == username)
+                return q.scalar() or 0
+            finally:
+                session.close()

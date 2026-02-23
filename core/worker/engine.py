@@ -423,12 +423,23 @@ class BackgroundWorker:
                 final_status = "failed"
                 error_message = str(exc)
                 logger.exception("Job %s failed: %s", job_id, error_message)
-            try:
-                self._job_store.delete_job(job_id)
-            except KeyError:
-                pass  # already deleted (e.g., cancel endpoint beat the worker thread)
-            except Exception:
-                logger.exception("Job %s: failed to delete from DB after %s", job_id, final_status)
+            if is_cancelled:
+                # Cancelled jobs are cleaned up entirely
+                try:
+                    self._job_store.delete_job(job_id)
+                except KeyError:
+                    pass  # already deleted (e.g., cancel endpoint beat the worker thread)
+                except Exception:
+                    logger.exception("Job %s: failed to delete from DB after cancel", job_id)
+            else:
+                # Failed jobs are retained so users can inspect the error
+                now = datetime.now(timezone.utc).isoformat()
+                try:
+                    self._job_store.update_job(
+                        job_id, status=final_status, message=error_message, completed_at=now
+                    )
+                except Exception:
+                    logger.exception("Job %s: failed to update status to %s", job_id, final_status)
             if is_shutdown:
                 raise
 

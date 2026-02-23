@@ -40,6 +40,7 @@ from ..models import (
     JobStatusResponse,
     JobSummaryResponse,
     JobSubmissionResponse,
+    PaginatedJobsResponse,
     ProgramArtifactResponse,
     QueueStatusResponse,
     RunRequest,
@@ -50,6 +51,7 @@ from ..service_gateway import DspyService, ServiceError
 from ..worker import BackgroundWorker, get_worker
 from .converters import (
     compute_elapsed,
+    extract_estimated_remaining,
     overview_to_base_fields,
     parse_overview,
     parse_timestamp,
@@ -296,13 +298,56 @@ def create_app(
             optimizer_name=payload.optimizer_name,
         )
 
-    @app.get("/jobs", response_model=List[JobSummaryResponse])
+    def _build_summary(job_data: dict) -> JobSummaryResponse:
+        """Build a JobSummaryResponse from a raw job store dict."""
+        created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
+        started_at = parse_timestamp(job_data.get("started_at"))
+        completed_at = parse_timestamp(job_data.get("completed_at"))
+        overview = parse_overview(job_data)
+        job_status = status_to_job_status(job_data.get("status", "pending"))
+
+        # Only show estimated_remaining for active jobs
+        est_remaining = None
+        if job_status not in _TERMINAL_STATUSES:
+            est_remaining = extract_estimated_remaining(job_data)
+
+        # Extract result metrics when available
+        result_data = job_data.get("result")
+        baseline = None
+        optimized = None
+        if isinstance(result_data, dict):
+            baseline = result_data.get("baseline_test_metric")
+            optimized = result_data.get("optimized_test_metric")
+
+        return JobSummaryResponse(
+            job_id=job_data["job_id"],
+            status=job_status,
+            message=job_data.get("message"),
+            created_at=created_at,
+            started_at=started_at,
+            completed_at=completed_at,
+            elapsed=compute_elapsed(created_at, started_at, completed_at),
+            estimated_remaining=est_remaining,
+            **overview_to_base_fields(overview),
+            split_fractions=overview.get(PAYLOAD_OVERVIEW_SPLIT_FRACTIONS),
+            shuffle=overview.get(PAYLOAD_OVERVIEW_SHUFFLE),
+            seed=overview.get(PAYLOAD_OVERVIEW_SEED),
+            optimizer_kwargs=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS, {}),
+            compile_kwargs=overview.get(PAYLOAD_OVERVIEW_COMPILE_KWARGS, {}),
+            latest_metrics=job_data.get("latest_metrics", {}),
+            progress_count=job_data.get("progress_count", 0),
+            log_count=job_data.get("log_count", 0),
+            baseline_test_metric=baseline,
+            optimized_test_metric=optimized,
+        )
+
+    @app.get("/jobs", response_model=PaginatedJobsResponse)
     def list_jobs(
         status: Optional[str] = Query(default=None, description="Filter by job status"),
         username: Optional[str] = Query(default=None, description="Filter by username"),
         limit: int = Query(default=50, ge=1, le=500, description="Max results"),
         offset: int = Query(default=0, ge=0, description="Skip N results"),
-    ) -> List[JobSummaryResponse]:
+    ) -> PaginatedJobsResponse:
         """List all jobs with optional filtering and pagination.
 
         Args:
@@ -312,38 +357,12 @@ def create_app(
             offset: Number of jobs to skip.
 
         Returns:
-            List[JobSummaryResponse]: Matching jobs ordered by creation time (newest first).
+            PaginatedJobsResponse: Paginated jobs ordered by creation time (newest first).
         """
+        total = job_store.count_jobs(status=status, username=username)
         rows = job_store.list_jobs(status=status, username=username, limit=limit, offset=offset)
-        results = []
-        for job_data in rows:
-            created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
-            started_at = parse_timestamp(job_data.get("started_at"))
-            completed_at = parse_timestamp(job_data.get("completed_at"))
-            overview = parse_overview(job_data)
-
-            job_id_val = job_data["job_id"]
-            results.append(
-                JobSummaryResponse(
-                    job_id=job_id_val,
-                    status=status_to_job_status(job_data.get("status", "pending")),
-                    message=job_data.get("message"),
-                    created_at=created_at,
-                    started_at=started_at,
-                    completed_at=completed_at,
-                    elapsed_seconds=compute_elapsed(created_at, started_at, completed_at),
-                    **overview_to_base_fields(overview),
-                    split_fractions=overview.get(PAYLOAD_OVERVIEW_SPLIT_FRACTIONS),
-                    shuffle=overview.get(PAYLOAD_OVERVIEW_SHUFFLE),
-                    seed=overview.get(PAYLOAD_OVERVIEW_SEED),
-                    optimizer_kwargs=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS, {}),
-                    compile_kwargs=overview.get(PAYLOAD_OVERVIEW_COMPILE_KWARGS, {}),
-                    latest_metrics=job_data.get("latest_metrics", {}),
-                    progress_count=job_data.get("progress_count", 0),
-                    log_count=job_data.get("log_count", 0),
-                )
-            )
-        return results
+        items = [_build_summary(job_data) for job_data in rows]
+        return PaginatedJobsResponse(items=items, total=total, limit=limit, offset=offset)
 
     @app.get("/jobs/{job_id}", response_model=JobStatusResponse)
     def get_job(job_id: str) -> JobStatusResponse:
@@ -384,6 +403,11 @@ def create_app(
         completed_at = parse_timestamp(job_data.get("completed_at"))
         overview = parse_overview(job_data)
 
+        # Only show estimated_remaining for active jobs
+        est_remaining = None
+        if status not in _TERMINAL_STATUSES:
+            est_remaining = extract_estimated_remaining(job_data)
+
         logger.debug("Returning status for job_id=%s state=%s", job_id, status)
         return JobStatusResponse(
             job_id=job_id,
@@ -391,7 +415,8 @@ def create_app(
             created_at=created_at,
             started_at=started_at,
             completed_at=completed_at,
-            elapsed_seconds=compute_elapsed(created_at, started_at, completed_at),
+            elapsed=compute_elapsed(created_at, started_at, completed_at),
+            estimated_remaining=est_remaining,
             **overview_to_base_fields(overview),
             message=job_data.get("message"),
             latest_metrics=job_data.get("latest_metrics", {}),
@@ -417,29 +442,9 @@ def create_app(
             logger.warning("Job summary requested for unknown job_id=%s", job_id)
             raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
 
-        created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
-        started_at = parse_timestamp(job_data.get("started_at"))
-        completed_at = parse_timestamp(job_data.get("completed_at"))
-        overview = parse_overview(job_data)
-
-        return JobSummaryResponse(
-            job_id=job_id,
-            status=status_to_job_status(job_data.get("status", "pending")),
-            message=job_data.get("message"),
-            created_at=created_at,
-            started_at=started_at,
-            completed_at=completed_at,
-            elapsed_seconds=compute_elapsed(created_at, started_at, completed_at),
-            **overview_to_base_fields(overview),
-            split_fractions=overview.get(PAYLOAD_OVERVIEW_SPLIT_FRACTIONS),
-            shuffle=overview.get(PAYLOAD_OVERVIEW_SHUFFLE),
-            seed=overview.get(PAYLOAD_OVERVIEW_SEED),
-            optimizer_kwargs=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS, {}),
-            compile_kwargs=overview.get(PAYLOAD_OVERVIEW_COMPILE_KWARGS, {}),
-            latest_metrics=job_data.get("latest_metrics", {}),
-            progress_count=job_store.get_progress_count(job_id),
-            log_count=job_store.get_log_count(job_id),
-        )
+        job_data["progress_count"] = job_store.get_progress_count(job_id)
+        job_data["log_count"] = job_store.get_log_count(job_id)
+        return _build_summary(job_data)
 
     @app.get("/jobs/{job_id}/logs", response_model=List[JobLogEntry])
     def get_job_logs(job_id: str) -> List[JobLogEntry]:

@@ -16,9 +16,8 @@ services:
       - WORKER_CONCURRENCY=2
       - WORKER_POLL_INTERVAL=2.0
       - LOCAL_DB_PATH=/app/data/dspy_jobs.db
-      # TODO: Configure your remote DB API
-      - REMOTE_DB_URL=http://your-db-api:9000
-      - REMOTE_DB_API_KEY=
+      # Remote PostgreSQL backend (set JOB_STORE_BACKEND=remote to use)
+      # - REMOTE_DB_URL=postgresql://user:pass@host:5432/dbname
       # Logging
       - LOG_LEVEL=INFO
     volumes:  # [WORKER-FIX] persist SQLite DB across container restarts

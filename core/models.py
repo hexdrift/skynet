@@ -300,7 +300,8 @@ class _JobResponseBase(BaseModel):
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    elapsed_seconds: Optional[float] = None
+    elapsed: Optional[str] = None
+    estimated_remaining: Optional[str] = None
     username: Optional[str] = None
     module_name: Optional[str] = None
     module_kwargs: Dict[str, Any] = Field(default_factory=dict)
@@ -333,6 +334,19 @@ class JobSummaryResponse(_JobResponseBase):
     compile_kwargs: Dict[str, Any] = Field(default_factory=dict)
     progress_count: int = 0
     log_count: int = 0
+    baseline_test_metric: Optional[float] = None
+    optimized_test_metric: Optional[float] = None
+
+
+class PaginatedJobsResponse(BaseModel):
+    """Paginated wrapper for job listings."""
+
+    items: List[JobSummaryResponse] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 50
+    offset: int = 0
+
+
 class QueueStatusResponse(BaseModel):
     """Response payload for the queue status endpoint."""
 

@@ -49,6 +49,13 @@ class JobStore(Protocol):
         offset: int = 0,
     ) -> List[Dict[str, Any]]: ...
 
+    def count_jobs(
+        self,
+        *,
+        status: Optional[str] = None,
+        username: Optional[str] = None,
+    ) -> int: ...
+
     def recover_orphaned_jobs(self) -> int: ...
 
     def recover_pending_jobs(self) -> List[str]: ...
