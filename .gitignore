@@ -34,6 +34,12 @@ htmlcov/
 # OS files
 .DS_Store
 
+# Playwright
+.playwright-mcp/
+
+# Screenshots
+*.png
+
 # Environment variables
 .env
 .env.*
