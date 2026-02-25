@@ -1,13 +1,8 @@
-"""Probe the logs endpoint for real user pain points.
+"""Tests for the logs endpoint pagination and filtering.
 
-Scenario: A user runs a long optimization that produces many log lines.
-They want to:
-  1. Tail the last N entries to see what's happening now
-  2. Filter by level=ERROR to find what went wrong
-  3. Paginate through the full history
-
-Currently GET /jobs/{id}/logs dumps everything with no pagination or
-filtering -- unlike GET /jobs which has limit/offset.
+GET /jobs/{id}/logs supports limit, offset, and level query parameters.
+These tests verify that pagination and level filtering work correctly
+for a job that produces many mixed-level log entries.
 """
 from __future__ import annotations
 
@@ -106,12 +101,7 @@ def _wait_terminal(client, job_id, timeout=10.0):
 
 
 def test_logs_pagination_limit(configured_env) -> None:
-    """GET /jobs/{id}/logs?limit=5 should return at most 5 entries.
-
-    Without this, a user monitoring a long-running job downloads ALL log
-    entries every time -- potentially thousands of lines just to see the
-    latest output.
-    """
+    """GET /jobs/{id}/logs?limit=5 should return at most 5 entries."""
     app = create_app(service=VerboseService())
     with TestClient(app) as client:
         submit = client.post("/run", json=RUN_PAYLOAD)
@@ -130,9 +120,7 @@ def test_logs_pagination_limit(configured_env) -> None:
         assert limited.status_code == 200
         entries = limited.json()
         assert len(entries) == 5, (
-            f"Expected 5 log entries with limit=5, got {len(entries)}. "
-            f"The logs endpoint has no pagination -- users must download "
-            f"all {total} entries every time."
+            f"Expected 5 log entries with limit=5, got {len(entries)}"
         )
 
 
@@ -162,11 +150,7 @@ def test_logs_pagination_offset(configured_env) -> None:
 
 
 def test_logs_level_filter(configured_env) -> None:
-    """GET /jobs/{id}/logs?level=ERROR should return only ERROR-level entries.
-
-    When a job fails, the user needs to find the error quickly, not wade
-    through hundreds of INFO lines.
-    """
+    """GET /jobs/{id}/logs?level=ERROR should return only ERROR-level entries."""
     app = create_app(service=VerboseService())
     with TestClient(app) as client:
         submit = client.post("/run", json=RUN_PAYLOAD)
