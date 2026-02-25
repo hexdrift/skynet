@@ -190,8 +190,6 @@ class RemoteDBJobStore:
                 merged = dict(job.latest_metrics or {})
                 merged.update(metrics)
                 job.latest_metrics = merged
-            if message:
-                job.message = message
 
             event_count = session.query(ProgressEventModel).filter(ProgressEventModel.job_id == job_id).count()
             if event_count > MAX_PROGRESS_EVENTS:
@@ -257,15 +255,28 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def get_logs(self, job_id: str) -> List[Dict[str, Any]]:
+    def get_logs(
+        self,
+        job_id: str,
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        level: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         session = self._get_session()
         try:
-            logs = (
+            q = (
                 session.query(LogEntryModel)
                 .filter(LogEntryModel.job_id == job_id)
-                .order_by(LogEntryModel.timestamp.asc())
-                .all()
             )
+            if level:
+                q = q.filter(LogEntryModel.level == level)
+            q = q.order_by(LogEntryModel.timestamp.asc())
+            if offset:
+                q = q.offset(offset)
+            if limit is not None:
+                q = q.limit(limit)
+            logs = q.all()
             return [
                 {"timestamp": log.timestamp.isoformat() if log.timestamp else None, "level": log.level, "logger": log.logger, "message": log.message}
                 for log in logs
@@ -273,14 +284,17 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def get_log_count(self, job_id: str) -> int:
+    def get_log_count(self, job_id: str, *, level: Optional[str] = None) -> int:
         session = self._get_session()
         try:
-            return session.query(LogEntryModel).filter(LogEntryModel.job_id == job_id).count()
+            q = session.query(LogEntryModel).filter(LogEntryModel.job_id == job_id)
+            if level:
+                q = q.filter(LogEntryModel.level == level)
+            return q.count()
         finally:
             session.close()
 
-    def list_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    def list_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None, job_type: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         session = self._get_session()
         try:
             q = session.query(JobModel).order_by(JobModel.created_at.desc())
@@ -288,6 +302,8 @@ class RemoteDBJobStore:
                 q = q.filter(JobModel.status == status)
             if username:
                 q = q.filter(JobModel.username == username)
+            if job_type:
+                q = q.filter(JobModel.payload_overview["job_type"].as_string() == job_type)
             jobs = q.offset(offset).limit(limit).all()
             job_ids = [j.job_id for j in jobs]
 
@@ -312,7 +328,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def count_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None) -> int:
+    def count_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None, job_type: Optional[str] = None) -> int:
         session = self._get_session()
         try:
             q = session.query(func.count(JobModel.job_id))
@@ -320,6 +336,8 @@ class RemoteDBJobStore:
                 q = q.filter(JobModel.status == status)
             if username:
                 q = q.filter(JobModel.username == username)
+            if job_type:
+                q = q.filter(JobModel.payload_overview["job_type"].as_string() == job_type)
             return q.scalar() or 0
         finally:
             session.close()

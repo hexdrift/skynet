@@ -88,8 +88,13 @@ class SplitFractions(BaseModel):
         return self
 
 
-class RunRequest(BaseModel):
-    """Primary payload for the /run endpoint."""
+# ---------------------------------------------------------------------------
+# Request payloads (inbound — what clients send)
+# ---------------------------------------------------------------------------
+
+
+class _OptimizationRequestBase(BaseModel):
+    """Shared fields for all optimization job submissions."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -106,6 +111,17 @@ class RunRequest(BaseModel):
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
     seed: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _ensure_dataset(self) -> "_OptimizationRequestBase":
+        if not self.dataset:
+            raise ValueError("Dataset must contain at least one row.")
+        return self
+
+
+class RunRequest(_OptimizationRequestBase):
+    """Payload for the /run endpoint."""
+
     model_settings: ModelConfig = Field(alias="model_config")
     reflection_model_settings: Optional[ModelConfig] = Field(
         default=None, alias="reflection_model_config"
@@ -117,22 +133,25 @@ class RunRequest(BaseModel):
         default=None, alias="task_model_config"
     )
 
+
+class GridSearchRequest(_OptimizationRequestBase):
+    """Payload for the /grid-search endpoint — sweep over model pairs."""
+
+    generation_models: List[ModelConfig]
+    reflection_models: List[ModelConfig]
+
     @model_validator(mode="after")
-    def _ensure_dataset(self) -> "RunRequest":
-        """Ensure that at least one data row is provided.
-
-        Args:
-            self: The ``RunRequest`` instance being validated.
-
-        Returns:
-            RunRequest: Validated request.
-
-        Raises:
-            ValueError: If the dataset is empty.
-        """
-        if not self.dataset:
-            raise ValueError("Dataset must contain at least one row.")
+    def _validate_model_lists(self) -> "GridSearchRequest":
+        if not self.generation_models:
+            raise ValueError("At least one generation model is required.")
+        if not self.reflection_models:
+            raise ValueError("At least one reflection model is required.")
         return self
+
+
+# ---------------------------------------------------------------------------
+# Intermediate / telemetry models
+# ---------------------------------------------------------------------------
 
 
 class SplitCounts(BaseModel):
@@ -224,23 +243,13 @@ class ProgramArtifact(BaseModel):
     )
 
 
-class RunResponse(BaseModel):
-    """Response payload containing optimization results and the compiled program.
+# ---------------------------------------------------------------------------
+# Result payloads (outbound — job results)
+# ---------------------------------------------------------------------------
 
-    Attributes:
-        module_name: Name of the DSPy module that was optimized.
-        optimizer_name: Name of the optimizer used for compilation.
-        metric_name: Name of the evaluation metric function.
-        split_counts: Number of examples in train/val/test splits.
-        baseline_test_metric: Score on test set before optimization.
-        optimized_test_metric: Score on test set after optimization.
-        optimization_metadata: Extra metadata from the optimizer.
-        details: Additional run details and diagnostics.
-        program_artifact_path: Server path to the saved artifact (deprecated).
-        program_artifact: Serialized program artifact with base64 pickle.
-        runtime_seconds: Total optimization runtime in seconds.
-        run_log: Captured log entries from the optimization run.
-    """
+
+class RunResponse(BaseModel):
+    """Result of a single optimization run."""
 
     module_name: str
     optimizer_name: str
@@ -255,6 +264,43 @@ class RunResponse(BaseModel):
     program_artifact: Optional[ProgramArtifact] = None
     runtime_seconds: Optional[float] = None
     run_log: List[JobLogEntry] = Field(default_factory=list)
+
+
+class PairResult(BaseModel):
+    """Result of a single (generation, reflection) model pair run."""
+
+    pair_index: int
+    generation_model: str
+    reflection_model: str
+    baseline_test_metric: Optional[float] = None
+    optimized_test_metric: Optional[float] = None
+    metric_improvement: Optional[float] = None
+    runtime_seconds: Optional[float] = None
+    program_artifact: Optional[ProgramArtifact] = None
+    error: Optional[str] = None
+
+
+class GridSearchResponse(BaseModel):
+    """Result of a grid search over model pairs.
+
+    Contains a leaderboard of per-pair scores and highlights the best config.
+    """
+
+    module_name: str
+    optimizer_name: str
+    metric_name: Optional[str] = None
+    split_counts: SplitCounts
+    total_pairs: int
+    completed_pairs: int = 0
+    failed_pairs: int = 0
+    pair_results: List[PairResult] = Field(default_factory=list)
+    best_pair: Optional[PairResult] = None
+    runtime_seconds: Optional[float] = None
+
+
+# ---------------------------------------------------------------------------
+# Job status / response payloads (outbound — what clients receive)
+# ---------------------------------------------------------------------------
 
 
 class HealthResponse(BaseModel):
@@ -281,9 +327,10 @@ class JobStatus(str, Enum):
 
 
 class JobSubmissionResponse(BaseModel):
-    """Response payload for job submission requests."""
+    """Immediate response to POST /run or POST /grid-search."""
 
     job_id: str
+    job_type: str
     status: JobStatus
     created_at: datetime
     username: str
@@ -294,38 +341,57 @@ class JobSubmissionResponse(BaseModel):
 class _JobResponseBase(BaseModel):
     """Shared fields across job response endpoints."""
 
+    # Identity & status
     job_id: str
+    job_type: str
     status: JobStatus
     message: Optional[str] = None
+
+    # Timestamps
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     elapsed: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
     estimated_remaining: Optional[str] = None
+
+    # Payload summary (universal)
     username: Optional[str] = None
     module_name: Optional[str] = None
     module_kwargs: Dict[str, Any] = Field(default_factory=dict)
     optimizer_name: Optional[str] = None
+    column_mapping: Optional[ColumnMapping] = None
+    dataset_rows: Optional[int] = None
+
+    # Live telemetry
+    latest_metrics: Dict[str, Any] = Field(default_factory=dict)
+
+    # Run-specific (null for grid search)
     model_name: Optional[str] = None
     model_settings: Optional[Dict[str, Any]] = None
     reflection_model_name: Optional[str] = None
     prompt_model_name: Optional[str] = None
     task_model_name: Optional[str] = None
-    column_mapping: Optional[ColumnMapping] = None
-    dataset_rows: Optional[int] = None
-    latest_metrics: Dict[str, Any] = Field(default_factory=dict)
+
+    # Grid-search-specific (null for run)
+    total_pairs: Optional[int] = None
+    completed_pairs: Optional[int] = None
+    failed_pairs: Optional[int] = None
+    generation_models: Optional[List[Any]] = None
+    reflection_models: Optional[List[Any]] = None
 
 
 class JobStatusResponse(_JobResponseBase):
-    """Response payload returned by the job-inspection endpoint."""
+    """Full job detail returned by GET /jobs/{id}."""
 
     progress_events: List[ProgressEvent] = Field(default_factory=list)
     logs: List[JobLogEntry] = Field(default_factory=list)
     result: Optional[RunResponse] = None
+    grid_result: Optional[GridSearchResponse] = None
 
 
 class JobSummaryResponse(_JobResponseBase):
-    """Aggregated view of a job with coarse progress information."""
+    """Lightweight dashboard view of a job."""
 
     split_fractions: Optional[SplitFractions] = None
     shuffle: Optional[bool] = None
@@ -334,8 +400,14 @@ class JobSummaryResponse(_JobResponseBase):
     compile_kwargs: Dict[str, Any] = Field(default_factory=dict)
     progress_count: int = 0
     log_count: int = 0
+
+    # Metrics (run: direct values; grid search: best pair's values)
     baseline_test_metric: Optional[float] = None
     optimized_test_metric: Optional[float] = None
+    metric_improvement: Optional[float] = None
+
+    # Grid search (null for run)
+    best_pair_label: Optional[str] = None
 
 
 class PaginatedJobsResponse(BaseModel):
@@ -347,67 +419,6 @@ class PaginatedJobsResponse(BaseModel):
     offset: int = 0
 
 
-class GridSearchRequest(BaseModel):
-    """Payload for the /grid-search endpoint — sweep over model pairs."""
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    username: str
-    module_name: str
-    module_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    signature_code: str
-    metric_code: str
-    optimizer_name: str
-    optimizer_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    compile_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    dataset: List[Dict[str, Any]]
-    column_mapping: ColumnMapping
-    split_fractions: SplitFractions = Field(default_factory=SplitFractions)
-    shuffle: bool = True
-    seed: Optional[int] = None
-    generation_models: List[ModelConfig]
-    reflection_models: List[ModelConfig]
-
-    @model_validator(mode="after")
-    def _validate(self) -> "GridSearchRequest":
-        if not self.dataset:
-            raise ValueError("Dataset must contain at least one row.")
-        if not self.generation_models:
-            raise ValueError("At least one generation model is required.")
-        if not self.reflection_models:
-            raise ValueError("At least one reflection model is required.")
-        return self
-
-
-class PairResult(BaseModel):
-    """Result of a single (generation, reflection) model pair run."""
-
-    pair_index: int
-    generation_model: str
-    reflection_model: str
-    baseline_test_metric: Optional[float] = None
-    optimized_test_metric: Optional[float] = None
-    metric_improvement: Optional[float] = None
-    runtime_seconds: Optional[float] = None
-    program_artifact: Optional[ProgramArtifact] = None
-    error: Optional[str] = None
-
-
-class GridSearchResponse(BaseModel):
-    """Final result of a grid search over model pairs."""
-
-    module_name: str
-    optimizer_name: str
-    metric_name: Optional[str] = None
-    split_counts: SplitCounts
-    total_pairs: int
-    completed_pairs: int = 0
-    failed_pairs: int = 0
-    pair_results: List[PairResult] = Field(default_factory=list)
-    best_pair: Optional[PairResult] = None
-    runtime_seconds: Optional[float] = None
-
-
 class QueueStatusResponse(BaseModel):
     """Response payload for the queue status endpoint."""
 
@@ -415,6 +426,28 @@ class QueueStatusResponse(BaseModel):
     active_jobs: int
     worker_threads: int
     workers_alive: bool
+
+
+class JobCancelResponse(BaseModel):
+    """Response payload for the cancel endpoint."""
+
+    job_id: str
+    status: str
+
+
+class JobDeleteResponse(BaseModel):
+    """Response payload for the delete endpoint."""
+
+    job_id: str
+    deleted: bool
+
+
+class JobPayloadResponse(BaseModel):
+    """Response payload for the payload retrieval endpoint."""
+
+    job_id: str
+    job_type: str
+    payload: Dict[str, Any]
 
 
 class ProgramArtifactResponse(BaseModel):

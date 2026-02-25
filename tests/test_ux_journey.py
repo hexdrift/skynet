@@ -503,12 +503,14 @@ def test_full_ux_journey(configured_env) -> None:
         cancel = client.post(f"/jobs/{job_id_4}/cancel")
         assert cancel.status_code == 200
 
-        # Wait for deletion
-        _wait_until(lambda: client.get(f"/jobs/{job_id_4}").status_code == 404, timeout=3)
+        # Job should still be queryable with cancelled status
+        detail = client.get(f"/jobs/{job_id_4}")
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "cancelled"
 
-        # Cancel again should 404
+        # Cancel again should 409 (already terminal)
         cancel_again = client.post(f"/jobs/{job_id_4}/cancel")
-        assert cancel_again.status_code == 404
+        assert cancel_again.status_code == 409
 
         # ===== 19. Artifact on non-success job =====
         # Submit and cancel to get a non-success state
@@ -523,13 +525,15 @@ def test_full_ux_journey(configured_env) -> None:
         )
         client.post(f"/jobs/{job_id_5}/cancel")
 
-        # Artifact should be 404 or 409
+        # Wait for cancel to take effect
         _wait_until(
-            lambda: client.get(f"/jobs/{job_id_5}").status_code in (200, 404),
+            lambda: client.get(f"/jobs/{job_id_5}").json().get("status") == "cancelled",
             timeout=3
         )
+        # Artifact should be 409 with cancellation-specific message
         art_resp = client.get(f"/jobs/{job_id_5}/artifact")
-        assert art_resp.status_code in (404, 409)
+        assert art_resp.status_code == 409
+        assert "cancelled" in art_resp.json()["detail"].lower()
 
     # ===== Print UX Findings =====
     print("\n" + "=" * 70)

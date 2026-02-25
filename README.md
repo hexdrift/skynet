@@ -77,7 +77,7 @@ Job subprocess (per running job, cancellable)
 DspyService (validate + compile + evaluate inside subprocess)
         |
         v
-JobStore backend (default: LocalDBJobStore, optional: RemoteDBJobStore scaffold)
+JobStore backend (default: LocalDBJobStore, optional: RemoteDBJobStore for PostgreSQL)
 ```
 
 Package structure:
@@ -94,7 +94,7 @@ core/
 │   ├── __init__.py          — backend selection (`JOB_STORE_BACKEND`)
 │   ├── base.py              — JobStore protocol
 │   ├── local.py             — LocalDBJobStore (SQLite, default)
-│   └── remote.py            — RemoteDBJobStore scaffold (implement TODO stubs)
+│   └── remote.py            — RemoteDBJobStore (PostgreSQL backend)
 ├── worker/                  — background job processing
 │   ├── engine.py            — threaded worker (WORKER_CONCURRENCY, WORKER_POLL_INTERVAL)
 │   └── log_handler.py       — per-job log capture handler
@@ -109,9 +109,6 @@ core/
     ├── optimizers.py        — optimizer instantiation and compilation
     └── progress.py          — tqdm progress capture
 ```
-
-Important implementation status:
-- `RemoteDBJobStore` methods are scaffolds with `TODO` stubs. See `core/storage/remote.py` for the full DB schema and implementation guide.
 
 ## Configuration
 Environment variables used by runtime:
@@ -183,6 +180,26 @@ Security note:
 - `signature_code` and `metric_code` are executed with `exec(...)`. Treat this service as trusted-input unless you sandbox/guard execution externally.
 
 ## API Reference
+
+### Error Response Format
+All error responses (`4xx` and `5xx`) use a consistent shape:
+```json
+{
+  "error": "<error_type>",
+  "detail": "Human-readable description"
+}
+```
+
+Error types by status code:
+| Status | `error` value |
+|--------|---------------|
+| 400 | `validation_error` |
+| 404 | `not_found` |
+| 409 | `conflict` |
+| 422 | `invalid_request` |
+| 500 | `internal_error` |
+| 503 | `service_unavailable` |
+
 ### `POST /run`
 Validates payload, creates job record, enqueues background processing. Returns `201`.
 
@@ -190,40 +207,55 @@ Response:
 ```json
 {
   "job_id": "uuid",
+  "job_type": "run",
   "status": "pending"
 }
 ```
 
 ### `POST /grid-search`
-Validates payload, creates a single job that sweeps all `(generation, reflection)` model pairs. Returns `201` with the same response shape as `/run`.
+Validates payload, creates a single job that sweeps all `(generation, reflection)` model pairs. Returns `201`.
+
+Response:
+```json
+{
+  "job_id": "uuid",
+  "job_type": "grid_search",
+  "status": "pending"
+}
+```
 
 Progress events emitted per pair: `grid_pair_started`, `grid_pair_completed`, `grid_pair_failed`.
 
 ### `GET /jobs`
-List all jobs with optional filtering and pagination.
+List all jobs with optional filtering and pagination. Each item includes `job_type` (`"run"` or `"grid_search"`) and type-specific fields:
+- Run jobs: `model_name`, `model_settings`, `reflection_model_name`
+- Grid search jobs: `generation_models`, `reflection_models`, `total_pairs`, `completed_pairs`, `failed_pairs`, `best_pair_label`
 
 Query parameters:
 - `status`: filter by job status
 - `username`: filter by username
+- `job_type`: filter by job type (`run` or `grid_search`)
 - `limit`: max results (1-500, default 50)
 - `offset`: skip N results (default 0)
 
 ### `GET /jobs/{job_id}`
-Detailed job view: status, timestamps, latest metrics, full progress events, logs, and `result` on success.
+Detailed job view: status, timestamps, latest metrics, full progress events, logs, and result on success.
 
-Statuses:
-- `pending`
-- `validating`
-- `running`
-- `success`
-- `failed`
-- `cancelled`
+- Run jobs: `result` contains the optimization result with metrics and artifact
+- Grid search jobs: `grid_result` contains per-pair leaderboard (`pair_results`), `best_pair`, and per-pair artifacts
+
+Statuses: `pending`, `validating`, `running`, `success`, `failed`, `cancelled`
 
 ### `GET /jobs/{job_id}/summary`
 Lightweight dashboard-friendly summary with payload overview + latest metrics.
 
 ### `GET /jobs/{job_id}/logs`
 Chronological list of captured log entries.
+
+Query parameters:
+- `limit`: max entries to return
+- `offset`: skip N entries (default 0)
+- `level`: filter by log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
 
 ### `GET /jobs/{job_id}/artifact`
 Returns serialized artifact only after success.
@@ -303,7 +335,7 @@ def materialize_artifact(bundle, destination):
 
 Logs:
 - DSPy `INFO` logs are captured per job.
-- Logs are available via `/jobs/{id}/logs` and embedded in successful `result.run_log`.
+- Logs are available via `/jobs/{id}/logs` (supports `limit`, `offset`, and `level` filtering) and embedded in successful `result.run_log`.
 
 ## Operational Notes
 - CORS is currently open (`allow_origins=["*"]`).
@@ -311,7 +343,8 @@ Logs:
 - On startup, orphaned jobs (stuck in `running`/`validating` from a previous crash) are automatically marked as `failed`.
 
 ## Reliability Contract
-- Cancelled jobs are deleted; `GET /jobs/{id}` returns `404` after cancellation.
+- Cancelled jobs are retained with status `cancelled`; `GET /jobs/{id}` returns the job with its cancelled status. Use `DELETE /jobs/{id}` to remove them.
+- Failed jobs are retained with status `failed` and include the error message.
 - Pending jobs are recovered from storage and re-queued on startup.
 - Running jobs execute inside per-job subprocesses and are terminated on cancellation.
 - Reliability guarantees are validated for Linux/OpenShift deployments (`fork` start method).

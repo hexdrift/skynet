@@ -26,6 +26,8 @@ def fetch_job_data(
         'job_status': None,
         'logs': None,
         'artifact': None,
+        'grid_result': None,
+        'job_payload': None,
         'error': None
     }
 
@@ -48,10 +50,24 @@ def fetch_job_data(
         if resp.status_code == 200:
             data['logs'] = resp.json()
 
-        # Fetch artifact (may return 409 if not finished, 404 if no artifact)
-        resp = requests.get(f"{api_base_url}/jobs/{job_id}/artifact", timeout=30)
+        # Fetch original payload (signature_code, metric_code)
+        resp = requests.get(f"{api_base_url}/jobs/{job_id}/payload", timeout=30)
         if resp.status_code == 200:
-            data['artifact'] = resp.json()
+            data['job_payload'] = resp.json()
+
+        # Determine job type from summary
+        job_type = (data.get('summary') or {}).get('job_type', 'run')
+
+        if job_type == 'grid_search':
+            # Fetch grid result for grid search jobs
+            resp = requests.get(f"{api_base_url}/jobs/{job_id}/grid-result", timeout=30)
+            if resp.status_code == 200:
+                data['grid_result'] = resp.json()
+        else:
+            # Fetch artifact for regular run jobs
+            resp = requests.get(f"{api_base_url}/jobs/{job_id}/artifact", timeout=30)
+            if resp.status_code == 200:
+                data['artifact'] = resp.json()
 
     except requests.RequestException as e:
         data['error'] = f'Connection error: {str(e)}'
@@ -253,13 +269,8 @@ def generate_dashboard_html(
         /* Panels */
         .panels {{
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
-            align-items: start;
-        }}
-
-        @media (max-width: 1200px) {{
-            .panels {{ grid-template-columns: 1fr; }}
         }}
 
         .panel {{
@@ -267,7 +278,13 @@ def generate_dashboard_html(
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
             overflow: hidden;
-            transition: var(--transition);
+            transition: box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+        }}
+
+        .panel-full {{
+            grid-column: 1 / -1;
         }}
 
         .panel:hover {{
@@ -288,6 +305,15 @@ def generate_dashboard_html(
 
         .panel-content {{
             padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }}
+
+        @media (max-width: 1080px) {{
+            .panels {{
+                grid-template-columns: 1fr;
+            }}
         }}
 
         /* Job Timeline - Compact */
@@ -442,6 +468,126 @@ def generate_dashboard_html(
         .comparison-improvement.negative {{
             background: var(--error);
         }}
+
+        /* Job type badge */
+        .job-type-badge {{
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 12px;
+            letter-spacing: 0.3px;
+        }}
+        .job-type-badge.run {{
+            background: var(--secondary-bg);
+            color: var(--secondary);
+        }}
+        .job-type-badge.grid_search {{
+            background: var(--accent-bg);
+            color: var(--accent);
+        }}
+
+        /* Grid Search Results */
+        .grid-results-section {{
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }}
+
+        .grid-results-header {{
+            background: var(--surface-hover);
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            direction: rtl;
+        }}
+
+        .grid-results-title {{
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }}
+
+        .grid-results-count {{
+            font-size: 12px;
+            color: var(--text-secondary);
+        }}
+
+        .grid-results-table-wrapper {{
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }}
+
+        .grid-results-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+        }}
+
+        .grid-results-table th {{
+            background: var(--bg);
+            padding: 10px 12px;
+            text-align: start;
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }}
+
+        .grid-results-table td {{
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }}
+
+        .grid-results-table tr:last-child td {{
+            border-bottom: none;
+        }}
+
+        .grid-results-table tbody tr:hover {{
+            background: var(--surface-hover);
+        }}
+
+        .grid-results-table tr.best-pair {{
+            background: var(--success-bg);
+            border-inline-start: 3px solid var(--success);
+        }}
+        .grid-results-table tr.best-pair:hover {{
+            background: var(--success-bg);
+        }}
+
+        .grid-results-table tr.failed-pair {{
+            background: var(--error-bg);
+            color: var(--text-secondary);
+        }}
+        .grid-results-table tr.failed-pair:hover {{
+            background: var(--error-bg);
+        }}
+
+        .grid-results-table .model-detail {{
+            font-size: 11px;
+            color: var(--text-secondary);
+        }}
+
+        .pair-status-badge {{
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }}
+        .pair-status-badge.success {{ background: var(--success-bg); color: var(--success); }}
+        .pair-status-badge.failed {{ background: var(--error-bg); color: var(--error); }}
+        .pair-status-badge.best {{ background: var(--accent-bg); color: var(--accent); }}
 
         /* Summary Groups */
         .summary-groups {{
@@ -718,71 +864,8 @@ def generate_dashboard_html(
             direction: ltr;
         }}
 
-        /* Charts */
-        .charts-grid {{
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            margin-top: 20px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border);
-        }}
-
-        .chart-container {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            padding: 12px;
-            direction: ltr;
-        }}
-
-        .chart-header {{
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
-        }}
-
-        .chart-title {{
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }}
-
-        .chart-wrapper {{
-            position: relative;
-            direction: ltr;
-            unicode-bidi: isolate;
-        }}
-
-        .chart-wrapper canvas {{
-            width: 100%;
-            height: 208.5px;
-            background: var(--surface-hover);
-            border-radius: var(--radius-md);
-        }}
-
-        .chart-tooltip {{
-            position: absolute;
-            background: var(--text-primary);
-            color: var(--surface);
-            padding: 8px 12px;
-            border-radius: var(--radius-sm);
-            font-size: 12px;
-            font-family: inherit;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s;
-            z-index: 10;
-            white-space: nowrap;
-        }}
-
-        .chart-tooltip.visible {{
-            opacity: 1;
-        }}
-
         /* Logs Panel */
         .logs-panel {{
-            grid-column: 1 / -1;
         }}
 
         .logs-header {{
@@ -964,50 +1047,76 @@ def generate_dashboard_html(
         }}
 
         /* Optimized Prompt Section */
-        .prompt-panel {{
-            grid-column: 1 / -1;
-            display: none;
-        }}
 
-        .prompt-panel.show {{
-            display: block;
-        }}
-
-        .prompt-panel .panel-header .copy-btn {{
-            padding: 5px 10px;
-            background: rgba(255,255,255,0.15);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.3);
-            border-radius: var(--radius-sm);
-            font-size: 11px;
-            font-family: inherit;
-            cursor: pointer;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }}
-
-        .prompt-panel .panel-header .copy-btn:hover {{
-            background: rgba(255,255,255,0.25);
-        }}
-
-        .prompt-content {{
-            background: var(--surface-hover);
+        /* Code Tiles (Signature & Metric) */
+        .code-tile {{
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
-            padding: 16px;
-            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }}
+
+        .code-tile:last-child {{
+            margin-bottom: 0;
+        }}
+
+        .code-tile-header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px;
+            background: var(--accent-bg);
+            border-bottom: 1px solid var(--border);
+            direction: ltr;
+        }}
+
+        .code-tile-label {{
             font-size: 12px;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }}
+
+        .code-tile-copy {{
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 2px 6px;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+        }}
+
+        .code-tile-copy:hover {{
+            background: var(--surface-hover);
+            color: var(--primary);
+        }}
+
+        .code-block {{
+            background: #faf8f5;
+            padding: 14px 16px;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 12.5px;
             line-height: 1.7;
             white-space: pre-wrap;
             word-break: break-word;
-            max-height: 400px;
+            max-height: 300px;
             overflow-y: auto;
             overscroll-behavior: contain;
             direction: ltr;
             text-align: left;
+            margin: 0;
+            color: #1e1e1e;
         }}
+
+        .code-block .kw {{ color: #0550ae; }}
+        .code-block .str {{ color: #a45a28; }}
+        .code-block .cls {{ color: #117a65; }}
+        .code-block .fn {{ color: #6f42c1; }}
+        .code-block .cmt {{ color: #6a737d; font-style: italic; }}
+        .code-block .dec {{ color: #9a3568; }}
+        .code-block .op {{ color: #383838; }}
 
         /* Kwargs Display */
         .kwargs-display {{
@@ -1051,6 +1160,8 @@ def generate_dashboard_html(
             .log-entry {{ grid-template-columns: 1fr; gap: 4px; }}
             .header-controls input {{ width: 100%; }}
             .comparison-card {{ grid-template-columns: 1fr; text-align: center; }}
+            .grid-results-table {{ font-size: 11px; }}
+            .grid-results-table th, .grid-results-table td {{ padding: 6px 8px; }}
             .job-timeline {{ flex-wrap: wrap; gap: 16px; }}
             .header-top {{ flex-direction: column; }}
         }}
@@ -1070,7 +1181,7 @@ def generate_dashboard_html(
         <!-- Main Panels -->
         <div class="panels" id="mainPanels">
             <!-- Configuration Summary -->
-            <div class="panel">
+            <div class="panel panel-full">
                 <div class="panel-header">
                     <span>פרטי המשימה</span>
                 </div>
@@ -1111,10 +1222,10 @@ def generate_dashboard_html(
 
             <!-- Progress Visualization -->
             <div class="panel">
-                <div class="panel-header">תוצאות השיפור</div>
+                <div class="panel-header"><span>תוצאות השיפור</span></div>
                 <div class="panel-content">
                     <!-- Progress Bar + Stats -->
-                    <div class="progress-section" id="progressSection" style="display: none;">
+                    <div class="progress-section" id="progressSection">
                         <div class="progress-top">
                             <span class="progress-percent" id="progressPercent">0%</span>
                             <div class="progress-bar-container">
@@ -1138,7 +1249,7 @@ def generate_dashboard_html(
                     </div>
 
                     <!-- Comparison Card -->
-                    <div class="comparison-card" id="comparisonCard" style="display: none;">
+                    <div class="comparison-card" id="comparisonCard">
                         <div class="comparison-metric">
                             <div class="comparison-label">ציון התחלתי (בדיקה)</div>
                             <div class="comparison-value baseline" id="baselineScore">--</div>
@@ -1155,49 +1266,98 @@ def generate_dashboard_html(
                         </div>
                     </div>
 
-                    <div class="charts-grid" dir="ltr">
-                        <div class="chart-container">
-                            <div class="chart-header">
-                                <div class="chart-title">התקדמות התהליך</div>
-                            </div>
-                            <div class="chart-wrapper">
-                                <canvas id="progressChart"></canvas>
-                                <div class="chart-tooltip" id="progressTooltip"></div>
-                            </div>
+                    <!-- Grid Search Results Table -->
+                    <div class="grid-results-section" id="gridResultsSection">
+                        <div class="grid-results-header">
+                            <span class="grid-results-title">תוצאות לפי זוג מודלים</span>
+                            <span class="grid-results-count" id="gridPairsCount"></span>
                         </div>
+                        <div class="grid-results-table-wrapper">
+                            <table class="grid-results-table" dir="rtl">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>מודל יצירה</th>
+                                        <th>מודל רפלקציה</th>
+                                        <th>בסיס</th>
+                                        <th>משופר</th>
+                                        <th>שיפור</th>
+                                        <th>סטטוס</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gridResultsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
 
-                        <div class="chart-container">
-                            <div class="chart-header">
-                                <div class="chart-title">שיפור הציון לאורך הסבבים</div>
-                            </div>
-                            <div class="chart-wrapper">
-                                <canvas id="metricsChart"></canvas>
-                                <div class="chart-tooltip" id="metricsTooltip"></div>
-                            </div>
+                </div>
+            </div>
+
+            <!-- Signature & Metric Panel -->
+            <div class="panel" id="codePanel">
+                <div class="panel-header">
+                    <span>הגדרת המשימה (Signature & Metric)</span>
+                </div>
+                <div class="panel-content">
+                    <div id="signatureSection" class="code-tile" style="display: none;">
+                        <div class="code-tile-header">
+                            <span class="code-tile-label">Signature</span>
+                            <button class="code-tile-copy" onclick="copyCode('signatureCode', this)" title="העתק">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
                         </div>
+                        <pre class="code-block" id="signatureCode"></pre>
+                    </div>
+                    <div id="metricSection" class="code-tile" style="display: none;">
+                        <div class="code-tile-header">
+                            <span class="code-tile-label">Metric</span>
+                            <button class="code-tile-copy" onclick="copyCode('metricCode', this)" title="העתק">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <pre class="code-block" id="metricCode"></pre>
+                    </div>
+                    <div id="codeEmptyState" class="empty-state">
+                        <div>קוד לא זמין</div>
                     </div>
                 </div>
             </div>
 
             <!-- Optimized Prompt Panel -->
-            <div class="panel prompt-panel" id="promptPanel">
+            <div class="panel panel-full prompt-panel" id="promptPanel">
                 <div class="panel-header">
                     <span>ההוראות המשופרות</span>
-                    <button class="copy-btn" id="copyPromptBtn" onclick="copyPrompt()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
-                    </button>
                 </div>
                 <div class="panel-content">
-                    <div class="prompt-content" id="promptContent"></div>
+                    <div id="promptSection" class="code-tile">
+                        <div class="code-tile-header">
+                            <span class="code-tile-label">Optimized Prompt</span>
+                            <button class="code-tile-copy" id="copyPromptBtn" onclick="copyPrompt()" title="העתק">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <pre class="code-block" id="promptContent"></pre>
+                    </div>
+                    <div id="promptEmptyState" class="empty-state">
+                        <div>הנתונים יופיעו לאחר סיום השיפור</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Logs Panel -->
-            <div class="panel logs-panel">
-                <div class="panel-header">יומן פעילות</div>
+            <div class="panel panel-full logs-panel">
+                <div class="panel-header">
+                    <span>יומן פעילות</span>
+                </div>
                 <div class="panel-content">
                     <div class="logs-header">
                         <div class="logs-header-row">
@@ -1271,8 +1431,6 @@ def generate_dashboard_html(
         // Legacy aliases for compatibility
         let currentJobId = null;
         let allLogs = [];
-        let progressData = [];
-        let metricsData = [];
 
         // Status translations
         const statusTranslations = {{
@@ -1293,6 +1451,14 @@ def generate_dashboard_html(
             'message': {{
                 title: 'סטטוס נוכחי',
                 desc: 'מה קורה כרגע - באיזה שלב נמצא התהליך.'
+            }},
+            'job_type': {{
+                title: 'סוג משימה',
+                desc: '<span class="en">Run</span> - הרצה בודדת עם מודל אחד.<br><span class="en">Grid Search</span> - סריקת זוגות מודלים למציאת השילוב הטוב ביותר.'
+            }},
+            'metric_name': {{
+                title: 'מדד הערכה',
+                desc: 'הפונקציה שמודדת את איכות התוצאות. ציון גבוה יותר = תוצאה טובה יותר.'
             }},
             'module': {{
                 title: 'סוג התבנית',
@@ -1433,21 +1599,49 @@ def generate_dashboard_html(
         }});
 
         function displayData(data) {{
+            const jobType = data.summary?.job_type || 'run';
+
+            // Extract extra fields from detail response into summary for display
+            const metricName = jobType === 'grid_search'
+                ? data.job_status?.grid_result?.metric_name
+                : data.job_status?.result?.metric_name;
+            if (metricName && data.summary) data.summary._metric_name = metricName;
+
+            const splitCounts = jobType === 'grid_search'
+                ? data.job_status?.grid_result?.split_counts
+                : data.job_status?.result?.split_counts;
+            if (splitCounts && data.summary) data.summary._split_counts = splitCounts;
+
+            // Pass best pair index so summary can resolve exact model configs
+            if (jobType === 'grid_search' && data.grid_result?.best_pair && data.summary) {{
+                data.summary._best_pair_index = data.grid_result.best_pair.pair_index;
+            }}
+
             if (data.summary) {{
                 updateSummaryPanel(data.summary);
                 updateTimeline(data.summary);
             }}
-            if (data.job_status) {{
-                updateProgressPanel(data.job_status);
-                updateComparisonCard(data.job_status);
-            }}
+
+            const summaryStatus = data.summary?.status;
+            updateProgressPanel(data.job_status || {{}}, summaryStatus);
+            updateComparisonCard(data.job_status || {{}}, jobType);
+
             if (data.logs) updateLogsPanel(data.logs);
-            updatePromptPanel(data.artifact);
+
+            if (jobType === 'grid_search') {{
+                document.getElementById('gridResultsSection').style.display = '';
+                updateGridResultsPanel(data.grid_result, data.summary);
+            }} else {{
+                // Grid table is not relevant for single-run jobs
+                document.getElementById('gridResultsSection').style.display = 'none';
+                updatePromptPanel(data.artifact);
+            }}
+
+            // Populate signature & metric code panel
+            updateCodePanel(data.job_payload);
 
             if (data.summary?.status === 'failed') {{
                 showJobError(data.summary.message, 'המשימה נכשלה');
-            }} else if (data.summary?.status === 'cancelled') {{
-                showJobError(data.summary.message || 'המשימה בוטלה', 'המשימה בוטלה');
             }} else {{
                 hideJobError();
             }}
@@ -1498,8 +1692,28 @@ def generate_dashboard_html(
                 data.completed_at ? formatTime(data.completed_at) : '--';
         }}
 
+        function formatModelLabel(model) {{
+            if (typeof model === 'string') return `<span class="mono">${{escapeHtml(model)}}</span>`;
+            const name = model.name || '--';
+            const parts = [];
+            if (model.temperature !== undefined) parts.push('temp=' + model.temperature);
+            if (model.max_tokens) parts.push('max_tokens=' + model.max_tokens);
+            if (model.top_p !== undefined && model.top_p !== null) parts.push('top_p=' + model.top_p);
+            if (parts.length === 0) return `<span class="mono">${{escapeHtml(name)}}</span>`;
+            return `<span class="mono">${{escapeHtml(name)}}</span> <span class="model-detail">(${{escapeHtml(parts.join(', '))}})</span>`;
+        }}
+
+        function findModelConfig(modelName, configList) {{
+            if (!configList) return null;
+            for (const m of configList) {{
+                if (typeof m === 'object' && m.name === modelName) return m;
+            }}
+            return null;
+        }}
+
         function updateSummaryPanel(data) {{
             currentOptimizerType = detectOptimizerType(data.optimizer_name);
+            const jobType = data.job_type || 'run';
 
             const taskItems = [
                 {{ key: 'job_id', label: 'מזהה', value: data.job_id, mono: true, copyable: true }},
@@ -1507,32 +1721,90 @@ def generate_dashboard_html(
                 {{ key: 'elapsed', label: 'זמן', value: data.elapsed_seconds ? formatDuration(data.elapsed_seconds) : '--' }},
             ];
             if (data.username) taskItems.push({{ key: 'username', label: 'משתמש', value: data.username }});
+            taskItems.push({{ key: 'job_type', label: 'סוג', value: `<span class="job-type-badge ${{jobType}}">${{jobType === 'grid_search' ? 'Grid Search' : 'Run'}}</span>`, isHtml: true }});
 
             const optimizationItems = [
                 {{ key: 'module', label: 'מודול', value: data.module_name || '--', mono: true }},
                 {{ key: 'optimizer', label: 'אופטימייזר', value: data.optimizer_name || '--', mono: true }},
             ];
-            if (data.model_name) optimizationItems.push({{ key: 'model_name', label: 'מודל', value: data.model_name, mono: true }});
-            if (data.reflection_model_name) optimizationItems.push({{ key: 'reflection_model_name', label: 'מודל רפלקציה', value: data.reflection_model_name, mono: true }});
+            if (data._metric_name) {{
+                optimizationItems.push({{ key: 'metric_name', label: 'שם מדד', value: data._metric_name, mono: true }});
+            }}
+
+            if (jobType === 'grid_search') {{
+                // Grid search: show model lists with full settings
+                if (data.generation_models) {{
+                    const labels = data.generation_models.map(m => formatModelLabel(m)).join('<br>');
+                    optimizationItems.push({{ key: 'model_name', label: 'מודלי יצירה', value: labels, isHtml: true }});
+                }}
+                if (data.reflection_models) {{
+                    const labels = data.reflection_models.map(m => formatModelLabel(m)).join('<br>');
+                    optimizationItems.push({{ key: 'reflection_model_name', label: 'מודלי רפלקציה', value: labels, isHtml: true }});
+                }}
+                const total = data.total_pairs || 0;
+                const completed = data.completed_pairs || 0;
+                const failed = data.failed_pairs || 0;
+                optimizationItems.push({{ key: 'dataset_rows', label: 'זוגות', value: `${{completed}}/${{total}} הושלמו${{failed > 0 ? `, ${{failed}} נכשלו` : ''}}` }});
+                if (data.best_pair_label) {{
+                    // Use pair index to resolve exact model configs from the grid
+                    const genConfigs = data.generation_models || [];
+                    const refConfigs = data.reflection_models || [];
+                    const pairIdx = data._best_pair_index;
+                    let bestLabel = data.best_pair_label;
+                    if (pairIdx != null && genConfigs.length > 0 && refConfigs.length > 0) {{
+                        const numRef = refConfigs.length;
+                        const genIdx = Math.floor(pairIdx / numRef);
+                        const refIdx = pairIdx % numRef;
+                        const genCfg = genConfigs[genIdx] || genConfigs[0];
+                        const refCfg = refConfigs[refIdx] || refConfigs[0];
+                        bestLabel = formatModelLabel(genCfg) + ' + ' + formatModelLabel(refCfg);
+                    }}
+                    optimizationItems.push({{ key: 'model_name', label: 'זוג מנצח', value: bestLabel, isHtml: true }});
+                }}
+            }} else {{
+                // Regular run: show model names
+                if (data.model_name) optimizationItems.push({{ key: 'model_name', label: 'מודל', value: data.model_name, mono: true }});
+                if (data.reflection_model_name) optimizationItems.push({{ key: 'reflection_model_name', label: 'מודל רפלקציה', value: data.reflection_model_name, mono: true }});
+                if (data.prompt_model_name) optimizationItems.push({{ key: 'model_name', label: 'מודל פרומפט', value: data.prompt_model_name, mono: true }});
+                if (data.task_model_name) optimizationItems.push({{ key: 'model_name', label: 'מודל משימה', value: data.task_model_name, mono: true }});
+            }}
+
             optimizationItems.push({{ key: 'optimizer_kwargs', label: 'פרמטרים', value: formatKwargs(data.optimizer_kwargs), isHtml: true }});
             if (data.module_kwargs && Object.keys(data.module_kwargs).length > 0) {{
                 optimizationItems.push({{ key: 'module_kwargs', label: 'הגדרות מודול', value: formatKwargs(data.module_kwargs), isHtml: true }});
             }}
             optimizationItems.push({{ key: 'compile_kwargs', label: 'קומפילציה', value: formatKwargs(data.compile_kwargs), isHtml: true }});
 
+            // Data settings group
+            const dataItems = [
+                {{ key: 'dataset_rows', label: 'שורות', value: data.dataset_rows || '--' }},
+                {{ key: 'shuffle', label: 'ערבוב', value: data.shuffle !== null ? (data.shuffle ? 'כן' : 'לא') : '--' }},
+                {{ key: 'seed', label: 'Seed', value: data.seed ?? '--', mono: true }},
+                {{ key: 'split_fractions', label: 'חלוקה', value: formatSplitFractions(data.split_fractions, data._split_counts), isHtml: true }},
+            ];
+
             const groups = [
                 {{ title: 'פרטי משימה', items: taskItems }},
-                {{
-                    title: 'הגדרות נתונים',
-                    items: [
-                        {{ key: 'dataset_rows', label: 'שורות', value: data.dataset_rows || '--' }},
-                        {{ key: 'shuffle', label: 'ערבוב', value: data.shuffle !== null ? (data.shuffle ? 'כן' : 'לא') : '--' }},
-                        {{ key: 'seed', label: 'Seed', value: data.seed ?? '--', mono: true }},
-                        {{ key: 'split_fractions', label: 'חלוקה', value: formatSplitFractions(data.split_fractions), isHtml: true }},
-                    ]
-                }},
-                {{ title: 'הגדרות אופטימיזציה', items: optimizationItems }}
+                {{ title: 'הגדרות נתונים', items: dataItems }},
+                {{ title: 'הגדרות אופטימיזציה', items: optimizationItems }},
             ];
+
+            // Model configuration group (run jobs)
+            if (jobType !== 'grid_search' && data.model_settings && typeof data.model_settings === 'object') {{
+                const ms = data.model_settings;
+                const modelConfigItems = [];
+                if (ms.name) modelConfigItems.push({{ key: 'model_name', label: 'שם', value: ms.name, mono: true }});
+                if (ms.temperature !== undefined) modelConfigItems.push({{ key: 'model_name', label: 'טמפרטורה', value: String(ms.temperature) }});
+                if (ms.max_tokens) modelConfigItems.push({{ key: 'model_name', label: 'אורך מקסימלי', value: String(ms.max_tokens) }});
+                if (ms.top_p !== undefined && ms.top_p !== null) modelConfigItems.push({{ key: 'model_name', label: 'Top-P', value: String(ms.top_p) }});
+                if (ms.base_url) modelConfigItems.push({{ key: 'model_name', label: 'כתובת שרת', value: ms.base_url, mono: true }});
+                if (ms.extra && Object.keys(ms.extra).length > 0) {{
+                    modelConfigItems.push({{ key: 'model_name', label: 'נוסף', value: formatKwargs(ms.extra), isHtml: true }});
+                }}
+                if (modelConfigItems.length > 0) {{
+                    groups.push({{ title: 'הגדרות מודל', items: modelConfigItems }});
+                }}
+            }}
 
             document.getElementById('summaryGroups').innerHTML = groups.map((group, gi) => `
                 <div class="summary-group" id="group-${{gi}}">
@@ -1552,7 +1824,7 @@ def generate_dashboard_html(
                                                 <span class="param-info">?</span>
                                             </span>
                                         </td>
-                                        <td>${{item.isHtml ? item.value : (item.mono ? `<span class="mono ${{item.copyable ? 'copyable' : ''}}" ${{item.copyable ? `onclick="copyToClipboard('${{escapeAttr(String(item.value))}}', event)"` : ''}}>${{escapeHtml(String(item.value))}}</span>` : escapeHtml(String(item.value)))}}</td>
+                                        <td>${{item.isHtml ? `<span class="copyable" onclick="copyToClipboard(this.textContent.trim(), event)">${{item.value}}</span>` : `<span class="${{item.mono ? 'mono ' : ''}}copyable" onclick="copyToClipboard('${{escapeAttr(String(item.value))}}', event)">${{escapeHtml(String(item.value))}}</span>`}}</td>
                                     </tr>
                                 `).join('')}}
                             </tbody>
@@ -1613,19 +1885,30 @@ def generate_dashboard_html(
             tooltip.classList.add('visible');
         }}
 
-        function updateComparisonCard(data) {{
+        function updateComparisonCard(data, jobType) {{
             const card = document.getElementById('comparisonCard');
-            const result = data.result;
 
-            if (!result || (result.baseline_test_metric === null && result.optimized_test_metric === null)) {{
-                card.style.display = 'none';
-                return;
+            let baseline = null;
+            let optimized = null;
+
+            if (jobType === 'grid_search') {{
+                // For grid search, use best pair from grid_result
+                const gridResult = data.grid_result;
+                if (gridResult?.best_pair) {{
+                    baseline = gridResult.best_pair.baseline_test_metric;
+                    optimized = gridResult.best_pair.optimized_test_metric;
+                }}
+            }} else {{
+                const result = data.result;
+                if (result) {{
+                    baseline = result.baseline_test_metric;
+                    optimized = result.optimized_test_metric;
+                }}
             }}
 
-            card.style.display = 'grid';
-
-            const baseline = result.baseline_test_metric;
-            const optimized = result.optimized_test_metric;
+            if (baseline === null && optimized === null) {{
+                // No data — show card with default '--' values
+            }}
 
             document.getElementById('baselineScore').textContent =
                 baseline !== null ? baseline.toFixed(2) : '--';
@@ -1640,18 +1923,142 @@ def generate_dashboard_html(
             }}
         }}
 
+        function updateGridResultsPanel(gridResult, summary) {{
+            const section = document.getElementById('gridResultsSection');
+            const body = document.getElementById('gridResultsBody');
+            const countEl = document.getElementById('gridPairsCount');
+
+            if (!gridResult || !gridResult.pair_results || gridResult.pair_results.length === 0) {{
+                body.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">אין נתונים</td></tr>';
+                countEl.textContent = '';
+                return;
+            }}
+            const pairs = gridResult.pair_results;
+            const bestIdx = gridResult.best_pair?.pair_index;
+
+            // Model config lookups from overview (may be dicts or strings)
+            const genConfigs = summary?.generation_models || [];
+            const refConfigs = summary?.reflection_models || [];
+
+            countEl.textContent = `${{gridResult.completed_pairs || 0}}/${{gridResult.total_pairs || pairs.length}} הושלמו`;
+
+            // Sort: best first, then by optimized metric descending
+            const sorted = [...pairs].sort((a, b) => {{
+                if (a.pair_index === bestIdx) return -1;
+                if (b.pair_index === bestIdx) return 1;
+                const aScore = a.optimized_test_metric ?? -1;
+                const bScore = b.optimized_test_metric ?? -1;
+                return bScore - aScore;
+            }});
+
+            body.innerHTML = sorted.map(p => {{
+                const isBest = p.pair_index === bestIdx;
+                const isFailed = !!p.error;
+                const rowClass = isBest ? 'best-pair' : (isFailed ? 'failed-pair' : '');
+                const statusBadge = isBest
+                    ? '<span class="pair-status-badge best">מנצח</span>'
+                    : (isFailed ? '<span class="pair-status-badge failed">נכשל</span>'
+                    : '<span class="pair-status-badge success">הושלם</span>');
+
+                // Resolve model configs to show distinguishing settings
+                const genConfig = findModelConfig(p.generation_model, genConfigs) || p.generation_model;
+                const refConfig = findModelConfig(p.reflection_model, refConfigs) || p.reflection_model;
+
+                return `<tr class="${{rowClass}}">
+                    <td>${{p.pair_index + 1}}</td>
+                    <td><span class="mono">${{escapeHtml(p.generation_model)}}</span></td>
+                    <td><span class="mono">${{escapeHtml(p.reflection_model)}}</span></td>
+                    <td>${{p.baseline_test_metric != null ? p.baseline_test_metric.toFixed(4) : '--'}}</td>
+                    <td>${{p.optimized_test_metric != null ? p.optimized_test_metric.toFixed(4) : '--'}}</td>
+                    <td>${{p.metric_improvement != null ? (p.metric_improvement >= 0 ? '+' : '') + p.metric_improvement.toFixed(4) : '--'}}</td>
+                    <td>${{statusBadge}}</td>
+                </tr>`;
+            }}).join('');
+
+            // Also show the prompt panel for the best pair if it has an artifact
+            if (gridResult.best_pair?.program_artifact) {{
+                updatePromptPanel({{ program_artifact: gridResult.best_pair.program_artifact }});
+            }}
+        }}
+
+        function highlightPython(code) {{
+            let html = escapeHtml(code);
+            // Strings (triple-quoted first, then single/double)
+            html = html.replace(/((&quot;){3}[\s\S]*?(&quot;){3}|(&quot;).*?(&quot;)|&#x27;&#x27;&#x27;[\s\S]*?&#x27;&#x27;&#x27;|&#x27;.*?&#x27;|&quot;.*?&quot;)/g, '<span class="str">$1</span>');
+            // Decorators
+            html = html.replace(/^(@\w+)/gm, '<span class="dec">$1</span>');
+            // Comments
+            html = html.replace(/(#.*$)/gm, '<span class="cmt">$1</span>');
+            // Keywords
+            const kws = ['import', 'from', 'class', 'def', 'return', 'if', 'else', 'elif', 'for', 'in', 'not', 'and', 'or', 'is', 'None', 'True', 'False', 'with', 'as', 'try', 'except', 'raise', 'pass', 'lambda'];
+            const kwRe = new RegExp('\\\\b(' + kws.join('|') + ')\\\\b', 'g');
+            html = html.replace(kwRe, '<span class="kw">$1</span>');
+            // Function/method calls
+            html = html.replace(/\b(\w+)(\()/g, '<span class="fn">$1</span>$2');
+            return html;
+        }}
+
+        function copyCode(elementId, btn) {{
+            const text = document.getElementById(elementId).textContent;
+            const svgEl = btn.querySelector('svg');
+            const originalSvg = svgEl.outerHTML;
+            const checkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            navigator.clipboard.writeText(text).then(() => {{
+                svgEl.outerHTML = checkSvg;
+                setTimeout(() => {{
+                    btn.querySelector('svg').outerHTML = originalSvg;
+                }}, 2000);
+            }}).catch(() => alert('ההעתקה נכשלה'));
+        }}
+
+        function updateCodePanel(jobPayload) {{
+            const sigSection = document.getElementById('signatureSection');
+            const metSection = document.getElementById('metricSection');
+            const emptyState = document.getElementById('codeEmptyState');
+
+            const payload = jobPayload?.payload;
+            if (!payload) {{
+                sigSection.style.display = 'none';
+                metSection.style.display = 'none';
+                emptyState.style.display = '';
+                return;
+            }}
+
+            const sigCode = payload.signature_code;
+            const metCode = payload.metric_code;
+
+            if (sigCode) {{
+                document.getElementById('signatureCode').innerHTML = highlightPython(sigCode);
+                sigSection.style.display = '';
+            }} else {{
+                sigSection.style.display = 'none';
+            }}
+
+            if (metCode) {{
+                document.getElementById('metricCode').innerHTML = highlightPython(metCode);
+                metSection.style.display = '';
+            }} else {{
+                metSection.style.display = 'none';
+            }}
+
+            emptyState.style.display = (sigCode || metCode) ? 'none' : '';
+        }}
+
         function updatePromptPanel(artifact) {{
-            const panel = document.getElementById('promptPanel');
+            const section = document.getElementById('promptSection');
+            const emptyState = document.getElementById('promptEmptyState');
+
             if (!artifact?.program_artifact?.optimized_prompt) {{
-                panel.classList.remove('show');
+                section.style.display = 'none';
+                emptyState.style.display = '';
                 return;
             }}
 
             const prompt = artifact.program_artifact.optimized_prompt;
-            panel.classList.add('show');
-
             const content = prompt.formatted_prompt || prompt.instructions || '';
             document.getElementById('promptContent').textContent = content;
+            section.style.display = '';
+            emptyState.style.display = 'none';
         }}
 
         function copyPrompt() {{
@@ -1672,34 +2079,42 @@ def generate_dashboard_html(
             }});
         }}
 
-        function updateProgressPanel(data) {{
-            const events = data.progress_events || [];
+        function updateProgressPanel(data, jobStatus) {{
             const latestMetrics = data.latest_metrics || {{}};
-
-            progressData = events
-                .filter(e => e.event === 'optimizer_progress' && e.metrics?.tqdm_percent !== undefined)
-                .map(e => ({{ timestamp: new Date(e.timestamp), percent: e.metrics.tqdm_percent }}))
-                .sort((a, b) => a.timestamp - b.timestamp);
-
-            metricsData = events
-                .filter(e => e.metrics?.iteration !== undefined && e.metrics?.score !== undefined)
-                .map(e => ({{ iteration: e.metrics.iteration, score: e.metrics.score }}))
-                .sort((a, b) => a.iteration - b.iteration);
-
-            drawProgressChart();
-            drawMetricsChart();
-            updateProgressStats(latestMetrics);
+            const status = jobStatus || data.status;
+            const isFinished = ['success', 'failed', 'cancelled'].includes(status);
+            updateProgressStats(latestMetrics, isFinished, status);
         }}
 
-        function updateProgressStats(latestMetrics) {{
+        function updateProgressStats(latestMetrics, isFinished, status) {{
             const section = document.getElementById('progressSection');
             const percent = latestMetrics.tqdm_percent;
-            if (percent === undefined || percent === null) {{
-                section.style.display = 'none';
+
+            if (isFinished) {{
+                // Job is done — show 100% complete bar
+                section.classList.add('done');
+                document.getElementById('progressPercent').textContent = status === 'success' ? '100%' : (status === 'failed' ? 'נכשל' : 'בוטל');
+                document.getElementById('progressBar').style.width = status === 'success' ? '100%' : (percent != null ? Math.min(percent, 100) + '%' : '0%');
+                const n = latestMetrics.tqdm_n;
+                const total = latestMetrics.tqdm_total;
+                document.getElementById('progressStep').textContent =
+                    (n != null && total != null) ? `${{n}} מתוך ${{total}}` : (status === 'success' ? 'הושלם' : '--');
+                document.getElementById('progressRate').textContent = '--';
+                document.getElementById('progressEta').textContent = '--';
                 return;
             }}
 
-            section.style.display = 'block';
+            if (percent === undefined || percent === null) {{
+                // No progress data yet — show waiting state
+                section.classList.remove('done');
+                document.getElementById('progressPercent').textContent = '--';
+                document.getElementById('progressBar').style.width = '0%';
+                document.getElementById('progressStep').textContent = 'ממתין לנתונים';
+                document.getElementById('progressRate').textContent = '--';
+                document.getElementById('progressEta').textContent = '--';
+                return;
+            }}
+
             section.classList.toggle('done', percent >= 100);
 
             document.getElementById('progressPercent').textContent = percent.toFixed(1) + '%';
@@ -1775,211 +2190,6 @@ def generate_dashboard_html(
             `).join('');
         }}
 
-        // Generic line chart drawing function
-        function drawLineChart(config) {{
-            const {{ canvasId, tooltipId, data, getX, getY, maxY, xLabels, yLabels, xTitle, yTitle, lineColor, fillColor }} = config;
-
-            const canvas = document.getElementById(canvasId);
-            const ctx = canvas.getContext('2d');
-            const rect = canvas.getBoundingClientRect();
-
-            canvas.width = rect.width * window.devicePixelRatio;
-            canvas.height = rect.height * window.devicePixelRatio;
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-
-            const width = rect.width;
-            const height = rect.height;
-            const padding = {{ top: 20, right: 20, bottom: 40, left: 60 }};
-            const chartWidth = width - padding.left - padding.right;
-            const chartHeight = height - padding.top - padding.bottom;
-
-            ctx.clearRect(0, 0, width, height);
-
-            // Draw grid
-            ctx.strokeStyle = '#E5E3DB';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= 4; i++) {{
-                const y = padding.top + (chartHeight * (4 - i) / 4);
-                ctx.beginPath();
-                ctx.moveTo(padding.left, y);
-                ctx.lineTo(width - padding.right, y);
-                ctx.stroke();
-            }}
-
-            // Draw axes
-            ctx.strokeStyle = '#1F1E1D';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(padding.left, padding.top);
-            ctx.lineTo(padding.left, height - padding.bottom);
-            ctx.lineTo(width - padding.right, height - padding.bottom);
-            ctx.stroke();
-
-            // Y-axis labels
-            ctx.fillStyle = '#6F6F78';
-            ctx.font = '11px system-ui, sans-serif';
-            ctx.textAlign = 'right';
-            for (let i = 0; i <= 4; i++) {{
-                const y = padding.top + (chartHeight * (4 - i) / 4);
-                ctx.fillText(yLabels(i, maxY), padding.left - 8, y + 4);
-            }}
-
-            // Y-axis title
-            ctx.save();
-            ctx.translate(12, height / 2);
-            ctx.rotate(-Math.PI / 2);
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#1F1E1D';
-            ctx.font = '12px system-ui, sans-serif';
-            ctx.fillText(yTitle, 0, 0);
-            ctx.restore();
-
-            // X-axis labels
-            ctx.fillStyle = '#6F6F78';
-            ctx.font = '10px system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            const numXLabels = 5;
-            for (let i = 0; i <= numXLabels; i++) {{
-                const x = padding.left + (i / numXLabels) * chartWidth;
-                ctx.fillText(xLabels(i, numXLabels), x, height - padding.bottom + 15);
-            }}
-
-            // X-axis title
-            ctx.fillStyle = '#1F1E1D';
-            ctx.font = '12px system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(xTitle, width / 2, height - 5);
-
-            if (data.length === 0) {{
-                return;
-            }}
-
-            if (data.length === 1) {{
-                const x = padding.left + chartWidth / 2;
-                const y = padding.top + chartHeight - (getY(data[0]) / maxY) * chartHeight;
-                ctx.fillStyle = lineColor;
-                ctx.beginPath();
-                ctx.arc(x, y, 5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#6F6F78';
-                ctx.font = '11px system-ui, sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(getY(data[0]).toFixed(1), x, y - 12);
-                return;
-            }}
-
-            // Draw line
-            ctx.strokeStyle = lineColor;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            data.forEach((point, i) => {{
-                const x = padding.left + getX(point) * chartWidth;
-                const y = padding.top + chartHeight - (getY(point) / maxY) * chartHeight;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }});
-            ctx.stroke();
-
-            // Gradient fill
-            const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
-            gradient.addColorStop(0, fillColor);
-            gradient.addColorStop(1, fillColor.replace('0.2', '0'));
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            data.forEach((point, i) => {{
-                const x = padding.left + getX(point) * chartWidth;
-                const y = padding.top + chartHeight - (getY(point) / maxY) * chartHeight;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }});
-            ctx.lineTo(width - padding.right, height - padding.bottom);
-            ctx.lineTo(padding.left, height - padding.bottom);
-            ctx.closePath();
-            ctx.fill();
-
-            // Setup tooltip with event cleanup
-            setupChartTooltip(canvas, tooltipId, data, config.tooltipFormat, chartWidth, padding);
-        }}
-
-        function drawProgressChart() {{
-            const minTime = progressData.length > 0 ? progressData[0].timestamp.getTime() : 0;
-            const maxTime = progressData.length > 0 ? progressData[progressData.length - 1].timestamp.getTime() : 1;
-            const timeRange = maxTime - minTime || 1;
-
-            drawLineChart({{
-                canvasId: 'progressChart',
-                tooltipId: 'progressTooltip',
-                data: progressData,
-                getX: (p) => (p.timestamp.getTime() - minTime) / timeRange,
-                getY: (p) => p.percent,
-                maxY: 100,
-                xLabels: (i, n) => progressData.length > 0 ? new Date(minTime + (timeRange * i / n)).toLocaleTimeString('he-IL', {{hour: '2-digit', minute:'2-digit'}}) : '',
-                yLabels: (i) => `${{i * 25}}%`,
-                xTitle: 'זמן',
-                yTitle: 'אחוז התקדמות',
-                lineColor: '#C96442',
-                fillColor: 'rgba(201, 100, 66, 0.2)',
-                tooltipFormat: (p) => `${{p.percent.toFixed(1)}}% בשעה ${{p.timestamp.toLocaleTimeString('he-IL')}}`
-            }});
-        }}
-
-        function drawMetricsChart() {{
-            const maxScore = metricsData.length > 0 ? Math.max(...metricsData.map(d => d.score)) * 1.1 : 1;
-            const maxIter = metricsData.length > 0 ? Math.max(...metricsData.map(d => d.iteration)) : 1;
-
-            drawLineChart({{
-                canvasId: 'metricsChart',
-                tooltipId: 'metricsTooltip',
-                data: metricsData,
-                getX: (p) => p.iteration / maxIter,
-                getY: (p) => p.score,
-                maxY: maxScore,
-                xLabels: (i, n) => Math.round(maxIter * i / n).toString(),
-                yLabels: (i, max) => (max * i / 4).toFixed(2),
-                xTitle: 'סבב',
-                yTitle: 'ציון',
-                lineColor: '#B8860B',
-                fillColor: 'rgba(184, 134, 11, 0.2)',
-                tooltipFormat: (p) => `סבב ${{p.iteration}}: ${{p.score.toFixed(4)}}`
-            }});
-        }}
-
-        // Chart tooltip with event listener cleanup
-        const chartHandlers = new Map();
-        function setupChartTooltip(canvas, tooltipId, data, formatFn, chartWidth, padding) {{
-            const tooltip = document.getElementById(tooltipId);
-
-            // Clean up previous handlers
-            if (chartHandlers.has(canvas)) {{
-                const {{ move, leave }} = chartHandlers.get(canvas);
-                canvas.removeEventListener('mousemove', move);
-                canvas.removeEventListener('mouseleave', leave);
-            }}
-
-            const moveHandler = (e) => {{
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                if (x < padding.left || x > rect.width - padding.right) {{
-                    tooltip.classList.remove('visible');
-                    return;
-                }}
-                const normalizedX = (x - padding.left) / chartWidth;
-                const index = Math.round(normalizedX * (data.length - 1));
-                if (index >= 0 && index < data.length) {{
-                    tooltip.innerHTML = formatFn(data[index]);
-                    tooltip.style.left = `${{Math.max(0, x - 80)}}px`;
-                    tooltip.style.top = `${{e.clientY - rect.top - 30}}px`;
-                    tooltip.classList.add('visible');
-                }}
-            }};
-
-            const leaveHandler = () => tooltip.classList.remove('visible');
-
-            canvas.addEventListener('mousemove', moveHandler);
-            canvas.addEventListener('mouseleave', leaveHandler);
-            chartHandlers.set(canvas, {{ move: moveHandler, leave: leaveHandler }});
-        }}
-
         function showJobError(msg, title) {{
             const banner = document.getElementById('errorBanner');
             document.getElementById('errorBannerTitle').textContent = title || 'המשימה נכשלה';
@@ -1992,21 +2202,24 @@ def generate_dashboard_html(
         }}
 
         // Helpers
-        function formatSplitFractions(fractions) {{
+        function formatSplitFractions(fractions, counts) {{
             if (!fractions) return '--';
+            const trainLabel = counts ? `${{(fractions.train * 100).toFixed(0)}}% (${{counts.train}})` : `${{(fractions.train * 100).toFixed(0)}}%`;
+            const valLabel = counts ? `${{(fractions.val * 100).toFixed(0)}}% (${{counts.val}})` : `${{(fractions.val * 100).toFixed(0)}}%`;
+            const testLabel = counts ? `${{(fractions.test * 100).toFixed(0)}}% (${{counts.test}})` : `${{(fractions.test * 100).toFixed(0)}}%`;
             return `
                 <div class="split-fractions-display">
                     <div class="split-fraction-item">
                         <span class="label">אימון:</span>
-                        <span class="value">${{(fractions.train * 100).toFixed(0)}}%</span>
+                        <span class="value">${{trainLabel}}</span>
                     </div>
                     <div class="split-fraction-item">
                         <span class="label">אימות:</span>
-                        <span class="value">${{(fractions.val * 100).toFixed(0)}}%</span>
+                        <span class="value">${{valLabel}}</span>
                     </div>
                     <div class="split-fraction-item">
                         <span class="label">בדיקה:</span>
-                        <span class="value">${{(fractions.test * 100).toFixed(0)}}%</span>
+                        <span class="value">${{testLabel}}</span>
                     </div>
                 </div>
             `;
@@ -2051,9 +2264,11 @@ def generate_dashboard_html(
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             const s = Math.floor(seconds % 60);
-            if (h > 0) return `${{h}} ש׳ ${{m}} ד׳ ${{s}} ש״`;
-            if (m > 0) return `${{m}} ד׳ ${{s}} ש״`;
-            return `${{s}} ש״`;
+            let text;
+            if (h > 0) text = `${{h}} שעות ${{m}} דק׳ ${{s}} שנ׳`;
+            else if (m > 0) text = `${{m}} דק׳ ${{s}} שנ׳`;
+            else text = `${{s}} שנ׳`;
+            return '\u2066' + text + '\u2069';
         }}
 
         function escapeHtml(text) {{
@@ -2089,13 +2304,6 @@ def generate_dashboard_html(
             }});
         }}
 
-        // Event listeners
-        window.addEventListener('resize', () => {{
-            if (currentJobId) {{
-                drawProgressChart();
-                drawMetricsChart();
-            }}
-        }});
     </script>
 </body>
 </html>'''

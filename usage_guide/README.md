@@ -8,6 +8,7 @@ This guide is for **clients** who want to submit optimization jobs to the DSPy s
 - [Datasets](#datasets)
 - [GEPA Optimizer](#gepa-optimizer)
 - [Grid Search](#grid-search)
+- [Error Handling](#error-handling)
 - [API Client Classes](#api-client-classes)
 - [Typical Workflow](#typical-workflow)
 
@@ -129,6 +130,18 @@ This produces `2 x 1 = 2` optimization runs as a single job.
 
 Grid search jobs use the same `/jobs/{job_id}` endpoint. Progress events include `grid_pair_started`, `grid_pair_completed`, and `grid_pair_failed` with per-pair details.
 
+### Filtering Logs
+
+The logs endpoint supports filtering by level and pagination:
+
+```python
+# Get only ERROR logs
+resp = requests.get(f"{BASE_URL}/jobs/{job_id}/logs", params={"level": "ERROR"})
+
+# Paginate through logs
+resp = requests.get(f"{BASE_URL}/jobs/{job_id}/logs", params={"limit": 50, "offset": 100})
+```
+
 ### Retrieving Results
 
 Once the job completes, fetch the full grid result:
@@ -148,6 +161,25 @@ if result["best_pair"]:
 ```
 
 Each entry in `pair_results` contains `baseline_test_metric`, `optimized_test_metric`, `metric_improvement`, `runtime_seconds`, `program_artifact`, and `error` (if the pair failed).
+
+## Error Handling
+
+All API error responses use a consistent format:
+```json
+{
+  "error": "not_found",
+  "detail": "Job 'abc-123' not found"
+}
+```
+
+The `error` field tells you the error type (`validation_error`, `not_found`, `conflict`, `invalid_request`, `internal_error`, `service_unavailable`), while `detail` provides a human-readable message. This lets you write a single error handler:
+
+```python
+resp = requests.post(f"{BASE_URL}/run", json=payload)
+if resp.status_code >= 400:
+    err = resp.json()
+    print(f"Error ({err['error']}): {err['detail']}")
+```
 
 ## API Client Classes
 
@@ -175,7 +207,7 @@ status = client.status(job_id)
 # Get job summary (lightweight)
 summary = client.summary(job_id)
 
-# Get full logs
+# Get full logs (supports level filtering)
 logs = client.logs(job_id)
 
 # Download artifact

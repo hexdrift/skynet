@@ -49,6 +49,11 @@ PAYLOAD_OVERVIEW_JOB_TYPE = "job_type"
 JOB_TYPE_RUN = "run"
 JOB_TYPE_GRID_SEARCH = "grid_search"
 
+# grid search overview keys
+PAYLOAD_OVERVIEW_TOTAL_PAIRS = "total_pairs"
+PAYLOAD_OVERVIEW_GENERATION_MODELS = "generation_models"
+PAYLOAD_OVERVIEW_REFLECTION_MODELS = "reflection_models"
+
 # tqdm metric keys captured from progress bars
 TQDM_TOTAL_KEY = "tqdm_total"
 TQDM_N_KEY = "tqdm_n"

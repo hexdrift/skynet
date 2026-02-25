@@ -34,9 +34,16 @@ class JobStore(Protocol):
         timestamp: Optional[datetime] = None,
     ) -> None: ...
 
-    def get_logs(self, job_id: str) -> List[Dict[str, Any]]: ...
+    def get_logs(
+        self,
+        job_id: str,
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        level: Optional[str] = None,
+    ) -> List[Dict[str, Any]]: ...
 
-    def get_log_count(self, job_id: str) -> int: ...
+    def get_log_count(self, job_id: str, *, level: Optional[str] = None) -> int: ...
 
     def set_payload_overview(self, job_id: str, overview: Dict[str, Any]) -> None: ...
 
@@ -45,6 +52,7 @@ class JobStore(Protocol):
         *,
         status: Optional[str] = None,
         username: Optional[str] = None,
+        job_type: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> List[Dict[str, Any]]: ...
@@ -54,6 +62,7 @@ class JobStore(Protocol):
         *,
         status: Optional[str] = None,
         username: Optional[str] = None,
+        job_type: Optional[str] = None,
     ) -> int: ...
 
     def recover_orphaned_jobs(self) -> int: ...

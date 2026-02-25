@@ -15,6 +15,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from ..constants import JOB_TYPE_GRID_SEARCH, JOB_TYPE_RUN, PAYLOAD_OVERVIEW_JOB_TYPE
 from ..storage import JobStore
 from ..models import GridSearchRequest, RunRequest
 from ..registry import ServiceRegistry
@@ -82,7 +83,7 @@ def _run_service_in_subprocess(
     dspy_logger.addHandler(log_handler)
 
     try:
-        is_grid_search = "generation_models" in payload_dict
+        job_type = payload_dict.pop("_job_type", JOB_TYPE_RUN)
 
         def progress_callback(message: str, metrics: Dict[str, Any]) -> None:
             _safe_queue_put(
@@ -94,8 +95,7 @@ def _run_service_in_subprocess(
                 },
             )
 
-        if is_grid_search:
-            # Grid search requires DspyService; fall back if injected service lacks it.
+        if job_type == JOB_TYPE_GRID_SEARCH:
             if not hasattr(service, "run_grid_search"):
                 service = DspyService(ServiceRegistry())
             payload = GridSearchRequest.model_validate(payload_dict)
@@ -232,7 +232,7 @@ class BackgroundWorker:
         """
         self._job_store.update_job(
             job_id,
-            payload=payload.model_dump(mode="json"),
+            payload=payload.model_dump(mode="json", by_alias=True),
         )
         self.enqueue_job(job_id)
 
@@ -322,8 +322,16 @@ class BackgroundWorker:
             if not payload_dict:
                 raise ValueError(f"Job {job_id} has no payload")
 
-            is_grid_search = "generation_models" in payload_dict
-            if is_grid_search:
+            overview = job_data.get("payload_overview", {})
+            if isinstance(overview, str):
+                import json
+                try:
+                    overview = json.loads(overview)
+                except (json.JSONDecodeError, TypeError):
+                    overview = {}
+            job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
+
+            if job_type == JOB_TYPE_GRID_SEARCH:
                 payload = GridSearchRequest.model_validate(payload_dict)
             else:
                 payload = RunRequest.model_validate(payload_dict)
@@ -335,9 +343,9 @@ class BackgroundWorker:
             )
 
             service = self._get_service()
-            if is_grid_search and hasattr(service, "validate_grid_search_payload"):
+            if job_type == JOB_TYPE_GRID_SEARCH and hasattr(service, "validate_grid_search_payload"):
                 service.validate_grid_search_payload(payload)
-            elif not is_grid_search:
+            elif job_type == JOB_TYPE_RUN:
                 service.validate_payload(payload)
 
             _check_cancel()  # before starting the optimization
@@ -360,6 +368,10 @@ class BackgroundWorker:
                 _FORK_SERVICE = service
 
             try:
+                # Inject job type so subprocess can dispatch without duck-typing.
+                # Pydantic ignores this unknown key during model_validate.
+                payload_dict["_job_type"] = job_type
+
                 event_queue = self._mp_ctx.Queue()
                 run_process = self._mp_ctx.Process(
                     target=_run_service_in_subprocess,
@@ -389,6 +401,16 @@ class BackgroundWorker:
                     traceback_text = subprocess_error.get("traceback")
                     if traceback_text:
                         logger.error("Job %s subprocess traceback:\n%s", job_id, traceback_text)
+                        # Persist traceback so users can see it via GET /jobs/{id}/logs
+                        try:
+                            self._job_store.append_log(
+                                job_id,
+                                level="ERROR",
+                                logger_name="dspy.subprocess",
+                                message=traceback_text,
+                            )
+                        except Exception:
+                            pass
                     raise RuntimeError(str(subprocess_error.get("error", "Unknown subprocess error")))
 
                 if run_process.exitcode not in (0, None) and result_dict is None:
@@ -402,15 +424,25 @@ class BackgroundWorker:
                 # cancel endpoint already marked the job as cancelled.
                 _check_cancel()
 
+                # Grid search with all pairs failed is a failure, not a success.
+                final_status = "success"
+                final_message = "Optimization completed successfully"
+                if job_type == JOB_TYPE_GRID_SEARCH and isinstance(result_dict, dict):
+                    completed = result_dict.get("completed_pairs", 0)
+                    total = result_dict.get("total_pairs", 0)
+                    if completed == 0 and total > 0:
+                        final_status = "failed"
+                        final_message = f"All {total} model pairs failed"
+
                 try:
                     self._job_store.update_job(
                         job_id,
-                        status="success",
-                        message="Optimization completed successfully",
+                        status=final_status,
+                        message=final_message,
                         completed_at=datetime.now(timezone.utc).isoformat(),
                         result=result_dict,
                     )
-                    logger.info("Job %s completed successfully", job_id)
+                    logger.info("Job %s completed with status=%s", job_id, final_status)
                 except KeyError:
                     logger.info("Job %s was deleted during execution (likely cancelled), skipping result", job_id)
             except BaseException:
@@ -443,13 +475,8 @@ class BackgroundWorker:
                 error_message = str(exc)
                 logger.exception("Job %s failed: %s", job_id, error_message)
             if is_cancelled:
-                # Cancelled jobs are cleaned up entirely
-                try:
-                    self._job_store.delete_job(job_id)
-                except KeyError:
-                    pass  # already deleted (e.g., cancel endpoint beat the worker thread)
-                except Exception:
-                    logger.exception("Job %s: failed to delete from DB after cancel", job_id)
+                # Cancel endpoint already set status to "cancelled"; no further DB action needed.
+                pass
             else:
                 # Failed jobs are retained so users can inspect the error
                 now = datetime.now(timezone.utc).isoformat()

@@ -1,5 +1,5 @@
 import logging
-import time
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 import dspy
@@ -98,7 +98,7 @@ class DspyService:
         Raises:
             ServiceError: If validation fails or optimization errors occur.
         """
-        run_start = time.perf_counter()
+        run_start = datetime.now(timezone.utc)
         logger.info(
             "Starting DSPy run: module=%s optimizer=%s dataset_rows=%d",
             payload.module_name,
@@ -224,7 +224,7 @@ class DspyService:
         if baseline_test_metric is not None and optimized_test_metric is not None:
             metric_improvement = optimized_test_metric - baseline_test_metric
 
-        runtime_seconds = time.perf_counter() - run_start
+        runtime_seconds = (datetime.now(timezone.utc) - run_start).total_seconds()
         response = RunResponse(
             module_name=payload.module_name,
             optimizer_name=payload.optimizer_name,
@@ -255,7 +255,7 @@ class DspyService:
         progress_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     ) -> GridSearchResponse:
         """Run GEPA optimization for every (generation, reflection) model pair."""
-        grid_start = time.perf_counter()
+        grid_start = datetime.now(timezone.utc)
         pairs = [
             (gen_cfg, ref_cfg)
             for gen_cfg in payload.generation_models
@@ -312,7 +312,7 @@ class DspyService:
                     "reflection_model": ref_cfg.name,
                 })
 
-            pair_start = time.perf_counter()
+            pair_start = datetime.now(timezone.utc)
             try:
                 program = module_factory(**module_kwargs)
                 language_model = build_language_model(gen_cfg)
@@ -347,7 +347,7 @@ class DspyService:
                 if baseline is not None and optimized is not None:
                     improvement = optimized - baseline
 
-                pair_runtime = time.perf_counter() - pair_start
+                pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
                 result = PairResult(
                     pair_index=i,
                     generation_model=gen_cfg.name,
@@ -379,7 +379,7 @@ class DspyService:
                     })
 
             except Exception as exc:
-                pair_runtime = time.perf_counter() - pair_start
+                pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
                 error_msg = str(exc)
                 pair_results.append(PairResult(
                     pair_index=i,
@@ -407,7 +407,7 @@ class DspyService:
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
         best_pair = max(successful, key=lambda p: p.optimized_test_metric) if successful else None
 
-        grid_runtime = time.perf_counter() - grid_start
+        grid_runtime = (datetime.now(timezone.utc) - grid_start).total_seconds()
         completed_count = len([p for p in pair_results if p.error is None])
         failed_count = len([p for p in pair_results if p.error is not None])
 
@@ -436,6 +436,7 @@ class DspyService:
         signature_cls = load_signature_from_code(payload.signature_code)
         inputs, outputs = extract_signature_fields(signature_cls)
         self._require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        self._require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
         load_metric_from_code(payload.metric_code)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
@@ -466,6 +467,7 @@ class DspyService:
         signature_cls = load_signature_from_code(payload.signature_code)
         inputs, outputs = extract_signature_fields(signature_cls)
         self._require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        self._require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
         load_metric_from_code(payload.metric_code)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
@@ -540,4 +542,28 @@ class DspyService:
                 "column_mapping must include every signature field. "
                 f"Missing inputs: {sorted(missing_inputs)}; "
                 f"missing outputs: {sorted(missing_outputs)}"
+            )
+
+    @staticmethod
+    def _require_mapping_columns_in_dataset(
+        mapping: ColumnMapping, dataset: List[Dict[str, Any]]
+    ) -> None:
+        """Ensure every mapped column name exists in the dataset rows.
+
+        Args:
+            mapping: ColumnMapping specifying input/output column mappings.
+            dataset: Non-empty list of row dicts from the request.
+
+        Raises:
+            ServiceError: If mapped columns are not found in dataset keys.
+        """
+        dataset_columns = set()
+        for row in dataset:
+            dataset_columns.update(row.keys())
+        mapped_columns = set(mapping.inputs.values()) | set(mapping.outputs.values())
+        missing = mapped_columns - dataset_columns
+        if missing:
+            raise ServiceError(
+                f"column_mapping references columns not found in dataset: {sorted(missing)}. "
+                f"Available columns: {sorted(dataset_columns)}"
             )

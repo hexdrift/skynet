@@ -177,7 +177,7 @@ def test_happy_path_completion(configured_env) -> None:
         assert body["result"]["metric_name"] == "metric"
 
 
-def test_pending_cancellation_deletes_job_and_leaves_no_orphans(configured_env, monkeypatch) -> None:
+def test_pending_cancellation_marks_job_cancelled(configured_env, monkeypatch) -> None:
     monkeypatch.setenv("WORKER_POLL_INTERVAL", "1.0")
     app = create_app(service=FastSuccessService())
     with TestClient(app) as client:
@@ -188,12 +188,9 @@ def test_pending_cancellation_deletes_job_and_leaves_no_orphans(configured_env, 
         cancel = client.post(f"/jobs/{job_id}/cancel")
         assert cancel.status_code == 200
 
-        assert _wait_until(lambda: client.get(f"/jobs/{job_id}").status_code == 404, timeout=2.0)
-
-    store = LocalDBJobStore()
-    assert not store.job_exists(job_id)
-    assert store.get_progress_count(job_id) == 0
-    assert store.get_log_count(job_id) == 0
+        detail = client.get(f"/jobs/{job_id}")
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "cancelled"
 
 
 def test_running_cancellation_is_bounded_and_clears_active_job(configured_env) -> None:
@@ -209,9 +206,9 @@ def test_running_cancellation_is_bounded_and_clears_active_job(configured_env) -
         cancel = client.post(f"/jobs/{job_id}/cancel")
         assert cancel.status_code == 200
 
-        deleted = _wait_until(lambda: client.get(f"/jobs/{job_id}").status_code == 404, timeout=2.0)
+        cancelled = _wait_for_job_status(client, job_id, "cancelled", timeout=2.0)
         elapsed = time.time() - t0
-        assert deleted, "Cancelled running job should be deleted quickly"
+        assert cancelled, "Cancelled running job should reach 'cancelled' status quickly"
         assert elapsed <= 2.0
 
         assert _wait_until(lambda: client.get("/queue").json()["active_jobs"] == 0, timeout=2.0)
@@ -400,3 +397,95 @@ def test_tqdm_proxy_computes_remaining_from_rate() -> None:
     zero_captured = []
     zero_proxy = _TqdmProxy(ZeroRateBar(), lambda e, m: zero_captured.append(m))
     assert zero_captured[0]["tqdm_remaining"] is None
+
+
+class FailingRunService:
+    """Service that always raises during run()."""
+
+    def validate_payload(self, payload) -> None:
+        pass
+
+    def run(self, payload, *, artifact_id=None, progress_callback=None):
+        raise ValueError("Dataset column mismatch: expected 'question' but got 'query'")
+
+
+def test_artifact_on_failed_job_shows_error(configured_env) -> None:
+    """Artifact endpoint should say the job failed and include the error message."""
+    app = create_app(service=FailingRunService())
+    with TestClient(app) as client:
+        submit = client.post("/run", json=make_payload(username="fail_art"))
+        assert submit.status_code == 201
+        job_id = submit.json()["job_id"]
+
+        assert _wait_for_job_status(client, job_id, "failed", timeout=8.0)
+
+        art = client.get(f"/jobs/{job_id}/artifact")
+        assert art.status_code == 409
+        detail = art.json()["detail"]
+        assert "failed" in detail.lower()
+        assert "column mismatch" in detail.lower()
+
+
+def test_artifact_on_cancelled_job_says_cancelled(configured_env) -> None:
+    """Artifact endpoint should clearly say the job was cancelled."""
+    app = create_app(service=FastSuccessService())
+    with TestClient(app) as client:
+        submit = client.post("/run", json=make_payload(username="cancel_art"))
+        assert submit.status_code == 201
+        job_id = submit.json()["job_id"]
+
+        cancel = client.post(f"/jobs/{job_id}/cancel")
+        assert cancel.status_code == 200
+
+        art = client.get(f"/jobs/{job_id}/artifact")
+        assert art.status_code == 409
+        assert "cancelled" in art.json()["detail"].lower()
+
+
+def test_failed_job_has_traceback_in_logs(configured_env) -> None:
+    """When a job fails, the subprocess traceback should be in the job logs."""
+    app = create_app(service=FailingRunService())
+    with TestClient(app) as client:
+        submit = client.post("/run", json=make_payload(username="traceback_test"))
+        assert submit.status_code == 201
+        job_id = submit.json()["job_id"]
+
+        assert _wait_for_job_status(client, job_id, "failed", timeout=8.0)
+
+        logs = client.get(f"/jobs/{job_id}/logs")
+        assert logs.status_code == 200
+        entries = logs.json()
+        error_entries = [e for e in entries if e["level"] == "ERROR"]
+        assert error_entries, "Failed job should have ERROR-level log entries with traceback"
+        traceback_text = " ".join(e["message"] for e in error_entries)
+        assert "Traceback" in traceback_text or "ValueError" in traceback_text
+
+
+def test_payload_retrieval(configured_env) -> None:
+    """GET /jobs/{id}/payload returns the original submitted payload."""
+    app = create_app(service=FastSuccessService())
+    with TestClient(app) as client:
+        original = make_payload(username="payload_test")
+        submit = client.post("/run", json=original)
+        assert submit.status_code == 201
+        job_id = submit.json()["job_id"]
+
+        resp = client.get(f"/jobs/{job_id}/payload")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_id"] == job_id
+        payload = body["payload"]
+        assert payload["username"] == "payload_test"
+        assert payload["module_name"] == original["module_name"]
+        assert payload["signature_code"] == original["signature_code"]
+        assert payload["metric_code"] == original["metric_code"]
+        assert payload["dataset"] == original["dataset"]
+        assert payload["column_mapping"] == original["column_mapping"]
+
+
+def test_payload_retrieval_unknown_job(configured_env) -> None:
+    """GET /jobs/{id}/payload returns 404 for unknown job."""
+    app = create_app(service=FastSuccessService())
+    with TestClient(app) as client:
+        resp = client.get("/jobs/nonexistent-job-id/payload")
+        assert resp.status_code == 404
