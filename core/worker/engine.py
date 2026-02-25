@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from ..storage import JobStore
-from ..models import RunRequest
+from ..models import GridSearchRequest, RunRequest
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
 
@@ -82,7 +82,7 @@ def _run_service_in_subprocess(
     dspy_logger.addHandler(log_handler)
 
     try:
-        payload = RunRequest.model_validate(payload_dict)
+        is_grid_search = "generation_models" in payload_dict
 
         def progress_callback(message: str, metrics: Dict[str, Any]) -> None:
             _safe_queue_put(
@@ -94,11 +94,23 @@ def _run_service_in_subprocess(
                 },
             )
 
-        result = service.run(
-            payload,
-            artifact_id=artifact_id,
-            progress_callback=progress_callback,
-        )
+        if is_grid_search:
+            # Grid search requires DspyService; fall back if injected service lacks it.
+            if not hasattr(service, "run_grid_search"):
+                service = DspyService(ServiceRegistry())
+            payload = GridSearchRequest.model_validate(payload_dict)
+            result = service.run_grid_search(
+                payload,
+                artifact_id=artifact_id,
+                progress_callback=progress_callback,
+            )
+        else:
+            payload = RunRequest.model_validate(payload_dict)
+            result = service.run(
+                payload,
+                artifact_id=artifact_id,
+                progress_callback=progress_callback,
+            )
         _safe_queue_put(
             event_queue,
             {
@@ -211,7 +223,7 @@ class BackgroundWorker:
                 self._pending_jobs.append(job_id)
                 logger.info("Job %s enqueued", job_id)
 
-    def submit_job(self, job_id: str, payload: RunRequest) -> None:
+    def submit_job(self, job_id: str, payload) -> None:
         """Submit a job for background processing.
 
         Args:
@@ -310,7 +322,11 @@ class BackgroundWorker:
             if not payload_dict:
                 raise ValueError(f"Job {job_id} has no payload")
 
-            payload = RunRequest.model_validate(payload_dict)
+            is_grid_search = "generation_models" in payload_dict
+            if is_grid_search:
+                payload = GridSearchRequest.model_validate(payload_dict)
+            else:
+                payload = RunRequest.model_validate(payload_dict)
 
             self._job_store.update_job(
                 job_id,
@@ -319,7 +335,10 @@ class BackgroundWorker:
             )
 
             service = self._get_service()
-            service.validate_payload(payload)
+            if is_grid_search and hasattr(service, "validate_grid_search_payload"):
+                service.validate_grid_search_payload(payload)
+            elif not is_grid_search:
+                service.validate_payload(payload)
 
             _check_cancel()  # before starting the optimization
 

@@ -39,6 +39,16 @@ PROGRESS_BASELINE = "baseline_evaluated"
 PROGRESS_OPTIMIZED = "optimized_evaluated"
 PROGRESS_OPTIMIZER = "optimizer_progress"
 
+# grid search progress events
+PROGRESS_GRID_PAIR_STARTED = "grid_pair_started"
+PROGRESS_GRID_PAIR_COMPLETED = "grid_pair_completed"
+PROGRESS_GRID_PAIR_FAILED = "grid_pair_failed"
+
+# job type discriminator
+PAYLOAD_OVERVIEW_JOB_TYPE = "job_type"
+JOB_TYPE_RUN = "run"
+JOB_TYPE_GRID_SEARCH = "grid_search"
+
 # tqdm metric keys captured from progress bars
 TQDM_TOTAL_KEY = "tqdm_total"
 TQDM_N_KEY = "tqdm_n"

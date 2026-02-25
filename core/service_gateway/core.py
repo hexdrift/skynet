@@ -16,11 +16,23 @@ from ..constants import (
     META_OPTIMIZER,
     META_OPTIMIZER_KWARGS,
     PROGRESS_BASELINE,
+    PROGRESS_GRID_PAIR_COMPLETED,
+    PROGRESS_GRID_PAIR_FAILED,
+    PROGRESS_GRID_PAIR_STARTED,
     PROGRESS_OPTIMIZED,
     PROGRESS_SPLITS_READY,
 )
 from ..exceptions import ServiceError
-from ..models import ColumnMapping, RunRequest, RunResponse, SplitCounts
+from ..models import (
+    ColumnMapping,
+    GridSearchRequest,
+    GridSearchResponse,
+    ModelConfig,
+    PairResult,
+    RunRequest,
+    RunResponse,
+    SplitCounts,
+)
 from .progress import capture_tqdm
 from ..registry import (
     ResolverError,
@@ -234,6 +246,203 @@ class DspyService:
             payload.optimizer_name,
         )
         return response
+
+    def run_grid_search(
+        self,
+        payload: GridSearchRequest,
+        *,
+        artifact_id: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    ) -> GridSearchResponse:
+        """Run GEPA optimization for every (generation, reflection) model pair."""
+        grid_start = time.perf_counter()
+        pairs = [
+            (gen_cfg, ref_cfg)
+            for gen_cfg in payload.generation_models
+            for ref_cfg in payload.reflection_models
+        ]
+        total_pairs = len(pairs)
+        logger.info(
+            "Starting grid search: %d pairs, module=%s optimizer=%s",
+            total_pairs, payload.module_name, payload.optimizer_name,
+        )
+
+        # --- shared setup (done once) ---
+        signature_cls = load_signature_from_code(payload.signature_code)
+        signature_inputs, signature_outputs = extract_signature_fields(signature_cls)
+        self._require_mapping_matches_signature(
+            payload.column_mapping, signature_inputs, signature_outputs,
+        )
+        module_factory, auto_signature = self._get_module_factory(payload.module_name)
+        module_kwargs = dict(payload.module_kwargs)
+        if auto_signature or "signature" not in module_kwargs:
+            module_kwargs["signature"] = signature_cls
+
+        metric = load_metric_from_code(payload.metric_code)
+        metric_identifier = getattr(metric, "__name__", "inline_metric")
+        optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
+
+        examples = rows_to_examples(payload.dataset, payload.column_mapping)
+        splits = split_examples(
+            examples, payload.split_fractions,
+            shuffle=payload.shuffle,
+            seed=payload.seed or self.default_seed,
+        )
+        split_counts = SplitCounts(
+            train=len(splits.train), val=len(splits.val), test=len(splits.test),
+        )
+        if progress_callback:
+            progress_callback(PROGRESS_SPLITS_READY, {
+                DETAIL_TRAIN: split_counts.train,
+                DETAIL_VAL: split_counts.val,
+                DETAIL_TEST: split_counts.test,
+                "total_pairs": total_pairs,
+            })
+
+        # --- iterate pairs ---
+        pair_results: List[PairResult] = []
+        for i, (gen_cfg, ref_cfg) in enumerate(pairs):
+            pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
+            logger.info("Grid pair %d/%d: %s", i + 1, total_pairs, pair_label)
+            if progress_callback:
+                progress_callback(PROGRESS_GRID_PAIR_STARTED, {
+                    "pair_index": i,
+                    "total_pairs": total_pairs,
+                    "generation_model": gen_cfg.name,
+                    "reflection_model": ref_cfg.name,
+                })
+
+            pair_start = time.perf_counter()
+            try:
+                program = module_factory(**module_kwargs)
+                language_model = build_language_model(gen_cfg)
+                # Build a temporary ModelConfig for the generation model to pass
+                # to instantiate_optimizer (it uses model_settings for defaults).
+                optimizer = instantiate_optimizer(
+                    optimizer_factory, payload.optimizer_name,
+                    payload.optimizer_kwargs, metric,
+                    gen_cfg, ref_cfg, None, None,
+                )
+
+                with dspy.context(lm=language_model):
+                    baseline = None
+                    if splits.test:
+                        baseline = evaluate_on_test(program, splits.test, metric)
+
+                    with capture_tqdm(progress_callback):
+                        compiled = compile_program(
+                            optimizer=optimizer, program=program,
+                            splits=splits, metric=metric,
+                            compile_kwargs=payload.compile_kwargs,
+                        )
+
+                    optimized = None
+                    if splits.test:
+                        optimized = evaluate_on_test(compiled, splits.test, metric)
+
+                art_id = f"{artifact_id}_pair_{i}" if artifact_id else None
+                program_artifact = persist_program(compiled, art_id)
+
+                improvement = None
+                if baseline is not None and optimized is not None:
+                    improvement = optimized - baseline
+
+                pair_runtime = time.perf_counter() - pair_start
+                result = PairResult(
+                    pair_index=i,
+                    generation_model=gen_cfg.name,
+                    reflection_model=ref_cfg.name,
+                    baseline_test_metric=baseline,
+                    optimized_test_metric=optimized,
+                    metric_improvement=improvement,
+                    runtime_seconds=round(pair_runtime, 2),
+                    program_artifact=program_artifact,
+                )
+                pair_results.append(result)
+                logger.info(
+                    "Grid pair %d/%d completed: baseline=%.4f optimized=%.4f (%.1fs)",
+                    i + 1, total_pairs,
+                    baseline or 0, optimized or 0, pair_runtime,
+                )
+                if progress_callback:
+                    progress_callback(PROGRESS_GRID_PAIR_COMPLETED, {
+                        "pair_index": i,
+                        "total_pairs": total_pairs,
+                        "generation_model": gen_cfg.name,
+                        "reflection_model": ref_cfg.name,
+                        "baseline_test_metric": baseline,
+                        "optimized_test_metric": optimized,
+                        "metric_improvement": improvement,
+                        "runtime_seconds": round(pair_runtime, 2),
+                        "completed_so_far": len([p for p in pair_results if p.error is None]),
+                        "failed_so_far": len([p for p in pair_results if p.error is not None]),
+                    })
+
+            except Exception as exc:
+                pair_runtime = time.perf_counter() - pair_start
+                error_msg = str(exc)
+                pair_results.append(PairResult(
+                    pair_index=i,
+                    generation_model=gen_cfg.name,
+                    reflection_model=ref_cfg.name,
+                    error=error_msg,
+                    runtime_seconds=round(pair_runtime, 2),
+                ))
+                logger.warning(
+                    "Grid pair %d/%d failed (%s): %s",
+                    i + 1, total_pairs, pair_label, error_msg,
+                )
+                if progress_callback:
+                    progress_callback(PROGRESS_GRID_PAIR_FAILED, {
+                        "pair_index": i,
+                        "total_pairs": total_pairs,
+                        "generation_model": gen_cfg.name,
+                        "reflection_model": ref_cfg.name,
+                        "error": error_msg,
+                        "completed_so_far": len([p for p in pair_results if p.error is None]),
+                        "failed_so_far": len([p for p in pair_results if p.error is not None]),
+                    })
+
+        # --- pick best pair ---
+        successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
+        best_pair = max(successful, key=lambda p: p.optimized_test_metric) if successful else None
+
+        grid_runtime = time.perf_counter() - grid_start
+        completed_count = len([p for p in pair_results if p.error is None])
+        failed_count = len([p for p in pair_results if p.error is not None])
+
+        logger.info(
+            "Grid search finished: %d/%d completed, %d failed, best=%s (%.1fs total)",
+            completed_count, total_pairs, failed_count,
+            f"{best_pair.generation_model}+{best_pair.reflection_model}" if best_pair else "none",
+            grid_runtime,
+        )
+
+        return GridSearchResponse(
+            module_name=payload.module_name,
+            optimizer_name=payload.optimizer_name,
+            metric_name=metric_identifier,
+            split_counts=split_counts,
+            total_pairs=total_pairs,
+            completed_pairs=completed_count,
+            failed_pairs=failed_count,
+            pair_results=pair_results,
+            best_pair=best_pair,
+            runtime_seconds=round(grid_runtime, 2),
+        )
+
+    def validate_grid_search_payload(self, payload: GridSearchRequest) -> None:
+        """Validate a grid search request before job submission."""
+        signature_cls = load_signature_from_code(payload.signature_code)
+        inputs, outputs = extract_signature_fields(signature_cls)
+        self._require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        load_metric_from_code(payload.metric_code)
+        self._get_module_factory(payload.module_name)
+        optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
+        validate_optimizer_signature(optimizer_factory, payload.optimizer_name)
+        validate_optimizer_kwargs(
+            optimizer_factory, payload.optimizer_kwargs, payload.optimizer_name,
+        )
 
     def validate_payload(self, payload: RunRequest) -> None:
         """Run additional validations prior to job submission.

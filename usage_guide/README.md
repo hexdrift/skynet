@@ -7,6 +7,7 @@ This guide is for **clients** who want to submit optimization jobs to the DSPy s
 - [Notebooks](#notebooks)
 - [Datasets](#datasets)
 - [GEPA Optimizer](#gepa-optimizer)
+- [Grid Search](#grid-search)
 - [API Client Classes](#api-client-classes)
 - [Typical Workflow](#typical-workflow)
 
@@ -86,6 +87,67 @@ payload = {
 | `max_full_evals` | Alternative to `auto`: explicit max number of rollouts |
 | `use_merge` | Enable merge-based optimization (default: `True`) |
 | `num_threads` | Parallel evaluation threads (e.g., `32`) |
+
+## Grid Search
+
+Grid search sweeps over every combination of generation and reflection models, running a full optimization cycle for each pair. This is useful for finding the best model pairing without manual experimentation.
+
+### Submitting a Grid Search
+
+`POST /grid-search` accepts the same fields as `/run`, but replaces `model_config` and `reflection_model_config` with two lists:
+
+```python
+payload = {
+    "username": "researcher",
+    "module_name": "dspy.ChainOfThought",
+    "optimizer_name": "dspy.GEPA",
+    "signature_code": serialize_source(QASignature),
+    "metric_code": serialize_source(metric),
+    "dataset": dataset,
+    "column_mapping": {"inputs": {"question": "question"}, "outputs": {"answer": "answer"}},
+    "optimizer_kwargs": {"auto": "light"},
+    "compile_kwargs": {},
+    "split_fractions": {"train": 0.5, "val": 0.3, "test": 0.2},
+    "shuffle": True,
+    "seed": 42,
+    "generation_models": [
+        {"name": "openai/gpt-4o-mini", "temperature": 0.7, "max_tokens": 4000},
+        {"name": "openai/gpt-4o",      "temperature": 0.7, "max_tokens": 4000},
+    ],
+    "reflection_models": [
+        {"name": "openai/gpt-4o-mini", "temperature": 1.0, "max_tokens": 20000},
+    ],
+}
+
+resp = requests.post(f"{BASE_URL}/grid-search", json=payload)
+job_id = resp.json()["job_id"]
+```
+
+This produces `2 x 1 = 2` optimization runs as a single job.
+
+### Monitoring Progress
+
+Grid search jobs use the same `/jobs/{job_id}` endpoint. Progress events include `grid_pair_started`, `grid_pair_completed`, and `grid_pair_failed` with per-pair details.
+
+### Retrieving Results
+
+Once the job completes, fetch the full grid result:
+
+```python
+resp = requests.get(f"{BASE_URL}/jobs/{job_id}/grid-result")
+result = resp.json()
+
+print(f"Completed: {result['completed_pairs']}/{result['total_pairs']}")
+print(f"Failed:    {result['failed_pairs']}")
+
+if result["best_pair"]:
+    bp = result["best_pair"]
+    print(f"Best pair: {bp['generation_model']} + {bp['reflection_model']}")
+    print(f"  Optimized metric: {bp['optimized_test_metric']}")
+    print(f"  Improvement:      {bp['metric_improvement']}")
+```
+
+Each entry in `pair_results` contains `baseline_test_metric`, `optimized_test_metric`, `metric_improvement`, `runtime_seconds`, `program_artifact`, and `error` (if the pair failed).
 
 ## API Client Classes
 

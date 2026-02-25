@@ -347,6 +347,67 @@ class PaginatedJobsResponse(BaseModel):
     offset: int = 0
 
 
+class GridSearchRequest(BaseModel):
+    """Payload for the /grid-search endpoint — sweep over model pairs."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    username: str
+    module_name: str
+    module_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    signature_code: str
+    metric_code: str
+    optimizer_name: str
+    optimizer_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    compile_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    dataset: List[Dict[str, Any]]
+    column_mapping: ColumnMapping
+    split_fractions: SplitFractions = Field(default_factory=SplitFractions)
+    shuffle: bool = True
+    seed: Optional[int] = None
+    generation_models: List[ModelConfig]
+    reflection_models: List[ModelConfig]
+
+    @model_validator(mode="after")
+    def _validate(self) -> "GridSearchRequest":
+        if not self.dataset:
+            raise ValueError("Dataset must contain at least one row.")
+        if not self.generation_models:
+            raise ValueError("At least one generation model is required.")
+        if not self.reflection_models:
+            raise ValueError("At least one reflection model is required.")
+        return self
+
+
+class PairResult(BaseModel):
+    """Result of a single (generation, reflection) model pair run."""
+
+    pair_index: int
+    generation_model: str
+    reflection_model: str
+    baseline_test_metric: Optional[float] = None
+    optimized_test_metric: Optional[float] = None
+    metric_improvement: Optional[float] = None
+    runtime_seconds: Optional[float] = None
+    program_artifact: Optional[ProgramArtifact] = None
+    error: Optional[str] = None
+
+
+class GridSearchResponse(BaseModel):
+    """Final result of a grid search over model pairs."""
+
+    module_name: str
+    optimizer_name: str
+    metric_name: Optional[str] = None
+    split_counts: SplitCounts
+    total_pairs: int
+    completed_pairs: int = 0
+    failed_pairs: int = 0
+    pair_results: List[PairResult] = Field(default_factory=list)
+    best_pair: Optional[PairResult] = None
+    runtime_seconds: Optional[float] = None
+
+
 class QueueStatusResponse(BaseModel):
     """Response payload for the queue status endpoint."""
 

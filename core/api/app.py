@@ -14,9 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ..constants import (
+    JOB_TYPE_GRID_SEARCH,
+    JOB_TYPE_RUN,
     PAYLOAD_OVERVIEW_COLUMN_MAPPING,
     PAYLOAD_OVERVIEW_COMPILE_KWARGS,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
+    PAYLOAD_OVERVIEW_JOB_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
     PAYLOAD_OVERVIEW_MODULE_KWARGS,
@@ -34,6 +37,8 @@ from ..constants import (
 from ..storage import get_job_store
 from ..models import (
     HEALTH_STATUS_OK,
+    GridSearchRequest,
+    GridSearchResponse,
     HealthResponse,
     JobLogEntry,
     JobStatus,
@@ -298,6 +303,59 @@ def create_app(
             optimizer_name=payload.optimizer_name,
         )
 
+    @app.post("/grid-search", response_model=JobSubmissionResponse, status_code=201)
+    def submit_grid_search(payload: GridSearchRequest) -> JobSubmissionResponse:
+        """Submit a grid search over (generation, reflection) model pairs."""
+        if hasattr(service, "validate_grid_search_payload"):
+            try:
+                service.validate_grid_search_payload(payload)
+            except (ServiceError, RegistryError) as exc:
+                logger.warning("Grid search validation failed: %s", exc)
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        job_id = str(uuid4())
+        total_pairs = len(payload.generation_models) * len(payload.reflection_models)
+
+        job_store.create_job(job_id)
+        job_store.set_payload_overview(
+            job_id,
+            {
+                PAYLOAD_OVERVIEW_JOB_TYPE: JOB_TYPE_GRID_SEARCH,
+                PAYLOAD_OVERVIEW_USERNAME: payload.username,
+                PAYLOAD_OVERVIEW_MODULE_NAME: payload.module_name,
+                PAYLOAD_OVERVIEW_MODULE_KWARGS: dict(payload.module_kwargs),
+                PAYLOAD_OVERVIEW_OPTIMIZER_NAME: payload.optimizer_name,
+                PAYLOAD_OVERVIEW_MODEL_NAME: f"{len(payload.generation_models)} gen x {len(payload.reflection_models)} ref",
+                PAYLOAD_OVERVIEW_COLUMN_MAPPING: payload.column_mapping.model_dump(),
+                PAYLOAD_OVERVIEW_DATASET_ROWS: len(payload.dataset),
+                PAYLOAD_OVERVIEW_SPLIT_FRACTIONS: payload.split_fractions.model_dump(),
+                PAYLOAD_OVERVIEW_SHUFFLE: payload.shuffle,
+                PAYLOAD_OVERVIEW_SEED: payload.seed,
+                PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS: dict(payload.optimizer_kwargs),
+                PAYLOAD_OVERVIEW_COMPILE_KWARGS: dict(payload.compile_kwargs),
+                "total_pairs": total_pairs,
+                "generation_models": [m.name for m in payload.generation_models],
+                "reflection_models": [m.name for m in payload.reflection_models],
+            },
+        )
+
+        current_worker = get_worker(job_store, service=service)
+        current_worker.submit_job(job_id, payload)
+
+        logger.info(
+            "Enqueued grid search %s: %d pairs, module=%s optimizer=%s",
+            job_id, total_pairs, payload.module_name, payload.optimizer_name,
+        )
+
+        return JobSubmissionResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            created_at=datetime.now(timezone.utc),
+            username=payload.username,
+            module_name=payload.module_name,
+            optimizer_name=payload.optimizer_name,
+        )
+
     def _build_summary(job_data: dict) -> JobSummaryResponse:
         """Build a JobSummaryResponse from a raw job store dict."""
         created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
@@ -390,7 +448,9 @@ def create_app(
         logs = job_store.get_logs(job_id)
 
         result = None
-        if status == JobStatus.success:
+        overview = parse_overview(job_data)
+        job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
+        if status == JobStatus.success and job_type == JOB_TYPE_RUN:
             result_data = job_data.get("result")
             if result_data and isinstance(result_data, dict):
                 try:
@@ -401,7 +461,6 @@ def create_app(
         created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
         started_at = parse_timestamp(job_data.get("started_at"))
         completed_at = parse_timestamp(job_data.get("completed_at"))
-        overview = parse_overview(job_data)
 
         # Only show estimated_remaining for active jobs
         est_remaining = None
@@ -500,6 +559,31 @@ def create_app(
             raise HTTPException(status_code=409, detail="Job has not finished yet.")
 
         raise HTTPException(status_code=404, detail="Job did not produce an artifact.")
+
+    @app.get("/jobs/{job_id}/grid-result", response_model=GridSearchResponse)
+    def get_grid_search_result(job_id: str) -> GridSearchResponse:
+        """Return the full grid search result once the job completes."""
+        try:
+            job_data = job_store.get_job(job_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+
+        overview = parse_overview(job_data)
+        if overview.get(PAYLOAD_OVERVIEW_JOB_TYPE) != JOB_TYPE_GRID_SEARCH:
+            raise HTTPException(status_code=404, detail="Job is not a grid search.")
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status not in _TERMINAL_STATUSES:
+            raise HTTPException(status_code=409, detail="Job has not finished yet.")
+
+        result_data = job_data.get("result")
+        if not result_data or not isinstance(result_data, dict):
+            raise HTTPException(status_code=404, detail="No grid search result available.")
+
+        try:
+            return GridSearchResponse.model_validate(result_data)
+        except ValidationError:
+            raise HTTPException(status_code=500, detail="Grid search result data is corrupted.")
 
     @app.post("/jobs/{job_id}/cancel", status_code=200)
     def cancel_job(job_id: str) -> dict:

@@ -65,7 +65,7 @@ docker compose up --build
 Current runtime architecture is:
 
 ```text
-FastAPI (/run, /jobs/*, /health, /queue)
+FastAPI (/run, /grid-search, /jobs/*, /health, /queue)
         |
         v
 BackgroundWorker (thread pool, in-process queue)
@@ -149,7 +149,9 @@ app = create_app(registry=registry)
 ```
 
 ## Request Payload Contract
-`POST /run` expects:
+
+### `POST /run`
+Expects:
 1. `module_name`: alias or dotted path
 2. `signature_code`: Python code defining exactly one `dspy.Signature` subclass
 3. `metric_code`: Python code defining a callable metric (`metric(...)` preferred)
@@ -166,7 +168,14 @@ app = create_app(registry=registry)
    - `split_fractions` (`train`, `val`, `test`, sum must be `1.0`)
    - `shuffle`, `seed`
 
-Validation behavior:
+### `POST /grid-search`
+Sweeps over every combination of generation and reflection models. Expects the same fields as `/run` except `model_config` and `reflection_model_config` are replaced by:
+1. `generation_models`: list of `ModelConfig` objects (at least one)
+2. `reflection_models`: list of `ModelConfig` objects (at least one)
+
+Each `(generation, reflection)` pair runs a full GEPA optimization cycle. Results are stored as a single job and retrieved via `GET /jobs/{job_id}/grid-result`.
+
+Validation behavior (both endpoints):
 - Schema/shape issues -> HTTP `422`
 - Unsupported optimizer kwargs / semantic issues -> HTTP `400`
 
@@ -184,6 +193,11 @@ Response:
   "status": "pending"
 }
 ```
+
+### `POST /grid-search`
+Validates payload, creates a single job that sweeps all `(generation, reflection)` model pairs. Returns `201` with the same response shape as `/run`.
+
+Progress events emitted per pair: `grid_pair_started`, `grid_pair_completed`, `grid_pair_failed`.
 
 ### `GET /jobs`
 List all jobs with optional filtering and pagination.
@@ -216,6 +230,15 @@ Returns serialized artifact only after success.
 - `200`: artifact available
 - `409`: job still running
 - `404`: job missing or no artifact produced
+
+### `GET /jobs/{job_id}/grid-result`
+Returns the full grid search result once the job completes.
+- `200`: grid search result with per-pair metrics and best pair
+- `404`: job not found or not a grid search job
+- `409`: job has not finished yet
+- `500`: stored result data is corrupted
+
+Response includes: `pair_results` (per-pair baseline/optimized metrics, artifacts, errors), `best_pair`, `completed_pairs`, `failed_pairs`, and `runtime_seconds`.
 
 ### `POST /jobs/{job_id}/cancel`
 Cancel a pending or running job.
