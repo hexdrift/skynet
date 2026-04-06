@@ -1,0 +1,49 @@
+# Skynet — Docker Compose with PostgreSQL
+# Usage: docker-compose up --build
+
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: skynet-db
+    environment:
+      POSTGRES_DB: skynet
+      POSTGRES_USER: skynet
+      POSTGRES_PASSWORD: skynet
+    ports:
+      - "5432:5432"
+    volumes:
+      - skynet-pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skynet-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REMOTE_DB_URL=postgresql://skynet:skynet@db:5432/skynet
+      - WORKER_CONCURRENCY=2
+      - WORKER_POLL_INTERVAL=2.0
+      - LOG_LEVEL=INFO
+      # Set your LLM API key:
+      # - OPENAI_API_KEY=sk-your-key-here
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+volumes:
+  skynet-pgdata:
+
+networks:
+  default:
+    driver: bridge
