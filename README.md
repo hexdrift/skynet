@@ -1,140 +1,340 @@
-# DSPy as a Service
+# Skynet
 
-FastAPI service that runs DSPy optimization jobs asynchronously over HTTP. Clients submit datasets + signature/metric code, then poll job status/logs/artifacts.
+DSPy prompt optimization as a service. Submit datasets + signature/metric code, run MIPROv2 or GEPA optimizations, serve optimized programs — all through a web UI or REST API.
 
-This README is for service operators (deployment, configuration, extension). If you only consume the API, start with `usage_guide/README.md`.
+## Quick Start
 
-## Contents
-- Prerequisites
-- Install and Run
-- Architecture
-- Configuration
-- Built-in Resolution and Extensibility
-- Request Payload Contract
-- API Reference
-- Artifacts and Logs
-- Operational Notes
-- Client Usage Guide
+### 1. Prerequisites
 
-## Prerequisites
 - Python 3.10+ (3.11 recommended)
-- DSPy-compatible dependencies (`dspy`, `litellm`, etc.)
-- Provider credentials in environment variables (for example `OPENAI_API_KEY`)
+- Node.js 18+ and npm
+- PostgreSQL 14+
+- An LLM API key (OpenAI, Anthropic, etc.)
 
-## Install and Run
-### Option A: `uv` (recommended)
+### 2. Clone and Setup
+
 ```bash
-# 1) create environment
-uv venv .venv
-source .venv/bin/activate
-
-# 2) install service + dev extras
-uv pip install -e '.[dev]'
-
-# 3) provider credentials
-export OPENAI_API_KEY=sk-...
-
-# 4) run API
-uv run python main.py
+git clone <repo-url>
+cd skynet
 ```
 
-### Option B: `venv` + `pip`
+### 3. Database
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
-export OPENAI_API_KEY=sk-...
+# Create the database
+createdb skynet
+
+# (Optional) Create a test database for running tests
+createdb skynet_test
+```
+
+### 4. Backend
+
+```bash
+cd backend
+
+# Create environment
+python -m venv ../.venv
+source ../.venv/bin/activate
+pip install -e '.[dev]'
+
+# Configure
+cp .env.example .env
+# Edit .env — set at minimum:
+#   OPENAI_API_KEY=sk-...
+#   REMOTE_DB_URL=postgresql://youruser@localhost:5432/skynet
+
+# Start
 python main.py
 ```
 
-Server defaults to `http://0.0.0.0:8000`.
+Backend runs at http://localhost:8000.
 
-Equivalent direct Uvicorn command:
+### 5. Frontend
+
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+cd frontend
+
+# Install dependencies
+npm install
+
+# Configure
+cp .env.example .env.local
+# Edit .env.local — defaults work for local development
+
+# Start
+npm run dev
 ```
 
-### Docker
-`docker-compose.yml` is a single-container deployment (API + in-process background workers):
+Frontend runs at http://localhost:3001.
+
+### 6. Open the App
+
+Navigate to http://localhost:3001. If authentication is enabled you'll see a login page, otherwise you'll land directly on the dashboard.
+
+---
+
+## Project Structure
+
+```
+skynet/
+├── backend/                    Python API + worker
+│   ├── main.py                 Entry point
+│   ├── .env.example            Configuration template
+│   ├── Dockerfile
+│   ├── docker-compose.yml      API + PostgreSQL
+│   ├── pyproject.toml
+│   ├── core/
+│   │   ├── api/                FastAPI routes
+│   │   ├── storage/            PostgreSQL persistence
+│   │   ├── worker/             Background job processing
+│   │   ├── registry/           Module & optimizer resolution
+│   │   ├── service_gateway/    DSPy orchestration pipeline
+│   │   ├── notifications/      Internal comms (Rocket.Chat, Slack, etc.)
+│   │   └── models.py           Pydantic models
+│   ├── tests/
+│   │   ├── test_llm_integration.py   34 real-API tests
+│   │   ├── test_load.py              9 load/stress tests
+│   │   └── locustfile.py             Sustained load dashboard
+│   └── usage_guide/            Notebooks + API client examples
+└── frontend/                   Next.js + shadcn/ui
+    ├── .env.example            Configuration template
+    ├── package.json
+    └── src/
+        ├── app/                Pages (dashboard, submit wizard, job detail)
+        ├── components/         UI components
+        └── lib/                API client, types, auth
+```
+
+---
+
+## Configuration
+
+### Backend (`backend/.env`)
+
 ```bash
+# ── Required ──
+OPENAI_API_KEY=sk-your-key          # Or any LiteLLM-supported provider
+REMOTE_DB_URL=postgresql://user@localhost:5432/skynet
+
+# ── Server ──
+API_HOST=0.0.0.0
+API_PORT=8000
+LOG_LEVEL=INFO
+
+# ── CORS ──
+# Comma-separated allowed origins (defaults to localhost:3000,3001)
+ALLOWED_ORIGINS=http://localhost:3001,https://yourdomain.com
+
+# ── Worker ──
+WORKER_CONCURRENCY=2                # Parallel optimization jobs
+WORKER_POLL_INTERVAL=2.0            # Queue poll interval (seconds)
+WORKER_STALE_THRESHOLD=600          # Health check threshold (seconds)
+
+# ── Notifications (optional) ──
+# COMMS_WEBHOOK_URL=https://chat.yourcompany.com/hooks/webhook-id
+# COMMS_CHANNEL=#skynet-notifications
+# FRONTEND_URL=https://skynet.yourcompany.com
+```
+
+### Frontend (`frontend/.env.local`)
+
+```bash
+# ── API ──
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# ── Auth (NextAuth) ──
+AUTH_SECRET=generate-with-openssl-rand-base64-32
+
+# ── ADFS Login (optional — uncomment to enable) ──
+# AUTH_ADFS_ISSUER=https://adfs.yourcompany.com/adfs
+# AUTH_ADFS_CLIENT_ID=your-client-id
+# AUTH_ADFS_CLIENT_SECRET=your-client-secret
+
+# ── Dev Login (active when ADFS is not configured) ──
+# Login with any username and password "skynet"
+# Set DEV_AUTH=false to disable login entirely
+```
+
+---
+
+## Authentication
+
+### Development Mode (default)
+
+When ADFS is not configured, a local credentials login is active:
+- **Username**: any value (becomes your display name)
+- **Password**: `skynet`
+
+### ADFS (Production)
+
+1. On your ADFS server, register a new Web Application (OpenID Connect)
+2. Set redirect URI: `https://your-app/api/auth/callback/adfs`
+3. Enable scopes: `openid`, `profile`, `email`
+4. Copy Client ID and Secret to `frontend/.env.local`
+
+When authenticated, the username auto-fills in the submit form from the ADFS session.
+
+### No Authentication
+
+Set `DEV_AUTH=false` in `frontend/.env.local` (with ADFS env vars unset) to disable login entirely.
+
+---
+
+## Notifications
+
+Skynet sends Hebrew notifications to your internal messaging platform when jobs are submitted or completed.
+
+### Setup
+
+1. Create an incoming webhook in your messaging platform (Rocket.Chat, Slack, Teams, etc.)
+2. Set `COMMS_WEBHOOK_URL` in `backend/.env`
+3. Optionally set `COMMS_CHANNEL` and `FRONTEND_URL`
+
+### Messages
+
+| Event | Message |
+|-------|---------|
+| Job submitted | 🚀 אופטימיזציה חדשה — user, optimizer, model, [link to monitor] |
+| Job succeeded | ✅ אופטימיזציה הושלמה — user, scores, [link to results] |
+| Job failed | ❌ אופטימיזציה נכשלה — user, error, [link to details] |
+| Job cancelled | ⚠️ אופטימיזציה בוטלה — user, [link to details] |
+
+When `COMMS_WEBHOOK_URL` is not set, notifications are silently skipped.
+
+### Adapting to Your Platform
+
+Edit `backend/core/notifications/comms.py` — the `send_message()` function sends a JSON payload to the webhook URL. Adjust the payload format for your platform:
+
+```python
+# Rocket.Chat / Slack:  {"text": "...", "channel": "#room"}
+# Teams:                {"text": "..."}
+# Custom:               adapt as needed
+```
+
+---
+
+## Serving Optimized Programs
+
+After a successful optimization, you can run inference on the optimized program:
+
+```bash
+# Check what fields the program expects
+curl http://localhost:8000/serve/{job_id}/info
+
+# Run inference
+curl -X POST http://localhost:8000/serve/{job_id} \
+  -H 'Content-Type: application/json' \
+  -d '{"inputs": {"question": "What is 7+3?"}}'
+```
+
+The frontend provides a built-in playground on the job detail page — fill in the input fields and click "הרץ תוכנית".
+
+---
+
+## Supported Optimization Configurations
+
+| Module | Optimizer | Job Type | Notes |
+|--------|-----------|----------|-------|
+| predict | miprov2 | run | Standard prompt optimization |
+| cot | miprov2 | run | Chain-of-thought optimization |
+| predict | gepa | run | Requires `reflection_model_config` and 5-arg metric |
+| cot | gepa | run | Same as above with CoT |
+| predict | miprov2 | grid_search | Sweep over model pairs |
+| cot | miprov2 | grid_search | Sweep with CoT |
+| predict | gepa | grid_search | GEPA sweep |
+| cot | gepa | grid_search | GEPA sweep with CoT |
+
+### Model Config Options
+
+| Field | Description |
+|-------|-------------|
+| `name` | Model identifier (e.g., `gpt-4o-mini`, `o3-mini`, `claude-sonnet-4-20250514`) |
+| `base_url` | Custom endpoint (Azure, vLLM, local LLMs) |
+| `temperature` | 0.0–2.0 |
+| `max_tokens` | Max output tokens |
+| `top_p` | Nucleus sampling |
+| `extra.api_key` | Per-request API key (not stored in DB) |
+| `extra.reasoning_effort` | For o-series models: `low`, `medium`, `high` |
+
+---
+
+## Docker
+
+```bash
+cd backend
 docker compose up --build
 ```
 
-## Architecture
-Current runtime architecture is:
+This starts the API + PostgreSQL. The frontend must be deployed separately (Vercel, Docker, etc.).
 
-```text
-FastAPI (/run, /grid-search, /jobs/*, /health, /queue)
-        |
-        v
-BackgroundWorker (thread pool, in-process queue)
-        |
-        v
-Job subprocess (per running job, cancellable)
-        |
-        v
-DspyService (validate + compile + evaluate inside subprocess)
-        |
-        v
-JobStore backend (default: LocalDBJobStore, optional: RemoteDBJobStore for PostgreSQL)
+---
+
+## Testing
+
+### Backend Integration Tests (real API calls)
+
+```bash
+cd backend
+
+# Start the server first
+python main.py &
+
+# Run all 34 integration tests (requires OPENAI_API_KEY)
+python -m pytest tests/test_llm_integration.py -v
+
+# Run load tests (9 tests)
+python -m pytest tests/test_load.py -v
+
+# Sustained load testing dashboard
+locust -f tests/locustfile.py --host=http://localhost:8000
 ```
 
-Package structure:
-```text
-core/
-├── __init__.py              — public API re-exports
-├── constants.py             — shared constant keys
-├── exceptions.py            — service error types
-├── models.py                — Pydantic request/response models
-├── api/                     — HTTP layer
-│   ├── app.py               — FastAPI routes and lifecycle
-│   └── converters.py        — job data → response converters
-├── storage/                 — persistence layer
-│   ├── __init__.py          — backend selection (`JOB_STORE_BACKEND`)
-│   ├── base.py              — JobStore protocol
-│   ├── local.py             — LocalDBJobStore (SQLite, default)
-│   └── remote.py            — RemoteDBJobStore (PostgreSQL backend)
-├── worker/                  — background job processing
-│   ├── engine.py            — threaded worker (WORKER_CONCURRENCY, WORKER_POLL_INTERVAL)
-│   └── log_handler.py       — per-job log capture handler
-├── registry/                — module and optimizer resolution
-│   ├── core.py              — ServiceRegistry
-│   └── resolvers.py         — built-in aliases + dotted path resolution
-└── service_gateway/         — DSPy orchestration pipeline
-    ├── core.py              — DspyService (validate + compile + evaluate)
-    ├── artifacts.py          — program serialization
-    ├── data.py              — dataset loading, splitting, column mapping
-    ├── language_models.py   — LLM construction from model config
-    ├── optimizers.py        — optimizer instantiation and compilation
-    └── progress.py          — tqdm progress capture
+### Frontend
+
+```bash
+cd frontend
+npm run build    # Type check + build
 ```
 
-## Configuration
-Environment variables used by runtime:
-- `OPENAI_API_KEY` / provider-specific keys: required by your selected model provider
-- `JOB_STORE_BACKEND`: `local` (default) or `remote`
-- `LOCAL_DB_PATH`: SQLite DB path when `JOB_STORE_BACKEND=local` (default `dspy_jobs.db`)
-- `REMOTE_DB_URL`: required when `JOB_STORE_BACKEND=remote`
-- `REMOTE_DB_API_KEY`: auth token for your remote DB API (optional, backend-specific)
-- `WORKER_CONCURRENCY`: number of worker threads, default `2`
-- `WORKER_POLL_INTERVAL`: queue poll interval in seconds, default `2.0`
-- `CANCEL_POLL_INTERVAL`: cancellation poll interval while a run is executing, default `1.0`
-- `JOB_RUN_START_METHOD`: multiprocessing start method for per-job subprocesses (`fork` default)
-- `WORKER_STALE_THRESHOLD`: max seconds of no worker activity before health check flags it, default `600`
+---
 
-## Built-in Resolution and Extensibility
-Built-in aliases (see `core/registry/resolvers.py`):
-- Modules:
-  - `predict` -> `dspy.Predict`
-  - `cot` -> `dspy.modules.ChainOfThought` (fallback `dspy.ChainOfThought`)
-- Optimizers:
-  - `miprov2` -> `dspy.teleprompt.MIPROv2`
-  - `gepa` -> `dspy.teleprompt.GEPA`
+## API Reference
 
-You can also reference dotted `dspy.*` paths directly in payloads.
+### Endpoints
 
-For custom factories, register with `ServiceRegistry` before app creation in `main.py`:
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/run` | Submit optimization job |
+| `POST` | `/grid-search` | Submit grid search job |
+| `GET` | `/jobs` | List jobs (filterable, paginated) |
+| `GET` | `/jobs/{id}` | Full job detail |
+| `GET` | `/jobs/{id}/summary` | Dashboard-friendly summary |
+| `GET` | `/jobs/{id}/logs` | Job logs (filterable by level) |
+| `GET` | `/jobs/{id}/payload` | Original submission payload |
+| `GET` | `/jobs/{id}/artifact` | Download optimized program |
+| `GET` | `/jobs/{id}/grid-result` | Grid search results |
+| `GET` | `/jobs/{id}/stream` | SSE real-time updates |
+| `POST` | `/jobs/{id}/cancel` | Cancel active job |
+| `DELETE` | `/jobs/{id}` | Delete terminal job |
+| `GET` | `/serve/{id}/info` | Program signature info |
+| `POST` | `/serve/{id}` | Run inference on optimized program |
+| `GET` | `/health` | Health check |
+| `GET` | `/queue` | Queue status |
+
+### Error Format
+
+All errors return:
+```json
+{"error": "<type>", "detail": "Human-readable message"}
+```
+
+---
+
+## Extensibility
+
+Register custom modules and optimizers in `main.py`:
+
 ```python
 from core import ServiceRegistry, create_app
 
@@ -145,217 +345,8 @@ registry.register_optimizer("my_optimizer", my_optimizer_factory)
 app = create_app(registry=registry)
 ```
 
-## Request Payload Contract
-
-### `POST /run`
-Expects:
-1. `module_name`: alias or dotted path
-2. `signature_code`: Python code defining exactly one `dspy.Signature` subclass
-3. `metric_code`: Python code defining a callable metric (`metric(...)` preferred)
-4. `optimizer_name`: alias or dotted path
-5. `dataset`: non-empty list of row dictionaries
-6. `column_mapping`: object with:
-   - `inputs`: signature input field -> dataset column
-   - `outputs`: signature output field -> dataset column
-7. `model_config`: base model configuration
-8. Optional:
-   - `module_kwargs`, `optimizer_kwargs`, `compile_kwargs`
-   - `reflection_model_config` (required by GEPA unless `reflection_lm` passed)
-   - `prompt_model_config` and `task_model_config` (for MiPROv2 overrides)
-   - `split_fractions` (`train`, `val`, `test`, sum must be `1.0`)
-   - `shuffle`, `seed`
-
-### `POST /grid-search`
-Sweeps over every combination of generation and reflection models. Expects the same fields as `/run` except `model_config` and `reflection_model_config` are replaced by:
-1. `generation_models`: list of `ModelConfig` objects (at least one)
-2. `reflection_models`: list of `ModelConfig` objects (at least one)
-
-Each `(generation, reflection)` pair runs a full GEPA optimization cycle. Results are stored as a single job and retrieved via `GET /jobs/{job_id}/grid-result`.
-
-Validation behavior (both endpoints):
-- Schema/shape issues -> HTTP `422`
-- Unsupported optimizer kwargs / semantic issues -> HTTP `400`
-
-Security note:
-- `signature_code` and `metric_code` are executed with `exec(...)`. Treat this service as trusted-input unless you sandbox/guard execution externally.
-
-## API Reference
-
-### Error Response Format
-All error responses (`4xx` and `5xx`) use a consistent shape:
-```json
-{
-  "error": "<error_type>",
-  "detail": "Human-readable description"
-}
-```
-
-Error types by status code:
-| Status | `error` value |
-|--------|---------------|
-| 400 | `validation_error` |
-| 404 | `not_found` |
-| 409 | `conflict` |
-| 422 | `invalid_request` |
-| 500 | `internal_error` |
-| 503 | `service_unavailable` |
-
-### `POST /run`
-Validates payload, creates job record, enqueues background processing. Returns `201`.
-
-Response:
-```json
-{
-  "job_id": "uuid",
-  "job_type": "run",
-  "status": "pending"
-}
-```
-
-### `POST /grid-search`
-Validates payload, creates a single job that sweeps all `(generation, reflection)` model pairs. Returns `201`.
-
-Response:
-```json
-{
-  "job_id": "uuid",
-  "job_type": "grid_search",
-  "status": "pending"
-}
-```
-
-Progress events emitted per pair: `grid_pair_started`, `grid_pair_completed`, `grid_pair_failed`.
-
-### `GET /jobs`
-List all jobs with optional filtering and pagination. Each item includes `job_type` (`"run"` or `"grid_search"`) and type-specific fields:
-- Run jobs: `model_name`, `model_settings`, `reflection_model_name`
-- Grid search jobs: `generation_models`, `reflection_models`, `total_pairs`, `completed_pairs`, `failed_pairs`, `best_pair_label`
-
-Query parameters:
-- `status`: filter by job status
-- `username`: filter by username
-- `job_type`: filter by job type (`run` or `grid_search`)
-- `limit`: max results (1-500, default 50)
-- `offset`: skip N results (default 0)
-
-### `GET /jobs/{job_id}`
-Detailed job view: status, timestamps, latest metrics, full progress events, logs, and result on success.
-
-- Run jobs: `result` contains the optimization result with metrics and artifact
-- Grid search jobs: `grid_result` contains per-pair leaderboard (`pair_results`), `best_pair`, and per-pair artifacts
-
-Statuses: `pending`, `validating`, `running`, `success`, `failed`, `cancelled`
-
-### `GET /jobs/{job_id}/summary`
-Lightweight dashboard-friendly summary with payload overview + latest metrics.
-
-### `GET /jobs/{job_id}/logs`
-Chronological list of captured log entries.
-
-Query parameters:
-- `limit`: max entries to return
-- `offset`: skip N entries (default 0)
-- `level`: filter by log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
-
-### `GET /jobs/{job_id}/artifact`
-Returns serialized artifact only after success.
-- `200`: artifact available
-- `409`: job still running
-- `404`: job missing or no artifact produced
-
-### `GET /jobs/{job_id}/grid-result`
-Returns the full grid search result once the job completes.
-- `200`: grid search result with per-pair metrics and best pair
-- `404`: job not found or not a grid search job
-- `409`: job has not finished yet
-- `500`: stored result data is corrupted
-
-Response includes: `pair_results` (per-pair baseline/optimized metrics, artifacts, errors), `best_pair`, `completed_pairs`, `failed_pairs`, and `runtime_seconds`.
-
-### `POST /jobs/{job_id}/cancel`
-Cancel a pending or running job.
-- `200`: cancelled successfully
-- `409`: job already in a terminal state
-- `404`: job not found
-
-### `DELETE /jobs/{job_id}`
-Delete a completed, failed, or cancelled job and all its data.
-- `200`: deleted successfully
-- `409`: job still active (cancel it first)
-- `404`: job not found
-
-### `GET /queue`
-Queue and worker status snapshot:
-```json
-{
-  "pending_jobs": 0,
-  "active_jobs": 1,
-  "worker_threads": 2,
-  "workers_alive": true
-}
-```
-
-### `GET /health`
-Basic health + registered assets snapshot:
-```json
-{
-  "status": "ok",
-  "registered_assets": {
-    "modules": [],
-    "metrics": [],
-    "optimizers": []
-  }
-}
-```
-
-## Artifacts and Logs
-Artifact payload (`program_artifact`) includes:
-- `metadata`: parsed `metadata.json`
-- `program_pickle_base64`: base64-encoded `program.pkl`
-- `optimized_prompt`: extracted prompt/demo summary from first predictor (when available)
-
-Current behavior:
-- Artifacts are generated in a temporary directory and returned inline.
-- Temporary files are deleted after packaging.
-- `program_artifact.path` is currently `null`.
-
-Materialize artifact helper:
-```python
-import base64
-import json
-from pathlib import Path
-
-def materialize_artifact(bundle, destination):
-    dest = Path(destination)
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "metadata.json").write_text(json.dumps(bundle["metadata"], indent=2))
-    (dest / "program.pkl").write_bytes(base64.b64decode(bundle["program_pickle_base64"]))
-    return dest
-```
-
-Logs:
-- DSPy `INFO` logs are captured per job.
-- Logs are available via `/jobs/{id}/logs` (supports `limit`, `offset`, and `level` filtering) and embedded in successful `result.run_log`.
-
-## Operational Notes
-- CORS is currently open (`allow_origins=["*"]`).
-- No built-in auth/rate limiting in this repo.
-- On startup, orphaned jobs (stuck in `running`/`validating` from a previous crash) are automatically marked as `failed`.
-
-## Reliability Contract
-- Cancelled jobs are retained with status `cancelled`; `GET /jobs/{id}` returns the job with its cancelled status. Use `DELETE /jobs/{id}` to remove them.
-- Failed jobs are retained with status `failed` and include the error message.
-- Pending jobs are recovered from storage and re-queued on startup.
-- Running jobs execute inside per-job subprocesses and are terminated on cancellation.
-- Reliability guarantees are validated for Linux/OpenShift deployments (`fork` start method).
+---
 
 ## Client Usage Guide
-See `usage_guide/README.md` for notebook examples and end-to-end client flow.
 
-Quick setup for guide environment:
-```bash
-cd usage_guide
-uv venv .venv
-source .venv/bin/activate
-uv pip install -r pyproject.toml
-```
+See `backend/usage_guide/README.md` for notebook examples and API client classes.

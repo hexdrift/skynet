@@ -27,6 +27,7 @@ htmlcov/
 
 # Editor sessions
 .claude/
+CLAUDE.md
 
 # Jupyter
 .ipynb_checkpoints/
@@ -40,7 +41,21 @@ htmlcov/
 # Screenshots
 *.png
 
-# Environment variables
+# Environment variables (NEVER commit secrets)
 .env
-.env.*
-dspy_jobs.db
+.env.local
+!.env.example
+*.db
+
+# Build artifacts
+.next/
+.ruff_cache/
+.benchmarks/
+node_modules/
+*.tsbuildinfo
+
+# Agents/tools
+.agents/
+.kiro/
+.windsurf/
+skills-lock.json
