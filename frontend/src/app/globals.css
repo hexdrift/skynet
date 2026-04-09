@@ -418,6 +418,7 @@ table tbody tr {
   a {
     transition: none !important;
   }
+  .ambient-bg .orb { animation: none !important; }
 }
 
 /* Better focus rings for RTL — skip plain inputs/textareas */
@@ -546,10 +547,7 @@ code, .font-mono, [class*="font-mono"] {
   50% { transform: translate(-25px, 35px) scale(1.1); }
 }
 
-/* Reduce motion for users who prefer it */
-@media (prefers-reduced-motion: reduce) {
-  .ambient-bg .orb { animation: none !important; }
-}
+/* (reduced-motion for orbs merged into main reduced-motion block above) */
 
 /* Spotlight radial glow on hover (follows mouse) */
 [data-slot="card"]::before {
@@ -969,14 +967,4 @@ table {
   }
 }
 
-/* Print styles */
-@media print {
-  .ambient-bg,
-  header,
-  aside,
-  .scroll-progress { display: none !important; }
-
-  body { background: white !important; color: black !important; }
-  [data-slot="card"] { break-inside: avoid; box-shadow: none !important; border: 1px solid #ccc; }
-}
 
