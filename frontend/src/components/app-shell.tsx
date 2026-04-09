@@ -4,17 +4,20 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Menu, LogOut } from "lucide-react";
+import { Menu, LogOut, GraduationCap } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "./animated-wordmark";
+import { useTutorialContext } from "./tutorial/tutorial-provider";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
+import { ParticleHero } from "./particle-hero";
 const Sidebar = dynamic(() => import("./sidebar").then((m) => m.Sidebar), { ssr: false });
-const ParticleHero = dynamic(() => import("./particle-hero").then((m) => m.ParticleHero), { ssr: false });
 
 export function AppShell({ children }: { children: React.ReactNode }) {
  const [sidebarOpen, setSidebarOpen] = React.useState(false);
  const { data: session } = useSession();
  const pathname = usePathname();
+ const { openMenu } = useTutorialContext();
 
  // Close mobile sidebar on route change
  React.useEffect(() => { setSidebarOpen(false); }, [pathname]);
@@ -81,11 +84,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
  }}
  >
  {/* Logo wordmark — pinned LEFT */}
- <div className="flex items-center">
+ <div className="flex items-center gap-1.5">
  <div className="hidden sm:block">
  <AnimatedWordmark size={16} />
  </div>
  <span className="sm:hidden text-sm font-bold tracking-[0.14em] uppercase text-foreground" style={{ fontFamily: '"Inter Variable", system-ui, sans-serif' }}>SKYNET</span>
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <button
+ type="button"
+ onClick={openMenu}
+ className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground"
+ aria-label="סיור במערכת"
+ >
+ <GraduationCap className="size-4" />
+ </button>
+ </TooltipTrigger>
+ <TooltipContent side="bottom" dir="rtl">סיור מודרך במערכת</TooltipContent>
+ </Tooltip>
  </div>
 
  {/* Right side: user + logout + mobile hamburger */}
