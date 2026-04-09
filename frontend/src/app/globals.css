@@ -17,6 +17,12 @@
   0%, 100% { opacity: 0.15; }
   40%, 60% { opacity: 1; }
 }
+@keyframes cascadeDownHyper {
+  0% { opacity: 0; transform: translateY(-8px) scale(0.8); }
+  30% { opacity: 1; transform: translateY(4px) scale(1.15); }
+  60% { opacity: 0.8; transform: translateY(8px) scale(1); }
+  100% { opacity: 0; transform: translateY(16px) scale(0.7); }
+}
 
 @custom-variant data-open {
   &:where([data-state="open"]), &:where([data-open]:not([data-open="false"])) { @slot; }
@@ -100,15 +106,15 @@
   --blue: #7C6350;
   --blue-light: rgba(124, 99, 80, 0.08);
 
-  --danger: #B04030;
-  --danger-dim: rgba(176, 64, 48, 0.08);
-  --danger-border: rgba(176, 64, 48, 0.2);
-  --success: #5C7A52;
-  --success-dim: rgba(92, 122, 82, 0.08);
-  --success-border: rgba(92, 122, 82, 0.2);
-  --warning: #A07830;
-  --warning-dim: rgba(160, 120, 48, 0.08);
-  --warning-border: rgba(160, 120, 48, 0.2);
+  --danger: #c02a1a;
+  --danger-dim: rgba(192, 42, 26, 0.1);
+  --danger-border: rgba(192, 42, 26, 0.25);
+  --success: #1a7a3a;
+  --success-dim: rgba(26, 122, 58, 0.1);
+  --success-border: rgba(26, 122, 58, 0.25);
+  --warning: #9a6a10;
+  --warning-dim: rgba(154, 106, 16, 0.1);
+  --warning-border: rgba(154, 106, 16, 0.25);
 
   --shadow-sm: 0 1px 2px rgba(28, 22, 18, 0.05);
   --shadow-card: 0 1px 3px rgba(28, 22, 18, 0.06), 0 1px 2px rgba(28, 22, 18, 0.04);
@@ -201,6 +207,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow-x: hidden; /* Prevent decorative orbs and wide content from causing horizontal scroll */
 }
 
 body {
@@ -356,10 +363,16 @@ code, pre, .font-mono {
    UX REFINEMENTS
    ════════════════════════════════════════════ */
 
-/* Make table rows feel interactive */
+/* Table row layout */
 table tbody tr {
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-snappy);
+  contain: layout style;
+}
+
+/* Underline individual cell on hover for copyable cells */
+table tbody tr td:not(:last-child):hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: black;
 }
 
 /* Subtle hover lift on cards */
@@ -373,21 +386,21 @@ table tbody tr {
   border-color: var(--border);
 }
 
-/* Staggered row entrance */
+/* Staggered row entrance — uses transform for GPU compositing */
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Rows: contained layout for minimal reflow on table updates */
+table tbody tr {
+  contain: layout style;
+}
+
 /* Smooth transitions for chart containers on data change */
 .recharts-wrapper {
   transition: opacity 0.3s ease;
-}
-
-/* Smooth bar/progress width transitions */
-.recharts-bar-rectangle,
-.recharts-pie-sector {
-  transition: all 0.4s ease;
+  contain: layout style paint;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -398,6 +411,12 @@ table tbody tr {
   .recharts-bar-rectangle,
   .recharts-pie-sector {
     transition: none;
+  }
+  /* Disable all non-essential transitions for reduced motion */
+  [data-slot="card"],
+  button,
+  a {
+    transition: none !important;
   }
 }
 
@@ -467,8 +486,8 @@ code, .font-mono, [class*="font-mono"] {
 }
 
 .ambient-bg .orb-1 {
-  width: 600px;
-  height: 600px;
+  width: min(600px, 50vw);
+  height: min(600px, 50vw);
   top: -10%;
   right: -5%;
   background: rgba(200, 168, 130, 0.12);
@@ -476,8 +495,8 @@ code, .font-mono, [class*="font-mono"] {
 }
 
 .ambient-bg .orb-2 {
-  width: 500px;
-  height: 500px;
+  width: min(500px, 45vw);
+  height: min(500px, 45vw);
   bottom: -10%;
   left: -5%;
   background: rgba(166, 139, 107, 0.1);
@@ -485,8 +504,8 @@ code, .font-mono, [class*="font-mono"] {
 }
 
 .ambient-bg .orb-3 {
-  width: 400px;
-  height: 400px;
+  width: min(400px, 40vw);
+  height: min(400px, 40vw);
   top: 50%;
   left: 40%;
   background: rgba(139, 117, 96, 0.08);
@@ -494,8 +513,8 @@ code, .font-mono, [class*="font-mono"] {
 }
 
 .ambient-bg .orb-4 {
-  width: 350px;
-  height: 350px;
+  width: min(350px, 35vw);
+  height: min(350px, 35vw);
   top: 20%;
   left: 60%;
   background: rgba(212, 184, 150, 0.06);
@@ -826,31 +845,128 @@ header {
 
 /* Status pill badges with colored glow */
 .status-pill-success {
-  background: rgba(92, 122, 82, 0.1);
-  color: var(--success);
-  border-color: rgba(92, 122, 82, 0.25);
-  box-shadow: 0 0 8px rgba(92, 122, 82, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: rgba(34, 120, 60, 0.12);
+  color: #1a7a3a;
+  border-color: rgba(34, 120, 60, 0.35);
+  box-shadow: 0 0 10px rgba(34, 120, 60, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .status-pill-running {
-  background: rgba(160, 120, 48, 0.1);
-  color: var(--warning);
-  border-color: rgba(160, 120, 48, 0.25);
-  box-shadow: 0 0 8px rgba(160, 120, 48, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: rgba(180, 120, 20, 0.12);
+  color: #9a6a10;
+  border-color: rgba(180, 120, 20, 0.35);
+  box-shadow: 0 0 10px rgba(180, 120, 20, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .status-pill-failed {
-  background: rgba(176, 64, 48, 0.1);
-  color: var(--danger);
-  border-color: rgba(176, 64, 48, 0.25);
-  box-shadow: 0 0 8px rgba(176, 64, 48, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: rgba(200, 45, 30, 0.12);
+  color: #c02a1a;
+  border-color: rgba(200, 45, 30, 0.35);
+  box-shadow: 0 0 10px rgba(200, 45, 30, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .status-pill-pending {
-  background: rgba(200, 185, 168, 0.12);
-  color: var(--text-3);
-  border-color: rgba(200, 185, 168, 0.3);
-  box-shadow: 0 0 6px rgba(200, 185, 168, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: rgba(140, 140, 160, 0.1);
+  color: #6b6b7a;
+  border-color: rgba(140, 140, 160, 0.3);
+  box-shadow: 0 0 6px rgba(140, 140, 160, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.status-pill-cancelled {
+  background: rgba(120, 110, 100, 0.1);
+  color: #6b6058;
+  border-color: rgba(120, 110, 100, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ════════════════════════════════════════════
+   FLUID LAYOUT SYSTEM — Desktop window resizing
+   ════════════════════════════════════════════ */
+
+/* Dialog/modal fluid width */
+[role="dialog"] {
+  max-width: min(90%, 600px);
+  width: 100%;
+}
+
+/* Responsive breakpoints for desktop fluid layouts */
+@media (max-width: 1200px) {
+  /* Wider spacing for medium-large viewports */
+  .mx-auto.max-w-7xl {
+    max-width: 90%;
+    padding-inline: clamp(1rem, 2vw, 2rem);
+  }
+  
+  /* Fluid container widths */
+  .max-w-2xl { max-width: min(42rem, 92vw); }
+  .max-w-4xl { max-width: min(56rem, 94vw); }
+  .max-w-6xl { max-width: min(72rem, 96vw); }
+}
+
+@media (max-width: 960px) {
+  /* Compact layouts for medium viewports */
+  h1 { font-size: clamp(1.5rem, 3vw, 2rem) !important; }
+  
+  .grid-cols-2 { grid-template-columns: 1fr !important; }
+  .grid-cols-3 { grid-template-columns: repeat(2, 1fr) !important; }
+  .grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (max-width: 800px) {
+  /* Minimum comfortable width for split-screen */
+  h1 { font-size: clamp(1.25rem, 3.5vw, 1.75rem) !important; }
+  
+  .grid-cols-3 { grid-template-columns: 1fr !important; }
+  .grid-cols-4 { grid-template-columns: 1fr !important; }
+  
+  /* Stack stat cards vertically */
+  .stats-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Fluid typography scale */
+html {
+  font-size: clamp(14px, 1.2vw, 16px);
+}
+
+h1 {
+  font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: clamp(1.125rem, 2vw, 1.25rem);
+  line-height: 1.4;
+}
+
+/* Fluid grid system — prevent grid blowout */
+
+/* Prevent grid blowout — ensure columns never exceed container */
+.grid > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Table horizontal scroll on small viewports */
+table {
+  width: 100%;
+  min-width: 100%;
+}
+
+@media (max-width: 960px) {
+  table {
+    min-width: 700px; /* Force horizontal scroll below this width */
+  }
+}
+
+@media (max-width: 800px) {
+  table {
+    min-width: 600px;
+  }
 }
 
 /* Print styles */
@@ -863,3 +979,4 @@ header {
   body { background: white !important; color: black !important; }
   [data-slot="card"] { break-inside: avoid; box-shadow: none !important; border: 1px solid #ccc; }
 }
+
