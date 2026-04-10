@@ -48,7 +48,7 @@ from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ...worker import get_worker
-from ._helpers import strip_api_key
+from ._helpers import enforce_user_quota, strip_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,8 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         except (ServiceError, RegistryError) as exc:
             logger.warning("Payload validation failed: %s", exc)
             raise HTTPException(status_code=400, detail=str(exc))
+
+        enforce_user_quota(job_store, payload.username)
 
         optimization_id = str(uuid4())
         # Ensure a deterministic seed so dataset splits are reproducible
@@ -165,6 +167,8 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             except (ServiceError, RegistryError) as exc:
                 logger.warning("Grid search validation failed: %s", exc)
                 raise HTTPException(status_code=400, detail=str(exc))
+
+        enforce_user_quota(job_store, payload.username)
 
         optimization_id = str(uuid4())
         if payload.seed is None:

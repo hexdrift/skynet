@@ -77,3 +77,7 @@ OPTIMIZER_TASK_MODEL_KEY = "task_model"
 # optimizer identifiers that require special handling
 OPTIMIZER_NAME_GEPA = "gepa"
 OPTIMIZER_NAME_MIPROV2 = "miprov2"
+
+# Per-user job quota. Counts every job owned by a username across all
+# statuses. Admins and users listed in job_quota_overrides bypass this.
+MAX_JOBS_PER_USER = 100
