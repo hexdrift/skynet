@@ -111,10 +111,11 @@ export function DataTab({ job, pairIndex }: { job: OptimizationStatusResponse; p
    : getTestResults(job.optimization_id);
   fetchResults
    .then((res) => {
-    const map: Record<string, Record<number, EvalExampleResult>> = { optimized: {}, baseline: {} };
-    for (const r of res.optimized ?? []) map.optimized[r.index] = r;
-    for (const r of res.baseline ?? []) map.baseline[r.index] = r;
-    setTestResults(map);
+    const optimized: Record<number, EvalExampleResult> = {};
+    const baseline: Record<number, EvalExampleResult> = {};
+    for (const r of res.optimized ?? []) optimized[r.index] = r;
+    for (const r of res.baseline ?? []) baseline[r.index] = r;
+    setTestResults({ optimized, baseline });
    })
    .catch(() => { /* non-critical */ })
    .finally(() => setTestResultsLoading(false));
