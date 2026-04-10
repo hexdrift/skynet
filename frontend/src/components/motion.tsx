@@ -4,7 +4,7 @@ import { motion, type HTMLMotionProps } from "framer-motion";
 import * as React from "react";
 
 /* ── Fade-in when scrolled into view ── */
-export function FadeIn({
+export const FadeIn = React.memo(function FadeIn({
  children,
  delay = 0,
  direction = "up",
@@ -35,10 +35,10 @@ export function FadeIn({
  {children}
  </motion.div>
  );
-}
+});
 
 /* ── Staggered children container ── */
-export function StaggerContainer({
+export const StaggerContainer = React.memo(function StaggerContainer({
  children,
  className,
  staggerDelay = 0.08,
@@ -61,10 +61,10 @@ export function StaggerContainer({
  {children}
  </motion.div>
  );
-}
+});
 
 /* ── Individual stagger item ── */
-export function StaggerItem({
+export const StaggerItem = React.memo(function StaggerItem({
  children,
  className,
 }: {
@@ -87,7 +87,7 @@ export function StaggerItem({
  {children}
  </motion.div>
  );
-}
+});
 
 /* ── Scale on hover wrapper ── */
 export function HoverScale({
@@ -149,7 +149,7 @@ export function TiltCard({
 }
 
 /* ── Counter animation for numbers ── */
-export function AnimatedNumber({
+export const AnimatedNumber = React.memo(function AnimatedNumber({
  value,
  duration = 0.6,
  decimals = 0,
@@ -181,8 +181,9 @@ export function AnimatedNumber({
  const to = value;
  if (from === to) { setDisplayed(to); prevValue.current = to; return; }
  const start = performance.now();
+ const durationMs = duration * 1000;
  const animate = (now: number) => {
- const progress = Math.min((now - start) / (duration * 1000), 1);
+ const progress = Math.min((now - start) / durationMs, 1);
  const eased = 1 - Math.pow(1 - progress, 3);
  const current = from + (to - from) * eased;
  setDisplayed(decimals > 0 ? parseFloat(current.toFixed(decimals)) : Math.round(current));
@@ -216,4 +217,4 @@ export function AnimatedNumber({
 
  const formatted = decimals > 0 ? displayed.toFixed(decimals) : displayed.toLocaleString("he-IL");
  return <span ref={ref} className={className}>{prefix}{formatted}{suffix}</span>;
-}
+});

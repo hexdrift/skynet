@@ -68,7 +68,7 @@ def create_tables(url: str) -> None:
         from sqlalchemy import create_engine
         # Import the models to register them with Base
         sys.path.insert(0, ".")
-        from core.storage.local import Base
+        from core.storage.models import Base
         engine = create_engine(url, echo=False)
         Base.metadata.create_all(engine)
         print(f"✓ Tables created/verified:")

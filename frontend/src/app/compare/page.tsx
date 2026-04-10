@@ -25,7 +25,10 @@ import { motion } from "framer-motion";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/components/motion";
 import { getJob } from "@/lib/api";
 import { STATUS_LABELS } from "@/lib/constants";
-import type { JobStatusResponse, OptimizedPredictor } from "@/lib/types";
+import type { OptimizationStatusResponse, OptimizedPredictor } from "@/lib/types";
+import { Skeleton } from "boneyard-js/react";
+import { compareBones } from "@/components/compare-bones";
+import { HelpTip } from "@/components/help-tip";
 
 /* ── Formatters ── */
 
@@ -60,7 +63,7 @@ function ScoreCard({
  winner,
  delay,
 }: {
- label: string;
+ label: React.ReactNode;
  valueA: string;
  valueB: string;
  winner?: "a" | "b" | null;
@@ -145,7 +148,7 @@ function PromptBlock({ prompt, label }: { prompt: OptimizedPredictor | null | un
 
    {/* Instructions */}
    <div className="space-y-1.5">
-    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Instructions</p>
+    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider"><HelpTip text="ההנחיות שהאופטימייזר יצר למודל — מתארות את המשימה ואיך לבצע אותה">הנחיות (Instructions)</HelpTip></p>
     <div className="relative group/ins rounded-lg border border-border/40 bg-muted/20 p-3 pr-9">
      <pre className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed text-foreground/80" dir="ltr">
       {prompt.instructions}
@@ -158,7 +161,7 @@ function PromptBlock({ prompt, label }: { prompt: OptimizedPredictor | null | un
    {prompt.demos.length > 0 && (
     <div className="space-y-2">
      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-      {prompt.demos.length} Demos
+      {prompt.demos.length} דוגמאות (Demos)
      </p>
      <div className="space-y-2">
       {prompt.demos.map((demo, i) => (
@@ -192,19 +195,19 @@ function PromptBlock({ prompt, label }: { prompt: OptimizedPredictor | null | un
 
 export default function ComparePage() {
  const searchParams = useSearchParams();
- const jobIds = (searchParams.get("jobs") ?? "").split(",").filter(Boolean);
+ const optimizationIds = (searchParams.get("jobs") ?? "").split(",").filter(Boolean);
 
- const [jobs, setJobs] = useState<(JobStatusResponse | null)[]>([null, null]);
+ const [jobs, setJobs] = useState<(OptimizationStatusResponse | null)[]>([null, null]);
  const [loading, setLoading] = useState(true);
  const [error, setError] = useState<string | null>(null);
 
  useEffect(() => {
-  if (jobIds.length < 2) {
-   setError("נדרשים לפחות 2 מזהי אופטימיזציות בפרמטר jobs");
+  if (optimizationIds.length < 2) {
+   setError("בחר שתי אופטימיזציות מלוח הבקרה כדי להשוות ביניהן");
    setLoading(false);
    return;
   }
-  Promise.all([getJob(jobIds[0]), getJob(jobIds[1])])
+  Promise.all([getJob(optimizationIds[0]), getJob(optimizationIds[1])])
    .then(([a, b]) => { setJobs([a, b]); setError(null); })
    .catch((e) => setError(e instanceof Error ? e.message : "שגיאה בטעינת האופטימיזציות"))
    .finally(() => setLoading(false));
@@ -213,9 +216,9 @@ export default function ComparePage() {
 
  if (loading) {
   return (
-   <div className="flex items-center justify-center min-h-[60vh]">
-    <Loader2 className="size-8 animate-spin text-primary" />
-   </div>
+   <Skeleton name="compare" loading initialBones={compareBones} color="var(--muted)" animate="shimmer">
+    <div className="min-h-[60vh]" />
+   </Skeleton>
   );
  }
 
@@ -229,7 +232,7 @@ export default function ComparePage() {
   );
  }
 
- const [a, b] = jobs as [JobStatusResponse, JobStatusResponse];
+ const [a, b] = jobs as [OptimizationStatusResponse, OptimizationStatusResponse];
 
  // Extract metrics
  const aBaseline = a.result?.baseline_test_metric ?? a.grid_result?.best_pair?.baseline_test_metric;
@@ -246,8 +249,8 @@ export default function ComparePage() {
  const aPrompt = a.result?.program_artifact?.optimized_prompt ?? a.grid_result?.best_pair?.program_artifact?.optimized_prompt;
  const bPrompt = b.result?.program_artifact?.optimized_prompt ?? b.grid_result?.best_pair?.program_artifact?.optimized_prompt;
 
- const nameA = a.name || a.job_id.slice(0, 8);
- const nameB = b.name || b.job_id.slice(0, 8);
+ const nameA = a.name || a.optimization_id.slice(0, 8);
+ const nameB = b.name || b.optimization_id.slice(0, 8);
 
  return (
   <motion.div
@@ -273,20 +276,20 @@ export default function ComparePage() {
        <ArrowLeftRight className="size-4 text-white" />
       </div>
       <div>
-       <h1 className="text-lg font-bold">השוואת אופטימיזציות</h1>
+       <h1 className="text-lg font-bold" data-tutorial="compare-button"><HelpTip text="השוואה מפורטת בין שתי הרצות — ציונים, הגדרות, ופרומפטים">השוואת אופטימיזציות</HelpTip></h1>
        <p className="text-[11px] text-muted-foreground">השוואה מפורטת בין שתי הרצות</p>
       </div>
      </div>
 
-     {/* Job identity cards */}
+     {/* Optimization identity cards */}
      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {[
        { job: a, label: "A", name: nameA },
        { job: b, label: "B", name: nameB },
       ].map(({ job, label, name }) => (
        <Link
-        key={job.job_id}
-        href={`/jobs/${job.job_id}`}
+        key={job.optimization_id}
+        href={`/optimizations/${job.optimization_id}`}
         className="group relative rounded-lg border border-border/50 bg-white/80 px-4 py-2.5 pe-5 hover:border-primary/30 transition-all duration-300 overflow-hidden flex items-center justify-between gap-3"
        >
         <div className={`absolute inset-y-0 end-0 w-1 ${label === "A" ? "bg-[#3D2E22]" : "bg-[#7C6350]"}`} />
@@ -303,12 +306,12 @@ export default function ComparePage() {
     <div className="space-y-3">
      <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
       <Trophy className="size-3.5" />
-      ציונים
+      <HelpTip text="ציוני המדידה לפני ואחרי האופטימיזציה לכל הרצה">ציונים</HelpTip>
      </h2>
      <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" staggerDelay={0.06}>
-      <ScoreCard label="ציון התחלתי" valueA={fmt(aBaseline)} valueB={fmt(bBaseline)} delay={0} />
-      <ScoreCard label="ציון מאופטם" valueA={fmt(aOptimized)} valueB={fmt(bOptimized)} winner={betterOptimized} delay={0.05} />
-      <ScoreCard label="שיפור" valueA={fmtImprovement(aImprovement)} valueB={fmtImprovement(bImprovement)} winner={betterImprovement} delay={0.1} />
+      <ScoreCard label={<HelpTip text="ציון המדידה לפני אופטימיזציה">ציון התחלתי</HelpTip>} valueA={fmt(aBaseline)} valueB={fmt(bBaseline)} delay={0} />
+      <ScoreCard label={<HelpTip text="ציון המדידה אחרי אופטימיזציה">ציון מאופטם</HelpTip>} valueA={fmt(aOptimized)} valueB={fmt(bOptimized)} winner={betterOptimized} delay={0.05} />
+      <ScoreCard label={<HelpTip text="ההפרש בין הציון המשופר לציון ההתחלתי">שיפור</HelpTip>} valueA={fmtImprovement(aImprovement)} valueB={fmtImprovement(bImprovement)} winner={betterImprovement} delay={0.1} />
       <ScoreCard
        label="זמן ריצה"
        valueA={fmtElapsed(a.result?.runtime_seconds)}
@@ -325,7 +328,7 @@ export default function ComparePage() {
      <CardHeader className="pb-2">
       <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold">
        <Cpu className="size-3.5" />
-       הגדרות
+       <HelpTip text="השוואת ההגדרות שנבחרו לכל הרצה — מודל, אופטימייזר, ונתונים">הגדרות</HelpTip>
       </CardTitle>
      </CardHeader>
      <CardContent className="pt-0">
@@ -352,7 +355,7 @@ export default function ComparePage() {
      <CardHeader>
       <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold">
        <Sparkles className="size-3.5" />
-       פרומפטים מאופטמים
+       <HelpTip text="הפרומפט שנבנה אוטומטית ע״י האופטימייזר — כולל הנחיות ודוגמאות שנבחרו">פרומפט מאופטם</HelpTip>
       </CardTitle>
      </CardHeader>
      <CardContent>

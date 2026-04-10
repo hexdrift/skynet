@@ -5,10 +5,12 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "react-toastify";
-import { Upload, ChevronLeft, ChevronRight, ChevronDown, Loader2, CheckCircle2, XCircle, AlertTriangle, Check } from "lucide-react";
+import { Upload, ChevronLeft, ChevronRight, ChevronDown, Loader2, XCircle, AlertTriangle, Check, Database, Cpu, User, Code, Tag, Layers, Component, Target, FileText, Columns, Shuffle, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnimatedWordmark } from "@/components/animated-wordmark";
 import dynamic from "next/dynamic";
 import type { ValidationResult as EditorValidationResult } from "@/components/code-editor";
@@ -25,13 +27,14 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 
-import { submitRun, submitGridSearch, validateCode, getJobPayload, getJob } from "@/lib/api";
+import { submitRun, submitGridSearch, validateCode, getOptimizationPayload, getJob } from "@/lib/api";
 import type { ModelConfig, ColumnMapping, SplitFractions, ValidateCodeResponse, ModelCatalogResponse } from "@/lib/types";
 import { parseDatasetFile, type ParsedDataset } from "@/lib/parse-dataset";
 import { NumberInput } from "@/components/number-input";
 import { ModelConfigModal } from "@/components/model-config-modal";
 import { ModelChip, AddModelButton } from "@/components/model-chip";
 import { getModelCatalog, cachedCatalog } from "@/lib/model-catalog";
+import { HelpTip } from "@/components/help-tip";
 
 /* ── Constants ── */
 
@@ -81,24 +84,50 @@ export default function SubmitPage() {
  // Wizard state
  const [step, setStep] = useState(0);
  const [direction, setDirection] = useState(0);
+ // Expose for tutorial beforeShow
+ useEffect(() => {
+  (window as any).__skynetSetWizardStep = setStep;
+  (window as any).__skynetSetParsedDataset = setParsedDataset;
+  (window as any).__skynetSetColumnRoles = setColumnRoles;
+  (window as any).__skynetSetDatasetFileName = setDatasetFileName;
+  (window as any).__skynetSetSignatureCode = setSignatureCode;
+  (window as any).__skynetSetMetricCode = setMetricCode;
+  (window as any).__skynetSetOptimizerName = setOptimizerName;
+  return () => {
+   delete (window as any).__skynetSetWizardStep;
+   delete (window as any).__skynetSetParsedDataset;
+   delete (window as any).__skynetSetColumnRoles;
+   delete (window as any).__skynetSetDatasetFileName;
+   delete (window as any).__skynetSetSignatureCode;
+   delete (window as any).__skynetSetMetricCode;
+   delete (window as any).__skynetSetOptimizerName;
+  };
+ }, []);
+ const [summaryTab, setSummaryTab] = useState(0);
+ const [summaryCodeTab, setSummaryCodeTab] = useState<string>("signature");
 
  // Job type
- const [jobType, setJobType] = useState<"run"|"grid_search">("run");
+ const [jobType, setOptimizationType] = useState<"run"|"grid_search">("run");
 
  // Username — always from the logged-in session
  const username = session?.user?.name ?? "";
  const [jobName, setJobName] = useState("");
+ const [jobDescription, setJobDescription] = useState("");
  const [moduleName, setModuleName] = useState("predict");
  const [optimizerName, setOptimizerName] = useState("miprov2");
- const [signatureCode, setSignatureCode] = useState(`class MySignature(dspy.Signature):
-    """Describe the task here."""
-
-    # inputs
-    input_field: str = dspy.InputField(desc="description of input")
-
-    # outputs
-    output_field: str = dspy.OutputField(desc="description of output")
-`);
+ const buildSignatureTemplate = (roles: Record<string, "input"|"output"|"ignore">) => {
+  const inputs = Object.entries(roles).filter(([, r]) => r === "input").map(([c]) => c);
+  const outputs = Object.entries(roles).filter(([, r]) => r === "output").map(([c]) => c);
+  const toId = (s: string) => s.replace(/[^a-zA-Z0-9_\u0590-\u05FF]/g, "_").replace(/^(\d)/, "_$1");
+  const inLines = inputs.length > 0
+   ? inputs.map((c) => `    ${toId(c)}: str = dspy.InputField(desc="")`).join("\n")
+   : `    input_field: str = dspy.InputField(desc="")`;
+  const outLines = outputs.length > 0
+   ? outputs.map((c) => `    ${toId(c)}: str = dspy.OutputField(desc="")`).join("\n")
+   : `    output_field: str = dspy.OutputField(desc="")`;
+  return `class MySignature(dspy.Signature):\n    """Describe the task here."""\n\n    # inputs\n${inLines}\n\n    # outputs\n${outLines}\n`;
+ };
+ const [signatureCode, setSignatureCode] = useState(() => buildSignatureTemplate({}));
  const METRIC_TEMPLATE_MIPRO = `def metric(example: dspy.Example, prediction: dspy.Prediction, trace: bool = None) -> float:
     # Return a numeric score (float/int/bool)
 
@@ -130,6 +159,15 @@ export default function SubmitPage() {
 
  // Column mapping
  const [columnRoles, setColumnRoles] = useState<Record<string,"input"|"output"|"ignore">>({});
+ const [signatureManuallyEdited, setSignatureManuallyEdited] = useState(false);
+
+ // Auto-update signature template when column roles change
+ useEffect(() => {
+  if (signatureManuallyEdited) return;
+  const hasRoles = Object.values(columnRoles).some((r) => r === "input" || r === "output");
+  if (!hasRoles) return;
+  setSignatureCode(buildSignatureTemplate(columnRoles));
+ }, [columnRoles, signatureManuallyEdited]);
 
  // Global provider settings (shared across all models)
  const [globalBaseUrl, setGlobalBaseUrl] = useState("");
@@ -210,17 +248,18 @@ export default function SubmitPage() {
  cloneRan.current = true;
  setCloneLoading(true);
  // Fetch both payload and job display name in parallel
- Promise.all([getJobPayload(cloneId), getJob(cloneId).catch(() => null)])
- .then(([{ job_type, payload }, jobData]) => {
+ Promise.all([getOptimizationPayload(cloneId), getJob(cloneId).catch(() => null)])
+ .then(([{ optimization_type, payload }, jobData]) => {
  // Job type
- setJobType(job_type === "grid_search" ? "grid_search" : "run");
+ setOptimizationType(optimization_type === "grid_search" ? "grid_search" : "run");
 
  // Basic fields — prefer the current display name over the payload name
  const displayName = jobData?.name || payload.name;
  if (displayName) setJobName(String(displayName));
+ if (payload.description) setJobDescription(String(payload.description));
  if (payload.module_name) setModuleName(String(payload.module_name));
  if (payload.optimizer_name) setOptimizerName(String(payload.optimizer_name));
- if (payload.signature_code) setSignatureCode(String(payload.signature_code));
+ if (payload.signature_code) { setSignatureCode(String(payload.signature_code)); setSignatureManuallyEdited(true); }
  if (payload.metric_code) setMetricCode(String(payload.metric_code));
 
  // Dataset
@@ -228,7 +267,7 @@ export default function SubmitPage() {
  const rows = payload.dataset as Record<string, unknown>[];
  const columns = Object.keys(rows[0]);
  setParsedDataset({ columns, rows, rowCount: rows.length });
- setDatasetFileName(`שוכפל מ-${cloneId.slice(0, 8)}`);
+ setDatasetFileName(String((payload as Record<string, unknown>).dataset_filename || displayName || cloneId || ""));
  }
 
  // Column mapping
@@ -519,12 +558,14 @@ export default function SubmitPage() {
  const compKw = buildCompileKwargs();
  const base = {
  name: jobName.trim() || undefined,
+ description: jobDescription.trim() || undefined,
  username: username.trim(),
  module_name: moduleName,
  signature_code: signatureCode,
  metric_code: metricCode,
  optimizer_name: optimizerName,
  dataset: parsedDataset.rows as Record<string, unknown>[],
+ dataset_filename: datasetFileName || undefined,
  column_mapping: columnMapping,
  split_fractions: split,
  shuffle,
@@ -567,7 +608,7 @@ export default function SubmitPage() {
  }
 
  // Show splash transition, then navigate
- const jobUrl = `/jobs/${result.job_id}`;
+ const jobUrl = `/optimizations/${result.optimization_id}`;
  setSubmitPhase("splash");
  // Collapse sidebar before navigating so the job page opens with full width
  window.dispatchEvent(new Event("sidebar:collapse"));
@@ -596,7 +637,7 @@ export default function SubmitPage() {
 
  const stepContent = [
  /* ── Step 0: Basics ── */
- <Card key="basics" className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
+ <Card key="basics" className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg" data-tutorial="wizard-step-1">
  <CardHeader>
  <CardTitle className="text-lg">פרטים בסיסיים</CardTitle>
  <CardDescription>שם וסוג אופטימיזציה</CardDescription>
@@ -605,6 +646,21 @@ export default function SubmitPage() {
  <div className="space-y-2">
  <Label>שם האופטימיזציה</Label>
  <Input placeholder="לדוגמא: ניתוח שאלות מתמטיקה" value={jobName} onChange={(e) => setJobName(e.target.value)} dir="rtl" />
+ </div>
+ <div className="space-y-2">
+ <div className="flex items-center justify-between">
+ <Label>תיאור</Label>
+ <span className={cn("text-[10px] tabular-nums transition-colors", jobDescription.length > 280 ? "text-destructive font-medium" : "text-muted-foreground/50")}>{jobDescription.length}/280</span>
+ </div>
+ <textarea
+ data-tutorial="job-description"
+ value={jobDescription}
+ onChange={(e) => { if (e.target.value.length <= 280) setJobDescription(e.target.value); }}
+ placeholder="תיאור קצר של מטרת האופטימיזציה (אופציונלי)"
+ dir="rtl"
+ rows={4}
+ className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+ />
  </div>
  <Separator />
  <div className="space-y-3">
@@ -615,7 +671,7 @@ export default function SubmitPage() {
  style={{ insetInlineStart: jobType === "run" ? 4 : "calc(50% + 2px)" }}
  />
  {([["run","ריצה בודדת","אופטימיזציה עם מודל יחיד"], ["grid_search","סריקה","סריקת זוגות מודלים למציאת השילוב הטוב ביותר"]] as const).map(([val, label, desc]) => (
- <button key={val} type="button" onClick={() => setJobType(val)}
+ <button key={val} type="button" onClick={() => setOptimizationType(val)}
  className={cn("relative z-10 flex-1 rounded-md px-4 py-2.5 cursor-pointer text-center transition-colors duration-200",
  jobType === val ?"text-foreground":"text-foreground/60 hover:text-foreground")}>
  <span className="text-sm font-medium">{label}</span>
@@ -628,7 +684,7 @@ export default function SubmitPage() {
  </Card>,
 
  /* ── Step 1: Dataset ── */
- <Card key="data" className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
+ <Card key="data" className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg" data-tutorial="wizard-step-2">
  <CardHeader>
  <CardTitle className="text-lg">דאטאסט</CardTitle>
  <CardDescription>העלה קובץ נתונים והגדר את מיפוי העמודות</CardDescription>
@@ -643,7 +699,7 @@ export default function SubmitPage() {
  )}
  >
  <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground group-hover:text-primary/70 transition-colors duration-300"/>
- <p className="text-sm font-medium">{datasetFileName ?? "לחץ להעלאת קובץ CSV או JSON"}</p>
+ <p className="text-sm font-medium truncate max-w-full px-4" title={datasetFileName ?? undefined}>{datasetFileName ?? "לחץ להעלאת קובץ CSV או JSON"}</p>
  {parsedDataset && (
  <Badge variant="secondary" className="mt-2">{parsedDataset.rowCount} שורות · {parsedDataset.columns.length} עמודות</Badge>
  )}
@@ -653,7 +709,7 @@ export default function SubmitPage() {
  {parsedDataset && parsedDataset.columns.length > 0 && (
  <>
  <Separator />
- <div className="space-y-3">
+ <div className="space-y-3" data-tutorial="column-mapping">
  <Label>מיפוי עמודות</Label>
  <p className="text-xs text-muted-foreground">סמן כל עמודה כקלט, פלט, או התעלם</p>
  <div className="space-y-2">
@@ -692,14 +748,15 @@ export default function SubmitPage() {
  </Card>,
 
  /* ── Step 2: Model & Optimizer ── */
- <Card key="model" className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
+ <Card key="model" className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg" data-tutorial="wizard-step-3">
  <CardHeader>
  <CardTitle className="text-lg">הגדרות מודל ואופטימיזציה</CardTitle>
+ <CardDescription>בחר מודול, אופטימייזר ומודלי שפה</CardDescription>
  </CardHeader>
  <CardContent className="space-y-5">
  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
- <div className="space-y-2">
- <Label>מודול</Label>
+ <div className="space-y-2" data-tutorial="module-selector">
+ <Label><HelpTip text="אופן עיבוד הפרומפט — Predict שולח ישירות, CoT מוסיף שלב חשיבה לפני התשובה">מודול</HelpTip></Label>
  <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
  <div
  className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
@@ -712,8 +769,8 @@ export default function SubmitPage() {
  ))}
  </div>
  </div>
- <div className="space-y-2">
- <Label>אופטימייזר</Label>
+ <div className="space-y-2" data-tutorial="optimizer-selector">
+ <Label><HelpTip text="אלגוריתם האופטימיזציה — MIPROv2 מנסה שילובי הוראות ודוגמאות, GEPA משפר באמצעות רפלקציה על שגיאות">אופטימייזר</HelpTip></Label>
  <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
  <div
  className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
@@ -740,6 +797,12 @@ export default function SubmitPage() {
  <Label htmlFor="apiKey">מפתח API</Label>
  <Input id="apiKey" dir="ltr" type="password" placeholder="sk-..." value={globalApiKey} onChange={(e) => setGlobalApiKey(e.target.value)} />
  {anyProviderHasEnvKey && <p className="text-[10px] text-muted-foreground">אופציונאלי- מפתח API ילקח ממשתנה סביבה</p>}
+ {globalApiKey && typeof window !== "undefined" && window.location.protocol !== "https:" && process.env.NODE_ENV === "production" && (
+ <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+ <AlertTriangle className="size-3 shrink-0" />
+ ⚠️ חיבור לא מוצפן — מפתח ה-API יישלח ללא הצפנה. השתמשו ב-HTTPS בסביבת ייצור.
+ </p>
+ )}
  </div>
  </div>
 
@@ -747,7 +810,7 @@ export default function SubmitPage() {
 
  {/* Model chips */}
  {jobType === "run" ? (
- <div className="space-y-3">
+ <div className="space-y-3" data-tutorial="model-catalog">
  <Label className="text-sm font-semibold">מודלים</Label>
  <div className="space-y-2">
  <ModelChip
@@ -763,11 +826,6 @@ export default function SubmitPage() {
  required
  onClick={() => setEditingModel({ config: secondModelConfig ?? emptyModelConfig(), onSave: setSecondModelConfig, label: "מודל רפלקציה" })}
  onRemove={secondModelConfig?.name ? () => setSecondModelConfig(null) : undefined}
- copyFromLabel={modelConfig.name ? `העתק מ-${(modelConfig.name.split("/").pop())}` : undefined}
- onCopyFrom={modelConfig.name ? () => {
- setSecondModelConfig({ ...modelConfig });
- toast.success("הוגדר לפי מודל יצירה");
- } : undefined}
  />
  </div>
  </div>
@@ -785,15 +843,16 @@ export default function SubmitPage() {
  onSave: (c) => { const u = [...generationModels]; u[i] = c; setGenerationModels(u); },
  label: `מודל יצירה ${i + 1}`,
  })}
- onClone={() => setGenerationModels([...generationModels, { ...m }])}
  onRemove={generationModels.length > 1 ? () => setGenerationModels(generationModels.filter((_, j) => j !== i)) : undefined}
  />
  ))}
+ {generationModels.every((m) => m.name.trim()) && (
  <AddModelButton label="הוסף" onClick={() => setEditingModel({
  config: generationModels.length ? { ...generationModels[generationModels.length - 1], name: "" } : emptyModelConfig(),
  onSave: (c) => setGenerationModels([...generationModels.filter((m) => m.name.trim()), c]),
  label: "מודל יצירה חדש",
  })} />
+ )}
  </div>
  </div>
  <Separator />
@@ -809,15 +868,16 @@ export default function SubmitPage() {
  onSave: (c) => { const u = [...reflectionModels]; u[i] = c; setReflectionModels(u); },
  label: `מודל רפלקציה ${i + 1}`,
  })}
- onClone={() => setReflectionModels([...reflectionModels, { ...m }])}
  onRemove={reflectionModels.length > 1 ? () => setReflectionModels(reflectionModels.filter((_, j) => j !== i)) : undefined}
  />
  ))}
+ {reflectionModels.every((m) => m.name.trim()) && (
  <AddModelButton label="הוסף" onClick={() => setEditingModel({
  config: reflectionModels.length ? { ...reflectionModels[reflectionModels.length - 1], name: "" } : emptyModelConfig(),
  onSave: (c) => setReflectionModels([...reflectionModels.filter((m) => m.name.trim()), c]),
  label: "מודל רפלקציה חדש",
  })} />
+ )}
  </div>
  </div>
  </div>
@@ -837,24 +897,25 @@ export default function SubmitPage() {
  </Card>,
 
  /* ── Step 3: Code ── */
- <Card key="code" className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
+ <Card key="code" className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg" data-tutorial="wizard-step-4">
  <CardHeader>
  <CardTitle className="text-lg">קוד</CardTitle>
+ <CardDescription>הגדר את חתימת המשימה ופונקציית המדידה</CardDescription>
  </CardHeader>
  <CardContent className="space-y-5">
- <div className="space-y-2">
- <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">חתימה (Signature)</Label>
+ <div className="space-y-2" data-tutorial="signature-editor">
+ <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"><HelpTip text="הגדרת שדות הקלט והפלט של המשימה — מה המודל מקבל ומה הוא צריך להחזיר">חתימה (Signature)</HelpTip></Label>
  <CodeEditor
  value={signatureCode}
- onChange={(v) => { setSignatureCode(v); setSignatureValidation(null); }}
+ onChange={(v) => { setSignatureCode(v); setSignatureManuallyEdited(true); setSignatureValidation(null); }}
  height="180px"
  onRun={runSignatureValidation}
  validationResult={signatureValidation}
  />
  </div>
  <Separator />
- <div className="space-y-2">
- <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">מטריקה (Metric)</Label>
+ <div className="space-y-2" data-tutorial="metric-editor">
+ <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"><HelpTip text="פונקציה שמודדת את איכות התשובה — מחזירה ציון מספרי לכל דוגמה">מטריקה (Metric)</HelpTip></Label>
  <CodeEditor
  value={metricCode}
  onChange={(v) => { setMetricCode(v); setMetricValidation(null); }}
@@ -867,15 +928,16 @@ export default function SubmitPage() {
  </Card>,
 
  /* ── Step 4: Parameters ── */
- <Card key="params" className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
+ <Card key="params" className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg" data-tutorial="wizard-step-5">
  <CardHeader>
  <CardTitle className="text-lg">פרמטרים</CardTitle>
+ <CardDescription>חלוקת הנתונים והגדרות האופטימייזר</CardDescription>
  </CardHeader>
  <CardContent className="space-y-5">
  {/* Split fractions */}
- <div className="space-y-3">
+ <div className="space-y-3" data-tutorial="data-splits">
  <div className="flex items-center justify-between">
- <Label className="font-semibold">חלוקת דאטאסט</Label>
+ <Label className="font-semibold"><HelpTip text="הנתונים מחולקים לשלוש קבוצות — אימון ללמידה, אימות לכיוונון, ובדיקה למדידת הביצועים הסופיים">חלוקת דאטאסט</HelpTip></Label>
  {splitSum !== 1 && <Badge variant="destructive" className="text-xs">סכום: {splitSum}</Badge>}
  </div>
  <div className="flex h-3 rounded-full overflow-hidden">
@@ -885,15 +947,15 @@ export default function SubmitPage() {
  </div>
  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
  <div className="space-y-1">
- <Label htmlFor="split-train" className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]"/>אימון</Label>
+ <Label htmlFor="split-train" className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]"/><HelpTip text="דוגמאות שהאופטימייזר לומד מהן">אימון</HelpTip></Label>
  <NumberInput id="split-train" step={0.05} min={0} max={1} value={split.train} onChange={(v) => updateSplit("train", String(v))} />
  </div>
  <div className="space-y-1">
- <Label htmlFor="split-val" className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]"/>אימות</Label>
+ <Label htmlFor="split-val" className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]"/><HelpTip text="דוגמאות לכיוונון פנימי במהלך האופטימיזציה">אימות</HelpTip></Label>
  <NumberInput id="split-val" step={0.05} min={0} max={1} value={split.val} onChange={(v) => updateSplit("val", String(v))} />
  </div>
  <div className="space-y-1">
- <Label htmlFor="split-test" className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]"/>בדיקה</Label>
+ <Label htmlFor="split-test" className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]"/><HelpTip text="דוגמאות שמורות למדידה סופית — לא נחשפות באימון">בדיקה</HelpTip></Label>
  <NumberInput id="split-test" step={0.05} min={0} max={1} value={split.test} onChange={(v) => updateSplit("test", String(v))} />
  </div>
  </div>
@@ -904,8 +966,8 @@ export default function SubmitPage() {
  {/* Advanced settings inline */}
  <div className="space-y-4">
  <Label className="font-semibold">הגדרות נוספות</Label>
- <div className="flex items-center gap-3">
- <Label htmlFor="shuffle" className="cursor-pointer text-sm">ערבוב</Label>
+ <div className="flex items-center justify-between">
+ <Label htmlFor="shuffle" className="cursor-pointer text-sm"><HelpTip text="ערבוב סדר השורות בדאטאסט לפני החלוקה — מונע הטיה מסדר הנתונים">ערבוב</HelpTip></Label>
  <Switch id="shuffle" checked={shuffle} onCheckedChange={setShuffle} />
  </div>
  {/* Optimizer-specific parameters */}
@@ -913,8 +975,8 @@ export default function SubmitPage() {
  <Label className="font-semibold text-xs text-muted-foreground">פרמטרי אופטימייזר</Label>
 
  {/* Common: auto level */}
- <div className="space-y-2">
- <Label className="text-sm">רמת חיפוש (auto)</Label>
+ <div className="space-y-2" data-tutorial="auto-level">
+ <Label className="text-sm"><HelpTip text="עומק החיפוש — קלה מהירה עם פחות ניסיונות, מעמיקה בודקת יותר שילובים אך לוקחת זמן רב יותר">רמת חיפוש (auto)</HelpTip></Label>
  <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
  {autoLevel && (
  <div
@@ -932,40 +994,40 @@ export default function SubmitPage() {
  </div>
 
  {optimizerName === "miprov2"? (
- <div className="grid grid-cols-2 gap-3">
+ <div className="grid grid-cols-2 gap-3" data-tutorial="mipro-params">
  <div className="space-y-1.5">
- <Label className="text-xs">דוגמאות אוטומטיות</Label>
+ <Label className="text-xs"><HelpTip text="דוגמאות שהמערכת מייצרת אוטומטית מתוך הנתונים כדי ללמד את המודל">דוגמאות אוטומטיות</HelpTip></Label>
  <NumberInput min={0} max={20} step={1} value={maxBootstrappedDemos ? parseInt(maxBootstrappedDemos, 10) : ""} onChange={(v) => setMaxBootstrappedDemos(String(v))} />
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs">דוגמאות מהנתונים</Label>
+ <Label className="text-xs"><HelpTip text="דוגמאות קלט-פלט מתוך הדאטאסט שמוצגות למודל כהדגמה">דוגמאות מהנתונים</HelpTip></Label>
  <NumberInput min={0} max={20} step={1} value={maxLabeledDemos ? parseInt(maxLabeledDemos, 10) : ""} onChange={(v) => setMaxLabeledDemos(String(v))} />
  </div>
  <div className="space-y-1.5">
- <Label className={cn("text-xs", autoLevel && "text-muted-foreground/50")}>מספר ניסיונות</Label>
+ <Label className={cn("text-xs", autoLevel && "text-muted-foreground/50")}><HelpTip text="כמה שילובים שונים של הוראות ודוגמאות האופטימייזר ינסה">מספר ניסיונות</HelpTip></Label>
  <NumberInput min={1} max={100} step={1} value={numTrials ? parseInt(numTrials, 10) : ""} onChange={(v) => setNumTrials(String(v))} disabled={!!autoLevel} />
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs">גודל מדגם</Label>
+ <Label className="text-xs"><HelpTip text="מספר הדוגמאות שנבדקות בכל סבב הערכה — מדגם קטן מזרז, גדול מדויק יותר">גודל מדגם</HelpTip></Label>
  <NumberInput min={1} max={200} step={1} value={minibatchSize ? parseInt(minibatchSize, 10) : ""} onChange={(v) => setMinibatchSize(String(v))} />
  </div>
- <div className="col-span-2 flex items-center gap-3">
- <Label className="text-sm cursor-pointer">בדיקה חלקית</Label>
+ <div className="col-span-2 flex items-center justify-between">
+ <Label className="text-sm cursor-pointer"><HelpTip text="כשפעיל, הערכה רצה על מדגם קטן במקום הדאטאסט המלא — מאיץ את התהליך">בדיקה חלקית</HelpTip></Label>
  <Switch checked={minibatch} onCheckedChange={setMinibatch} />
  </div>
  </div>
  ) : (
- <div className="grid grid-cols-2 gap-3">
+ <div className="grid grid-cols-2 gap-3" data-tutorial="gepa-params">
  <div className="space-y-1.5">
- <Label className="text-xs">גודל מדגם לרפלקציה</Label>
+ <Label className="text-xs"><HelpTip text="כמה דוגמאות המודל מנתח בכל סבב רפלקציה כדי לזהות דפוסי שגיאה">גודל מדגם לרפלקציה</HelpTip></Label>
  <NumberInput min={1} max={20} step={1} value={reflectionMinibatchSize ? parseInt(reflectionMinibatchSize, 10) : ""} onChange={(v) => setReflectionMinibatchSize(String(v))} />
  </div>
  <div className="space-y-1.5">
- <Label className={cn("text-xs", autoLevel && "text-muted-foreground/50")}>מקסימום סבבי הערכה</Label>
+ <Label className={cn("text-xs", autoLevel && "text-muted-foreground/50")}><HelpTip text="מספר הפעמים שהמערכת מריצה הערכה מלאה על כל הנתונים">מקסימום סבבי הערכה</HelpTip></Label>
  <NumberInput min={1} max={50} step={1} value={maxFullEvals ? parseInt(maxFullEvals, 10) : ""} onChange={(v) => setMaxFullEvals(String(v))} disabled={!!autoLevel} />
  </div>
- <div className="col-span-2 flex items-center gap-3">
- <Label className="text-sm cursor-pointer">מיזוג מועמדים</Label>
+ <div className="col-span-2 flex items-center justify-between">
+ <Label className="text-sm cursor-pointer"><HelpTip text="כשפעיל, המערכת משלבת הוראות מכמה מועמדים טובים לפרומפט אחד משופר">מיזוג מועמדים</HelpTip></Label>
  <Switch checked={useMerge} onCheckedChange={setUseMerge} />
  </div>
  </div>
@@ -976,105 +1038,246 @@ export default function SubmitPage() {
  </Card>,
 
  /* ── Step 5: Summary & Submit ── */
- <Card key="review" className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
- <CardHeader>
- <CardTitle className="text-lg">סיכום ושליחה</CardTitle>
- </CardHeader>
- <CardContent className="space-y-3 text-sm">
+ <div key="review" className="space-y-4" data-tutorial="wizard-step-6">
  {(() => {
- const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
- <div className="flex justify-between gap-4"><span className="text-muted-foreground shrink-0">{label}</span><span className="font-medium truncate" dir="ltr">{value}</span></div>
- );
- const Section = ({ title, summary, children }: { title: string; summary: React.ReactNode; children: React.ReactNode }) => (
- <details className="group rounded-xl border border-border/50 bg-muted/30 overflow-hidden">
- <summary className="flex items-center justify-between p-4 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden hover:bg-muted/50 transition-colors">
- <span className="font-semibold text-sm">{title}</span>
- <div className="flex items-center gap-2">
- <span className="text-xs text-muted-foreground truncate max-w-[200px]">{summary}</span>
- <ChevronDown className="size-3.5 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
- </div>
- </summary>
- <div className="px-4 pb-4 pt-1 space-y-2 border-t border-border/30">{children}</div>
- </details>
- );
- const columnMapping = buildColumnMapping();
- const inputCols = Object.keys(columnMapping.inputs);
- const outputCols = Object.keys(columnMapping.outputs);
+ const SUMMARY_TABS = [
+  { id: "general", label: "כללי", icon: <User className="size-3.5" /> },
+  { id: "dataset", label: "דאטאסט", icon: <Database className="size-3.5" /> },
+  { id: "models", label: "מודלים", icon: <Cpu className="size-3.5" /> },
+  { id: "optimizer", label: "אופטימייזר", icon: <Target className="size-3.5" /> },
+  { id: "code", label: "קוד", icon: <Code className="size-3.5" /> },
+ ];
+
  return (
  <>
- {/* Basic — always visible, no expand */}
- <div className="rounded-xl border border-border/50 bg-muted/30 p-4 space-y-2">
- <Row label="משתמש" value={username || "—"} />
- <Row label="סוג" value={<span dir="rtl">{jobType === "run" ? "ריצה בודדת" : "סריקה"}</span>} />
- <Row label="מודול" value={moduleName} />
- </div>
-
- {/* Dataset */}
- <Section title="דאטאסט" summary={datasetFileName ?? "—"}>
- <Row label="קובץ" value={datasetFileName ?? "—"} />
- <Row label="שורות" value={parsedDataset?.rowCount ?? "—"} />
- <Row label="עמודות קלט" value={inputCols.join(", ") || "—"} />
- <Row label="עמודות פלט" value={outputCols.join(", ") || "—"} />
- <Row label="חלוקה (אימון / אימות / בדיקה)" value={`${split.train} / ${split.val} / ${split.test}`} />
- <Row label="ערבוב" value={<span dir="rtl">{shuffle ? "כן" : "לא"}</span>} />
- </Section>
-
- {/* Models */}
- <Section
- title="מודלים"
- summary={jobType === "run"
- ? (modelConfig.name || "—")
- : `${generationModels.filter(m => m.name).length} × ${reflectionModels.filter(m => m.name).length}`
- }
+ {/* Tabbed sections */}
+ <motion.div
+  initial={{ opacity: 0, y: 8 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+  className="rounded-2xl border border-border bg-card/80 backdrop-blur-xl shadow-lg overflow-hidden"
  >
- {jobType === "run" ? (
- <>
- <Row label="מודל יצירה" value={modelConfig.name || "—"} />
- <Row label="טמפרטורה" value={modelConfig.temperature} />
- {modelConfig.max_tokens && <Row label="מקסימום טוקנים" value={modelConfig.max_tokens} />}
- {modelConfig.top_p != null && <Row label="Top P" value={modelConfig.top_p} />}
- {secondModelConfig?.name && (
- <>
- <Separator className="my-1" />
- <Row label="מודל רפלקציה" value={secondModelConfig.name} />
- <Row label="טמפרטורה" value={secondModelConfig.temperature} />
- {secondModelConfig.max_tokens && <Row label="מקסימום טוקנים" value={secondModelConfig.max_tokens} />}
- </>
- )}
- </>
- ) : (
- <>
- <Row label="מודלי יצירה" value={generationModels.filter(m => m.name).map(m => m.name).join(", ") || "—"} />
- <Row label="מודלי רפלקציה" value={reflectionModels.filter(m => m.name).map(m => m.name).join(", ") || "—"} />
- </>
- )}
- </Section>
+  {/* Tab bar */}
+  <div className="relative flex border-b border-border bg-secondary/50 p-1 gap-0.5">
+   <div
+    className="absolute top-1 bottom-1 rounded-lg bg-background shadow-sm transition-[inset-inline-start] duration-200 ease-out pointer-events-none"
+    style={{
+     width: `calc((100% - 12px) / ${SUMMARY_TABS.length})`,
+     insetInlineStart: `calc(${summaryTab} * ${100 / SUMMARY_TABS.length}% + 4px)`,
+    }}
+   />
+   {SUMMARY_TABS.map((tab, i) => (
+    <button
+     key={tab.id}
+     type="button"
+     onClick={() => setSummaryTab(i)}
+     className={cn(
+      "relative z-10 flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-medium transition-colors duration-150 cursor-pointer",
+      summaryTab === i
+       ? "text-foreground"
+       : "text-muted-foreground hover:text-foreground/80"
+     )}
+    >
+     {tab.icon}
+     <span className="hidden sm:inline">{tab.label}</span>
+    </button>
+   ))}
+  </div>
 
- {/* Optimizer */}
- <Section title="אופטימייזר" summary={optimizerName}>
- <Row label="שם" value={optimizerName} />
- <Row label="רמת חיפוש" value={autoLevel} />
- {optimizerName === "miprov2" ? (
- <>
- <Row label="דוגמאות אוטומטיות" value={maxBootstrappedDemos} />
- <Row label="דוגמאות מהנתונים" value={maxLabeledDemos} />
- <Row label="מספר ניסיונות" value={numTrials} />
- <Row label="בדיקה חלקית" value={<span dir="rtl">{minibatch ? "כן" : "לא"}</span>} />
- {minibatch && <Row label="גודל מדגם" value={minibatchSize} />}
- </>
- ) : (
- <>
- <Row label="גודל מדגם לרפלקציה" value={reflectionMinibatchSize} />
- <Row label="מקסימום סבבי הערכה" value={maxFullEvals} />
- <Row label="מיזוג מועמדים" value={<span dir="rtl">{useMerge ? "כן" : "לא"}</span>} />
- </>
- )}
- </Section>
+  {/* Tab content */}
+  <div className="p-5">
+   <AnimatePresence mode="wait">
+    <motion.div
+     key={summaryTab}
+     initial={{ opacity: 0, y: 6 }}
+     animate={{ opacity: 1, y: 0 }}
+     exit={{ opacity: 0, y: -6 }}
+     transition={{ duration: 0.15 }}
+    >
+     {/* General */}
+     {summaryTab === 0 && (
+      <div className="space-y-0">
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Tag className="size-3.5" />שם האופטימיזציה</span>
+        <span className="text-sm font-medium">{jobName || "—"}</span>
+       </div>
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Layers className="size-3.5" />סוג אופטימיזציה</span>
+        <span className="text-sm font-medium">{jobType === "run" ? "ריצה בודדת" : "סריקה"}</span>
+       </div>
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Component className="size-3.5" />מודול</span>
+        <span className="text-sm font-medium font-mono" dir="ltr">{moduleName === "predict" ? "Predict" : "CoT"}</span>
+       </div>
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Target className="size-3.5" />אופטימייזר</span>
+        <span className="text-sm font-medium font-mono" dir="ltr">{optimizerName === "miprov2" ? "MIPROv2" : "GEPA"}</span>
+       </div>
+      </div>
+     )}
+
+     {/* Dataset */}
+     {summaryTab === 1 && (
+      <div className="space-y-4">
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><FileText className="size-3.5" />קובץ</span>
+        <span className="text-sm font-medium truncate max-w-[60%]" title={datasetFileName ?? undefined}>{datasetFileName ?? "—"}</span>
+       </div>
+       {parsedDataset && (
+        <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+         <span className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="size-3.5" />גודל</span>
+         <span className="text-sm font-medium">{parsedDataset.rowCount} שורות · {parsedDataset.columns.length} עמודות</span>
+        </div>
+       )}
+       {parsedDataset && parsedDataset.columns.length > 0 && (
+        <>
+         <div className="space-y-2 pt-1">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Columns className="size-3.5" />מיפוי עמודות</span>
+          <div className="space-y-1.5">
+           {parsedDataset.columns.map((col) => {
+            const role = columnRoles[col];
+            if (role === "ignore") return null;
+            const roleLabel = role === "input" ? "קלט" : role === "output" ? "פלט" : "התעלם";
+            const roleColor = role === "input" ? "text-[#3D2E22] bg-[#3D2E22]/10" : role === "output" ? "text-primary bg-primary/10" : "text-muted-foreground bg-muted";
+            return (
+             <div key={col} className="flex items-center justify-between gap-2 py-1">
+              <span className="text-xs font-mono truncate" dir="ltr">{col}</span>
+              <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", roleColor)}>{roleLabel}</span>
+             </div>
+            );
+           })}
+          </div>
+         </div>
+        </>
+       )}
+       <Separator />
+       <div className="space-y-3">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Layers className="size-3.5" />חלוקת דאטאסט</span>
+        <div className="flex h-3 rounded-full overflow-hidden">
+         <div className="bg-[#3D2E22]" style={{ width: `${split.train * 100}%` }} />
+         <div className="bg-[#C8A882]" style={{ width: `${split.val * 100}%` }} />
+         <div className="bg-[#8C7A6B]" style={{ width: `${split.test * 100}%` }} />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+         <div className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]"/>אימון {split.train}</div>
+         <div className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]"/>אימות {split.val}</div>
+         <div className="flex items-center gap-1.5 text-xs"><span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]"/>בדיקה {split.test}</div>
+        </div>
+       </div>
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Shuffle className="size-3.5" />ערבוב</span>
+        <span className="text-sm font-medium">{shuffle ? "כן" : "לא"}</span>
+       </div>
+      </div>
+     )}
+
+     {/* Models */}
+     {summaryTab === 2 && (
+      <div className="space-y-2 pointer-events-none">
+       {jobType === "run" ? (
+        <div className="space-y-2">
+         <ModelChip config={modelConfig} roleLabel="מודל יצירה" onClick={() => {}} />
+         {secondModelConfig?.name && (
+          <ModelChip config={secondModelConfig} roleLabel="מודל רפלקציה" onClick={() => {}} />
+         )}
+        </div>
+       ) : (
+        <div className="space-y-2">
+         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">מודלי יצירה</span>
+         <div className="space-y-1.5">
+          {generationModels.filter(m => m.name).map((m, i) => (
+           <ModelChip key={i} config={m} onClick={() => {}} />
+          ))}
+         </div>
+         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">מודלי רפלקציה</span>
+         <div className="space-y-1.5">
+          {reflectionModels.filter(m => m.name).map((m, i) => (
+           <ModelChip key={i} config={m} onClick={() => {}} />
+          ))}
+         </div>
+        </div>
+       )}
+      </div>
+     )}
+
+     {/* Optimizer */}
+     {summaryTab === 3 && (
+      <div className="space-y-0">
+       <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground"><Search className="size-3.5" />רמת חיפוש</span>
+        <span className="text-sm font-medium">{autoLevel === "light" ? "קלה" : autoLevel === "medium" ? "בינונית" : "מעמיקה"}</span>
+       </div>
+       {optimizerName === "miprov2" ? (
+        <>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Cpu className="size-3.5" />דוגמאות אוטומטיות</span>
+          <span className="text-sm font-medium font-mono">{maxBootstrappedDemos || "—"}</span>
+         </div>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="size-3.5" />דוגמאות מהנתונים</span>
+          <span className="text-sm font-medium font-mono">{maxLabeledDemos || "—"}</span>
+         </div>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Layers className="size-3.5" />מספר ניסיונות</span>
+          <span className="text-sm font-medium font-mono">{numTrials || "—"}</span>
+         </div>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Layers className="size-3.5" />בדיקה חלקית</span>
+          <span className="text-sm font-medium">{minibatch ? `כן (${minibatchSize})` : "לא"}</span>
+         </div>
+        </>
+       ) : (
+        <>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="size-3.5" />גודל מדגם לרפלקציה</span>
+          <span className="text-sm font-medium font-mono">{reflectionMinibatchSize || "—"}</span>
+         </div>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Layers className="size-3.5" />מקסימום סבבי הערכה</span>
+          <span className="text-sm font-medium font-mono">{maxFullEvals || "—"}</span>
+         </div>
+         <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground"><Shuffle className="size-3.5" />מיזוג מועמדים</span>
+          <span className="text-sm font-medium">{useMerge ? "כן" : "לא"}</span>
+         </div>
+        </>
+       )}
+      </div>
+     )}
+
+     {/* Code */}
+     {summaryTab === 4 && (
+      <Tabs defaultValue={signatureCode ? "signature" : "metric"} dir="ltr" onValueChange={setSummaryCodeTab}>
+       <TabsList className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto">
+        {signatureCode && metricCode && (
+         <div
+          className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
+          style={{ insetInlineStart: summaryCodeTab === "signature" ? 4 : "calc(50% + 2px)" }}
+         />
+        )}
+        {signatureCode && <TabsTrigger value="signature" className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5">חתימה (Signature)</TabsTrigger>}
+        {metricCode && <TabsTrigger value="metric" className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5">מטריקה (Metric)</TabsTrigger>}
+       </TabsList>
+       {signatureCode && (
+        <TabsContent value="signature">
+         <CodeEditor value={signatureCode} onChange={() => {}} height={`${(Math.min(signatureCode.split("\n").length + 1, 10)) * 19.6 + 8}px`} readOnly />
+        </TabsContent>
+       )}
+       {metricCode && (
+        <TabsContent value="metric">
+         <CodeEditor value={metricCode} onChange={() => {}} height={`${(Math.min(metricCode.split("\n").length + 1, 10)) * 19.6 + 8}px`} readOnly />
+        </TabsContent>
+       )}
+      </Tabs>
+     )}
+    </motion.div>
+   </AnimatePresence>
+  </div>
+ </motion.div>
  </>
  );
  })()}
- </CardContent>
- </Card>,
+ </div>,
  ];
 
  /* ════════════════════════════════════════════
@@ -1091,7 +1294,7 @@ export default function SubmitPage() {
  </div>
 
  {/* Step indicator — numbered circles with connecting lines */}
- <div className="relative">
+ <div className="relative" data-tutorial="wizard-stepper">
  <div className="flex items-center justify-between">
  {STEPS.map((s, i) => {
  const reachable = i <= maxReachableStep;
@@ -1149,7 +1352,7 @@ export default function SubmitPage() {
  </div>
 
  {/* Animated step content */}
- <div className="relative overflow-hidden min-h-[300px] pt-[10px]">
+ <div className="relative overflow-hidden pt-[10px]" data-tutorial="submit-wizard">
  <AnimatePresence mode="wait" custom={direction}>
  <motion.div
  key={step}
@@ -1183,16 +1386,20 @@ export default function SubmitPage() {
  <Button
  onClick={handleNext}
  className="gap-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(124,99,80,0.3)] active:scale-[0.97]"
+ data-tutorial="wizard-next"
  >
  הבא
  <ChevronLeft className="h-4 w-4"/>
  </Button>
  </div>
  ) : (
- <button
+ <motion.button
  type="button"
  onClick={handleSubmit}
  disabled={submitting}
+ data-tutorial="submit-button"
+ animate={{ scale: [1, 1.01, 1] }}
+ transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
  className="group relative w-full rounded-2xl bg-primary text-primary-foreground font-semibold text-base pt-5 pb-7 cursor-pointer transition-all duration-300 hover:shadow-[0_0_30px_rgba(61,46,34,0.35)] hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
  >
  {submitting ? (
@@ -1203,14 +1410,14 @@ export default function SubmitPage() {
  ) : (
  <div className="flex flex-col items-center gap-4">
  <span>שלח אופטימיזציה</span>
- <div className="flex flex-col items-center -space-y-7 h-0 overflow-visible opacity-0 group-hover:opacity-70 transition-opacity duration-300">
- <ChevronDown className="size-10 animate-[cascadeDown_1s_ease-in-out_infinite]" />
- <ChevronDown className="size-10 animate-[cascadeDown_1s_ease-in-out_0.15s_infinite]" />
- <ChevronDown className="size-10 animate-[cascadeDown_1s_ease-in-out_0.3s_infinite]" />
+ <div className="flex flex-col items-center -space-y-7 h-0 overflow-visible opacity-70 group-hover:opacity-100 transition-opacity duration-200 [&>svg]:animate-[cascadeDown_1s_ease-in-out_infinite] group-hover:[&>svg]:animate-[cascadeDownHyper_0.5s_ease-out_infinite]">
+ <ChevronDown className="size-10 [animation-delay:0s] group-hover:[animation-delay:0s]" />
+ <ChevronDown className="size-10 [animation-delay:0.15s] group-hover:[animation-delay:0.08s]" />
+ <ChevronDown className="size-10 [animation-delay:0.3s] group-hover:[animation-delay:0.16s]" />
  </div>
  </div>
  )}
- </button>
+ </motion.button>
  )}
 
  {/* ── Submit splash overlay — portal to body so it covers sidebar + header ── */}

@@ -3,13 +3,17 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Send, Play, Trash2, Search, PanelRightClose, PanelRightOpen, X, MoreHorizontal, Share2, Pencil, Pin } from "lucide-react";
+import { LayoutDashboard, Send, Play, Trash2, Search, PanelRightClose, PanelRightOpen, X, MoreHorizontal, Share2, Pencil, Pin, Loader2, Grid2x2, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { listJobs, deleteJob, renameJob, togglePinJob } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { listJobs, listJobsSidebar, deleteJob, renameOptimization, togglePinOptimization } from "@/lib/api";
+import type { SidebarJobItem } from "@/lib/api";
 import { ACTIVE_STATUSES, STATUS_LABELS } from "@/lib/constants";
-import type { JobSummaryResponse } from "@/lib/types";
+import type { OptimizationSummaryResponse } from "@/lib/types";
+// Sidebar now uses SidebarJobItem from api.ts but falls back to OptimizationSummaryResponse shape
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
 
@@ -23,6 +27,9 @@ const PAGE_SIZE = 20;
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const activePairParam = searchParams.get("pair");
+  const activePairIndex = activePairParam != null ? parseInt(activePairParam, 10) : null;
   const { data: session } = useSession();
   const sessionUser = session?.user?.name ?? "";
   const isAdmin = (session?.user as Record<string, unknown> | undefined)?.role === "admin";
@@ -35,7 +42,7 @@ export function Sidebar() {
     return () => window.removeEventListener("sidebar:collapse", handler);
   }, []);
 
-  const [jobs, setJobs] = React.useState<JobSummaryResponse[]>([]);
+  const [jobs, setJobs] = React.useState<SidebarJobItem[]>([]);
   const [totalJobs, setTotalJobs] = React.useState(0);
   const [activeCount, setActiveCount] = React.useState(0);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -45,28 +52,34 @@ export function Sidebar() {
 
   const fetchData = React.useCallback(async () => {
     try {
-      const res = await listJobs({
+      const res = await listJobsSidebar({
         username: isAdmin ? undefined : (sessionUser || undefined),
         limit: PAGE_SIZE,
         offset: 0,
       });
       setJobs(res.items);
       setTotalJobs(res.total);
-      setActiveCount(res.items.filter(j => ACTIVE_STATUSES.has(j.status)).length);
+      setActiveCount(res.items.filter(j => ACTIVE_STATUSES.has(j.status as never)).length);
       setLoadedAll(res.items.length >= res.total);
     } catch { /* ignore */ }
   }, [sessionUser, isAdmin]);
 
   React.useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchData, 30000);
+    // Listen for cross-component invalidation (dashboard delete, etc.)
+    const onJobsChanged = () => fetchData();
+    window.addEventListener("optimizations-changed", onJobsChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("optimizations-changed", onJobsChanged);
+    };
   }, [fetchData]);
 
   const loadMore = async () => {
     if (loadedAll) return;
     try {
-      const res = await listJobs({
+      const res = await listJobsSidebar({
         username: isAdmin ? undefined : (sessionUser || undefined),
         limit: PAGE_SIZE,
         offset: jobs.length,
@@ -76,42 +89,58 @@ export function Sidebar() {
     } catch { /* ignore */ }
   };
 
-  const handleDelete = async (e: React.MouseEvent, jobId: string) => {
+  const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
+
+  const handleDelete = (e: React.MouseEvent, optimizationId: string) => {
     e.preventDefault();
     e.stopPropagation();
+    setDeleteConfirm(optimizationId);
+  };
+
+  const confirmDelete = async () => {
+    const optimizationId = deleteConfirm;
+    if (!optimizationId) return;
+    setDeleteLoading(true);
+    setJobs((prev) => prev.filter((j) => j.optimization_id !== optimizationId));
+    setTotalJobs((prev) => Math.max(0, prev - 1));
     try {
-      await deleteJob(jobId);
+      await deleteJob(optimizationId);
       toast.success("נמחק");
-      fetchData();
-      if (pathname === `/jobs/${jobId}`) router.push("/");
+      window.dispatchEvent(new Event("optimizations-changed"));
+      if (pathname === `/optimizations/${optimizationId}`) router.push("/");
     } catch {
       toast.error("שגיאה במחיקה");
+      fetchData();
+    } finally {
+      setDeleteLoading(false);
+      setDeleteConfirm(null);
     }
   };
 
   // Filter jobs by search
+  const searchLower = React.useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
   const filteredJobs = React.useMemo(() => {
-    if (!searchQuery.trim()) return jobs;
-    const q = searchQuery.toLowerCase();
+    if (!searchLower) return jobs;
     return jobs.filter(j =>
-      (j.name ?? "").toLowerCase().includes(q) ||
-      (j.module_name ?? "").toLowerCase().includes(q) ||
-      j.job_id.toLowerCase().includes(q) ||
-      (j.optimizer_name ?? "").toLowerCase().includes(q) ||
-      (j.model_name ?? "").toLowerCase().includes(q) ||
-      (j.username ?? "").toLowerCase().includes(q)
+      (j.name ?? "").toLowerCase().includes(searchLower) ||
+      (j.module_name ?? "").toLowerCase().includes(searchLower) ||
+      j.optimization_id.toLowerCase().includes(searchLower) ||
+      (j.optimizer_name ?? "").toLowerCase().includes(searchLower) ||
+      (j.model_name ?? "").toLowerCase().includes(searchLower) ||
+      (j.username ?? "").toLowerCase().includes(searchLower)
     );
-  }, [jobs, searchQuery]);
+  }, [jobs, searchLower]);
 
   // Group jobs: pinned first, then active, then by date
   const groupedJobs = React.useMemo(() => {
-    const groups: { label: string; jobs: JobSummaryResponse[] }[] = [];
-    const pinned: JobSummaryResponse[] = [];
-    const active: JobSummaryResponse[] = [];
-    const today: JobSummaryResponse[] = [];
-    const yesterday: JobSummaryResponse[] = [];
-    const thisWeek: JobSummaryResponse[] = [];
-    const older: JobSummaryResponse[] = [];
+    const groups: { label: string; jobs: SidebarJobItem[] }[] = [];
+    const pinned: SidebarJobItem[] = [];
+    const active: SidebarJobItem[] = [];
+    const today: SidebarJobItem[] = [];
+    const yesterday: SidebarJobItem[] = [];
+    const thisWeek: SidebarJobItem[] = [];
+    const older: SidebarJobItem[] = [];
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -120,8 +149,8 @@ export function Sidebar() {
 
     for (const job of filteredJobs) {
       if (job.pinned) { pinned.push(job); continue; }
-      if (ACTIVE_STATUSES.has(job.status)) { active.push(job); continue; }
-      const created = new Date(job.created_at);
+      if (ACTIVE_STATUSES.has(job.status as never)) { active.push(job); continue; }
+      const created = new Date(job.created_at ?? 0);
       if (created >= todayStart) today.push(job);
       else if (created >= yesterdayStart) yesterday.push(job);
       else if (created >= weekStart) thisWeek.push(job);
@@ -150,10 +179,11 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "relative flex h-full shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar/80 backdrop-blur-xl overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-        collapsed ? "w-12" : "w-56"
+        "relative flex h-full shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar/80 backdrop-blur-xl overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
       )}
+      style={{ width: collapsed ? "3rem" : "clamp(200px, 16vw, 240px)" }}
       dir="rtl"
+      data-tutorial="sidebar-full"
     >
       {/* Collapsed view */}
       <div className={cn(
@@ -196,8 +226,10 @@ export function Sidebar() {
       )}>
       {/* Header with collapse */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-sidebar-border/60">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80 px-2">
-          Skynet
+        <div className="flex items-center gap-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80 px-2" data-tutorial="sidebar-logo">
+            Skynet
+          </div>
         </div>
         <button
           type="button"
@@ -211,7 +243,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 px-3 py-3" role="navigation" aria-label="ניווט ראשי">
+      <nav className="flex flex-col gap-1 px-3 py-3" role="navigation" aria-label="ניווט ראשי" data-tutorial="sidebar-nav">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           const showBadge = href === "/" && activeCount > 0;
@@ -291,11 +323,12 @@ export function Sidebar() {
               </p>
               {group.jobs.map(job => (
                 <JobRow
-                  key={job.job_id}
+                  key={job.optimization_id}
                   job={job}
-                  isActive={pathname === `/jobs/${job.job_id}`}
+                  isActive={pathname === `/optimizations/${job.optimization_id}`}
+                  activePair={pathname === `/optimizations/${job.optimization_id}` ? activePairIndex : null}
                   onDelete={handleDelete}
-                  onUse={(e, id) => { e.preventDefault(); e.stopPropagation(); router.push(`/jobs/${id}?tab=playground`); }}
+                  onUse={(e, id) => { e.preventDefault(); e.stopPropagation(); router.push(`/optimizations/${id}?tab=playground`); }}
                   onRefresh={fetchData}
                 />
               ))}
@@ -314,6 +347,28 @@ export function Sidebar() {
       </div>
 
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteConfirm !== null} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>מחיקת אופטימיזציה</DialogTitle>
+            <DialogDescription>
+              האם למחוק את האופטימיזציה{" "}
+              <span className="font-mono font-medium text-foreground break-all">{deleteConfirm}</span>
+              ?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleteLoading} className="w-full justify-center">
+              ביטול
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteLoading} className="w-full justify-center">
+              {deleteLoading ? <Loader2 className="size-4 animate-spin" /> : "מחיקה"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }
@@ -321,12 +376,14 @@ export function Sidebar() {
 function JobRow({
   job,
   isActive,
+  activePair,
   onDelete,
   onUse,
   onRefresh,
 }: {
-  job: JobSummaryResponse;
+  job: SidebarJobItem;
   isActive: boolean;
+  activePair: number | null;
   onDelete: (e: React.MouseEvent, id: string) => void;
   onUse: (e: React.MouseEvent, id: string) => void;
   onRefresh: () => void;
@@ -335,12 +392,14 @@ function JobRow({
   const [renaming, setRenaming] = React.useState(false);
   const [renameValue, setRenameValue] = React.useState("");
   const [menuPos, setMenuPos] = React.useState<{ top: number; left: number } | null>(null);
+  const [expanded, setExpanded] = React.useState(isActive && activePair !== null);
   const menuRef = React.useRef<HTMLDivElement>(null);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const renameRef = React.useRef<HTMLInputElement>(null);
-  const isLive = ACTIVE_STATUSES.has(job.status);
+  const isLive = ACTIVE_STATUSES.has(job.status as never);
   const isSuccess = job.status === "success";
-  const displayName = job.name || [job.module_name, job.optimizer_name].filter(Boolean).join(" · ") || job.job_id.slice(0, 8);
+  const isGridSearch = job.optimization_type === "grid_search" && (job.total_pairs ?? 0) > 0;
+  const displayName = job.name || [job.module_name, job.optimizer_name].filter(Boolean).join(" · ") || job.optimization_id.slice(0, 8);
 
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -363,7 +422,7 @@ function JobRow({
   }, [renaming]);
 
   const handleShare = () => {
-    const url = `${window.location.origin}/jobs/${job.job_id}`;
+    const url = `${window.location.origin}/optimizations/${job.optimization_id}`;
     navigator.clipboard.writeText(url);
     toast.success("קישור הועתק");
     setMenuOpen(false);
@@ -373,9 +432,10 @@ function JobRow({
     const newName = renameValue.trim();
     if (!newName) { setRenaming(false); return; }
     try {
-      await renameJob(job.job_id, newName);
+      await renameOptimization(job.optimization_id, newName);
       toast.success("שם עודכן");
-      window.dispatchEvent(new CustomEvent("job-renamed", { detail: { jobId: job.job_id, name: newName } }));
+      window.dispatchEvent(new CustomEvent("optimization-renamed", { detail: { optimizationId: job.optimization_id, name: newName } }));
+      window.dispatchEvent(new Event("optimizations-changed"));
       onRefresh();
     } catch {
       toast.error("שגיאה בעדכון שם");
@@ -386,9 +446,10 @@ function JobRow({
 
   const handlePin = async () => {
     try {
-      const res = await togglePinJob(job.job_id);
+      const res = await togglePinOptimization(job.optimization_id);
       toast.success(res.pinned ? "הוצמד" : "הוסר מהצמדה");
-      window.dispatchEvent(new CustomEvent("job-updated", { detail: { jobId: job.job_id } }));
+      window.dispatchEvent(new CustomEvent("optimization-updated", { detail: { optimizationId: job.optimization_id } }));
+      window.dispatchEvent(new Event("optimizations-changed"));
       onRefresh();
     } catch {
       toast.error("שגיאה");
@@ -423,21 +484,33 @@ function JobRow({
           : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-foreground"
       )}>
         <Link
-          href={`/jobs/${job.job_id}`}
-          className="flex items-center gap-2 min-w-0 flex-1"
+          href={`/optimizations/${job.optimization_id}`}
+          className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden"
         >
           <StatusDot status={job.status} />
           {job.pinned && <Pin className="size-2.5 text-muted-foreground/60 shrink-0" />}
-          <span className="truncate font-medium leading-tight" dir="auto">
+          <span className="truncate font-medium leading-tight min-w-0 block" dir="auto" title={displayName}>
             {displayName}
           </span>
-          {isLive && (
-            <span className="text-[9px] font-semibold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded shrink-0">
-              {STATUS_LABELS[job.status] ?? job.status}
+          {isGridSearch && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-muted-foreground/60 bg-muted/40 px-1 py-0.5 rounded shrink-0" title={`סריקה · ${job.total_pairs ?? "?"} זוגות`}>
+              <Grid2x2 className="size-2.5" />
+              {job.total_pairs ?? "?"}
             </span>
           )}
+
         </Link>
-        {!isLive && (
+        {isGridSearch && (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded(o => !o); }}
+            className="p-0.5 rounded cursor-pointer text-muted-foreground/40 hover:text-foreground transition-colors shrink-0"
+            aria-label={expanded ? "כווץ ריצות" : "הרחב ריצות"}
+          >
+            <ChevronLeft className={cn("size-3.5 transition-transform duration-200", expanded && "-rotate-90")} />
+          </button>
+        )}
+        {(
           <button
             ref={btnRef}
             type="button"
@@ -460,6 +533,40 @@ function JobRow({
           </button>
         )}
       </div>
+
+      {/* Expanded pair sub-items for grid search */}
+      <AnimatePresence>
+        {expanded && isGridSearch && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="ps-6 pe-2 pb-1">
+              {Array.from({ length: job.total_pairs! }, (_, i) => {
+                const isPairActive = isActive && activePair === i;
+                return (
+                  <Link
+                    key={i}
+                    href={`/optimizations/${job.optimization_id}?pair=${i}`}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-[10px] transition-all duration-150",
+                      isPairActive
+                        ? "bg-primary/[0.07] text-foreground font-semibold"
+                        : "text-muted-foreground/70 hover:bg-sidebar-accent/30 hover:text-foreground"
+                    )}
+                  >
+                    <StatusDot status={job.status} />
+                    <span>ריצה {i + 1}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Dropdown menu — portaled to body to escape overflow clipping */}
       {menuOpen && menuPos && createPortal(
@@ -512,7 +619,7 @@ function JobRow({
             <button
               type="button"
               role="menuitem"
-              onClick={(e) => { setMenuOpen(false); onDelete(e, job.job_id); }}
+              onClick={(e) => { setMenuOpen(false); onDelete(e, job.optimization_id); }}
               className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[11px] text-red-500 hover:bg-red-500/5 cursor-pointer transition-colors"
             >
               <Trash2 className="size-3.5" />
@@ -530,14 +637,14 @@ function StatusDot({ status }: { status: string }) {
   return (
     <span className="relative flex size-2 shrink-0">
       {isRunning && (
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400/60" />
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
       )}
       <span className={cn(
         "relative inline-flex rounded-full size-2",
-        status === "success" ? "bg-emerald-500" :
-        status === "failed" ? "bg-red-400" :
-        status === "cancelled" ? "bg-stone-300" :
-        "bg-amber-400"
+        status === "success" ? "bg-[var(--success)]" :
+        status === "failed" ? "bg-[var(--danger)]" :
+        status === "cancelled" ? "bg-[#6b6058]" :
+        "bg-[var(--warning)]"
       )} />
     </span>
   );

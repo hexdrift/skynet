@@ -257,7 +257,7 @@ export function AnimatedWordmark({
 
   // Stop morphing — reset all to default
   const stopMorph = useCallback(() => {
-    if (intervalRef.current) {
+    if (intervalRef.current != null) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
@@ -275,10 +275,18 @@ export function AnimatedWordmark({
   // Auto-morph on mount (for splash screens)
   useEffect(() => {
     if (autoMorph && !reducedMotionRef.current) {
+      // Clear any stale ref before starting to avoid the guard in startMorph
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       startMorph();
     }
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
   }, [autoMorph, startMorph]);
 
@@ -289,7 +297,7 @@ export function AnimatedWordmark({
   return (
     <span
       dir="ltr"
-      className={`inline-flex items-center select-none cursor-pointer ${className ?? ""}`}
+      className={`inline-flex items-center select-none ${className ?? ""}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       role="img"

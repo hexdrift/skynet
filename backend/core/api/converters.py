@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ..constants import (
-    JOB_TYPE_RUN,
+    OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_COLUMN_MAPPING,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
@@ -22,27 +22,28 @@ from ..constants import (
     PAYLOAD_OVERVIEW_TASK_MODEL,
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
     PAYLOAD_OVERVIEW_NAME,
+    PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_USERNAME,
     TQDM_REMAINING_KEY,
 )
-from ..models import JobStatus
+from ..models import OptimizationStatus
 
 logger = logging.getLogger(__name__)
 
 
-def status_to_job_status(status: str) -> JobStatus:
-    """Map status string to JobStatus enum.
+def status_to_job_status(status: str) -> OptimizationStatus:
+    """Map status string to OptimizationStatus enum.
 
     Args:
         status: Status string from job store.
 
     Returns:
-        JobStatus: Corresponding enum value.
+        OptimizationStatus: Corresponding enum value.
     """
     try:
-        return JobStatus(status)
+        return OptimizationStatus(status)
     except ValueError:
-        return JobStatus.pending
+        return OptimizationStatus.pending
 
 
 def parse_timestamp(val: Any) -> Optional[datetime]:
@@ -174,8 +175,9 @@ def overview_to_base_fields(overview: dict) -> dict:
     """
     return {
         # Universal
-        "job_type": overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN),
+        "optimization_type": overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN),
         "name": overview.get(PAYLOAD_OVERVIEW_NAME),
+        "description": overview.get(PAYLOAD_OVERVIEW_DESCRIPTION),
         "pinned": overview.get("pinned", False),
         "archived": overview.get("archived", False),
         "username": overview.get(PAYLOAD_OVERVIEW_USERNAME),

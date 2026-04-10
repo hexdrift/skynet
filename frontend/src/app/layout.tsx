@@ -5,6 +5,8 @@ import { Providers } from "@/components/theme-provider";
 import { SessionProvider } from "@/components/session-provider";
 import { ToastContainer } from "@/components/toast-container";
 import { SplashScreen } from "@/components/splash-screen";
+import { TutorialOverlay, TutorialMenu } from "@/components/tutorial";
+import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
 import "@fontsource-variable/heebo/index.css";
 import "@fontsource-variable/inter/index.css";
 import "react-toastify/dist/ReactToastify.css";
@@ -95,7 +97,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
  <Providers>
  <TooltipProvider>
  <SplashScreen />
+ <TutorialProvider>
  <AppShell>{children}</AppShell>
+ <TutorialOverlay />
+ <TutorialMenu />
+ </TutorialProvider>
  </TooltipProvider>
  </Providers>
  </SessionProvider>

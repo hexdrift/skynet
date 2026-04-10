@@ -1,0 +1,49 @@
+"use client";
+
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronDown } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+interface AnalyticsSectionProps {
+  title: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+  className?: string;
+}
+
+export function AnalyticsSection({ title, defaultOpen = true, children, className }: AnalyticsSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setIsOpen(!isOpen)}>
+        <CardTitle className="text-base font-semibold flex items-center justify-between">
+          <span>{title}</span>
+          <motion.div
+            animate={{ rotate: isOpen ? 0 : 180 }}
+            transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+          >
+            <ChevronDown className="size-4 text-muted-foreground" />
+          </motion.div>
+        </CardTitle>
+      </CardHeader>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+              height: { type: "spring", stiffness: 300, damping: 30 },
+              opacity: { duration: 0.2 },
+            }}
+            style={{ overflow: "hidden" }}
+          >
+            <CardContent className="pt-0">{children}</CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}

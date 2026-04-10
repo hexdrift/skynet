@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Settings2, Copy, RotateCcw, Sparkles, Plus, Thermometer, Coins, Brain } from "lucide-react";
+import { Settings, Copy, RotateCcw, Sparkles, Plus, Thermometer, Coins, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModelConfig } from "@/lib/types";
 
@@ -105,7 +105,7 @@ export function ModelChip({
             <RotateCcw className="size-3" />
           </button>
         )}
-        <Settings2 className="size-3.5 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />
+        <Settings className="size-3.5 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />
       </div>
     </div>
   );

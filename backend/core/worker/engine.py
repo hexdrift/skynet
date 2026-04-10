@@ -15,7 +15,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from ..constants import JOB_TYPE_GRID_SEARCH, JOB_TYPE_RUN, PAYLOAD_OVERVIEW_JOB_TYPE, PAYLOAD_OVERVIEW_USERNAME
+from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN, PAYLOAD_OVERVIEW_JOB_TYPE, PAYLOAD_OVERVIEW_USERNAME
 from ..notifications import notify_job_completed
 from ..storage import JobStore
 from ..models import GridSearchRequest, RunRequest
@@ -90,7 +90,7 @@ def _run_service_in_subprocess(
     """Execute a DSPy run in a child process and stream events to parent.
 
     Args:
-        payload_dict: Serialized request payload including a ``_job_type`` key.
+        payload_dict: Serialized request payload including a ``_optimization_type`` key.
         artifact_id: Identifier used for storing optimization artifacts.
         event_queue: Multiprocessing queue for streaming progress, log, and
             result events back to the parent process.
@@ -108,7 +108,7 @@ def _run_service_in_subprocess(
     dspy_logger.addHandler(log_handler)
 
     try:
-        job_type = payload_dict.pop("_job_type", JOB_TYPE_RUN)
+        optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
 
         def progress_callback(message: str, metrics: Dict[str, Any]) -> None:
             _safe_queue_put(
@@ -120,7 +120,7 @@ def _run_service_in_subprocess(
                 },
             )
 
-        if job_type == JOB_TYPE_GRID_SEARCH:
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
             if not hasattr(service, "run_grid_search"):
                 service = DspyService(ServiceRegistry())
             payload = GridSearchRequest.model_validate(payload_dict)
@@ -239,55 +239,55 @@ class BackgroundWorker:
             self._service = DspyService(ServiceRegistry())
         return self._service
 
-    def enqueue_job(self, job_id: str) -> None:
+    def enqueue_job(self, optimization_id: str) -> None:
         """Add job to the pending queue and wire its cancel event.
 
         Used for both new job submissions and jobs recovered from DB on startup.
 
         Args:
-            job_id: Unique job identifier.
+            optimization_id: Unique optimization identifier.
         """
         with self._queue_lock:
-            self._cancel_events[job_id] = threading.Event()
-            if job_id not in self._pending_jobs and job_id not in self._processing_jobs:
-                self._pending_jobs.append(job_id)
-                logger.info("Job %s enqueued", job_id)
+            self._cancel_events[optimization_id] = threading.Event()
+            if optimization_id not in self._pending_jobs and optimization_id not in self._processing_jobs:
+                self._pending_jobs.append(optimization_id)
+                logger.info("Optimization %s enqueued", optimization_id)
 
-    def submit_job(self, job_id: str, payload) -> None:
+    def submit_job(self, optimization_id: str, payload) -> None:
         """Submit a job for background processing.
 
         Args:
-            job_id: Unique job identifier.
+            optimization_id: Unique optimization identifier.
             payload: The optimization request payload.
         """
         self._job_store.update_job(
-            job_id,
+            optimization_id,
             payload=payload.model_dump(mode="json", by_alias=True),
         )
-        self.enqueue_job(job_id)
+        self.enqueue_job(optimization_id)
 
     def _get_next_job(self) -> Optional[str]:
         """Get the next pending job from the queue.
 
         Returns:
-            Optional[str]: Job ID if available, None otherwise.
+            Optional[str]: Optimization ID if available, None otherwise.
         """
         with self._queue_lock:
             if self._pending_jobs:
-                job_id = self._pending_jobs.pop(0)
-                self._processing_jobs.add(job_id)
-                return job_id
+                optimization_id = self._pending_jobs.pop(0)
+                self._processing_jobs.add(optimization_id)
+                return optimization_id
         return None
 
-    def _mark_job_done(self, job_id: str) -> None:
+    def _mark_job_done(self, optimization_id: str) -> None:
         """Mark a job as no longer processing.
 
         Args:
-            job_id: The job identifier to mark as done.
+            optimization_id: The optimization identifier to mark as done.
         """
         with self._queue_lock:
-            self._processing_jobs.discard(job_id)
-            self._cancel_events.pop(job_id, None)
+            self._processing_jobs.discard(optimization_id)
+            self._cancel_events.pop(optimization_id, None)
 
     def _worker_loop(self, worker_id: int) -> None:
         """Main worker loop that processes jobs.
@@ -301,9 +301,9 @@ class BackgroundWorker:
             idle_cycles = 0
             self._touch_activity(worker_id)
             while self._running:
-                job_id = self._get_next_job()
+                optimization_id = self._get_next_job()
 
-                if job_id is None:
+                if optimization_id is None:
                     time.sleep(self._poll_interval)
                     idle_cycles += 1
                     if idle_cycles % 150 == 0:  # [WORKER-FIX] heartbeat every ~5min for observability
@@ -314,43 +314,43 @@ class BackgroundWorker:
                 idle_cycles = 0
                 self._touch_activity(worker_id)
                 try:
-                    self._process_job(job_id, worker_id)
+                    self._process_job(optimization_id, worker_id)
                 except Exception as exc:
-                    logger.exception("Worker %d failed processing job %s: %s", worker_id, job_id, exc)
+                    logger.exception("Worker %d failed processing job %s: %s", worker_id, optimization_id, exc)
                 finally:
-                    self._mark_job_done(job_id)
+                    self._mark_job_done(optimization_id)
         except Exception:  # [WORKER-FIX] log fatal thread errors instead of dying silently
             logger.exception("Worker %d died unexpectedly", worker_id)
 
         logger.info("Worker %d stopped", worker_id)
 
-    def _process_job(self, job_id: str, worker_id: int) -> None:
+    def _process_job(self, optimization_id: str, worker_id: int) -> None:
         """Process a single optimization job.
 
         Args:
-            job_id: The job identifier to process.
+            optimization_id: The optimization identifier to process.
             worker_id: Owning worker thread id for activity tracking.
 
         Raises:
             ValueError: If job has no payload.
         """
-        logger.info("Processing job %s", job_id)
+        logger.info("Processing job %s", optimization_id)
 
         with self._queue_lock:
-            cancel_event = self._cancel_events.get(job_id)
+            cancel_event = self._cancel_events.get(optimization_id)
 
         def _check_cancel() -> None:
             if cancel_event and cancel_event.is_set():
-                raise CancellationError(f"Job {job_id} cancelled by user")
+                raise CancellationError(f"Optimization {optimization_id} cancelled by user")
 
         try:
             _check_cancel()  # before loading payload
 
-            job_data = self._job_store.get_job(job_id)
+            job_data = self._job_store.get_job(optimization_id)
             payload_dict = job_data.get("payload")
 
             if not payload_dict:
-                raise ValueError(f"Job {job_id} has no payload")
+                raise ValueError(f"Optimization {optimization_id} has no payload")
 
             overview = job_data.get("payload_overview", {})
             if isinstance(overview, str):
@@ -359,29 +359,29 @@ class BackgroundWorker:
                     overview = json.loads(overview)
                 except (json.JSONDecodeError, TypeError):
                     overview = {}
-            job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
+            optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
 
-            if job_type == JOB_TYPE_GRID_SEARCH:
+            if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                 payload = GridSearchRequest.model_validate(payload_dict)
             else:
                 payload = RunRequest.model_validate(payload_dict)
 
             self._job_store.update_job(
-                job_id,
+                optimization_id,
                 status="validating",
                 message="Validating payload",
             )
 
             service = self._get_service()
-            if job_type == JOB_TYPE_GRID_SEARCH and hasattr(service, "validate_grid_search_payload"):
+            if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH and hasattr(service, "validate_grid_search_payload"):
                 service.validate_grid_search_payload(payload)
-            elif job_type == JOB_TYPE_RUN:
+            elif optimization_type == OPTIMIZATION_TYPE_RUN:
                 service.validate_payload(payload)
 
             _check_cancel()  # before starting the optimization
 
             self._job_store.update_job(
-                job_id,
+                optimization_id,
                 status="running",
                 message="Running optimization",
                 started_at=datetime.now(timezone.utc).isoformat(),
@@ -400,13 +400,13 @@ class BackgroundWorker:
             try:
                 # Inject job type so subprocess can dispatch without duck-typing.
                 # Pydantic ignores this unknown key during model_validate.
-                payload_dict["_job_type"] = job_type
+                payload_dict["_optimization_type"] = optimization_type
 
                 event_queue = self._mp_ctx.Queue()
                 run_process = self._mp_ctx.Process(
                     target=_run_service_in_subprocess,
-                    args=(payload_dict, job_id, event_queue, self._mp_start_method),
-                    name=f"dspy-run-{job_id[:8]}",
+                    args=(payload_dict, optimization_id, event_queue, self._mp_start_method),
+                    name=f"dspy-run-{optimization_id[:8]}",
                     daemon=True,
                 )
                 run_process.start()
@@ -415,13 +415,13 @@ class BackgroundWorker:
                     _check_cancel()
                     self._touch_activity(worker_id)
                     run_process.join(timeout=self._cancel_poll_interval)
-                    drained_result, drained_error = self._drain_subprocess_events(job_id, event_queue)
+                    drained_result, drained_error = self._drain_subprocess_events(optimization_id, event_queue)
                     if drained_result is not None:
                         result_dict = drained_result
                     if drained_error is not None:
                         subprocess_error = drained_error
 
-                drained_result, drained_error = self._drain_subprocess_events(job_id, event_queue)
+                drained_result, drained_error = self._drain_subprocess_events(optimization_id, event_queue)
                 if drained_result is not None:
                     result_dict = drained_result
                 if drained_error is not None:
@@ -430,11 +430,11 @@ class BackgroundWorker:
                 if subprocess_error:
                     traceback_text = subprocess_error.get("traceback")
                     if traceback_text:
-                        logger.error("Job %s subprocess traceback:\n%s", job_id, traceback_text)
+                        logger.error("Optimization %s subprocess traceback:\n%s", optimization_id, traceback_text)
                         # Persist traceback so users can see it via GET /jobs/{id}/logs
                         try:
                             self._job_store.append_log(
-                                job_id,
+                                optimization_id,
                                 level="ERROR",
                                 logger_name="dspy.subprocess",
                                 message=traceback_text,
@@ -444,10 +444,10 @@ class BackgroundWorker:
                     raise RuntimeError(str(subprocess_error.get("error", "Unknown subprocess error")))
 
                 if run_process.exitcode not in (0, None) and result_dict is None:
-                    raise RuntimeError(f"Job subprocess exited with code {run_process.exitcode}")
+                    raise RuntimeError(f"Optimization subprocess exited with code {run_process.exitcode}")
 
                 if result_dict is None:
-                    raise RuntimeError("Job subprocess finished without a result payload")
+                    raise RuntimeError("Optimization subprocess finished without a result payload")
 
                 # Check cancel one last time: service.run() may have completed
                 # during a long phase with no progress callbacks, after the
@@ -457,35 +457,43 @@ class BackgroundWorker:
                 # Grid search with all pairs failed is a failure, not a success.
                 final_status = "success"
                 final_message = "Optimization completed successfully"
-                if job_type == JOB_TYPE_GRID_SEARCH and isinstance(result_dict, dict):
+                if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH and isinstance(result_dict, dict):
                     completed = result_dict.get("completed_pairs", 0)
                     total = result_dict.get("total_pairs", 0)
                     if completed == 0 and total > 0:
                         final_status = "failed"
                         final_message = f"All {total} model pairs failed"
+                        # Append the first pair error for visibility
+                        pair_results = result_dict.get("pair_results") or []
+                        first_error = next(
+                            (p["error"] for p in pair_results if isinstance(p, dict) and p.get("error")),
+                            None,
+                        )
+                        if first_error:
+                            final_message = f"{final_message}: {first_error}"
 
                 try:
                     self._job_store.update_job(
-                        job_id,
+                        optimization_id,
                         status=final_status,
                         message=final_message,
                         completed_at=datetime.now(timezone.utc).isoformat(),
                         result=result_dict,
                     )
-                    logger.info("Job %s completed with status=%s", job_id, final_status)
+                    logger.info("Optimization %s completed with status=%s", optimization_id, final_status)
                     # Send completion notification
                     _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "")
                     _baseline = result_dict.get("baseline_test_metric") if isinstance(result_dict, dict) else None
                     _optimized = result_dict.get("optimized_test_metric") if isinstance(result_dict, dict) else None
                     notify_job_completed(
-                        job_id=job_id, username=_username, status=final_status,
+                        optimization_id=optimization_id, username=_username, status=final_status,
                         message=final_message, baseline_score=_baseline, optimized_score=_optimized,
                     )
                 except KeyError:
-                    logger.info("Job %s was deleted during execution (likely cancelled), skipping result", job_id)
+                    logger.info("Optimization %s was deleted during execution (likely cancelled), skipping result", optimization_id)
             except BaseException:
                 if run_process is not None and run_process.is_alive():
-                    self._terminate_run_process(run_process, job_id)
+                    self._terminate_run_process(run_process, optimization_id)
                 raise
             finally:
                 if event_queue is not None:
@@ -503,30 +511,30 @@ class BackgroundWorker:
             is_cancelled = isinstance(exc, CancellationError)
             if is_cancelled:
                 final_status, error_message = "cancelled", "בוטל על ידי המשתמש"
-                logger.info("Job %s cancelled", job_id)
+                logger.info("Optimization %s cancelled", optimization_id)
             elif is_shutdown:
                 final_status = "failed"
-                error_message = f"Job interrupted by service shutdown: {exc}"
-                logger.exception("Job %s failed: %s", job_id, error_message)
+                error_message = f"Optimization interrupted by service shutdown: {exc}"
+                logger.exception("Optimization %s failed: %s", optimization_id, error_message)
             else:
                 final_status = "failed"
                 error_message = str(exc)
-                logger.exception("Job %s failed: %s", job_id, error_message)
+                logger.exception("Optimization %s failed: %s", optimization_id, error_message)
             _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "") if isinstance(overview, dict) else ""
             if is_cancelled:
                 # Cancel endpoint already set status to "cancelled"; no further DB action needed.
-                notify_job_completed(job_id=job_id, username=_username, status="cancelled")
+                notify_job_completed(optimization_id=optimization_id, username=_username, status="cancelled")
             else:
                 # Failed jobs are retained so users can inspect the error
                 now = datetime.now(timezone.utc).isoformat()
                 try:
                     self._job_store.update_job(
-                        job_id, status=final_status, message=error_message, completed_at=now
+                        optimization_id, status=final_status, message=error_message, completed_at=now
                     )
                 except Exception:
-                    logger.exception("Job %s: failed to update status to %s", job_id, final_status)
+                    logger.exception("Optimization %s: failed to update status to %s", optimization_id, final_status)
                 notify_job_completed(
-                    job_id=job_id, username=_username, status=final_status, message=error_message,
+                    optimization_id=optimization_id, username=_username, status=final_status, message=error_message,
                 )
             if is_shutdown:
                 raise
@@ -592,12 +600,12 @@ class BackgroundWorker:
         with self._activity_lock:
             self._last_activity[worker_id] = time.monotonic()
 
-    def _terminate_run_process(self, run_process: mp.process.BaseProcess, job_id: str) -> None:
+    def _terminate_run_process(self, run_process: mp.process.BaseProcess, optimization_id: str) -> None:
         """Force-stop a still-running job subprocess.
 
         Args:
             run_process: The subprocess to terminate.
-            job_id: Job identifier for logging.
+            optimization_id: Optimization identifier for logging.
         """
         run_process.terminate()
         run_process.join(timeout=3.0)
@@ -605,19 +613,19 @@ class BackgroundWorker:
             run_process.kill()
             run_process.join(timeout=2.0)
         if run_process.is_alive():
-            logger.error("Job %s subprocess did not terminate cleanly", job_id)
+            logger.error("Optimization %s subprocess did not terminate cleanly", optimization_id)
         else:
-            logger.info("Job %s subprocess terminated", job_id)
+            logger.info("Optimization %s subprocess terminated", optimization_id)
 
     def _drain_subprocess_events(
         self,
-        job_id: str,
+        optimization_id: str,
         event_queue: Any,
     ) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
         """Persist queued child-process events and return latest result/error payloads.
 
         Args:
-            job_id: Identifier of the job owning these events.
+            optimization_id: Identifier of the job owning these events.
             event_queue: Multiprocessing queue to drain.
 
         Returns:
@@ -637,12 +645,12 @@ class BackgroundWorker:
             if event_type == _EVENT_PROGRESS:
                 try:
                     self._job_store.record_progress(
-                        job_id,
+                        optimization_id,
                         event.get("event"),
                         event.get("metrics") or {},
                     )
                 except Exception:
-                    logger.exception("Job %s: failed to persist subprocess progress event", job_id)
+                    logger.exception("Optimization %s: failed to persist subprocess progress event", optimization_id)
             elif event_type == _EVENT_LOG:
                 timestamp = None
                 timestamp_raw = event.get("timestamp")
@@ -653,14 +661,14 @@ class BackgroundWorker:
                         timestamp = None
                 try:
                     self._job_store.append_log(
-                        job_id,
+                        optimization_id,
                         level=str(event.get("level", "INFO")),
                         logger_name=str(event.get("logger", "dspy")),
                         message=str(event.get("message", "")),
                         timestamp=timestamp,
                     )
                 except Exception:
-                    logger.exception("Job %s: failed to persist subprocess log entry", job_id)
+                    logger.exception("Optimization %s: failed to persist subprocess log entry", optimization_id)
             elif event_type == _EVENT_RESULT:
                 payload = event.get("result")
                 if isinstance(payload, dict):
@@ -714,23 +722,23 @@ class BackgroundWorker:
             return False
         return all(t.is_alive() for t in self._threads)
 
-    def cancel_job(self, job_id: str) -> bool:
+    def cancel_job(self, optimization_id: str) -> bool:
         """Signal a job to stop, removing it from the queue or interrupting it if running.
 
         Args:
-            job_id: Job identifier to cancel.
+            optimization_id: Optimization identifier to cancel.
 
         Returns:
             bool: True if the job was found (pending or running).
         """
         with self._queue_lock:
-            event = self._cancel_events.get(job_id)
+            event = self._cancel_events.get(optimization_id)
             if event:
                 event.set()
-            if job_id in self._pending_jobs:
-                self._pending_jobs.remove(job_id)
+            if optimization_id in self._pending_jobs:
+                self._pending_jobs.remove(optimization_id)
                 # Pending jobs never reach _mark_job_done; clean up event here.
-                self._cancel_events.pop(job_id, None)
+                self._cancel_events.pop(optimization_id, None)
                 return True
         return event is not None  # True if was running
 
@@ -769,7 +777,7 @@ _worker_lock = threading.Lock()
 def get_worker(
     job_store: JobStore,
     service: Optional[DspyService] = None,
-    pending_job_ids: Optional[list] = None,
+    pending_optimization_ids: Optional[list] = None,
 ) -> BackgroundWorker:
     """Get or create the global background worker.
 
@@ -793,8 +801,8 @@ def get_worker(
                 service=service,
             )
             _worker.start()
-            for job_id in (pending_job_ids or []):
-                _worker.enqueue_job(job_id)
+            for optimization_id in (pending_optimization_ids or []):
+                _worker.enqueue_job(optimization_id)
 
     return _worker
 

@@ -1,6 +1,6 @@
 /* ── Job lifecycle ── */
 export type JobStatus = "pending" | "validating" | "running" | "success" | "failed" | "cancelled";
-export type JobType = "run" | "grid_search";
+export type OptimizationType = "run" | "grid_search";
 
 /* ── Request models ── */
 export interface ModelConfig {
@@ -25,6 +25,7 @@ export interface SplitFractions {
 
 interface OptimizationRequestBase {
   name?: string;
+  description?: string;
   username: string;
   module_name: string;
   module_kwargs?: Record<string, unknown>;
@@ -53,23 +54,25 @@ export interface GridSearchRequest extends OptimizationRequestBase {
 }
 
 /* ── Response models ── */
-export interface JobSubmissionResponse {
-  job_id: string;
-  job_type: JobType;
+export interface OptimizationSubmissionResponse {
+  optimization_id: string;
+  optimization_type: OptimizationType;
   status: JobStatus;
   created_at: string;
   name?: string;
+  description?: string;
   username: string;
   module_name: string;
   optimizer_name: string;
 }
 
-export interface JobSummaryResponse {
-  job_id: string;
-  job_type: JobType;
+export interface OptimizationSummaryResponse {
+  optimization_id: string;
+  optimization_type: OptimizationType;
   status: JobStatus;
   message?: string;
   name?: string;
+  description?: string;
   pinned?: boolean;
   archived?: boolean;
   created_at: string;
@@ -109,17 +112,18 @@ export interface JobSummaryResponse {
 }
 
 export interface PaginatedJobsResponse {
-  items: JobSummaryResponse[];
+  items: OptimizationSummaryResponse[];
   total: number;
   limit: number;
   offset: number;
 }
 
-export interface JobLogEntry {
+export interface OptimizationLogEntry {
   timestamp: string;
   level: string;
   logger: string;
   message: string;
+  pair_index?: number | null;
 }
 
 export interface ProgressEvent {
@@ -158,8 +162,12 @@ export interface PairResult {
   optimized_test_metric?: number;
   metric_improvement?: number;
   runtime_seconds?: number;
+  num_lm_calls?: number;
+  avg_response_time_ms?: number;
   program_artifact?: ProgramArtifact;
   error?: string;
+  baseline_test_results?: EvalExampleResult[];
+  optimized_test_results?: EvalExampleResult[];
 }
 
 export interface RunResult {
@@ -172,6 +180,8 @@ export interface RunResult {
   metric_improvement?: number;
   program_artifact?: ProgramArtifact;
   runtime_seconds?: number;
+  num_lm_calls?: number;
+  avg_response_time_ms?: number;
 }
 
 export interface GridSearchResult {
@@ -187,9 +197,9 @@ export interface GridSearchResult {
   runtime_seconds?: number;
 }
 
-export interface JobStatusResponse extends JobSummaryResponse {
+export interface OptimizationStatusResponse extends OptimizationSummaryResponse {
   progress_events: ProgressEvent[];
-  logs: JobLogEntry[];
+  logs: OptimizationLogEntry[];
   result?: RunResult;
   grid_result?: GridSearchResult;
 }
@@ -213,9 +223,9 @@ export interface QueueStatusResponse {
   workers_alive: boolean;
 }
 
-export interface JobPayloadResponse {
-  job_id: string;
-  job_type: JobType;
+export interface OptimizationPayloadResponse {
+  optimization_id: string;
+  optimization_type: OptimizationType;
   payload: Record<string, unknown>;
 }
 
@@ -230,10 +240,36 @@ export interface TemplateResponse {
   created_at: string;
 }
 
+/* ── Dataset ── */
+
+export interface DatasetRow {
+  index: number;
+  row: Record<string, unknown>;
+}
+
+export interface OptimizationDatasetResponse {
+  total_rows: number;
+  splits: {
+    train: DatasetRow[];
+    val: DatasetRow[];
+    test: DatasetRow[];
+  };
+  column_mapping: ColumnMapping;
+  split_counts: { train: number; val: number; test: number };
+}
+
+export interface EvalExampleResult {
+  index: number;
+  outputs: Record<string, unknown>;
+  score: number;
+  pass: boolean;
+  error?: string;
+}
+
 /* ── Serving ── */
 
 export interface ServeInfoResponse {
-  job_id: string;
+  optimization_id: string;
   module_name: string;
   optimizer_name: string;
   model_name: string;
@@ -244,7 +280,7 @@ export interface ServeInfoResponse {
 }
 
 export interface ServeResponse {
-  job_id: string;
+  optimization_id: string;
   outputs: Record<string, unknown>;
   input_fields: string[];
   output_fields: string[];

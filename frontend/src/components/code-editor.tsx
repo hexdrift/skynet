@@ -283,9 +283,9 @@ export function CodeEditor({
   const hasOutput = result !== null || running;
 
   return (
-    <div className="rounded-xl border border-border/60 overflow-hidden flex flex-col shadow-sm" dir="ltr">
+    <div className="rounded-xl border border-border/60 overflow-visible flex flex-col shadow-sm w-full" style={readOnly ? undefined : { maxHeight: "60vh" }} dir="ltr">
       {/* ── Toolbar ── */}
-      <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F3ECE3] text-[11px] text-[#8C7A6B] border-b border-[#E5DDD4]">
+      <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F3ECE3] text-[11px] text-[#8C7A6B] border-b border-[#E5DDD4] rounded-t-xl">
         <span className="flex-1 font-semibold text-[#7C6350] tracking-wide flex items-center gap-1.5">
           {label}
         </span>
@@ -340,9 +340,9 @@ export function CodeEditor({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden"
+            className="overflow-hidden rounded-b-xl"
           >
-            <div className="relative [&_.cm-editor]:!outline-none">
+            <div className="relative overflow-y-auto [&_.cm-editor]:!outline-none" style={readOnly ? undefined : { maxHeight: "calc(60vh - 4rem)" }}>
               <CodeMirror
                 value={value}
                 height={height}
