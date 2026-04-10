@@ -91,7 +91,7 @@ import type { ServeInfoResponse } from "@/lib/types";
 import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/lib/tutorial-demo-data";
 import { Skeleton } from "boneyard-js/react";
 import { optimizationDetailBones } from "@/components/optimization-detail-bones";
-import { DataTab } from "./data-tab";
+import { DataTab } from "@/features/optimizations/components/DataTab";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES, STATUS_LABELS } from "@/lib/constants";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
 import { HelpTip } from "@/components/help-tip";
@@ -102,15 +102,22 @@ import type {
 } from "@/lib/types";
 
 /* ── Helpers ── */
+// Pure helpers, constants, and the pipeline-stage detector have moved
+// to @/features/optimizations — see index.ts for the public surface.
 
-const STATUS_COLORS: Record<string, string> = {
- pending: "status-pill-pending",
- validating: "status-pill-running",
- running: "status-pill-running",
- success: "status-pill-success",
- failed: "status-pill-failed",
- cancelled: "status-pill-cancelled",
-};
+import {
+ STATUS_COLORS,
+ PIPELINE_STAGES,
+ STAGE_INFO,
+ type PipelineStage,
+ formatPercent,
+ formatImprovement,
+ jsonPreview,
+ formatDuration,
+ detectStage,
+ extractScoresFromLogs,
+ type ScorePoint,
+} from "@/features/optimizations";
 
 
 function StatusBadge({ status }: { status: string }) {
@@ -146,158 +153,6 @@ function InfoCard({ label, value, icon }: { label: React.ReactNode; value: React
  );
 }
 
-function formatPercent(v: number | undefined | null): string {
- if (v == null) return "—";
- // Backend may return 0-1 (fraction) or 0-100 (percentage)
- const pct = v > 1 ? v : v * 100;
- return `${pct.toFixed(1)}%`;
-}
-
-function formatImprovement(v: number | undefined | null): string {
- if (v == null) return "—";
- // Backend may return 0-1 (fraction) or larger (already percentage points)
- const pct = Math.abs(v) > 1 ? v : v * 100;
- return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
-}
-
-function jsonPreview(v: unknown): string {
- if (v == null) return "—";
- if (typeof v ==="object") return JSON.stringify(v, null, 2);
- return String(v);
-}
-
-function formatDuration(seconds: number): string {
- const hrs = Math.floor(seconds / 3600);
- const mins = Math.floor((seconds % 3600) / 60);
- const secs = Math.floor(seconds % 60);
- const pad = (n: number) => String(n).padStart(2, "0");
- if (hrs > 0) return `${hrs}:${pad(mins)}:${pad(secs)}`;
- return `${mins}:${pad(secs)}`;
-}
-
-/* ── Pipeline stage detection ── */
-type PipelineStage ="validating"|"splitting"|"baseline"|"optimizing"|"evaluating"|"done";
-
-function detectStage(job: OptimizationStatusResponse): PipelineStage {
- if (job.status ==="validating") return "validating";
- if (job.status ==="success") return "done";
-
- const events = job.progress_events ?? [];
- const eventNames = events.map((e) => e.event);
- const metrics = job.latest_metrics ?? {};
-
- // Check progress events (works for both single-run and grid search)
- if (eventNames.includes("optimized_evaluated") || eventNames.includes("grid_pair_completed")) return "done";
- if (eventNames.includes("optimizer_progress")) return "optimizing";
- if (eventNames.includes("baseline_evaluated")) return "optimizing";
- if (eventNames.includes("grid_pair_started")) return "baseline";
- if (eventNames.includes("dataset_splits_ready")) return "baseline";
-
- // Fallback: use latest_metrics hints (e.g. tqdm from optimizer)
- if (metrics.tqdm_desc || metrics.tqdm_percent != null) return "optimizing";
-
- if (job.status ==="running") return "splitting";
- return "validating";
-}
-
-const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = [
- { key: "validating", label: "אימות"},
- { key: "splitting", label: "חלוקת נתונים"},
- { key: "baseline", label: "ציון התחלתי"},
- { key: "optimizing", label: "אופטימיזציה"},
- { key: "evaluating", label: "הערכה"},
-];
-
-const STAGE_INFO: Record<string, { title: string; description: string; details: string }> = {
- validating: {
-  title: "אימות הקלט",
-  description: "בדיקה שכל הרכיבים תקינים לפני תחילת האופטימיזציה.",
-  details: "חתימת הקלט והפלט נבדקת מול מיפוי העמודות בדאטאסט. פונקציית המדידה נטענת ומאומתת. המודול והאופטימייזר נבדקים לתאימות. אם נמצאת שגיאה — האופטימיזציה נעצרת כאן.",
- },
- splitting: {
-  title: "חלוקת הנתונים",
-  description: "הדאטאסט מחולק לשלוש קבוצות: אימון, אימות ובדיקה.",
-  details: "השורות מעורבבות באופן אקראי עם ערך מספרי התחלתי קבוע כדי להבטיח תוצאות זהות בכל הרצה. לאחר מכן הן מחולקות לפי היחסים שהוגדרו. סט הבדיקה נשמר בצד ולא משתתף בתהליך האופטימיזציה.",
- },
- baseline: {
-  title: "מדידת ציון בסיס",
-  description: "הרצת התוכנית ללא אופטימיזציה על סט הבדיקה.",
-  details: "התוכנית רצה כפי שהיא — ללא prompt engineering או דוגמאות — על כל דוגמה בסט הבדיקה. פונקציית המדידה מחשבת ציון לכל דוגמה, והממוצע הוא ציון הבסיס. ציון זה משמש כנקודת השוואה לשיפור שהאופטימיזציה מביאה.",
- },
- optimizing: {
-  title: "אופטימיזציה",
-  description: "האופטימייזר משפר את התוכנית באמצעות סט האימון.",
-  details: "האופטימייזר מנסה שילובים שונים של הנחיות, דוגמאות נבחרות והוראות כדי למקסם את ציון המדידה על סט האימות. כל ניסיון מריץ את התוכנית עם הגדרה שונה ומודד את התוצאה. בסיום נבחרת הגרסה הטובה ביותר.",
- },
- evaluating: {
-  title: "הערכה סופית",
-  description: "הרצת התוכנית המשופרת על סט הבדיקה.",
-  details: "התוכנית המשופרת רצה על סט הבדיקה — אותן דוגמאות שנמדדו בשלב הבסיס. ההשוואה בין הציונים מראה את השיפור בפועל. אם התוכנית המשופרת גרועה יותר מהמקורית, המערכת שומרת את התוכנית המקורית.",
- },
-};
-
-/* ── Score extraction from optimizer logs ── */
-
-interface ScorePoint {
- trial: number;
- score: number;
- best: number;
-}
-
-function extractScoresFromLogs(logs: { message: string }[]): ScorePoint[] {
- const points: ScorePoint[] = [];
- let currentTrial = 0;
- let bestSoFar = -1;
-
- for (const log of logs) {
- const msg = log.message;
-
- // MIPROv2: "===== Trial N / M =====" or "== Trial N / M"
- const trialMatch = msg.match(/Trial (\d+)\s*\/\s*\d+/);
- if (trialMatch) {
- currentTrial = parseInt(trialMatch[1], 10);
- }
-
- // MIPROv2: "Score: 85.0 with parameters ..."
- const scoreMatch = msg.match(/^Score:\s*([\d.]+)\s+(?:with parameters|on minibatch)/);
- if (scoreMatch && currentTrial > 0) {
- const score = parseFloat(scoreMatch[1]);
- bestSoFar = Math.max(bestSoFar, score);
- points.push({ trial: currentTrial, score, best: bestSoFar });
- continue;
- }
-
- // MIPROv2: "Default program score: 85.0"
- const defaultMatch = msg.match(/Default program score:\s*([\d.]+)/);
- if (defaultMatch) {
- const score = parseFloat(defaultMatch[1]);
- bestSoFar = Math.max(bestSoFar, score);
- points.push({ trial: currentTrial || 1, score, best: bestSoFar });
- continue;
- }
-
- // GEPA: "Iteration N: Full valset score for new program: 0.78"
- const gepaScoreMatch = msg.match(/Iteration (\d+):\s*Full valset score for new program:\s*([\d.]+)/);
- if (gepaScoreMatch) {
- const iter = parseInt(gepaScoreMatch[1], 10);
- const score = parseFloat(gepaScoreMatch[2]);
- bestSoFar = Math.max(bestSoFar, score);
- points.push({ trial: iter, score, best: bestSoFar });
- continue;
- }
-
- // GEPA: "Iteration N: Base program full valset score: 0.65"
- const gepaBaseMatch = msg.match(/Iteration (\d+):\s*Base program full valset score:\s*([\d.]+)/);
- if (gepaBaseMatch) {
- const iter = parseInt(gepaBaseMatch[1], 10);
- const score = parseFloat(gepaBaseMatch[2]);
- bestSoFar = Math.max(bestSoFar, score);
- points.push({ trial: iter, score, best: bestSoFar });
- }
- }
-
- return points;
-}
 
 
 function LangPicker<T extends string>({ value, onChange, labels }: {
