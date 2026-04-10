@@ -92,6 +92,7 @@ import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/lib/tutorial-demo-d
 import { Skeleton } from "boneyard-js/react";
 import { optimizationDetailBones } from "@/components/optimization-detail-bones";
 import { DataTab } from "@/features/optimizations/components/DataTab";
+import { msg } from "@/features/shared/messages";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES, STATUS_LABELS } from "@/lib/constants";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
 import { HelpTip } from "@/components/help-tip";
@@ -725,7 +726,7 @@ function LogsTab({ logs, pairNames, live }: { logs: import("@/lib/types").Optimi
      const td = (e.target as HTMLElement).closest("td");
      if (!td) return;
      const text = td.textContent?.trim();
-     if (text) { navigator.clipboard.writeText(text); toast.success("הועתק בהצלחה"); }
+     if (text) { navigator.clipboard.writeText(text); toast.success(msg("clipboard.copied")); }
     }}
    >
     {showPairCol && (
@@ -846,7 +847,7 @@ function ExportMenu({ job, optimizedPrompt }: { job: import("@/lib/types").Optim
     const a = document.createElement("a");
     a.href = url; a.download = `program_${job.optimization_id.slice(0, 8)}.pkl`; a.click();
     URL.revokeObjectURL(url);
-    } catch { toast.error("שגיאה בפענוח הקובץ"); }
+    } catch { toast.error(msg("optimization.file.parse_error")); }
    }} className={itemCls}>
     <Package className={iconCls} />
     <span className="flex-1">תוכנית מאומנת</span>
@@ -892,7 +893,7 @@ function DeleteJobDialog({ optimizationId, onDeleted }: { optimizationId: string
   window.dispatchEvent(new Event("optimizations-changed"));
   onDeleted();
  } catch (err) {
-  toast.error(err instanceof Error ? err.message : "מחיקה נכשלה");
+  toast.error(err instanceof Error ? err.message : msg("optimization.delete.failed"));
  } finally {
   setLoading(false);
  }
@@ -1124,10 +1125,10 @@ export default function JobDetailPage() {
  if (isDemoMode) return;
  try {
  await cancelJob(id);
- toast.success("בקשת ביטול נשלחה");
+ toast.success(msg("optimization.cancel.sent"));
  fetchJob();
  } catch (err) {
- toast.error(err instanceof Error ? err.message :"ביטול נכשל");
+ toast.error(err instanceof Error ? err.message : msg("optimization.cancel.failed"));
  }
  };
 
@@ -1361,8 +1362,8 @@ export default function JobDetailPage() {
  aria-label="העתק מזהה אופטימיזציה"
  role="button"
  tabIndex={0}
- onClick={() => { navigator.clipboard.writeText(job.optimization_id); toast.success("הועתק", { autoClose: 1000 }); }}
- onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigator.clipboard.writeText(job.optimization_id); toast.success("הועתק", { autoClose: 1000 }); } }}
+ onClick={() => { navigator.clipboard.writeText(job.optimization_id); toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });}}
+ onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigator.clipboard.writeText(job.optimization_id); toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });} }}
  >
  {job.optimization_id}
  </code>

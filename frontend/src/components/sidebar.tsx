@@ -17,6 +17,7 @@ import type { OptimizationSummaryResponse } from "@/lib/types";
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
 import { groupJobsByRecency, matchesJobSearch } from "@/features/sidebar";
+import { msg } from "@/features/shared/messages";
 
 const NAV_ITEMS = [
   { href: "/", label: "לוח בקרה", icon: LayoutDashboard },
@@ -107,11 +108,11 @@ export function Sidebar() {
     setTotalJobs((prev) => Math.max(0, prev - 1));
     try {
       await deleteJob(optimizationId);
-      toast.success("נמחק");
+      toast.success(msg("sidebar.delete.success"));
       window.dispatchEvent(new Event("optimizations-changed"));
       if (pathname === `/optimizations/${optimizationId}`) router.push("/");
     } catch {
-      toast.error("שגיאה במחיקה");
+      toast.error(msg("sidebar.delete.failed"));
       fetchData();
     } finally {
       setDeleteLoading(false);
@@ -383,7 +384,7 @@ function JobRow({
   const handleShare = () => {
     const url = `${window.location.origin}/optimizations/${job.optimization_id}`;
     navigator.clipboard.writeText(url);
-    toast.success("קישור הועתק");
+    toast.success(msg("sidebar.link.copied"));
     setMenuOpen(false);
   };
 
@@ -392,12 +393,12 @@ function JobRow({
     if (!newName) { setRenaming(false); return; }
     try {
       await renameOptimization(job.optimization_id, newName);
-      toast.success("שם עודכן");
+      toast.success(msg("sidebar.rename.success"));
       window.dispatchEvent(new CustomEvent("optimization-renamed", { detail: { optimizationId: job.optimization_id, name: newName } }));
       window.dispatchEvent(new Event("optimizations-changed"));
       onRefresh();
     } catch {
-      toast.error("שגיאה בעדכון שם");
+      toast.error(msg("sidebar.rename.failed"));
     }
     setRenaming(false);
   };
@@ -406,12 +407,12 @@ function JobRow({
   const handlePin = async () => {
     try {
       const res = await togglePinOptimization(job.optimization_id);
-      toast.success(res.pinned ? "הוצמד" : "הוסר מהצמדה");
+      toast.success(res.pinned ? msg("sidebar.pin.on") : msg("sidebar.pin.off"));
       window.dispatchEvent(new CustomEvent("optimization-updated", { detail: { optimizationId: job.optimization_id } }));
       window.dispatchEvent(new Event("optimizations-changed"));
       onRefresh();
     } catch {
-      toast.error("שגיאה");
+      toast.error(msg("sidebar.generic_error"));
     }
     setMenuOpen(false);
   };

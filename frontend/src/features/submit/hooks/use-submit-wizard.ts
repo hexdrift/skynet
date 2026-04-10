@@ -23,6 +23,7 @@ import { parseDatasetFile, type ParsedDataset } from "@/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/components/code-editor";
 import { getModelCatalog, cachedCatalog } from "@/lib/model-catalog";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
+import { msg } from "@/features/shared/messages";
 
 import {
   STEPS,
@@ -252,10 +253,10 @@ export function useSubmitWizard() {
           if (compKw.minibatch_size != null) setMinibatchSize(String(compKw.minibatch_size));
         }
 
-        toast.success("הגדרות שוכפלו בהצלחה");
+        toast.success(msg("submit.clone.success"));
       })
       .catch(() => {
-        toast.error("שגיאה בטעינת הגדרות לשכפול");
+        toast.error(msg("submit.clone.failed"));
       })
       .finally(() => setCloneLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,36 +295,36 @@ export function useSubmitWizard() {
   const validateStep = (s: number, showToast = false): boolean => {
     switch (s) {
       case 0:
-        if (!username.trim()) { if (showToast) toast.error("נא להזין שם משתמש"); return false; }
-        if (!jobName.trim()) { if (showToast) toast.error("נא להזין שם לאופטימיזציה"); return false; }
+        if (!username.trim()) { if (showToast) toast.error(msg("submit.validation.username_required")); return false; }
+        if (!jobName.trim()) { if (showToast) toast.error(msg("submit.validation.name_required")); return false; }
         return true;
       case 1: {
-        if (!parsedDataset || parsedDataset.rowCount === 0) { if (showToast) toast.error("נא להעלות קובץ דאטאסט"); return false; }
+        if (!parsedDataset || parsedDataset.rowCount === 0) { if (showToast) toast.error(msg("submit.validation.dataset_required")); return false; }
         const m = buildColumnMapping();
-        if (Object.keys(m.inputs).length === 0) { if (showToast) toast.error("נא לסמן לפחות עמודת קלט אחת"); return false; }
-        if (Object.keys(m.outputs).length === 0) { if (showToast) toast.error("נא לסמן לפחות עמודת פלט אחת"); return false; }
+        if (Object.keys(m.inputs).length === 0) { if (showToast) toast.error(msg("submit.validation.input_column_required")); return false; }
+        if (Object.keys(m.outputs).length === 0) { if (showToast) toast.error(msg("submit.validation.output_column_required")); return false; }
         return true;
       }
       case 2:
         if (jobType === "run") {
-          if (!modelConfig.name.trim()) { if (showToast) toast.error("נא לבחור מודל"); return false; }
+          if (!modelConfig.name.trim()) { if (showToast) toast.error(msg("submit.validation.model_required")); return false; }
           // Require api_key if provider has no env default AND no global key
           const hasApiKey = !!globalApiKey || !!(modelConfig.extra?.api_key);
           if (!anyProviderHasEnvKey && !hasApiKey) {
-            if (showToast) toast.error("נא להזין מפתח API — אין ב-env ולא הוזן ידנית");
+            if (showToast) toast.error(msg("submit.validation.api_key_required"));
             return false;
           }
           const secondModel = secondModelConfig;
-          if (!secondModel?.name?.trim()) { if (showToast) toast.error("נא לבחור מודל רפלקציה"); return false; }
+          if (!secondModel?.name?.trim()) { if (showToast) toast.error(msg("submit.validation.reflection_model_required")); return false; }
         }
         if (jobType === "grid_search") {
-          if (generationModels.every((m) => !m.name.trim())) { if (showToast) toast.error("נא להוסיף לפחות מודל יצירה אחד"); return false; }
-          if (reflectionModels.every((m) => !m.name.trim())) { if (showToast) toast.error("נא להוסיף לפחות מודל רפלקציה אחד"); return false; }
+          if (generationModels.every((m) => !m.name.trim())) { if (showToast) toast.error(msg("submit.validation.generation_model_required")); return false; }
+          if (reflectionModels.every((m) => !m.name.trim())) { if (showToast) toast.error(msg("submit.validation.reflection_models_required")); return false; }
         }
         return true;
       case 3:
-        if (!signatureCode.trim()) { if (showToast) toast.error("נא להזין קוד חתימה"); return false; }
-        if (!metricCode.trim()) { if (showToast) toast.error("נא להזין קוד Metric"); return false; }
+        if (!signatureCode.trim()) { if (showToast) toast.error(msg("submit.validation.signature_required")); return false; }
+        if (!metricCode.trim()) { if (showToast) toast.error(msg("submit.validation.metric_required")); return false; }
         // Block progress if any validation ran and found errors
         if (signatureValidation && signatureValidation.errors.length > 0) { return false; }
         if (metricValidation && metricValidation.errors.length > 0) { return false; }
@@ -386,7 +387,7 @@ export function useSubmitWizard() {
 
   const handleValidateCode = async (): Promise<boolean> => {
     if (!parsedDataset || parsedDataset.rowCount === 0) {
-      toast.error("נא להעלות דאטאסט לפני אימות הקוד");
+      toast.error(msg("submit.validation.dataset_before_code"));
       return false;
     }
     try {
@@ -397,10 +398,10 @@ export function useSubmitWizard() {
       const sigOk = !sigRes || sigRes.errors.length === 0;
       const metOk = !metRes || metRes.errors.length === 0;
       if (sigOk && metOk) return true;
-      toast.error("יש שגיאות בקוד — בדוק את הפירוט למטה");
+      toast.error(msg("submit.validation.code_has_errors"));
       return false;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "שגיאה באימות הקוד");
+      toast.error(err instanceof Error ? err.message : msg("submit.code_validation_failed"));
       return false;
     }
   };
@@ -435,7 +436,7 @@ export function useSubmitWizard() {
       setColumnRoles(roles);
       toast.success(`נטען ${parsed.rowCount} שורות מ-${file.name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "שגיאה בטעינת הקובץ");
+      toast.error(err instanceof Error ? err.message : msg("submit.dataset.file_error"));
     }
   }, []);
 
@@ -449,14 +450,14 @@ export function useSubmitWizard() {
 
   /* ── Submit ── */
   const handleSubmit = async () => {
-    if (!username.trim()) { toast.error("נא להזין שם משתמש"); goTo(0); return; }
-    if (!parsedDataset || parsedDataset.rowCount === 0) { toast.error("נא להעלות דאטאסט"); goTo(1); return; }
-    if (!signatureCode.trim()) { toast.error("נא להזין קוד חתימה"); goTo(3); return; }
-    if (!metricCode.trim()) { toast.error("נא להזין קוד Metric"); goTo(3); return; }
+    if (!username.trim()) { toast.error(msg("submit.validation.username_required")); goTo(0); return; }
+    if (!parsedDataset || parsedDataset.rowCount === 0) { toast.error(msg("submit.validation.dataset_required_short")); goTo(1); return; }
+    if (!signatureCode.trim()) { toast.error(msg("submit.validation.signature_required")); goTo(3); return; }
+    if (!metricCode.trim()) { toast.error(msg("submit.validation.metric_required")); goTo(3); return; }
 
     const columnMapping = buildColumnMapping();
-    if (Object.keys(columnMapping.inputs).length === 0) { toast.error("נא לסמן לפחות עמודת קלט אחת"); goTo(1); return; }
-    if (Object.keys(columnMapping.outputs).length === 0) { toast.error("נא לסמן לפחות עמודת פלט אחת"); goTo(1); return; }
+    if (Object.keys(columnMapping.inputs).length === 0) { toast.error(msg("submit.validation.input_column_required")); goTo(1); return; }
+    if (Object.keys(columnMapping.outputs).length === 0) { toast.error(msg("submit.validation.output_column_required")); goTo(1); return; }
 
     setSubmitting(true);
     setSubmitPhase("sending");
@@ -504,7 +505,7 @@ export function useSubmitWizard() {
 
       let result;
       if (jobType === "run") {
-        if (!modelConfig.name.trim()) { toast.error("נא לבחור מודל"); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
+        if (!modelConfig.name.trim()) { toast.error(msg("submit.validation.model_required")); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
         const secondApplied = secondModelConfig?.name?.trim() ? applyGlobals(secondModelConfig) : undefined;
         const runPayload = {
           ...base,
@@ -523,8 +524,8 @@ export function useSubmitWizard() {
       } else {
         const validGen = generationModels.filter((m) => m.name.trim()).map(applyGlobals);
         const validRef = reflectionModels.filter((m) => m.name.trim()).map(applyGlobals);
-        if (validGen.length === 0) { toast.error("נא להוסיף לפחות מודל יצירה אחד"); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
-        if (validRef.length === 0) { toast.error("נא להוסיף לפחות מודל רפלקציה אחד"); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
+        if (validGen.length === 0) { toast.error(msg("submit.validation.generation_model_required")); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
+        if (validRef.length === 0) { toast.error(msg("submit.validation.reflection_models_required")); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
         result = await submitGridSearch({ ...base, generation_models: validGen, reflection_models: validRef });
       }
 
@@ -538,7 +539,7 @@ export function useSubmitWizard() {
         router.push(jobUrl);
       }, 1500);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "שגיאה בשליחת האופטימיזציה");
+      toast.error(err instanceof Error ? err.message : msg("submit.submit_failed"));
       setSubmitPhase("idle");
       setSubmitting(false);
     }

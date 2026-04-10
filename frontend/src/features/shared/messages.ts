@@ -12,11 +12,15 @@
  *     import { msg } from "@/features/shared/messages";
  *     toast.error(msg("submission.failed"));
  *
- * Migration plan:
- * 1. Start by moving toast.error/success messages from the submit
- *    wizard hook (highest concentration — 12 strings).
- * 2. Then dashboard (8 strings) and sidebar (5 strings).
- * 3. Finally optimizations/[id] (15+ strings).
+ * Migration status (2026-04-10): all static toast strings across submit,
+ * dashboard, sidebar, optimizations/[id] and DataTab now use msg(). Two
+ * sites remain hard-coded because they need interpolation or JSX:
+ *   - use-submit-wizard.ts:437   `נטען ${n} שורות מ-${file}` (needs
+ *     parameterised template support in the catalog)
+ *   - optimizations/[id]/page.tsx:1204  `<div>נא למלא…{missing.join(",")}</div>`
+ *     (JSX toast with a runtime array)
+ * When real i18next/paraglide is adopted, both can move to a parameterised
+ * ICU message and the inline literals can be removed.
  */
 
 /**
@@ -34,7 +38,9 @@ export const MESSAGES = {
   "submit.validation.output_column_required": "נא לסמן לפחות עמודת פלט אחת",
   "submit.validation.model_required": "נא לבחור מודל",
   "submit.validation.reflection_model_required": "נא לבחור מודל רפלקציה",
+  "submit.validation.reflection_models_required": "נא להוסיף לפחות מודל רפלקציה אחד",
   "submit.validation.generation_model_required": "נא להוסיף לפחות מודל יצירה אחד",
+  "submit.validation.dataset_required_short": "נא להעלות דאטאסט",
   "submit.validation.api_key_required": "נא להזין מפתח API — אין ב-env ולא הוזן ידנית",
   "submit.validation.signature_required": "נא להזין קוד חתימה",
   "submit.validation.metric_required": "נא להזין קוד Metric",
@@ -56,13 +62,26 @@ export const MESSAGES = {
   // ── sidebar ──────────────────────────────────────────────────────────
   "sidebar.delete.success": "נמחק",
   "sidebar.delete.failed": "שגיאה במחיקה",
+  "sidebar.link.copied": "קישור הועתק",
+  "sidebar.rename.success": "שם עודכן",
+  "sidebar.rename.failed": "שגיאה בעדכון שם",
+  "sidebar.pin.on": "הוצמד",
+  "sidebar.pin.off": "הוסר מהצמדה",
+  "sidebar.generic_error": "שגיאה",
 
   // ── compare ──────────────────────────────────────────────────────────
   "compare.select_two": "בחר שתי אופטימיזציות מלוח הבקרה כדי להשוות ביניהן",
   "compare.load_error": "שגיאה בטעינת האופטימיזציות",
 
+  // ── optimization detail ──────────────────────────────────────────────
+  "optimization.cancel.sent": "בקשת ביטול נשלחה",
+  "optimization.cancel.failed": "ביטול נכשל",
+  "optimization.delete.failed": "מחיקה נכשלה",
+  "optimization.file.parse_error": "שגיאה בפענוח הקובץ",
+
   // ── clipboard / generic ──────────────────────────────────────────────
   "clipboard.copied": "הועתק בהצלחה",
+  "clipboard.copied_short": "הועתק",
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;
