@@ -11,150 +11,23 @@ import queue
 import sys
 import threading
 import time
-import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN, PAYLOAD_OVERVIEW_JOB_TYPE, PAYLOAD_OVERVIEW_USERNAME
+from ..constants import PAYLOAD_OVERVIEW_JOB_TYPE, PAYLOAD_OVERVIEW_USERNAME
 from ..notifications import notify_job_completed
 from ..storage import JobStore
-from ..models import GridSearchRequest, RunRequest
-from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
+from .subprocess_runner import (
+    EVENT_ERROR,
+    EVENT_LOG,
+    EVENT_PROGRESS,
+    EVENT_RESULT,
+    run_service_in_subprocess,
+    set_fork_service,
+)
 
 logger = logging.getLogger(__name__)
-
-_EVENT_PROGRESS = "progress"
-_EVENT_LOG = "log"
-_EVENT_RESULT = "result"
-_EVENT_ERROR = "error"
-
-# Populated before forking so child processes can reuse the same registry-backed service.
-_FORK_SERVICE: Optional[DspyService] = None
-
-
-def _safe_queue_put(event_queue: Any, event: Dict[str, Any]) -> None:
-    """Put an event onto a multiprocessing queue, suppressing errors.
-
-    Args:
-        event_queue: Multiprocessing queue to write to.
-        event: Event dictionary to enqueue.
-    """
-    try:
-        event_queue.put(event)
-    except Exception:
-        # Parent may have already torn down the queue during cancellation/shutdown.
-        pass
-
-
-class _SubprocessLogHandler(logging.Handler):
-    """Forward DSPy logs from the subprocess to the parent worker."""
-
-    def __init__(self, event_queue: Any) -> None:
-        """Initialize the subprocess log handler.
-
-        Args:
-            event_queue: Multiprocessing queue for forwarding log events.
-        """
-        super().__init__()
-        self._event_queue = event_queue
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Format and forward a log record to the parent process via the event queue.
-
-        Args:
-            record: Log record to forward.
-        """
-        try:
-            message = self.format(record)
-        except Exception:
-            message = record.getMessage()
-        _safe_queue_put(
-            self._event_queue,
-            {
-                "type": _EVENT_LOG,
-                "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
-                "level": record.levelname,
-                "logger": record.name,
-                "message": message,
-            },
-        )
-
-
-def _run_service_in_subprocess(
-    payload_dict: Dict[str, Any],
-    artifact_id: str,
-    event_queue: Any,
-    start_method: str,
-) -> None:
-    """Execute a DSPy run in a child process and stream events to parent.
-
-    Args:
-        payload_dict: Serialized request payload including a ``_optimization_type`` key.
-        artifact_id: Identifier used for storing optimization artifacts.
-        event_queue: Multiprocessing queue for streaming progress, log, and
-            result events back to the parent process.
-        start_method: Multiprocessing start method (e.g. "fork", "spawn").
-    """
-    service = _FORK_SERVICE if start_method == "fork" and _FORK_SERVICE is not None else DspyService(ServiceRegistry())
-    dspy_logger = logging.getLogger("dspy")
-    saved_level = dspy_logger.level
-    log_handler = _SubprocessLogHandler(event_queue)
-    log_handler.setLevel(logging.INFO)
-    log_handler.setFormatter(logging.Formatter("%(message)s"))
-
-    if dspy_logger.level == 0 or dspy_logger.level > logging.INFO:
-        dspy_logger.setLevel(logging.INFO)
-    dspy_logger.addHandler(log_handler)
-
-    try:
-        optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
-
-        def progress_callback(message: str, metrics: Dict[str, Any]) -> None:
-            _safe_queue_put(
-                event_queue,
-                {
-                    "type": _EVENT_PROGRESS,
-                    "event": message,
-                    "metrics": metrics or {},
-                },
-            )
-
-        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
-            if not hasattr(service, "run_grid_search"):
-                service = DspyService(ServiceRegistry())
-            payload = GridSearchRequest.model_validate(payload_dict)
-            result = service.run_grid_search(
-                payload,
-                artifact_id=artifact_id,
-                progress_callback=progress_callback,
-            )
-        else:
-            payload = RunRequest.model_validate(payload_dict)
-            result = service.run(
-                payload,
-                artifact_id=artifact_id,
-                progress_callback=progress_callback,
-            )
-        _safe_queue_put(
-            event_queue,
-            {
-                "type": _EVENT_RESULT,
-                "result": result.model_dump(mode="json"),
-            },
-        )
-    except BaseException as exc:
-        _safe_queue_put(
-            event_queue,
-            {
-                "type": _EVENT_ERROR,
-                "error": str(exc),
-                "traceback": traceback.format_exc(),
-            },
-        )
-    finally:
-        dspy_logger.removeHandler(log_handler)
-        dspy_logger.setLevel(saved_level)
 
 
 class CancellationError(Exception):
@@ -394,8 +267,7 @@ class BackgroundWorker:
 
             # Preserve registry-backed service in child when using fork.
             if self._mp_start_method == "fork":
-                global _FORK_SERVICE
-                _FORK_SERVICE = service
+                set_fork_service(service)
 
             try:
                 # Inject job type so subprocess can dispatch without duck-typing.
@@ -404,7 +276,7 @@ class BackgroundWorker:
 
                 event_queue = self._mp_ctx.Queue()
                 run_process = self._mp_ctx.Process(
-                    target=_run_service_in_subprocess,
+                    target=run_service_in_subprocess,
                     args=(payload_dict, optimization_id, event_queue, self._mp_start_method),
                     name=f"dspy-run-{optimization_id[:8]}",
                     daemon=True,
@@ -642,7 +514,7 @@ class BackgroundWorker:
                 break
 
             event_type = event.get("type")
-            if event_type == _EVENT_PROGRESS:
+            if event_type == EVENT_PROGRESS:
                 try:
                     self._job_store.record_progress(
                         optimization_id,
@@ -651,7 +523,7 @@ class BackgroundWorker:
                     )
                 except Exception:
                     logger.exception("Optimization %s: failed to persist subprocess progress event", optimization_id)
-            elif event_type == _EVENT_LOG:
+            elif event_type == EVENT_LOG:
                 timestamp = None
                 timestamp_raw = event.get("timestamp")
                 if isinstance(timestamp_raw, str):
@@ -669,11 +541,11 @@ class BackgroundWorker:
                     )
                 except Exception:
                     logger.exception("Optimization %s: failed to persist subprocess log entry", optimization_id)
-            elif event_type == _EVENT_RESULT:
+            elif event_type == EVENT_RESULT:
                 payload = event.get("result")
                 if isinstance(payload, dict):
                     result_payload = payload
-            elif event_type == _EVENT_ERROR:
+            elif event_type == EVENT_ERROR:
                 payload = {
                     "error": str(event.get("error", "Unknown subprocess error")),
                     "traceback": str(event.get("traceback", "")),
