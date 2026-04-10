@@ -93,6 +93,7 @@ import { Skeleton } from "boneyard-js/react";
 import { optimizationDetailBones } from "@/components/optimization-detail-bones";
 import { DataTab } from "./data-tab";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES, STATUS_LABELS } from "@/lib/constants";
+import { registerTutorialHook } from "@/lib/tutorial-bridge";
 import { HelpTip } from "@/components/help-tip";
 import type {
  OptimizationStatusResponse,
@@ -1085,8 +1086,8 @@ export default function JobDetailPage() {
  const searchParams = useSearchParams();
  const initialTab = searchParams.get("tab") ?? "overview";
  const [detailTab, setDetailTab] = useState(initialTab);
- // Expose for tutorial
- useEffect(() => { (window as any).__skynetSetDetailTab = setDetailTab; return () => { delete (window as any).__skynetSetDetailTab; }; }, []);
+ // Expose for tutorial via the typed bridge (see lib/tutorial-bridge.ts).
+ useEffect(() => registerTutorialHook("setDetailTab", setDetailTab), []);
 
  const isDemoMode = id === DEMO_OPTIMIZATION_ID;
 

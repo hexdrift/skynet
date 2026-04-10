@@ -10,6 +10,7 @@ import { SpotlightMask } from "./spotlight-mask";
 import { TutorialPopover } from "./tutorial-popover";
 import { AnimatedWordmark } from "@/components/animated-wordmark";
 import { DEMO_OPTIMIZATION_ID } from "@/lib/tutorial-demo-data";
+import { isTutorialNavigating, registerTutorialHook } from "@/lib/tutorial-bridge";
 
 export function TutorialOverlay() {
   const {
@@ -32,17 +33,18 @@ export function TutorialOverlay() {
   const [stepReady, setStepReady] = React.useState(false);
   const router = useRouter();
 
-  // Expose splash trigger + client-side navigation for tutorial beforeShow
+  // Register splash trigger + client-side navigation with the typed
+  // tutorial bridge so steps in lib/tutorial-steps.ts can drive them.
   React.useEffect(() => {
-    (window as any).__skynetShowTutorialSplash = () => {
+    const unregisterSplash = registerTutorialHook("showTutorialSplash", () => {
       setShowSplash(true);
       // Auto-dismiss: match real submit splash (1.5s) + buffer for navigation
       setTimeout(() => setShowSplash(false), 1500);
-    };
-    (window as any).__skynetRouterPush = (path: string) => router.push(path);
+    });
+    const unregisterPush = registerTutorialHook("routerPush", (path: string) => router.push(path));
     return () => {
-      delete (window as any).__skynetShowTutorialSplash;
-      delete (window as any).__skynetRouterPush;
+      unregisterSplash();
+      unregisterPush();
     };
   }, [router]);
 
@@ -203,7 +205,7 @@ export function TutorialOverlay() {
   ) : null;
 
   if (!state.isVisible || !currentStep) return splashPortal;
-  if (typeof window !== "undefined" && (window as any).__skynetTutorialNavigating) return splashPortal;
+  if (isTutorialNavigating()) return splashPortal;
 
   const track = state.activeTrack ? getTrack(state.activeTrack) : null;
   if (!track) return splashPortal;
