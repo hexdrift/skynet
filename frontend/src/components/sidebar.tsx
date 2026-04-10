@@ -16,6 +16,7 @@ import type { OptimizationSummaryResponse } from "@/lib/types";
 // Sidebar now uses SidebarJobItem from api.ts but falls back to OptimizationSummaryResponse shape
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
+import { groupJobsByRecency, matchesJobSearch } from "@/features/sidebar";
 
 const NAV_ITEMS = [
   { href: "/", label: "לוח בקרה", icon: LayoutDashboard },
@@ -118,54 +119,12 @@ export function Sidebar() {
     }
   };
 
-  // Filter jobs by search
-  const searchLower = React.useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
-  const filteredJobs = React.useMemo(() => {
-    if (!searchLower) return jobs;
-    return jobs.filter(j =>
-      (j.name ?? "").toLowerCase().includes(searchLower) ||
-      (j.module_name ?? "").toLowerCase().includes(searchLower) ||
-      j.optimization_id.toLowerCase().includes(searchLower) ||
-      (j.optimizer_name ?? "").toLowerCase().includes(searchLower) ||
-      (j.model_name ?? "").toLowerCase().includes(searchLower) ||
-      (j.username ?? "").toLowerCase().includes(searchLower)
-    );
-  }, [jobs, searchLower]);
-
-  // Group jobs: pinned first, then active, then by date
-  const groupedJobs = React.useMemo(() => {
-    const groups: { label: string; jobs: SidebarJobItem[] }[] = [];
-    const pinned: SidebarJobItem[] = [];
-    const active: SidebarJobItem[] = [];
-    const today: SidebarJobItem[] = [];
-    const yesterday: SidebarJobItem[] = [];
-    const thisWeek: SidebarJobItem[] = [];
-    const older: SidebarJobItem[] = [];
-
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
-    const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
-
-    for (const job of filteredJobs) {
-      if (job.pinned) { pinned.push(job); continue; }
-      if (ACTIVE_STATUSES.has(job.status as never)) { active.push(job); continue; }
-      const created = new Date(job.created_at ?? 0);
-      if (created >= todayStart) today.push(job);
-      else if (created >= yesterdayStart) yesterday.push(job);
-      else if (created >= weekStart) thisWeek.push(job);
-      else older.push(job);
-    }
-
-    if (pinned.length) groups.push({ label: "מוצמדים", jobs: pinned });
-    if (active.length) groups.push({ label: "פעילים", jobs: active });
-    if (today.length) groups.push({ label: "היום", jobs: today });
-    if (yesterday.length) groups.push({ label: "אתמול", jobs: yesterday });
-    if (thisWeek.length) groups.push({ label: "השבוע", jobs: thisWeek });
-    if (older.length) groups.push({ label: "ישנים", jobs: older });
-
-    return groups;
-  }, [filteredJobs]);
+  // Filter + group jobs via the pure helpers in features/sidebar
+  const filteredJobs = React.useMemo(
+    () => jobs.filter((j) => matchesJobSearch(j, searchQuery)),
+    [jobs, searchQuery],
+  );
+  const groupedJobs = React.useMemo(() => groupJobsByRecency(filteredJobs), [filteredJobs]);
 
   // Scroll to load more
   const handleScroll = () => {
