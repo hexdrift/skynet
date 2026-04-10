@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
- title: "Skynet",
+ title: "Optimization Details",
  description: "צפה בפרטי האופטימיזציה, לוגים, מטריקות ותוצאות",
 };
 

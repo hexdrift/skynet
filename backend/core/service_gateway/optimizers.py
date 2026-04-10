@@ -87,38 +87,72 @@ def _compile_accepts_valset(optimizer: Any) -> bool:
         return False
 
 
-def evaluate_on_test(program: Any, test_examples: List[Any], metric) -> Optional[float]:
+def evaluate_on_test(
+    program: Any,
+    test_examples: List[Any],
+    metric,
+    *,
+    collect_per_example: bool = False,
+) -> "tuple[Optional[float], list[dict]] | Optional[float]":
     """Evaluate a compiled program on the test split.
 
     Args:
         program: Compiled DSPy module.
         test_examples: Held-out dataset for final evaluation.
         metric: Metric callable used by DSPy evaluators.
+        collect_per_example: If True, also return per-example results.
 
     Returns:
-        Optional[float]: Numeric score if evaluation succeeds, else ``None``.
-
-    Raises:
-        ServiceError: If the evaluator returns a non-numeric result.
+        If collect_per_example is False: Optional[float] aggregate score.
+        If collect_per_example is True: (aggregate_score, per_example_results) tuple.
     """
 
     if not test_examples:
-        return None
+        return (None, []) if collect_per_example else None
 
+    # Use DSPy's Evaluate — returns EvaluationResult with score + per-example results
     evaluator = dspy.Evaluate(
         devset=test_examples,
         metric=metric,
         display_progress=True,
     )
-    result = evaluator(program)
-    if isinstance(result, (int, float)):
-        return float(result)
-    score = getattr(result, "score", None)
-    if isinstance(score, (int, float)):
-        return float(score)
-    raise ServiceError(
-        "Evaluator returned a non-numeric result; ensure the metric's score is a float."
-    )
+    eval_result = evaluator(program)
+
+    # Extract aggregate score
+    if isinstance(eval_result, (int, float)):
+        aggregate = float(eval_result)
+        raw_results = []
+    else:
+        score = getattr(eval_result, "score", None)
+        if isinstance(score, (int, float)):
+            aggregate = float(score)
+        else:
+            raise ServiceError(
+                "Evaluator returned a non-numeric result; ensure the metric's score is a float."
+            )
+        raw_results = getattr(eval_result, "results", []) or []
+
+    if not collect_per_example:
+        return aggregate
+
+    # Build per-example results from EvaluationResult.results
+    # Each entry is (example, prediction, score)
+    per_example: list[dict] = []
+    for i, entry in enumerate(raw_results):
+        try:
+            example, prediction, ex_score = entry
+            # Metric may return a dspy.Prediction with a .score attribute
+            if hasattr(ex_score, "score"):
+                ex_score = ex_score.score
+            ex_score = float(ex_score) if isinstance(ex_score, (int, float, bool)) else 0.0
+            outputs = {}
+            for k in example.labels().keys():
+                outputs[k] = getattr(prediction, k, None) if prediction else None
+            per_example.append({"index": i, "outputs": outputs, "score": ex_score, "pass": ex_score > 0})
+        except Exception:
+            per_example.append({"index": i, "outputs": {}, "score": 0.0, "pass": False})
+
+    return aggregate, per_example
 
 
 def optimizer_requires_metric(factory: Callable[..., Any]) -> bool:

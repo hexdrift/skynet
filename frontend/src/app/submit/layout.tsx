@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
 export const metadata: Metadata = {
- title: "Skynet",
+ title: "New Optimization",
  description: "צור אופטימיזציית פרומפטים חדשה עם DSPy — בחר מודל, העלה דאטאסט, ושפר ביצועים",
 };
 

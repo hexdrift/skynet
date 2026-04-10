@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ArrowDown, ArrowUpDown, Filter, Search } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Filter, Search, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -23,6 +23,8 @@ export function ColumnHeader<K extends string>({
  onFilter,
  openFilter,
  setOpenFilter,
+ width,
+ onResize,
 }: {
  label: string;
  sortKey: K;
@@ -35,16 +37,90 @@ export function ColumnHeader<K extends string>({
  onFilter?: (col: string, values: Set<string>) => void;
  openFilter?: string | null;
  setOpenFilter?: (col: string | null) => void;
+ width?: number;
+ onResize?: (key: K, width: number) => void;
 }) {
  const sortActive = currentSort === sortKey;
  const hasFilter = filterCol && filterOptions && filters && onFilter && setOpenFilter;
  const filterActive = hasFilter && filters[filterCol] && filters[filterCol].size > 0;
  const isOpen = hasFilter && openFilter === filterCol;
  const filterIconRef = useRef<HTMLButtonElement>(null);
+ const thRef = useRef<HTMLTableCellElement>(null);
+
+ const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const startX = e.clientX;
+  const startW = thRef.current?.offsetWidth ?? 120;
+  const onMove = (ev: MouseEvent) => {
+   const isRtl = getComputedStyle(thRef.current!).direction === "rtl";
+   const delta = isRtl ? startX - ev.clientX : ev.clientX - startX;
+   const newW = Math.max(60, startW + delta);
+   onResize?.(sortKey, newW);
+  };
+  const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+ }, [sortKey, onResize]);
+
+ const handleResizeDblClick = useCallback((e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  // Auto-fit: measure the widest natural content in this column (Excel-style)
+  // Temporarily remove constraints to get true content width, then restore.
+  const th = thRef.current;
+  if (!th) return;
+  const table = th.closest("table");
+  if (!table) return;
+  const colIdx = Array.from(th.parentElement?.children ?? []).indexOf(th);
+  const PADDING = 14; // ~7px each side, matching Excel
+  const MIN_W = 60;
+  const MAX_W = 600;
+
+  // Collect all cells in this column (header + body)
+  const cells: HTMLElement[] = [th];
+  table.querySelectorAll("tbody tr").forEach((row) => {
+   const cell = row.children[colIdx] as HTMLElement | undefined;
+   if (cell) cells.push(cell);
+  });
+
+  // Temporarily remove overflow/truncation so scrollWidth reflects true content
+  const saved = cells.map((cell) => ({
+   el: cell,
+   maxW: cell.style.maxWidth,
+   w: cell.style.width,
+   overflow: cell.style.overflow,
+  }));
+  for (const cell of cells) {
+   cell.style.maxWidth = "none";
+   cell.style.width = "auto";
+   cell.style.overflow = "visible";
+  }
+  // Force layout reflow then measure
+  let widest = 0;
+  for (const cell of cells) {
+   widest = Math.max(widest, cell.scrollWidth);
+  }
+  // Restore original styles
+  for (const s of saved) {
+   s.el.style.maxWidth = s.maxW;
+   s.el.style.width = s.w;
+   s.el.style.overflow = s.overflow;
+  }
+
+  const fitW = Math.max(MIN_W, Math.min(widest + PADDING, MAX_W));
+  onResize?.(sortKey, fitW);
+ }, [sortKey, onResize]);
 
  return (
- <th className={`relative select-none px-3 py-3 text-right text-[12px] font-semibold whitespace-nowrap ${sortActive ? "text-foreground" : "text-muted-foreground"}`}>
- <div className="flex items-center gap-0.5">
+ <th
+  ref={thRef}
+  className={`relative select-none ps-2 pe-4 py-3 text-center text-[12px] font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}
+  style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+ >
+ <div className="flex items-center justify-center gap-0.5 overflow-hidden">
  <button
  type="button"
  onClick={() => onSort(sortKey)}
@@ -83,6 +159,13 @@ export function ColumnHeader<K extends string>({
  anchorRef={filterIconRef}
  />
  ) : null}
+ {onResize && (
+  <div
+   className="absolute top-0 bottom-0 w-[5px] cursor-col-resize end-0 z-10 after:absolute after:inset-y-2 after:start-[2px] after:w-px after:bg-border/40 hover:after:bg-primary/50 active:after:bg-primary/70 after:transition-colors"
+   onMouseDown={handleResizeStart}
+   onDoubleClick={handleResizeDblClick}
+  />
+ )}
  </th>
  );
 }
@@ -109,16 +192,34 @@ function FilterDropdown({
  () => selected.size === 0 ? new Set(options.map((o) => o.value)) : new Set(selected),
  );
  const [search, setSearch] = useState("");
- const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+ const [pos, setPos] = useState<{ top: number; left: number; availH: number } | null>(null);
  const ref = useRef<HTMLDivElement>(null);
  const searchRef = useRef<HTMLInputElement>(null);
 
- useLayoutEffect(() => {
- if (anchorRef?.current) {
+ const updatePos = useCallback(() => {
+ if (!anchorRef?.current) return;
  const rect = anchorRef.current.getBoundingClientRect();
- setPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
- }
+ const dropdownW = 260;
+ const gap = 4;
+ const top = rect.bottom + gap;
+ const availH = Math.max(150, window.innerHeight - top - gap);
+ // Center dropdown on the icon, then clamp within viewport
+ const idealLeft = rect.left + rect.width / 2 - dropdownW / 2;
+ const left = Math.max(4, Math.min(idealLeft, window.innerWidth - dropdownW - 4));
+ setPos({ top, left, availH });
  }, [anchorRef]);
+
+ useLayoutEffect(() => { updatePos(); }, [updatePos]);
+
+ // Close dropdown when any ancestor scrolls
+ useEffect(() => {
+ const scrollParents: HTMLElement[] = [];
+ let el = anchorRef?.current?.parentElement;
+ while (el) { if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) scrollParents.push(el); el = el.parentElement; }
+ scrollParents.forEach((sp) => sp.addEventListener("scroll", onClose, { passive: true }));
+ window.addEventListener("resize", onClose);
+ return () => { scrollParents.forEach((sp) => sp.removeEventListener("scroll", onClose)); window.removeEventListener("resize", onClose); };
+ }, [anchorRef, onClose]);
 
  useEffect(() => {
  searchRef.current?.focus();
@@ -162,8 +263,8 @@ function FilterDropdown({
  const dropdown = (
  <div
  ref={ref}
- className="fixed z-50 min-w-[220px] rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl"
- style={pos ? { top: pos.top, right: pos.right } : { visibility: "hidden" as const }}
+ className="fixed z-[9999] max-w-[min(90vw,320px)] w-full rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl"
+ style={pos ? { top: pos.top, left: pos.left, minWidth: "clamp(180px, 25vw, 260px)" } : { visibility: "hidden" as const }}
  onClick={(e) => e.stopPropagation()}
  >
  {/* Search box */}
@@ -184,14 +285,14 @@ function FilterDropdown({
 
  {/* Select all */}
  <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted/70">
- <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+ <input type="checkbox" className="accent-[#3D2E22]" checked={allSelected} onChange={toggleSelectAll} />
  בחר הכל
  </label>
 
  <div className="my-1 border-t border-border/70" />
 
  {/* Checkbox list */}
- <div className="max-h-[200px] overflow-y-auto">
+ <div className="overflow-y-auto" style={{ maxHeight: Math.min(200, (pos?.availH ?? 200) - 120) }}>
  {visibleOptions.length === 0 ? (
  <p className="text-[11px] text-center py-2 text-muted-foreground">אין תוצאות</p>
  ) : (
@@ -199,13 +300,15 @@ function FilterDropdown({
  <label
  key={opt.value}
  className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted/70"
+ title={opt.value}
  >
  <input
  type="checkbox"
+ className="shrink-0 accent-[#3D2E22]"
  checked={localSelected.has(opt.value)}
  onChange={() => toggleValue(opt.value)}
  />
- {opt.label}
+ <span className="truncate" dir={/[\u0590-\u05FF]/.test(opt.label) ? "rtl" : "ltr"}>{opt.label}</span>
  </label>
  ))
  )}
@@ -221,7 +324,7 @@ function FilterDropdown({
  className="flex-1 text-[11px] font-semibold"
  onClick={() => { onApply(new Set()); onClose(); }}
  >
- נקה
+ בטל
  </Button>
  <Button
  type="button"
@@ -267,4 +370,37 @@ export function useColumnFilters() {
  const activeCount = Object.values(filters).filter((s) => s.size > 0).length;
 
  return { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount };
+}
+
+/* ── Hook for column resize state ── */
+
+export function useColumnResize() {
+ const [widths, setWidths] = useState<Record<string, number>>({});
+
+ const setColumnWidth = useCallback((col: string, width: number) => {
+  setWidths((prev) => ({ ...prev, [col]: width }));
+ }, []);
+
+ const resetAll = useCallback(() => setWidths({}), []);
+
+ const hasResized = Object.keys(widths).length > 0;
+
+ return { widths, setColumnWidth, resetAll, hasResized };
+}
+
+/* ── Reset columns button — shown when columns have been manually resized ── */
+
+export function ResetColumnsButton({ resize }: { resize: { hasResized: boolean; resetAll: () => void } }) {
+ if (!resize.hasResized) return null;
+ return (
+  <button
+   type="button"
+   onClick={resize.resetAll}
+   className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground/40"
+   title="איפוס רוחב עמודות"
+  >
+   <RotateCcw className="size-3" />
+   <span>איפוס גודל עמודות</span>
+  </button>
+ );
 }

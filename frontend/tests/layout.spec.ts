@@ -37,9 +37,9 @@ test.describe("Responsive layout", () => {
           await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded" });
 
           if (route === "/submit") {
-            await expect(page.getByText("פרטים בסיסיים")).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByText("פרטים בסיסיים").first()).toBeVisible({ timeout: 30_000 });
           } else if (route.startsWith("/jobs/")) {
-            await expect(page.getByText("סקירה")).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByText("סקירה").first()).toBeVisible({ timeout: 30_000 });
           } else if (route.startsWith("/compare")) {
             await expect(page.getByText("VS").first()).toBeVisible({ timeout: 30_000 });
           } else {

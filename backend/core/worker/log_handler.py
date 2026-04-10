@@ -17,14 +17,27 @@ _NO_MUTATION_RE = re.compile(
 )
 
 
+_thread_pair_index = threading.local()
+
+
+def set_current_pair_index(pair_index: int | None) -> None:
+    """Set the current pair index for the calling thread."""
+    _thread_pair_index.value = pair_index
+
+
+def get_current_pair_index() -> int | None:
+    """Get the current pair index for the calling thread."""
+    return getattr(_thread_pair_index, "value", None)
+
+
 class JobLogHandler(logging.Handler):
     """Route DSPy log records into the job manager for later inspection."""
 
-    def __init__(self, job_id: str, jobs: JobStore) -> None:
+    def __init__(self, optimization_id: str, jobs: JobStore) -> None:
         """Initialize the handler with job context.
 
         Args:
-            job_id: Identifier for the job receiving log entries.
+            optimization_id: Identifier for the job receiving log entries.
             jobs: Job manager or remote DB store responsible for persisting logs.
 
         Returns:
@@ -32,7 +45,7 @@ class JobLogHandler(logging.Handler):
         """
 
         super().__init__()
-        self._job_id = job_id
+        self._optimization_id = optimization_id
         self._jobs = jobs
         self._thread_ids = {threading.get_ident()}
         self._thread_lock = threading.Lock()
@@ -65,15 +78,16 @@ class JobLogHandler(logging.Handler):
         timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
         try:  # [WORKER-FIX] protect emit() from DB errors that would crash the worker thread
             self._jobs.append_log(
-                self._job_id,
+                self._optimization_id,
                 level=record.levelname,
                 logger_name=record.name,
                 message=message,
                 timestamp=timestamp,
+                pair_index=get_current_pair_index(),
             )
             for event_name, metrics in _extract_progress_from_log(message):
                 self._jobs.record_progress(
-                    self._job_id,
+                    self._optimization_id,
                     event_name,
                     metrics,
                 )

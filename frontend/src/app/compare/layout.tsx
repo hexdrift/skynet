@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
 export const metadata: Metadata = {
- title: "Skynet — השוואת אופטימיזציות",
+ title: "Compare",
  description: "השוואת תוצאות בין שתי אופטימיזציות",
 };
 

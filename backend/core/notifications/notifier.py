@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3001")
 
 
-def _job_url(job_id: str) -> str:
+def _job_url(optimization_id: str) -> str:
     """Build a link to the job detail page."""
-    return f"{FRONTEND_URL}/jobs/{job_id}"
+    return f"{FRONTEND_URL}/jobs/{optimization_id}"
 
 
 def notify_job_started(
-    job_id: str,
+    optimization_id: str,
     username: str,
-    job_type: str,
+    optimization_type: str,
     optimizer_name: str,
     module_name: str,
     model_name: Optional[str] = None,
@@ -31,16 +31,16 @@ def notify_job_started(
     """Send a notification when a job is submitted.
 
     Args:
-        job_id: Unique job identifier.
+        optimization_id: Unique optimization identifier.
         username: User who submitted the job.
-        job_type: "run" or "grid_search".
+        optimization_type: "run" or "grid_search".
         optimizer_name: Optimizer being used.
         module_name: DSPy module being optimized.
         model_name: LLM model name (if applicable).
     """
-    type_label = "חיפוש רשת" if job_type == "grid_search" else "הרצה"
+    type_label = "חיפוש רשת" if optimization_type == "grid_search" else "הרצה"
     model_part = f" | מודל: {model_name}" if model_name else ""
-    link = _job_url(job_id)
+    link = _job_url(optimization_id)
 
     text = (
         f"🚀 *אופטימיזציה חדשה*\n"
@@ -53,7 +53,7 @@ def notify_job_started(
 
 
 def notify_job_completed(
-    job_id: str,
+    optimization_id: str,
     username: str,
     status: str,
     message: Optional[str] = None,
@@ -63,14 +63,14 @@ def notify_job_completed(
     """Send a notification when a job finishes.
 
     Args:
-        job_id: Unique job identifier.
+        optimization_id: Unique optimization identifier.
         username: User who submitted the job.
         status: Final status ("success", "failed", "cancelled").
         message: Status message from the backend.
         baseline_score: Baseline test metric (if available).
         optimized_score: Optimized test metric (if available).
     """
-    link = _job_url(job_id)
+    link = _job_url(optimization_id)
 
     if status == "success":
         scores = ""

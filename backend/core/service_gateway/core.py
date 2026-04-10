@@ -166,8 +166,11 @@ class DspyService:
 
         with dspy.context(lm=language_model):
             baseline_test_metric = None
+            baseline_test_results: list[dict] = []
             if splits.test:
-                baseline_test_metric = evaluate_on_test(program, splits.test, metric)
+                baseline_test_metric, baseline_test_results = evaluate_on_test(
+                    program, splits.test, metric, collect_per_example=True,
+                )
                 logger.info("Baseline test metric: %s", baseline_test_metric)
                 if progress_callback and baseline_test_metric is not None:
                     progress_callback(
@@ -187,8 +190,11 @@ class DspyService:
             logger.info("Optimizer compile completed successfully")
 
             optimized_test_metric = None
+            optimized_test_results: list[dict] = []
             if splits.test:
-                optimized_test_metric = evaluate_on_test(compiled_program, splits.test, metric)
+                optimized_test_metric, optimized_test_results = evaluate_on_test(
+                    compiled_program, splits.test, metric, collect_per_example=True,
+                )
                 logger.info("Optimized test metric: %s", optimized_test_metric)
                 if progress_callback and optimized_test_metric is not None:
                     progress_callback(
@@ -241,6 +247,8 @@ class DspyService:
             metric_improvement = optimized_test_metric - baseline_test_metric
 
         runtime_seconds = (datetime.now(timezone.utc) - run_start).total_seconds()
+        num_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
+        avg_response_time_ms = round((runtime_seconds * 1000) / num_lm_calls, 1) if num_lm_calls else None
         response = RunResponse(
             module_name=payload.module_name,
             optimizer_name=payload.optimizer_name,
@@ -254,6 +262,10 @@ class DspyService:
             program_artifact_path=program_artifact.path if program_artifact else None,
             program_artifact=program_artifact,
             runtime_seconds=runtime_seconds,
+            num_lm_calls=num_lm_calls,
+            avg_response_time_ms=avg_response_time_ms,
+            baseline_test_results=baseline_test_results,
+            optimized_test_results=optimized_test_results,
         )
 
         logger.info(
@@ -327,9 +339,18 @@ class DspyService:
                 "total_pairs": total_pairs,
             })
 
-        # --- iterate pairs ---
-        pair_results: List[PairResult] = []
-        for i, (gen_cfg, ref_cfg) in enumerate(pairs):
+        # --- run pairs concurrently ---
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        pair_results: List[PairResult] = [None] * total_pairs  # type: ignore[list-item]
+        results_lock = threading.Lock()
+        completed_count_ref = [0]
+        failed_count_ref = [0]
+
+        def _run_pair(i: int, gen_cfg, ref_cfg) -> PairResult:
+            from ..worker.log_handler import set_current_pair_index
+            set_current_pair_index(i)
             pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
             logger.info("Grid pair %d/%d: %s", i + 1, total_pairs, pair_label)
             if progress_callback:
@@ -344,8 +365,6 @@ class DspyService:
             try:
                 program = module_factory(**module_kwargs)
                 language_model = build_language_model(gen_cfg)
-                # Build a temporary ModelConfig for the generation model to pass
-                # to instantiate_optimizer (it uses model_settings for defaults).
                 optimizer = instantiate_optimizer(
                     optimizer_factory, payload.optimizer_name,
                     payload.optimizer_kwargs, metric,
@@ -354,8 +373,16 @@ class DspyService:
 
                 with dspy.context(lm=language_model):
                     baseline = None
+                    baseline_test_results: list[dict] = []
                     if splits.test:
-                        baseline = evaluate_on_test(program, splits.test, metric)
+                        baseline, baseline_test_results = evaluate_on_test(
+                            program, splits.test, metric, collect_per_example=True,
+                        )
+                        if progress_callback and baseline is not None:
+                            progress_callback(PROGRESS_BASELINE, {
+                                DETAIL_BASELINE: baseline,
+                                "pair_index": i,
+                            })
 
                     with capture_tqdm(progress_callback):
                         compiled = compile_program(
@@ -365,10 +392,17 @@ class DspyService:
                         )
 
                     optimized = None
+                    optimized_test_results: list[dict] = []
                     if splits.test:
-                        optimized = evaluate_on_test(compiled, splits.test, metric)
+                        optimized, optimized_test_results = evaluate_on_test(
+                            compiled, splits.test, metric, collect_per_example=True,
+                        )
+                        if progress_callback and optimized is not None:
+                            progress_callback(PROGRESS_OPTIMIZED, {
+                                DETAIL_OPTIMIZED: optimized,
+                                "pair_index": i,
+                            })
 
-                # Return the better program per pair
                 best = compiled
                 if baseline is not None and optimized is not None and optimized < baseline:
                     logger.warning("Grid pair %d: optimized (%.4f) worse than baseline (%.4f) — keeping baseline", i, optimized, baseline)
@@ -383,6 +417,8 @@ class DspyService:
                     improvement = optimized - baseline
 
                 pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
+                pair_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
+                pair_avg_ms = round((pair_runtime * 1000) / pair_lm_calls, 1) if pair_lm_calls else None
                 result = PairResult(
                     pair_index=i,
                     generation_model=gen_cfg.name,
@@ -391,15 +427,22 @@ class DspyService:
                     optimized_test_metric=optimized,
                     metric_improvement=improvement,
                     runtime_seconds=round(pair_runtime, 2),
+                    num_lm_calls=pair_lm_calls,
+                    avg_response_time_ms=pair_avg_ms,
                     program_artifact=program_artifact,
+                    baseline_test_results=baseline_test_results,
+                    optimized_test_results=optimized_test_results,
                 )
-                pair_results.append(result)
+                with results_lock:
+                    completed_count_ref[0] += 1
                 logger.info(
                     "Grid pair %d/%d completed: baseline=%.4f optimized=%.4f (%.1fs)",
                     i + 1, total_pairs,
                     baseline or 0, optimized or 0, pair_runtime,
                 )
                 if progress_callback:
+                    with results_lock:
+                        c, f = completed_count_ref[0], failed_count_ref[0]
                     progress_callback(PROGRESS_GRID_PAIR_COMPLETED, {
                         "pair_index": i,
                         "total_pairs": total_pairs,
@@ -409,34 +452,52 @@ class DspyService:
                         "optimized_test_metric": optimized,
                         "metric_improvement": improvement,
                         "runtime_seconds": round(pair_runtime, 2),
-                        "completed_so_far": len([p for p in pair_results if p.error is None]),
-                        "failed_so_far": len([p for p in pair_results if p.error is not None]),
+                        "completed_so_far": c,
+                        "failed_so_far": f,
                     })
+                set_current_pair_index(None)
+                return result
 
             except Exception as exc:
                 pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
                 error_msg = str(exc)
-                pair_results.append(PairResult(
+                result = PairResult(
                     pair_index=i,
                     generation_model=gen_cfg.name,
                     reflection_model=ref_cfg.name,
                     error=error_msg,
                     runtime_seconds=round(pair_runtime, 2),
-                ))
+                )
+                with results_lock:
+                    failed_count_ref[0] += 1
                 logger.warning(
                     "Grid pair %d/%d failed (%s): %s",
                     i + 1, total_pairs, pair_label, error_msg,
                 )
                 if progress_callback:
+                    with results_lock:
+                        c, f = completed_count_ref[0], failed_count_ref[0]
                     progress_callback(PROGRESS_GRID_PAIR_FAILED, {
                         "pair_index": i,
                         "total_pairs": total_pairs,
                         "generation_model": gen_cfg.name,
                         "reflection_model": ref_cfg.name,
                         "error": error_msg,
-                        "completed_so_far": len([p for p in pair_results if p.error is None]),
-                        "failed_so_far": len([p for p in pair_results if p.error is not None]),
+                        "completed_so_far": c,
+                        "failed_so_far": f,
                     })
+                set_current_pair_index(None)
+                return result
+
+        max_workers = min(total_pairs, 4)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_run_pair, i, gen_cfg, ref_cfg): i
+                for i, (gen_cfg, ref_cfg) in enumerate(pairs)
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                pair_results[idx] = future.result()
 
         # --- pick best pair ---
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]

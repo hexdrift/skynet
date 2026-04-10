@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
- title: "Skynet",
+ title: "Login",
  description: "התחבר למערכת Skynet לאופטימיזציית פרומפטים",
  alternates: { canonical: "/login" },
  robots: { index: true, follow: true },

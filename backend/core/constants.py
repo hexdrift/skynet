@@ -17,6 +17,7 @@ META_MODEL_IDENTIFIER = "model_identifier"
 
 # payload overview keys cached per job
 PAYLOAD_OVERVIEW_NAME = "name"
+PAYLOAD_OVERVIEW_DESCRIPTION = "description"
 PAYLOAD_OVERVIEW_USERNAME = "username"
 PAYLOAD_OVERVIEW_MODULE_NAME = "module_name"
 PAYLOAD_OVERVIEW_MODULE_KWARGS = "module_kwargs"
@@ -28,6 +29,7 @@ PAYLOAD_OVERVIEW_PROMPT_MODEL = "prompt_model_name"
 PAYLOAD_OVERVIEW_TASK_MODEL = "task_model_name"
 PAYLOAD_OVERVIEW_COLUMN_MAPPING = "column_mapping"
 PAYLOAD_OVERVIEW_DATASET_ROWS = "dataset_rows"
+PAYLOAD_OVERVIEW_DATASET_FILENAME = "dataset_filename"
 PAYLOAD_OVERVIEW_SPLIT_FRACTIONS = "split_fractions"
 PAYLOAD_OVERVIEW_SHUFFLE = "shuffle"
 PAYLOAD_OVERVIEW_SEED = "seed"
@@ -46,9 +48,9 @@ PROGRESS_GRID_PAIR_COMPLETED = "grid_pair_completed"
 PROGRESS_GRID_PAIR_FAILED = "grid_pair_failed"
 
 # job type discriminator
-PAYLOAD_OVERVIEW_JOB_TYPE = "job_type"
-JOB_TYPE_RUN = "run"
-JOB_TYPE_GRID_SEARCH = "grid_search"
+PAYLOAD_OVERVIEW_JOB_TYPE = "optimization_type"
+OPTIMIZATION_TYPE_RUN = "run"
+OPTIMIZATION_TYPE_GRID_SEARCH = "grid_search"
 
 # grid search overview keys
 PAYLOAD_OVERVIEW_TOTAL_PAIRS = "total_pairs"

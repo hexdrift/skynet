@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import os
+import random
 import signal  # [WORKER-FIX] for SIGTERM graceful shutdown
 import threading
 from typing import Any, Iterable, List, Optional
@@ -15,10 +16,11 @@ from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
 from ..constants import (
-    JOB_TYPE_GRID_SEARCH,
-    JOB_TYPE_RUN,
+    OPTIMIZATION_TYPE_GRID_SEARCH,
+    OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_COLUMN_MAPPING,
     PAYLOAD_OVERVIEW_COMPILE_KWARGS,
+    PAYLOAD_OVERVIEW_DATASET_FILENAME,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
     PAYLOAD_OVERVIEW_JOB_TYPE,
@@ -37,26 +39,34 @@ from ..constants import (
     PAYLOAD_OVERVIEW_TASK_MODEL,
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
     PAYLOAD_OVERVIEW_NAME,
+    PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_USERNAME,
 )
 from ..storage import get_job_store
 from ..models import (
     HEALTH_STATUS_OK,
+    AnalyticsSummaryResponse,
+    ColumnMapping,
     GridSearchRequest,
     GridSearchResponse,
     HealthResponse,
     JobCancelResponse,
     JobDeleteResponse,
     JobLogEntry,
-    JobPayloadResponse,
+    OptimizationPayloadResponse,
+    ModelStatsResponse,
+    ModelStatsItem,
+    OptimizerStatsResponse,
+    OptimizerStatsItem,
     ValidateCodeRequest,
     ValidateCodeResponse,
-    JobStatus,
-    JobStatusResponse,
-    JobSummaryResponse,
-    JobSubmissionResponse,
+    OptimizationStatus,
+    OptimizationStatusResponse,
+    OptimizationSummaryResponse,
+    OptimizationSubmissionResponse,
     ModelConfig,
     PaginatedJobsResponse,
+    PairResult,
     ProgramArtifactResponse,
     QueueStatusResponse,
     RunRequest,
@@ -64,6 +74,7 @@ from ..models import (
     ServeInfoResponse,
     ServeRequest,
     ServeResponse,
+    SplitFractions,
     TemplateCreateRequest,
     TemplateResponse,
 )
@@ -99,7 +110,7 @@ class DiscoverModelsResponse(BaseModel):
 logger = logging.getLogger(__name__)
 
 # Terminal job states that cannot be cancelled or restarted
-_TERMINAL_STATUSES = {JobStatus.success, JobStatus.failed, JobStatus.cancelled}
+_TERMINAL_STATUSES = {OptimizationStatus.success, OptimizationStatus.failed, OptimizationStatus.cancelled}
 
 
 def _strip_api_key(d: dict) -> dict:
@@ -145,7 +156,7 @@ def create_app(
         nonlocal worker
         job_store.recover_orphaned_jobs()  # [WORKER-FIX] mark crashed jobs from previous run as failed
         pending_ids = job_store.recover_pending_jobs()
-        worker = get_worker(job_store, service=service, pending_job_ids=pending_ids)
+        worker = get_worker(job_store, service=service, pending_optimization_ids=pending_ids)
         if pending_ids:
             logger.info("Re-queued %d pending jobs from previous run", len(pending_ids))
         logger.info("Background worker started")
@@ -306,9 +317,31 @@ def create_app(
         The frontend uses this to populate the model-name dropdown and to
         decide whether an explicit ``api_key`` input is required (if the
         backend's env already has the key, the user can leave it blank).
-        """
 
-        return get_catalog_cached()
+        Cached for 5 minutes — model catalog rarely changes at runtime.
+        """
+        from starlette.responses import JSONResponse as StarletteJSON
+        catalog = get_catalog_cached()
+        return catalog
+
+    @app.middleware("http")
+    async def add_cache_headers(request: Request, call_next):
+        """Add Cache-Control headers to cacheable GET endpoints."""
+        response = await call_next(request)
+        path = request.url.path
+        if request.method == "GET":
+            if path == "/models":
+                # Model catalog is static per process lifetime
+                response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+            elif path == "/health":
+                response.headers["Cache-Control"] = "no-cache, max-age=0"
+            elif path == "/queue":
+                # Queue status is semi-dynamic — cache briefly
+                response.headers["Cache-Control"] = "private, max-age=5"
+            elif path == "/optimizations" and "status" not in str(request.url.query):
+                # Job list without status filter — cache briefly
+                response.headers["Cache-Control"] = "private, max-age=2, stale-while-revalidate=10"
+        return response
 
     @app.post("/models/discover", response_model=DiscoverModelsResponse)
     def discover_models(payload: DiscoverModelsRequest) -> DiscoverModelsResponse:
@@ -529,15 +562,15 @@ def create_app(
             warnings=warnings,
         )
 
-    @app.post("/run", response_model=JobSubmissionResponse, status_code=201)
-    def submit_job(payload: RunRequest) -> JobSubmissionResponse:
+    @app.post("/run", response_model=OptimizationSubmissionResponse, status_code=201)
+    def submit_job(payload: RunRequest) -> OptimizationSubmissionResponse:
         """Validate and queue a DSPy optimization request.
 
         Args:
             payload: Parsed request containing dataset and optimizer settings.
 
         Returns:
-            JobSubmissionResponse: Job identifier and scheduling metadata.
+            OptimizationSubmissionResponse: Optimization identifier and scheduling metadata.
 
         Raises:
             HTTPException: If validation fails.
@@ -549,14 +582,18 @@ def create_app(
             logger.warning("Payload validation failed: %s", exc)
             raise HTTPException(status_code=400, detail=str(exc))
 
-        job_id = str(uuid4())
+        optimization_id = str(uuid4())
+        # Ensure a deterministic seed so dataset splits are reproducible
+        if payload.seed is None:
+            payload.seed = hash(optimization_id) % (2**31)
 
-        job_store.create_job(job_id)
+        job_store.create_job(optimization_id)
         job_store.set_payload_overview(
-            job_id,
+            optimization_id,
             {
-                PAYLOAD_OVERVIEW_JOB_TYPE: JOB_TYPE_RUN,
+                PAYLOAD_OVERVIEW_JOB_TYPE: OPTIMIZATION_TYPE_RUN,
                 PAYLOAD_OVERVIEW_NAME: payload.name,
+                PAYLOAD_OVERVIEW_DESCRIPTION: payload.description,
                 PAYLOAD_OVERVIEW_USERNAME: payload.username,
                 PAYLOAD_OVERVIEW_MODULE_NAME: payload.module_name,
                 PAYLOAD_OVERVIEW_MODULE_KWARGS: dict(payload.module_kwargs),
@@ -577,6 +614,7 @@ def create_app(
                 ),
                 PAYLOAD_OVERVIEW_COLUMN_MAPPING: payload.column_mapping.model_dump(),
                 PAYLOAD_OVERVIEW_DATASET_ROWS: len(payload.dataset),
+                PAYLOAD_OVERVIEW_DATASET_FILENAME: payload.dataset_filename,
                 PAYLOAD_OVERVIEW_SPLIT_FRACTIONS: payload.split_fractions.model_dump(),
                 PAYLOAD_OVERVIEW_SHUFFLE: payload.shuffle,
                 PAYLOAD_OVERVIEW_SEED: payload.seed,
@@ -586,28 +624,28 @@ def create_app(
         )
 
         current_worker = get_worker(job_store, service=service)
-        current_worker.submit_job(job_id, payload)
+        current_worker.submit_job(optimization_id, payload)
 
         logger.info(
             "Enqueued job %s for module=%s optimizer=%s",
-            job_id,
+            optimization_id,
             payload.module_name,
             payload.optimizer_name,
         )
 
         notify_job_started(
-            job_id=job_id,
+            optimization_id=optimization_id,
             username=payload.username,
-            job_type=JOB_TYPE_RUN,
+            optimization_type=OPTIMIZATION_TYPE_RUN,
             optimizer_name=payload.optimizer_name,
             module_name=payload.module_name,
             model_name=payload.model_settings.normalized_identifier(),
         )
 
-        return JobSubmissionResponse(
-            job_id=job_id,
-            job_type=JOB_TYPE_RUN,
-            status=JobStatus.pending,
+        return OptimizationSubmissionResponse(
+            optimization_id=optimization_id,
+            optimization_type=OPTIMIZATION_TYPE_RUN,
+            status=OptimizationStatus.pending,
             created_at=datetime.now(timezone.utc),
             name=payload.name,
             username=payload.username,
@@ -615,8 +653,8 @@ def create_app(
             optimizer_name=payload.optimizer_name,
         )
 
-    @app.post("/grid-search", response_model=JobSubmissionResponse, status_code=201)
-    def submit_grid_search(payload: GridSearchRequest) -> JobSubmissionResponse:
+    @app.post("/grid-search", response_model=OptimizationSubmissionResponse, status_code=201)
+    def submit_grid_search(payload: GridSearchRequest) -> OptimizationSubmissionResponse:
         """Submit a grid search over (generation, reflection) model pairs."""
         if hasattr(service, "validate_grid_search_payload"):
             try:
@@ -625,21 +663,25 @@ def create_app(
                 logger.warning("Grid search validation failed: %s", exc)
                 raise HTTPException(status_code=400, detail=str(exc))
 
-        job_id = str(uuid4())
+        optimization_id = str(uuid4())
+        if payload.seed is None:
+            payload.seed = hash(optimization_id) % (2**31)
         total_pairs = len(payload.generation_models) * len(payload.reflection_models)
 
-        job_store.create_job(job_id)
+        job_store.create_job(optimization_id)
         job_store.set_payload_overview(
-            job_id,
+            optimization_id,
             {
-                PAYLOAD_OVERVIEW_JOB_TYPE: JOB_TYPE_GRID_SEARCH,
+                PAYLOAD_OVERVIEW_JOB_TYPE: OPTIMIZATION_TYPE_GRID_SEARCH,
                 PAYLOAD_OVERVIEW_NAME: payload.name,
+                PAYLOAD_OVERVIEW_DESCRIPTION: payload.description,
                 PAYLOAD_OVERVIEW_USERNAME: payload.username,
                 PAYLOAD_OVERVIEW_MODULE_NAME: payload.module_name,
                 PAYLOAD_OVERVIEW_MODULE_KWARGS: dict(payload.module_kwargs),
                 PAYLOAD_OVERVIEW_OPTIMIZER_NAME: payload.optimizer_name,
                 PAYLOAD_OVERVIEW_COLUMN_MAPPING: payload.column_mapping.model_dump(),
                 PAYLOAD_OVERVIEW_DATASET_ROWS: len(payload.dataset),
+                PAYLOAD_OVERVIEW_DATASET_FILENAME: payload.dataset_filename,
                 PAYLOAD_OVERVIEW_SPLIT_FRACTIONS: payload.split_fractions.model_dump(),
                 PAYLOAD_OVERVIEW_SHUFFLE: payload.shuffle,
                 PAYLOAD_OVERVIEW_SEED: payload.seed,
@@ -652,26 +694,26 @@ def create_app(
         )
 
         current_worker = get_worker(job_store, service=service)
-        current_worker.submit_job(job_id, payload)
+        current_worker.submit_job(optimization_id, payload)
 
         logger.info(
             "Enqueued grid search %s: %d pairs, module=%s optimizer=%s",
-            job_id, total_pairs, payload.module_name, payload.optimizer_name,
+            optimization_id, total_pairs, payload.module_name, payload.optimizer_name,
         )
 
         notify_job_started(
-            job_id=job_id,
+            optimization_id=optimization_id,
             username=payload.username,
-            job_type=JOB_TYPE_GRID_SEARCH,
+            optimization_type=OPTIMIZATION_TYPE_GRID_SEARCH,
             optimizer_name=payload.optimizer_name,
             module_name=payload.module_name,
             model_name=f"{total_pairs} זוגות",
         )
 
-        return JobSubmissionResponse(
-            job_id=job_id,
-            job_type=JOB_TYPE_GRID_SEARCH,
-            status=JobStatus.pending,
+        return OptimizationSubmissionResponse(
+            optimization_id=optimization_id,
+            optimization_type=OPTIMIZATION_TYPE_GRID_SEARCH,
+            status=OptimizationStatus.pending,
             created_at=datetime.now(timezone.utc),
             name=payload.name,
             username=payload.username,
@@ -679,14 +721,14 @@ def create_app(
             optimizer_name=payload.optimizer_name,
         )
 
-    def _build_summary(job_data: dict) -> JobSummaryResponse:
-        """Build a JobSummaryResponse from a raw job store dict."""
+    def _build_summary(job_data: dict) -> OptimizationSummaryResponse:
+        """Build a OptimizationSummaryResponse from a raw job store dict."""
         created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
         started_at = parse_timestamp(job_data.get("started_at"))
         completed_at = parse_timestamp(job_data.get("completed_at"))
         overview = parse_overview(job_data)
         job_status = status_to_job_status(job_data.get("status", "pending"))
-        job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
 
         # Only show estimated_remaining for active jobs
         est_remaining = None
@@ -703,7 +745,7 @@ def create_app(
         best_pair_label = None
 
         if isinstance(result_data, dict):
-            if job_type == JOB_TYPE_GRID_SEARCH:
+            if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                 best_pair = result_data.get("best_pair")
                 if isinstance(best_pair, dict):
                     baseline = best_pair.get("baseline_test_metric")
@@ -718,7 +760,7 @@ def create_app(
                 optimized = result_data.get("optimized_test_metric")
 
         # For grid search, pull live counters from latest_metrics if result not yet available
-        if job_type == JOB_TYPE_GRID_SEARCH:
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
             if completed_pairs is None:
                 live_completed = latest_metrics.get("completed_so_far")
                 completed_pairs = live_completed if isinstance(live_completed, int) else 0
@@ -733,8 +775,8 @@ def create_app(
 
         elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
 
-        return JobSummaryResponse(
-            job_id=job_data["job_id"],
+        return OptimizationSummaryResponse(
+            optimization_id=job_data["optimization_id"],
             status=job_status,
             message=job_data.get("message"),
             created_at=created_at,
@@ -760,14 +802,14 @@ def create_app(
             best_pair_label=best_pair_label,
         )
 
-    _VALID_STATUSES = {s.value for s in JobStatus}
-    _VALID_JOB_TYPES = {JOB_TYPE_RUN, JOB_TYPE_GRID_SEARCH}
+    _VALID_STATUSES = {s.value for s in OptimizationStatus}
+    _VALID_JOB_TYPES = {OPTIMIZATION_TYPE_RUN, OPTIMIZATION_TYPE_GRID_SEARCH}
 
-    @app.get("/jobs", response_model=PaginatedJobsResponse)
+    @app.get("/optimizations", response_model=PaginatedJobsResponse)
     def list_jobs(
         status: Optional[str] = Query(default=None, description="Filter by job status"),
         username: Optional[str] = Query(default=None, description="Filter by username"),
-        job_type: Optional[str] = Query(default=None, description="Filter by job type (run or grid_search)"),
+        optimization_type: Optional[str] = Query(default=None, description="Filter by job type (run or grid_search)"),
         limit: int = Query(default=50, ge=1, le=500, description="Max results"),
         offset: int = Query(default=0, ge=0, description="Skip N results"),
     ) -> PaginatedJobsResponse:
@@ -776,7 +818,7 @@ def create_app(
         Args:
             status: Optional status filter.
             username: Optional username filter.
-            job_type: Optional job type filter ('run' or 'grid_search').
+            optimization_type: Optional job type filter ('run' or 'grid_search').
             limit: Maximum number of jobs to return.
             offset: Number of jobs to skip.
 
@@ -788,20 +830,418 @@ def create_app(
                 status_code=422,
                 detail=f"Invalid status filter '{status}'. Valid values: {sorted(_VALID_STATUSES)}",
             )
-        if job_type is not None and job_type not in _VALID_JOB_TYPES:
+        if optimization_type is not None and optimization_type not in _VALID_JOB_TYPES:
             raise HTTPException(
                 status_code=422,
-                detail=f"Invalid job_type filter '{job_type}'. Valid values: {sorted(_VALID_JOB_TYPES)}",
+                detail=f"Invalid optimization_type filter '{optimization_type}'. Valid values: {sorted(_VALID_JOB_TYPES)}",
             )
-        total = job_store.count_jobs(status=status, username=username, job_type=job_type)
-        rows = job_store.list_jobs(status=status, username=username, job_type=job_type, limit=limit, offset=offset)
+        total = job_store.count_jobs(status=status, username=username, optimization_type=optimization_type)
+        rows = job_store.list_jobs(status=status, username=username, optimization_type=optimization_type, limit=limit, offset=offset)
         items = [_build_summary(job_data) for job_data in rows]
         return PaginatedJobsResponse(items=items, total=total, limit=limit, offset=offset)
 
-    # ── Server-Sent Events (SSE) for real-time dashboard streaming ──
-    # NOTE: Must be registered BEFORE /jobs/{job_id} to avoid route shadowing.
+    # ── Lightweight sidebar listing (minimal fields, no result/metrics) ──
 
-    @app.get("/jobs/stream")
+    class SidebarJobItem(BaseModel):
+        optimization_id: str
+        status: str
+        name: Optional[str] = None
+        module_name: Optional[str] = None
+        optimizer_name: Optional[str] = None
+        model_name: Optional[str] = None
+        username: Optional[str] = None
+        created_at: Optional[datetime] = None
+        pinned: bool = False
+        optimization_type: Optional[str] = None
+        total_pairs: Optional[int] = None
+
+    class SidebarJobsResponse(BaseModel):
+        items: List[SidebarJobItem]
+        total: int
+
+    @app.get("/optimizations/sidebar", response_model=SidebarJobsResponse)
+    def list_jobs_sidebar(
+        username: Optional[str] = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> SidebarJobsResponse:
+        """Lightweight job listing for sidebar navigation.
+
+        Returns only the minimal fields needed for the sidebar (no result
+        data, metrics, or logs). Much faster than the full /jobs endpoint.
+        """
+        total = job_store.count_jobs(username=username)
+        rows = job_store.list_jobs(username=username, limit=limit, offset=offset)
+        items = []
+        for row in rows:
+            overview = parse_overview(row)
+            items.append(SidebarJobItem(
+                optimization_id=row["optimization_id"],
+                status=row.get("status", "pending"),
+                name=overview.get(PAYLOAD_OVERVIEW_NAME),
+                module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME),
+                optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME),
+                model_name=overview.get(PAYLOAD_OVERVIEW_MODEL_NAME),
+                username=overview.get(PAYLOAD_OVERVIEW_USERNAME),
+                created_at=parse_timestamp(row.get("created_at")),
+                pinned=bool(overview.get("pinned", False)),
+                optimization_type=overview.get(PAYLOAD_OVERVIEW_JOB_TYPE),
+                total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
+            ))
+        return SidebarJobsResponse(items=items, total=total)
+
+    # ── Analytics aggregation endpoints ──
+
+    @app.get("/analytics/summary", response_model=AnalyticsSummaryResponse)
+    def get_analytics_summary(
+        optimizer: Optional[str] = Query(default=None, description="Filter by optimizer name"),
+        model: Optional[str] = Query(default=None, description="Filter by model name"),
+        status: Optional[str] = Query(default=None, description="Filter by job status"),
+        username: Optional[str] = Query(default=None, description="Filter by username"),
+    ) -> AnalyticsSummaryResponse:
+        """Pre-compute dashboard KPIs with optional filters.
+
+        Returns aggregated metrics across all matching jobs including success rate,
+        average improvement, average runtime, and dataset statistics.
+
+        Args:
+            optimizer: Filter by optimizer name (e.g., 'miprov2', 'gepa').
+            model: Filter by model name (exact match on model_name field).
+            status: Filter by job status.
+            username: Filter by username.
+
+        Returns:
+            AnalyticsSummaryResponse: Aggregated KPIs across filtered jobs.
+        """
+        # Fetch all jobs (no pagination for analytics)
+        all_jobs = job_store.list_jobs(
+            status=status,
+            username=username,
+            limit=10000,  # Large limit to get all jobs
+            offset=0,
+        )
+
+        # Apply additional filters that aren't natively supported by list_jobs
+        filtered_jobs = []
+        for job_data in all_jobs:
+            overview = parse_overview(job_data)
+            
+            # Filter by optimizer
+            if optimizer and overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME) != optimizer:
+                continue
+            
+            # Filter by model (check model_name field)
+            if model and overview.get(PAYLOAD_OVERVIEW_MODEL_NAME) != model:
+                continue
+            
+            filtered_jobs.append((job_data, overview))
+
+        # Initialize counters
+        total = len(filtered_jobs)
+        status_counts = {"success": 0, "failed": 0, "cancelled": 0, "pending": 0, "running": 0, "validating": 0}
+        improvements = []
+        runtimes = []
+        total_dataset_rows = 0
+        total_pairs = 0
+        completed_pairs = 0
+        failed_pairs = 0
+
+        # Aggregate metrics
+        for job_data, overview in filtered_jobs:
+            job_status = job_data.get("status", "pending")
+            status_counts[job_status] = status_counts.get(job_status, 0) + 1
+
+            # Dataset rows
+            rows = overview.get(PAYLOAD_OVERVIEW_DATASET_ROWS)
+            if isinstance(rows, int):
+                total_dataset_rows += rows
+
+            # Grid search specific
+            optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+            if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+                pairs = overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS)
+                if isinstance(pairs, int):
+                    total_pairs += pairs
+
+            # Only process completed jobs for metrics
+            if job_status != "success":
+                continue
+
+            result_data = job_data.get("result")
+            if not result_data or not isinstance(result_data, dict):
+                continue
+
+            # Extract metrics based on job type
+            if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+                # Grid search: use best pair metrics
+                best_pair = result_data.get("best_pair")
+                if isinstance(best_pair, dict):
+                    baseline = best_pair.get("baseline_test_metric")
+                    optimized = best_pair.get("optimized_test_metric")
+                    if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
+                        improvements.append(optimized - baseline)
+                    
+                    runtime = best_pair.get("runtime_seconds")
+                    if isinstance(runtime, (int, float)):
+                        runtimes.append(runtime)
+                
+                # Aggregate pair counters
+                comp = result_data.get("completed_pairs")
+                fail = result_data.get("failed_pairs")
+                if isinstance(comp, int):
+                    completed_pairs += comp
+                if isinstance(fail, int):
+                    failed_pairs += fail
+            else:
+                # Regular run: use direct metrics
+                baseline = result_data.get("baseline_test_metric")
+                optimized = result_data.get("optimized_test_metric")
+                if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
+                    improvements.append(optimized - baseline)
+                
+                runtime = result_data.get("runtime_seconds")
+                if isinstance(runtime, (int, float)):
+                    runtimes.append(runtime)
+
+        # Compute aggregate statistics
+        success_count = status_counts["success"]
+        success_rate = (success_count / total) if total > 0 else 0.0
+        avg_improvement = (sum(improvements) / len(improvements)) if improvements else None
+        max_improvement = max(improvements) if improvements else None
+        min_improvement = min(improvements) if improvements else None
+        avg_runtime = (sum(runtimes) / len(runtimes)) if runtimes else None
+
+        return AnalyticsSummaryResponse(
+            total_jobs=total,
+            success_count=success_count,
+            failed_count=status_counts["failed"],
+            cancelled_count=status_counts["cancelled"],
+            pending_count=status_counts["pending"],
+            running_count=status_counts.get("running", 0) + status_counts.get("validating", 0),
+            success_rate=round(success_rate, 4),
+            avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
+            max_improvement=round(max_improvement, 6) if max_improvement is not None else None,
+            min_improvement=round(min_improvement, 6) if min_improvement is not None else None,
+            avg_runtime=round(avg_runtime, 2) if avg_runtime is not None else None,
+            total_dataset_rows=total_dataset_rows,
+            total_pairs=total_pairs,
+            completed_pairs=completed_pairs,
+            failed_pairs=failed_pairs,
+        )
+
+    @app.get("/analytics/optimizers", response_model=OptimizerStatsResponse)
+    def get_optimizer_stats(
+        model: Optional[str] = Query(default=None, description="Filter by model name"),
+        status: Optional[str] = Query(default=None, description="Filter by job status"),
+        username: Optional[str] = Query(default=None, description="Filter by username"),
+    ) -> OptimizerStatsResponse:
+        """Pre-compute per-optimizer statistics with optional filters.
+
+        Aggregates metrics grouped by optimizer name, showing success rate,
+        average improvement, and average runtime for each optimizer.
+
+        Args:
+            model: Filter by model name.
+            status: Filter by job status.
+            username: Filter by username.
+
+        Returns:
+            OptimizerStatsResponse: List of per-optimizer statistics.
+        """
+        # Fetch all jobs
+        all_jobs = job_store.list_jobs(
+            status=status,
+            username=username,
+            limit=10000,
+            offset=0,
+        )
+
+        # Group by optimizer
+        optimizer_data = {}  # optimizer_name -> {jobs, improvements, runtimes}
+        
+        for job_data in all_jobs:
+            overview = parse_overview(job_data)
+            
+            # Filter by model
+            if model and overview.get(PAYLOAD_OVERVIEW_MODEL_NAME) != model:
+                continue
+            
+            optimizer_name = overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME)
+            if not optimizer_name:
+                continue
+            
+            if optimizer_name not in optimizer_data:
+                optimizer_data[optimizer_name] = {
+                    "total": 0,
+                    "success": 0,
+                    "improvements": [],
+                    "runtimes": [],
+                }
+            
+            stats = optimizer_data[optimizer_name]
+            stats["total"] += 1
+            
+            job_status = job_data.get("status", "pending")
+            if job_status == "success":
+                stats["success"] += 1
+                
+                result_data = job_data.get("result")
+                if result_data and isinstance(result_data, dict):
+                    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+                    
+                    if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+                        best_pair = result_data.get("best_pair")
+                        if isinstance(best_pair, dict):
+                            baseline = best_pair.get("baseline_test_metric")
+                            optimized = best_pair.get("optimized_test_metric")
+                            if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
+                                stats["improvements"].append(optimized - baseline)
+                            
+                            runtime = best_pair.get("runtime_seconds")
+                            if isinstance(runtime, (int, float)):
+                                stats["runtimes"].append(runtime)
+                    else:
+                        baseline = result_data.get("baseline_test_metric")
+                        optimized = result_data.get("optimized_test_metric")
+                        if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
+                            stats["improvements"].append(optimized - baseline)
+                        
+                        runtime = result_data.get("runtime_seconds")
+                        if isinstance(runtime, (int, float)):
+                            stats["runtimes"].append(runtime)
+        
+        # Build response items
+        items = []
+        for optimizer_name, stats in optimizer_data.items():
+            total = stats["total"]
+            success_count = stats["success"]
+            success_rate = (success_count / total) if total > 0 else 0.0
+            avg_improvement = (
+                sum(stats["improvements"]) / len(stats["improvements"])
+                if stats["improvements"] else None
+            )
+            avg_runtime = (
+                sum(stats["runtimes"]) / len(stats["runtimes"])
+                if stats["runtimes"] else None
+            )
+            
+            items.append(OptimizerStatsItem(
+                name=optimizer_name,
+                total_jobs=total,
+                success_count=success_count,
+                avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
+                success_rate=round(success_rate, 4),
+                avg_runtime=round(avg_runtime, 2) if avg_runtime is not None else None,
+            ))
+        
+        # Sort by total jobs descending
+        items.sort(key=lambda x: x.total_jobs, reverse=True)
+        
+        return OptimizerStatsResponse(items=items)
+
+    @app.get("/analytics/models", response_model=ModelStatsResponse)
+    def get_model_stats(
+        optimizer: Optional[str] = Query(default=None, description="Filter by optimizer name"),
+        status: Optional[str] = Query(default=None, description="Filter by job status"),
+        username: Optional[str] = Query(default=None, description="Filter by username"),
+    ) -> ModelStatsResponse:
+        """Pre-compute per-model statistics with optional filters.
+
+        Aggregates metrics grouped by model name, showing success rate,
+        average improvement, and usage count for each model.
+
+        Args:
+            optimizer: Filter by optimizer name.
+            status: Filter by job status.
+            username: Filter by username.
+
+        Returns:
+            ModelStatsResponse: List of per-model statistics.
+        """
+        # Fetch all jobs
+        all_jobs = job_store.list_jobs(
+            status=status,
+            username=username,
+            limit=10000,
+            offset=0,
+        )
+
+        # Group by model
+        model_data = {}  # model_name -> {jobs, improvements, runtimes}
+        
+        for job_data in all_jobs:
+            overview = parse_overview(job_data)
+            
+            # Filter by optimizer
+            if optimizer and overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME) != optimizer:
+                continue
+            
+            model_name = overview.get(PAYLOAD_OVERVIEW_MODEL_NAME)
+            if not model_name:
+                continue
+            
+            if model_name not in model_data:
+                model_data[model_name] = {
+                    "total": 0,
+                    "success": 0,
+                    "improvements": [],
+                    "use_count": 0,
+                }
+            
+            stats = model_data[model_name]
+            stats["total"] += 1
+            stats["use_count"] += 1
+            
+            job_status = job_data.get("status", "pending")
+            if job_status == "success":
+                stats["success"] += 1
+                
+                result_data = job_data.get("result")
+                if result_data and isinstance(result_data, dict):
+                    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+                    
+                    if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+                        best_pair = result_data.get("best_pair")
+                        if isinstance(best_pair, dict):
+                            baseline = best_pair.get("baseline_test_metric")
+                            optimized = best_pair.get("optimized_test_metric")
+                            if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
+                                stats["improvements"].append(optimized - baseline)
+                    else:
+                        baseline = result_data.get("baseline_test_metric")
+                        optimized = result_data.get("optimized_test_metric")
+                        if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
+                            stats["improvements"].append(optimized - baseline)
+        
+        # Build response items
+        items = []
+        for model_name, stats in model_data.items():
+            total = stats["total"]
+            success_count = stats["success"]
+            success_rate = (success_count / total) if total > 0 else 0.0
+            avg_improvement = (
+                sum(stats["improvements"]) / len(stats["improvements"])
+                if stats["improvements"] else None
+            )
+            
+            items.append(ModelStatsItem(
+                name=model_name,
+                total_jobs=total,
+                success_count=success_count,
+                avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
+                success_rate=round(success_rate, 4),
+                use_count=stats["use_count"],
+            ))
+        
+        # Sort by use count descending
+        items.sort(key=lambda x: x.use_count, reverse=True)
+        
+        return ModelStatsResponse(items=items)
+
+    # ── Server-Sent Events (SSE) for real-time dashboard streaming ──
+    # NOTE: Must be registered BEFORE /optimizations/{optimization_id} to avoid route shadowing.
+
+    @app.get("/optimizations/stream")
     async def stream_dashboard():
         """Stream dashboard-level updates via Server-Sent Events.
 
@@ -823,12 +1263,12 @@ def create_app(
                 for row in active_rows:
                     overview = parse_overview(row)
                     summaries.append({
-                        "job_id": row["job_id"],
+                        "optimization_id": row["optimization_id"],
                         "status": row.get("status", "pending"),
                         "name": overview.get(PAYLOAD_OVERVIEW_NAME),
                         "latest_metrics": row.get("latest_metrics", {}),
-                        "log_count": job_store.get_log_count(row["job_id"]),
-                        "progress_count": job_store.get_progress_count(row["job_id"]),
+                        "log_count": job_store.get_log_count(row["optimization_id"]),
+                        "progress_count": job_store.get_progress_count(row["optimization_id"]),
                     })
 
                 yield f"data: {json.dumps({'active_jobs': summaries, 'active_count': len(summaries)}, default=str)}\n\n"
@@ -849,47 +1289,49 @@ def create_app(
             },
         )
 
-    @app.get("/jobs/{job_id}", response_model=JobStatusResponse)
-    def get_job(job_id: str) -> JobStatusResponse:
+    @app.get("/optimizations/{optimization_id}", response_model=OptimizationStatusResponse)
+    def get_job(optimization_id: str, request: Request) -> OptimizationStatusResponse:
         """Return the status of a queued or running job.
 
+        Supports conditional GET via ETag/If-None-Match for caching.
+
         Args:
-            job_id: Identifier returned during submission.
+            optimization_id: Identifier returned during submission.
 
         Returns:
-            JobStatusResponse: Current job metadata and latest metrics.
+            OptimizationStatusResponse: Current job metadata and latest metrics.
 
         Raises:
             HTTPException: If the job is not found.
         """
 
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            logger.warning("Job status requested for unknown job_id=%s", job_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            logger.warning("Optimization status requested for unknown optimization_id=%s", optimization_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         status = status_to_job_status(job_data.get("status", "pending"))
 
-        progress_events = job_store.get_progress_events(job_id)
-        logs = job_store.get_logs(job_id)
+        progress_events = job_store.get_progress_events(optimization_id)
+        logs = job_store.get_logs(optimization_id)
 
         overview = parse_overview(job_data)
-        job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
 
         result = None
         grid_result = None
         result_data = job_data.get("result")
         if result_data and isinstance(result_data, dict):
             try:
-                if job_type == JOB_TYPE_GRID_SEARCH:
+                if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                     # Always include per-pair results so users can see what
                     # went wrong without a separate /grid-result call.
                     grid_result = GridSearchResponse.model_validate(result_data)
-                elif status == JobStatus.success:
+                elif status == OptimizationStatus.success:
                     result = RunResponse.model_validate(result_data)
             except ValidationError:
-                logger.warning("Job %s has corrupted result data", job_id)
+                logger.warning("Optimization %s has corrupted result data", optimization_id)
 
         created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
         started_at = parse_timestamp(job_data.get("started_at"))
@@ -904,7 +1346,7 @@ def create_app(
         latest_metrics = job_data.get("latest_metrics", {})
         completed_pairs = None
         failed_pairs = None
-        if job_type == JOB_TYPE_GRID_SEARCH:
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
             if grid_result:
                 completed_pairs = grid_result.completed_pairs
                 failed_pairs = grid_result.failed_pairs
@@ -916,9 +1358,9 @@ def create_app(
 
         elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
 
-        logger.debug("Returning status for job_id=%s state=%s", job_id, status)
-        return JobStatusResponse(
-            job_id=job_id,
+        logger.debug("Returning status for optimization_id=%s state=%s", optimization_id, status)
+        response_data = OptimizationStatusResponse(
+            optimization_id=optimization_id,
             status=status,
             created_at=created_at,
             started_at=started_at,
@@ -937,30 +1379,50 @@ def create_app(
             grid_result=grid_result,
         )
 
-    @app.get("/jobs/{job_id}/summary", response_model=JobSummaryResponse)
-    def get_job_summary(job_id: str) -> JobSummaryResponse:
+        # ETag based on status + metrics hash for conditional GET
+        import hashlib
+        etag_src = f"{status}:{len(logs)}:{len(progress_events)}:{str(latest_metrics)}"
+        etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == etag:
+            return JSONResponse(status_code=304, content=None, headers={"ETag": etag})
+
+        # For terminal jobs, allow longer caching
+        headers = {"ETag": etag}
+        if status in _TERMINAL_STATUSES:
+            headers["Cache-Control"] = "private, max-age=60"
+        else:
+            headers["Cache-Control"] = "private, max-age=1"
+
+        return JSONResponse(
+            content=response_data.model_dump(mode="json"),
+            headers=headers,
+        )
+
+    @app.get("/optimizations/{optimization_id}/summary", response_model=OptimizationSummaryResponse)
+    def get_job_summary(optimization_id: str) -> OptimizationSummaryResponse:
         """Return a coarse summary of job progress and metadata.
 
         Args:
-            job_id: Identifier for the job returned during submission.
+            optimization_id: Identifier for the job returned during submission.
 
         Returns:
-            JobSummaryResponse: Aggregated job metadata and timing information.
+            OptimizationSummaryResponse: Aggregated job metadata and timing information.
         """
 
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            logger.warning("Job summary requested for unknown job_id=%s", job_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            logger.warning("Optimization summary requested for unknown optimization_id=%s", optimization_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
-        job_data["progress_count"] = job_store.get_progress_count(job_id)
-        job_data["log_count"] = job_store.get_log_count(job_id)
+        job_data["progress_count"] = job_store.get_progress_count(optimization_id)
+        job_data["log_count"] = job_store.get_log_count(optimization_id)
         return _build_summary(job_data)
 
-    @app.get("/jobs/{job_id}/logs", response_model=List[JobLogEntry])
+    @app.get("/optimizations/{optimization_id}/logs", response_model=List[JobLogEntry])
     def get_job_logs(
-        job_id: str,
+        optimization_id: str,
         limit: Optional[int] = Query(default=None, ge=1, le=5000, description="Max log entries to return"),
         offset: int = Query(default=0, ge=0, description="Skip N log entries"),
         level: Optional[str] = Query(default=None, description="Filter by log level (e.g. ERROR, WARNING, INFO)"),
@@ -968,7 +1430,7 @@ def create_app(
         """Return the chronological run log for the job.
 
         Args:
-            job_id: Identifier for the job returned during submission.
+            optimization_id: Identifier for the job returned during submission.
             limit: Maximum number of log entries to return.
             offset: Number of log entries to skip.
             level: Filter by log level (case-insensitive).
@@ -977,30 +1439,30 @@ def create_app(
             List[JobLogEntry]: Ordered log entries captured during execution.
         """
 
-        if not job_store.job_exists(job_id):
-            logger.warning("Job logs requested for unknown job_id=%s", job_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+        if not job_store.job_exists(optimization_id):
+            logger.warning("Optimization logs requested for unknown optimization_id=%s", optimization_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         normalized_level = level.upper() if level else None
         log_entries = job_store.get_logs(
-            job_id, limit=limit, offset=offset, level=normalized_level,
+            optimization_id, limit=limit, offset=offset, level=normalized_level,
         )
         return [JobLogEntry(**entry) for entry in log_entries]
 
-    @app.get("/jobs/{job_id}/payload", response_model=JobPayloadResponse)
-    def get_job_payload(job_id: str) -> JobPayloadResponse:
+    @app.get("/optimizations/{optimization_id}/payload", response_model=OptimizationPayloadResponse)
+    def get_job_payload(optimization_id: str) -> OptimizationPayloadResponse:
         """Return the original request payload submitted for this job.
 
         Args:
-            job_id: Identifier for the job returned during submission.
+            optimization_id: Identifier for the job returned during submission.
 
         Returns:
-            JobPayloadResponse: The stored request payload.
+            OptimizationPayloadResponse: The stored request payload.
         """
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         payload = job_data.get("payload")
         if not payload or not isinstance(payload, dict):
@@ -1010,92 +1472,373 @@ def create_app(
             )
 
         overview = parse_overview(job_data)
-        job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
-        return JobPayloadResponse(job_id=job_id, job_type=job_type, payload=payload)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+        return OptimizationPayloadResponse(optimization_id=optimization_id, optimization_type=optimization_type, payload=payload)
 
-    @app.get("/jobs/{job_id}/artifact", response_model=ProgramArtifactResponse)
-    def get_job_artifact(job_id: str) -> ProgramArtifactResponse:
+    @app.get("/optimizations/{optimization_id}/dataset")
+    def get_job_dataset(optimization_id: str) -> dict:
+        """Return the dataset rows grouped by split (train/val/test).
+
+        Args:
+            optimization_id: Identifier for the job returned during submission.
+
+        Returns:
+            dict: Dataset rows partitioned into splits with metadata.
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+
+        payload = job_data.get("payload")
+        if not payload or not isinstance(payload, dict):
+            raise HTTPException(
+                status_code=404,
+                detail="Payload not available for this job.",
+            )
+
+        dataset = payload.get("dataset")
+        if not dataset or not isinstance(dataset, list):
+            raise HTTPException(
+                status_code=404,
+                detail="Dataset not available for this job.",
+            )
+
+        # Parse column mapping
+        raw_mapping = payload.get("column_mapping", {})
+        try:
+            column_mapping = ColumnMapping.model_validate(raw_mapping)
+        except ValidationError:
+            raise HTTPException(
+                status_code=500,
+                detail="Stored column mapping is invalid.",
+            )
+
+        # Parse split fractions (fall back to defaults)
+        raw_fractions = payload.get("split_fractions", {})
+        try:
+            fractions = SplitFractions.model_validate(raw_fractions)
+        except ValidationError:
+            fractions = SplitFractions()
+
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+
+        # Replicate the split algorithm from service_gateway/data.py
+        # When seed is None, derive a stable seed from optimization_id so repeated
+        # calls produce the same shuffle (needed for index remapping).
+        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+        total = len(dataset)
+        indices = list(range(total))
+        if shuffle:
+            rng = random.Random(effective_seed)
+            rng.shuffle(indices)
+
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        train_indices = indices[:train_end]
+        val_indices = indices[train_end:val_end]
+        test_indices = indices[val_end:]
+
+        def _build_rows(idx_list: list[int]) -> list[dict]:
+            return [{"index": i, "row": dataset[i]} for i in idx_list]
+
+        splits = {
+            "train": _build_rows(train_indices),
+            "val": _build_rows(val_indices),
+            "test": _build_rows(test_indices),
+        }
+
+        return {
+            "total_rows": total,
+            "splits": splits,
+            "column_mapping": {
+                "inputs": column_mapping.inputs,
+                "outputs": column_mapping.outputs,
+            },
+            "split_counts": {
+                "train": len(train_indices),
+                "val": len(val_indices),
+                "test": len(test_indices),
+            },
+        }
+
+    @app.post("/optimizations/{optimization_id}/evaluate-examples")
+    def evaluate_examples(optimization_id: str, req: dict) -> dict:
+        """Evaluate examples using the actual metric function.
+
+        Body: { "indices": [0,1,...], "program_type": "optimized"|"baseline" }
+        Returns per-example results with predictions and metric scores.
+        """
+        import base64
+        import pickle
+
+        import dspy
+
+        from ..service_gateway.data import (
+            load_metric_from_code,
+            load_signature_from_code,
+            rows_to_examples,
+            split_examples,
+        )
+        from ..service_gateway.language_models import build_language_model
+
+        indices = req.get("indices", [])
+        program_type = req.get("program_type", "optimized")
+
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+
+        overview = parse_overview(job_data)
+        payload = job_data.get("payload")
+        if not payload or not isinstance(payload, dict):
+            raise HTTPException(status_code=404, detail="Optimization has no payload.")
+
+        dataset = payload.get("dataset", [])
+        column_mapping_raw = payload.get("column_mapping", {})
+        column_mapping = ColumnMapping.model_validate(column_mapping_raw)
+        fractions_raw = payload.get("split_fractions", {})
+        fractions = SplitFractions.model_validate(fractions_raw)
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+
+        # Reconstruct splits to identify test rows
+        total = len(dataset)
+        ordered = list(range(total))
+        if shuffle:
+            rng = random.Random(seed)
+            rng.shuffle(ordered)
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        test_indices_set = set(ordered[val_end:])
+
+        # Load metric
+        metric_code = payload.get("metric_code", "")
+        if not metric_code:
+            raise HTTPException(status_code=400, detail="Optimization has no metric code.")
+        metric = load_metric_from_code(metric_code)
+
+        # Load model config
+        model_settings = payload.get("model_config") or overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS, {})
+        model_name_str = overview.get(PAYLOAD_OVERVIEW_MODEL_NAME, "")
+        if model_settings:
+            model_config = ModelConfig.model_validate(model_settings)
+        elif model_name_str:
+            model_config = ModelConfig(name=model_name_str)
+        else:
+            raise HTTPException(status_code=400, detail="No model config found.")
+
+        lm = build_language_model(model_config)
+
+        # Build program
+        if program_type == "baseline":
+            signature_code = payload.get("signature_code", "")
+            signature_cls = load_signature_from_code(signature_code)
+            module_name = payload.get("module_name", "predict")
+            module_kwargs = dict(payload.get("module_kwargs", {}))
+
+            from ..service_gateway import DspyService
+            module_factory, auto_signature = DspyService._get_module_factory(None, module_name)
+            if auto_signature or "signature" not in module_kwargs:
+                module_kwargs["signature"] = signature_cls
+            program = module_factory(**module_kwargs)
+        else:
+            # Load optimized program
+            result_data = job_data.get("result")
+            if not result_data:
+                raise HTTPException(status_code=409, detail="Optimization has no result.")
+            result = RunResponse.model_validate(result_data)
+            artifact = result.program_artifact
+            if not artifact or not artifact.program_pickle_base64:
+                raise HTTPException(status_code=409, detail="No program artifact.")
+            if optimization_id not in _program_cache:
+                program_bytes = base64.b64decode(artifact.program_pickle_base64)
+                _program_cache[optimization_id] = pickle.loads(program_bytes)  # noqa: S301
+            program = _program_cache[optimization_id]
+
+        # Convert requested rows to DSPy examples and evaluate
+        results = []
+        with dspy.context(lm=lm):
+            for idx in indices:
+                if idx < 0 or idx >= total:
+                    continue
+                row = dataset[idx]
+                # Build example
+                example_dict = {}
+                for sig_field, col_name in column_mapping.inputs.items():
+                    example_dict[sig_field] = row.get(col_name, "")
+                for sig_field, col_name in column_mapping.outputs.items():
+                    example_dict[sig_field] = row.get(col_name, "")
+
+                example = dspy.Example(**example_dict).with_inputs(
+                    *list(column_mapping.inputs.keys())
+                )
+
+                try:
+                    prediction = program(**{k: example_dict[k] for k in column_mapping.inputs})
+                    outputs = {}
+                    for sig_field in column_mapping.outputs:
+                        outputs[sig_field] = getattr(prediction, sig_field, None)
+
+                    # Run metric
+                    try:
+                        score = metric(example, prediction)
+                        score = float(score) if isinstance(score, (int, float, bool)) else 0.0
+                    except Exception:
+                        score = 0.0
+
+                    results.append({
+                        "index": idx,
+                        "outputs": outputs,
+                        "score": score,
+                        "pass": score > 0,
+                    })
+                except Exception as exc:
+                    results.append({
+                        "index": idx,
+                        "outputs": {},
+                        "score": 0.0,
+                        "pass": False,
+                        "error": str(exc),
+                    })
+
+        return {"results": results, "program_type": program_type}
+
+    @app.get("/optimizations/{optimization_id}/test-results")
+    def get_test_results(optimization_id: str) -> dict:
+        """Return per-example test results stored during optimization.
+
+        The stored results use sequential indices within the test split.
+        This endpoint remaps them to global dataset indices so the frontend
+        can match results to dataset rows.
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+
+        result_data = job_data.get("result")
+        if not result_data:
+            raise HTTPException(status_code=409, detail="Optimization has no result yet.")
+
+        result = RunResponse.model_validate(result_data)
+
+        # Reconstruct global test indices for remapping
+        payload = job_data.get("payload", {})
+        dataset = payload.get("dataset", [])
+        total = len(dataset)
+        fractions_raw = payload.get("split_fractions", {})
+        fractions = SplitFractions.model_validate(fractions_raw)
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+
+        ordered = list(range(total))
+        if shuffle:
+            rng = random.Random(effective_seed)
+            rng.shuffle(ordered)
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        test_indices = ordered[val_end:]
+
+        def remap(results: list) -> list:
+            remapped = []
+            for r in results:
+                seq_idx = r.get("index", 0)
+                global_idx = test_indices[seq_idx] if seq_idx < len(test_indices) else seq_idx
+                remapped.append({**r, "index": global_idx})
+            return remapped
+
+        return {
+            "baseline": remap(result.baseline_test_results),
+            "optimized": remap(result.optimized_test_results),
+        }
+
+    @app.get("/optimizations/{optimization_id}/artifact", response_model=ProgramArtifactResponse)
+    def get_job_artifact(optimization_id: str) -> ProgramArtifactResponse:
         """Return the serialized artifact once the job succeeds.
 
         Args:
-            job_id: Identifier for the job returned during submission.
+            optimization_id: Identifier for the job returned during submission.
 
         Returns:
             ProgramArtifactResponse: Serialized program artifact payload.
         """
 
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            logger.warning("Artifact requested for unknown job_id=%s", job_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            logger.warning("Artifact requested for unknown optimization_id=%s", optimization_id)
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         overview = parse_overview(job_data)
-        job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
 
-        if job_type == JOB_TYPE_GRID_SEARCH:
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
             raise HTTPException(
                 status_code=404,
-                detail="Grid search jobs produce per-pair artifacts. Use GET /jobs/{job_id}/grid-result instead.",
+                detail="Grid search jobs produce per-pair artifacts. Use GET /optimizations/{optimization_id}/grid-result instead.",
             )
 
         status = status_to_job_status(job_data.get("status", "pending"))
 
-        if status in {JobStatus.pending, JobStatus.validating, JobStatus.running}:
-            raise HTTPException(status_code=409, detail="Job has not finished yet.")
+        if status in {OptimizationStatus.pending, OptimizationStatus.validating, OptimizationStatus.running}:
+            raise HTTPException(status_code=409, detail="Optimization has not finished yet.")
 
-        if status == JobStatus.failed:
+        if status == OptimizationStatus.failed:
             error_msg = job_data.get("message") or "unknown error"
             raise HTTPException(
                 status_code=409,
-                detail=f"Job failed and did not produce an artifact. Error: {error_msg}",
+                detail=f"Optimization failed and did not produce an artifact. Error: {error_msg}",
             )
 
-        if status == JobStatus.cancelled:
+        if status == OptimizationStatus.cancelled:
             raise HTTPException(
                 status_code=409,
-                detail="Job was cancelled and did not produce an artifact.",
+                detail="Optimization was cancelled and did not produce an artifact.",
             )
 
-        if status == JobStatus.success:
+        if status == OptimizationStatus.success:
             result_data = job_data.get("result")
             if result_data and isinstance(result_data, dict):
                 try:
                     result = RunResponse.model_validate(result_data)
                 except ValidationError:
-                    logger.warning("Job %s has corrupted result data", job_id)
-                    raise HTTPException(status_code=500, detail="Job result data is corrupted.")
+                    logger.warning("Optimization %s has corrupted result data", optimization_id)
+                    raise HTTPException(status_code=500, detail="Optimization result data is corrupted.")
                 return ProgramArtifactResponse(
                     program_artifact=result.program_artifact,
                 )
 
-        raise HTTPException(status_code=409, detail="Job did not produce an artifact.")
+        raise HTTPException(status_code=409, detail="Optimization did not produce an artifact.")
 
-    @app.get("/jobs/{job_id}/grid-result", response_model=GridSearchResponse)
-    def get_grid_search_result(job_id: str) -> GridSearchResponse:
+    @app.get("/optimizations/{optimization_id}/grid-result", response_model=GridSearchResponse)
+    def get_grid_search_result(optimization_id: str) -> GridSearchResponse:
         """Return the full grid search result once the job completes."""
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         overview = parse_overview(job_data)
-        if overview.get(PAYLOAD_OVERVIEW_JOB_TYPE) != JOB_TYPE_GRID_SEARCH:
-            raise HTTPException(status_code=404, detail="Job is not a grid search.")
+        if overview.get(PAYLOAD_OVERVIEW_JOB_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise HTTPException(status_code=404, detail="Optimization is not a grid search.")
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in _TERMINAL_STATUSES:
-            raise HTTPException(status_code=409, detail="Job has not finished yet.")
+            raise HTTPException(status_code=409, detail="Optimization has not finished yet.")
 
         result_data = job_data.get("result")
         if not result_data or not isinstance(result_data, dict):
-            if status == JobStatus.failed:
+            if status == OptimizationStatus.failed:
                 error_msg = job_data.get("message") or "unknown error"
                 raise HTTPException(
                     status_code=409,
                     detail=f"Grid search failed and produced no result. Error: {error_msg}",
                 )
-            if status == JobStatus.cancelled:
+            if status == OptimizationStatus.cancelled:
                 raise HTTPException(
                     status_code=409,
                     detail="Grid search was cancelled and produced no result.",
@@ -1107,56 +1850,56 @@ def create_app(
         except ValidationError:
             raise HTTPException(status_code=500, detail="Grid search result data is corrupted.")
 
-    @app.post("/jobs/{job_id}/cancel", response_model=JobCancelResponse, status_code=200)
-    def cancel_job(job_id: str) -> JobCancelResponse:
+    @app.post("/optimizations/{optimization_id}/cancel", response_model=JobCancelResponse, status_code=200)
+    def cancel_job(optimization_id: str) -> JobCancelResponse:
         """Cancel a pending or running job.
 
         Args:
-            job_id: Identifier for the job to cancel.
+            optimization_id: Identifier for the job to cancel.
 
         Returns:
-            dict: Confirmation with job_id and new status.
+            dict: Confirmation with optimization_id and new status.
 
         Raises:
             HTTPException: If the job is not found or already in a terminal state.
         """
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status in _TERMINAL_STATUSES:
             raise HTTPException(
                 status_code=409,
-                detail=f"Job is already in terminal state '{status.value}'.",
+                detail=f"Optimization is already in terminal state '{status.value}'.",
             )
 
         if worker:
-            worker.cancel_job(job_id)
+            worker.cancel_job(optimization_id)
 
         now = datetime.now(timezone.utc).isoformat()
-        job_store.update_job(job_id, status="cancelled", message="בוטל על ידי המשתמש", completed_at=now)
-        logger.info("Job %s (%s) cancelled", job_id, status.value)
-        return JobCancelResponse(job_id=job_id, status="cancelled")
+        job_store.update_job(optimization_id, status="cancelled", message="בוטל על ידי המשתמש", completed_at=now)
+        logger.info("Optimization %s (%s) cancelled", optimization_id, status.value)
+        return JobCancelResponse(optimization_id=optimization_id, status="cancelled")
 
-    @app.delete("/jobs/{job_id}", response_model=JobDeleteResponse, status_code=200)
-    def delete_job(job_id: str) -> JobDeleteResponse:
+    @app.delete("/optimizations/{optimization_id}", response_model=JobDeleteResponse, status_code=200)
+    def delete_job(optimization_id: str) -> JobDeleteResponse:
         """Delete a completed, failed, or cancelled job and all its data.
 
         Args:
-            job_id: Identifier for the job to delete.
+            optimization_id: Identifier for the job to delete.
 
         Returns:
-            dict: Confirmation with deleted job_id.
+            dict: Confirmation with deleted optimization_id.
 
         Raises:
             HTTPException: If the job is not found or still active.
         """
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in _TERMINAL_STATUSES:
@@ -1165,52 +1908,52 @@ def create_app(
                 detail=f"Cannot delete job in '{status.value}' state. Cancel it first.",
             )
 
-        job_store.delete_job(job_id)
-        logger.info("Job %s deleted", job_id)
-        return JobDeleteResponse(job_id=job_id, deleted=True)
+        job_store.delete_job(optimization_id)
+        logger.info("Optimization %s deleted", optimization_id)
+        return JobDeleteResponse(optimization_id=optimization_id, deleted=True)
 
     # ── Job metadata endpoints (rename, pin, archive) ──
 
     class RenameRequest(BaseModel):
         name: str
 
-    @app.patch("/jobs/{job_id}/name", status_code=200)
-    def rename_job(job_id: str, req: RenameRequest) -> dict:
+    @app.patch("/optimizations/{optimization_id}/name", status_code=200)
+    def rename_job(optimization_id: str, req: RenameRequest) -> dict:
         """Update the display name of a job."""
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Job not found.")
+            raise HTTPException(status_code=404, detail="Optimization not found.")
         overview = parse_overview(job_data)
         overview[PAYLOAD_OVERVIEW_NAME] = req.name.strip()
-        job_store.set_payload_overview(job_id, overview)
-        return {"job_id": job_id, "name": req.name.strip()}
+        job_store.set_payload_overview(optimization_id, overview)
+        return {"optimization_id": optimization_id, "name": req.name.strip()}
 
-    @app.patch("/jobs/{job_id}/pin", status_code=200)
-    def toggle_pin_job(job_id: str) -> dict:
+    @app.patch("/optimizations/{optimization_id}/pin", status_code=200)
+    def toggle_pin_job(optimization_id: str) -> dict:
         """Toggle the pinned state of a job."""
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Job not found.")
+            raise HTTPException(status_code=404, detail="Optimization not found.")
         overview = parse_overview(job_data)
         current = overview.get("pinned", False)
         overview["pinned"] = not current
-        job_store.set_payload_overview(job_id, overview)
-        return {"job_id": job_id, "pinned": not current}
+        job_store.set_payload_overview(optimization_id, overview)
+        return {"optimization_id": optimization_id, "pinned": not current}
 
-    @app.patch("/jobs/{job_id}/archive", status_code=200)
-    def toggle_archive_job(job_id: str) -> dict:
+    @app.patch("/optimizations/{optimization_id}/archive", status_code=200)
+    def toggle_archive_job(optimization_id: str) -> dict:
         """Toggle the archived state of a job."""
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Job not found.")
+            raise HTTPException(status_code=404, detail="Optimization not found.")
         overview = parse_overview(job_data)
         current = overview.get("archived", False)
         overview["archived"] = not current
-        job_store.set_payload_overview(job_id, overview)
-        return {"job_id": job_id, "archived": not current}
+        job_store.set_payload_overview(optimization_id, overview)
+        return {"optimization_id": optimization_id, "archived": not current}
 
     @app.get("/queue", response_model=QueueStatusResponse)
     def get_queue_status() -> QueueStatusResponse:
@@ -1236,8 +1979,8 @@ def create_app(
 
     # ── Server-Sent Events (SSE) for real-time job streaming ──
 
-    @app.get("/jobs/{job_id}/stream")
-    async def stream_job(job_id: str):
+    @app.get("/optimizations/{optimization_id}/stream")
+    async def stream_job(optimization_id: str):
         """Stream job status updates via Server-Sent Events.
 
         Sends a JSON event every 2 seconds with the current job state.
@@ -1245,7 +1988,7 @@ def create_app(
         nonexistent jobs before opening the stream.
 
         Args:
-            job_id: The job identifier to stream.
+            optimization_id: The optimization identifier to stream.
 
         Returns:
             StreamingResponse: SSE stream of job status updates.
@@ -1258,32 +2001,32 @@ def create_app(
 
         # Check job exists before opening stream
         try:
-            raw = job_store.get_job(job_id)
+            raw = job_store.get_job(optimization_id)
         except KeyError:
             raw = None
         if raw is None:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         terminal = {"success", "failed", "cancelled"}
 
         async def event_generator():
             """Yield SSE events until job completes."""
             while True:
-                raw = job_store.get_job(job_id)
+                raw = job_store.get_job(optimization_id)
                 if raw is None:
-                    yield f"event: error\ndata: {json.dumps({'error': 'Job not found'})}\n\n"
+                    yield f"event: error\ndata: {json.dumps({'error': 'Optimization not found'})}\n\n"
                     return
 
                 # Build a lightweight status payload
                 status = raw.get("status", "pending")
                 metrics = raw.get("latest_metrics", {})
                 payload = {
-                    "job_id": job_id,
+                    "optimization_id": optimization_id,
                     "status": status,
                     "message": raw.get("message"),
                     "latest_metrics": metrics,
-                    "log_count": job_store.get_log_count(job_id),
-                    "progress_count": job_store.get_progress_count(job_id),
+                    "log_count": job_store.get_log_count(optimization_id),
+                    "progress_count": job_store.get_progress_count(optimization_id),
                 }
 
                 yield f"data: {json.dumps(payload, default=str)}\n\n"
@@ -1309,11 +2052,13 @@ def create_app(
     # Cache deserialized programs to avoid repeated pickle loads
     _program_cache: dict[str, Any] = {}
 
-    def _load_program(job_id: str) -> tuple[Any, RunResponse, dict]:
+    def _load_program(optimization_id: str) -> tuple[Any, RunResponse, dict]:
         """Load and cache an optimized program from a completed job.
 
+        For grid search jobs, loads the best pair's program automatically.
+
         Args:
-            job_id: The job identifier.
+            optimization_id: The optimization identifier.
 
         Returns:
             Tuple of (compiled_program, run_response, payload_overview).
@@ -1325,52 +2070,141 @@ def create_app(
         import pickle
 
         try:
-            job_data = job_store.get_job(job_id)
+            job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{job_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
 
         overview = parse_overview(job_data)
-        job_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, JOB_TYPE_RUN)
-
-        if job_type == JOB_TYPE_GRID_SEARCH:
-            raise HTTPException(
-                status_code=409,
-                detail="Grid search jobs are not directly servable. Use the best pair's job artifact.",
-            )
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
 
         status = status_to_job_status(job_data.get("status", "pending"))
-        if status != JobStatus.success:
+        if status != OptimizationStatus.success:
             raise HTTPException(
                 status_code=409,
-                detail=f"Job is '{status.value}' — only successful jobs can be served.",
+                detail=f"Optimization is '{status.value}' — only successful optimizations can be served.",
             )
 
         result_data = job_data.get("result")
         if not result_data or not isinstance(result_data, dict):
-            raise HTTPException(status_code=409, detail="Job has no result data.")
+            raise HTTPException(status_code=409, detail="Optimization has no result data.")
 
-        result = RunResponse.model_validate(result_data)
-        artifact = result.program_artifact
-        if not artifact or not artifact.program_pickle_base64:
-            raise HTTPException(status_code=409, detail="Job has no program artifact.")
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+            grid_result = GridSearchResponse.model_validate(result_data)
+            if not grid_result.best_pair:
+                raise HTTPException(status_code=409, detail="Grid search has no successful pair.")
+            artifact = grid_result.best_pair.program_artifact
+            if not artifact or not artifact.program_pickle_base64:
+                raise HTTPException(status_code=409, detail="Best pair has no program artifact.")
+            # Build a synthetic RunResponse so callers get consistent data
+            result = RunResponse(
+                module_name=grid_result.module_name,
+                optimizer_name=grid_result.optimizer_name,
+                metric_name=grid_result.metric_name,
+                split_counts=grid_result.split_counts,
+                baseline_test_metric=grid_result.best_pair.baseline_test_metric,
+                optimized_test_metric=grid_result.best_pair.optimized_test_metric,
+                metric_improvement=grid_result.best_pair.metric_improvement,
+                program_artifact=artifact,
+            )
+            # Use the best pair's generation model as the default model name
+            overview[PAYLOAD_OVERVIEW_MODEL_NAME] = grid_result.best_pair.generation_model
+        else:
+            result = RunResponse.model_validate(result_data)
+            artifact = result.program_artifact
+            if not artifact or not artifact.program_pickle_base64:
+                raise HTTPException(status_code=409, detail="Optimization has no program artifact.")
 
-        if job_id not in _program_cache:
+        if optimization_id not in _program_cache:
             program_bytes = base64.b64decode(artifact.program_pickle_base64)
-            _program_cache[job_id] = pickle.loads(program_bytes)  # noqa: S301
+            _program_cache[optimization_id] = pickle.loads(program_bytes)  # noqa: S301
 
-        return _program_cache[job_id], result, overview
+        return _program_cache[optimization_id], result, overview
 
-    @app.get("/serve/{job_id}/info", response_model=ServeInfoResponse)
-    def serve_info(job_id: str) -> ServeInfoResponse:
+    def _load_pair_program(optimization_id: str, pair_index: int) -> tuple[Any, PairResult, dict]:
+        """Load and cache an optimized program from a specific grid search pair.
+
+        Args:
+            optimization_id: The optimization identifier.
+            pair_index: Index of the pair within the grid search results.
+
+        Returns:
+            Tuple of (compiled_program, pair_result, payload_overview).
+
+        Raises:
+            HTTPException: If job not found, not grid_search, or pair invalid.
+        """
+        import base64
+        import pickle
+
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+
+        overview = parse_overview(job_data)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+
+        if optimization_type != OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise HTTPException(
+                status_code=409,
+                detail="Per-pair serving is only available for grid search jobs.",
+            )
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status != OptimizationStatus.success:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Optimization is '{status.value}' — only successful optimizations can be served.",
+            )
+
+        result_data = job_data.get("result")
+        if not result_data or not isinstance(result_data, dict):
+            raise HTTPException(status_code=409, detail="Optimization has no result data.")
+
+        grid_result = GridSearchResponse.model_validate(result_data)
+
+        pair = None
+        for pr in grid_result.pair_results:
+            if pr.pair_index == pair_index:
+                pair = pr
+                break
+        if pair is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No pair with index {pair_index} in grid search results.",
+            )
+
+        if pair.error:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Pair {pair_index} failed: {pair.error}",
+            )
+
+        artifact = pair.program_artifact
+        if not artifact or not artifact.program_pickle_base64:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Pair {pair_index} has no program artifact.",
+            )
+
+        cache_key = f"{optimization_id}_pair_{pair_index}"
+        if cache_key not in _program_cache:
+            program_bytes = base64.b64decode(artifact.program_pickle_base64)
+            _program_cache[cache_key] = pickle.loads(program_bytes)  # noqa: S301
+
+        return _program_cache[cache_key], pair, overview
+
+    @app.get("/serve/{optimization_id}/info", response_model=ServeInfoResponse)
+    def serve_info(optimization_id: str) -> ServeInfoResponse:
         """Return metadata about a servable program without running inference.
 
         Args:
-            job_id: Identifier of a successful optimization job.
+            optimization_id: Identifier of a successful optimization job.
 
         Returns:
             ServeInfoResponse: Program signature and metadata.
         """
-        _, result, overview = _load_program(job_id)
+        _, result, overview = _load_program(optimization_id)
         artifact = result.program_artifact
 
         input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
@@ -1379,7 +2213,7 @@ def create_app(
         demo_count = len(artifact.optimized_prompt.demos) if artifact.optimized_prompt else 0
 
         return ServeInfoResponse(
-            job_id=job_id,
+            optimization_id=optimization_id,
             module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME, ""),
             optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME, ""),
             model_name=overview.get(PAYLOAD_OVERVIEW_MODEL_NAME, ""),
@@ -1389,15 +2223,15 @@ def create_app(
             demo_count=demo_count,
         )
 
-    @app.post("/serve/{job_id}", response_model=ServeResponse)
-    def serve_program(job_id: str, req: ServeRequest) -> ServeResponse:
+    @app.post("/serve/{optimization_id}", response_model=ServeResponse)
+    def serve_program(optimization_id: str, req: ServeRequest) -> ServeResponse:
         """Run inference on an optimized program.
 
         Deserializes the program artifact, configures the LM, and calls
         the program with the provided inputs.
 
         Args:
-            job_id: Identifier of a successful optimization job.
+            optimization_id: Identifier of a successful optimization job.
             req: Input fields and optional model config override.
 
         Returns:
@@ -1407,7 +2241,7 @@ def create_app(
 
         from ..service_gateway.language_models import build_language_model
 
-        program, result, overview = _load_program(job_id)
+        program, result, overview = _load_program(optimization_id)
         artifact = result.program_artifact
 
         # Determine model config
@@ -1456,15 +2290,15 @@ def create_app(
                     outputs[key] = val
 
         return ServeResponse(
-            job_id=job_id,
+            optimization_id=optimization_id,
             outputs=outputs,
             input_fields=input_fields,
             output_fields=output_fields,
             model_used=model_config.normalized_identifier(),
         )
 
-    @app.post("/serve/{job_id}/stream")
-    async def serve_program_stream(job_id: str, req: ServeRequest):
+    @app.post("/serve/{optimization_id}/stream")
+    async def serve_program_stream(optimization_id: str, req: ServeRequest):
         """Stream inference outputs token-by-token via Server-Sent Events.
 
         Uses ``dspy.streamify`` to wrap the loaded program with stream listeners
@@ -1475,7 +2309,7 @@ def create_app(
         - ``event: error`` — ``{"error": str}`` on failure
 
         Args:
-            job_id: Identifier of a successful optimization job.
+            optimization_id: Identifier of a successful optimization job.
             req: Input fields and optional model config override.
 
         Returns:
@@ -1489,10 +2323,10 @@ def create_app(
 
         from ..service_gateway.language_models import build_language_model
 
-        program, result, overview = _load_program(job_id)
+        program, result, overview = _load_program(optimization_id)
         artifact = result.program_artifact
 
-        # Determine model config (same logic as /serve/{job_id})
+        # Determine model config (same logic as /serve/{optimization_id})
         if req.model_config_override:
             model_config = req.model_config_override
         else:
@@ -1579,7 +2413,7 @@ def create_app(
             except Exception as exc:  # noqa: BLE001
                 yield sse("error", {"error": "streaming failed"})
                 logger = logging.getLogger(__name__)
-                logger.exception("Serve stream failed for job %s: %s", job_id, exc)
+                logger.exception("Serve stream failed for job %s: %s", optimization_id, exc)
                 return
         return StreamingResponse(
             event_generator(),
@@ -1591,9 +2425,264 @@ def create_app(
             },
         )
 
+    # ── Per-pair serving (grid search) ──
+
+    @app.get("/serve/{optimization_id}/pair/{pair_index}/info", response_model=ServeInfoResponse)
+    def serve_pair_info(optimization_id: str, pair_index: int) -> ServeInfoResponse:
+        """Return metadata about a servable pair program without running inference."""
+        program, pair, overview = _load_pair_program(optimization_id, pair_index)
+        artifact = pair.program_artifact
+
+        input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
+        output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
+        instructions = artifact.optimized_prompt.instructions if artifact.optimized_prompt else None
+        demo_count = len(artifact.optimized_prompt.demos) if artifact.optimized_prompt else 0
+
+        return ServeInfoResponse(
+            optimization_id=optimization_id,
+            module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME, ""),
+            optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME, ""),
+            model_name=pair.generation_model,
+            input_fields=input_fields,
+            output_fields=output_fields,
+            instructions=instructions,
+            demo_count=demo_count,
+        )
+
+    @app.post("/serve/{optimization_id}/pair/{pair_index}", response_model=ServeResponse)
+    def serve_pair_program(optimization_id: str, pair_index: int, req: ServeRequest) -> ServeResponse:
+        """Run inference on an optimized program from a specific grid search pair."""
+        import dspy
+
+        from ..service_gateway.language_models import build_language_model
+
+        program, pair, overview = _load_pair_program(optimization_id, pair_index)
+        artifact = pair.program_artifact
+
+        # Determine model config
+        if req.model_config_override:
+            model_config = req.model_config_override
+        else:
+            model_config = ModelConfig(name=pair.generation_model)
+
+        # Validate input fields
+        input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
+        output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
+
+        if input_fields:
+            missing = [f for f in input_fields if f not in req.inputs]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Missing required input fields: {missing}. Expected: {input_fields}",
+                )
+
+        # Build LM and run inference
+        lm = build_language_model(model_config)
+
+        with dspy.context(lm=lm):
+            prediction = program(**req.inputs)
+
+        # Extract outputs
+        outputs: dict[str, Any] = {}
+        if output_fields:
+            for field in output_fields:
+                outputs[field] = getattr(prediction, field, None)
+        else:
+            for key, val in prediction.toDict().items():
+                if key not in req.inputs:
+                    outputs[key] = val
+
+        return ServeResponse(
+            optimization_id=optimization_id,
+            outputs=outputs,
+            input_fields=input_fields,
+            output_fields=output_fields,
+            model_used=model_config.normalized_identifier(),
+        )
+
+    @app.post("/serve/{optimization_id}/pair/{pair_index}/stream")
+    async def serve_pair_program_stream(optimization_id: str, pair_index: int, req: ServeRequest):
+        """Stream inference outputs from a specific grid search pair's program."""
+        import asyncio
+        import json
+
+        import dspy
+        from dspy.streaming import StreamListener, StreamResponse
+
+        from ..service_gateway.language_models import build_language_model
+
+        program, pair, overview = _load_pair_program(optimization_id, pair_index)
+        artifact = pair.program_artifact
+
+        # Determine model config
+        if req.model_config_override:
+            model_config = req.model_config_override
+        else:
+            model_config = ModelConfig(name=pair.generation_model)
+
+        input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
+        output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
+
+        if input_fields:
+            missing = [f for f in input_fields if f not in req.inputs]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Missing required input fields: {missing}. Expected: {input_fields}",
+                )
+
+        lm = build_language_model(model_config)
+        model_used = model_config.normalized_identifier()
+        listeners = [StreamListener(signature_field_name=f) for f in output_fields]
+
+        async def event_generator():
+            def sse(event: str, payload: dict) -> str:
+                return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
+            try:
+                final_outputs: dict[str, Any] = {}
+                try:
+                    stream_program = dspy.streamify(
+                        program,
+                        stream_listeners=listeners,
+                        async_streaming=True,
+                    )
+                    with dspy.context(lm=lm):
+                        output_stream = stream_program(**req.inputs)
+                        async for item in output_stream:
+                            if isinstance(item, StreamResponse):
+                                yield sse("token", {"field": item.signature_field_name, "chunk": item.chunk})
+                            elif isinstance(item, dspy.Prediction):
+                                if output_fields:
+                                    for field in output_fields:
+                                        final_outputs[field] = getattr(item, field, None)
+                                else:
+                                    for key, val in item.toDict().items():
+                                        if key not in req.inputs:
+                                            final_outputs[key] = val
+                    yield sse("final", {
+                        "outputs": final_outputs,
+                        "input_fields": input_fields,
+                        "output_fields": output_fields,
+                        "model_used": model_used,
+                    })
+                    return
+                except Exception as stream_exc:  # noqa: BLE001
+                    with dspy.context(lm=lm):
+                        prediction = await asyncio.to_thread(lambda: program(**req.inputs))
+                    if output_fields:
+                        for field in output_fields:
+                            final_outputs[field] = getattr(prediction, field, None)
+                    else:
+                        for key, val in prediction.toDict().items():
+                            if key not in req.inputs:
+                                final_outputs[key] = val
+                    yield sse("final", {
+                        "outputs": final_outputs,
+                        "input_fields": input_fields,
+                        "output_fields": output_fields,
+                        "model_used": model_used,
+                        "streaming_fallback": True,
+                        "fallback_reason": str(stream_exc),
+                    })
+                    return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                yield sse("error", {"error": "streaming failed"})
+                logger = logging.getLogger(__name__)
+                logger.exception("Serve pair stream failed for job %s pair %d: %s", optimization_id, pair_index, exc)
+                return
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # ── Per-pair test results ──
+
+    @app.get("/optimizations/{optimization_id}/pair/{pair_index}/test-results")
+    def get_pair_test_results(optimization_id: str, pair_index: int) -> dict:
+        """Return per-example test results for a specific grid search pair.
+
+        Applies the same index remapping as the main test-results endpoint.
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+
+        overview = parse_overview(job_data)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+
+        if optimization_type != OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise HTTPException(
+                status_code=409,
+                detail="Per-pair test results are only available for grid search jobs.",
+            )
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status != OptimizationStatus.success:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Optimization is '{status.value}' — only successful optimizations have test results.",
+            )
+
+        result_data = job_data.get("result")
+        if not result_data or not isinstance(result_data, dict):
+            raise HTTPException(status_code=409, detail="Optimization has no result data.")
+
+        grid_result = GridSearchResponse.model_validate(result_data)
+
+        pair = None
+        for pr in grid_result.pair_results:
+            if pr.pair_index == pair_index:
+                pair = pr
+                break
+        if pair is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No pair with index {pair_index} in grid search results.",
+            )
+
+        # Reconstruct global test indices for remapping
+        payload = job_data.get("payload", {})
+        dataset = payload.get("dataset", [])
+        total = len(dataset)
+        fractions_raw = payload.get("split_fractions", {})
+        fractions = SplitFractions.model_validate(fractions_raw)
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+
+        ordered = list(range(total))
+        if shuffle:
+            rng = random.Random(effective_seed)
+            rng.shuffle(ordered)
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        test_indices = ordered[val_end:]
+
+        def remap(results: list) -> list:
+            remapped = []
+            for r in results:
+                seq_idx = r.get("index", 0)
+                global_idx = test_indices[seq_idx] if seq_idx < len(test_indices) else seq_idx
+                remapped.append({**r, "index": global_idx})
+            return remapped
+
+        return {
+            "baseline": remap(pair.baseline_test_results),
+            "optimized": remap(pair.optimized_test_results),
+        }
+
     # ── Job Templates (reusable configurations) ──
 
-    from ..storage.local import TemplateModel, Base as StorageBase
+    from ..storage.models import TemplateModel, Base as StorageBase
 
     # Ensure template table exists
     StorageBase.metadata.create_all(job_store.engine)

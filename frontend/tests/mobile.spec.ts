@@ -28,9 +28,9 @@ test.describe("Mobile touch targets", () => {
           if (route === "/") {
             await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
           } else if (route === "/submit") {
-            await expect(page.getByText("פרטים בסיסיים")).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByText("פרטים בסיסיים").first()).toBeVisible({ timeout: 30_000 });
           } else {
-            await expect(page.getByText("סקירה")).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByText("סקירה").first()).toBeVisible({ timeout: 30_000 });
           }
 
           const interactiveElements = await collectVisibleInteractiveElements(page);

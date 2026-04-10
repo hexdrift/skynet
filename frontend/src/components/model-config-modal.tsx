@@ -10,6 +10,7 @@ import { ModelPicker, modelSupportsThinking } from "@/components/model-picker";
 import { NumberInput } from "@/components/number-input";
 import { cn } from "@/lib/utils";
 import type { ModelConfig, CatalogModel } from "@/lib/types";
+import { HelpTip } from "@/components/help-tip";
 
 interface ModelConfigModalProps {
   open: boolean;
@@ -128,7 +129,7 @@ export function ModelConfigModal({
           {/* Temperature */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>טמפרטורה</Label>
+              <Label><HelpTip text="מידת היצירתיות של המודל — ערך נמוך נותן תשובות עקביות, גבוה מגוון יותר">טמפרטורה</HelpTip></Label>
               <span className="text-xs font-mono text-muted-foreground">{draft.temperature?.toFixed(1) ?? "0.7"}</span>
             </div>
             <input
@@ -143,7 +144,7 @@ export function ModelConfigModal({
           {/* Top P */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Top P</Label>
+              <Label><HelpTip text="מגביל את מגוון המילים שהמודל שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון">Top P</HelpTip></Label>
               <span className="text-xs font-mono text-muted-foreground">{draft.top_p?.toFixed(2) ?? "—"}</span>
             </div>
             <input
@@ -157,7 +158,7 @@ export function ModelConfigModal({
 
           {/* Max tokens */}
           <div className="space-y-2">
-            <Label>מקסימום טוקנים</Label>
+            <Label><HelpTip text="אורך התשובה המקסימלי — טוקן הוא בערך מילה אחת">מקסימום טוקנים</HelpTip></Label>
             <NumberInput
               min={1} step={256}
               value={draft.max_tokens ?? ""}

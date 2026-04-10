@@ -100,7 +100,8 @@ class _OptimizationRequestBase(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    name: Optional[str] = Field(default=None, description="User-defined display name for this job.")
+    name: Optional[str] = Field(default=None, description="User-defined display name for this optimization.")
+    description: Optional[str] = Field(default=None, max_length=280, description="Short description of the optimization goal (max 280 characters).")
     username: str
     module_name: str
     module_kwargs: Dict[str, Any] = Field(default_factory=dict)
@@ -114,6 +115,8 @@ class _OptimizationRequestBase(BaseModel):
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
     seed: Optional[int] = None
+    dataset_filename: Optional[str] = Field(default=None, description="Original dataset file name.")
+
 
     @model_validator(mode="after")
     def _ensure_dataset(self) -> "_OptimizationRequestBase":
@@ -266,7 +269,11 @@ class RunResponse(BaseModel):
     program_artifact_path: Optional[str] = None
     program_artifact: Optional[ProgramArtifact] = None
     runtime_seconds: Optional[float] = None
+    num_lm_calls: Optional[int] = None
+    avg_response_time_ms: Optional[float] = None
     run_log: List[JobLogEntry] = Field(default_factory=list)
+    baseline_test_results: List[Dict[str, Any]] = Field(default_factory=list)
+    optimized_test_results: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class PairResult(BaseModel):
@@ -279,8 +286,12 @@ class PairResult(BaseModel):
     optimized_test_metric: Optional[float] = None
     metric_improvement: Optional[float] = None
     runtime_seconds: Optional[float] = None
+    num_lm_calls: Optional[int] = None
+    avg_response_time_ms: Optional[float] = None
     program_artifact: Optional[ProgramArtifact] = None
     error: Optional[str] = None
+    baseline_test_results: List[Dict[str, Any]] = Field(default_factory=list)
+    optimized_test_results: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class GridSearchResponse(BaseModel):
@@ -341,7 +352,7 @@ class HealthResponse(BaseModel):
     registered_assets: Dict[str, List[str]]
 
 
-class JobStatus(str, Enum):
+class OptimizationStatus(str, Enum):
     """Enumerate background job states."""
 
     pending = "pending"
@@ -352,14 +363,15 @@ class JobStatus(str, Enum):
     cancelled = "cancelled"
 
 
-class JobSubmissionResponse(BaseModel):
+class OptimizationSubmissionResponse(BaseModel):
     """Immediate response to POST /run or POST /grid-search."""
 
-    job_id: str
-    job_type: str
-    status: JobStatus
+    optimization_id: str
+    optimization_type: str
+    status: OptimizationStatus
     created_at: datetime
     name: Optional[str] = None
+    description: Optional[str] = None
     username: str
     module_name: str
     optimizer_name: str
@@ -369,11 +381,12 @@ class _JobResponseBase(BaseModel):
     """Shared fields across job response endpoints."""
 
     # Identity & status
-    job_id: str
-    job_type: str
-    status: JobStatus
+    optimization_id: str
+    optimization_type: str
+    status: OptimizationStatus
     message: Optional[str] = None
     name: Optional[str] = None
+    description: Optional[str] = None
     pinned: bool = False
     archived: bool = False
 
@@ -411,7 +424,7 @@ class _JobResponseBase(BaseModel):
     reflection_models: Optional[List[Any]] = None
 
 
-class JobStatusResponse(_JobResponseBase):
+class OptimizationStatusResponse(_JobResponseBase):
     """Full job detail returned by GET /jobs/{id}."""
 
     progress_events: List[ProgressEvent] = Field(default_factory=list)
@@ -420,7 +433,7 @@ class JobStatusResponse(_JobResponseBase):
     grid_result: Optional[GridSearchResponse] = None
 
 
-class JobSummaryResponse(_JobResponseBase):
+class OptimizationSummaryResponse(_JobResponseBase):
     """Lightweight dashboard view of a job."""
 
     split_fractions: Optional[SplitFractions] = None
@@ -443,7 +456,7 @@ class JobSummaryResponse(_JobResponseBase):
 class PaginatedJobsResponse(BaseModel):
     """Paginated wrapper for job listings."""
 
-    items: List[JobSummaryResponse] = Field(default_factory=list)
+    items: List[OptimizationSummaryResponse] = Field(default_factory=list)
     total: int = 0
     limit: int = 50
     offset: int = 0
@@ -461,22 +474,22 @@ class QueueStatusResponse(BaseModel):
 class JobCancelResponse(BaseModel):
     """Response payload for the cancel endpoint."""
 
-    job_id: str
+    optimization_id: str
     status: str
 
 
 class JobDeleteResponse(BaseModel):
     """Response payload for the delete endpoint."""
 
-    job_id: str
+    optimization_id: str
     deleted: bool
 
 
-class JobPayloadResponse(BaseModel):
+class OptimizationPayloadResponse(BaseModel):
     """Response payload for the payload retrieval endpoint."""
 
-    job_id: str
-    job_type: str
+    optimization_id: str
+    optimization_type: str
     payload: Dict[str, Any]
 
 
@@ -518,7 +531,7 @@ class ServeRequest(BaseModel):
 class ServeResponse(BaseModel):
     """Response payload from program inference."""
 
-    job_id: str
+    optimization_id: str
     outputs: Dict[str, Any]
     input_fields: List[str]
     output_fields: List[str]
@@ -528,7 +541,7 @@ class ServeResponse(BaseModel):
 class ServeInfoResponse(BaseModel):
     """Metadata about a servable program (no inference call)."""
 
-    job_id: str
+    optimization_id: str
     module_name: str
     optimizer_name: str
     model_name: str
@@ -574,3 +587,62 @@ class TemplateResponse(BaseModel):
     username: str
     config: Dict[str, Any]
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Analytics aggregation models
+# ---------------------------------------------------------------------------
+
+
+class AnalyticsSummaryResponse(BaseModel):
+    """Pre-computed KPIs across all filtered jobs."""
+
+    total_jobs: int = 0
+    success_count: int = 0
+    failed_count: int = 0
+    cancelled_count: int = 0
+    pending_count: int = 0
+    running_count: int = 0
+    success_rate: float = 0.0
+    avg_improvement: Optional[float] = None
+    max_improvement: Optional[float] = None
+    min_improvement: Optional[float] = None
+    avg_runtime: Optional[float] = None
+    total_dataset_rows: int = 0
+    total_pairs: int = 0
+    completed_pairs: int = 0
+    failed_pairs: int = 0
+
+
+class OptimizerStatsItem(BaseModel):
+    """Per-optimizer aggregated statistics."""
+
+    name: str
+    total_jobs: int = 0
+    success_count: int = 0
+    avg_improvement: Optional[float] = None
+    success_rate: float = 0.0
+    avg_runtime: Optional[float] = None
+
+
+class OptimizerStatsResponse(BaseModel):
+    """Response payload for /analytics/optimizers endpoint."""
+
+    items: List[OptimizerStatsItem] = Field(default_factory=list)
+
+
+class ModelStatsItem(BaseModel):
+    """Per-model aggregated statistics."""
+
+    name: str
+    total_jobs: int = 0
+    success_count: int = 0
+    avg_improvement: Optional[float] = None
+    success_rate: float = 0.0
+    use_count: int = 0
+
+
+class ModelStatsResponse(BaseModel):
+    """Response payload for /analytics/models endpoint."""
+
+    items: List[ModelStatsItem] = Field(default_factory=list)
