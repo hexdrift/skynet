@@ -22,3 +22,4 @@ export { CodeTab } from "./components/CodeTab";
 export { StageInfoModal } from "./components/StageInfoModal";
 export { GridOverview } from "./components/GridOverview";
 export { PairDetailView } from "./components/PairDetailView";
+export { OverviewTab } from "./components/OverviewTab";
