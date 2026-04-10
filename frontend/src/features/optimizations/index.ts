@@ -16,3 +16,4 @@ export { ExportMenu, exportPromptAsJson, exportLogsAsCsv } from "./components/Ex
 export { DeleteJobDialog } from "./components/DeleteJobDialog";
 export { StatusBadge, InfoCard, LangPicker, CopyButton } from "./components/ui-primitives";
 export { ServeCodeSnippets } from "./components/ServeCodeSnippets";
+export { ServeChat, type ServeChatProps } from "./components/ServeChat";
