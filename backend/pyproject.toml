@@ -36,4 +36,16 @@ dependencies = [
 dev = [
     "httpx>=0.25",
     "pytest>=7.4",
+    "pytest-asyncio>=0.21",
 ]
+
+[tool.pytest.ini_options]
+# Unit tests (backend/tests/unit/) run without Postgres, OPENAI_API_KEY,
+# or a live server. Integration tests (test_llm_integration.py, test_load.py)
+# require all three. Run each tier separately:
+#
+#   uv run pytest tests/unit/ -v          # fast CI gate, no credentials
+#   uv run pytest tests/test_llm_integration.py -v  # nightly paid tier
+#
+testpaths = ["tests"]
+asyncio_mode = "auto"
