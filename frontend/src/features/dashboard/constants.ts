@@ -1,0 +1,10 @@
+export const PAGE_SIZE = 20;
+
+export const STATUS_COLORS: Record<string, string> = {
+  success: "var(--success)",
+  failed: "var(--danger)",
+  running: "var(--warning)",
+  pending: "#8c8c9a",
+  cancelled: "#6b6058",
+  validating: "var(--warning)",
+};
