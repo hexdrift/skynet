@@ -632,7 +632,7 @@ export default function DashboardPage() {
  const td = (e.target as HTMLElement).closest("td");
  if (!td || td === td.parentElement?.lastElementChild) return;
  const text = td.textContent?.trim();
- if (text) { navigator.clipboard.writeText(text); toast.success("הועתק בהצלחה"); }
+ if (text) { navigator.clipboard.writeText(text); toast.success(msg("clipboard.copied")); }
  }}
  data-tutorial="job-link"
  >
@@ -1136,7 +1136,7 @@ export default function DashboardPage() {
  const baseline = j.baseline_test_metric != null ? (j.baseline_test_metric > 1 ? j.baseline_test_metric : j.baseline_test_metric * 100) : null;
  const optimized = j.optimized_test_metric != null ? (j.optimized_test_metric > 1 ? j.optimized_test_metric : j.optimized_test_metric * 100) : null;
 
- const copyCell = (text: string) => (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(text); toast.success("הועתק", { autoClose: 1000 }); };
+ const copyCell = (text: string) => (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(text); toast.success(msg("clipboard.copied_short"), { autoClose: 1000 }); };
  const copyCls = "cursor-pointer hover:bg-stone-500/[0.04] transition-colors";
  return (
  <TableRow key={j.optimization_id} className="group/row border-border/40 hover:bg-stone-500/[0.03]">

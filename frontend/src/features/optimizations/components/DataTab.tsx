@@ -16,6 +16,7 @@ import { Skeleton } from "boneyard-js/react";
 import { dataTabBones } from "@/components/data-tab-bones";
 import { FadeIn } from "@/components/motion";
 import { HelpTip } from "@/components/help-tip";
+import { msg } from "@/features/shared/messages";
 import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/lib/api";
 import type { OptimizationDatasetResponse, DatasetRow, OptimizationStatusResponse, EvalExampleResult } from "@/lib/types";
 import { DEMO_OPTIMIZATION_ID } from "@/lib/tutorial-demo-data";
@@ -299,7 +300,7 @@ export function DataTab({ job, pairIndex }: { job: OptimizationStatusResponse; p
             const td = (e.target as HTMLElement).closest("td");
             if (!td || td === td.parentElement?.lastElementChild) return;
             const text = td.textContent?.trim();
-            if (text) { navigator.clipboard.writeText(text); toast.success("הועתק בהצלחה"); }
+            if (text) { navigator.clipboard.writeText(text); toast.success(msg("clipboard.copied")); }
            }}>
             {split === "test" && evalCount > 0 && (
              <TableCell className="!p-0 !px-1.5 !py-1" style={colResize.widths["_score"] ? { width: colResize.widths["_score"] } : { width: 72 }}>
