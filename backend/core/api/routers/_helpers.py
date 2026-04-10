@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from ...constants import (
+    MAX_JOBS_PER_USER,
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_JOB_TYPE,
@@ -25,6 +26,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS,
     PAYLOAD_OVERVIEW_COMPILE_KWARGS,
 )
+from ...job_quota_overrides import get_user_quota
 from ...models import (
     GridSearchResponse,
     OptimizationStatus,
@@ -62,6 +64,24 @@ def strip_api_key(d: dict) -> dict:
     if isinstance(extra, dict) and "api_key" in extra:
         result["extra"] = {k: v for k, v in extra.items() if k != "api_key"}
     return result
+
+
+def enforce_user_quota(job_store, username: str) -> None:
+    """Raise HTTP 409 if ``username`` is at or over their job quota.
+
+    Admins and users with an explicit ``None`` override in
+    ``job_quota_overrides`` bypass the check entirely. The count
+    includes every job owned by the user across all statuses.
+    """
+    quota = get_user_quota(username, MAX_JOBS_PER_USER)
+    if quota is None:
+        return
+    current = job_store.count_jobs(username=username)
+    if current >= quota:
+        raise HTTPException(
+            status_code=409,
+            detail=f"הגעת למגבלת {quota} אופטימיזציות לכל משתמש. מחק אופטימיזציות ישנות כדי ליצור חדשות.",
+        )
 
 
 def build_summary(job_data: dict) -> OptimizationSummaryResponse:

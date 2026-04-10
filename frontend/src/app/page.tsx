@@ -186,15 +186,14 @@ export default function DashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; status: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // P1 #12: fetch a bounded window instead of 200 rows. The dashboard
-  // still filters + sorts client-side, but the default page of 50 covers
-  // the common "most-recent" view. A future full server-filter rewrite
-  // can drop this comment and the useMemo-based filtering below.
+  // The per-user job quota (constants.MAX_JOBS_PER_USER) guarantees the
+  // result set stays bounded, so the dashboard fetches the full list and
+  // filters + sorts client-side. Admins can exceed the cap via
+  // job_quota_overrides.ADMIN_USERNAMES and will see everyone's jobs.
   const fetchJobs = useCallback(async () => {
     try {
       const result = await listJobs({
         username: isAdmin ? undefined : sessionUser || undefined,
-        limit: 50,
       });
       setData(result);
       setError(null);
