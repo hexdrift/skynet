@@ -62,6 +62,7 @@ import {
   formatId,
 } from "@/features/dashboard";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
+import { msg } from "@/features/shared/messages";
 
 
 export default function DashboardPage() {
@@ -105,16 +106,20 @@ export default function DashboardPage() {
  const [deleteTarget, setDeleteTarget] = useState<{ id: string; status: string } | null>(null);
  const [deleting, setDeleting] = useState(false);
 
+ // P1 #12: fetch a bounded window instead of 200 rows. The dashboard
+ // still filters + sorts client-side, but the default page of 50 covers
+ // the common "most-recent" view. A future full server-filter rewrite
+ // can drop this comment and the useMemo-based filtering below.
  const fetchJobs = useCallback(async () => {
  try {
  const result = await listJobs({
  username: isAdmin ? undefined : (sessionUser || undefined),
- limit: 200,
+ limit: 50,
  });
  setData(result);
  setError(null);
  } catch (e) {
- setError(e instanceof Error ? e.message : "שגיאה בטעינת אופטימיזציות");
+ setError(e instanceof Error ? e.message : msg("dashboard.load_error"));
  } finally {
  setLoading(false);
  setInitialLoad(false);
@@ -162,7 +167,7 @@ export default function DashboardPage() {
  // Notify sidebar + re-fetch
  window.dispatchEvent(new Event("optimizations-changed"));
  } catch (err) {
- toast.error(err instanceof Error ? err.message : "מחיקה נכשלה");
+ toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
  // Revert: re-fetch real data
  fetchJobs();
  } finally {
