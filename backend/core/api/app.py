@@ -91,6 +91,7 @@ from .converters import (
     status_to_job_status,
 )
 from .model_catalog import ModelCatalogResponse, get_catalog_cached
+from .routers.optimizations_meta import create_optimizations_meta_router
 
 
 class DiscoverModelsRequest(BaseModel):
@@ -1420,60 +1421,7 @@ def create_app(
         job_data["log_count"] = job_store.get_log_count(optimization_id)
         return _build_summary(job_data)
 
-    @app.get("/optimizations/{optimization_id}/logs", response_model=List[JobLogEntry])
-    def get_job_logs(
-        optimization_id: str,
-        limit: Optional[int] = Query(default=None, ge=1, le=5000, description="Max log entries to return"),
-        offset: int = Query(default=0, ge=0, description="Skip N log entries"),
-        level: Optional[str] = Query(default=None, description="Filter by log level (e.g. ERROR, WARNING, INFO)"),
-    ) -> List[JobLogEntry]:
-        """Return the chronological run log for the job.
-
-        Args:
-            optimization_id: Identifier for the job returned during submission.
-            limit: Maximum number of log entries to return.
-            offset: Number of log entries to skip.
-            level: Filter by log level (case-insensitive).
-
-        Returns:
-            List[JobLogEntry]: Ordered log entries captured during execution.
-        """
-
-        if not job_store.job_exists(optimization_id):
-            logger.warning("Optimization logs requested for unknown optimization_id=%s", optimization_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
-
-        normalized_level = level.upper() if level else None
-        log_entries = job_store.get_logs(
-            optimization_id, limit=limit, offset=offset, level=normalized_level,
-        )
-        return [JobLogEntry(**entry) for entry in log_entries]
-
-    @app.get("/optimizations/{optimization_id}/payload", response_model=OptimizationPayloadResponse)
-    def get_job_payload(optimization_id: str) -> OptimizationPayloadResponse:
-        """Return the original request payload submitted for this job.
-
-        Args:
-            optimization_id: Identifier for the job returned during submission.
-
-        Returns:
-            OptimizationPayloadResponse: The stored request payload.
-        """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
-
-        payload = job_data.get("payload")
-        if not payload or not isinstance(payload, dict):
-            raise HTTPException(
-                status_code=404,
-                detail="Payload not available for this job.",
-            )
-
-        overview = parse_overview(job_data)
-        optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
-        return OptimizationPayloadResponse(optimization_id=optimization_id, optimization_type=optimization_type, payload=payload)
+    # get_job_logs, get_job_payload — moved to routers/optimizations_meta.py
 
     @app.get("/optimizations/{optimization_id}/dataset")
     def get_job_dataset(optimization_id: str) -> dict:
@@ -1912,48 +1860,7 @@ def create_app(
         logger.info("Optimization %s deleted", optimization_id)
         return JobDeleteResponse(optimization_id=optimization_id, deleted=True)
 
-    # ── Job metadata endpoints (rename, pin, archive) ──
-
-    class RenameRequest(BaseModel):
-        name: str
-
-    @app.patch("/optimizations/{optimization_id}/name", status_code=200)
-    def rename_job(optimization_id: str, req: RenameRequest) -> dict:
-        """Update the display name of a job."""
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail="Optimization not found.")
-        overview = parse_overview(job_data)
-        overview[PAYLOAD_OVERVIEW_NAME] = req.name.strip()
-        job_store.set_payload_overview(optimization_id, overview)
-        return {"optimization_id": optimization_id, "name": req.name.strip()}
-
-    @app.patch("/optimizations/{optimization_id}/pin", status_code=200)
-    def toggle_pin_job(optimization_id: str) -> dict:
-        """Toggle the pinned state of a job."""
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail="Optimization not found.")
-        overview = parse_overview(job_data)
-        current = overview.get("pinned", False)
-        overview["pinned"] = not current
-        job_store.set_payload_overview(optimization_id, overview)
-        return {"optimization_id": optimization_id, "pinned": not current}
-
-    @app.patch("/optimizations/{optimization_id}/archive", status_code=200)
-    def toggle_archive_job(optimization_id: str) -> dict:
-        """Toggle the archived state of a job."""
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail="Optimization not found.")
-        overview = parse_overview(job_data)
-        current = overview.get("archived", False)
-        overview["archived"] = not current
-        job_store.set_payload_overview(optimization_id, overview)
-        return {"optimization_id": optimization_id, "archived": not current}
+    # rename_job, toggle_pin_job, toggle_archive_job — moved to routers/optimizations_meta.py
 
     @app.get("/queue", response_model=QueueStatusResponse)
     def get_queue_status() -> QueueStatusResponse:
@@ -2781,5 +2688,11 @@ def create_app(
             session.delete(row)
             session.commit()
         return {"template_id": template_id, "deleted": True}
+
+    # ── Domain routers ──
+    # Routes live in sub-modules that take dependencies via a factory function.
+    # Only the routes that cleanly fit the domain have been moved so far; the
+    # rest of the optimization endpoints still live above.
+    app.include_router(create_optimizations_meta_router(job_store=job_store))
 
     return app
