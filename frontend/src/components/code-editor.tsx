@@ -9,7 +9,12 @@ import { Extension } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches } from "@codemirror/search";
-import { autocompletion, acceptCompletion, CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  acceptCompletion,
+  CompletionContext,
+  type CompletionResult,
+} from "@codemirror/autocomplete";
 import { indentWithTab } from "@codemirror/commands";
 import { Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
@@ -116,7 +121,7 @@ const beigeEditorTheme = EditorView.theme(
       textDecoration: "none",
     },
   },
-  { dark: false }
+  { dark: false },
 );
 
 const beigeHighlightStyle = HighlightStyle.define([
@@ -157,7 +162,11 @@ const dspyCompletions = [
   { label: "dspy.ChainOfThought", type: "class", detail: "Chain of thought module" },
   { label: "dspy.Predict", type: "class", detail: "Predict module" },
   { label: "import dspy", type: "keyword", detail: "Import DSPy" },
-  { label: "def metric(example, pred, trace=None):", type: "function", detail: "Metric function template" },
+  {
+    label: "def metric(example, pred, trace=None):",
+    type: "function",
+    detail: "Metric function template",
+  },
   { label: "with_inputs", type: "method", detail: "Set input fields on Example" },
   { label: "with_outputs", type: "method", detail: "Set output fields on Example" },
 ];
@@ -270,20 +279,30 @@ export function CodeEditor({
         const data = await res.json();
         if (data.changed) onChange(data.code);
       }
-    } catch { /* silent */ }
-    finally { setFormatting(false); }
+    } catch {
+      /* silent */
+    } finally {
+      setFormatting(false);
+    }
   }, [value, formatting, onChange]);
 
   // Clear result when code changes
-  const handleChange = useCallback((v: string) => {
-    onChange(v);
-    if (result) setResult(null);
-  }, [onChange, result]);
+  const handleChange = useCallback(
+    (v: string) => {
+      onChange(v);
+      if (result) setResult(null);
+    },
+    [onChange, result],
+  );
 
   const hasOutput = result !== null || running;
 
   return (
-    <div className="rounded-xl border border-border/60 overflow-visible flex flex-col shadow-sm w-full" style={readOnly ? undefined : { maxHeight: "60vh" }} dir="ltr">
+    <div
+      className="rounded-xl border border-border/60 overflow-visible flex flex-col shadow-sm w-full"
+      style={readOnly ? undefined : { maxHeight: "60vh" }}
+      dir="ltr"
+    >
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F3ECE3] text-[11px] text-[#8C7A6B] border-b border-[#E5DDD4] rounded-t-xl">
         <span className="flex-1 font-semibold text-[#7C6350] tracking-wide flex items-center gap-1.5">
@@ -342,7 +361,10 @@ export function CodeEditor({
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden rounded-b-xl"
           >
-            <div className="relative overflow-y-auto [&_.cm-editor]:!outline-none" style={readOnly ? undefined : { maxHeight: "calc(60vh - 4rem)" }}>
+            <div
+              className="relative overflow-y-auto [&_.cm-editor]:!outline-none"
+              style={readOnly ? undefined : { maxHeight: "calc(60vh - 4rem)" }}
+            >
               <CodeMirror
                 value={value}
                 height={height}
@@ -377,7 +399,9 @@ export function CodeEditor({
       {hasOutput && (
         <div className="bg-[#F5EDE4] border-t border-[#E5DDD4] px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-[#8C7A6B] uppercase tracking-wider font-semibold">Validation</span>
+            <span className="text-[10px] text-[#8C7A6B] uppercase tracking-wider font-semibold">
+              Validation
+            </span>
             {!running && result && (
               <button
                 type="button"
@@ -402,8 +426,14 @@ export function CodeEditor({
                 <span className="font-medium text-[#5A7247]">Valid</span>
                 {result.signature_fields && (
                   <div className="text-[#7C6350] font-mono text-[11px] space-y-0.5" dir="ltr">
-                    <div><span className="text-[#8C7A6B]">Inputs:</span> {result.signature_fields.inputs.join(", ")}</div>
-                    <div><span className="text-[#8C7A6B]">Outputs:</span> {result.signature_fields.outputs.join(", ")}</div>
+                    <div>
+                      <span className="text-[#8C7A6B]">Inputs:</span>{" "}
+                      {result.signature_fields.inputs.join(", ")}
+                    </div>
+                    <div>
+                      <span className="text-[#8C7A6B]">Outputs:</span>{" "}
+                      {result.signature_fields.outputs.join(", ")}
+                    </div>
                   </div>
                 )}
               </div>
@@ -412,9 +442,23 @@ export function CodeEditor({
           {result?.errors.map((err, i) => (
             <div key={`e${i}`} className="flex items-start gap-2 text-xs">
               <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />
-              <span className="text-red-700">{err.split(/(https?:\/\/[^\s]+)/g).map((part, j) =>
-                /^https?:\/\//.test(part) ? <a key={j} href={part} target="_blank" rel="noopener noreferrer" className="underline hover:text-red-900 transition-colors">{part}</a> : part
-              )}</span>
+              <span className="text-red-700">
+                {err.split(/(https?:\/\/[^\s]+)/g).map((part, j) =>
+                  /^https?:\/\//.test(part) ? (
+                    <a
+                      key={j}
+                      href={part}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-red-900 transition-colors"
+                    >
+                      {part}
+                    </a>
+                  ) : (
+                    part
+                  ),
+                )}
+              </span>
             </div>
           ))}
           {result?.warnings.map((w, i) => (

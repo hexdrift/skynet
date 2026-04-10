@@ -138,8 +138,26 @@ const tabletBones: Bone[] = [
 
 export const optimizationDetailBones: ResponsiveBones = {
   breakpoints: {
-    375: { name: "optimization-detail", viewportWidth: 375, width: mW, height: 580, bones: mobileBones },
-    768: { name: "optimization-detail", viewportWidth: 768, width: tW, height: 650, bones: tabletBones },
-    1280: { name: "optimization-detail", viewportWidth: 1280, width: dW, height: 690, bones: desktopBones },
+    375: {
+      name: "optimization-detail",
+      viewportWidth: 375,
+      width: mW,
+      height: 580,
+      bones: mobileBones,
+    },
+    768: {
+      name: "optimization-detail",
+      viewportWidth: 768,
+      width: tW,
+      height: 650,
+      bones: tabletBones,
+    },
+    1280: {
+      name: "optimization-detail",
+      viewportWidth: 1280,
+      width: dW,
+      height: 690,
+      bones: desktopBones,
+    },
   },
 };

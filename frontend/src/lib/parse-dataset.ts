@@ -57,7 +57,9 @@ export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
     const rows = lines.slice(1).map((line) => {
       const values = parseCSVLine(line);
       const row: Record<string, unknown> = {};
-      headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
+      headers.forEach((h, i) => {
+        row[h] = values[i] ?? "";
+      });
       return row;
     });
     return { columns: headers, rows, rowCount: rows.length };

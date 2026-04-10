@@ -13,7 +13,7 @@ test.describe("axe-core accessibility scan", () => {
       .analyze();
 
     const critical = results.violations.filter(
-      (v) => v.impact === "critical" || v.impact === "serious"
+      (v) => v.impact === "critical" || v.impact === "serious",
     );
 
     if (critical.length > 0) {

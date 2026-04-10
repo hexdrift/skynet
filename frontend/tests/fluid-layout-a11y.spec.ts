@@ -14,7 +14,9 @@ const A11Y_VIEWPORTS = [
 ] as const;
 
 test.describe("Fluid Layout Accessibility", () => {
-  test("all pages pass axe-core checks at narrow and wide viewports", async ({ browser }, testInfo) => {
+  test("all pages pass axe-core checks at narrow and wide viewports", async ({
+    browser,
+  }, testInfo) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
     const [jobA, jobB] = await fetchSampleJobIds(2);
@@ -41,7 +43,9 @@ test.describe("Fluid Layout Accessibility", () => {
           } else if (route.path.startsWith("/compare")) {
             await expect(page.getByText("VS").first()).toBeVisible({ timeout: 30_000 });
           } else {
-            await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+              timeout: 30_000,
+            });
           }
 
           // Run axe-core accessibility scan
@@ -88,7 +92,9 @@ test.describe("Fluid Layout Accessibility", () => {
     }
   });
 
-  test("interactive elements meet minimum touch target size at all viewports", async ({ browser }) => {
+  test("interactive elements meet minimum touch target size at all viewports", async ({
+    browser,
+  }) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
 
@@ -104,7 +110,9 @@ test.describe("Fluid Layout Accessibility", () => {
     for (const viewport of TOUCH_TARGET_VIEWPORTS) {
       await withAuthenticatedPage(browser, authState, viewport, async (page) => {
         await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+          timeout: 30_000,
+        });
 
         const tooSmall = await page.evaluate(() => {
           const MIN_SIZE = 44; // WCAG 2.1 Level AAA minimum touch target size
@@ -160,7 +168,7 @@ test.describe("Fluid Layout Accessibility", () => {
         if (tooSmall.length > 0) {
           failedChecks.push(
             `SMALL TOUCH TARGETS @ ${viewport.width}px: Found ${tooSmall.length} elements smaller than 44px\n` +
-            tooSmall.map(t => `  - ${t.tag} "${t.text}" (${t.size})`).join("\n")
+              tooSmall.map((t) => `  - ${t.tag} "${t.text}" (${t.size})`).join("\n"),
           );
         }
       });
@@ -173,7 +181,9 @@ test.describe("Fluid Layout Accessibility", () => {
       });
     }
 
-    expect(failedChecks, "All interactive elements should meet minimum touch target size").toEqual([]);
+    expect(failedChecks, "All interactive elements should meet minimum touch target size").toEqual(
+      [],
+    );
   });
 
   test("keyboard navigation works at all viewport sizes", async ({ browser }) => {
@@ -190,7 +200,9 @@ test.describe("Fluid Layout Accessibility", () => {
     for (const viewport of KEYBOARD_NAV_VIEWPORTS) {
       await withAuthenticatedPage(browser, authState, viewport, async (page) => {
         await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+          timeout: 30_000,
+        });
 
         // Tab through interactive elements
         const tabCount = 10;
@@ -206,18 +218,17 @@ test.describe("Fluid Layout Accessibility", () => {
 
             const rect = focused.getBoundingClientRect();
             const style = window.getComputedStyle(focused);
-            
+
             // Check if focus outline is visible
-            const hasVisibleOutline = 
-              style.outline !== "none" && 
-              style.outline !== "" ||
+            const hasVisibleOutline =
+              (style.outline !== "none" && style.outline !== "") ||
               style.boxShadow.includes("focus") ||
               focused.classList.toString().includes("focus");
 
             return {
               tag: focused.tagName.toLowerCase(),
               visible: rect.width > 0 && rect.height > 0,
-              inViewport: 
+              inViewport:
                 rect.top >= 0 &&
                 rect.left >= 0 &&
                 rect.bottom <= window.innerHeight &&
@@ -235,20 +246,20 @@ test.describe("Fluid Layout Accessibility", () => {
             // Check if focused element has visible focus indicator
             if (!focusInfo.hasOutline && focusInfo.visible) {
               failedChecks.push(
-                `NO FOCUS INDICATOR @ ${viewport.width}px: ${focusInfo.tag} element lacks visible focus outline`
+                `NO FOCUS INDICATOR @ ${viewport.width}px: ${focusInfo.tag} element lacks visible focus outline`,
               );
             }
           }
         }
 
         // Verify we could tab to interactive elements
-        const interactiveElements = focusedElements.filter(
-          (el) => ["button", "a", "input", "select", "textarea"].includes(el.tag)
+        const interactiveElements = focusedElements.filter((el) =>
+          ["button", "a", "input", "select", "textarea"].includes(el.tag),
         );
 
         if (interactiveElements.length === 0) {
           failedChecks.push(
-            `KEYBOARD NAV ISSUE @ ${viewport.width}px: Could not tab to any interactive elements`
+            `KEYBOARD NAV ISSUE @ ${viewport.width}px: Could not tab to any interactive elements`,
           );
         }
       });
@@ -279,7 +290,9 @@ test.describe("Fluid Layout Accessibility", () => {
     for (const viewport of RTL_VIEWPORTS) {
       await withAuthenticatedPage(browser, authState, viewport, async (page) => {
         await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+          timeout: 30_000,
+        });
 
         const rtlIssues = await page.evaluate(() => {
           const issues: string[] = [];
@@ -316,7 +329,7 @@ test.describe("Fluid Layout Accessibility", () => {
 
           if (physicalPropsCount > 10) {
             issues.push(
-              `Found ${physicalPropsCount} elements with physical directional properties (should use logical properties)`
+              `Found ${physicalPropsCount} elements with physical directional properties (should use logical properties)`,
             );
           }
 

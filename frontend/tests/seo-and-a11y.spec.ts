@@ -16,7 +16,9 @@ test.describe("SEO and accessibility regressions", () => {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/login$/);
   });
 
-  test("job detail copy affordances expose aria labels and keyboard semantics", async ({ browser }) => {
+  test("job detail copy affordances expose aria labels and keyboard semantics", async ({
+    browser,
+  }) => {
     const baseUrl = await resolveAppBaseUrl();
     const [jobId] = await fetchSampleJobIds(1);
     const authState = await createAuthenticatedState(browser, baseUrl);
@@ -42,7 +44,9 @@ test.describe("SEO and accessibility regressions", () => {
 
     await withAuthenticatedPage(browser, authState, { width: 1440, height: 900 }, async (page) => {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+        timeout: 30_000,
+      });
 
       await page.getByRole("tab", { name: "סטטיסטיקות" }).click();
 
@@ -58,4 +62,3 @@ test.describe("SEO and accessibility regressions", () => {
     });
   });
 });
-

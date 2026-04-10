@@ -7,7 +7,15 @@
  * (audit #13).
  */
 export { STATUS_COLORS, PIPELINE_STAGES, STAGE_INFO, type PipelineStage } from "./constants";
-export { formatPercent, formatImprovement, jsonPreview, formatDuration, formatLogTimestamp, logTimeBucket, formatOutput } from "./lib/formatters";
+export {
+  formatPercent,
+  formatImprovement,
+  jsonPreview,
+  formatDuration,
+  formatLogTimestamp,
+  logTimeBucket,
+  formatOutput,
+} from "./lib/formatters";
 export { detectStage } from "./lib/detect-stage";
 export { extractScoresFromLogs, type ScorePoint } from "./lib/extract-scores";
 export { DataTab } from "./components/DataTab";

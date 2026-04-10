@@ -40,7 +40,10 @@ export function SpotlightMask({ targetRect, padding = 8, borderRadius = 12 }: Sp
       </defs>
 
       <rect
-        x="0" y="0" width="100%" height="100%"
+        x="0"
+        y="0"
+        width="100%"
+        height="100%"
         fill="rgba(28,22,18,0.50)"
         mask="url(#tutorial-spotlight-mask)"
       />
@@ -50,7 +53,9 @@ export function SpotlightMask({ targetRect, padding = 8, borderRadius = 12 }: Sp
         animate={{ x, y, width: w, height: h }}
         transition={spring}
         rx={borderRadius}
-        fill="none" stroke="rgba(229,221,212,0.35)" strokeWidth="1.5"
+        fill="none"
+        stroke="rgba(229,221,212,0.35)"
+        strokeWidth="1.5"
       />
 
       {/* Glow */}
@@ -61,7 +66,10 @@ export function SpotlightMask({ targetRect, padding = 8, borderRadius = 12 }: Sp
           opacity: { duration: 2.5, repeat: Infinity, ease: "easeInOut" },
         }}
         rx={borderRadius}
-        fill="none" stroke="rgba(229,221,212,0.2)" strokeWidth="3" filter="blur(4px)"
+        fill="none"
+        stroke="rgba(229,221,212,0.2)"
+        strokeWidth="3"
+        filter="blur(4px)"
       />
     </svg>
   );

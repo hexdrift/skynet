@@ -31,7 +31,12 @@ export function SplashScreen() {
       suppressHydrationWarning
       style={
         phase === "fading"
-          ? { backgroundColor: "#F0EBE4", opacity: 0, transition: "opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)", pointerEvents: "none" as const }
+          ? {
+              backgroundColor: "#F0EBE4",
+              opacity: 0,
+              transition: "opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)",
+              pointerEvents: "none" as const,
+            }
           : { backgroundColor: "#F0EBE4" }
       }
     >

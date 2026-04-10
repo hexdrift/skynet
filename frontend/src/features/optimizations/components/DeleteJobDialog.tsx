@@ -56,7 +56,13 @@ export function DeleteJobDialog({
       <TooltipProvider>
         <UiTooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-red-600" onClick={() => setOpen(true)} aria-label="מחיקה">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-red-600"
+              onClick={() => setOpen(true)}
+              aria-label="מחיקה"
+            >
               <Trash2 className="size-4" />
             </Button>
           </TooltipTrigger>
@@ -69,16 +75,28 @@ export function DeleteJobDialog({
             <DialogTitle>מחיקת אופטימיזציה</DialogTitle>
             <DialogDescription>
               האם למחוק את האופטימיזציה{" "}
-              <span className="font-mono font-medium text-foreground break-all">{optimizationId}</span>
+              <span className="font-mono font-medium text-foreground break-all">
+                {optimizationId}
+              </span>
               ?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={loading} className="w-full justify-center">
+            <Button
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={loading}
+              className="w-full justify-center"
+            >
               ביטול
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={loading} className="w-full justify-center">
-              {loading ? <Loader2 className="size-4 animate-spin"/> : "מחיקה"}
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={loading}
+              className="w-full justify-center"
+            >
+              {loading ? <Loader2 className="size-4 animate-spin" /> : "מחיקה"}
             </Button>
           </DialogFooter>
         </DialogContent>

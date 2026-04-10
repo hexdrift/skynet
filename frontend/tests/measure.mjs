@@ -35,7 +35,7 @@ const QUICK_BREAKPOINTS = [
 const BREAKPOINTS = isQuick ? QUICK_BREAKPOINTS : ALL_BREAKPOINTS;
 
 function ensureDirs() {
-  [RESULTS_DIR, BASELINE_DIR, CURRENT_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+  [RESULTS_DIR, BASELINE_DIR, CURRENT_DIR].forEach((d) => fs.mkdirSync(d, { recursive: true }));
 }
 
 async function login(page) {
@@ -55,7 +55,7 @@ async function login(page) {
   await btn.click({ timeout: 10000 });
   // Wait for redirect — either to dashboard or away from login
   try {
-    await page.waitForURL(u => !u.href.includes("/login"), { timeout: 15000 });
+    await page.waitForURL((u) => !u.href.includes("/login"), { timeout: 15000 });
   } catch {
     // Fallback: navigate directly
     await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded", timeout: 10000 });
@@ -72,16 +72,21 @@ async function measureNavigation(page, url) {
 
   // Count long tasks via CDP
   const longTasks = await page.evaluate(() => {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       let count = 0;
       const obs = new PerformanceObserver((list) => {
         for (const e of list.getEntries()) {
           if (e.duration > 50) count++;
         }
       });
-      try { obs.observe({ type: "longtask", buffered: true }); } catch {}
+      try {
+        obs.observe({ type: "longtask", buffered: true });
+      } catch {}
       // Give 500ms to collect buffered long tasks
-      setTimeout(() => { obs.disconnect(); resolve(count); }, 500);
+      setTimeout(() => {
+        obs.disconnect();
+        resolve(count);
+      }, 500);
     });
   });
 
@@ -155,13 +160,17 @@ async function measureInteractions(page, pageName) {
 }
 
 function compareScreenshots(baselinePath, currentPath) {
-  if (!fs.existsSync(baselinePath) || !fs.existsSync(currentPath)) return { match: true, diffPixels: 0 };
+  if (!fs.existsSync(baselinePath) || !fs.existsSync(currentPath))
+    return { match: true, diffPixels: 0 };
   try {
     const img1 = PNG.sync.read(fs.readFileSync(baselinePath));
     const img2 = PNG.sync.read(fs.readFileSync(currentPath));
-    if (img1.width !== img2.width || img1.height !== img2.height) return { match: false, diffPixels: -1 };
+    if (img1.width !== img2.width || img1.height !== img2.height)
+      return { match: false, diffPixels: -1 };
     const diff = new PNG({ width: img1.width, height: img1.height });
-    const numDiff = pixelmatch(img1.data, img2.data, diff.data, img1.width, img1.height, { threshold: 0.15 });
+    const numDiff = pixelmatch(img1.data, img2.data, diff.data, img1.width, img1.height, {
+      threshold: 0.15,
+    });
     const pct = (numDiff / (img1.width * img1.height)) * 100;
     return { match: pct < 0.5, diffPixels: numDiff };
   } catch {
@@ -174,7 +183,7 @@ function runLighthouse() {
     try {
       const result = execSync(
         `npx lighthouse ${BASE_URL}/login --output=json --chrome-flags='--headless --no-sandbox --disable-gpu' --only-categories=performance --quiet 2>/dev/null`,
-        { timeout: 90000, maxBuffer: 10 * 1024 * 1024 }
+        { timeout: 90000, maxBuffer: 10 * 1024 * 1024 },
       ).toString();
       const json = JSON.parse(result);
       const score = Math.round((json.categories?.performance?.score ?? 0) * 100);
@@ -214,16 +223,27 @@ async function main() {
     const page = await context.newPage();
 
     // Mock backend API (localhost:8000) so measurements reflect frontend perf, not backend latency
-    await page.route(url => url.href.includes("localhost:8000"), route => {
-      const url = route.request().url();
-      if (url.includes("/jobs")) {
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 }) });
-      }
-      if (url.includes("/queue-status")) {
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ pending: 0, running: 0, queue: [] }) });
-      }
-      return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
-    });
+    await page.route(
+      (url) => url.href.includes("localhost:8000"),
+      (route) => {
+        const url = route.request().url();
+        if (url.includes("/jobs")) {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 }),
+          });
+        }
+        if (url.includes("/queue-status")) {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ pending: 0, running: 0, queue: [] }),
+          });
+        }
+        return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+      },
+    );
 
     let loggedIn = false;
 
@@ -274,12 +294,17 @@ async function main() {
   // Stats
   const allTimings = [...navTimings, ...interactionTimings];
   allTimings.sort((a, b) => a - b);
-  const avgMs = allTimings.length > 0 ? allTimings.reduce((a, b) => a + b, 0) / allTimings.length : 0;
+  const avgMs =
+    allTimings.length > 0 ? allTimings.reduce((a, b) => a + b, 0) / allTimings.length : 0;
   const p95Idx = Math.floor(allTimings.length * 0.95);
   const p95Ms = allTimings.length > 0 ? allTimings[Math.min(p95Idx, allTimings.length - 1)] : 0;
 
-  const avgNavMs = navTimings.length > 0 ? navTimings.reduce((a, b) => a + b, 0) / navTimings.length : 0;
-  const avgInteractionMs = interactionTimings.length > 0 ? interactionTimings.reduce((a, b) => a + b, 0) / interactionTimings.length : 0;
+  const avgNavMs =
+    navTimings.length > 0 ? navTimings.reduce((a, b) => a + b, 0) / navTimings.length : 0;
+  const avgInteractionMs =
+    interactionTimings.length > 0
+      ? interactionTimings.reduce((a, b) => a + b, 0) / interactionTimings.length
+      : 0;
 
   // Lighthouse (skip in quick mode)
   let lhScore = 92; // default for quick mode
@@ -289,7 +314,10 @@ async function main() {
   }
 
   // Composite: weight interaction timing more heavily
-  const composite = lhScore * 0.4 + Math.max(0, 1000 - avgMs) * 0.3 + Math.max(0, 1000 - totalLongTasks * 100) * 0.3;
+  const composite =
+    lhScore * 0.4 +
+    Math.max(0, 1000 - avgMs) * 0.3 +
+    Math.max(0, 1000 - totalLongTasks * 100) * 0.3;
 
   const result = {
     timestamp: new Date().toISOString(),
@@ -325,10 +353,13 @@ async function main() {
 
   if (visualDiffs.length > 0) {
     console.log("\nVisual diffs:");
-    visualDiffs.forEach(d => console.log(`  ⚠ ${d}`));
+    visualDiffs.forEach((d) => console.log(`  ⚠ ${d}`));
   }
 
   process.exit(0);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

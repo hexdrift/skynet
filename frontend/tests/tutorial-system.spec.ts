@@ -1,6 +1,6 @@
 /**
  * Tutorial System Tests
- * 
+ *
  * Comprehensive test suite for the interactive tutorial overlay system
  * covering step definitions, UI components, keyboard navigation, and persistence.
  */
@@ -55,8 +55,10 @@ async function clearTutorialStorage(page: Page): Promise<void> {
 
 test.describe("Tutorial Step Definitions", () => {
   test("all quick-tour steps have required fields and Hebrew text", async ({ page }) => {
-    await page.goto("data:text/html,<script type='module'>import { TUTORIAL_TRACKS } from '/src/lib/tutorial-steps.ts';window.tracks=TUTORIAL_TRACKS;</script>");
-    
+    await page.goto(
+      "data:text/html,<script type='module'>import { TUTORIAL_TRACKS } from '/src/lib/tutorial-steps.ts';window.tracks=TUTORIAL_TRACKS;</script>",
+    );
+
     const quickTourTrack = await page.evaluate(() => {
       return (window as any).tracks.find((t: any) => t.id === "quick-tour");
     });
@@ -84,8 +86,10 @@ test.describe("Tutorial Step Definitions", () => {
   });
 
   test("all deep-dive steps have required fields and Hebrew text", async ({ page }) => {
-    await page.goto("data:text/html,<script type='module'>import { TUTORIAL_TRACKS } from '/src/lib/tutorial-steps.ts';window.tracks=TUTORIAL_TRACKS;</script>");
-    
+    await page.goto(
+      "data:text/html,<script type='module'>import { TUTORIAL_TRACKS } from '/src/lib/tutorial-steps.ts';window.tracks=TUTORIAL_TRACKS;</script>",
+    );
+
     const deepDiveTrack = await page.evaluate(() => {
       return (window as any).tracks.find((t: any) => t.id === "deep-dive");
     });
@@ -101,7 +105,7 @@ test.describe("Tutorial Step Definitions", () => {
       expect(step.description).toBeTruthy();
       expect(step.target).toBeTruthy();
       expect(step.track).toBe("deep-dive");
-      
+
       expect(step.title).not.toMatch(/TODO|TBD|FIXME|XXX/i);
       expect(step.description).not.toMatch(/TODO|TBD|FIXME|XXX/i);
       expect(step.target).toMatch(/^\[data-tutorial=/);
@@ -109,8 +113,10 @@ test.describe("Tutorial Step Definitions", () => {
   });
 
   test("no duplicate step IDs within each track", async ({ page }) => {
-    await page.goto("data:text/html,<script type='module'>import { TUTORIAL_TRACKS } from '/src/lib/tutorial-steps.ts';window.tracks=TUTORIAL_TRACKS;</script>");
-    
+    await page.goto(
+      "data:text/html,<script type='module'>import { TUTORIAL_TRACKS } from '/src/lib/tutorial-steps.ts';window.tracks=TUTORIAL_TRACKS;</script>",
+    );
+
     const tracks = await page.evaluate(() => {
       return (window as any).tracks;
     });
@@ -149,7 +155,7 @@ test.describe("Data-Tutorial Attributes Presence", () => {
       await expect(page.locator('[data-tutorial="sidebar-nav"]')).toBeVisible();
       await expect(page.locator('[data-tutorial="new-optimization"]')).toBeVisible();
       await expect(page.locator('[data-tutorial="dashboard-kpis"]')).toBeVisible();
-      
+
       // Check table appears (may be empty, but element should exist)
       const tableContainer = page.locator('[data-tutorial="dashboard-table"]');
       await expect(tableContainer).toBeAttached();
@@ -172,7 +178,7 @@ test.describe("Data-Tutorial Attributes Presence", () => {
 
       // Check wizard container
       await expect(page.locator('[data-tutorial="submit-wizard"]')).toBeVisible();
-      
+
       // Check step 1 (basics)
       await expect(page.locator('[data-tutorial="wizard-step-1"]')).toBeVisible();
 
@@ -191,7 +197,7 @@ test.describe("Data-Tutorial Attributes Presence", () => {
 
     try {
       await page.goto(`${baseUrl}/compare`, { waitUntil: "domcontentloaded" });
-      
+
       // Compare page should have the compare-button attribute
       await expect(page.locator('[data-tutorial="compare-button"]')).toBeVisible();
     } finally {
@@ -219,9 +225,9 @@ test.describe("Tutorial Menu", () => {
 
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      
+
       await openTutorialMenu(page);
-      
+
       // Check modal content
       await expect(page.locator("text=בחרו מסלול למידה")).toBeVisible();
       await expect(page.locator("text=סיור מהיר")).toBeVisible();
@@ -262,9 +268,9 @@ test.describe("Tutorial Menu", () => {
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
       await openTutorialMenu(page);
-      
+
       await page.click('button[aria-label="סגור תפריט"]');
-      
+
       // Menu should disappear
       await expect(page.locator("text=בחרו מסלול למידה")).toBeHidden();
     } finally {
@@ -279,10 +285,10 @@ test.describe("Tutorial Menu", () => {
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
       await openTutorialMenu(page);
-      
+
       // Click backdrop (outside modal)
-      await page.click('.bg-black\\/60', { position: { x: 10, y: 10 } });
-      
+      await page.click(".bg-black\\/60", { position: { x: 10, y: 10 } });
+
       // Menu should disappear
       await expect(page.locator("text=בחרו מסלול למידה")).toBeHidden({ timeout: 2000 });
     } finally {
@@ -332,7 +338,7 @@ test.describe("Tutorial Popover", () => {
       await expect(page.locator("text=ברוכים הבאים ל-Skynet")).toBeVisible();
       await expect(page.locator("text=פלטפורמה לאופטימיזציה אוטומטית")).toBeVisible();
       await expect(page.locator("text=1 מתוך 12")).toBeVisible();
-      
+
       // Check navigation buttons
       await expect(page.locator("button:has-text('הבא')")).toBeVisible();
       await expect(page.locator("button:has-text('הקודם')")).toBeDisabled(); // First step
@@ -351,11 +357,11 @@ test.describe("Tutorial Popover", () => {
 
       // Click Next
       await page.click("button:has-text('הבא')");
-      
+
       // Should show step 2
       await expect(page.locator("text=ניווט במערכת")).toBeVisible();
       await expect(page.locator("text=2 מתוך 12")).toBeVisible();
-      
+
       // Previous button should now be enabled
       await expect(page.locator("button:has-text('הקודם')")).toBeEnabled();
     } finally {
@@ -377,7 +383,7 @@ test.describe("Tutorial Popover", () => {
 
       // Go back
       await page.click("button:has-text('הקודם')");
-      
+
       // Should show step 1 again
       await expect(page.locator("text=ברוכים הבאים ל-Skynet")).toBeVisible();
       await expect(page.locator("text=1 מתוך 12")).toBeVisible();
@@ -419,7 +425,7 @@ test.describe("Tutorial Popover", () => {
 
       // Close tutorial
       await page.click('button[aria-label="סגור מדריך"]');
-      
+
       // Popover should disappear
       await expect(page.locator("text=ברוכים הבאים ל-Skynet")).toBeHidden();
     } finally {
@@ -436,7 +442,7 @@ test.describe("Tutorial Popover", () => {
       await startTrack(page, "סיור מהיר");
 
       // Check progress bar exists
-      const progressBar = page.locator('.h-1.bg-muted\\/30 .bg-gradient-to-r');
+      const progressBar = page.locator(".h-1.bg-muted\\/30 .bg-gradient-to-r");
       await expect(progressBar).toBeVisible();
 
       // Progress should increase after clicking Next
@@ -485,7 +491,7 @@ test.describe("Spotlight Mask", () => {
       await expect(svg).toBeVisible();
 
       // Check mask and rect elements exist
-      await expect(svg.locator('mask')).toBeAttached();
+      await expect(svg.locator("mask")).toBeAttached();
       await expect(svg.locator('rect[fill="white"]')).toBeAttached();
       await expect(svg.locator('rect[fill="black"]')).toBeAttached();
     } finally {
@@ -503,18 +509,24 @@ test.describe("Spotlight Mask", () => {
 
       // Get initial mask rect position
       const svg = page.locator('svg[aria-hidden="true"]').first();
-      const initialRect = await svg.locator('rect[fill="black"]').first().evaluate((el) => {
-        return { x: el.getAttribute('x'), y: el.getAttribute('y') };
-      });
+      const initialRect = await svg
+        .locator('rect[fill="black"]')
+        .first()
+        .evaluate((el) => {
+          return { x: el.getAttribute("x"), y: el.getAttribute("y") };
+        });
 
       // Move to next step
       await page.click("button:has-text('הבא')");
       await page.waitForTimeout(300);
 
       // Mask should update
-      const newRect = await svg.locator('rect[fill="black"]').first().evaluate((el) => {
-        return { x: el.getAttribute('x'), y: el.getAttribute('y') };
-      });
+      const newRect = await svg
+        .locator('rect[fill="black"]')
+        .first()
+        .evaluate((el) => {
+          return { x: el.getAttribute("x"), y: el.getAttribute("y") };
+        });
 
       // Position should change (different target element)
       expect(newRect.x).not.toBe(initialRect.x);
@@ -546,9 +558,9 @@ test.describe("Keyboard Navigation", () => {
       await startTrack(page, "סיור מהיר");
 
       await expect(page.locator("text=1 מתוך 12")).toBeVisible();
-      
+
       await page.keyboard.press("Enter");
-      
+
       await expect(page.locator("text=2 מתוך 12")).toBeVisible();
     } finally {
       await context.close();
@@ -564,7 +576,7 @@ test.describe("Keyboard Navigation", () => {
       await startTrack(page, "סיור מהיר");
 
       await page.keyboard.press("ArrowLeft");
-      
+
       await expect(page.locator("text=2 מתוך 12")).toBeVisible();
     } finally {
       await context.close();
@@ -585,7 +597,7 @@ test.describe("Keyboard Navigation", () => {
 
       // Go back with ArrowRight
       await page.keyboard.press("ArrowRight");
-      
+
       await expect(page.locator("text=1 מתוך 12")).toBeVisible();
     } finally {
       await context.close();
@@ -604,7 +616,7 @@ test.describe("Keyboard Navigation", () => {
       await expect(page.locator("text=2 מתוך 12")).toBeVisible();
 
       await page.keyboard.press("Backspace");
-      
+
       await expect(page.locator("text=1 מתוך 12")).toBeVisible();
     } finally {
       await context.close();
@@ -620,7 +632,7 @@ test.describe("Keyboard Navigation", () => {
       await startTrack(page, "סיור מהיר");
 
       await page.keyboard.press("Escape");
-      
+
       await expect(page.locator("text=ברוכים הבאים ל-Skynet")).toBeHidden();
     } finally {
       await context.close();
@@ -663,7 +675,7 @@ test.describe("LocalStorage Persistence", () => {
         await page.click("button:has-text('הבא')");
         await page.waitForTimeout(100);
       }
-      
+
       await page.click("button:has-text('סיים')");
       await page.waitForTimeout(300);
 
@@ -697,7 +709,7 @@ test.describe("LocalStorage Persistence", () => {
 
       // Open menu and check for completed badge
       await openTutorialMenu(page);
-      
+
       const quickTourCard = page.locator('button:has-text("סיור מהיר")');
       await expect(quickTourCard.locator("text=✓ הושלם")).toBeVisible();
     } finally {
@@ -711,7 +723,7 @@ test.describe("LocalStorage Persistence", () => {
 
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      
+
       // Complete quick tour
       await startTrack(page, "סיור מהיר");
       for (let i = 0; i < 11; i++) {
@@ -768,7 +780,7 @@ test.describe("Full Tutorial Flow", () => {
       // Navigate through all 12 steps
       for (let i = 1; i <= 12; i++) {
         await expect(page.locator(`text=${i} מתוך 12`)).toBeVisible();
-        
+
         if (i < 12) {
           await page.click("button:has-text('הבא')");
           await page.waitForTimeout(100);
@@ -796,7 +808,7 @@ test.describe("Full Tutorial Flow", () => {
 
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      
+
       // Complete tutorial first
       await startTrack(page, "סיור מהיר");
       for (let i = 0; i < 11; i++) {
@@ -825,10 +837,10 @@ test.describe("Full Tutorial Flow", () => {
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
       await clearTutorialStorage(page);
-      
+
       // Start tutorial
       await startTrack(page, "סיור מהיר");
-      
+
       // Navigate to step 3
       await page.click("button:has-text('הבא')");
       await page.click("button:has-text('הבא')");
@@ -842,7 +854,7 @@ test.describe("Full Tutorial Flow", () => {
 
       // Tutorial should NOT auto-resume
       await expect(page.locator("text=3 מתוך 12")).toBeHidden();
-      
+
       // But help button should still be visible
       await expect(page.locator('button[aria-label="פתח מדריך"]')).toBeVisible();
     } finally {
@@ -870,7 +882,7 @@ test.describe("Hebrew Text Verification", () => {
 
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      
+
       // Open menu
       await openTutorialMenu(page);
 
@@ -884,11 +896,11 @@ test.describe("Hebrew Text Verification", () => {
       // Check popover text
       await expect(page.locator("button:has-text('הבא')")).toBeVisible();
       await expect(page.locator("button:has-text('הקודם')")).toBeVisible();
-      
+
       // Navigate to ensure consistent Hebrew throughout
       await page.click("button:has-text('הבא')");
       await page.waitForTimeout(200);
-      
+
       // All step numbers should be in format "X מתוך Y" (Hebrew)
       await expect(page.locator("text=2 מתוך 12")).toBeVisible();
     } finally {
@@ -908,7 +920,7 @@ test.describe("Hebrew Text Verification", () => {
       for (let i = 0; i < 12; i++) {
         // Get all visible text
         const bodyText = await page.locator('[dir="rtl"]').first().textContent();
-        
+
         // Check for common placeholder patterns
         expect(bodyText).not.toMatch(/\bTODO\b/i);
         expect(bodyText).not.toMatch(/\bTBD\b/i);

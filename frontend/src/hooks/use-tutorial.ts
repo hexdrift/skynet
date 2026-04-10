@@ -201,7 +201,7 @@ export function useTutorial() {
         STORAGE_KEY,
         JSON.stringify({
           completedTracks: Array.from(state.completedTracks),
-        })
+        }),
       );
     } catch {
       // Ignore storage errors

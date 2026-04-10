@@ -44,7 +44,9 @@ export function extractScoresFromLogs(logs: { message: string }[]): ScorePoint[]
     }
 
     // GEPA: "Iteration N: Full valset score for new program: 0.78"
-    const gepaScoreMatch = msg.match(/Iteration (\d+):\s*Full valset score for new program:\s*([\d.]+)/);
+    const gepaScoreMatch = msg.match(
+      /Iteration (\d+):\s*Full valset score for new program:\s*([\d.]+)/,
+    );
     if (gepaScoreMatch) {
       const iter = parseInt(gepaScoreMatch[1]!, 10);
       const score = parseFloat(gepaScoreMatch[2]!);
@@ -54,7 +56,9 @@ export function extractScoresFromLogs(logs: { message: string }[]): ScorePoint[]
     }
 
     // GEPA: "Iteration N: Base program full valset score: 0.65"
-    const gepaBaseMatch = msg.match(/Iteration (\d+):\s*Base program full valset score:\s*([\d.]+)/);
+    const gepaBaseMatch = msg.match(
+      /Iteration (\d+):\s*Base program full valset score:\s*([\d.]+)/,
+    );
     if (gepaBaseMatch) {
       const iter = parseInt(gepaBaseMatch[1]!, 10);
       const score = parseFloat(gepaBaseMatch[2]!);

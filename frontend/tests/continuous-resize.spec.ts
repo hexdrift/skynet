@@ -8,7 +8,9 @@ import {
 
 // Layer 3: Continuous Resize Test
 test.describe("Continuous Resize", () => {
-  test("dashboard page handles continuous viewport resize smoothly", async ({ browser }, testInfo) => {
+  test("dashboard page handles continuous viewport resize smoothly", async ({
+    browser,
+  }, testInfo) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
 
@@ -24,7 +26,9 @@ test.describe("Continuous Resize", () => {
     for (let width = startWidth; width >= endWidth; width -= step) {
       await withAuthenticatedPage(browser, authState, { width, height }, async (page) => {
         await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({
+          timeout: 30_000,
+        });
 
         // Wait for any animations/transitions to complete
         await page.waitForTimeout(300);
@@ -80,14 +84,14 @@ test.describe("Continuous Resize", () => {
         // Check for horizontal overflow
         if (metrics.hasHorizontalScroll) {
           failedChecks.push(
-            `HORIZONTAL SCROLL @ ${width}px: Document width ${metrics.documentWidth}px exceeds viewport`
+            `HORIZONTAL SCROLL @ ${width}px: Document width ${metrics.documentWidth}px exceeds viewport`,
           );
         }
 
         // Check if content extends beyond viewport
         if (metrics.maxElementRight > metrics.viewportWidth + 1) {
           failedChecks.push(
-            `ELEMENT OVERFLOW @ ${width}px: Element extends to ${metrics.maxElementRight}px (viewport: ${metrics.viewportWidth}px)`
+            `ELEMENT OVERFLOW @ ${width}px: Element extends to ${metrics.maxElementRight}px (viewport: ${metrics.viewportWidth}px)`,
           );
         }
       });
@@ -100,21 +104,23 @@ test.describe("Continuous Resize", () => {
 
       // Check for sudden element count changes (more than 20% difference)
       const elementCountDiff = Math.abs(
-        curr.metrics.visibleElementCount - prev.metrics.visibleElementCount
+        curr.metrics.visibleElementCount - prev.metrics.visibleElementCount,
       );
       const elementCountRatio = elementCountDiff / prev.metrics.visibleElementCount;
 
       if (elementCountRatio > 0.2) {
         failedChecks.push(
-          `LAYOUT JUMP @ ${curr.width}px: ${elementCountDiff} elements changed (${Math.round(elementCountRatio * 100)}% difference from ${prev.width}px)`
+          `LAYOUT JUMP @ ${curr.width}px: ${elementCountDiff} elements changed (${Math.round(elementCountRatio * 100)}% difference from ${prev.width}px)`,
         );
       }
     }
 
     // Report results
     console.log("\n📊 Continuous Resize Test Results:");
-    console.log(`Tested ${layoutSnapshots.length} viewport widths from ${startWidth}px to ${endWidth}px`);
-    
+    console.log(
+      `Tested ${layoutSnapshots.length} viewport widths from ${startWidth}px to ${endWidth}px`,
+    );
+
     if (failedChecks.length === 0) {
       console.log("✅ All resize steps passed smoothly!");
     } else {
@@ -131,12 +137,14 @@ test.describe("Continuous Resize", () => {
       if (snapshot) {
         console.log(
           `  ${w}px: ${snapshot.metrics.visibleElementCount} visible elements, ` +
-          `max right: ${snapshot.metrics.maxElementRight}px`
+            `max right: ${snapshot.metrics.maxElementRight}px`,
         );
       }
     });
 
-    expect(failedChecks, `Found ${failedChecks.length} issues during continuous resize`).toEqual([]);
+    expect(failedChecks, `Found ${failedChecks.length} issues during continuous resize`).toEqual(
+      [],
+    );
   });
 
   test("job detail page handles continuous resize smoothly", async ({ browser }, testInfo) => {
@@ -226,9 +234,10 @@ test.describe("Continuous Resize", () => {
           inputs.forEach((input) => {
             const rect = input.getBoundingClientRect();
             if (rect.right > window.innerWidth + 1) {
-              const label = (input as HTMLElement).getAttribute("aria-label") || 
-                           (input as HTMLElement).getAttribute("name") || 
-                           "unknown field";
+              const label =
+                (input as HTMLElement).getAttribute("aria-label") ||
+                (input as HTMLElement).getAttribute("name") ||
+                "unknown field";
               problems.push(`Form field overflow: ${label} extends to ${Math.round(rect.right)}px`);
             }
           });

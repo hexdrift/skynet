@@ -27,7 +27,9 @@ const ALL_ROUTES = [
 ] as const;
 
 test.describe("Fluid Layout Visual Regression", () => {
-  test("all pages render without layout issues at all viewport widths", async ({ browser }, testInfo) => {
+  test("all pages render without layout issues at all viewport widths", async ({
+    browser,
+  }, testInfo) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
     const [jobA, jobB] = await fetchSampleJobIds(2);
@@ -54,13 +56,17 @@ test.describe("Fluid Layout Visual Regression", () => {
 
             // Wait for route-specific content
             if (route.path === "/submit") {
-              await expect(page.getByText("פרטים בסיסיים").first()).toBeVisible({ timeout: 30_000 });
+              await expect(page.getByText("פרטים בסיסיים").first()).toBeVisible({
+                timeout: 30_000,
+              });
             } else if (route.path.startsWith("/jobs/")) {
               await expect(page.getByText("סקירה")).toBeVisible({ timeout: 30_000 });
             } else if (route.path.startsWith("/compare")) {
               await expect(page.getByText("VS").first()).toBeVisible({ timeout: 30_000 });
             } else {
-              await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+              await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+                timeout: 30_000,
+              });
             }
 
             // Take screenshot
@@ -73,68 +79,80 @@ test.describe("Fluid Layout Visual Regression", () => {
             try {
               await assertNoHorizontalOverflow(page, `${route.label} @ ${viewport.width}px`);
             } catch (error) {
-              failedChecks.push(`OVERFLOW: ${route.label} @ ${viewport.width}px - ${error instanceof Error ? error.message : String(error)}`);
+              failedChecks.push(
+                `OVERFLOW: ${route.label} @ ${viewport.width}px - ${error instanceof Error ? error.message : String(error)}`,
+              );
             }
 
             // Check for console errors
             if (consoleErrors.length > 0) {
-              failedChecks.push(`CONSOLE ERRORS: ${route.label} @ ${viewport.width}px - ${consoleErrors.join(", ")}`);
+              failedChecks.push(
+                `CONSOLE ERRORS: ${route.label} @ ${viewport.width}px - ${consoleErrors.join(", ")}`,
+              );
             }
 
             // Check for layout issues
             const layoutIssues = await page.evaluate(() => {
               const issues: string[] = [];
-              
+
               // Check for elements that overflow viewport
               const allElements = document.querySelectorAll("*");
               allElements.forEach((el) => {
                 const rect = el.getBoundingClientRect();
                 const computedStyle = window.getComputedStyle(el);
-                
+
                 // Skip hidden elements
                 if (computedStyle.display === "none" || computedStyle.visibility === "hidden") {
                   return;
                 }
-                
+
                 // Check if element extends beyond viewport width
                 if (rect.right > window.innerWidth + 1) {
                   const tag = el.tagName.toLowerCase();
                   const classList = el.className;
-                  issues.push(`Element overflow: ${tag}.${classList} extends to ${Math.round(rect.right)}px (viewport: ${window.innerWidth}px)`);
+                  issues.push(
+                    `Element overflow: ${tag}.${classList} extends to ${Math.round(rect.right)}px (viewport: ${window.innerWidth}px)`,
+                  );
                 }
               });
-              
+
               return issues.slice(0, 5); // Limit to first 5 issues
             });
 
             if (layoutIssues.length > 0) {
-              failedChecks.push(`LAYOUT ISSUES: ${route.label} @ ${viewport.width}px - ${layoutIssues.join("; ")}`);
+              failedChecks.push(
+                `LAYOUT ISSUES: ${route.label} @ ${viewport.width}px - ${layoutIssues.join("; ")}`,
+              );
             }
           });
         } else {
           // Login page - no auth needed
           const context = await browser.newContext({ viewport });
           const page = await context.newPage();
-          
+
           try {
             const consoleErrors = recordConsoleErrors(page);
-            
+
             await page.goto(`${baseUrl}${route.path}`, { waitUntil: "domcontentloaded" });
             await expect(page.getByLabel("שם משתמש").first()).toBeVisible({ timeout: 30_000 });
-            
+
             await page.screenshot({
               path: testInfo.outputPath(`${route.label}-${viewport.width}px.png`),
               fullPage: true,
             });
-            
+
             try {
               await assertNoHorizontalOverflow(page, `${route.label} @ ${viewport.width}px`);
             } catch (error) {
-              failedChecks.push(`OVERFLOW: ${route.label} @ ${viewport.width}px - ${error instanceof Error ? error.message : String(error)}`);
+              failedChecks.push(
+                `OVERFLOW: ${route.label} @ ${viewport.width}px - ${error instanceof Error ? error.message : String(error)}`,
+              );
             }
-            
+
             if (consoleErrors.length > 0) {
-              failedChecks.push(`CONSOLE ERRORS: ${route.label} @ ${viewport.width}px - ${consoleErrors.join(", ")}`);
+              failedChecks.push(
+                `CONSOLE ERRORS: ${route.label} @ ${viewport.width}px - ${consoleErrors.join(", ")}`,
+              );
             }
           } finally {
             await context.close();
@@ -163,13 +181,16 @@ test.describe("Fluid Layout Visual Regression", () => {
     for (const viewport of FLUID_LAYOUT_VIEWPORTS) {
       await withAuthenticatedPage(browser, authState, viewport, async (page) => {
         await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+          timeout: 30_000,
+        });
 
         const overlaps = await page.evaluate(() => {
-          const sidebar = document.querySelector('[class*="sidebar"]') || 
-                         document.querySelector('nav') ||
-                         document.querySelector('[role="navigation"]');
-          const mainContent = document.querySelector('main');
+          const sidebar =
+            document.querySelector('[class*="sidebar"]') ||
+            document.querySelector("nav") ||
+            document.querySelector('[role="navigation"]');
+          const mainContent = document.querySelector("main");
 
           if (!sidebar || !mainContent) {
             return null;
@@ -180,16 +201,17 @@ test.describe("Fluid Layout Visual Regression", () => {
 
           // Check for overlap (accounting for RTL layout)
           const hasOverlap = !(
-            sidebarRect.left >= mainRect.right ||
-            sidebarRect.right <= mainRect.left
+            sidebarRect.left >= mainRect.right || sidebarRect.right <= mainRect.left
           );
 
-          return hasOverlap ? {
-            sidebarLeft: sidebarRect.left,
-            sidebarRight: sidebarRect.right,
-            mainLeft: mainRect.left,
-            mainRight: mainRect.right,
-          } : null;
+          return hasOverlap
+            ? {
+                sidebarLeft: sidebarRect.left,
+                sidebarRight: sidebarRect.right,
+                mainLeft: mainRect.left,
+                mainRight: mainRect.right,
+              }
+            : null;
         });
 
         if (overlaps) {
@@ -208,7 +230,9 @@ test.describe("Fluid Layout Visual Regression", () => {
     expect(failedChecks, "Sidebar should not overlap content").toEqual([]);
   });
 
-  test("tables have horizontal scroll within container, not page-wide", async ({ browser }, testInfo) => {
+  test("tables have horizontal scroll within container, not page-wide", async ({
+    browser,
+  }, testInfo) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
     const [jobId] = await fetchSampleJobIds(1);
@@ -216,7 +240,7 @@ test.describe("Fluid Layout Visual Regression", () => {
     const failedChecks: string[] = [];
 
     // Test at smaller viewports where tables would overflow
-    const narrowViewports = FLUID_LAYOUT_VIEWPORTS.filter(v => v.width <= 1024);
+    const narrowViewports = FLUID_LAYOUT_VIEWPORTS.filter((v) => v.width <= 1024);
 
     for (const viewport of narrowViewports) {
       await withAuthenticatedPage(browser, authState, viewport, async (page) => {
@@ -230,15 +254,16 @@ test.describe("Fluid Layout Visual Regression", () => {
           tables.forEach((table) => {
             const tableRect = table.getBoundingClientRect();
             const parent = table.parentElement;
-            
+
             if (!parent) return;
-            
+
             const parentStyle = window.getComputedStyle(parent);
-            const hasScrollContainer = parentStyle.overflowX === "auto" || parentStyle.overflowX === "scroll";
-            
+            const hasScrollContainer =
+              parentStyle.overflowX === "auto" || parentStyle.overflowX === "scroll";
+
             // Check if table is wider than viewport
             const tableOverflowsViewport = tableRect.width > window.innerWidth;
-            
+
             issues.push({
               hasContainer: hasScrollContainer,
               containerOverflows: tableOverflowsViewport && !hasScrollContainer,
@@ -248,9 +273,11 @@ test.describe("Fluid Layout Visual Regression", () => {
           return issues;
         });
 
-        const problematicTables = tableScrollIssue.filter(t => t.containerOverflows);
+        const problematicTables = tableScrollIssue.filter((t) => t.containerOverflows);
         if (problematicTables.length > 0) {
-          failedChecks.push(`TABLE SCROLL ISSUE @ ${viewport.width}px: ${problematicTables.length} table(s) overflow without scroll container`);
+          failedChecks.push(
+            `TABLE SCROLL ISSUE @ ${viewport.width}px: ${problematicTables.length} table(s) overflow without scroll container`,
+          );
         }
       });
     }
@@ -291,7 +318,9 @@ test.describe("Fluid Layout Visual Regression", () => {
             }
 
             if (rect.width > window.innerWidth || rect.height > window.innerHeight) {
-              issues.push(`Modal overflow: ${rect.width}x${rect.height} > ${window.innerWidth}x${window.innerHeight}`);
+              issues.push(
+                `Modal overflow: ${rect.width}x${rect.height} > ${window.innerWidth}x${window.innerHeight}`,
+              );
             }
           });
 
@@ -334,19 +363,23 @@ test.describe("Fluid Layout Visual Regression", () => {
           editors.forEach((editor) => {
             const editorRect = editor.getBoundingClientRect();
             const parent = editor.parentElement;
-            
+
             if (!parent) return;
-            
+
             const parentRect = parent.getBoundingClientRect();
-            
+
             // Check if editor is significantly wider than parent (more than 10px)
             if (editorRect.width > parentRect.width + 10) {
-              issues.push(`Editor overflow: ${Math.round(editorRect.width)}px > parent ${Math.round(parentRect.width)}px`);
+              issues.push(
+                `Editor overflow: ${Math.round(editorRect.width)}px > parent ${Math.round(parentRect.width)}px`,
+              );
             }
-            
+
             // Check if editor extends beyond viewport
             if (editorRect.right > window.innerWidth + 1) {
-              issues.push(`Editor extends beyond viewport: ${Math.round(editorRect.right)}px > ${window.innerWidth}px`);
+              issues.push(
+                `Editor extends beyond viewport: ${Math.round(editorRect.right)}px > ${window.innerWidth}px`,
+              );
             }
           });
 

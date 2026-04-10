@@ -21,7 +21,7 @@ if (
 ) {
   console.error(
     "[Skynet] ⚠️ Production API URL uses HTTP — API keys and tokens will be transmitted in plaintext. " +
-    "Set NEXT_PUBLIC_API_URL to an https:// URL."
+      "Set NEXT_PUBLIC_API_URL to an https:// URL.",
   );
 }
 
@@ -43,14 +43,16 @@ function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
   const existing = _inflight.get(key);
   if (existing) return existing as Promise<T>;
 
-  const promise = request<T>(path).then((data) => {
-    _cache.set(key, { data, ts: Date.now() });
-    _inflight.delete(key);
-    return data;
-  }).catch((err) => {
-    _inflight.delete(key);
-    throw err;
-  });
+  const promise = request<T>(path)
+    .then((data) => {
+      _cache.set(key, { data, ts: Date.now() });
+      _inflight.delete(key);
+      return data;
+    })
+    .catch((err) => {
+      _inflight.delete(key);
+      throw err;
+    });
   _inflight.set(key, promise);
   return promise;
 }
@@ -62,7 +64,7 @@ function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
  */
 export function invalidateCache(...pathSubstrings: string[]) {
   for (const [key] of _cache) {
-    if (pathSubstrings.length === 0 || pathSubstrings.some(s => key.includes(s))) {
+    if (pathSubstrings.length === 0 || pathSubstrings.some((s) => key.includes(s))) {
       _cache.delete(key);
     }
   }
@@ -136,49 +138,76 @@ export function getOptimizationPayload(optimizationId: string) {
 }
 
 export function getOptimizationDataset(optimizationId: string) {
-  return request<import("./types").OptimizationDatasetResponse>(`/optimizations/${optimizationId}/dataset`);
+  return request<import("./types").OptimizationDatasetResponse>(
+    `/optimizations/${optimizationId}/dataset`,
+  );
 }
 
-export function evaluateExamples(optimizationId: string, indices: number[], programType: "optimized" | "baseline") {
-  return request<{ results: import("./types").EvalExampleResult[]; program_type: string }>(`/optimizations/${optimizationId}/evaluate-examples`, {
-    method: "POST",
-    body: JSON.stringify({ indices, program_type: programType }),
-  });
+export function evaluateExamples(
+  optimizationId: string,
+  indices: number[],
+  programType: "optimized" | "baseline",
+) {
+  return request<{ results: import("./types").EvalExampleResult[]; program_type: string }>(
+    `/optimizations/${optimizationId}/evaluate-examples`,
+    {
+      method: "POST",
+      body: JSON.stringify({ indices, program_type: programType }),
+    },
+  );
 }
 
 export function getTestResults(optimizationId: string) {
-  return request<{ baseline: import("./types").EvalExampleResult[]; optimized: import("./types").EvalExampleResult[] }>(`/optimizations/${optimizationId}/test-results`);
+  return request<{
+    baseline: import("./types").EvalExampleResult[];
+    optimized: import("./types").EvalExampleResult[];
+  }>(`/optimizations/${optimizationId}/test-results`);
 }
 
 export async function cancelJob(optimizationId: string) {
-  const res = await request<{ optimization_id: string; status: string }>(`/optimizations/${optimizationId}/cancel`, { method: "POST" });
+  const res = await request<{ optimization_id: string; status: string }>(
+    `/optimizations/${optimizationId}/cancel`,
+    { method: "POST" },
+  );
   invalidateCache("/optimizations");
   return res;
 }
 
 export async function deleteJob(optimizationId: string) {
-  const res = await request<{ optimization_id: string; deleted: boolean }>(`/optimizations/${optimizationId}`, { method: "DELETE" });
+  const res = await request<{ optimization_id: string; deleted: boolean }>(
+    `/optimizations/${optimizationId}`,
+    { method: "DELETE" },
+  );
   invalidateCache("/optimizations");
   return res;
 }
 
 export async function renameOptimization(optimizationId: string, name: string) {
-  const res = await request<{ optimization_id: string; name: string }>(`/optimizations/${optimizationId}/name`, {
-    method: "PATCH",
-    body: JSON.stringify({ name }),
-  });
+  const res = await request<{ optimization_id: string; name: string }>(
+    `/optimizations/${optimizationId}/name`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    },
+  );
   invalidateCache("/optimizations");
   return res;
 }
 
 export async function togglePinOptimization(optimizationId: string) {
-  const res = await request<{ optimization_id: string; pinned: boolean }>(`/optimizations/${optimizationId}/pin`, { method: "PATCH" });
+  const res = await request<{ optimization_id: string; pinned: boolean }>(
+    `/optimizations/${optimizationId}/pin`,
+    { method: "PATCH" },
+  );
   invalidateCache("/optimizations");
   return res;
 }
 
 export async function toggleArchiveOptimization(optimizationId: string) {
-  const res = await request<{ optimization_id: string; archived: boolean }>(`/optimizations/${optimizationId}/archive`, { method: "PATCH" });
+  const res = await request<{ optimization_id: string; archived: boolean }>(
+    `/optimizations/${optimizationId}/archive`,
+    { method: "PATCH" },
+  );
   invalidateCache("/optimizations");
   return res;
 }
@@ -230,7 +259,10 @@ export function listJobsSidebar(params?: { username?: string; limit?: number; of
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.offset) q.set("offset", String(params.offset));
   const qs = q.toString();
-  return cachedGet<{ items: SidebarJobItem[]; total: number }>(`/optimizations/sidebar${qs ? `?${qs}` : ""}`, 3000);
+  return cachedGet<{ items: SidebarJobItem[]; total: number }>(
+    `/optimizations/sidebar${qs ? `?${qs}` : ""}`,
+    3000,
+  );
 }
 
 /* ── Serving ── */
@@ -244,7 +276,10 @@ export function getPairServeInfo(optimizationId: string, pairIndex: number) {
 }
 
 export function getPairTestResults(optimizationId: string, pairIndex: number) {
-  return request<{ baseline: import("./types").EvalExampleResult[]; optimized: import("./types").EvalExampleResult[] }>(`/optimizations/${optimizationId}/pair/${pairIndex}/test-results`);
+  return request<{
+    baseline: import("./types").EvalExampleResult[];
+    optimized: import("./types").EvalExampleResult[];
+  }>(`/optimizations/${optimizationId}/pair/${pairIndex}/test-results`);
 }
 
 export function serveProgram(optimizationId: string, inputs: Record<string, string>) {
@@ -256,7 +291,12 @@ export function serveProgram(optimizationId: string, inputs: Record<string, stri
 
 export interface StreamServeHandlers {
   onToken: (field: string, chunk: string) => void;
-  onFinal: (result: { outputs: Record<string, unknown>; model_used: string; input_fields: string[]; output_fields: string[] }) => void;
+  onFinal: (result: {
+    outputs: Record<string, unknown>;
+    model_used: string;
+    input_fields: string[];
+    output_fields: string[];
+  }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
 }
@@ -287,7 +327,9 @@ export async function serveProgramStream(
       const raw = JSON.parse(text).detail;
       // 422 responses send an array of validation-error objects — coerce to string
       detail = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : undefined;
-    } catch { /* not json */ }
+    } catch {
+      /* not json */
+    }
     handlers.onError(detail ?? `שגיאת שרת: ${res.status}`);
     return;
   }
@@ -303,7 +345,11 @@ export async function serveProgramStream(
     }
     if (dataLines.length === 0) return;
     let data: Record<string, unknown>;
-    try { data = JSON.parse(dataLines.join("\n")); } catch { return; }
+    try {
+      data = JSON.parse(dataLines.join("\n"));
+    } catch {
+      return;
+    }
     if (event === "token") {
       handlers.onToken(String(data.field ?? ""), String(data.chunk ?? ""));
     } else if (event === "final") {
@@ -366,7 +412,9 @@ export async function servePairProgramStream(
     try {
       const raw = JSON.parse(text).detail;
       detail = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : undefined;
-    } catch { /* not json */ }
+    } catch {
+      /* not json */
+    }
     handlers.onError(detail ?? `שגיאת שרת: ${res.status}`);
     return;
   }
@@ -382,7 +430,11 @@ export async function servePairProgramStream(
     }
     if (dataLines.length === 0) return;
     let data: Record<string, unknown>;
-    try { data = JSON.parse(dataLines.join("\n")); } catch { return; }
+    try {
+      data = JSON.parse(dataLines.join("\n"));
+    } catch {
+      return;
+    }
     if (event === "token") {
       handlers.onToken(String(data.field ?? ""), String(data.chunk ?? ""));
     } else if (event === "final") {
@@ -444,9 +496,16 @@ export function listTemplates(username?: string): Promise<import("./types").Temp
 /** Prefetch templates on module load so they're ready when submit page opens. */
 listTemplates().catch(() => {});
 
-function _invalidateTemplatesCache() { _templatesCache = null; }
+function _invalidateTemplatesCache() {
+  _templatesCache = null;
+}
 
-export async function createTemplate(payload: { name: string; description?: string; username: string; config: Record<string, unknown> }) {
+export async function createTemplate(payload: {
+  name: string;
+  description?: string;
+  username: string;
+  config: Record<string, unknown>;
+}) {
   const result = await request<import("./types").TemplateResponse>("/templates", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -456,8 +515,10 @@ export async function createTemplate(payload: { name: string; description?: stri
 }
 
 export async function deleteTemplate(templateId: string, username: string) {
-  const result = await request<{ template_id: string; deleted: boolean }>(`/templates/${templateId}?username=${encodeURIComponent(username)}`, { method: "DELETE" });
+  const result = await request<{ template_id: string; deleted: boolean }>(
+    `/templates/${templateId}?username=${encodeURIComponent(username)}`,
+    { method: "DELETE" },
+  );
   _invalidateTemplatesCache();
   return result;
 }
-

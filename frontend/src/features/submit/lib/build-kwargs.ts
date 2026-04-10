@@ -14,7 +14,15 @@ export interface OptimizerKwargsInput {
 }
 
 export function buildOptimizerKwargs(input: OptimizerKwargsInput): Record<string, unknown> {
-  const { optimizerName, autoLevel, maxBootstrappedDemos, maxLabeledDemos, maxFullEvals, reflectionMinibatchSize, useMerge } = input;
+  const {
+    optimizerName,
+    autoLevel,
+    maxBootstrappedDemos,
+    maxLabeledDemos,
+    maxFullEvals,
+    reflectionMinibatchSize,
+    useMerge,
+  } = input;
   const kw: Record<string, unknown> = {};
   if (optimizerName === "miprov2") {
     if (autoLevel) kw.auto = autoLevel;
@@ -27,7 +35,8 @@ export function buildOptimizerKwargs(input: OptimizerKwargsInput): Record<string
     } else if (maxFullEvals) {
       kw.max_full_evals = parseInt(maxFullEvals, 10);
     }
-    if (reflectionMinibatchSize) kw.reflection_minibatch_size = parseInt(reflectionMinibatchSize, 10);
+    if (reflectionMinibatchSize)
+      kw.reflection_minibatch_size = parseInt(reflectionMinibatchSize, 10);
     kw.use_merge = useMerge;
   }
   return Object.keys(kw).length > 0 ? kw : {};

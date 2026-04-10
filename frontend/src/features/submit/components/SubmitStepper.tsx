@@ -32,7 +32,7 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
                       ? "bg-primary/15 text-primary hover:bg-primary/25"
                       : reachable
                         ? "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                        : "bg-muted/50 text-muted-foreground/30 cursor-not-allowed"
+                        : "bg-muted/50 text-muted-foreground/30 cursor-not-allowed",
                 )}
               >
                 {completed ? <Check className="size-4" /> : i + 1}
@@ -47,7 +47,7 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
               <span
                 className={cn(
                   "mt-2 text-[11px] font-medium transition-colors duration-200 hidden sm:block text-center",
-                  active ? "text-foreground" : completed ? "text-primary" : "text-muted-foreground"
+                  active ? "text-foreground" : completed ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 {s.label}

@@ -1,4 +1,10 @@
-import { expect, type Browser, type Page, type StorageState, type ViewportSize } from "@playwright/test";
+import {
+  expect,
+  type Browser,
+  type Page,
+  type StorageState,
+  type ViewportSize,
+} from "@playwright/test";
 
 const APP_BASE_URLS = [
   process.env.PLAYWRIGHT_BASE_URL,
@@ -26,7 +32,9 @@ export async function resolveAppBaseUrl(): Promise<string> {
         }
       }
 
-      throw new Error(`Unable to resolve the frontend base URL. Tried: ${APP_BASE_URLS.join(", ")}`);
+      throw new Error(
+        `Unable to resolve the frontend base URL. Tried: ${APP_BASE_URLS.join(", ")}`,
+      );
     })();
   }
 
@@ -51,7 +59,10 @@ export async function fetchSampleJobIds(count = 2): Promise<string[]> {
   return ids.slice(0, count);
 }
 
-export async function createAuthenticatedState(browser: Browser, baseUrl: string): Promise<StorageState> {
+export async function createAuthenticatedState(
+  browser: Browser,
+  baseUrl: string,
+): Promise<StorageState> {
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -140,7 +151,9 @@ export type InteractiveElementSnapshot = {
   bottom: number;
 };
 
-export async function collectVisibleInteractiveElements(page: Page): Promise<InteractiveElementSnapshot[]> {
+export async function collectVisibleInteractiveElements(
+  page: Page,
+): Promise<InteractiveElementSnapshot[]> {
   const selector = [
     "button",
     "a[href]",
@@ -193,10 +206,7 @@ export async function collectVisibleInteractiveElements(page: Page): Promise<Int
         }
 
         const intersectsViewport =
-          item.right > 0 &&
-          item.bottom > 0 &&
-          item.left < innerWidth &&
-          item.top < innerHeight;
+          item.right > 0 && item.bottom > 0 && item.left < innerWidth && item.top < innerHeight;
 
         return intersectsViewport;
       });

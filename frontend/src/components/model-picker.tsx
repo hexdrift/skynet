@@ -46,7 +46,10 @@ export function ModelPicker({
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   // Use cached catalog instantly (prefetched on module load); fallback to async
-  const [catalog, setCatalog] = React.useState<{ providers: CatalogProvider[]; models: CatalogModel[] } | null>(cachedCatalog);
+  const [catalog, setCatalog] = React.useState<{
+    providers: CatalogProvider[];
+    models: CatalogModel[];
+  } | null>(cachedCatalog);
   const [catalogError, setCatalogError] = React.useState<string | null>(null);
   const [discovered, setDiscovered] = React.useState<string[]>([]);
   const [discovering, setDiscovering] = React.useState(false);
@@ -59,13 +62,23 @@ export function ModelPicker({
   React.useEffect(() => {
     if (catalog) return;
     let cancelled = false;
-    getModelCatalog().then((c) => { if (!cancelled) setCatalog(c); }).catch(() => {});
-    return () => { cancelled = true; };
+    getModelCatalog()
+      .then((c) => {
+        if (!cancelled) setCatalog(c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [catalog]);
 
   // Discover models from base_url
   const runDiscover = React.useCallback(async () => {
-    if (!discoverUrl) { setDiscovered([]); setDiscoveryError(null); return; }
+    if (!discoverUrl) {
+      setDiscovered([]);
+      setDiscoveryError(null);
+      return;
+    }
     setDiscovering(true);
     setDiscoveryError(null);
     try {
@@ -81,8 +94,14 @@ export function ModelPicker({
 
   // Auto-run discovery when URL stabilizes
   React.useEffect(() => {
-    if (!discoverUrl) { setDiscovered([]); setDiscoveryError(null); return; }
-    const t = setTimeout(() => { runDiscover(); }, 400);
+    if (!discoverUrl) {
+      setDiscovered([]);
+      setDiscoveryError(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      runDiscover();
+    }, 400);
     return () => clearTimeout(t);
   }, [discoverUrl, runDiscover]);
 
@@ -125,8 +144,8 @@ export function ModelPicker({
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return allModels;
-    return allModels.filter((m) =>
-      m.value.toLowerCase().includes(q) || m.label.toLowerCase().includes(q),
+    return allModels.filter(
+      (m) => m.value.toLowerCase().includes(q) || m.label.toLowerCase().includes(q),
     );
   }, [allModels, query]);
 
@@ -141,10 +160,13 @@ export function ModelPicker({
     return groups;
   }, [filtered]);
 
-  const providerLabel = React.useCallback((slug: string): string => {
-    if (slug === "discovered") return `מהשרת (${discoverUrl ?? ""})`;
-    return catalog?.providers.find((p) => p.slug === slug)?.label ?? slug;
-  }, [catalog, discoverUrl]);
+  const providerLabel = React.useCallback(
+    (slug: string): string => {
+      if (slug === "discovered") return `מהשרת (${discoverUrl ?? ""})`;
+      return catalog?.providers.find((p) => p.slug === slug)?.label ?? slug;
+    },
+    [catalog, discoverUrl],
+  );
 
   const selectedModel = allModels.find((m) => m.value === value);
 
@@ -177,9 +199,16 @@ export function ModelPicker({
             <span className="truncate font-mono text-[13px]">{selectedModel?.label ?? value}</span>
           </span>
         ) : (
-          <span className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">{placeholder}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
+            {placeholder}
+          </span>
         )}
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+            open && "rotate-180",
+          )}
+        />
       </button>
 
       {open && (
@@ -214,7 +243,11 @@ export function ModelPicker({
                 className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="רענן מודלים מהשרת"
               >
-                {discovering ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                {discovering ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3" />
+                )}
                 רענן
               </button>
             )}
@@ -228,11 +261,16 @@ export function ModelPicker({
               </div>
             )}
             {filtered.length === 0 && (
-              <div className="px-3 py-8 text-center text-xs text-muted-foreground">לא נמצאו מודלים</div>
+              <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+                לא נמצאו מודלים
+              </div>
             )}
             {Array.from(grouped.entries()).map(([provider, items]) => (
               <div key={provider} className="py-1">
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-start" dir="ltr">
+                <div
+                  className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-start"
+                  dir="ltr"
+                >
                   {providerLabel(provider)}
                 </div>
                 {items.map((m) => (
@@ -252,10 +290,17 @@ export function ModelPicker({
                     <span className="flex min-w-0 flex-1 items-center gap-1.5" dir="ltr">
                       <span className="truncate text-[13px]">{m.label}</span>
                       {m.max_input_tokens && (
-                        <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{formatCtx(m.max_input_tokens)}</span>
+                        <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
+                          {formatCtx(m.max_input_tokens)}
+                        </span>
                       )}
                     </span>
-                    <Check className={cn("size-3.5 shrink-0", value === m.value ? "opacity-100" : "opacity-0")} />
+                    <Check
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        value === m.value ? "opacity-100" : "opacity-0",
+                      )}
+                    />
                   </button>
                 ))}
               </div>
@@ -275,8 +320,8 @@ export function modelSupportsThinking(modelValue: string, models?: CatalogModel[
   // Fallback heuristic for custom model names
   const v = modelValue.toLowerCase();
   return (
-    /\/o\d(-|$)/.test(v) ||           // openai/o1, o3, o4
-    /\/gpt-5/.test(v) ||              // openai/gpt-5 family
+    /\/o\d(-|$)/.test(v) || // openai/o1, o3, o4
+    /\/gpt-5/.test(v) || // openai/gpt-5 family
     /claude-(opus|sonnet)-4/.test(v) || // anthropic claude 4.x
     /deepseek-reasoner/.test(v) ||
     /gemini-2\.5/.test(v) ||
