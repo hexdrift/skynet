@@ -13,10 +13,12 @@ import dynamic from "next/dynamic";
 import type { ServeInfoResponse } from "@/lib/types";
 import { LangPicker } from "./ui-primitives";
 
-const CodeEditor = dynamic(
-  () => import("@/components/code-editor").then((m) => m.CodeEditor),
-  { ssr: false, loading: () => <div className="h-[180px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" /> },
-);
+const CodeEditor = dynamic(() => import("@/components/code-editor").then((m) => m.CodeEditor), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[180px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" />
+  ),
+});
 
 export function ServeCodeSnippets({
   serveInfo,
@@ -28,8 +30,10 @@ export function ServeCodeSnippets({
   const [codeTab, setCodeTab] = useState<"curl" | "python" | "javascript" | "go" | "dspy">("curl");
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const url = `${apiBase}/serve/${optimizationId}`;
-  const inputsObj = serveInfo.input_fields.map(f => `"${f}": "<${f}>"`).join(", ");
-  const inputsJson = JSON.stringify({ inputs: Object.fromEntries(serveInfo.input_fields.map(f => [f, `<${f}>`])) });
+  const inputsObj = serveInfo.input_fields.map((f) => `"${f}": "<${f}>"`).join(", ");
+  const inputsJson = JSON.stringify({
+    inputs: Object.fromEntries(serveInfo.input_fields.map((f) => [f, `<${f}>`])),
+  });
   const snippets = {
     curl: [
       `# Send a POST request to the optimized program endpoint`,
@@ -49,19 +53,19 @@ export function ServeCodeSnippets({
       ``,
       `# Parse and print the results`,
       `result = response.json()`,
-      ...serveInfo.output_fields.map(f => `print(result["outputs"]["${f}"])`),
+      ...serveInfo.output_fields.map((f) => `print(result["outputs"]["${f}"])`),
     ].join("\n"),
     javascript: [
       `// Call the optimized program via fetch`,
       `const response = await fetch("${url}", {`,
       `  method: "POST",`,
       `  headers: { "Content-Type": "application/json" },`,
-      `  body: JSON.stringify({ inputs: { ${serveInfo.input_fields.map(f => `${f}: "<${f}>"`).join(", ")} } }),`,
+      `  body: JSON.stringify({ inputs: { ${serveInfo.input_fields.map((f) => `${f}: "<${f}>"`).join(", ")} } }),`,
       `});`,
       ``,
       `// Parse and use the results`,
       `const result = await response.json();`,
-      ...serveInfo.output_fields.map(f => `console.log(result.outputs.${f});`),
+      ...serveInfo.output_fields.map((f) => `console.log(result.outputs.${f});`),
     ].join("\n"),
     go: [
       `package main`,
@@ -77,7 +81,7 @@ export function ServeCodeSnippets({
       `\t// Build the request payload`,
       `\tpayload, _ := json.Marshal(map[string]any{`,
       `\t\t"inputs": map[string]string{`,
-      ...serveInfo.input_fields.map(f => `\t\t\t"${f}": "<${f}>",`),
+      ...serveInfo.input_fields.map((f) => `\t\t\t"${f}": "<${f}>",`),
       `\t\t},`,
       `\t})`,
       ``,
@@ -89,7 +93,7 @@ export function ServeCodeSnippets({
       `\tvar result map[string]any`,
       `\tjson.NewDecoder(resp.Body).Decode(&result)`,
       `\toutputs := result["outputs"].(map[string]any)`,
-      ...serveInfo.output_fields.map(f => `\tfmt.Println(outputs["${f}"])`),
+      ...serveInfo.output_fields.map((f) => `\tfmt.Println(outputs["${f}"])`),
       `}`,
     ].join("\n"),
     dspy: [
@@ -109,11 +113,17 @@ export function ServeCodeSnippets({
       `# Configure your language model and run the program`,
       `lm = dspy.LM("gpt-4o-mini")`,
       `with dspy.context(lm=lm):`,
-      `    result = program(${serveInfo.input_fields.map(f => `${f}="<${f}>"`).join(", ")})`,
-      ...serveInfo.output_fields.map(f => `    print(result.${f})`),
+      `    result = program(${serveInfo.input_fields.map((f) => `${f}="<${f}>"`).join(", ")})`,
+      ...serveInfo.output_fields.map((f) => `    print(result.${f})`),
     ].join("\n"),
   };
-  const labels = { curl: "cURL", python: "Python", javascript: "JavaScript", go: "Go", dspy: "DSPy" } as const;
+  const labels = {
+    curl: "cURL",
+    python: "Python",
+    javascript: "JavaScript",
+    go: "Go",
+    dspy: "DSPy",
+  } as const;
   const snippet = snippets[codeTab];
   return (
     <CodeEditor

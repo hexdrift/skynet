@@ -16,7 +16,9 @@ test.describe("Fluid Layout Performance", () => {
 
     await withAuthenticatedPage(browser, authState, { width: 1920, height: 1080 }, async (page) => {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({
+        timeout: 30_000,
+      });
 
       // Inject performance monitoring script
       await page.addScriptTag({
@@ -56,7 +58,7 @@ test.describe("Fluid Layout Performance", () => {
 
       for (let i = 0; i < widths.length; i++) {
         const width = widths[i];
-        
+
         // Reset counters
         await page.evaluate(() => {
           window.layoutThrashing.layoutReads = 0;
@@ -73,7 +75,7 @@ test.describe("Fluid Layout Performance", () => {
         // More than 100 layout reads in a single resize could indicate thrashing
         if (thrashing.layoutReads > 100) {
           failedChecks.push(
-            `LAYOUT THRASHING @ ${width}px: ${thrashing.layoutReads} layout reads during resize`
+            `LAYOUT THRASHING @ ${width}px: ${thrashing.layoutReads} layout reads during resize`,
           );
         }
       }
@@ -94,7 +96,9 @@ test.describe("Fluid Layout Performance", () => {
     }
   });
 
-  test("Framer Motion animations still work after fluid layout changes", async ({ browser }, testInfo) => {
+  test("Framer Motion animations still work after fluid layout changes", async ({
+    browser,
+  }, testInfo) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
 
@@ -108,12 +112,16 @@ test.describe("Fluid Layout Performance", () => {
     for (const viewport of ANIMATION_VIEWPORTS) {
       await withAuthenticatedPage(browser, authState, viewport, async (page) => {
         await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({
+          timeout: 30_000,
+        });
 
         // Check for Framer Motion elements
         const animationStatus = await page.evaluate(() => {
-          const motionElements = document.querySelectorAll('[data-framer-motion], [style*="transform"]');
-          
+          const motionElements = document.querySelectorAll(
+            '[data-framer-motion], [style*="transform"]',
+          );
+
           if (motionElements.length === 0) {
             return {
               hasMotionElements: false,
@@ -154,7 +162,7 @@ test.describe("Fluid Layout Performance", () => {
 
         if (animationStatus.hasMotionElements && animationStatus.animatedCount === 0) {
           failedChecks.push(
-            `ANIMATION ISSUE @ ${viewport.width}px: Found ${animationStatus.totalElements} motion elements but none are animated`
+            `ANIMATION ISSUE @ ${viewport.width}px: Found ${animationStatus.totalElements} motion elements but none are animated`,
           );
         }
 
@@ -193,7 +201,7 @@ test.describe("Fluid Layout Performance", () => {
 
         if (formVisible.visible === 0 && formVisible.total > 0) {
           failedChecks.push(
-            `STAGGER ANIMATION ISSUE @ ${viewport.width}px: ${formVisible.total} form elements found but none are visible`
+            `STAGGER ANIMATION ISSUE @ ${viewport.width}px: ${formVisible.total} form elements found but none are visible`,
           );
         }
 
@@ -241,13 +249,15 @@ test.describe("Fluid Layout Performance", () => {
         await withAuthenticatedPage(browser, authState, viewport, async (page) => {
           // Measure page load performance
           const startTime = Date.now();
-          
+
           await page.goto(`${baseUrl}${route.path}`, { waitUntil: "domcontentloaded" });
 
           if (route.path === "/submit") {
             await expect(page.getByText("פרטים בסיסיים").first()).toBeVisible({ timeout: 30_000 });
           } else {
-            await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({
+              timeout: 30_000,
+            });
           }
 
           const loadTime = Date.now() - startTime;
@@ -255,7 +265,7 @@ test.describe("Fluid Layout Performance", () => {
           // Get Web Vitals if available
           const vitals = await page.evaluate(() => {
             return new Promise((resolve) => {
-              if ('PerformanceObserver' in window) {
+              if ("PerformanceObserver" in window) {
                 const metrics: any = {};
 
                 // Get LCP (Largest Contentful Paint)
@@ -265,15 +275,17 @@ test.describe("Fluid Layout Performance", () => {
                     const lastEntry = entries[entries.length - 1];
                     metrics.lcp = lastEntry.renderTime || lastEntry.loadTime;
                   });
-                  lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
+                  lcpObserver.observe({ entryTypes: ["largest-contentful-paint"] });
                 } catch (e) {
                   // LCP not supported
                 }
 
                 // Get FCP (First Contentful Paint)
                 try {
-                  const paintEntries = performance.getEntriesByType('paint');
-                  const fcpEntry = paintEntries.find(entry => entry.name === 'first-contentful-paint');
+                  const paintEntries = performance.getEntriesByType("paint");
+                  const fcpEntry = paintEntries.find(
+                    (entry) => entry.name === "first-contentful-paint",
+                  );
                   if (fcpEntry) {
                     metrics.fcp = fcpEntry.startTime;
                   }
@@ -282,9 +294,12 @@ test.describe("Fluid Layout Performance", () => {
                 }
 
                 // Get navigation timing
-                const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+                const navigation = performance.getEntriesByType(
+                  "navigation",
+                )[0] as PerformanceNavigationTiming;
                 if (navigation) {
-                  metrics.domContentLoaded = navigation.domContentLoadedEventEnd - navigation.domContentLoadedEventStart;
+                  metrics.domContentLoaded =
+                    navigation.domContentLoadedEventEnd - navigation.domContentLoadedEventStart;
                   metrics.domInteractive = navigation.domInteractive;
                 }
 
@@ -314,12 +329,13 @@ test.describe("Fluid Layout Performance", () => {
       console.log(`  Load Time: ${metrics.loadTime}ms`);
       if (metrics.fcp) console.log(`  FCP: ${Math.round(metrics.fcp)}ms`);
       if (metrics.lcp) console.log(`  LCP: ${Math.round(metrics.lcp)}ms`);
-      if (metrics.domContentLoaded) console.log(`  DOM Content Loaded: ${Math.round(metrics.domContentLoaded)}ms`);
+      if (metrics.domContentLoaded)
+        console.log(`  DOM Content Loaded: ${Math.round(metrics.domContentLoaded)}ms`);
     });
 
     // Check for performance issues (load time > 5 seconds is problematic)
-    const slowPages = performanceMetrics.filter(m => m.metrics.loadTime > 5000);
-    
+    const slowPages = performanceMetrics.filter((m) => m.metrics.loadTime > 5000);
+
     if (slowPages.length > 0) {
       console.warn("\n⚠️ Performance Warning: Some pages took longer than 5s to load:");
       slowPages.forEach(({ viewport, route, metrics }) => {
@@ -336,12 +352,14 @@ test.describe("Fluid Layout Performance", () => {
 
     await withAuthenticatedPage(browser, authState, { width: 1920, height: 1080 }, async (page) => {
       await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: "לוח בקרה" }).first()).toBeVisible({
+        timeout: 30_000,
+      });
 
       const cssIssues = await page.evaluate(() => {
         const issues: string[] = [];
         const allElements = document.querySelectorAll("*");
-        
+
         let fixedWidthCount = 0;
         let fixedWidthElements: Array<{ tag: string; width: string }> = [];
 
@@ -350,7 +368,11 @@ test.describe("Fluid Layout Performance", () => {
           const inlineStyle = (el as HTMLElement).style;
 
           // Check for fixed pixel widths in inline styles
-          if (inlineStyle.width && inlineStyle.width.includes("px") && !inlineStyle.width.includes("max-width")) {
+          if (
+            inlineStyle.width &&
+            inlineStyle.width.includes("px") &&
+            !inlineStyle.width.includes("max-width")
+          ) {
             const widthValue = parseInt(inlineStyle.width);
             // Ignore small fixed widths (icons, spacers, etc.)
             if (widthValue > 200) {
@@ -367,7 +389,7 @@ test.describe("Fluid Layout Performance", () => {
 
         if (fixedWidthCount > 0) {
           issues.push(
-            `Found ${fixedWidthCount} elements with fixed pixel widths (should use percentages, max-width, or clamp)`
+            `Found ${fixedWidthCount} elements with fixed pixel widths (should use percentages, max-width, or clamp)`,
           );
           if (fixedWidthElements.length > 0) {
             issues.push(`Examples: ${JSON.stringify(fixedWidthElements.slice(0, 5))}`);

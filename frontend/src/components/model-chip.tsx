@@ -51,16 +51,32 @@ export function ModelChip({
       {/* Model info */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {roleLabel && (
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{roleLabel}</span>
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {roleLabel}
+          </span>
         )}
-        <span className={cn("truncate text-sm", isEmpty ? "text-muted-foreground" : "text-foreground font-mono font-medium")} dir={isEmpty ? "rtl" : "ltr"}>
+        <span
+          className={cn(
+            "truncate text-sm",
+            isEmpty ? "text-muted-foreground" : "text-foreground font-mono font-medium",
+          )}
+          dir={isEmpty ? "rtl" : "ltr"}
+        >
           {isEmpty ? name : (name.split("/").pop() ?? name)}
         </span>
         {/* Settings summary */}
         {!isEmpty && (
           <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground" dir="ltr">
-            <span className="inline-flex items-center gap-0.5"><Thermometer className="size-2.5" />{config.temperature?.toFixed(1) ?? "0.7"}</span>
-            {config.max_tokens && <span className="inline-flex items-center gap-0.5"><Coins className="size-2.5" />{config.max_tokens}</span>}
+            <span className="inline-flex items-center gap-0.5">
+              <Thermometer className="size-2.5" />
+              {config.temperature?.toFixed(1) ?? "0.7"}
+            </span>
+            {config.max_tokens && (
+              <span className="inline-flex items-center gap-0.5">
+                <Coins className="size-2.5" />
+                {config.max_tokens}
+              </span>
+            )}
             {hasThinking && (
               <span className="inline-flex items-center gap-0.5 text-primary/70">
                 <Brain className="size-2.5" />
@@ -75,7 +91,10 @@ export function ModelChip({
       {isEmpty && copyFromLabel && onCopyFrom && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onCopyFrom(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCopyFrom();
+          }}
           className="flex shrink-0 items-center gap-1 rounded-md border border-dashed border-primary/30 px-2 py-1 text-[10px] font-medium text-primary/80 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer"
         >
           <Copy className="size-2.5" />
@@ -88,7 +107,10 @@ export function ModelChip({
         {onClone && !isEmpty && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onClone(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClone();
+            }}
             className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground transition-all cursor-pointer"
             title="שכפל"
           >
@@ -98,7 +120,10 @@ export function ModelChip({
         {onRemove && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
             className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all cursor-pointer"
             title="אפס"
           >

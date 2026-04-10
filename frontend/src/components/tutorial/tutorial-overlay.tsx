@@ -13,15 +13,8 @@ import { DEMO_OPTIMIZATION_ID } from "@/lib/tutorial-demo-data";
 import { isTutorialNavigating, registerTutorialHook } from "@/lib/tutorial-bridge";
 
 export function TutorialOverlay() {
-  const {
-    state,
-    currentStep,
-    nextStep,
-    prevStep,
-    exitTutorial,
-    completeTrack,
-    toggleAutoPlay,
-  } = useTutorialContext();
+  const { state, currentStep, nextStep, prevStep, exitTutorial, completeTrack, toggleAutoPlay } =
+    useTutorialContext();
 
   const [targetRect, setTargetRect] = React.useState<DOMRect | null>(null);
   const [popoverPosition, setPopoverPosition] = React.useState<{
@@ -70,12 +63,25 @@ export function TutorialOverlay() {
         p = spaces.sort((a, b) => b.s - a.s)[0]!.p;
       }
 
-      let top = 0, left = 0;
+      let top = 0,
+        left = 0;
       switch (p) {
-        case "top":    top = rect.top - ph - gap; left = rect.left + rect.width / 2 - pw / 2; break;
-        case "bottom": top = rect.bottom + gap;   left = rect.left + rect.width / 2 - pw / 2; break;
-        case "left":   top = rect.top + rect.height / 2 - ph / 2; left = rect.left - pw - gap; break;
-        case "right":  top = rect.top + rect.height / 2 - ph / 2; left = rect.right + gap; break;
+        case "top":
+          top = rect.top - ph - gap;
+          left = rect.left + rect.width / 2 - pw / 2;
+          break;
+        case "bottom":
+          top = rect.bottom + gap;
+          left = rect.left + rect.width / 2 - pw / 2;
+          break;
+        case "left":
+          top = rect.top + rect.height / 2 - ph / 2;
+          left = rect.left - pw - gap;
+          break;
+        case "right":
+          top = rect.top + rect.height / 2 - ph / 2;
+          left = rect.right + gap;
+          break;
       }
 
       top = Math.max(12, Math.min(top, vh - ph - 12));
@@ -83,7 +89,7 @@ export function TutorialOverlay() {
 
       return { top, left, placement: p };
     },
-    []
+    [],
   );
 
   const updatePositions = React.useCallback(() => {
@@ -128,7 +134,7 @@ export function TutorialOverlay() {
         const offScreen = rect.top < 0 || rect.bottom > window.innerHeight;
         if (offScreen) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
-          await new Promise(r => setTimeout(r, 250));
+          await new Promise((r) => setTimeout(r, 250));
         }
       }
       // Start rAF tracking — handles resize, scroll, layout shifts
@@ -158,7 +164,15 @@ export function TutorialOverlay() {
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [stepReady, state.isAutoPlaying, state.activeTrack, state.currentStepIndex, currentStep, nextStep, completeTrack]);
+  }, [
+    stepReady,
+    state.isAutoPlaying,
+    state.activeTrack,
+    state.currentStepIndex,
+    currentStep,
+    nextStep,
+    completeTrack,
+  ]);
 
   const handleExit = React.useCallback(() => {
     exitTutorial();
@@ -173,9 +187,16 @@ export function TutorialOverlay() {
     if (!state.isVisible) return;
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === "ArrowLeft") { e.preventDefault(); nextStep(); }
-      else if (e.key === "ArrowRight" || e.key === "Backspace") { e.preventDefault(); prevStep(); }
-      else if (e.key === "Escape") { e.preventDefault(); handleExit(); }
+      if (e.key === "Enter" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        nextStep();
+      } else if (e.key === "ArrowRight" || e.key === "Backspace") {
+        e.preventDefault();
+        prevStep();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleExit();
+      }
     };
 
     window.addEventListener("keydown", onKey);
@@ -183,26 +204,28 @@ export function TutorialOverlay() {
   }, [state.isVisible, nextStep, prevStep, handleExit]);
 
   // Splash must render independently of tutorial visibility
-  const splashPortal = showSplash ? createPortal(
-    <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-[99999] flex items-center justify-center"
-        style={{ backgroundColor: "#F0EBE4" }}
-        initial={{ y: "-100%" }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <AnimatedWordmark size={64} autoMorph morphSpeed={120} />
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>,
-    document.body
-  ) : null;
+  const splashPortal = showSplash
+    ? createPortal(
+        <AnimatePresence>
+          <motion.div
+            className="fixed inset-0 z-[99999] flex items-center justify-center"
+            style={{ backgroundColor: "#F0EBE4" }}
+            initial={{ y: "-100%" }}
+            animate={{ y: 0 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <AnimatedWordmark size={64} autoMorph morphSpeed={120} />
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body,
+      )
+    : null;
 
   if (!state.isVisible || !currentStep) return splashPortal;
   if (isTutorialNavigating()) return splashPortal;
@@ -243,7 +266,7 @@ export function TutorialOverlay() {
             />
           )}
         </div>,
-        document.body
+        document.body,
       )}
     </>
   );

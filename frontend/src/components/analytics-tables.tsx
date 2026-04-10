@@ -108,8 +108,8 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
                           opt.avgImprovement > 0
                             ? "text-emerald-700"
                             : opt.avgImprovement < 0
-                            ? "text-red-600"
-                            : ""
+                              ? "text-red-600"
+                              : ""
                         }`}
                       >
                         {opt.avgImprovement > 0 ? "+" : ""}
@@ -119,7 +119,8 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
                   </TableCell>
                   <TableCell className="text-center tabular-nums text-sm">{opt.runs}</TableCell>
                   <TableCell className="text-center tabular-nums text-sm" dir="ltr">
-                    {Math.floor(opt.avgRuntime / 60)}:{String(Math.floor(opt.avgRuntime % 60)).padStart(2, "0")}
+                    {Math.floor(opt.avgRuntime / 60)}:
+                    {String(Math.floor(opt.avgRuntime % 60)).padStart(2, "0")}
                   </TableCell>
                 </TableRow>
               ))}
@@ -213,8 +214,8 @@ export function ModelPerformanceTable({ data }: { data: ModelPerformanceData[] }
                             model.avgImprovement > 0
                               ? "text-emerald-700"
                               : model.avgImprovement < 0
-                              ? "text-red-600"
-                              : ""
+                                ? "text-red-600"
+                                : ""
                           }`}
                         >
                           {model.avgImprovement > 0 ? "+" : ""}

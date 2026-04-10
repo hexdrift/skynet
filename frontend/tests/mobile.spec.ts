@@ -26,7 +26,9 @@ test.describe("Mobile touch targets", () => {
           await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded" });
 
           if (route === "/") {
-            await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+              timeout: 30_000,
+            });
           } else if (route === "/submit") {
             await expect(page.getByText("פרטים בסיסיים").first()).toBeVisible({ timeout: 30_000 });
           } else {
@@ -34,7 +36,9 @@ test.describe("Mobile touch targets", () => {
           }
 
           const interactiveElements = await collectVisibleInteractiveElements(page);
-          const tooSmall = interactiveElements.filter((element) => element.width < 44 || element.height < 44);
+          const tooSmall = interactiveElements.filter(
+            (element) => element.width < 44 || element.height < 44,
+          );
 
           expect(
             tooSmall,
@@ -49,4 +53,3 @@ test.describe("Mobile touch targets", () => {
     });
   }
 });
-

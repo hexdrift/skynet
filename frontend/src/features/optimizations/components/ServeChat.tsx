@@ -17,7 +17,12 @@ import { formatOutput } from "../lib/formatters";
 
 export interface ServeChatProps {
   serveInfo: ServeInfoResponse;
-  runHistory: Array<{ inputs: Record<string, string>; outputs: Record<string, unknown>; model: string; ts: number }>;
+  runHistory: Array<{
+    inputs: Record<string, string>;
+    outputs: Record<string, unknown>;
+    model: string;
+    ts: number;
+  }>;
   setRunHistory: React.Dispatch<React.SetStateAction<ServeChatProps["runHistory"]>>;
   streamingRun: { inputs: Record<string, string>; partial: Record<string, string> } | null;
   serveLoading: boolean;
@@ -89,10 +94,19 @@ export function ServeChat({
                     className="text-right p-3 rounded-xl border border-[#DDD4C8]/60 hover:border-[#C8A882]/60 bg-muted/10 hover:bg-muted/20 transition-all group"
                     dir="auto"
                   >
-                    <div className="text-[10px] font-medium text-[#3D2E22]/50 mb-1">דוגמה {i + 1}</div>
+                    <div className="text-[10px] font-medium text-[#3D2E22]/50 mb-1">
+                      דוגמה {i + 1}
+                    </div>
                     <div className="text-xs text-foreground/70 line-clamp-2 font-mono" dir="ltr">
-                      {Object.entries(demo.inputs).map(([k, v]) => `${k}: ${String(v)}`).join(", ").slice(0, 80)}
-                      {Object.entries(demo.inputs).map(([k, v]) => `${k}: ${String(v)}`).join(", ").length > 80 ? "..." : ""}
+                      {Object.entries(demo.inputs)
+                        .map(([k, v]) => `${k}: ${String(v)}`)
+                        .join(", ")
+                        .slice(0, 80)}
+                      {Object.entries(demo.inputs)
+                        .map(([k, v]) => `${k}: ${String(v)}`)
+                        .join(", ").length > 80
+                        ? "..."
+                        : ""}
                     </div>
                   </button>
                 ))}
@@ -110,7 +124,12 @@ export function ServeChat({
                     {serveInfo.input_fields.map((field) => (
                       <div key={field}>
                         {serveInfo.input_fields.length > 1 && (
-                          <label className="text-[10px] text-muted-foreground/50 font-mono px-1 mb-0.5 block" dir="ltr">{field}</label>
+                          <label
+                            className="text-[10px] text-muted-foreground/50 font-mono px-1 mb-0.5 block"
+                            dir="ltr"
+                          >
+                            {field}
+                          </label>
                         )}
                         <textarea
                           ref={(el) => {
@@ -133,7 +152,10 @@ export function ServeChat({
                       </div>
                     ))}
                     <div className="flex justify-start gap-1.5">
-                      <button onClick={() => setEditingRunTs(null)} className="text-[11px] text-muted-foreground hover:text-foreground px-3 py-1 rounded-lg hover:bg-muted transition-colors">
+                      <button
+                        onClick={() => setEditingRunTs(null)}
+                        className="text-[11px] text-muted-foreground hover:text-foreground px-3 py-1 rounded-lg hover:bg-muted transition-colors"
+                      >
                         ביטול
                       </button>
                       <button
@@ -147,12 +169,19 @@ export function ServeChat({
                 </div>
               ) : (
                 <div className="flex justify-start group/user">
-                  <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#3D2E22] text-[#FAF8F5] px-4 py-3 text-sm shadow-sm" dir="ltr">
+                  <div
+                    className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#3D2E22] text-[#FAF8F5] px-4 py-3 text-sm shadow-sm"
+                    dir="ltr"
+                  >
                     {serveInfo.input_fields.map((k, i, arr) => (
                       <div key={k} className="font-mono leading-relaxed">
                         <span className="text-[#C8A882] text-xs">{k}: </span>
-                        <span className="whitespace-pre-wrap break-words">{run.inputs[k] ?? ""}</span>
-                        {i < arr.length - 1 && arr.length > 1 && <div className="h-px bg-white/10 my-1.5" />}
+                        <span className="whitespace-pre-wrap break-words">
+                          {run.inputs[k] ?? ""}
+                        </span>
+                        {i < arr.length - 1 && arr.length > 1 && (
+                          <div className="h-px bg-white/10 my-1.5" />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -170,14 +199,25 @@ export function ServeChat({
               {!isEditing && (
                 <div className="px-1" dir="ltr">
                   {serveInfo.output_fields.map((k, i, arr) => (
-                    <div key={k} className={`font-mono text-sm leading-relaxed ${arr.length > 1 ? "mb-1" : ""}`}>
+                    <div
+                      key={k}
+                      className={`font-mono text-sm leading-relaxed ${arr.length > 1 ? "mb-1" : ""}`}
+                    >
                       <span className="text-muted-foreground text-xs">{k}: </span>
-                      <span className="whitespace-pre-wrap break-words">{formatOutput(run.outputs[k])}</span>
+                      <span className="whitespace-pre-wrap break-words">
+                        {formatOutput(run.outputs[k])}
+                      </span>
                     </div>
                   ))}
                   <div className="flex items-center gap-0.5 mt-1 -ms-1">
-                    <CopyButton text={serveInfo.output_fields.map((k) => `${k}: ${formatOutput(run.outputs[k])}`).join("\n")} />
-                    <span className="text-[9px] text-muted-foreground/30 ms-1 font-mono" dir="ltr">{run.model}</span>
+                    <CopyButton
+                      text={serveInfo.output_fields
+                        .map((k) => `${k}: ${formatOutput(run.outputs[k])}`)
+                        .join("\n")}
+                    />
+                    <span className="text-[9px] text-muted-foreground/30 ms-1 font-mono" dir="ltr">
+                      {run.model}
+                    </span>
                   </div>
                 </div>
               )}
@@ -187,12 +227,19 @@ export function ServeChat({
         {streamingRun && (
           <div className="space-y-3">
             <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#3D2E22] text-[#FAF8F5] px-4 py-3 text-sm shadow-sm" dir="ltr">
+              <div
+                className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#3D2E22] text-[#FAF8F5] px-4 py-3 text-sm shadow-sm"
+                dir="ltr"
+              >
                 {serveInfo.input_fields.map((k, i, arr) => (
                   <div key={k} className="font-mono leading-relaxed">
                     <span className="text-[#C8A882] text-xs">{k}: </span>
-                    <span className="whitespace-pre-wrap break-words">{streamingRun.inputs[k] ?? ""}</span>
-                    {i < arr.length - 1 && arr.length > 1 && <div className="h-px bg-white/10 my-1.5" />}
+                    <span className="whitespace-pre-wrap break-words">
+                      {streamingRun.inputs[k] ?? ""}
+                    </span>
+                    {i < arr.length - 1 && arr.length > 1 && (
+                      <div className="h-px bg-white/10 my-1.5" />
+                    )}
                   </div>
                 ))}
               </div>
@@ -201,16 +248,29 @@ export function ServeChat({
               {Object.keys(streamingRun.partial).length === 0 ? (
                 <div className="flex items-center gap-1.5 py-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#3D2E22]/30 animate-bounce" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#3D2E22]/30 animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#3D2E22]/30 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-[#3D2E22]/30 animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-[#3D2E22]/30 animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
                   <span className="text-xs text-muted-foreground/40">חושב</span>
                 </div>
               ) : (
                 serveInfo.output_fields.map((k, i, arr) => (
-                  <div key={k} className={`font-mono text-sm leading-relaxed ${arr.length > 1 ? "mb-1" : ""}`}>
+                  <div
+                    key={k}
+                    className={`font-mono text-sm leading-relaxed ${arr.length > 1 ? "mb-1" : ""}`}
+                  >
                     <span className="text-muted-foreground text-xs">{k}: </span>
-                    <span className="whitespace-pre-wrap break-words">{streamingRun.partial[k] ?? ""}</span>
-                    {streamingRun.partial[k] && <span className="inline-block w-1 h-3 bg-foreground/40 ms-0.5 animate-pulse" />}
+                    <span className="whitespace-pre-wrap break-words">
+                      {streamingRun.partial[k] ?? ""}
+                    </span>
+                    {streamingRun.partial[k] && (
+                      <span className="inline-block w-1 h-3 bg-foreground/40 ms-0.5 animate-pulse" />
+                    )}
                   </div>
                 ))
               )}
@@ -224,16 +284,24 @@ export function ServeChat({
           <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-2.5 py-1.5 mb-2 max-w-2xl mx-auto">
             <XCircle className="size-3 shrink-0" />
             <span className="flex-1 break-words min-w-0">{serveError}</span>
-            <button onClick={() => setServeError(null)} className="ms-auto p-0.5 hover:bg-red-100 rounded">
+            <button
+              onClick={() => setServeError(null)}
+              className="ms-auto p-0.5 hover:bg-red-100 rounded"
+            >
               <span className="sr-only">סגור</span>×
             </button>
           </div>
         )}
         <form
-          onSubmit={(e) => { e.preventDefault(); handleServe(); }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleServe();
+          }}
           className="max-w-2xl mx-auto"
         >
-          <div className={`flex gap-2 ${serveInfo.input_fields.length > 1 ? "items-center" : "items-start"}`}>
+          <div
+            className={`flex gap-2 ${serveInfo.input_fields.length > 1 ? "items-center" : "items-start"}`}
+          >
             <Button
               type="submit"
               size="icon"
@@ -241,20 +309,40 @@ export function ServeChat({
               disabled={serveLoading}
               aria-label="שלח"
             >
-              {serveLoading
-                ? <Loader2 className="size-4 animate-spin" />
-                : <svg viewBox="0 0 24 24" fill="currentColor" className="size-4"><path d="M12 2L12 22M12 2L5 9M12 2L19 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
-              }
+              {serveLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
+                  <path
+                    d="M12 2L12 22M12 2L5 9M12 2L19 9"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                </svg>
+              )}
             </Button>
-            <div className={`flex-1 ${serveInfo.input_fields.length > 1 ? "space-y-2" : "flex gap-2 items-start"}`}>
+            <div
+              className={`flex-1 ${serveInfo.input_fields.length > 1 ? "space-y-2" : "flex gap-2 items-start"}`}
+            >
               {serveInfo.input_fields.map((field) => (
                 <div key={field} className="flex-1 min-w-0">
                   {serveInfo.input_fields.length > 1 && (
-                    <label htmlFor={`serve-${field}`} className="text-[10px] text-muted-foreground/50 font-mono px-3 mb-0.5 block" dir="ltr">{field}</label>
+                    <label
+                      htmlFor={`serve-${field}`}
+                      className="text-[10px] text-muted-foreground/50 font-mono px-3 mb-0.5 block"
+                      dir="ltr"
+                    >
+                      {field}
+                    </label>
                   )}
                   <textarea
                     id={`serve-${field}`}
-                    ref={(el) => { textareaRefs.current[field] = el; }}
+                    ref={(el) => {
+                      textareaRefs.current[field] = el;
+                    }}
                     dir="auto"
                     placeholder={field}
                     defaultValue=""
@@ -266,7 +354,9 @@ export function ServeChat({
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        const allFilled = serveInfo.input_fields.every((f) => textareaRefs.current[f]?.value?.trim());
+                        const allFilled = serveInfo.input_fields.every((f) =>
+                          textareaRefs.current[f]?.value?.trim(),
+                        );
                         if (!serveLoading && allFilled) handleServe();
                       }
                     }}

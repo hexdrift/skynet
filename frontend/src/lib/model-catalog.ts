@@ -17,7 +17,9 @@ try {
       _cache = parsed.data as ModelCatalogResponse;
     }
   }
-} catch { /* ignore parse errors */ }
+} catch {
+  /* ignore parse errors */
+}
 
 // Kick off network fetch — updates cache and localStorage
 const _ready: Promise<ModelCatalogResponse> = (async () => {
@@ -26,7 +28,9 @@ const _ready: Promise<ModelCatalogResponse> = (async () => {
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
     const data: ModelCatalogResponse = await res.json();
     _cache = data;
-    try { localStorage.setItem(LS_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ data, ts: Date.now() }));
+    } catch {}
     return data;
   } catch {
     // Return cached or empty catalog on failure
@@ -46,7 +50,10 @@ export function cachedCatalog(): ModelCatalogResponse | null {
   return _cache;
 }
 
-export async function discoverModels(baseUrl: string, apiKey?: string): Promise<DiscoverModelsResponse> {
+export async function discoverModels(
+  baseUrl: string,
+  apiKey?: string,
+): Promise<DiscoverModelsResponse> {
   const res = await fetch(`${API}/models/discover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

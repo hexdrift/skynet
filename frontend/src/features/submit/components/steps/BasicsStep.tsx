@@ -9,10 +9,14 @@ import { cn } from "@/lib/utils";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
 export function BasicsStep({ w }: { w: SubmitWizardContext }) {
-  const { jobName, setJobName, jobDescription, setJobDescription, jobType, setOptimizationType } = w;
+  const { jobName, setJobName, jobDescription, setJobDescription, jobType, setOptimizationType } =
+    w;
 
   return (
-    <Card className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg" data-tutorial="wizard-step-1">
+    <Card
+      className="border-border/50 bg-card/80 backdrop-blur-xl shadow-lg"
+      data-tutorial="wizard-step-1"
+    >
       <CardHeader>
         <CardTitle className="text-lg">פרטים בסיסיים</CardTitle>
         <CardDescription>שם וסוג אופטימיזציה</CardDescription>
@@ -20,17 +24,33 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label>שם האופטימיזציה</Label>
-          <Input placeholder="לדוגמא: ניתוח שאלות מתמטיקה" value={jobName} onChange={(e) => setJobName(e.target.value)} dir="rtl" />
+          <Input
+            placeholder="לדוגמא: ניתוח שאלות מתמטיקה"
+            value={jobName}
+            onChange={(e) => setJobName(e.target.value)}
+            dir="rtl"
+          />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label>תיאור</Label>
-            <span className={cn("text-[10px] tabular-nums transition-colors", jobDescription.length > 280 ? "text-destructive font-medium" : "text-muted-foreground/50")}>{jobDescription.length}/280</span>
+            <span
+              className={cn(
+                "text-[10px] tabular-nums transition-colors",
+                jobDescription.length > 280
+                  ? "text-destructive font-medium"
+                  : "text-muted-foreground/50",
+              )}
+            >
+              {jobDescription.length}/280
+            </span>
           </div>
           <textarea
             data-tutorial="job-description"
             value={jobDescription}
-            onChange={(e) => { if (e.target.value.length <= 280) setJobDescription(e.target.value); }}
+            onChange={(e) => {
+              if (e.target.value.length <= 280) setJobDescription(e.target.value);
+            }}
             placeholder="תיאור קצר של מטרת האופטימיזציה (אופציונלי)"
             dir="rtl"
             rows={4}
@@ -45,12 +65,30 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
               className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
               style={{ insetInlineStart: jobType === "run" ? 4 : "calc(50% + 2px)" }}
             />
-            {([["run", "ריצה בודדת", "אופטימיזציה עם מודל יחיד"], ["grid_search", "סריקה", "סריקת זוגות מודלים למציאת השילוב הטוב ביותר"]] as const).map(([val, label, desc]) => (
-              <button key={val} type="button" onClick={() => setOptimizationType(val)}
-                className={cn("relative z-10 flex-1 rounded-md px-4 py-2.5 cursor-pointer text-center transition-colors duration-200",
-                  jobType === val ? "text-foreground" : "text-foreground/60 hover:text-foreground")}>
+            {(
+              [
+                ["run", "ריצה בודדת", "אופטימיזציה עם מודל יחיד"],
+                ["grid_search", "סריקה", "סריקת זוגות מודלים למציאת השילוב הטוב ביותר"],
+              ] as const
+            ).map(([val, label, desc]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setOptimizationType(val)}
+                className={cn(
+                  "relative z-10 flex-1 rounded-md px-4 py-2.5 cursor-pointer text-center transition-colors duration-200",
+                  jobType === val ? "text-foreground" : "text-foreground/60 hover:text-foreground",
+                )}
+              >
                 <span className="text-sm font-medium">{label}</span>
-                <span className={cn("block text-[11px] mt-0.5 transition-colors duration-200", jobType === val ? "text-muted-foreground" : "text-foreground/40")}>{desc}</span>
+                <span
+                  className={cn(
+                    "block text-[11px] mt-0.5 transition-colors duration-200",
+                    jobType === val ? "text-muted-foreground" : "text-foreground/40",
+                  )}
+                >
+                  {desc}
+                </span>
               </button>
             ))}
           </div>

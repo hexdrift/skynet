@@ -12,395 +12,452 @@ export type Filters = Record<string, Set<string>>;
 /* ── Column header with sort + optional Excel-style filter dropdown ── */
 
 export function ColumnHeader<K extends string>({
- label,
- sortKey,
- currentSort,
- sortDir,
- onSort,
- filterCol,
- filterOptions,
- filters,
- onFilter,
- openFilter,
- setOpenFilter,
- width,
- onResize,
+  label,
+  sortKey,
+  currentSort,
+  sortDir,
+  onSort,
+  filterCol,
+  filterOptions,
+  filters,
+  onFilter,
+  openFilter,
+  setOpenFilter,
+  width,
+  onResize,
 }: {
- label: string;
- sortKey: K;
- currentSort: K;
- sortDir: SortDir;
- onSort: (key: K) => void;
- filterCol?: string;
- filterOptions?: { value: string; label: string }[];
- filters?: Filters;
- onFilter?: (col: string, values: Set<string>) => void;
- openFilter?: string | null;
- setOpenFilter?: (col: string | null) => void;
- width?: number;
- onResize?: (key: K, width: number) => void;
+  label: string;
+  sortKey: K;
+  currentSort: K;
+  sortDir: SortDir;
+  onSort: (key: K) => void;
+  filterCol?: string;
+  filterOptions?: { value: string; label: string }[];
+  filters?: Filters;
+  onFilter?: (col: string, values: Set<string>) => void;
+  openFilter?: string | null;
+  setOpenFilter?: (col: string | null) => void;
+  width?: number;
+  onResize?: (key: K, width: number) => void;
 }) {
- const sortActive = currentSort === sortKey;
- const hasFilter = filterCol && filterOptions && filters && onFilter && setOpenFilter;
- const filterActive = hasFilter && filters[filterCol] && filters[filterCol].size > 0;
- const isOpen = hasFilter && openFilter === filterCol;
- const filterIconRef = useRef<HTMLButtonElement>(null);
- const thRef = useRef<HTMLTableCellElement>(null);
+  const sortActive = currentSort === sortKey;
+  const hasFilter = filterCol && filterOptions && filters && onFilter && setOpenFilter;
+  const filterActive = hasFilter && filters[filterCol] && filters[filterCol].size > 0;
+  const isOpen = hasFilter && openFilter === filterCol;
+  const filterIconRef = useRef<HTMLButtonElement>(null);
+  const thRef = useRef<HTMLTableCellElement>(null);
 
- const handleResizeStart = useCallback((e: React.MouseEvent) => {
-  e.preventDefault();
-  e.stopPropagation();
-  const startX = e.clientX;
-  const startW = thRef.current?.offsetWidth ?? 120;
-  const onMove = (ev: MouseEvent) => {
-   const isRtl = getComputedStyle(thRef.current!).direction === "rtl";
-   const delta = isRtl ? startX - ev.clientX : ev.clientX - startX;
-   const newW = Math.max(60, startW + delta);
-   onResize?.(sortKey, newW);
-  };
-  const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
-  document.body.style.cursor = "col-resize";
-  document.body.style.userSelect = "none";
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("mouseup", onUp);
- }, [sortKey, onResize]);
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = thRef.current?.offsetWidth ?? 120;
+      const onMove = (ev: MouseEvent) => {
+        const isRtl = getComputedStyle(thRef.current!).direction === "rtl";
+        const delta = isRtl ? startX - ev.clientX : ev.clientX - startX;
+        const newW = Math.max(60, startW + delta);
+        onResize?.(sortKey, newW);
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [sortKey, onResize],
+  );
 
- const handleResizeDblClick = useCallback((e: React.MouseEvent) => {
-  e.preventDefault();
-  e.stopPropagation();
-  // Auto-fit: measure the widest natural content in this column (Excel-style)
-  // Temporarily remove constraints to get true content width, then restore.
-  const th = thRef.current;
-  if (!th) return;
-  const table = th.closest("table");
-  if (!table) return;
-  const colIdx = Array.from(th.parentElement?.children ?? []).indexOf(th);
-  const PADDING = 14; // ~7px each side, matching Excel
-  const MIN_W = 60;
-  const MAX_W = 600;
+  const handleResizeDblClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Auto-fit: measure the widest natural content in this column (Excel-style)
+      // Temporarily remove constraints to get true content width, then restore.
+      const th = thRef.current;
+      if (!th) return;
+      const table = th.closest("table");
+      if (!table) return;
+      const colIdx = Array.from(th.parentElement?.children ?? []).indexOf(th);
+      const PADDING = 14; // ~7px each side, matching Excel
+      const MIN_W = 60;
+      const MAX_W = 600;
 
-  // Collect all cells in this column (header + body)
-  const cells: HTMLElement[] = [th];
-  table.querySelectorAll("tbody tr").forEach((row) => {
-   const cell = row.children[colIdx] as HTMLElement | undefined;
-   if (cell) cells.push(cell);
-  });
+      // Collect all cells in this column (header + body)
+      const cells: HTMLElement[] = [th];
+      table.querySelectorAll("tbody tr").forEach((row) => {
+        const cell = row.children[colIdx] as HTMLElement | undefined;
+        if (cell) cells.push(cell);
+      });
 
-  // Temporarily remove overflow/truncation so scrollWidth reflects true content
-  const saved = cells.map((cell) => ({
-   el: cell,
-   maxW: cell.style.maxWidth,
-   w: cell.style.width,
-   overflow: cell.style.overflow,
-  }));
-  for (const cell of cells) {
-   cell.style.maxWidth = "none";
-   cell.style.width = "auto";
-   cell.style.overflow = "visible";
-  }
-  // Force layout reflow then measure
-  let widest = 0;
-  for (const cell of cells) {
-   widest = Math.max(widest, cell.scrollWidth);
-  }
-  // Restore original styles
-  for (const s of saved) {
-   s.el.style.maxWidth = s.maxW;
-   s.el.style.width = s.w;
-   s.el.style.overflow = s.overflow;
-  }
+      // Temporarily remove overflow/truncation so scrollWidth reflects true content
+      const saved = cells.map((cell) => ({
+        el: cell,
+        maxW: cell.style.maxWidth,
+        w: cell.style.width,
+        overflow: cell.style.overflow,
+      }));
+      for (const cell of cells) {
+        cell.style.maxWidth = "none";
+        cell.style.width = "auto";
+        cell.style.overflow = "visible";
+      }
+      // Force layout reflow then measure
+      let widest = 0;
+      for (const cell of cells) {
+        widest = Math.max(widest, cell.scrollWidth);
+      }
+      // Restore original styles
+      for (const s of saved) {
+        s.el.style.maxWidth = s.maxW;
+        s.el.style.width = s.w;
+        s.el.style.overflow = s.overflow;
+      }
 
-  const fitW = Math.max(MIN_W, Math.min(widest + PADDING, MAX_W));
-  onResize?.(sortKey, fitW);
- }, [sortKey, onResize]);
+      const fitW = Math.max(MIN_W, Math.min(widest + PADDING, MAX_W));
+      onResize?.(sortKey, fitW);
+    },
+    [sortKey, onResize],
+  );
 
- return (
- <th
-  ref={thRef}
-  className={`relative select-none ps-2 pe-4 py-3 text-center text-[12px] font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}
-  style={width ? { width, minWidth: width, maxWidth: width } : undefined}
- >
- <div className="flex items-center justify-center gap-0.5 overflow-hidden">
- <button
- type="button"
- onClick={() => onSort(sortKey)}
- className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent/60 hover:text-foreground cursor-pointer"
- aria-label={`מיין לפי ${label}`}
- >
- <span>{label}</span>
- {sortActive ? (
- sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
- ) : (
- <ArrowUpDown className="size-3" />
- )}
- </button>
- {hasFilter ? (
- <button
- type="button"
- ref={filterIconRef}
- className={`rounded-full p-1 hover:bg-accent/60 hover:text-foreground cursor-pointer ${filterActive ? "text-primary" : "text-muted-foreground"}`}
- onClick={(e) => {
- e.stopPropagation();
- setOpenFilter(isOpen ? null : filterCol);
- }}
- aria-label={`סינון עמודת ${label}`}
- >
- <Filter className="size-3" />
- </button>
- ) : null}
- </div>
- {isOpen ? (
- <FilterDropdown
- options={filterOptions}
- selected={filters[filterCol] || new Set()}
- onApply={(values) => { onFilter(filterCol, values); setOpenFilter(null); }}
- onClose={() => setOpenFilter(null)}
- ignoreRef={filterIconRef}
- anchorRef={filterIconRef}
- />
- ) : null}
- {onResize && (
-  <div
-   className="absolute top-0 bottom-0 w-[5px] cursor-col-resize end-0 z-10 after:absolute after:inset-y-2 after:start-[2px] after:w-px after:bg-border/40 hover:after:bg-primary/50 active:after:bg-primary/70 after:transition-colors"
-   onMouseDown={handleResizeStart}
-   onDoubleClick={handleResizeDblClick}
-  />
- )}
- </th>
- );
+  return (
+    <th
+      ref={thRef}
+      className={`relative select-none ps-2 pe-4 py-3 text-center text-[12px] font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}
+      style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+    >
+      <div className="flex items-center justify-center gap-0.5 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => onSort(sortKey)}
+          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent/60 hover:text-foreground cursor-pointer"
+          aria-label={`מיין לפי ${label}`}
+        >
+          <span>{label}</span>
+          {sortActive ? (
+            sortDir === "asc" ? (
+              <ArrowUp className="size-3" />
+            ) : (
+              <ArrowDown className="size-3" />
+            )
+          ) : (
+            <ArrowUpDown className="size-3" />
+          )}
+        </button>
+        {hasFilter ? (
+          <button
+            type="button"
+            ref={filterIconRef}
+            className={`rounded-full p-1 hover:bg-accent/60 hover:text-foreground cursor-pointer ${filterActive ? "text-primary" : "text-muted-foreground"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenFilter(isOpen ? null : filterCol);
+            }}
+            aria-label={`סינון עמודת ${label}`}
+          >
+            <Filter className="size-3" />
+          </button>
+        ) : null}
+      </div>
+      {isOpen ? (
+        <FilterDropdown
+          options={filterOptions}
+          selected={filters[filterCol] || new Set()}
+          onApply={(values) => {
+            onFilter(filterCol, values);
+            setOpenFilter(null);
+          }}
+          onClose={() => setOpenFilter(null)}
+          ignoreRef={filterIconRef}
+          anchorRef={filterIconRef}
+        />
+      ) : null}
+      {onResize && (
+        <div
+          className="absolute top-0 bottom-0 w-[5px] cursor-col-resize end-0 z-10 after:absolute after:inset-y-2 after:start-[2px] after:w-px after:bg-border/40 hover:after:bg-primary/50 active:after:bg-primary/70 after:transition-colors"
+          onMouseDown={handleResizeStart}
+          onDoubleClick={handleResizeDblClick}
+        />
+      )}
+    </th>
+  );
 }
 
 /* ── Excel-style filter dropdown: search + checkbox list + select all / clear ── */
 
 function FilterDropdown({
- options,
- selected,
- onApply,
- onClose,
- ignoreRef,
- anchorRef,
+  options,
+  selected,
+  onApply,
+  onClose,
+  ignoreRef,
+  anchorRef,
 }: {
- options: { value: string; label: string }[];
- selected: Set<string>;
- onApply: (values: Set<string>) => void;
- onClose: () => void;
- ignoreRef?: React.RefObject<HTMLElement | null>;
- anchorRef?: React.RefObject<HTMLElement | null>;
+  options: { value: string; label: string }[];
+  selected: Set<string>;
+  onApply: (values: Set<string>) => void;
+  onClose: () => void;
+  ignoreRef?: React.RefObject<HTMLElement | null>;
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }) {
- // selected.size === 0 means "no filter" (all shown). We convert to explicit set for local editing.
- const [localSelected, setLocalSelected] = useState<Set<string>>(
- () => selected.size === 0 ? new Set(options.map((o) => o.value)) : new Set(selected),
- );
- const [search, setSearch] = useState("");
- const [pos, setPos] = useState<{ top: number; left: number; availH: number } | null>(null);
- const ref = useRef<HTMLDivElement>(null);
- const searchRef = useRef<HTMLInputElement>(null);
+  // selected.size === 0 means "no filter" (all shown). We convert to explicit set for local editing.
+  const [localSelected, setLocalSelected] = useState<Set<string>>(() =>
+    selected.size === 0 ? new Set(options.map((o) => o.value)) : new Set(selected),
+  );
+  const [search, setSearch] = useState("");
+  const [pos, setPos] = useState<{ top: number; left: number; availH: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
- const updatePos = useCallback(() => {
- if (!anchorRef?.current) return;
- const rect = anchorRef.current.getBoundingClientRect();
- const dropdownW = 260;
- const gap = 4;
- const top = rect.bottom + gap;
- const availH = Math.max(150, window.innerHeight - top - gap);
- // Center dropdown on the icon, then clamp within viewport
- const idealLeft = rect.left + rect.width / 2 - dropdownW / 2;
- const left = Math.max(4, Math.min(idealLeft, window.innerWidth - dropdownW - 4));
- setPos({ top, left, availH });
- }, [anchorRef]);
+  const updatePos = useCallback(() => {
+    if (!anchorRef?.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const dropdownW = 260;
+    const gap = 4;
+    const top = rect.bottom + gap;
+    const availH = Math.max(150, window.innerHeight - top - gap);
+    // Center dropdown on the icon, then clamp within viewport
+    const idealLeft = rect.left + rect.width / 2 - dropdownW / 2;
+    const left = Math.max(4, Math.min(idealLeft, window.innerWidth - dropdownW - 4));
+    setPos({ top, left, availH });
+  }, [anchorRef]);
 
- useLayoutEffect(() => { updatePos(); }, [updatePos]);
+  useLayoutEffect(() => {
+    updatePos();
+  }, [updatePos]);
 
- // Close dropdown when any ancestor scrolls
- useEffect(() => {
- const scrollParents: HTMLElement[] = [];
- let el = anchorRef?.current?.parentElement;
- while (el) { if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) scrollParents.push(el); el = el.parentElement; }
- scrollParents.forEach((sp) => sp.addEventListener("scroll", onClose, { passive: true }));
- window.addEventListener("resize", onClose);
- return () => { scrollParents.forEach((sp) => sp.removeEventListener("scroll", onClose)); window.removeEventListener("resize", onClose); };
- }, [anchorRef, onClose]);
+  // Close dropdown when any ancestor scrolls
+  useEffect(() => {
+    const scrollParents: HTMLElement[] = [];
+    let el = anchorRef?.current?.parentElement;
+    while (el) {
+      if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)
+        scrollParents.push(el);
+      el = el.parentElement;
+    }
+    scrollParents.forEach((sp) => sp.addEventListener("scroll", onClose, { passive: true }));
+    window.addEventListener("resize", onClose);
+    return () => {
+      scrollParents.forEach((sp) => sp.removeEventListener("scroll", onClose));
+      window.removeEventListener("resize", onClose);
+    };
+  }, [anchorRef, onClose]);
 
- useEffect(() => {
- searchRef.current?.focus();
- }, []);
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
 
- useEffect(() => {
- function handleClick(e: MouseEvent) {
- const target = e.target as Node;
- if (ref.current && !ref.current.contains(target) && !(ignoreRef?.current && ignoreRef.current.contains(target))) {
- onClose();
- }
- }
- document.addEventListener("mousedown", handleClick);
- return () => document.removeEventListener("mousedown", handleClick);
- }, [onClose, ignoreRef]);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        ref.current &&
+        !ref.current.contains(target) &&
+        !(ignoreRef?.current && ignoreRef.current.contains(target))
+      ) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose, ignoreRef]);
 
- const allValues = new Set(options.map((o) => o.value));
- const allSelected = allValues.size > 0 && localSelected.size === allValues.size && [...allValues].every((v) => localSelected.has(v));
+  const allValues = new Set(options.map((o) => o.value));
+  const allSelected =
+    allValues.size > 0 &&
+    localSelected.size === allValues.size &&
+    [...allValues].every((v) => localSelected.has(v));
 
- const visibleOptions = search.trim()
- ? options.filter((o) => o.label.toLowerCase().includes(search.trim().toLowerCase()))
- : options;
+  const visibleOptions = search.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(search.trim().toLowerCase()))
+    : options;
 
- function toggleValue(val: string) {
- setLocalSelected((prev) => {
- const next = new Set(prev);
- if (next.has(val)) next.delete(val);
- else next.add(val);
- return next;
- });
- }
+  function toggleValue(val: string) {
+    setLocalSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(val)) next.delete(val);
+      else next.add(val);
+      return next;
+    });
+  }
 
- function toggleSelectAll() {
- if (allSelected) {
- setLocalSelected(new Set());
- } else {
- setLocalSelected(new Set(options.map((o) => o.value)));
- }
- }
+  function toggleSelectAll() {
+    if (allSelected) {
+      setLocalSelected(new Set());
+    } else {
+      setLocalSelected(new Set(options.map((o) => o.value)));
+    }
+  }
 
- const dropdown = (
- <div
- ref={ref}
- className="fixed z-[9999] max-w-[min(90vw,320px)] w-full rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl"
- style={pos ? { top: pos.top, left: pos.left, minWidth: "clamp(180px, 25vw, 260px)" } : { visibility: "hidden" as const }}
- onClick={(e) => e.stopPropagation()}
- >
- {/* Search box */}
- <div className="relative mb-1.5">
- <div className="absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground">
- <Search className="size-3" />
- </div>
- <Input
- ref={searchRef}
- type="text"
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- className="h-7 text-[11px] py-1.5 pe-7 ps-2 text-right"
- placeholder="חיפוש..."
- dir="rtl"
- />
- </div>
+  const dropdown = (
+    <div
+      ref={ref}
+      className="fixed z-[9999] max-w-[min(90vw,320px)] w-full rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl"
+      style={
+        pos
+          ? { top: pos.top, left: pos.left, minWidth: "clamp(180px, 25vw, 260px)" }
+          : { visibility: "hidden" as const }
+      }
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Search box */}
+      <div className="relative mb-1.5">
+        <div className="absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+          <Search className="size-3" />
+        </div>
+        <Input
+          ref={searchRef}
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-7 text-[11px] py-1.5 pe-7 ps-2 text-right"
+          placeholder="חיפוש..."
+          dir="rtl"
+        />
+      </div>
 
- {/* Select all */}
- <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted/70">
- <input type="checkbox" className="accent-[#3D2E22]" checked={allSelected} onChange={toggleSelectAll} />
- בחר הכל
- </label>
+      {/* Select all */}
+      <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted/70">
+        <input
+          type="checkbox"
+          className="accent-[#3D2E22]"
+          checked={allSelected}
+          onChange={toggleSelectAll}
+        />
+        בחר הכל
+      </label>
 
- <div className="my-1 border-t border-border/70" />
+      <div className="my-1 border-t border-border/70" />
 
- {/* Checkbox list */}
- <div className="overflow-y-auto" style={{ maxHeight: Math.min(200, (pos?.availH ?? 200) - 120) }}>
- {visibleOptions.length === 0 ? (
- <p className="text-[11px] text-center py-2 text-muted-foreground">אין תוצאות</p>
- ) : (
- visibleOptions.map((opt) => (
- <label
- key={opt.value}
- className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted/70"
- title={opt.value}
- >
- <input
- type="checkbox"
- className="shrink-0 accent-[#3D2E22]"
- checked={localSelected.has(opt.value)}
- onChange={() => toggleValue(opt.value)}
- />
- <span className="truncate" dir={/[\u0590-\u05FF]/.test(opt.label) ? "rtl" : "ltr"}>{opt.label}</span>
- </label>
- ))
- )}
- </div>
+      {/* Checkbox list */}
+      <div
+        className="overflow-y-auto"
+        style={{ maxHeight: Math.min(200, (pos?.availH ?? 200) - 120) }}
+      >
+        {visibleOptions.length === 0 ? (
+          <p className="text-[11px] text-center py-2 text-muted-foreground">אין תוצאות</p>
+        ) : (
+          visibleOptions.map((opt) => (
+            <label
+              key={opt.value}
+              className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted/70"
+              title={opt.value}
+            >
+              <input
+                type="checkbox"
+                className="shrink-0 accent-[#3D2E22]"
+                checked={localSelected.has(opt.value)}
+                onChange={() => toggleValue(opt.value)}
+              />
+              <span className="truncate" dir={/[\u0590-\u05FF]/.test(opt.label) ? "rtl" : "ltr"}>
+                {opt.label}
+              </span>
+            </label>
+          ))
+        )}
+      </div>
 
- <div className="my-1 border-t border-border/70" />
+      <div className="my-1 border-t border-border/70" />
 
- <div className="flex items-center gap-2 px-1">
- <Button
- type="button"
- variant="ghost"
- size="sm"
- className="flex-1 text-[11px] font-semibold"
- onClick={() => { onApply(new Set()); onClose(); }}
- >
- בטל
- </Button>
- <Button
- type="button"
- variant="default"
- size="sm"
- className="flex-1 text-[11px] font-semibold"
- onClick={() => {
- // If all options are selected, apply empty set (= no filter)
- const allVals = new Set(options.map((o) => o.value));
- const isAll = localSelected.size === allVals.size && [...allVals].every((v) => localSelected.has(v));
- onApply(isAll ? new Set() : localSelected);
- }}
- >
- החל
- </Button>
- </div>
- </div>
- );
+      <div className="flex items-center gap-2 px-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="flex-1 text-[11px] font-semibold"
+          onClick={() => {
+            onApply(new Set());
+            onClose();
+          }}
+        >
+          בטל
+        </Button>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          className="flex-1 text-[11px] font-semibold"
+          onClick={() => {
+            // If all options are selected, apply empty set (= no filter)
+            const allVals = new Set(options.map((o) => o.value));
+            const isAll =
+              localSelected.size === allVals.size &&
+              [...allVals].every((v) => localSelected.has(v));
+            onApply(isAll ? new Set() : localSelected);
+          }}
+        >
+          החל
+        </Button>
+      </div>
+    </div>
+  );
 
- return createPortal(dropdown, document.body);
+  return createPortal(dropdown, document.body);
 }
 
 /* ── Hook for filter state management ── */
 
 export function useColumnFilters() {
- const [filters, setFilters] = useState<Filters>({});
- const [openFilter, setOpenFilter] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>({});
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
 
- const setColumnFilter = useCallback((col: string, values: Set<string>) => {
- setFilters((prev) => {
- const next = { ...prev };
- if (values.size === 0) {
- delete next[col];
- } else {
- next[col] = values;
- }
- return next;
- });
- }, []);
+  const setColumnFilter = useCallback((col: string, values: Set<string>) => {
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (values.size === 0) {
+        delete next[col];
+      } else {
+        next[col] = values;
+      }
+      return next;
+    });
+  }, []);
 
- const clearAll = useCallback(() => setFilters({}), []);
+  const clearAll = useCallback(() => setFilters({}), []);
 
- const activeCount = Object.values(filters).filter((s) => s.size > 0).length;
+  const activeCount = Object.values(filters).filter((s) => s.size > 0).length;
 
- return { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount };
+  return { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount };
 }
 
 /* ── Hook for column resize state ── */
 
 export function useColumnResize() {
- const [widths, setWidths] = useState<Record<string, number>>({});
+  const [widths, setWidths] = useState<Record<string, number>>({});
 
- const setColumnWidth = useCallback((col: string, width: number) => {
-  setWidths((prev) => ({ ...prev, [col]: width }));
- }, []);
+  const setColumnWidth = useCallback((col: string, width: number) => {
+    setWidths((prev) => ({ ...prev, [col]: width }));
+  }, []);
 
- const resetAll = useCallback(() => setWidths({}), []);
+  const resetAll = useCallback(() => setWidths({}), []);
 
- const hasResized = Object.keys(widths).length > 0;
+  const hasResized = Object.keys(widths).length > 0;
 
- return { widths, setColumnWidth, resetAll, hasResized };
+  return { widths, setColumnWidth, resetAll, hasResized };
 }
 
 /* ── Reset columns button — shown when columns have been manually resized ── */
 
-export function ResetColumnsButton({ resize }: { resize: { hasResized: boolean; resetAll: () => void } }) {
- if (!resize.hasResized) return null;
- return (
-  <button
-   type="button"
-   onClick={resize.resetAll}
-   className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground/40"
-   title="איפוס רוחב עמודות"
-  >
-   <RotateCcw className="size-3" />
-   <span>איפוס גודל עמודות</span>
-  </button>
- );
+export function ResetColumnsButton({
+  resize,
+}: {
+  resize: { hasResized: boolean; resetAll: () => void };
+}) {
+  if (!resize.hasResized) return null;
+  return (
+    <button
+      type="button"
+      onClick={resize.resetAll}
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground/40"
+      title="איפוס רוחב עמודות"
+    >
+      <RotateCcw className="size-3" />
+      <span>איפוס גודל עמודות</span>
+    </button>
+  );
 }

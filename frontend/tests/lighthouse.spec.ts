@@ -1,10 +1,7 @@
 import { expect, test } from "@playwright/test";
 import chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
-import {
-  createAuthenticatedState,
-  resolveAppBaseUrl,
-} from "./helpers";
+import { createAuthenticatedState, resolveAppBaseUrl } from "./helpers";
 
 type LighthouseCategoryKey = "performance" | "accessibility" | "best-practices" | "seo";
 
@@ -23,12 +20,7 @@ async function auditPage(url: string, extraHeaders?: Record<string, string>) {
   let chrome: Awaited<ReturnType<typeof chromeLauncher.launch>> | undefined;
   try {
     chrome = await chromeLauncher.launch({
-      chromeFlags: [
-        "--headless=new",
-        "--disable-gpu",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-      ],
+      chromeFlags: ["--headless=new", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage"],
     });
 
     const result = await lighthouse(
@@ -61,10 +53,15 @@ async function auditPage(url: string, extraHeaders?: Record<string, string>) {
     }
 
     const scores = Object.fromEntries(
-      Object.entries(result.lhr.categories).map(([key, category]) => [key, Math.round((category?.score ?? 0) * 100)]),
+      Object.entries(result.lhr.categories).map(([key, category]) => [
+        key,
+        Math.round((category?.score ?? 0) * 100),
+      ]),
     ) as Record<LighthouseCategoryKey, number>;
 
-    for (const [category, minimum] of Object.entries(MINIMUMS) as Array<[LighthouseCategoryKey, number]>) {
+    for (const [category, minimum] of Object.entries(MINIMUMS) as Array<
+      [LighthouseCategoryKey, number]
+    >) {
       expect(
         scores[category],
         `Lighthouse ${category} score for ${url} was ${scores[category]}, expected >= ${minimum}`,
@@ -78,7 +75,9 @@ async function auditPage(url: string, extraHeaders?: Record<string, string>) {
 }
 
 test.describe("Lighthouse budgets", () => {
-  test("authenticated dashboard and login page meet the minimum score thresholds", async ({ browser }) => {
+  test("authenticated dashboard and login page meet the minimum score thresholds", async ({
+    browser,
+  }) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
     const cookieHeader = cookieHeaderFromState(authState.cookies);

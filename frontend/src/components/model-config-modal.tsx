@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -53,7 +59,10 @@ export function ModelConfigModal({
       ...p,
       extra: on
         ? { ...p.extra, reasoning_effort: "medium" }
-        : (() => { const { reasoning_effort: _, ...rest } = p.extra ?? {}; return Object.keys(rest).length ? rest : undefined; })(),
+        : (() => {
+            const { reasoning_effort: _, ...rest } = p.extra ?? {};
+            return Object.keys(rest).length ? rest : undefined;
+          })(),
     }));
   };
 
@@ -78,9 +87,17 @@ export function ModelConfigModal({
           {recentConfigs && recentConfigs.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">הגדרות אחרונות</Label>
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  הגדרות אחרונות
+                </Label>
                 {onClearRecent && (
-                  <button type="button" onClick={onClearRecent} className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors cursor-pointer">נקה</button>
+                  <button
+                    type="button"
+                    onClick={onClearRecent}
+                    className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors cursor-pointer"
+                  >
+                    נקה
+                  </button>
                 )}
               </div>
               <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin" dir="ltr">
@@ -129,11 +146,20 @@ export function ModelConfigModal({
           {/* Temperature */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label><HelpTip text="מידת היצירתיות של המודל — ערך נמוך נותן תשובות עקביות, גבוה מגוון יותר">טמפרטורה</HelpTip></Label>
-              <span className="text-xs font-mono text-muted-foreground">{draft.temperature?.toFixed(1) ?? "0.7"}</span>
+              <Label>
+                <HelpTip text="מידת היצירתיות של המודל — ערך נמוך נותן תשובות עקביות, גבוה מגוון יותר">
+                  טמפרטורה
+                </HelpTip>
+              </Label>
+              <span className="text-xs font-mono text-muted-foreground">
+                {draft.temperature?.toFixed(1) ?? "0.7"}
+              </span>
             </div>
             <input
-              type="range" min="0" max="2" step="0.1"
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
               value={draft.temperature ?? 0.7}
               onChange={(e) => setDraft((p) => ({ ...p, temperature: parseFloat(e.target.value) }))}
               className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
@@ -144,11 +170,20 @@ export function ModelConfigModal({
           {/* Top P */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label><HelpTip text="מגביל את מגוון המילים שהמודל שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון">Top P</HelpTip></Label>
-              <span className="text-xs font-mono text-muted-foreground">{draft.top_p?.toFixed(2) ?? "—"}</span>
+              <Label>
+                <HelpTip text="מגביל את מגוון המילים שהמודל שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון">
+                  Top P
+                </HelpTip>
+              </Label>
+              <span className="text-xs font-mono text-muted-foreground">
+                {draft.top_p?.toFixed(2) ?? "—"}
+              </span>
             </div>
             <input
-              type="range" min="0" max="1" step="0.05"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
               value={draft.top_p ?? 1}
               onChange={(e) => setDraft((p) => ({ ...p, top_p: parseFloat(e.target.value) }))}
               className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
@@ -158,9 +193,12 @@ export function ModelConfigModal({
 
           {/* Max tokens */}
           <div className="space-y-2">
-            <Label><HelpTip text="אורך התשובה המקסימלי — טוקן הוא בערך מילה אחת">מקסימום טוקנים</HelpTip></Label>
+            <Label>
+              <HelpTip text="אורך התשובה המקסימלי — טוקן הוא בערך מילה אחת">מקסימום טוקנים</HelpTip>
+            </Label>
             <NumberInput
-              min={1} step={256}
+              min={1}
+              step={256}
               value={draft.max_tokens ?? ""}
               onChange={(v) => setDraft((p) => ({ ...p, max_tokens: v }))}
             />
@@ -179,9 +217,16 @@ export function ModelConfigModal({
                   <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
                     <Label>רמת חשיבה</Label>
                     <div className="flex rounded-lg bg-muted p-0.5 w-full">
-                      {([["low", "נמוכה"], ["medium", "בינונית"], ["high", "גבוהה"]] as const).map(([val, label]) => (
+                      {(
+                        [
+                          ["low", "נמוכה"],
+                          ["medium", "בינונית"],
+                          ["high", "גבוהה"],
+                        ] as const
+                      ).map(([val, label]) => (
                         <button
-                          key={val} type="button"
+                          key={val}
+                          type="button"
                           onClick={() => setEffort(val)}
                           className={cn(
                             "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors text-center cursor-pointer",
@@ -202,8 +247,12 @@ export function ModelConfigModal({
         </div>
 
         <DialogFooter className="grid grid-cols-2 gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">ביטול</Button>
-          <Button onClick={handleSave} disabled={!draft.name.trim()} className="w-full">שמור</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+            ביטול
+          </Button>
+          <Button onClick={handleSave} disabled={!draft.name.trim()} className="w-full">
+            שמור
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

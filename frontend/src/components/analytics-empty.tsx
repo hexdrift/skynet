@@ -11,7 +11,11 @@ interface AnalyticsEmptyProps {
   onRetry?: () => void;
 }
 
-export function AnalyticsEmpty({ variant = "no-data", onClearFilters, onRetry }: AnalyticsEmptyProps) {
+export function AnalyticsEmpty({
+  variant = "no-data",
+  onClearFilters,
+  onRetry,
+}: AnalyticsEmptyProps) {
   const configs = {
     "no-data": {
       icon: Database,

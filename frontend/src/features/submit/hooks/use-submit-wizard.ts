@@ -25,13 +25,7 @@ import { getModelCatalog, cachedCatalog } from "@/lib/model-catalog";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
 import { msg } from "@/features/shared/messages";
 
-import {
-  STEPS,
-  emptyModelConfig,
-  defaultSplit,
-  RECENT_KEY,
-  MAX_RECENT,
-} from "../constants";
+import { STEPS, emptyModelConfig, defaultSplit, RECENT_KEY, MAX_RECENT } from "../constants";
 import { buildSignatureTemplate } from "../lib/build-signature";
 import { buildOptimizerKwargs, buildCompileKwargs } from "../lib/build-kwargs";
 import {
@@ -91,7 +85,11 @@ export function useSubmitWizard() {
 
   // Recent model configs — persisted in localStorage
   const [recentConfigs, setRecentConfigs] = useState<ModelConfig[]>(() => {
-    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+    } catch {
+      return [];
+    }
   });
   const saveToRecent = useCallback((config: ModelConfig) => {
     if (!config.name) return;
@@ -108,8 +106,14 @@ export function useSubmitWizard() {
   useEffect(() => {
     if (catalog) return;
     let cancelled = false;
-    getModelCatalog().then((c) => { if (!cancelled) setCatalog(c); }).catch(() => {});
-    return () => { cancelled = true; };
+    getModelCatalog()
+      .then((c) => {
+        if (!cancelled) setCatalog(c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [catalog]);
 
   // Check if ANY provider has an env key configured on the backend
@@ -196,7 +200,10 @@ export function useSubmitWizard() {
         if (payload.description) setJobDescription(String(payload.description));
         if (payload.module_name) setModuleName(String(payload.module_name));
         if (payload.optimizer_name) setOptimizerName(String(payload.optimizer_name));
-        if (payload.signature_code) { setSignatureCode(String(payload.signature_code)); setSignatureManuallyEdited(true); }
+        if (payload.signature_code) {
+          setSignatureCode(String(payload.signature_code));
+          setSignatureManuallyEdited(true);
+        }
         if (payload.metric_code) setMetricCode(String(payload.metric_code));
 
         // Dataset
@@ -204,20 +211,34 @@ export function useSubmitWizard() {
           const rows = payload.dataset as Record<string, unknown>[];
           const columns = Object.keys(rows[0] ?? {});
           setParsedDataset({ columns, rows, rowCount: rows.length });
-          setDatasetFileName(String((payload as Record<string, unknown>).dataset_filename || displayName || cloneId || ""));
+          setDatasetFileName(
+            String(
+              (payload as Record<string, unknown>).dataset_filename || displayName || cloneId || "",
+            ),
+          );
         }
 
         // Column mapping
-        const cm = payload.column_mapping as { inputs?: Record<string, string>; outputs?: Record<string, string> } | undefined;
+        const cm = payload.column_mapping as
+          | { inputs?: Record<string, string>; outputs?: Record<string, string> }
+          | undefined;
         if (cm) {
           const roles: Record<string, "input" | "output" | "ignore"> = {};
-          if (cm.inputs) Object.keys(cm.inputs).forEach((k) => { roles[k] = "input"; });
-          if (cm.outputs) Object.keys(cm.outputs).forEach((k) => { roles[k] = "output"; });
+          if (cm.inputs)
+            Object.keys(cm.inputs).forEach((k) => {
+              roles[k] = "input";
+            });
+          if (cm.outputs)
+            Object.keys(cm.outputs).forEach((k) => {
+              roles[k] = "output";
+            });
           setColumnRoles(roles);
         }
 
         // Split fractions
-        const sf = payload.split_fractions as { train?: number; val?: number; test?: number } | undefined;
+        const sf = payload.split_fractions as
+          | { train?: number; val?: number; test?: number }
+          | undefined;
         if (sf) setSplit({ train: sf.train ?? 0.7, val: sf.val ?? 0.15, test: sf.test ?? 0.15 });
 
         if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
@@ -226,7 +247,9 @@ export function useSubmitWizard() {
         const mc = payload.model_config as ModelConfig | undefined;
         if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
 
-        const smc = (payload.reflection_model_config ?? payload.task_model_config ?? payload.prompt_model_config) as ModelConfig | undefined;
+        const smc = (payload.reflection_model_config ??
+          payload.task_model_config ??
+          payload.prompt_model_config) as ModelConfig | undefined;
         if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
 
         // Grid search models
@@ -240,9 +263,11 @@ export function useSubmitWizard() {
         const optKw = payload.optimizer_kwargs as Record<string, unknown> | undefined;
         if (optKw) {
           if (optKw.auto) setAutoLevel(String(optKw.auto));
-          if (optKw.max_bootstrapped_demos != null) setMaxBootstrappedDemos(String(optKw.max_bootstrapped_demos));
+          if (optKw.max_bootstrapped_demos != null)
+            setMaxBootstrappedDemos(String(optKw.max_bootstrapped_demos));
           if (optKw.max_labeled_demos != null) setMaxLabeledDemos(String(optKw.max_labeled_demos));
-          if (optKw.reflection_minibatch_size != null) setReflectionMinibatchSize(String(optKw.reflection_minibatch_size));
+          if (optKw.reflection_minibatch_size != null)
+            setReflectionMinibatchSize(String(optKw.reflection_minibatch_size));
           if (optKw.max_full_evals != null) setMaxFullEvals(String(optKw.max_full_evals));
           if (optKw.use_merge != null) setUseMerge(Boolean(optKw.use_merge));
         }
@@ -295,41 +320,79 @@ export function useSubmitWizard() {
   const validateStep = (s: number, showToast = false): boolean => {
     switch (s) {
       case 0:
-        if (!username.trim()) { if (showToast) toast.error(msg("submit.validation.username_required")); return false; }
-        if (!jobName.trim()) { if (showToast) toast.error(msg("submit.validation.name_required")); return false; }
+        if (!username.trim()) {
+          if (showToast) toast.error(msg("submit.validation.username_required"));
+          return false;
+        }
+        if (!jobName.trim()) {
+          if (showToast) toast.error(msg("submit.validation.name_required"));
+          return false;
+        }
         return true;
       case 1: {
-        if (!parsedDataset || parsedDataset.rowCount === 0) { if (showToast) toast.error(msg("submit.validation.dataset_required")); return false; }
+        if (!parsedDataset || parsedDataset.rowCount === 0) {
+          if (showToast) toast.error(msg("submit.validation.dataset_required"));
+          return false;
+        }
         const m = buildColumnMapping();
-        if (Object.keys(m.inputs).length === 0) { if (showToast) toast.error(msg("submit.validation.input_column_required")); return false; }
-        if (Object.keys(m.outputs).length === 0) { if (showToast) toast.error(msg("submit.validation.output_column_required")); return false; }
+        if (Object.keys(m.inputs).length === 0) {
+          if (showToast) toast.error(msg("submit.validation.input_column_required"));
+          return false;
+        }
+        if (Object.keys(m.outputs).length === 0) {
+          if (showToast) toast.error(msg("submit.validation.output_column_required"));
+          return false;
+        }
         return true;
       }
       case 2:
         if (jobType === "run") {
-          if (!modelConfig.name.trim()) { if (showToast) toast.error(msg("submit.validation.model_required")); return false; }
+          if (!modelConfig.name.trim()) {
+            if (showToast) toast.error(msg("submit.validation.model_required"));
+            return false;
+          }
           // Require api_key if provider has no env default AND no global key
-          const hasApiKey = !!globalApiKey || !!(modelConfig.extra?.api_key);
+          const hasApiKey = !!globalApiKey || !!modelConfig.extra?.api_key;
           if (!anyProviderHasEnvKey && !hasApiKey) {
             if (showToast) toast.error(msg("submit.validation.api_key_required"));
             return false;
           }
           const secondModel = secondModelConfig;
-          if (!secondModel?.name?.trim()) { if (showToast) toast.error(msg("submit.validation.reflection_model_required")); return false; }
+          if (!secondModel?.name?.trim()) {
+            if (showToast) toast.error(msg("submit.validation.reflection_model_required"));
+            return false;
+          }
         }
         if (jobType === "grid_search") {
-          if (generationModels.every((m) => !m.name.trim())) { if (showToast) toast.error(msg("submit.validation.generation_model_required")); return false; }
-          if (reflectionModels.every((m) => !m.name.trim())) { if (showToast) toast.error(msg("submit.validation.reflection_models_required")); return false; }
+          if (generationModels.every((m) => !m.name.trim())) {
+            if (showToast) toast.error(msg("submit.validation.generation_model_required"));
+            return false;
+          }
+          if (reflectionModels.every((m) => !m.name.trim())) {
+            if (showToast) toast.error(msg("submit.validation.reflection_models_required"));
+            return false;
+          }
         }
         return true;
       case 3:
-        if (!signatureCode.trim()) { if (showToast) toast.error(msg("submit.validation.signature_required")); return false; }
-        if (!metricCode.trim()) { if (showToast) toast.error(msg("submit.validation.metric_required")); return false; }
+        if (!signatureCode.trim()) {
+          if (showToast) toast.error(msg("submit.validation.signature_required"));
+          return false;
+        }
+        if (!metricCode.trim()) {
+          if (showToast) toast.error(msg("submit.validation.metric_required"));
+          return false;
+        }
         // Block progress if any validation ran and found errors
-        if (signatureValidation && signatureValidation.errors.length > 0) { return false; }
-        if (metricValidation && metricValidation.errors.length > 0) { return false; }
+        if (signatureValidation && signatureValidation.errors.length > 0) {
+          return false;
+        }
+        if (metricValidation && metricValidation.errors.length > 0) {
+          return false;
+        }
         return true;
-      default: return true;
+      default:
+        return true;
     }
   };
 
@@ -417,8 +480,14 @@ export function useSubmitWizard() {
   };
 
   const handleTabClick = (idx: number) => {
-    if (idx <= step) { goTo(idx); return; } // going back is always allowed
-    if (idx <= maxReachableStep) { goTo(idx); return; } // all prior steps valid
+    if (idx <= step) {
+      goTo(idx);
+      return;
+    } // going back is always allowed
+    if (idx <= maxReachableStep) {
+      goTo(idx);
+      return;
+    } // all prior steps valid
     // try to validate current step and show error
     validateStep(step, true);
   };
@@ -432,7 +501,9 @@ export function useSubmitWizard() {
       setParsedDataset(parsed);
       setDatasetFileName(file.name);
       const roles: Record<string, "input" | "output" | "ignore"> = {};
-      parsed.columns.forEach((col) => { roles[col] = "input"; });
+      parsed.columns.forEach((col) => {
+        roles[col] = "input";
+      });
       setColumnRoles(roles);
       toast.success(`נטען ${parsed.rowCount} שורות מ-${file.name}`);
     } catch (err) {
@@ -450,14 +521,38 @@ export function useSubmitWizard() {
 
   /* ── Submit ── */
   const handleSubmit = async () => {
-    if (!username.trim()) { toast.error(msg("submit.validation.username_required")); goTo(0); return; }
-    if (!parsedDataset || parsedDataset.rowCount === 0) { toast.error(msg("submit.validation.dataset_required_short")); goTo(1); return; }
-    if (!signatureCode.trim()) { toast.error(msg("submit.validation.signature_required")); goTo(3); return; }
-    if (!metricCode.trim()) { toast.error(msg("submit.validation.metric_required")); goTo(3); return; }
+    if (!username.trim()) {
+      toast.error(msg("submit.validation.username_required"));
+      goTo(0);
+      return;
+    }
+    if (!parsedDataset || parsedDataset.rowCount === 0) {
+      toast.error(msg("submit.validation.dataset_required_short"));
+      goTo(1);
+      return;
+    }
+    if (!signatureCode.trim()) {
+      toast.error(msg("submit.validation.signature_required"));
+      goTo(3);
+      return;
+    }
+    if (!metricCode.trim()) {
+      toast.error(msg("submit.validation.metric_required"));
+      goTo(3);
+      return;
+    }
 
     const columnMapping = buildColumnMapping();
-    if (Object.keys(columnMapping.inputs).length === 0) { toast.error(msg("submit.validation.input_column_required")); goTo(1); return; }
-    if (Object.keys(columnMapping.outputs).length === 0) { toast.error(msg("submit.validation.output_column_required")); goTo(1); return; }
+    if (Object.keys(columnMapping.inputs).length === 0) {
+      toast.error(msg("submit.validation.input_column_required"));
+      goTo(1);
+      return;
+    }
+    if (Object.keys(columnMapping.outputs).length === 0) {
+      toast.error(msg("submit.validation.output_column_required"));
+      goTo(1);
+      return;
+    }
 
     setSubmitting(true);
     setSubmitPhase("sending");
@@ -499,14 +594,23 @@ export function useSubmitWizard() {
       const applyGlobals = (mc: ModelConfig): ModelConfig => {
         const out = { ...mc };
         if (globalBaseUrl && !out.base_url) out.base_url = globalBaseUrl;
-        if (globalApiKey && !out.extra?.api_key) out.extra = { ...out.extra, api_key: globalApiKey };
+        if (globalApiKey && !out.extra?.api_key)
+          out.extra = { ...out.extra, api_key: globalApiKey };
         return out;
       };
 
       let result;
       if (jobType === "run") {
-        if (!modelConfig.name.trim()) { toast.error(msg("submit.validation.model_required")); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
-        const secondApplied = secondModelConfig?.name?.trim() ? applyGlobals(secondModelConfig) : undefined;
+        if (!modelConfig.name.trim()) {
+          toast.error(msg("submit.validation.model_required"));
+          goTo(2);
+          setSubmitting(false);
+          setSubmitPhase("idle");
+          return;
+        }
+        const secondApplied = secondModelConfig?.name?.trim()
+          ? applyGlobals(secondModelConfig)
+          : undefined;
         const runPayload = {
           ...base,
           model_config: applyGlobals(modelConfig),
@@ -515,18 +619,34 @@ export function useSubmitWizard() {
             : {}),
           ...(optimizerName === "miprov2"
             ? {
-              prompt_model_config: applyGlobals(modelConfig),
-              ...(secondApplied ? { task_model_config: secondApplied } : {}),
-            }
+                prompt_model_config: applyGlobals(modelConfig),
+                ...(secondApplied ? { task_model_config: secondApplied } : {}),
+              }
             : {}),
         } as Parameters<typeof submitRun>[0];
         result = await submitRun(runPayload);
       } else {
         const validGen = generationModels.filter((m) => m.name.trim()).map(applyGlobals);
         const validRef = reflectionModels.filter((m) => m.name.trim()).map(applyGlobals);
-        if (validGen.length === 0) { toast.error(msg("submit.validation.generation_model_required")); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
-        if (validRef.length === 0) { toast.error(msg("submit.validation.reflection_models_required")); goTo(2); setSubmitting(false); setSubmitPhase("idle"); return; }
-        result = await submitGridSearch({ ...base, generation_models: validGen, reflection_models: validRef });
+        if (validGen.length === 0) {
+          toast.error(msg("submit.validation.generation_model_required"));
+          goTo(2);
+          setSubmitting(false);
+          setSubmitPhase("idle");
+          return;
+        }
+        if (validRef.length === 0) {
+          toast.error(msg("submit.validation.reflection_models_required"));
+          goTo(2);
+          setSubmitting(false);
+          setSubmitPhase("idle");
+          return;
+        }
+        result = await submitGridSearch({
+          ...base,
+          generation_models: validGen,
+          reflection_models: validRef,
+        });
       }
 
       // Show splash transition, then navigate
@@ -552,62 +672,102 @@ export function useSubmitWizard() {
 
   return {
     // Navigation / step state
-    step, setStep, direction, setDirection,
-    summaryTab, setSummaryTab,
-    summaryCodeTab, setSummaryCodeTab,
-    goNext, goPrev, goTo,
+    step,
+    setStep,
+    direction,
+    setDirection,
+    summaryTab,
+    setSummaryTab,
+    summaryCodeTab,
+    setSummaryCodeTab,
+    goNext,
+    goPrev,
+    goTo,
     maxReachableStep,
     validateStep,
     handleNext,
     handleTabClick,
     // Job type / basics
-    jobType, setOptimizationType,
+    jobType,
+    setOptimizationType,
     username,
-    jobName, setJobName,
-    jobDescription, setJobDescription,
-    moduleName, setModuleName,
-    optimizerName, setOptimizerName,
+    jobName,
+    setJobName,
+    jobDescription,
+    setJobDescription,
+    moduleName,
+    setModuleName,
+    optimizerName,
+    setOptimizerName,
     // Code editors
-    signatureCode, setSignatureCode,
+    signatureCode,
+    setSignatureCode,
     setSignatureManuallyEdited,
-    metricCode, setMetricCode,
-    signatureValidation, setSignatureValidation,
-    metricValidation, setMetricValidation,
+    metricCode,
+    setMetricCode,
+    signatureValidation,
+    setSignatureValidation,
+    metricValidation,
+    setMetricValidation,
     runSignatureValidation,
     runMetricValidation,
     // Dataset
-    parsedDataset, setParsedDataset,
-    datasetFileName, setDatasetFileName,
+    parsedDataset,
+    setParsedDataset,
+    datasetFileName,
+    setDatasetFileName,
     fileInputRef,
     handleFileUpload,
     // Column mapping
-    columnRoles, setColumnRoles,
+    columnRoles,
+    setColumnRoles,
     // Global provider
-    globalBaseUrl, setGlobalBaseUrl,
-    globalApiKey, setGlobalApiKey,
+    globalBaseUrl,
+    setGlobalBaseUrl,
+    globalApiKey,
+    setGlobalApiKey,
     anyProviderHasEnvKey,
     // Run model configs
-    modelConfig, setModelConfig,
-    secondModelConfig, setSecondModelConfig,
-    editingModel, setEditingModel,
-    recentConfigs, saveToRecent, clearRecentConfigs,
+    modelConfig,
+    setModelConfig,
+    secondModelConfig,
+    setSecondModelConfig,
+    editingModel,
+    setEditingModel,
+    recentConfigs,
+    saveToRecent,
+    clearRecentConfigs,
     catalog,
     // Grid search
-    generationModels, setGenerationModels,
-    reflectionModels, setReflectionModels,
+    generationModels,
+    setGenerationModels,
+    reflectionModels,
+    setReflectionModels,
     // Split / shuffle
-    split, updateSplit, splitSum,
-    shuffle, setShuffle,
+    split,
+    updateSplit,
+    splitSum,
+    shuffle,
+    setShuffle,
     // Advanced params
-    autoLevel, setAutoLevel,
-    maxBootstrappedDemos, setMaxBootstrappedDemos,
-    maxLabeledDemos, setMaxLabeledDemos,
-    numTrials, setNumTrials,
-    minibatch, setMinibatch,
-    minibatchSize, setMinibatchSize,
-    reflectionMinibatchSize, setReflectionMinibatchSize,
-    maxFullEvals, setMaxFullEvals,
-    useMerge, setUseMerge,
+    autoLevel,
+    setAutoLevel,
+    maxBootstrappedDemos,
+    setMaxBootstrappedDemos,
+    maxLabeledDemos,
+    setMaxLabeledDemos,
+    numTrials,
+    setNumTrials,
+    minibatch,
+    setMinibatch,
+    minibatchSize,
+    setMinibatchSize,
+    reflectionMinibatchSize,
+    setReflectionMinibatchSize,
+    maxFullEvals,
+    setMaxFullEvals,
+    useMerge,
+    setUseMerge,
     // Submission
     submitting,
     submitPhase,

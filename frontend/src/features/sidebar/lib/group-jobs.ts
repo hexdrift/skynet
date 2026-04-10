@@ -32,10 +32,7 @@ export function matchesJobSearch(job: SidebarJobItem, query: string): boolean {
  * Bucket jobs into pinned → active → today → yesterday → this week → older.
  * Empty buckets are dropped.
  */
-export function groupJobsByRecency(
-  jobs: SidebarJobItem[],
-  now: Date = new Date(),
-): JobGroup[] {
+export function groupJobsByRecency(jobs: SidebarJobItem[], now: Date = new Date()): JobGroup[] {
   const groups: JobGroup[] = [];
   const pinned: SidebarJobItem[] = [];
   const active: SidebarJobItem[] = [];
@@ -49,8 +46,14 @@ export function groupJobsByRecency(
   const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
 
   for (const job of jobs) {
-    if (job.pinned) { pinned.push(job); continue; }
-    if (ACTIVE_STATUSES.has(job.status as never)) { active.push(job); continue; }
+    if (job.pinned) {
+      pinned.push(job);
+      continue;
+    }
+    if (ACTIVE_STATUSES.has(job.status as never)) {
+      active.push(job);
+      continue;
+    }
     const created = new Date(job.created_at ?? 0);
     if (created >= todayStart) today.push(job);
     else if (created >= yesterdayStart) yesterday.push(job);

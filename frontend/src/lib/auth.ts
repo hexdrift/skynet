@@ -8,7 +8,10 @@ import Credentials from "next-auth/providers/credentials";
  * Set via AUTH_ADMINS env var, e.g. "gilad,admin,root"
  */
 const ADMIN_LIST = new Set(
-  (process.env.AUTH_ADMINS ?? "admin").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  (process.env.AUTH_ADMINS ?? "admin")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
 );
 
 /**
@@ -51,7 +54,12 @@ if (ssoConfigured) {
     profile(profile) {
       return {
         id: profile.sub,
-        name: profile.name ?? profile.unique_name ?? profile.upn ?? profile.preferred_username ?? profile.sub,
+        name:
+          profile.name ??
+          profile.unique_name ??
+          profile.upn ??
+          profile.preferred_username ??
+          profile.sub,
         email: profile.email ?? profile.upn ?? profile.preferred_username,
       };
     },
@@ -68,7 +76,7 @@ if (ssoConfigured) {
         if (!username) return null;
         return { id: username, name: username, email: `${username}@skynet.local` };
       },
-    })
+    }),
   );
 }
 

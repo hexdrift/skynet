@@ -12,7 +12,12 @@ interface AnalyticsSectionProps {
   className?: string;
 }
 
-export function AnalyticsSection({ title, defaultOpen = true, children, className }: AnalyticsSectionProps) {
+export function AnalyticsSection({
+  title,
+  defaultOpen = true,
+  children,
+  className,
+}: AnalyticsSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (

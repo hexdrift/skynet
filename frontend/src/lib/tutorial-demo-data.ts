@@ -68,8 +68,20 @@ function buildValidating(start: Date): OptimizationStatusResponse {
     elapsed_seconds: elapsed,
     elapsed: fmtElapsed(elapsed),
     logs: [
-      { timestamp: ts(start, 200), level: "INFO", logger: "skynet.worker", message: "Starting optimization: סיווג אימיילים", pair_index: null },
-      { timestamp: ts(start, 400), level: "INFO", logger: "dspy.validators", message: "Validating signature and metric code...", pair_index: null },
+      {
+        timestamp: ts(start, 200),
+        level: "INFO",
+        logger: "skynet.worker",
+        message: "Starting optimization: סיווג אימיילים",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 400),
+        level: "INFO",
+        logger: "dspy.validators",
+        message: "Validating signature and metric code...",
+        pair_index: null,
+      },
     ],
     log_count: 2,
   };
@@ -83,13 +95,41 @@ function buildSplitting(start: Date): OptimizationStatusResponse {
     elapsed_seconds: elapsed,
     elapsed: fmtElapsed(elapsed),
     progress_events: [
-      { timestamp: ts(start, 1500), event: "validation_passed", metrics: { message: "All checks passed" } },
+      {
+        timestamp: ts(start, 1500),
+        event: "validation_passed",
+        metrics: { message: "All checks passed" },
+      },
     ],
     logs: [
-      { timestamp: ts(start, 200), level: "INFO", logger: "skynet.worker", message: "Starting optimization: סיווג אימיילים", pair_index: null },
-      { timestamp: ts(start, 400), level: "INFO", logger: "dspy.validators", message: "Validating signature and metric code...", pair_index: null },
-      { timestamp: ts(start, 1500), level: "INFO", logger: "dspy.validators", message: "Validation passed ✓", pair_index: null },
-      { timestamp: ts(start, 1800), level: "INFO", logger: "dspy.datasets", message: "Splitting 200 examples into train/val/test...", pair_index: null },
+      {
+        timestamp: ts(start, 200),
+        level: "INFO",
+        logger: "skynet.worker",
+        message: "Starting optimization: סיווג אימיילים",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 400),
+        level: "INFO",
+        logger: "dspy.validators",
+        message: "Validating signature and metric code...",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 1500),
+        level: "INFO",
+        logger: "dspy.validators",
+        message: "Validation passed ✓",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 1800),
+        level: "INFO",
+        logger: "dspy.datasets",
+        message: "Splitting 200 examples into train/val/test...",
+        pair_index: null,
+      },
     ],
     progress_count: 1,
     log_count: 4,
@@ -105,15 +145,55 @@ function buildBaseline(start: Date): OptimizationStatusResponse {
     elapsed: fmtElapsed(elapsed),
     progress_events: [
       { timestamp: ts(start, 1500), event: "validation_passed", metrics: {} },
-      { timestamp: ts(start, 2800), event: "dataset_splits_ready", metrics: { train_examples: 120, val_examples: 40, test_examples: 40 } },
+      {
+        timestamp: ts(start, 2800),
+        event: "dataset_splits_ready",
+        metrics: { train_examples: 120, val_examples: 40, test_examples: 40 },
+      },
     ],
     logs: [
-      { timestamp: ts(start, 200), level: "INFO", logger: "skynet.worker", message: "Starting optimization: סיווג אימיילים", pair_index: null },
-      { timestamp: ts(start, 400), level: "INFO", logger: "dspy.validators", message: "Validating signature and metric code...", pair_index: null },
-      { timestamp: ts(start, 1500), level: "INFO", logger: "dspy.validators", message: "Validation passed ✓", pair_index: null },
-      { timestamp: ts(start, 1800), level: "INFO", logger: "dspy.datasets", message: "Splitting 200 examples into train/val/test...", pair_index: null },
-      { timestamp: ts(start, 2800), level: "INFO", logger: "dspy.datasets", message: "Dataset split: train=120, val=40, test=40", pair_index: null },
-      { timestamp: ts(start, 3000), level: "INFO", logger: "dspy.runners", message: "Evaluating default program on test set...", pair_index: null },
+      {
+        timestamp: ts(start, 200),
+        level: "INFO",
+        logger: "skynet.worker",
+        message: "Starting optimization: סיווג אימיילים",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 400),
+        level: "INFO",
+        logger: "dspy.validators",
+        message: "Validating signature and metric code...",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 1500),
+        level: "INFO",
+        logger: "dspy.validators",
+        message: "Validation passed ✓",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 1800),
+        level: "INFO",
+        logger: "dspy.datasets",
+        message: "Splitting 200 examples into train/val/test...",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 2800),
+        level: "INFO",
+        logger: "dspy.datasets",
+        message: "Dataset split: train=120, val=40, test=40",
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, 3000),
+        level: "INFO",
+        logger: "dspy.runners",
+        message: "Evaluating default program on test set...",
+        pair_index: null,
+      },
     ],
     progress_count: 2,
     log_count: 6,
@@ -125,29 +205,97 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
 
   const events: ProgressEvent[] = [
     { timestamp: ts(start, 1500), event: "validation_passed", metrics: {} },
-    { timestamp: ts(start, 2800), event: "dataset_splits_ready", metrics: { train_examples: 120, val_examples: 40, test_examples: 40 } },
-    { timestamp: ts(start, 4200), event: "baseline_evaluated", metrics: { baseline_test_metric: 0.62 } },
+    {
+      timestamp: ts(start, 2800),
+      event: "dataset_splits_ready",
+      metrics: { train_examples: 120, val_examples: 40, test_examples: 40 },
+    },
+    {
+      timestamp: ts(start, 4200),
+      event: "baseline_evaluated",
+      metrics: { baseline_test_metric: 0.62 },
+    },
   ];
   if (trialsDone > 0) {
     events.push({ timestamp: ts(start, 5000), event: "optimizer_progress", metrics: {} });
   }
 
   const logs: OptimizationLogEntry[] = [
-    { timestamp: ts(start, 200), level: "INFO", logger: "skynet.worker", message: "Starting optimization: סיווג אימיילים", pair_index: null },
-    { timestamp: ts(start, 400), level: "INFO", logger: "dspy.validators", message: "Validating signature and metric code...", pair_index: null },
-    { timestamp: ts(start, 1500), level: "INFO", logger: "dspy.validators", message: "Validation passed ✓", pair_index: null },
-    { timestamp: ts(start, 1800), level: "INFO", logger: "dspy.datasets", message: "Splitting 200 examples into train/val/test...", pair_index: null },
-    { timestamp: ts(start, 2800), level: "INFO", logger: "dspy.datasets", message: "Dataset split: train=120, val=40, test=40", pair_index: null },
-    { timestamp: ts(start, 3000), level: "INFO", logger: "dspy.runners", message: "Evaluating default program on test set...", pair_index: null },
-    { timestamp: ts(start, 4200), level: "INFO", logger: "dspy.runners", message: "Default program score: 62.0", pair_index: null },
-    { timestamp: ts(start, 4500), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Starting MIPROv2 optimization with ${NUM_TRIALS} trials...`, pair_index: null },
+    {
+      timestamp: ts(start, 200),
+      level: "INFO",
+      logger: "skynet.worker",
+      message: "Starting optimization: סיווג אימיילים",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 400),
+      level: "INFO",
+      logger: "dspy.validators",
+      message: "Validating signature and metric code...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 1500),
+      level: "INFO",
+      logger: "dspy.validators",
+      message: "Validation passed ✓",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 1800),
+      level: "INFO",
+      logger: "dspy.datasets",
+      message: "Splitting 200 examples into train/val/test...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 2800),
+      level: "INFO",
+      logger: "dspy.datasets",
+      message: "Dataset split: train=120, val=40, test=40",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 3000),
+      level: "INFO",
+      logger: "dspy.runners",
+      message: "Evaluating default program on test set...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 4200),
+      level: "INFO",
+      logger: "dspy.runners",
+      message: "Default program score: 62.0",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 4500),
+      level: "INFO",
+      logger: "dspy.optimizers.miprov2",
+      message: `Starting MIPROv2 optimization with ${NUM_TRIALS} trials...`,
+      pair_index: null,
+    },
   ];
 
   for (let i = 0; i < trialsDone; i++) {
     const offset = 5000 + i * 550;
     logs.push(
-      { timestamp: ts(start, offset), level: "INFO", logger: "dspy.optimizers.miprov2", message: `===== Trial ${i + 1} / ${NUM_TRIALS} =====`, pair_index: null },
-      { timestamp: ts(start, offset + 300), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Score: ${(TRIAL_SCORES[i] ?? 0).toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`, pair_index: null },
+      {
+        timestamp: ts(start, offset),
+        level: "INFO",
+        logger: "dspy.optimizers.miprov2",
+        message: `===== Trial ${i + 1} / ${NUM_TRIALS} =====`,
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, offset + 300),
+        level: "INFO",
+        logger: "dspy.optimizers.miprov2",
+        message: `Score: ${(TRIAL_SCORES[i] ?? 0).toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`,
+        pair_index: null,
+      },
     );
   }
 
@@ -175,36 +323,132 @@ function buildDone(start: Date): OptimizationStatusResponse {
 
   const events: ProgressEvent[] = [
     { timestamp: ts(start, 1500), event: "validation_passed", metrics: {} },
-    { timestamp: ts(start, 2800), event: "dataset_splits_ready", metrics: { train_examples: 120, val_examples: 40, test_examples: 40 } },
-    { timestamp: ts(start, 4200), event: "baseline_evaluated", metrics: { baseline_test_metric: 0.62 } },
+    {
+      timestamp: ts(start, 2800),
+      event: "dataset_splits_ready",
+      metrics: { train_examples: 120, val_examples: 40, test_examples: 40 },
+    },
+    {
+      timestamp: ts(start, 4200),
+      event: "baseline_evaluated",
+      metrics: { baseline_test_metric: 0.62 },
+    },
     { timestamp: ts(start, 5000), event: "optimizer_progress", metrics: {} },
-    { timestamp: ts(start, 9500), event: "optimized_evaluated", metrics: { optimized_test_metric: 0.84 } },
+    {
+      timestamp: ts(start, 9500),
+      event: "optimized_evaluated",
+      metrics: { optimized_test_metric: 0.84 },
+    },
   ];
 
   const logs: OptimizationLogEntry[] = [
-    { timestamp: ts(start, 200), level: "INFO", logger: "skynet.worker", message: "Starting optimization: סיווג אימיילים", pair_index: null },
-    { timestamp: ts(start, 400), level: "INFO", logger: "dspy.validators", message: "Validating signature and metric code...", pair_index: null },
-    { timestamp: ts(start, 1500), level: "INFO", logger: "dspy.validators", message: "Validation passed ✓", pair_index: null },
-    { timestamp: ts(start, 1800), level: "INFO", logger: "dspy.datasets", message: "Splitting 200 examples into train/val/test...", pair_index: null },
-    { timestamp: ts(start, 2800), level: "INFO", logger: "dspy.datasets", message: "Dataset split: train=120, val=40, test=40", pair_index: null },
-    { timestamp: ts(start, 3000), level: "INFO", logger: "dspy.runners", message: "Evaluating default program on test set...", pair_index: null },
-    { timestamp: ts(start, 4200), level: "INFO", logger: "dspy.runners", message: "Default program score: 62.0", pair_index: null },
-    { timestamp: ts(start, 4500), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Starting MIPROv2 optimization with ${NUM_TRIALS} trials...`, pair_index: null },
+    {
+      timestamp: ts(start, 200),
+      level: "INFO",
+      logger: "skynet.worker",
+      message: "Starting optimization: סיווג אימיילים",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 400),
+      level: "INFO",
+      logger: "dspy.validators",
+      message: "Validating signature and metric code...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 1500),
+      level: "INFO",
+      logger: "dspy.validators",
+      message: "Validation passed ✓",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 1800),
+      level: "INFO",
+      logger: "dspy.datasets",
+      message: "Splitting 200 examples into train/val/test...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 2800),
+      level: "INFO",
+      logger: "dspy.datasets",
+      message: "Dataset split: train=120, val=40, test=40",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 3000),
+      level: "INFO",
+      logger: "dspy.runners",
+      message: "Evaluating default program on test set...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 4200),
+      level: "INFO",
+      logger: "dspy.runners",
+      message: "Default program score: 62.0",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 4500),
+      level: "INFO",
+      logger: "dspy.optimizers.miprov2",
+      message: `Starting MIPROv2 optimization with ${NUM_TRIALS} trials...`,
+      pair_index: null,
+    },
   ];
 
   for (let i = 0; i < NUM_TRIALS; i++) {
     const offset = 5000 + i * 550;
     logs.push(
-      { timestamp: ts(start, offset), level: "INFO", logger: "dspy.optimizers.miprov2", message: `===== Trial ${i + 1} / ${NUM_TRIALS} =====`, pair_index: null },
-      { timestamp: ts(start, offset + 300), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Score: ${(TRIAL_SCORES[i] ?? 0).toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`, pair_index: null },
+      {
+        timestamp: ts(start, offset),
+        level: "INFO",
+        logger: "dspy.optimizers.miprov2",
+        message: `===== Trial ${i + 1} / ${NUM_TRIALS} =====`,
+        pair_index: null,
+      },
+      {
+        timestamp: ts(start, offset + 300),
+        level: "INFO",
+        logger: "dspy.optimizers.miprov2",
+        message: `Score: ${(TRIAL_SCORES[i] ?? 0).toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`,
+        pair_index: null,
+      },
     );
   }
 
   logs.push(
-    { timestamp: ts(start, 9200), level: "INFO", logger: "dspy.optimizers.miprov2", message: "Best program found with score: 84.0", pair_index: null },
-    { timestamp: ts(start, 9500), level: "INFO", logger: "dspy.runners", message: "Evaluating optimized program on test set...", pair_index: null },
-    { timestamp: ts(start, 10200), level: "INFO", logger: "dspy.runners", message: "Optimized program score: 84.0", pair_index: null },
-    { timestamp: ts(start, 10500), level: "INFO", logger: "skynet.worker", message: "Optimization complete ✓", pair_index: null },
+    {
+      timestamp: ts(start, 9200),
+      level: "INFO",
+      logger: "dspy.optimizers.miprov2",
+      message: "Best program found with score: 84.0",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 9500),
+      level: "INFO",
+      logger: "dspy.runners",
+      message: "Evaluating optimized program on test set...",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 10200),
+      level: "INFO",
+      logger: "dspy.runners",
+      message: "Optimized program score: 84.0",
+      pair_index: null,
+    },
+    {
+      timestamp: ts(start, 10500),
+      level: "INFO",
+      logger: "skynet.worker",
+      message: "Optimization complete ✓",
+      pair_index: null,
+    },
   );
 
   return {
@@ -244,7 +488,9 @@ function buildDone(start: Date): OptimizationStatusResponse {
    ═══════════════════════════════════════════════════════════ */
 
 export interface DemoCallbacks {
-  setJob: (updater: (prev: OptimizationStatusResponse | null) => OptimizationStatusResponse) => void;
+  setJob: (
+    updater: (prev: OptimizationStatusResponse | null) => OptimizationStatusResponse,
+  ) => void;
   setLoading: (v: boolean) => void;
 }
 
@@ -283,7 +529,12 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
   const set = (job: OptimizationStatusResponse) => setJob(() => job);
 
   // Phase 1: Validating
-  timers.push(setTimeout(() => { setLoading(false); set(buildValidating(start)); }, 400));
+  timers.push(
+    setTimeout(() => {
+      setLoading(false);
+      set(buildValidating(start));
+    }, 400),
+  );
 
   // Phase 2: Splitting
   timers.push(setTimeout(() => set(buildSplitting(start)), 2000));
@@ -297,11 +548,13 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
   }
 
   // Phase 5: Done — cache the final state
-  timers.push(setTimeout(() => {
-    const done = buildDone(start);
-    _cachedDoneState = done;
-    set(done);
-  }, 10500));
+  timers.push(
+    setTimeout(() => {
+      const done = buildDone(start);
+      _cachedDoneState = done;
+      set(done);
+    }, 10500),
+  );
 
   return () => timers.forEach(clearTimeout);
 }

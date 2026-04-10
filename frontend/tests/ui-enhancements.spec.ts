@@ -1,4 +1,12 @@
-import { expect, test, type Browser, type BrowserContext, type Page, type StorageState, type ViewportSize } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Page,
+  type StorageState,
+  type ViewportSize,
+} from "@playwright/test";
 
 import { assertNoHorizontalOverflow, createAuthenticatedState, resolveAppBaseUrl } from "./helpers";
 
@@ -113,7 +121,9 @@ test.describe("Login page enhancements", () => {
     expect(attrs.pointerEvents).toBe("none");
   });
 
-  test("login card is responsive — fits inside 375px viewport with no overflow", async ({ page }) => {
+  test("login card is responsive — fits inside 375px viewport with no overflow", async ({
+    page,
+  }) => {
     // Test mobile: card should not overflow
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
@@ -162,8 +172,16 @@ test.describe("Dashboard enhancements", () => {
     authState = await createAuthenticatedState(browser, baseUrl);
   });
 
-  test("main area has page-gradient and grid-pattern classes, pill CTA, animated wordmark, no img logo", async ({ browser }) => {
-    const { context, page } = await openDashboardWithMocks(browser, DESKTOP_VIEWPORT, [], authState, baseUrl);
+  test("main area has page-gradient and grid-pattern classes, pill CTA, animated wordmark, no img logo", async ({
+    browser,
+  }) => {
+    const { context, page } = await openDashboardWithMocks(
+      browser,
+      DESKTOP_VIEWPORT,
+      [],
+      authState,
+      baseUrl,
+    );
 
     try {
       const main = page.locator("main.page-gradient.grid-pattern");
@@ -172,7 +190,9 @@ test.describe("Dashboard enhancements", () => {
       await expect(main).toHaveClass(/grid-pattern/);
 
       // Pill CTA button
-      const pillButton = page.locator('[data-slot="button"][data-size="pill"]').filter({ hasText: "אופטימיזציה חדשה" });
+      const pillButton = page
+        .locator('[data-slot="button"][data-size="pill"]')
+        .filter({ hasText: "אופטימיזציה חדשה" });
       await expect(pillButton).toBeVisible();
 
       await expect(pillButton).toHaveAttribute("data-size", "pill");
@@ -188,7 +208,13 @@ test.describe("Dashboard enhancements", () => {
   });
 
   test("mobile header uses text fallback instead of animated wordmark", async ({ browser }) => {
-    const { context, page } = await openDashboardWithMocks(browser, MOBILE_VIEWPORT, [], authState, baseUrl);
+    const { context, page } = await openDashboardWithMocks(
+      browser,
+      MOBILE_VIEWPORT,
+      [],
+      authState,
+      baseUrl,
+    );
 
     try {
       await expect(page.locator("header [aria-label='SKYNET']")).toBeHidden();
@@ -199,7 +225,13 @@ test.describe("Dashboard enhancements", () => {
   });
 
   test("status badges have glow pill classes", async ({ browser }) => {
-    const { context, page } = await openDashboardWithMocks(browser, DESKTOP_VIEWPORT, STATUS_JOBS, authState, baseUrl);
+    const { context, page } = await openDashboardWithMocks(
+      browser,
+      DESKTOP_VIEWPORT,
+      STATUS_JOBS,
+      authState,
+      baseUrl,
+    );
 
     try {
       const successBadge = page.locator(".status-pill-success").first();

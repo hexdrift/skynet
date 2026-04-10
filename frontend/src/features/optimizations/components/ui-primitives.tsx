@@ -17,8 +17,16 @@ import { STATUS_COLORS } from "../constants";
 
 export function StatusBadge({ status }: { status: string }) {
   return (
-    <Badge variant="outline" className={`text-[13px] px-3 py-1 font-bold tracking-wide ${STATUS_COLORS[status] ?? ""}`}>
-      {status === "running" && <span className="relative flex size-2 me-1"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" /><span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" /></span>}
+    <Badge
+      variant="outline"
+      className={`text-[13px] px-3 py-1 font-bold tracking-wide ${STATUS_COLORS[status] ?? ""}`}
+    >
+      {status === "running" && (
+        <span className="relative flex size-2 me-1">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
+          <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
+        </span>
+      )}
       {STATUS_LABELS[status] ?? status}
     </Badge>
   );
@@ -41,7 +49,10 @@ export function InfoCard({
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         {icon && (
-          <span className="shrink-0 inline-flex items-center justify-center size-3.5 text-[#A89680] transition-colors duration-200 group-hover:text-[#7C6350]" aria-hidden="true">
+          <span
+            className="shrink-0 inline-flex items-center justify-center size-3.5 text-[#A89680] transition-colors duration-200 group-hover:text-[#7C6350]"
+            aria-hidden="true"
+          >
             {icon}
           </span>
         )}
@@ -72,7 +83,9 @@ export function LangPicker<T extends string>({
     const onClick = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     window.addEventListener("mousedown", onClick);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -85,13 +98,15 @@ export function LangPicker<T extends string>({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded-md font-semibold text-[#7C6350] tracking-wide hover:bg-black/5 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/50"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span>{labels[value]}</span>
-        <ChevronDown className={`size-3 text-[#8C7A6B] transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`size-3 text-[#8C7A6B] transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+        />
       </button>
       <AnimatePresence>
         {open && (
@@ -107,7 +122,10 @@ export function LangPicker<T extends string>({
               <li key={k}>
                 <button
                   type="button"
-                  onClick={() => { onChange(k); setOpen(false); }}
+                  onClick={() => {
+                    onChange(k);
+                    setOpen(false);
+                  }}
                   className={`w-full text-start px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer flex items-center justify-between ${k === value ? "bg-[#3D2E22]/8 text-[#3D2E22]" : "text-[#7C6350] hover:bg-black/5"}`}
                   role="option"
                   aria-selected={k === value}
@@ -138,9 +156,11 @@ export function CopyButton({ text, className = "" }: { text: string; className?:
       title="העתק"
       aria-label="העתק"
     >
-      {copied
-        ? <Check className="size-3.5 text-foreground/70" />
-        : <Clipboard className="size-3.5 text-foreground/40 hover:text-foreground/70" />}
+      {copied ? (
+        <Check className="size-3.5 text-foreground/70" />
+      ) : (
+        <Clipboard className="size-3.5 text-foreground/40 hover:text-foreground/70" />
+      )}
     </button>
   );
 }

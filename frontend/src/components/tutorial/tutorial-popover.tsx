@@ -114,7 +114,7 @@ export function TutorialPopover({
             disabled={isFirst}
             className={cn(
               "flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#3D2E22] text-[#FAF8F5] hover:bg-[#2C2018] transition-colors cursor-pointer",
-              isFirst && "invisible"
+              isFirst && "invisible",
             )}
           >
             <ArrowRight className="size-3" />

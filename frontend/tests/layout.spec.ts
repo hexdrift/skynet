@@ -17,17 +17,14 @@ const VIEWPORTS = [
 ] as const;
 
 test.describe("Responsive layout", () => {
-  test("app shell stays inside the viewport and stays console-clean at every breakpoint", async ({ browser }, testInfo) => {
+  test("app shell stays inside the viewport and stays console-clean at every breakpoint", async ({
+    browser,
+  }, testInfo) => {
     const baseUrl = await resolveAppBaseUrl();
     const authState = await createAuthenticatedState(browser, baseUrl);
     const [jobA, jobB] = await fetchSampleJobIds(2);
 
-    const routes = [
-      "/",
-      "/submit",
-      `/jobs/${jobA}`,
-      `/compare?jobs=${jobA},${jobB}`,
-    ] as const;
+    const routes = ["/", "/submit", `/jobs/${jobA}`, `/compare?jobs=${jobA},${jobB}`] as const;
 
     for (const viewport of VIEWPORTS) {
       for (const route of routes) {
@@ -43,7 +40,9 @@ test.describe("Responsive layout", () => {
           } else if (route.startsWith("/compare")) {
             await expect(page.getByText("VS").first()).toBeVisible({ timeout: 30_000 });
           } else {
-            await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({ timeout: 30_000 });
+            await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible({
+              timeout: 30_000,
+            });
           }
 
           await page.screenshot({

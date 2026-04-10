@@ -16,7 +16,8 @@ export function detectStage(job: OptimizationStatusResponse): PipelineStage {
   const metrics = job.latest_metrics ?? {};
 
   // Check progress events (works for both single-run and grid search)
-  if (eventNames.includes("optimized_evaluated") || eventNames.includes("grid_pair_completed")) return "done";
+  if (eventNames.includes("optimized_evaluated") || eventNames.includes("grid_pair_completed"))
+    return "done";
   if (eventNames.includes("optimizer_progress")) return "optimizing";
   if (eventNames.includes("baseline_evaluated")) return "optimizing";
   if (eventNames.includes("grid_pair_started")) return "baseline";

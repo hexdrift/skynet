@@ -1,7 +1,7 @@
 /**
  * Performance measurement suite for auto-optimize loop.
  * Measures: Lighthouse, interaction timing, long tasks, visual regression.
- * 
+ *
  * Usage: npx playwright test tests/perf-measure.ts --reporter=json
  */
 
@@ -65,7 +65,10 @@ async function login(page: Page) {
 }
 
 // Measure page load + interaction timing
-async function measurePageTiming(page: Page, url: string): Promise<{ loadMs: number; longTasks: number }> {
+async function measurePageTiming(
+  page: Page,
+  url: string,
+): Promise<{ loadMs: number; longTasks: number }> {
   // Set up long task observer before navigation
   await page.evaluate(() => {
     (window as any).__longTasks = 0;
@@ -86,13 +89,13 @@ async function measurePageTiming(page: Page, url: string): Promise<{ loadMs: num
 
   const startTime = Date.now();
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  
+
   // Wait for meaningful content to be visible
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(500); // Allow animations to settle
-  
+
   const loadMs = Date.now() - startTime;
-  
+
   const longTasks = await page.evaluate(() => {
     const lt = (window as any).__longTasks || 0;
     if ((window as any).__perfObserver) {
@@ -113,34 +116,40 @@ async function takeScreenshot(page: Page, pageName: string, breakpoint: string, 
 }
 
 // Compare screenshots using pixelmatch
-function compareScreenshots(baselinePath: string, currentPath: string): { match: boolean; diffPixels: number } {
+function compareScreenshots(
+  baselinePath: string,
+  currentPath: string,
+): { match: boolean; diffPixels: number } {
   if (!fs.existsSync(baselinePath)) {
     return { match: true, diffPixels: 0 }; // No baseline = first run, always pass
   }
-  
+
   try {
     const { PNG } = require("pngjs");
     const pixelmatch = require("pixelmatch");
-    
+
     const img1 = PNG.sync.read(fs.readFileSync(baselinePath));
     const img2 = PNG.sync.read(fs.readFileSync(currentPath));
-    
+
     // If dimensions differ, fail
     if (img1.width !== img2.width || img1.height !== img2.height) {
       return { match: false, diffPixels: -1 };
     }
-    
+
     const diff = new PNG({ width: img1.width, height: img1.height });
     const numDiffPixels = pixelmatch(
-      img1.data, img2.data, diff.data,
-      img1.width, img1.height,
-      { threshold: 0.15 } // Allow minor anti-aliasing differences
+      img1.data,
+      img2.data,
+      diff.data,
+      img1.width,
+      img1.height,
+      { threshold: 0.15 }, // Allow minor anti-aliasing differences
     );
-    
+
     // Allow up to 0.5% difference (for anti-aliasing, sub-pixel rendering)
     const totalPixels = img1.width * img1.height;
     const diffPercent = (numDiffPixels / totalPixels) * 100;
-    
+
     return { match: diffPercent < 0.5, diffPixels: numDiffPixels };
   } catch (e) {
     console.error("Screenshot comparison error:", e);
@@ -153,9 +162,9 @@ function runLighthouse(): number {
   try {
     const result = execSync(
       `npx lighthouse ${BASE_URL}/login --output=json --chrome-flags='--headless --no-sandbox --disable-gpu' --only-categories=performance --quiet 2>/dev/null`,
-      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 }
+      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
     ).toString();
-    
+
     const json = JSON.parse(result);
     return (json.categories?.performance?.score ?? 0) * 100;
   } catch (e) {
@@ -167,8 +176,8 @@ function runLighthouse(): number {
 // Calculate composite score
 function calculateComposite(lighthouse: number, avgMs: number, longTasks: number): number {
   const lighthouseComponent = lighthouse * 0.4;
-  const interactionComponent = Math.max(0, (1000 - avgMs)) * 0.3;
-  const longTaskComponent = Math.max(0, (1000 - longTasks * 100)) * 0.3;
+  const interactionComponent = Math.max(0, 1000 - avgMs) * 0.3;
+  const longTaskComponent = Math.max(0, 1000 - longTasks * 100) * 0.3;
   return lighthouseComponent + interactionComponent + longTaskComponent;
 }
 
@@ -233,7 +242,8 @@ test.describe("Performance Measurement", () => {
 
     // Sort timings for p95
     allTimings.sort((a, b) => a - b);
-    const avgMs = allTimings.length > 0 ? allTimings.reduce((a, b) => a + b, 0) / allTimings.length : 0;
+    const avgMs =
+      allTimings.length > 0 ? allTimings.reduce((a, b) => a + b, 0) / allTimings.length : 0;
     const p95Index = Math.floor(allTimings.length * 0.95);
     const p95Ms = allTimings.length > 0 ? allTimings[Math.min(p95Index, allTimings.length - 1)] : 0;
 
@@ -271,7 +281,9 @@ test.describe("Performance Measurement", () => {
     console.log(`║ Long Tasks (>50ms):      ${String(totalLongTasks).padStart(6)}       ║`);
     console.log(`║ Visual Regression:       ${visualPass ? "  PASS" : "  FAIL"}       ║`);
     console.log(`║ ──────────────────────────────────      ║`);
-    console.log(`║ COMPOSITE SCORE:         ${String(compositeScore.toFixed(2)).padStart(6)}       ║`);
+    console.log(
+      `║ COMPOSITE SCORE:         ${String(compositeScore.toFixed(2)).padStart(6)}       ║`,
+    );
     console.log("╚════════════════════════════════════════╝\n");
 
     if (visualDiffs.length > 0) {

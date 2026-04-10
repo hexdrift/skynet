@@ -108,8 +108,7 @@ const LETTERS: LetterDef[] = [
   {
     offset: 325,
     variants: {
-      default:
-        "M 0 2.1 h 62 v 20 h -40 v 14 h 32 v 18 h -32 v 16 h 42 v 20 h -64 Z",
+      default: "M 0 2.1 h 62 v 20 h -40 v 14 h 32 v 18 h -32 v 16 h 42 v 20 h -64 Z",
       glyph: [
         { x: 2, y: 2.1, w: 22.6, h: 22.6 },
         { x: 24, y: 35, w: 22.6, h: 22.6 },
@@ -124,8 +123,7 @@ const LETTERS: LetterDef[] = [
   {
     offset: 395,
     variants: {
-      default:
-        "M27.6,90 L46.9,90 L46.9,19.5 L74.5,19.5 L74.5,2.1 L0,2.1 L0,19.5 L27.6,19.5 Z",
+      default: "M27.6,90 L46.9,90 L46.9,19.5 L74.5,19.5 L74.5,2.1 L0,2.1 L0,19.5 L27.6,19.5 Z",
       glyph: [
         { x: 26.4, y: 35.3, w: 21.7, h: 21.7 },
         { x: 52.7, y: 9, w: 21.7, h: 21.7 },
@@ -194,11 +192,7 @@ function VariantGroup({
   }
 
   const d =
-    variant === "default"
-      ? content.default
-      : variant === "serif"
-        ? content.serif
-        : content.sans;
+    variant === "default" ? content.default : variant === "serif" ? content.serif : content.sans;
 
   return <path d={d} style={style} fillRule="nonzero" />;
 }

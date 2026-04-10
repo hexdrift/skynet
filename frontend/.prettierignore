@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+dist
+coverage
+test-results
+perf-results
+playwright-report
+package-lock.json
+tools/optimize/data
+*.min.js
+*.min.css
+public

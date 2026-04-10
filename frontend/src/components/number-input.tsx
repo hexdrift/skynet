@@ -27,7 +27,7 @@ export function NumberInput({
 }: NumberInputProps) {
   const numValue = typeof value === "number" ? value : 0;
   const decimals = step < 1 ? Math.max(String(step).split(".")[1]?.length ?? 0, 2) : 0;
-  const round = (n: number) => decimals ? parseFloat(n.toFixed(decimals)) : n;
+  const round = (n: number) => (decimals ? parseFloat(n.toFixed(decimals)) : n);
 
   const decrement = () => {
     const next = round(numValue - step);
@@ -42,7 +42,13 @@ export function NumberInput({
   };
 
   return (
-    <div className={cn("flex items-center h-9 rounded-xl border border-input/90 bg-background/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm overflow-hidden", disabled && "opacity-50 pointer-events-none", className)}>
+    <div
+      className={cn(
+        "flex items-center h-9 rounded-xl border border-input/90 bg-background/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm overflow-hidden",
+        disabled && "opacity-50 pointer-events-none",
+        className,
+      )}
+    >
       <button
         type="button"
         onClick={decrement}
@@ -60,7 +66,10 @@ export function NumberInput({
         value={typeof value === "number" && decimals ? value.toFixed(decimals) : value}
         onChange={(e) => {
           const raw = e.target.value.replace(/[^0-9.]/g, "");
-          if (raw === "" || raw === ".") { onChange(min ?? 0); return; }
+          if (raw === "" || raw === ".") {
+            onChange(min ?? 0);
+            return;
+          }
           const n = parseFloat(raw);
           if (isNaN(n)) return;
           if (min != null && n < min) return;

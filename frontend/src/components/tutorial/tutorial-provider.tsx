@@ -35,30 +35,49 @@ type TutorialAction =
 function tutorialReducer(state: TutorialState, action: TutorialAction): TutorialState {
   switch (action.type) {
     case "START_TRACK":
-      return { ...state, activeTrack: action.track, currentStepIndex: 0, isVisible: true, isMenuOpen: false };
+      return {
+        ...state,
+        activeTrack: action.track,
+        currentStepIndex: 0,
+        isVisible: true,
+        isMenuOpen: false,
+      };
     case "NEXT_STEP": {
       if (!state.activeTrack) return state;
       const track = getTrack(state.activeTrack);
       if (!track) return state;
       const nextIndex = state.currentStepIndex + 1;
       if (nextIndex >= track.steps.length) {
-        return { ...state, isVisible: false, completedTracks: new Set([...state.completedTracks, state.activeTrack]) };
+        return {
+          ...state,
+          isVisible: false,
+          completedTracks: new Set([...state.completedTracks, state.activeTrack]),
+        };
       }
       return { ...state, currentStepIndex: nextIndex };
     }
     case "PREV_STEP":
-      return state.activeTrack ? { ...state, currentStepIndex: Math.max(0, state.currentStepIndex - 1) } : state;
+      return state.activeTrack
+        ? { ...state, currentStepIndex: Math.max(0, state.currentStepIndex - 1) }
+        : state;
     case "GO_TO_STEP": {
       if (!state.activeTrack) return state;
       const t = getTrack(state.activeTrack);
       if (!t) return state;
-      return { ...state, currentStepIndex: Math.max(0, Math.min(action.index, t.steps.length - 1)) };
+      return {
+        ...state,
+        currentStepIndex: Math.max(0, Math.min(action.index, t.steps.length - 1)),
+      };
     }
     case "EXIT_TUTORIAL":
       return { ...state, isVisible: false, isMenuOpen: false };
     case "COMPLETE_TRACK":
       return state.activeTrack
-        ? { ...state, isVisible: false, completedTracks: new Set([...state.completedTracks, state.activeTrack]) }
+        ? {
+            ...state,
+            isVisible: false,
+            completedTracks: new Set([...state.completedTracks, state.activeTrack]),
+          }
         : state;
     case "OPEN_MENU":
       return { ...state, isMenuOpen: true, isVisible: false };
@@ -69,9 +88,20 @@ function tutorialReducer(state: TutorialState, action: TutorialAction): Tutorial
     case "SET_AUTO_PLAY":
       return { ...state, isAutoPlaying: action.value };
     case "RESET_ALL":
-      return { activeTrack: null, currentStepIndex: 0, isVisible: false, isMenuOpen: false, isAutoPlaying: false, completedTracks: new Set() };
+      return {
+        activeTrack: null,
+        currentStepIndex: 0,
+        isVisible: false,
+        isMenuOpen: false,
+        isAutoPlaying: false,
+        completedTracks: new Set(),
+      };
     case "LOAD_STATE":
-      return { ...state, ...action.state, completedTracks: new Set(action.state.completedTracks || []) };
+      return {
+        ...state,
+        ...action.state,
+        completedTracks: new Set(action.state.completedTracks || []),
+      };
     default:
       return state;
   }
@@ -94,7 +124,9 @@ const STORAGE_KEY = "skynet-tutorial-state";
 
 interface TutorialContextValue {
   state: TutorialState;
-  currentStep: ReturnType<typeof getTrack> extends { steps: (infer S)[] } | undefined ? S | undefined : never;
+  currentStep: ReturnType<typeof getTrack> extends { steps: (infer S)[] } | undefined
+    ? S | undefined
+    : never;
   startTrack: (track: TutorialTrack) => void;
   nextStep: () => void;
   prevStep: () => void;
@@ -128,7 +160,9 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
           },
         });
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Auto-start tutorial in auto-play mode via URL param
     const params = new URLSearchParams(window.location.search);
@@ -143,16 +177,24 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   // Persist full state on every change
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        completedTracks: Array.from(state.completedTracks),
-        activeTrack: state.activeTrack,
-        currentStepIndex: state.currentStepIndex,
-        isVisible: state.isVisible,
-      }));
-    } catch { /* ignore */ }
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          completedTracks: Array.from(state.completedTracks),
+          activeTrack: state.activeTrack,
+          currentStepIndex: state.currentStepIndex,
+          isVisible: state.isVisible,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
   }, [state.completedTracks, state.activeTrack, state.currentStepIndex, state.isVisible]);
 
-  const startTrack = useCallback((track: TutorialTrack) => dispatch({ type: "START_TRACK", track }), []);
+  const startTrack = useCallback(
+    (track: TutorialTrack) => dispatch({ type: "START_TRACK", track }),
+    [],
+  );
   const nextStep = useCallback(() => dispatch({ type: "NEXT_STEP" }), []);
   const prevStep = useCallback(() => dispatch({ type: "PREV_STEP" }), []);
   const goToStep = useCallback((index: number) => dispatch({ type: "GO_TO_STEP", index }), []);
@@ -162,26 +204,51 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     if (window.location.pathname !== "/") {
       // Pre-save tutorial state so it starts after navigation
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          completedTracks: Array.from(state.completedTracks),
-          activeTrack: "deep-dive",
-          currentStepIndex: 0,
-          isVisible: true,
-        }));
-      } catch { /* ignore */ }
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            completedTracks: Array.from(state.completedTracks),
+            activeTrack: "deep-dive",
+            currentStepIndex: 0,
+            isVisible: true,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
       window.location.href = "/";
     } else {
       dispatch({ type: "START_TRACK", track: "deep-dive" as TutorialTrack });
     }
   }, [state.completedTracks]);
   const closeMenu = useCallback(() => dispatch({ type: "CLOSE_MENU" }), []);
-  const resetAll = useCallback(() => { dispatch({ type: "RESET_ALL" }); localStorage.removeItem(STORAGE_KEY); }, []);
+  const resetAll = useCallback(() => {
+    dispatch({ type: "RESET_ALL" });
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
   const toggleAutoPlay = useCallback(() => dispatch({ type: "TOGGLE_AUTO_PLAY" }), []);
 
-  const currentStep = state.activeTrack ? getTrack(state.activeTrack)?.steps[state.currentStepIndex] : undefined;
+  const currentStep = state.activeTrack
+    ? getTrack(state.activeTrack)?.steps[state.currentStepIndex]
+    : undefined;
 
   return (
-    <TutorialContext.Provider value={{ state, currentStep, startTrack, nextStep, prevStep, goToStep, exitTutorial, completeTrack, openMenu, closeMenu, resetAll, toggleAutoPlay }}>
+    <TutorialContext.Provider
+      value={{
+        state,
+        currentStep,
+        startTrack,
+        nextStep,
+        prevStep,
+        goToStep,
+        exitTutorial,
+        completeTrack,
+        openMenu,
+        closeMenu,
+        resetAll,
+        toggleAutoPlay,
+      }}
+    >
       {children}
     </TutorialContext.Provider>
   );

@@ -31,7 +31,9 @@ export function SubmitWizard() {
     <div className="space-y-6 max-w-2xl mx-auto pb-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <a href="/" className="hover:text-foreground transition-colors">לוח בקרה</a>
+        <a href="/" className="hover:text-foreground transition-colors">
+          לוח בקרה
+        </a>
         <ChevronLeft className="h-3 w-3" />
         <span className="text-foreground font-medium">אופטימיזציה חדשה</span>
       </div>

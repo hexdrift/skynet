@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
-const API  = process.env.API_URL ?? "http://localhost:8000";
+const API = process.env.API_URL ?? "http://localhost:8000";
 const RESULTS_DIR = path.join(__dirname, "..", "perf-results");
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
 
@@ -188,7 +188,7 @@ async function measureInteractions(browser) {
 
   // Click first table row (navigate to job detail)
   {
-    const firstRow = page.locator('table tbody tr').first();
+    const firstRow = page.locator("table tbody tr").first();
     if (await firstRow.isVisible({ timeout: 2000 }).catch(() => false)) {
       const r = await time("Dashboard: click job row → detail page", async () => {
         await firstRow.click();
@@ -355,12 +355,12 @@ async function measureCacheEffectiveness(browser) {
   results.push({
     label: "Dashboard first load API requests",
     value: requests1.length,
-    detail: requests1.map(r => `${r.method} ${new URL(r.url).pathname}`).join(", "),
+    detail: requests1.map((r) => `${r.method} ${new URL(r.url).pathname}`).join(", "),
   });
   results.push({
     label: "Dashboard revisit API requests",
     value: requests2.length,
-    detail: requests2.map(r => `${r.method} ${new URL(r.url).pathname}`).join(", "),
+    detail: requests2.map((r) => `${r.method} ${new URL(r.url).pathname}`).join(", "),
   });
 
   await ctx.close();
@@ -382,7 +382,9 @@ async function main() {
   const apiResults = await measureApiLatency();
   for (const r of apiResults) {
     const size = r.body_bytes > 1024 ? `${(r.body_bytes / 1024).toFixed(1)}KB` : `${r.body_bytes}B`;
-    console.log(`  ${r.label.padEnd(30)} cold: ${String(r.cold_ms).padStart(4)}ms  warm: ${String(r.warm_ms).padStart(4)}ms  (${size})`);
+    console.log(
+      `  ${r.label.padEnd(30)} cold: ${String(r.cold_ms).padStart(4)}ms  warm: ${String(r.warm_ms).padStart(4)}ms  (${size})`,
+    );
   }
 
   // 2. Page loads
@@ -416,12 +418,12 @@ async function main() {
   await browser.close();
 
   // Summary
-  const allTimings = [...pageResults, ...interactionResults].map(r => r.ms);
+  const allTimings = [...pageResults, ...interactionResults].map((r) => r.ms);
   const avg = Math.round(allTimings.reduce((a, b) => a + b, 0) / allTimings.length);
   const max = Math.max(...allTimings);
   const min = Math.min(...allTimings);
   const p95 = allTimings.sort((a, b) => a - b)[Math.floor(allTimings.length * 0.95)];
-  const slowCount = allTimings.filter(t => t > 200).length;
+  const slowCount = allTimings.filter((t) => t > 200).length;
 
   console.log("\n" + "═".repeat(60));
   console.log("📊 SUMMARY");
@@ -430,8 +432,12 @@ async function main() {
   console.log(`  Average latency:             ${avg}ms`);
   console.log(`  P95 latency:                 ${p95}ms`);
   console.log(`  Min / Max:                   ${min}ms / ${max}ms`);
-  console.log(`  Interactions > 200ms:         ${slowCount} (${((slowCount/allTimings.length)*100).toFixed(0)}%)`);
-  console.log(`  API calls on dashboard:      ${apiResults.find(r => r.label.includes("sidebar"))?.warm_ms ?? "?"}ms (sidebar)`);
+  console.log(
+    `  Interactions > 200ms:         ${slowCount} (${((slowCount / allTimings.length) * 100).toFixed(0)}%)`,
+  );
+  console.log(
+    `  API calls on dashboard:      ${apiResults.find((r) => r.label.includes("sidebar"))?.warm_ms ?? "?"}ms (sidebar)`,
+  );
   console.log("═".repeat(60) + "\n");
 
   // Write results
@@ -448,4 +454,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
