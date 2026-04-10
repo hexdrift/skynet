@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -9,78 +9,31 @@ import {
  Trash2,
  Clock,
  Code,
- Code2,
  Terminal,
  TrendingUp,
- ChevronRight,
  ChevronLeft,
  Activity,
  CheckCircle2,
  Circle,
  Timer,
- Clipboard,
- Check,
  Send,
  Zap,
- Sparkles,
  CopyPlus,
- Download,
- ChevronDown,
- FileText,
- Pencil,
  MessageSquare,
- Component,
- Target,
- Cpu,
- Lightbulb,
- Quote,
- ListTodo,
- User,
  Database,
- PieChart,
- Shuffle,
- Dices,
- Crown,
- ArrowRight,
- ArrowLeft,
- Grid2x2,
- Layers,
- BarChart3,
- Settings2,
  Settings,
- Thermometer,
- Coins,
- Brain,
 } from "lucide-react";
 import { toast } from "react-toastify";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import {
- Table,
- TableBody,
- TableCell,
- TableHead,
- TableHeader,
- TableRow,
-} from "@/components/ui/table";
-import { ColumnHeader, useColumnFilters, useColumnResize, ResetColumnsButton, type SortDir } from "@/components/excel-filter";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { motion, AnimatePresence } from "framer-motion";
+import { useColumnFilters, useColumnResize } from "@/components/excel-filter";
 import { FadeIn, TiltCard, StaggerContainer, StaggerItem } from "@/components/motion";
 import dynamic from "next/dynamic";
 
-const CodeEditor = dynamic(
- () => import("@/components/code-editor").then((m) => m.CodeEditor),
- { ssr: false, loading: () => <div className="h-[180px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" /> },
-);
 const ScoreChart = dynamic(() => import("@/components/score-chart").then(m => m.ScoreChart), { ssr: false, loading: () => <div className="h-full" /> });
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getJob, cancelJob, deleteJob, getOptimizationPayload, getServeInfo, getPairServeInfo, serveProgramStream, servePairProgramStream } from "@/lib/api";
@@ -89,7 +42,7 @@ import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/lib/tutorial-demo-d
 import { Skeleton } from "boneyard-js/react";
 import { optimizationDetailBones } from "@/components/optimization-detail-bones";
 import { msg } from "@/features/shared/messages";
-import { ACTIVE_STATUSES, TERMINAL_STATUSES, STATUS_LABELS } from "@/lib/constants";
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/lib/constants";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
 import { HelpTip } from "@/components/help-tip";
 import type {
@@ -103,34 +56,27 @@ import type {
 // to @/features/optimizations — see index.ts for the public surface.
 
 import {
- STATUS_COLORS,
  PIPELINE_STAGES,
- STAGE_INFO,
  type PipelineStage,
  formatPercent,
  formatImprovement,
- jsonPreview,
  formatDuration,
- formatLogTimestamp,
- logTimeBucket,
- formatOutput,
  detectStage,
  extractScoresFromLogs,
- type ScorePoint,
  DataTab,
  LogsTab,
  ExportMenu,
- exportPromptAsJson,
- exportLogsAsCsv,
  DeleteJobDialog,
  StatusBadge,
  InfoCard,
- LangPicker,
  CopyButton,
  ServeCodeSnippets,
  ServeChat,
  ConfigTab,
  CodeTab,
+ StageInfoModal,
+ GridOverview,
+ PairDetailView,
 } from "@/features/optimizations";
 
 
@@ -667,245 +613,31 @@ export default function JobDetailPage() {
  )}
 
  {/* ── Per-pair full view (grid search with ?pair=N) ── */}
- {isTerminal && job.optimization_type === "grid_search" && activePairIndex !== null && activePair && (() => {
- const prs = job.grid_result!.pair_results;
- const best = job.grid_result!.best_pair;
- const isBest = best?.pair_index === activePair.pair_index;
- const pairPrompt = activePair.program_artifact?.optimized_prompt;
- const tabCls = "relative px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200";
- return (
- <div className="space-y-4">
- {/* Back to grid overview banner */}
- <FadeIn>
- <div className="flex items-center justify-between rounded-xl border border-[#C8A882]/30 bg-gradient-to-l from-[#FAF8F5] to-[#F5F1EC] p-3">
-  <div className="flex items-center gap-3">
-   <button
-    type="button"
-    onClick={() => router.push(`/optimizations/${id}`)}
-    className="inline-flex items-center gap-1.5 text-sm font-medium text-[#3D2E22] hover:text-[#3D2E22]/80 transition-colors cursor-pointer"
-   >
-    <ChevronRight className="size-4" />
-    <span>חזרה לסקירת הסריקה</span>
-   </button>
-   <span className="text-[11px] text-muted-foreground/60">|</span>
-   <div className="flex items-center gap-1.5">
-    {isBest && <Crown className="size-3.5 text-[#C8A882]" />}
-    <span className="text-sm font-semibold text-foreground">
-     {activePair.generation_model.split("/").pop()} × {activePair.reflection_model.split("/").pop()}
-    </span>
-   </div>
-  </div>
-  {/* Prev/Next navigation */}
-  <div className="flex items-center gap-1">
-   <button
-    type="button"
-    disabled={activePairIndex <= 0}
-    onClick={() => router.push(`/optimizations/${id}?pair=${activePairIndex - 1}`)}
-    className="p-1.5 rounded-lg hover:bg-[#3D2E22]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-    title="זוג קודם"
-   >
-    <ArrowRight className="size-4 text-[#3D2E22]" />
-   </button>
-   <span className="text-[11px] text-muted-foreground tabular-nums font-mono">{activePairIndex + 1}/{prs.length}</span>
-   <button
-    type="button"
-    disabled={activePairIndex >= prs.length - 1}
-    onClick={() => router.push(`/optimizations/${id}?pair=${activePairIndex + 1}`)}
-    className="p-1.5 rounded-lg hover:bg-[#3D2E22]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-    title="זוג הבא"
-   >
-    <ArrowLeft className="size-4 text-[#3D2E22]" />
-   </button>
-  </div>
- </div>
- </FadeIn>
-
- {/* Export bar for pair */}
- {!activePair.error && activePair.program_artifact && (
- <FadeIn delay={0.05}>
- <div className="flex items-center gap-3 p-4 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
-  <div className="flex-1">
-   <p className="text-sm font-medium">ייצוא תוצאות</p>
-  </div>
-  <ExportMenu job={job} optimizedPrompt={pairPrompt ?? null} />
- </div>
- </FadeIn>
+ {isTerminal && job.optimization_type === "grid_search" && activePairIndex !== null && activePair && job.grid_result && (
+  <PairDetailView
+   job={job}
+   activePair={activePair}
+   activePairIndex={activePairIndex}
+   pairCount={job.grid_result.pair_results.length}
+   pairFilteredLogs={pairFilteredLogs}
+   pairScorePoints={pairScorePoints}
+   initialTab={initialTab}
+   serveInfo={serveInfo}
+   runHistory={runHistory}
+   setRunHistory={setRunHistory}
+   streamingRun={streamingRun}
+   serveLoading={serveLoading}
+   serveError={serveError}
+   setServeError={setServeError}
+   textareaRefs={textareaRefs}
+   chatScrollRef={chatScrollRef}
+   handleServe={handleServe}
+   onBack={() => router.push(`/optimizations/${id}`)}
+   onPrev={() => router.push(`/optimizations/${id}?pair=${activePairIndex - 1}`)}
+   onNext={() => router.push(`/optimizations/${id}?pair=${activePairIndex + 1}`)}
+   onClearHistory={handleClearHistory}
+  />
  )}
-
- {/* Pair error display */}
- {activePair.error && (
- <FadeIn delay={0.05}>
-  <div className="rounded-xl border border-[#B04030]/30 bg-[#B04030]/5 p-4">
-   <div className="text-sm font-medium text-[#B04030] mb-1">שגיאה</div>
-   <pre className="text-xs font-mono text-[#B04030]/80 whitespace-pre-wrap" dir="ltr">{activePair.error}</pre>
-  </div>
- </FadeIn>
- )}
-
- {/* Per-pair tabs */}
- <Tabs defaultValue={initialTab} dir="rtl">
- <TabsList variant="line" className="border-b border-border/50 pb-0 gap-0">
- <TabsTrigger value="overview" className={tabCls}><TrendingUp className="size-3.5"/> סקירה</TabsTrigger>
- {pairPrompt?.formatted_prompt && <TabsTrigger value="prompt" className={tabCls}><Code2 className="size-3.5"/> פרומפט</TabsTrigger>}
- {serveInfo && <TabsTrigger value="playground" className={tabCls}><Send className="size-3.5"/> שימוש</TabsTrigger>}
- <TabsTrigger value="data" className={tabCls}><Database className="size-3.5"/> נתונים</TabsTrigger>
- <TabsTrigger value="logs" className={tabCls}><Terminal className="size-3.5"/> לוגים</TabsTrigger>
- </TabsList>
-
- {/* ── Pair overview tab ── */}
- <TabsContent value="overview" className="space-y-6 mt-4">
- {/* Score cards */}
- {!activePair.error && (
-  <StaggerContainer className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-   <StaggerItem>
-    <TiltCard className="rounded-xl border border-border/50 bg-card p-6 text-center">
-     <p className="text-[11px] text-muted-foreground mb-2 font-medium tracking-wide"><HelpTip text="ציון המדידה לפני אופטימיזציה — התוכנית רצה ללא הנחיות או דוגמאות">ציון התחלתי</HelpTip></p>
-     <p className="text-3xl font-mono font-bold tabular-nums">{formatPercent(activePair.baseline_test_metric)}</p>
-    </TiltCard>
-   </StaggerItem>
-   <StaggerItem>
-    <TiltCard className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.08)]">
-     <p className="text-[11px] text-muted-foreground mb-2 font-medium tracking-wide"><HelpTip text="ציון המדידה אחרי אופטימיזציה — התוכנית רצה עם ההנחיות והדוגמאות שנבחרו">ציון משופר</HelpTip></p>
-     <p className="text-3xl font-mono font-bold text-primary tabular-nums">{formatPercent(activePair.optimized_test_metric)}</p>
-    </TiltCard>
-   </StaggerItem>
-   <StaggerItem>
-    <TiltCard className={`rounded-xl border p-6 text-center ${(activePair.metric_improvement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}>
-     <p className="text-[11px] text-muted-foreground mb-2 font-medium tracking-wide"><HelpTip text="ההפרש בין הציון המשופר לציון ההתחלתי — ככל שגבוה יותר, האופטימיזציה הועילה יותר">שיפור</HelpTip></p>
-     <p className={`text-3xl font-mono font-bold tabular-nums ${(activePair.metric_improvement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}>{formatImprovement(activePair.metric_improvement)}</p>
-    </TiltCard>
-   </StaggerItem>
-  </StaggerContainer>
- )}
-
- {/* Pair model info */}
- <FadeIn delay={0.1}>
-  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-   <InfoCard label="מודל יצירה" value={activePair.generation_model.split("/").pop()} icon={<Cpu className="size-3.5" />} />
-   <InfoCard label="מודל רפלקציה" value={activePair.reflection_model.split("/").pop()} icon={<Lightbulb className="size-3.5" />} />
-   {activePair.runtime_seconds != null && (
-    <InfoCard label="זמן ריצה" value={formatDuration(activePair.runtime_seconds)} icon={<Clock className="size-3.5" />} />
-   )}
-   {activePair.num_lm_calls != null && (
-    <InfoCard label="קריאות למודל" value={String(activePair.num_lm_calls)} icon={<MessageSquare className="size-3.5" />} />
-   )}
-   {activePair.avg_response_time_ms != null && (
-    <InfoCard label="זמן תגובה ממוצע" value={`${(activePair.avg_response_time_ms / 1000).toFixed(1)}s`} icon={<Timer className="size-3.5" />} />
-   )}
-  </div>
- </FadeIn>
-
- {/* Score progression chart */}
- {pairScorePoints.length > 1 && (
-  <Card>
-   <CardHeader className="pb-2">
-    <CardTitle className="text-base font-medium"><HelpTip text="שינוי הציון לאורך הניסיונות השונים של האופטימייזר">מהלך הציונים</HelpTip></CardTitle>
-   </CardHeader>
-   <CardContent className="pt-0">
-    <div className="h-[260px]" dir="ltr">
-     <ScoreChart data={pairScorePoints} />
-    </div>
-    <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 mt-2">
-     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="inline-block w-3 h-0.5 rounded-full" style={{ backgroundColor: "var(--color-chart-4)"}} />
-      <span>ציון הניסיון</span>
-     </div>
-     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="inline-block w-3 h-[2px] rounded-full" style={{ backgroundColor: "var(--color-chart-2)"}} />
-      <span>הציון הגבוה ביותר</span>
-     </div>
-    </div>
-   </CardContent>
-  </Card>
- )}
-
- </TabsContent>
-
- {/* ── Pair prompt tab ── */}
- {pairPrompt?.formatted_prompt && (
- <TabsContent value="prompt" className="space-y-4 mt-4">
- <FadeIn>
-  {pairPrompt.demos && pairPrompt.demos.length > 0 && (
-   <Card>
-    <CardHeader className="pb-2">
-     <CardTitle className="text-base font-medium"><HelpTip text="דוגמאות קלט-פלט שנבחרו מהדאטאסט ומוצגות למודל כהדגמה">{pairPrompt.demos.length} דוגמאות</HelpTip></CardTitle>
-    </CardHeader>
-    <CardContent className="space-y-2">
-     {pairPrompt.demos.map((demo, di) => (
-      <div key={di} className="rounded-lg border border-border/40 bg-muted/30 p-3 text-xs font-mono space-y-1" dir="ltr">
-       {Object.entries(demo).map(([k, v]) => (
-        <div key={k}><span className="text-muted-foreground">{k}:</span> {String(v)}</div>
-       ))}
-      </div>
-     ))}
-    </CardContent>
-   </Card>
-  )}
-  <Card>
-   <CardHeader className="pb-2">
-    <CardTitle className="text-base font-medium"><HelpTip text="הפרומפט המלא שהאופטימייזר בנה — כולל הנחיות ודוגמאות שנבחרו">הפרומפט המאומן</HelpTip></CardTitle>
-   </CardHeader>
-   <CardContent>
-    <div className="relative group">
-     <pre className="text-sm font-mono bg-muted/50 rounded-lg p-4 pe-10 overflow-x-auto whitespace-pre-wrap leading-relaxed" dir="ltr">{pairPrompt.formatted_prompt}</pre>
-     <CopyButton text={pairPrompt.formatted_prompt} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100"/>
-    </div>
-   </CardContent>
-  </Card>
- </FadeIn>
- </TabsContent>
- )}
-
- {/* ── Pair playground tab ── */}
- {serveInfo && (
- <TabsContent value="playground" className="space-y-4 mt-4">
- <FadeIn>
- <div className="flex items-center justify-between pb-3 border-b border-border/60">
- <p className="text-sm text-muted-foreground">הרצת התוכנית המאומנת של זוג זה — הזן קלט וקבל תשובה.</p>
- {runHistory.length > 0 && (
- <TooltipProvider>
- <UiTooltip>
- <TooltipTrigger asChild>
-  <Button variant="ghost" size="icon" className="size-8" onClick={handleClearHistory} aria-label="נקה היסטוריה">
-  <Trash2 className="size-4" />
-  </Button>
- </TooltipTrigger>
- <TooltipContent side="bottom">נקה היסטוריה</TooltipContent>
- </UiTooltip>
- </TooltipProvider>
- )}
- </div>
- </FadeIn>
- <ServeChat
-  serveInfo={serveInfo}
-  runHistory={runHistory}
-  setRunHistory={setRunHistory}
-  streamingRun={streamingRun}
-  serveLoading={serveLoading}
-  serveError={serveError}
-  setServeError={setServeError}
-  textareaRefs={textareaRefs}
-  chatScrollRef={chatScrollRef}
-  handleServe={handleServe}
-  demos={activePair.program_artifact?.optimized_prompt?.demos ?? []}
- />
- </TabsContent>
- )}
-
- {/* ── Pair data tab ── */}
- <TabsContent value="data">
- <DataTab job={job} pairIndex={activePairIndex} />
- </TabsContent>
-
- {/* ── Pair logs tab ── */}
- <TabsContent value="logs">
- <LogsTab logs={pairFilteredLogs} />
- </TabsContent>
-
- </Tabs>
- </div>
- );
- })()}
 
  {/* ── Tabbed sections (normal view / grid overview) ── */}
  {!(job.optimization_type === "grid_search" && activePairIndex !== null) && (() => {
@@ -1139,253 +871,9 @@ export default function JobDetailPage() {
  </FadeIn>
  )}
 
- {job.status ==="success"&& job.optimization_type ==="grid_search"&& job.grid_result && activePairIndex === null && (() => {
- const prs = job.grid_result!.pair_results;
- const best = job.grid_result!.best_pair;
- const completedPrs = prs.filter(p => !p.error);
- const failedPrs = prs.filter(p => p.error);
- const maxScore = Math.max(...completedPrs.map(p => p.optimized_test_metric ?? 0), 0.01);
-
- // ─── Aggregated stats ───
- const scores = completedPrs.map(p => p.optimized_test_metric ?? 0);
- const baselines = completedPrs.map(p => p.baseline_test_metric ?? 0);
- const improvements = completedPrs.map(p => p.metric_improvement ?? 0);
- const runtimes = completedPrs.filter(p => p.runtime_seconds).map(p => p.runtime_seconds!);
- const lmCalls = completedPrs.filter(p => p.num_lm_calls).map(p => p.num_lm_calls!);
- const avgRespTimes = completedPrs.filter(p => p.avg_response_time_ms).map(p => p.avg_response_time_ms!);
-
- const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
- const bestScore = scores.length ? Math.max(...scores) : 0;
- const worstScore = scores.length ? Math.min(...scores) : 0;
- const avgScore = avg(scores);
- const avgBaseline = avg(baselines);
- const avgImprovement = avg(improvements);
- const bestImprovement = improvements.length ? Math.max(...improvements) : 0;
- const totalRuntime = runtimes.reduce((a, b) => a + b, 0);
- const avgRuntime = avg(runtimes);
- const totalLmCalls = lmCalls.reduce((a, b) => a + b, 0);
- const avgRespTime = avg(avgRespTimes);
-
- return (
- <div className="space-y-4" data-tutorial="grid-search">
- {/* Primary KPIs */}
- <StaggerContainer className="grid grid-cols-2 gap-3">
-  <StaggerItem>
-  <TiltCard className="rounded-xl border border-[#5C7A52]/30 bg-[#5C7A52]/5 p-4 text-center">
-   <p className="text-[10px] text-[#5C7A52] mb-1">ציון מנצח</p>
-   <p className="text-2xl font-mono font-bold tabular-nums text-[#5C7A52]">{formatPercent(bestScore)}</p>
-  </TiltCard>
-  </StaggerItem>
-  <StaggerItem>
-  <TiltCard className={`rounded-xl border border-border/50 bg-card/80 p-4 text-center`}>
-   <p className="text-[10px] text-muted-foreground mb-1">שיפור ממוצע</p>
-   <p className={`text-2xl font-mono font-bold tabular-nums ${avgImprovement > 0 ? "text-[#5C7A52]" : avgImprovement < 0 ? "text-[#B04030]" : ""}`}>{formatImprovement(avgImprovement)}</p>
-  </TiltCard>
-  </StaggerItem>
- </StaggerContainer>
-
- {/* Charts */}
- {completedPrs.length > 0 && (() => {
- const pairScoresData = completedPrs.map(p => ({
-  name: `${p.generation_model.split("/").pop()} × ${p.reflection_model.split("/").pop()}`,
-  התחלתי: Math.round((p.baseline_test_metric ?? 0) > 1 ? (p.baseline_test_metric ?? 0) : (p.baseline_test_metric ?? 0) * 100),
-  משופר: Math.round((p.optimized_test_metric ?? 0) > 1 ? (p.optimized_test_metric ?? 0) : (p.optimized_test_metric ?? 0) * 100),
-  isBest: best?.pair_index === p.pair_index,
- }));
- const pairImprovData = completedPrs.map(p => ({
-  name: `${p.generation_model.split("/").pop()} × ${p.reflection_model.split("/").pop()}`,
-  שיפור: +((p.metric_improvement ?? 0) > 1 ? (p.metric_improvement ?? 0) : (p.metric_improvement ?? 0) * 100).toFixed(1),
-  isBest: best?.pair_index === p.pair_index,
- }));
- const pairRespTimeData = completedPrs.filter(p => p.avg_response_time_ms).map(p => ({
-  name: `${p.generation_model.split("/").pop()} × ${p.reflection_model.split("/").pop()}`,
-  זמן_תגובה: +(p.avg_response_time_ms! / 1000).toFixed(1),
-  isBest: best?.pair_index === p.pair_index,
- }));
- const ScoreTip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; dataKey?: string; color?: string }>; label?: string }) => {
-  if (!active || !payload?.length) return null;
-  const nameMap: Record<string, string> = { "התחלתי": "ציון לפני אופטימיזציה", "משופר": "ציון אחרי אופטימיזציה" };
-  return (
-   <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg" dir="rtl">
-    {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-    {payload.map((p, i) => (
-     <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-      {p.color && <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />}
-      <span>{nameMap[String(p.dataKey)] ?? String(p.dataKey)}</span>
-      <span className="font-mono font-semibold text-foreground ms-auto">{p.value}%</span>
-     </div>
-    ))}
-   </div>
-  );
- };
- const ImprovTip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; color?: string }>; label?: string }) => {
-  if (!active || !payload?.length) return null;
-  const val = payload[0]!.value;
-  return (
-   <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg" dir="rtl">
-    {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-    <div className="flex items-center gap-2 text-xs">
-     <span className="text-muted-foreground">שיפור ביצועים:</span>
-     <span className={`font-mono font-semibold ms-auto ${val > 0 ? "text-[#5C7A52]" : val < 0 ? "text-[#B04030]" : "text-foreground"}`}>{val > 0 ? "+" : ""}{val}%</span>
-    </div>
-   </div>
-  );
- };
- return (
- <FadeIn delay={0.1}>
- <div className="grid gap-4 md:grid-cols-2">
-  {/* Scores per pair */}
-  <Card>
-   <CardHeader className="pb-2">
-    <CardTitle className="text-sm font-semibold"><HelpTip text="השוואת ציוני הבסיס והציון המשופר לכל זוג מודלים">ציונים לפי זוג</HelpTip></CardTitle>
-   </CardHeader>
-   <CardContent className="pt-0">
-    <div className="h-[220px]" dir="ltr">
-     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={pairScoresData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-       <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-muted" />
-       <XAxis type="number" domain={[0, 105]} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} className="fill-muted-foreground" label={{ value: "ציון באחוזים", position: "insideBottom", offset: -2, fontSize: 10 }} />
-       <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} className="fill-muted-foreground" tickLine={false} axisLine={false} label={{ value: "זוג מודלים", angle: -90, position: "insideLeft", offset: 15, fontSize: 10 }} />
-       <Tooltip content={<ScoreTip />} />
-       <Bar dataKey="התחלתי" name="התחלתי" fill="var(--color-chart-4)" radius={[0, 3, 3, 0]} barSize={12} animationDuration={400} />
-       <Bar dataKey="משופר" name="משופר" fill="var(--color-chart-2)" radius={[0, 3, 3, 0]} barSize={12} animationDuration={400} />
-      </BarChart>
-     </ResponsiveContainer>
-    </div>
-    <div className="flex justify-center gap-4 mt-1">
-     <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><span className="size-2 rounded-full" style={{ backgroundColor: "var(--color-chart-4)" }} /> התחלתי</div>
-     <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><span className="size-2 rounded-full" style={{ backgroundColor: "var(--color-chart-2)" }} /> משופר</div>
-    </div>
-   </CardContent>
-  </Card>
-
-  {/* Improvement per pair */}
-  <Card>
-   <CardHeader className="pb-2">
-    <CardTitle className="text-sm font-semibold"><HelpTip text="אחוז השיפור שכל זוג מודלים השיג ביחס לציון ההתחלתי">שיפור לפי זוג</HelpTip></CardTitle>
-   </CardHeader>
-   <CardContent className="pt-0">
-    <div className="h-[220px]" dir="ltr">
-     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={pairImprovData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-       <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-muted" />
-       <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} className="fill-muted-foreground" label={{ value: "שיפור באחוזים", position: "insideBottom", offset: -2, fontSize: 10 }} />
-       <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} className="fill-muted-foreground" tickLine={false} axisLine={false} label={{ value: "זוג מודלים", angle: -90, position: "insideLeft", offset: 15, fontSize: 10 }} />
-       <Tooltip content={<ImprovTip />} />
-       <Bar dataKey="שיפור" name="שיפור" radius={[0, 3, 3, 0]} barSize={14} animationDuration={400}>
-        {pairImprovData.map((entry, i) => (
-         <Cell key={i} fill={entry.isBest ? "#5C7A52" : entry.שיפור >= 0 ? "var(--color-chart-2)" : "#B04030"} />
-        ))}
-       </Bar>
-      </BarChart>
-     </ResponsiveContainer>
-    </div>
-   </CardContent>
-  </Card>
- </div>
-
- {/* Response time per pair */}
- {pairRespTimeData.length > 0 && (
-  <Card className="mt-4">
-   <CardHeader className="pb-2">
-    <CardTitle className="text-sm font-semibold"><HelpTip text="משך זמן ממוצע לכל קריאה למודל שפה, לפי זוג מודלים">זמן תגובה ממוצע לפי זוג</HelpTip></CardTitle>
-   </CardHeader>
-   <CardContent className="pt-0">
-    <div className="h-[220px]" dir="ltr">
-     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={pairRespTimeData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-       <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-muted" />
-       <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} className="fill-muted-foreground" label={{ value: "זמן תגובה בשניות", position: "insideBottom", offset: -2, fontSize: 10 }} />
-       <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} className="fill-muted-foreground" tickLine={false} axisLine={false} label={{ value: "זוג מודלים", angle: -90, position: "insideLeft", offset: 15, fontSize: 10 }} />
-       <Tooltip content={({ active, payload, label }) => {
-        if (!active || !payload?.length) return null;
-        return (
-         <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg" dir="rtl">
-          {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-          <div className="flex items-center gap-2 text-xs">
-           <span className="text-muted-foreground">זמן תגובה ממוצע לקריאה:</span>
-           <span className="font-mono font-semibold text-foreground ms-auto">{payload[0]!.value}s</span>
-          </div>
-         </div>
-        );
-       }} />
-       <Bar dataKey="זמן_תגובה" name="זמן תגובה בשניות" radius={[0, 3, 3, 0]} barSize={14} animationDuration={400}>
-        {pairRespTimeData.map((entry, i) => (
-         <Cell key={i} fill={entry.isBest ? "#C8A882" : "var(--color-chart-4)"} />
-        ))}
-       </Bar>
-      </BarChart>
-     </ResponsiveContainer>
-    </div>
-   </CardContent>
-  </Card>
+ {job.status === "success" && job.optimization_type === "grid_search" && job.grid_result && activePairIndex === null && (
+  <GridOverview job={job} onPairSelect={(pi) => router.push(`/optimizations/${id}?pair=${pi}`)} />
  )}
- </FadeIn>
- );
- })()}
-
- {/* Pair cards */}
- <div className="space-y-2">
- {prs.map((pr) => {
- const isBest = best?.pair_index === pr.pair_index;
- const scoreRatio = (pr.optimized_test_metric ?? 0) / maxScore;
- const improv = pr.metric_improvement ?? 0;
- return (
- <div
-  key={pr.pair_index}
-  className={`group rounded-xl border p-4 transition-all duration-200 cursor-pointer hover:shadow-sm ${
-   pr.error
-    ? "border-[#B04030]/30 bg-[#B04030]/[0.02] hover:border-[#B04030]/50"
-    : isBest
-    ? "border-[#5C7A52]/40 bg-[#5C7A52]/[0.03] hover:border-[#5C7A52]/60"
-    : "border-border/50 bg-card/80 hover:border-border"
-  }`}
-  onClick={() => router.push(`/optimizations/${id}?pair=${pr.pair_index}`)}
- >
-  <div className="flex items-center gap-3">
-   {isBest && <Crown className="size-4 text-[#C8A882] shrink-0" />}
-   {pr.error && <XCircle className="size-4 text-[#B04030] shrink-0" />}
-
-   <div className="flex items-center gap-2 min-w-0 flex-1">
-    <span className="font-mono text-xs truncate" title={pr.generation_model}>{pr.generation_model.split("/").pop()}</span>
-    <span className="text-[10px] text-muted-foreground/50">×</span>
-    <span className="font-mono text-xs truncate" title={pr.reflection_model}>{pr.reflection_model.split("/").pop()}</span>
-   </div>
-
-   {!pr.error ? (
-    <div className="flex items-center gap-4 shrink-0 tabular-nums font-mono text-xs" dir="rtl">
-     <div className="text-center">
-      <div className="text-[9px] text-foreground/50 mb-0.5">התחלתי</div>
-      <div className="text-foreground">{formatPercent(pr.baseline_test_metric)}</div>
-     </div>
-     <div className="text-center">
-      <div className="text-[9px] text-foreground/50 mb-0.5">משופר</div>
-      <div className={isBest ? "font-bold text-[#5C7A52]" : "text-foreground"}>{formatPercent(pr.optimized_test_metric)}</div>
-     </div>
-     <div className={`text-center min-w-[48px] ${improv > 0 ? "text-[#5C7A52]" : improv < 0 ? "text-[#B04030]" : "text-foreground"}`}>
-      <div className="text-[9px] text-foreground/50 mb-0.5">שיפור</div>
-      <div>{formatImprovement(improv)}</div>
-     </div>
-    </div>
-   ) : (
-    <span className="text-[11px] text-[#B04030] truncate max-w-[280px]" title={pr.error}>{pr.error}</span>
-   )}
-
-   <ChevronLeft className="size-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
-  </div>
-
-  {!pr.error && (
-   <div className="mt-2.5 h-1 rounded-full bg-border/30 overflow-hidden">
-    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${scoreRatio * 100}%`, background: isBest ? "#5C7A52" : "#C8A882", opacity: isBest ? 0.6 : 0.3 }} />
-   </div>
-  )}
- </div>
- );
- })}
- </div>
-
- </div>
- ); })()}
 
  </TabsContent>
 
@@ -1474,68 +962,7 @@ export default function JobDetailPage() {
  );
  })()}
 
- {/* Stage info modal */}
- <Dialog open={stageModal !== null} onOpenChange={(open) => { if (!open) setStageModal(null); }}>
-  <DialogContent className="max-w-md" dir="rtl">
-   {stageModal && (() => {
-    const info = STAGE_INFO[stageModal];
-    if (!info) return null;
-    const stageIndex = PIPELINE_STAGES.findIndex(s => s.key === stageModal);
-    const sc = (job?.result as { split_counts?: { train: number; val: number; test: number } } | undefined)?.split_counts;
-    return (
-     <>
-      <DialogHeader>
-       <div className="flex items-center gap-3 mb-1">
-        <div className="size-9 rounded-full bg-[#3D2E22] text-white flex items-center justify-center text-sm font-bold">{stageIndex + 1}</div>
-        <div>
-         <DialogTitle className="text-base">{info.title}</DialogTitle>
-         <DialogDescription className="text-[13px] mt-0.5">{info.description}</DialogDescription>
-        </div>
-       </div>
-      </DialogHeader>
-      <div className="space-y-4 text-sm">
-       <p className="text-muted-foreground leading-relaxed">{info.details}</p>
-
-       {/* Concrete data from the job */}
-       {/* no split counts for splitting stage */}
-
-       {stageModal === "baseline" && job?.baseline_test_metric != null && (
-        <div className="rounded-xl bg-muted/40 p-3">
-         <div className="text-[11px] font-semibold text-[#3D2E22] mb-1">תוצאה</div>
-         <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-bold tabular-nums">{(job.baseline_test_metric * 100).toFixed(1)}%</span>
-          <span className="text-xs text-muted-foreground">ציון בסיס על סט הבדיקה</span>
-         </div>
-        </div>
-       )}
-
-       {/* no config details for optimizing stage */}
-
-       {stageModal === "evaluating" && job?.optimized_test_metric != null && (
-        <div className="rounded-xl bg-muted/40 p-3">
-         <div className="text-[11px] font-semibold text-[#3D2E22] mb-1">תוצאה סופית</div>
-         <div className="flex items-baseline gap-3">
-          <div>
-           <span className="text-2xl font-bold tabular-nums text-[#5C7A52]">{(job.optimized_test_metric * 100).toFixed(1)}%</span>
-           <span className="text-[10px] text-muted-foreground ms-1">מאומנת</span>
-          </div>
-          {job.baseline_test_metric != null && (
-           <div className="text-xs text-muted-foreground">
-            מ-{(job.baseline_test_metric * 100).toFixed(1)}%
-            <span className={`ms-1 font-semibold ${(job.metric_improvement ?? 0) >= 0 ? "text-[#5C7A52]" : "text-[#B04030]"}`}>
-             ({(job.metric_improvement ?? 0) >= 0 ? "+" : ""}{((job.metric_improvement ?? 0) * 100).toFixed(1)}%)
-            </span>
-           </div>
-          )}
-         </div>
-        </div>
-       )}
-      </div>
-     </>
-    );
-   })()}
-  </DialogContent>
- </Dialog>
+ <StageInfoModal stage={stageModal} job={job} onClose={() => setStageModal(null)} />
 
  </div>
  );
