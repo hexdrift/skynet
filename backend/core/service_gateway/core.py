@@ -34,6 +34,10 @@ from ..models import (
     SplitCounts,
 )
 from .progress import capture_tqdm
+from .validators import (
+    require_mapping_columns_in_dataset,
+    require_mapping_matches_signature,
+)
 from ..registry import (
     ResolverError,
     ServiceRegistry,
@@ -538,8 +542,8 @@ class DspyService:
         """
         signature_cls = load_signature_from_code(payload.signature_code)
         inputs, outputs = extract_signature_fields(signature_cls)
-        self._require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
-        self._require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
+        require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
         load_metric_from_code(payload.metric_code)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
@@ -569,8 +573,8 @@ class DspyService:
 
         signature_cls = load_signature_from_code(payload.signature_code)
         inputs, outputs = extract_signature_fields(signature_cls)
-        self._require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
-        self._require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
+        require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
         load_metric_from_code(payload.metric_code)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
@@ -621,52 +625,3 @@ class DspyService:
             except ResolverError as exc:
                 raise ServiceError(str(exc)) from exc
 
-    @staticmethod
-    def _require_mapping_matches_signature(
-        mapping: ColumnMapping, signature_inputs: List[str], signature_outputs: List[str]
-    ) -> None:
-        """Ensure the column mapping covers every signature field exactly once.
-
-        Args:
-            mapping: ColumnMapping specifying input/output column mappings.
-            signature_inputs: List of input field names from the DSPy signature.
-            signature_outputs: List of output field names from the DSPy signature.
-
-        Returns:
-            None.
-
-        Raises:
-            ServiceError: If any signature fields are missing from the mapping.
-        """
-        missing_inputs = set(signature_inputs) - set(mapping.inputs.keys())
-        missing_outputs = set(signature_outputs) - set(mapping.outputs.keys())
-        if missing_inputs or missing_outputs:
-            raise ServiceError(
-                "column_mapping must include every signature field. "
-                f"Missing inputs: {sorted(missing_inputs)}; "
-                f"missing outputs: {sorted(missing_outputs)}"
-            )
-
-    @staticmethod
-    def _require_mapping_columns_in_dataset(
-        mapping: ColumnMapping, dataset: List[Dict[str, Any]]
-    ) -> None:
-        """Ensure every mapped column name exists in the dataset rows.
-
-        Args:
-            mapping: ColumnMapping specifying input/output column mappings.
-            dataset: Non-empty list of row dicts from the request.
-
-        Raises:
-            ServiceError: If mapped columns are not found in dataset keys.
-        """
-        dataset_columns = set()
-        for row in dataset:
-            dataset_columns.update(row.keys())
-        mapped_columns = set(mapping.inputs.values()) | set(mapping.outputs.values())
-        missing = mapped_columns - dataset_columns
-        if missing:
-            raise ServiceError(
-                f"column_mapping references columns not found in dataset: {sorted(missing)}. "
-                f"Available columns: {sorted(dataset_columns)}"
-            )
