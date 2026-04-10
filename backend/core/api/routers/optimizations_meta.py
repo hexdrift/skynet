@@ -14,7 +14,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...constants import (
     OPTIMIZATION_TYPE_RUN,
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class RenameRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=200)
 
 
 def create_optimizations_meta_router(*, job_store) -> APIRouter:
