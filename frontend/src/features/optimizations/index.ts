@@ -19,3 +19,6 @@ export { ServeCodeSnippets } from "./components/ServeCodeSnippets";
 export { ServeChat, type ServeChatProps } from "./components/ServeChat";
 export { ConfigTab } from "./components/ConfigTab";
 export { CodeTab } from "./components/CodeTab";
+export { StageInfoModal } from "./components/StageInfoModal";
+export { GridOverview } from "./components/GridOverview";
+export { PairDetailView } from "./components/PairDetailView";
