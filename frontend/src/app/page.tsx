@@ -50,115 +50,17 @@ import { HelpTip } from "@/components/help-tip";
 import { ACTIVE_STATUSES, STATUS_LABELS } from "@/lib/constants";
 import { dashboardBones } from "@/components/dashboard-bones";
 import type { PaginatedJobsResponse, OptimizationSummaryResponse, JobStatus, QueueStatusResponse } from "@/lib/types";
-
-const PAGE_SIZE = 20;
-
-
-const STATUS_COLORS: Record<string, string> = {
- success: "var(--success)",
- failed: "var(--danger)",
- running: "var(--warning)",
- pending: "#8c8c9a",
- cancelled: "#6b6058",
- validating: "var(--warning)",
-};
-
-function statusBadge(status: JobStatus) {
- const label = STATUS_LABELS[status] ?? status;
- switch (status) {
- case "pending":
- return <Badge variant="outline" className="status-pill-pending">{label}</Badge>;
- case "validating":
- return <Badge variant="outline" className="status-pill-running">{label}</Badge>;
- case "running":
- return <Badge variant="outline" className="status-pill-running animate-pulse">{label}</Badge>;
- case "success":
- return <Badge variant="outline" className="status-pill-success">{label}</Badge>;
- case "failed":
- return <Badge variant="outline" className="status-pill-failed">{label}</Badge>;
- case "cancelled":
- return <Badge variant="outline" className="status-pill-cancelled">{label}</Badge>;
- default:
- return <Badge variant="outline">{status}</Badge>;
- }
-}
-
-function typeBadge(jobType: string) {
- if (jobType === "grid_search") {
- return <Badge variant="outline" className="border-primary/30 text-primary">סריקה</Badge>;
- }
- return <Badge variant="secondary">ריצה בודדת</Badge>;
-}
-
-function formatElapsed(elapsedSeconds?: number): string {
- if (elapsedSeconds == null) return "-";
- const hrs = Math.floor(elapsedSeconds / 3600);
- const mins = Math.floor((elapsedSeconds % 3600) / 60);
- const secs = Math.floor(elapsedSeconds % 60);
- const pad = (n: number) => String(n).padStart(2,"0");
- if (hrs > 0) return `${hrs}:${pad(mins)}:${pad(secs)}`;
- return `${mins}:${pad(secs)}`;
-}
-
-function formatDate(iso: string): string {
- try {
- return new Date(iso).toLocaleString("he-IL");
- } catch {
- return iso;
- }
-}
-
-function formatRelativeTime(iso: string): string {
- try {
- const diff = Date.now() - new Date(iso).getTime();
- const mins = Math.floor(diff / 60000);
- if (mins < 1) return "עכשיו";
- if (mins < 60) return `לפני ${mins} דק'`;
- const hours = Math.floor(mins / 60);
- if (hours < 24) return `לפני ${hours} שע'`;
- const days = Math.floor(hours / 24);
- if (days < 7) return `לפני ${days} ימים`;
- return formatDate(iso);
- } catch {
- return formatDate(iso);
- }
-}
-
-function formatScore(job: OptimizationSummaryResponse): React.ReactNode {
- const baseline = job.baseline_test_metric;
- const optimized = job.optimized_test_metric;
- const improvement = job.metric_improvement;
-
- if (baseline == null && optimized == null) return "-";
-
- const fmt = (n: number) => (n > 1 ? n : n * 100).toFixed(1) +"%";
-
- if (baseline != null && optimized != null && improvement != null) {
- const color = improvement > 0 ? "text-[var(--success)]": improvement < 0 ? "text-[var(--danger)]":"text-muted-foreground";
- const sign = improvement > 0 ?"+":"";
- return (
- <span className="flex flex-col gap-0.5">
- <span className="flex items-center gap-1 text-xs">
- <span className="text-muted-foreground">{fmt(baseline)}</span>
- <span className="text-muted-foreground/50">&larr;</span>
- <span className="font-medium">{fmt(optimized)}</span>
- <span className={`${color} font-medium`}>({sign}{(Math.abs(improvement) > 1 ? improvement : improvement * 100).toFixed(1)}%)</span>
- </span>
- {job.best_pair_label && (
- <span className="text-[10px] text-muted-foreground truncate max-w-[160px]" title={job.best_pair_label}>{job.best_pair_label}</span>
- )}
- </span>
- );
- }
-
- if (optimized != null) return <span className="font-medium text-xs">{fmt(optimized)}</span>;
- if (baseline != null) return <span className="text-muted-foreground text-xs">{fmt(baseline)}</span>;
- return "-";
-}
-
-function formatId(id: string): string {
- return id;
-}
+import {
+  PAGE_SIZE,
+  STATUS_COLORS,
+  statusBadge,
+  typeBadge,
+  formatElapsed,
+  formatDate,
+  formatRelativeTime,
+  formatScore,
+  formatId,
+} from "@/features/dashboard";
 
 
 export default function DashboardPage() {
