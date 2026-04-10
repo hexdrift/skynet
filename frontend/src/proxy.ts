@@ -1,4 +1,7 @@
-export { auth as middleware } from "@/lib/auth";
+import { auth } from "@/lib/auth";
+
+// NextAuth v5 returns a callable handler suitable for proxy usage.
+export default auth;
 
 export const config = {
   // Protect all routes except login, api/auth, static assets
