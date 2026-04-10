@@ -202,12 +202,13 @@ export default function ComparePage() {
  const [error, setError] = useState<string | null>(null);
 
  useEffect(() => {
-  if (optimizationIds.length < 2) {
+  const [idA, idB] = optimizationIds;
+  if (!idA || !idB) {
    setError("בחר שתי אופטימיזציות מלוח הבקרה כדי להשוות ביניהן");
    setLoading(false);
    return;
   }
-  Promise.all([getJob(optimizationIds[0]), getJob(optimizationIds[1])])
+  Promise.all([getJob(idA), getJob(idB)])
    .then(([a, b]) => { setJobs([a, b]); setError(null); })
    .catch((e) => setError(e instanceof Error ? e.message : "שגיאה בטעינת האופטימיזציות"))
    .finally(() => setLoading(false));
