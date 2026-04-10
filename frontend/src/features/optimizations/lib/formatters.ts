@@ -33,3 +33,26 @@ export function formatDuration(seconds: number): string {
   if (hrs > 0) return `${hrs}:${pad(mins)}:${pad(secs)}`;
   return `${mins}:${pad(secs)}`;
 }
+
+/** Accept ISO "2026-03-30T23:32:45.971393" — return "30/03 23:32:45" */
+export function formatLogTimestamp(ts: string): string {
+  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return ts;
+  const [, , mm, dd, hh, mi, ss] = m;
+  return `${dd}/${mm} ${hh}:${mi}:${ss}`;
+}
+
+/** Group timestamps by minute for filter options: "30/03 23:32" */
+export function logTimeBucket(ts: string): string {
+  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (!m) return ts;
+  const [, , mm, dd, hh, mi] = m;
+  return `${dd}/${mm} ${hh}:${mi}`;
+}
+
+export function formatOutput(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+}

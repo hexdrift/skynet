@@ -27,9 +27,6 @@ import {
  Download,
  ChevronDown,
  FileText,
- FileJson,
- FileSpreadsheet,
- Package,
  Pencil,
  MessageSquare,
  Component,
@@ -91,7 +88,6 @@ import type { ServeInfoResponse } from "@/lib/types";
 import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/lib/tutorial-demo-data";
 import { Skeleton } from "boneyard-js/react";
 import { optimizationDetailBones } from "@/components/optimization-detail-bones";
-import { DataTab } from "@/features/optimizations/components/DataTab";
 import { msg } from "@/features/shared/messages";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES, STATUS_LABELS } from "@/lib/constants";
 import { registerTutorialHook } from "@/lib/tutorial-bridge";
@@ -115,9 +111,18 @@ import {
  formatImprovement,
  jsonPreview,
  formatDuration,
+ formatLogTimestamp,
+ logTimeBucket,
+ formatOutput,
  detectStage,
  extractScoresFromLogs,
  type ScorePoint,
+ DataTab,
+ LogsTab,
+ ExportMenu,
+ exportPromptAsJson,
+ exportLogsAsCsv,
+ DeleteJobDialog,
 } from "@/features/optimizations";
 
 
@@ -239,30 +244,6 @@ function CopyButton({ text, className =""}: { text: string; className?: string }
  );
 }
 
-/* ── Download helpers ── */
-
-function formatLogTimestamp(ts: string): string {
-  // Accept ISO "2026-03-30T23:32:45.971393" — return "30/03 23:32:45"
-  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return ts;
-  const [, , mm, dd, hh, mi, ss] = m;
-  return `${dd}/${mm} ${hh}:${mi}:${ss}`;
-}
-
-function logTimeBucket(ts: string): string {
-  // Group timestamps by minute for filter options: "30/03 23:32"
-  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
-  if (!m) return ts;
-  const [, , mm, dd, hh, mi] = m;
-  return `${dd}/${mm} ${hh}:${mi}`;
-}
-
-function formatOutput(v: unknown): string {
-  if (v == null) return "";
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
-}
 
 /* ── Extracted chat component — isolates edit/cancel state from the heavy parent ── */
 interface ServeChatProps {
@@ -624,315 +605,6 @@ function ServeCodeSnippets({ serveInfo, optimizationId }: { serveInfo: ServeInfo
  );
 }
 
-/* ── Logs tab — isolates filter/sort state from heavy parent ── */
-function LogsTab({ logs, pairNames, live }: { logs: import("@/lib/types").OptimizationLogEntry[]; pairNames?: Record<number, string>; live?: boolean }) {
- const showPairCol = !!pairNames && Object.keys(pairNames).length > 0;
- const logFilters = useColumnFilters();
- const logResize = useColumnResize();
- const [messageSearch, setMessageSearch] = useState("");
- const [sortKey, setSortKey] = useState<string>("timestamp");
- const [sortDir, setSortDir] = useState<SortDir>("desc");
- const toggleSort = (key: string) => {
- if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
- else { setSortKey(key); setSortDir("asc"); }
- };
-
- const filtered = useMemo(() => {
- const q = messageSearch.trim().toLowerCase();
- let result = logs.filter((l) => {
-  if (q && !l.message.toLowerCase().includes(q)) return false;
-  for (const [col, allowed] of Object.entries(logFilters.filters)) {
-  if (allowed.size === 0) continue;
-  const val = col === "timestamp"
-   ? logTimeBucket(l.timestamp)
-   : col === "pair_index"
-   ? (l.pair_index != null ? String(l.pair_index) : "—")
-   : String((l as unknown as Record<string, unknown>)[col] ?? "");
-  if (!allowed.has(val)) return false;
-  }
-  return true;
- });
- result = [...result].sort((a, b) => {
-  const av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
-  const bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
-  const cmp = av.localeCompare(bv, "he", { numeric: true });
-  return sortDir === "asc" ? cmp : -cmp;
- });
- return result;
- }, [logs, logFilters.filters, sortKey, sortDir, messageSearch]);
-
- const filterOptions = useMemo(() => {
- const unique = (key: string) => {
-  const vals = [...new Set(logs.map((l) => String((l as unknown as Record<string, unknown>)[key] ?? "")))].filter(Boolean).sort();
-  return vals.map((v) => ({ value: v, label: v }));
- };
- const timestampBuckets = [...new Set(logs.map((l) => logTimeBucket(l.timestamp)))]
-  .filter(Boolean).sort().map((v) => ({ value: v, label: v }));
- const pairOpts = showPairCol
-  ? [...new Set(logs.map((l) => l.pair_index != null ? String(l.pair_index) : "—"))].sort().map(v => ({ value: v, label: v === "—" ? "כללי" : (pairNames?.[parseInt(v)] ?? `ריצה ${parseInt(v) + 1}`) }))
-  : [];
- return { level: unique("level"), logger: unique("logger"), timestamp: timestampBuckets, pair_index: pairOpts };
- }, [logs, showPairCol, pairNames]);
-
- return (
- <div className="mt-4">
-  <FadeIn>
-  <div className="flex items-center justify-between gap-3 mb-4">
-  <p className="text-sm text-muted-foreground">{live ? "" : "לוגים מפורטים מתהליך האופטימיזציה — סננו לפי עמודה או חפשו בתוכן."}</p>
-  <span className="text-xs text-muted-foreground shrink-0">{filtered.length} רשומות</span>
-  </div>
-  </FadeIn>
-  <div className="flex items-center gap-3 mb-5">
-  <Input
-  type="text"
-  value={messageSearch}
-  onChange={(e) => setMessageSearch(e.target.value)}
-  placeholder="Search log messages..."
-  aria-label="Search log messages"
-  dir="ltr"
-  className="text-left w-full"
-  />
-  <ResetColumnsButton resize={logResize} />
-  </div>
-  {filtered.length === 0 ? (
-  <p className="text-sm text-muted-foreground py-8 text-center">אין לוגים</p>
-  ) : (
-  <Card>
-  <CardContent className="p-0">
-  <div className="max-h-[600px] overflow-auto">
-  <Table className={"table-fixed w-full"}>
-   <colgroup>
-   {showPairCol && <col style={{ width: logResize.widths["pair_index"] ?? "12%" }} />}
-   <col style={{ width: logResize.widths["timestamp"] ?? (showPairCol ? "13%" : "15%") }} />
-   <col style={{ width: logResize.widths["level"] ?? (showPairCol ? "10%" : "12%") }} />
-   <col style={{ width: logResize.widths["logger"] ?? (showPairCol ? "14%" : "17%") }} />
-   <col />
-   </colgroup>
-   <TableHeader>
-   <TableRow>
-   {showPairCol && <ColumnHeader label="ריצה" sortKey="pair_index" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="pair_index" filterOptions={filterOptions.pair_index} filters={logFilters.filters} onFilter={logFilters.setColumnFilter} openFilter={logFilters.openFilter} setOpenFilter={logFilters.setOpenFilter} width={logResize.widths["pair_index"]} onResize={logResize.setColumnWidth} />}
-   <ColumnHeader label="זמן" sortKey="timestamp" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="timestamp" filterOptions={filterOptions.timestamp} filters={logFilters.filters} onFilter={logFilters.setColumnFilter} openFilter={logFilters.openFilter} setOpenFilter={logFilters.setOpenFilter} width={logResize.widths["timestamp"]} onResize={logResize.setColumnWidth} />
-   <ColumnHeader label="רמה" sortKey="level" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="level" filterOptions={filterOptions.level} filters={logFilters.filters} onFilter={logFilters.setColumnFilter} openFilter={logFilters.openFilter} setOpenFilter={logFilters.setOpenFilter} width={logResize.widths["level"]} onResize={logResize.setColumnWidth} />
-   <ColumnHeader label="לוגר" sortKey="logger" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="logger" filterOptions={filterOptions.logger} filters={logFilters.filters} onFilter={logFilters.setColumnFilter} openFilter={logFilters.openFilter} setOpenFilter={logFilters.setOpenFilter} width={logResize.widths["logger"]} onResize={logResize.setColumnWidth} />
-   <ColumnHeader label="הודעה" sortKey="message" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} width={logResize.widths["message"]} onResize={logResize.setColumnWidth} />
-   </TableRow>
-   </TableHeader>
-   <TableBody>
-   {filtered.slice(0, 300).map((log, i) => (
-   <TableRow
-    key={i}
-    className="cursor-pointer"
-    onClick={(e) => {
-     const td = (e.target as HTMLElement).closest("td");
-     if (!td) return;
-     const text = td.textContent?.trim();
-     if (text) { navigator.clipboard.writeText(text); toast.success(msg("clipboard.copied")); }
-    }}
-   >
-    {showPairCol && (
-     <TableCell className="text-xs font-mono truncate overflow-hidden" style={logResize.widths["pair_index"] ? { width: logResize.widths["pair_index"], maxWidth: logResize.widths["pair_index"] } : undefined}>
-      {log.pair_index != null ? (
-       <Badge variant="secondary" className="text-[9px] font-mono">{pairNames?.[log.pair_index] ?? `ריצה ${log.pair_index + 1}`}</Badge>
-      ) : (
-       <span className="text-muted-foreground/40">—</span>
-      )}
-     </TableCell>
-    )}
-    <TableCell className="text-xs font-mono text-muted-foreground truncate overflow-hidden" style={logResize.widths["timestamp"] ? { width: logResize.widths["timestamp"], maxWidth: logResize.widths["timestamp"] } : undefined} dir="ltr">{formatLogTimestamp(log.timestamp)}</TableCell>
-    <TableCell className="truncate overflow-hidden" style={logResize.widths["level"] ? { width: logResize.widths["level"], maxWidth: logResize.widths["level"] } : undefined}>
-    <Badge variant={log.level === "ERROR" ? "destructive" : log.level === "WARNING" ? "outline" : "secondary"} className="text-[10px] font-mono">
-     {log.level}
-    </Badge>
-    </TableCell>
-    <TableCell className="text-xs font-mono text-muted-foreground truncate overflow-hidden" style={logResize.widths["logger"] ? { width: logResize.widths["logger"], maxWidth: logResize.widths["logger"] } : undefined} title={log.logger}>{log.logger}</TableCell>
-    <TableCell className="text-xs font-mono whitespace-pre-wrap break-all overflow-hidden hover:underline" style={logResize.widths["message"] ? { width: logResize.widths["message"], maxWidth: logResize.widths["message"] } : undefined} title={log.message}>{log.message}</TableCell>
-   </TableRow>
-   ))}
-   </TableBody>
-   {filtered.length > 300 && (
-   <tfoot><tr><td colSpan={showPairCol ? 5 : 4} className="text-center py-3 text-[10px] text-muted-foreground">מוצגות 300 מתוך {filtered.length} רשומות</td></tr></tfoot>
-   )}
-  </Table>
-  </div>
-  </CardContent>
-  </Card>
-  )}
- </div>
- );
-}
-
-function downloadFile(content: string, filename: string, mimeType: string) {
- const blob = new Blob([content], { type: mimeType });
- const url = URL.createObjectURL(blob);
- const a = document.createElement("a");
- a.href = url;
- a.download = filename;
- a.click();
- URL.revokeObjectURL(url);
-}
-
-function exportPromptAsText(prompt: import("@/lib/types").OptimizedPredictor, optimizationId: string) {
- let text = `# Optimized Prompt — ${prompt.predictor_name}\n\n`;
- text += `## Instructions\n${prompt.instructions}\n\n`;
- if (prompt.demos.length > 0) {
- text += `## Demos (${prompt.demos.length})\n\n`;
- prompt.demos.forEach((demo, i) => {
- text += `--- Demo ${i + 1} ---\n`;
- for (const [k, v] of Object.entries(demo.inputs)) text += `[Input] ${k}: ${v}\n`;
- for (const [k, v] of Object.entries(demo.outputs)) text += `[Output] ${k}: ${v}\n`;
- text += "\n";
- });
- }
- if (prompt.formatted_prompt) {
- text += `## Full Formatted Prompt\n${prompt.formatted_prompt}\n`;
- }
- downloadFile(text, `prompt_${optimizationId.slice(0, 8)}.txt`, "text/plain");
-}
-
-function exportPromptAsJson(prompt: import("@/lib/types").OptimizedPredictor, optimizationId: string) {
- downloadFile(JSON.stringify(prompt, null, 2), `prompt_${optimizationId.slice(0, 8)}.json`, "application/json");
-}
-
-function exportLogsAsCsv(logs: import("@/lib/types").OptimizationLogEntry[], optimizationId: string) {
- const header = "timestamp,level,logger,message\n";
- const rows = logs.map((l) => {
- const escapedMsg = `"${l.message.replace(/"/g, '""')}"`;
- return `${l.timestamp},${l.level},${l.logger},${escapedMsg}`;
- }).join("\n");
- downloadFile(header + rows, `logs_${optimizationId.slice(0, 8)}.csv`, "text/csv");
-}
-
-/* ── Export menu — isolates open state from heavy parent ── */
-function ExportMenu({ job, optimizedPrompt }: { job: import("@/lib/types").OptimizationStatusResponse; optimizedPrompt: import("@/lib/types").OptimizedPredictor | null }) {
- const [open, setOpen] = useState(false);
- const ref = useRef<HTMLDivElement>(null);
- useEffect(() => {
- if (!open) return;
- const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
- document.addEventListener("mousedown", handler);
- return () => document.removeEventListener("mousedown", handler);
- }, [open]);
-
- const hasPkl = !!(job.result?.program_artifact?.program_pickle_base64 || job.grid_result?.best_pair?.program_artifact?.program_pickle_base64);
- const itemCls = "w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] text-foreground hover:bg-muted/40 cursor-pointer transition-colors";
- const iconCls = "size-4 shrink-0 text-muted-foreground/60";
- const extCls = "text-muted-foreground/60 font-mono text-[10px] ms-auto";
- const divider = <div className="h-px bg-border/40 mx-2 my-1" />;
-
- return (
- <div className="relative" ref={ref}>
-  <Button size="sm" onClick={() => setOpen(o => !o)} className="gap-1.5">
-  <Download className="size-4" />
-  הורדה
-  <ChevronDown className={`size-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
-  </Button>
-  <AnimatePresence>
-  {open && (
-  <motion.div
-   role="menu"
-   initial={{ opacity: 0, scale: 0.95, y: -4 }}
-   animate={{ opacity: 1, scale: 1, y: 0 }}
-   exit={{ opacity: 0, scale: 0.95, y: -4 }}
-   transition={{ duration: 0.12 }}
-   className="absolute end-0 top-full mt-1.5 z-50 min-w-[180px] max-w-[min(240px,90vw)] rounded-2xl border border-border/40 bg-card shadow-[0_4px_24px_rgba(28,22,18,0.1)] py-1.5"
-  >
-   {hasPkl && (
-   <button type="button" role="menuitem" onClick={() => {
-    setOpen(false);
-    const b64 = job.result?.program_artifact?.program_pickle_base64 ?? job.grid_result?.best_pair?.program_artifact?.program_pickle_base64;
-    if (!b64) return;
-    try {
-    const blob = new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `program_${job.optimization_id.slice(0, 8)}.pkl`; a.click();
-    URL.revokeObjectURL(url);
-    } catch { toast.error(msg("optimization.file.parse_error")); }
-   }} className={itemCls}>
-    <Package className={iconCls} />
-    <span className="flex-1">תוכנית מאומנת</span>
-    <span className={extCls}>.pkl</span>
-   </button>
-   )}
-   {optimizedPrompt && (
-   <>
-    {hasPkl && divider}
-    <button type="button" role="menuitem" onClick={() => { setOpen(false); exportPromptAsJson(optimizedPrompt, job.optimization_id); }} className={itemCls}>
-    <FileJson className={iconCls} />
-    <span className="flex-1">פרומפט</span>
-    <span className={extCls}>.json</span>
-    </button>
-   </>
-   )}
-   {job.logs && job.logs.length > 0 && (
-   <>
-    {divider}
-    <button type="button" role="menuitem" onClick={() => { setOpen(false); exportLogsAsCsv(job.logs, job.optimization_id); }} className={itemCls}>
-    <FileSpreadsheet className={iconCls} />
-    <span className="flex-1">לוגים</span>
-    <span className={extCls}>.csv</span>
-    </button>
-   </>
-   )}
-  </motion.div>
-  )}
-  </AnimatePresence>
- </div>
- );
-}
-
-/* ── Delete dialog — isolates open/loading state from heavy parent ── */
-function DeleteJobDialog({ optimizationId, onDeleted }: { optimizationId: string; onDeleted: () => void }) {
- const [open, setOpen] = useState(false);
- const [loading, setLoading] = useState(false);
- const handleDelete = async () => {
- setLoading(true);
- try {
-  await deleteJob(optimizationId);
-  setOpen(false);
-  window.dispatchEvent(new Event("optimizations-changed"));
-  onDeleted();
- } catch (err) {
-  toast.error(err instanceof Error ? err.message : msg("optimization.delete.failed"));
- } finally {
-  setLoading(false);
- }
- };
- return (
- <>
-  <TooltipProvider>
-  <UiTooltip>
-  <TooltipTrigger asChild>
-  <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-red-600" onClick={() => setOpen(true)} aria-label="מחיקה">
-  <Trash2 className="size-4" />
-  </Button>
-  </TooltipTrigger>
-  <TooltipContent side="bottom">מחיקה</TooltipContent>
-  </UiTooltip>
-  </TooltipProvider>
-  <Dialog open={open} onOpenChange={setOpen}>
-  <DialogContent className="max-w-sm">
-   <DialogHeader>
-   <DialogTitle>מחיקת אופטימיזציה</DialogTitle>
-   <DialogDescription>
-    האם למחוק את האופטימיזציה{" "}
-    <span className="font-mono font-medium text-foreground break-all">{optimizationId}</span>
-    ?
-   </DialogDescription>
-   </DialogHeader>
-   <DialogFooter className="grid grid-cols-2 gap-2">
-   <Button variant="outline" onClick={() => setOpen(false)} disabled={loading} className="w-full justify-center">
-    ביטול
-   </Button>
-   <Button variant="destructive" onClick={handleDelete} disabled={loading} className="w-full justify-center">
-    {loading ? <Loader2 className="size-4 animate-spin"/> : "מחיקה"}
-   </Button>
-   </DialogFooter>
-  </DialogContent>
-  </Dialog>
- </>
- );
-}
 
 /* ── Page Component ── */
 
