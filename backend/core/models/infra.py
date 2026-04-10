@@ -1,0 +1,27 @@
+"""Models for the infra endpoints exposed from app.py — /health and /queue."""
+from typing import Dict, List
+
+from pydantic import BaseModel, Field
+
+from .common import HEALTH_STATUS_OK
+
+
+class HealthResponse(BaseModel):
+    """Response payload for the health check endpoint.
+
+    Attributes:
+        status: Health status string, typically "ok".
+        registered_assets: Dictionary of registered modules, metrics, and optimizers.
+    """
+
+    status: str = Field(default=HEALTH_STATUS_OK)
+    registered_assets: Dict[str, List[str]]
+
+
+class QueueStatusResponse(BaseModel):
+    """Response payload for the queue status endpoint."""
+
+    pending_jobs: int
+    active_jobs: int
+    worker_threads: int
+    workers_alive: bool
