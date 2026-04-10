@@ -63,7 +63,7 @@ export function ParticleHero({ className }: { className?: string }) {
         vx: (Math.random() - 0.5) * speed,
         vy: (Math.random() - 0.5) * speed,
         radius: Math.random() * 2 + 1,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
         alpha: Math.random() * 0.3 + 0.15,
       });
     }
@@ -138,15 +138,17 @@ export function ParticleHero({ className }: { className?: string }) {
 
       if (maxLineDistance > 0) {
         for (let i = 0; i < particles.length; i++) {
+          const pi = particles[i]!;
           for (let j = i + 1; j < particles.length; j++) {
-            const dx = particles[i].x - particles[j].x;
-            const dy = particles[i].y - particles[j].y;
+            const pj = particles[j]!;
+            const dx = pi.x - pj.x;
+            const dy = pi.y - pj.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < maxLineDistance) {
               const alpha = (1 - dist / maxLineDistance) * 0.08;
               ctx.beginPath();
-              ctx.moveTo(particles[i].x, particles[i].y);
-              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.moveTo(pi.x, pi.y);
+              ctx.lineTo(pj.x, pj.y);
               ctx.strokeStyle = `rgba(200, 168, 130, ${alpha})`;
               ctx.lineWidth = 0.5;
               ctx.stroke();

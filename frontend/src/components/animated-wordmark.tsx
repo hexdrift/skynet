@@ -152,7 +152,7 @@ function pickRandom(total: number, count: number): number[] {
   const pool = Array.from({ length: total }, (_, i) => i);
   for (let i = 0; i < Math.min(count, total); i++) {
     const r = Math.floor(Math.random() * pool.length);
-    indices.push(pool[r]);
+    indices.push(pool[r]!);
     pool.splice(r, 1);
   }
   return indices;
@@ -161,7 +161,7 @@ function pickRandom(total: number, count: number): number[] {
 /** Pick a random variant name that is NOT the current one */
 function randomOtherVariant(current: VariantName): VariantName {
   const others = VARIANT_NAMES.filter((v) => v !== current);
-  return others[Math.floor(Math.random() * others.length)];
+  return others[Math.floor(Math.random() * others.length)]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ export function AnimatedWordmark({
       setActiveVariants((prev) => {
         const next = [...prev];
         for (const idx of indices) {
-          next[idx] = randomOtherVariant(prev[idx]);
+          next[idx] = randomOtherVariant(prev[idx] ?? "default");
         }
         return next;
       });

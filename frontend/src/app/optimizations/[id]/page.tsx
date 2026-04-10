@@ -2015,7 +2015,7 @@ export default function JobDetailPage() {
  };
  const ImprovTip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; color?: string }>; label?: string }) => {
   if (!active || !payload?.length) return null;
-  const val = payload[0].value;
+  const val = payload[0]!.value;
   return (
    <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg" dir="rtl">
     {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
@@ -2099,7 +2099,7 @@ export default function JobDetailPage() {
           {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
           <div className="flex items-center gap-2 text-xs">
            <span className="text-muted-foreground">זמן תגובה ממוצע לקריאה:</span>
-           <span className="font-mono font-semibold text-foreground ms-auto">{payload[0].value}s</span>
+           <span className="font-mono font-semibold text-foreground ms-auto">{payload[0]!.value}s</span>
           </div>
          </div>
         );
@@ -2529,6 +2529,7 @@ export default function JobDetailPage() {
   <DialogContent className="max-w-md" dir="rtl">
    {stageModal && (() => {
     const info = STAGE_INFO[stageModal];
+    if (!info) return null;
     const stageIndex = PIPELINE_STAGES.findIndex(s => s.key === stageModal);
     const sc = (job?.result as { split_counts?: { train: number; val: number; test: number } } | undefined)?.split_counts;
     return (
