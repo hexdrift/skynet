@@ -45,7 +45,6 @@ from ..constants import (
 from ..storage import get_job_store
 from ..models import (
     HEALTH_STATUS_OK,
-    AnalyticsSummaryResponse,
     ColumnMapping,
     GridSearchRequest,
     GridSearchResponse,
@@ -53,13 +52,6 @@ from ..models import (
     JobCancelResponse,
     JobDeleteResponse,
     JobLogEntry,
-    OptimizationPayloadResponse,
-    ModelStatsResponse,
-    ModelStatsItem,
-    OptimizerStatsResponse,
-    OptimizerStatsItem,
-    ValidateCodeRequest,
-    ValidateCodeResponse,
     OptimizationStatus,
     OptimizationStatusResponse,
     OptimizationSummaryResponse,
@@ -75,10 +67,8 @@ from ..models import (
     ServeRequest,
     ServeResponse,
     SplitFractions,
-    TemplateCreateRequest,
-    TemplateResponse,
 )
-from ..notifications import notify_job_started, notify_job_completed
+from ..notifications import notify_job_started
 from ..registry import RegistryError, ServiceRegistry
 from ..service_gateway import DspyService, ServiceError
 from ..worker import BackgroundWorker, get_worker
@@ -90,7 +80,6 @@ from .converters import (
     parse_timestamp,
     status_to_job_status,
 )
-from .model_catalog import ModelCatalogResponse, get_catalog_cached
 from .routers.optimizations_meta import create_optimizations_meta_router
 from .routers.templates import create_templates_router
 from .routers.models import create_models_router
@@ -943,8 +932,6 @@ def create_app(
         from ..service_gateway.data import (
             load_metric_from_code,
             load_signature_from_code,
-            rows_to_examples,
-            split_examples,
         )
         from ..service_gateway.language_models import build_language_model
 
