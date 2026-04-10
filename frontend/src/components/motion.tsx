@@ -203,7 +203,7 @@ export const AnimatedNumber = React.memo(function AnimatedNumber({
 
  const observer = new IntersectionObserver(
  ([entry]) => {
- if (entry.isIntersecting) {
+ if (entry?.isIntersecting) {
  hasBeenVisible.current = true;
  runAnimation();
  observer.disconnect();

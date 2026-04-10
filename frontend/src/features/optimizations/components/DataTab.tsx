@@ -177,7 +177,7 @@ export function DataTab({ job, pairIndex }: { job: OptimizationStatusResponse; p
  const summaryBarGradient = useMemo(() => {
   const sorted = [...scores].sort((a, b) => a - b);
   if (sorted.length === 0) return "transparent";
-  if (sorted.length === 1) return scoreColor(sorted[0]);
+  if (sorted.length === 1) return scoreColor(sorted[0]!);
   const n = sorted.length;
   const stops = sorted.map((s, i) => {
    const start = (i / n) * 100;

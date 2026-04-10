@@ -147,7 +147,7 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
     const offset = 5000 + i * 550;
     logs.push(
       { timestamp: ts(start, offset), level: "INFO", logger: "dspy.optimizers.miprov2", message: `===== Trial ${i + 1} / ${NUM_TRIALS} =====`, pair_index: null },
-      { timestamp: ts(start, offset + 300), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Score: ${TRIAL_SCORES[i].toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`, pair_index: null },
+      { timestamp: ts(start, offset + 300), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Score: ${(TRIAL_SCORES[i] ?? 0).toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`, pair_index: null },
     );
   }
 
@@ -196,7 +196,7 @@ function buildDone(start: Date): OptimizationStatusResponse {
     const offset = 5000 + i * 550;
     logs.push(
       { timestamp: ts(start, offset), level: "INFO", logger: "dspy.optimizers.miprov2", message: `===== Trial ${i + 1} / ${NUM_TRIALS} =====`, pair_index: null },
-      { timestamp: ts(start, offset + 300), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Score: ${TRIAL_SCORES[i].toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`, pair_index: null },
+      { timestamp: ts(start, offset + 300), level: "INFO", logger: "dspy.optimizers.miprov2", message: `Score: ${(TRIAL_SCORES[i] ?? 0).toFixed(1)} with parameters {num_demos=${Math.min(i + 1, 3)}}`, pair_index: null },
     );
   }
 

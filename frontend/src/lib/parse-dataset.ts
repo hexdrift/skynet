@@ -46,14 +46,14 @@ export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
   if (ext === "json") {
     const data = JSON.parse(text);
     const rows = Array.isArray(data) ? data : [data];
-    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const columns = rows.length > 0 ? Object.keys(rows[0] ?? {}) : [];
     return { columns, rows, rowCount: rows.length };
   }
 
   if (ext === "csv") {
     const lines = text.trim().split("\n");
     if (lines.length < 2) throw new Error("CSV must have a header row and at least one data row");
-    const headers = parseCSVLine(lines[0]);
+    const headers = parseCSVLine(lines[0]!);
     const rows = lines.slice(1).map((line) => {
       const values = parseCSVLine(line);
       const row: Record<string, unknown> = {};

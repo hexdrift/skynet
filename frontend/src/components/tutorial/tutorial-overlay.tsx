@@ -67,7 +67,7 @@ export function TutorialOverlay() {
           { p: "right" as const, s: vw - rect.right },
           { p: "left" as const, s: rect.left },
         ];
-        p = spaces.sort((a, b) => b.s - a.s)[0].p;
+        p = spaces.sort((a, b) => b.s - a.s)[0]!.p;
       }
 
       let top = 0, left = 0;

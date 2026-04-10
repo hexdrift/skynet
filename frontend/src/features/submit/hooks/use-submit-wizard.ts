@@ -201,7 +201,7 @@ export function useSubmitWizard() {
         // Dataset
         if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
           const rows = payload.dataset as Record<string, unknown>[];
-          const columns = Object.keys(rows[0]);
+          const columns = Object.keys(rows[0] ?? {});
           setParsedDataset({ columns, rows, rowCount: rows.length });
           setDatasetFileName(String((payload as Record<string, unknown>).dataset_filename || displayName || cloneId || ""));
         }
