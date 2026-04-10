@@ -18,3 +18,4 @@ export { StatusBadge, InfoCard, LangPicker, CopyButton } from "./components/ui-p
 export { ServeCodeSnippets } from "./components/ServeCodeSnippets";
 export { ServeChat, type ServeChatProps } from "./components/ServeChat";
 export { ConfigTab } from "./components/ConfigTab";
+export { CodeTab } from "./components/CodeTab";
