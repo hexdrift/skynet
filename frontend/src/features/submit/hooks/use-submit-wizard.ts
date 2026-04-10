@@ -22,6 +22,7 @@ import type {
 import { parseDatasetFile, type ParsedDataset } from "@/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/components/code-editor";
 import { getModelCatalog, cachedCatalog } from "@/lib/model-catalog";
+import { registerTutorialHook } from "@/lib/tutorial-bridge";
 
 import {
   STEPS,
@@ -145,24 +146,19 @@ export function useSubmitWizard() {
   const [cloneLoading, setCloneLoading] = useState(false);
   const cloneRan = useRef(false);
 
-  // Expose setters on window for tutorial beforeShow hooks (load-bearing for tutorial system)
+  // Register setters with the typed tutorial bridge so the tutorial system
+  // can drive the wizard from plain-JS steps (see lib/tutorial-bridge.ts).
   useEffect(() => {
-    (window as unknown as Record<string, unknown>).__skynetSetWizardStep = setStep;
-    (window as unknown as Record<string, unknown>).__skynetSetParsedDataset = setParsedDataset;
-    (window as unknown as Record<string, unknown>).__skynetSetColumnRoles = setColumnRoles;
-    (window as unknown as Record<string, unknown>).__skynetSetDatasetFileName = setDatasetFileName;
-    (window as unknown as Record<string, unknown>).__skynetSetSignatureCode = setSignatureCode;
-    (window as unknown as Record<string, unknown>).__skynetSetMetricCode = setMetricCode;
-    (window as unknown as Record<string, unknown>).__skynetSetOptimizerName = setOptimizerName;
-    return () => {
-      delete (window as unknown as Record<string, unknown>).__skynetSetWizardStep;
-      delete (window as unknown as Record<string, unknown>).__skynetSetParsedDataset;
-      delete (window as unknown as Record<string, unknown>).__skynetSetColumnRoles;
-      delete (window as unknown as Record<string, unknown>).__skynetSetDatasetFileName;
-      delete (window as unknown as Record<string, unknown>).__skynetSetSignatureCode;
-      delete (window as unknown as Record<string, unknown>).__skynetSetMetricCode;
-      delete (window as unknown as Record<string, unknown>).__skynetSetOptimizerName;
-    };
+    const unregister = [
+      registerTutorialHook("setWizardStep", setStep),
+      registerTutorialHook("setParsedDataset", setParsedDataset),
+      registerTutorialHook("setColumnRoles", setColumnRoles),
+      registerTutorialHook("setDatasetFileName", setDatasetFileName),
+      registerTutorialHook("setSignatureCode", setSignatureCode),
+      registerTutorialHook("setMetricCode", setMetricCode),
+      registerTutorialHook("setOptimizerName", setOptimizerName),
+    ];
+    return () => unregister.forEach((fn) => fn());
   }, []);
 
   // Swap metric template when optimizer changes (only if user hasn't edited it)

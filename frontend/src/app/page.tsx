@@ -61,6 +61,7 @@ import {
   formatScore,
   formatId,
 } from "@/features/dashboard";
+import { registerTutorialHook } from "@/lib/tutorial-bridge";
 
 
 export default function DashboardPage() {
@@ -75,7 +76,7 @@ export default function DashboardPage() {
  // Analytics filters
  const [activeTab, setActiveTab] = useState("jobs");
  // Expose for tutorial beforeShow
- useEffect(() => { (window as any).__skynetSetTab = setActiveTab; return () => { delete (window as any).__skynetSetTab; }; }, []);
+ useEffect(() => registerTutorialHook("setTab", setActiveTab), []);
  const [analyticsOptimizer, setAnalyticsOptimizer] = useState<string>("all");
  const [analyticsModel, setAnalyticsModel] = useState<string>("all");
  const [analyticsStatus, setAnalyticsStatus] = useState<string>("all");

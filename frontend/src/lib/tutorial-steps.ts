@@ -32,12 +32,15 @@ export interface TutorialTrackDefinition {
 
 /* ── Navigation helpers ── */
 
+import { callTutorialHook, hasTutorialHook, setTutorialNavigating } from "./tutorial-bridge";
+
 function navigateTo(path: string) {
-  const push = (window as any).__skynetRouterPush;
-  if (push) {
-    push(path);
+  // Prefer in-app client navigation via the tutorial-overlay hook.
+  // Fall back to a full reload if no overlay is mounted (e.g. tests).
+  if (hasTutorialHook("routerPush")) {
+    callTutorialHook("routerPush", path);
   } else {
-    (window as any).__skynetTutorialNavigating = true;
+    setTutorialNavigating(true);
     window.location.href = path;
   }
 }
@@ -57,7 +60,7 @@ function waitForElement(selector: string, timeoutMs = 3000): Promise<void> {
 
 /** Show a splash screen identical to the real submit animation */
 function showSubmitSplash(): Promise<void> {
-  (window as any).__skynetShowTutorialSplash?.();
+  callTutorialHook("showTutorialSplash");
   return new Promise((resolve) => setTimeout(resolve, 1500));
 }
 
@@ -82,19 +85,19 @@ async function ensureDemoDetail() {
 }
 
 function setTab(tab: string) {
-  (window as any).__skynetSetTab?.(tab);
+  callTutorialHook("setTab", tab);
 }
 
 function setWizardStep(step: number) {
-  (window as any).__skynetSetWizardStep?.(step);
+  callTutorialHook("setWizardStep", step);
 }
 
 function setDetailTab(tab: string) {
-  (window as any).__skynetSetDetailTab?.(tab);
+  callTutorialHook("setDetailTab", tab);
 }
 
 function setOptimizerName(name: string) {
-  (window as any).__skynetSetOptimizerName?.(name);
+  callTutorialHook("setOptimizerName", name);
 }
 
 /** Inject sample dataset + code into the wizard for the tutorial */
@@ -107,17 +110,18 @@ function injectSampleDataset() {
     { email_text: "Free gift card waiting for you", category: "spam" },
     { email_text: "Team standup notes from Monday", category: "important" },
   ];
-  (window as any).__skynetSetParsedDataset?.({
+  callTutorialHook("setParsedDataset", {
     columns: ["email_text", "category"],
     rows,
     rowCount: rows.length,
   });
-  (window as any).__skynetSetColumnRoles?.({
+  callTutorialHook("setColumnRoles", {
     email_text: "input",
     category: "output",
   });
-  (window as any).__skynetSetDatasetFileName?.("emails_sample.csv");
-  (window as any).__skynetSetSignatureCode?.(
+  callTutorialHook("setDatasetFileName", "emails_sample.csv");
+  callTutorialHook(
+    "setSignatureCode",
 `class EmailClassifier(dspy.Signature):
     """Classify an email into a category: spam, important, or promotional."""
 
@@ -127,7 +131,8 @@ function injectSampleDataset() {
     # outputs
     category: str = dspy.OutputField(desc="One of: spam, important, promotional")
 `);
-  (window as any).__skynetSetMetricCode?.(
+  callTutorialHook(
+    "setMetricCode",
 `def metric(example: dspy.Example, prediction: dspy.Prediction, trace: bool = None) -> float:
     return float(example.category.strip().lower() == prediction.category.strip().lower())
 `);
