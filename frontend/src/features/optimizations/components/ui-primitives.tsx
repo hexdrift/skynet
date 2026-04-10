@@ -1,0 +1,146 @@
+"use client";
+
+/**
+ * Small UI primitives used across the optimizations detail page.
+ *
+ * Extracted from app/optimizations/[id]/page.tsx. Each component owns
+ * its own state but has no data dependencies on the parent — they are
+ * pure display/interaction leaves.
+ */
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, ChevronDown, Clipboard } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { STATUS_LABELS } from "@/lib/constants";
+import { STATUS_COLORS } from "../constants";
+
+export function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant="outline" className={`text-[13px] px-3 py-1 font-bold tracking-wide ${STATUS_COLORS[status] ?? ""}`}>
+      {status === "running" && <span className="relative flex size-2 me-1"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" /><span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" /></span>}
+      {STATUS_LABELS[status] ?? status}
+    </Badge>
+  );
+}
+
+export function InfoCard({
+  label,
+  value,
+  icon,
+}: {
+  label: ReactNode;
+  value: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <motion.div
+      whileHover={{ y: -1 }}
+      transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+      className="group relative rounded-lg border border-[#E3DCD0] bg-[#FBF9F4] px-3.5 py-3 transition-[border-color,box-shadow] duration-200 hover:border-[#C8A882]/55 hover:shadow-[0_2px_8px_-2px_rgba(124,99,80,0.1)]"
+    >
+      <div className="flex items-center gap-1.5 mb-1.5">
+        {icon && (
+          <span className="shrink-0 inline-flex items-center justify-center size-3.5 text-[#A89680] transition-colors duration-200 group-hover:text-[#7C6350]" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+        <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-[#A89680] truncate">
+          {label}
+        </p>
+      </div>
+      <p className="text-sm font-semibold text-[#1C1612] truncate">
+        {value ?? <span className="text-[#BFB3A3] font-normal">—</span>}
+      </p>
+    </motion.div>
+  );
+}
+
+export function LangPicker<T extends string>({
+  value,
+  onChange,
+  labels,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  labels: Record<T, string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const keys = Object.keys(labels) as T[];
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded-md font-semibold text-[#7C6350] tracking-wide hover:bg-black/5 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/50"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span>{labels[value]}</span>
+        <ChevronDown className={`size-3 text-[#8C7A6B] transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            role="listbox"
+            initial={{ opacity: 0, y: 4, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute bottom-full mb-1.5 start-0 z-20 min-w-[120px] rounded-lg border border-[#E5DDD4] bg-[#FAF6F0] shadow-lg overflow-hidden py-1"
+          >
+            {keys.map((k) => (
+              <li key={k}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(k); setOpen(false); }}
+                  className={`w-full text-start px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer flex items-center justify-between ${k === value ? "bg-[#3D2E22]/8 text-[#3D2E22]" : "text-[#7C6350] hover:bg-black/5"}`}
+                  role="option"
+                  aria-selected={k === value}
+                >
+                  <span>{labels[k]}</span>
+                  {k === value && <Check className="size-3" />}
+                </button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className={`p-1.5 cursor-pointer transition-opacity duration-200 outline-none border-none shadow-none ring-0 bg-transparent hover:opacity-100 ${className}`}
+      title="העתק"
+      aria-label="העתק"
+    >
+      {copied
+        ? <Check className="size-3.5 text-foreground/70" />
+        : <Clipboard className="size-3.5 text-foreground/40 hover:text-foreground/70" />}
+    </button>
+  );
+}
