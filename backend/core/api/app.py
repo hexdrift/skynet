@@ -83,9 +83,12 @@ _SCALAR_CUSTOM_CSS = """
 }
 .skynet-wordmark svg { overflow: visible; }
 
+/* Toggle button sits just to the right of the wordmark so both brand
+   and control share the top-left corner, matching the Notion / Linear
+   / VS Code layout. */
 .skynet-sidebar-toggle {
   position: absolute;
-  right: 16px;
+  left: 148px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
@@ -106,13 +109,38 @@ _SCALAR_CUSTOM_CSS = """
   outline: 2px solid #3D2E22;
   outline-offset: 2px;
 }
+/* Icon flips horizontally between states as a subtle state cue */
+.skynet-sidebar-toggle svg {
+  transition: transform 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+html[data-skynet-sidebar="hidden"] .skynet-sidebar-toggle svg {
+  transform: scaleX(-1);
+}
 
-/* Collapsible sidebar — toggled via [data-skynet-sidebar] on <html>.
-   Default (hidden) removes the sidebar from the layout by zeroing its
-   width variable and hiding the aside; main content reclaims the space.
-   Visible state restores Scalar's normal layout. */
-html[data-skynet-sidebar="hidden"] .t-doc__sidebar { display: none; }
-html[data-skynet-sidebar="hidden"] { --refs-sidebar-width: 0px; }
+/* ── Animated collapsible sidebar ───────────────────────────────────
+   Scalar's layout is a CSS Grid. We pin the template to an explicit
+   `288px 1fr` baseline so the transition has matching track types,
+   then flip the first track to 0px when hidden. The sidebar itself
+   translates offscreen in sync so it doesn't bleed into the content
+   column during the reflow. Same interaction model as Notion / Linear. */
+.references-layout {
+  grid-template-columns: 288px minmax(0, 1fr) !important;
+  transition: grid-template-columns 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.t-doc__sidebar {
+  min-width: 0 !important;
+  transition:
+    transform 320ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 220ms ease;
+}
+html[data-skynet-sidebar="hidden"] .references-layout {
+  grid-template-columns: 0px minmax(0, 1fr) !important;
+}
+html[data-skynet-sidebar="hidden"] .t-doc__sidebar {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* Skynet warm-beige light theme to match the main app */
 .light-mode {
