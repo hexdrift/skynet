@@ -8,6 +8,7 @@ This module now contains *only* the app-lifecycle concerns:
 * Consistent JSON error response shape
 * Two "infra" endpoints that reference the worker directly: ``/health``
   and ``/queue``
+* Scalar API reference mounted at ``/scalar`` with air-gapped static assets
 
 Every other route has been extracted into ``backend/core/api/routers/``
 and wired up via ``app.include_router``. See ``AGENTS.md`` for the
@@ -20,12 +21,15 @@ import os
 import signal  # [WORKER-FIX] for SIGTERM graceful shutdown
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from scalar_fastapi import AgentScalarConfig, DocumentDownloadType, get_scalar_api_reference
 
 from ..exceptions import AppError
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
@@ -43,6 +47,18 @@ from .routers.submissions import create_submissions_router
 from .routers.templates import create_templates_router
 
 logger = logging.getLogger(__name__)
+
+_SCALAR_STATIC_DIR = Path(__file__).parent / "static" / "scalar"
+
+_OPENAPI_TAGS = [
+    {"name": "Optimizations", "description": "Submit, list, inspect, and manage DSPy optimization jobs."},
+    {"name": "Inference", "description": "Run inference against an optimized program."},
+    {"name": "Analytics", "description": "Aggregate stats across jobs, optimizers, and models."},
+    {"name": "Models", "description": "Model catalog and provider discovery."},
+    {"name": "Templates", "description": "Save and reuse job configuration templates."},
+    {"name": "Code Validation", "description": "Format and validate user-supplied Python code."},
+    {"name": "System", "description": "Health and queue status for readiness probes."},
+]
 
 
 def create_app(
@@ -108,7 +124,32 @@ def create_app(
                 worker.stop()
                 logger.info("Background worker stopped")
 
-    app = FastAPI(title="Skynet", lifespan=lifespan)
+    app = FastAPI(
+        title="Skynet",
+        lifespan=lifespan,
+        openapi_tags=_OPENAPI_TAGS,
+        servers=[{"url": "/", "description": "This server"}],
+    )
+
+    app.mount(
+        "/scalar-static",
+        StaticFiles(directory=_SCALAR_STATIC_DIR),
+        name="scalar-static",
+    )
+
+    @app.get("/scalar", include_in_schema=False)
+    async def scalar_docs() -> HTMLResponse:
+        return get_scalar_api_reference(
+            openapi_url=app.openapi_url,
+            title=f"{app.title} API",
+            scalar_js_url="/scalar-static/standalone.js",
+            agent=AgentScalarConfig(disabled=True),
+            telemetry=False,
+            document_download_type=DocumentDownloadType.NONE,
+            persist_auth=True,
+            default_open_all_tags=False,
+            dark_mode=True,
+        )
 
     allowed_origins = os.getenv(
         "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"
@@ -139,7 +180,7 @@ def create_app(
         request: Request, exc: AppError
     ) -> JSONResponse:
         """Handle domain exceptions raised by services.
-        
+
         Converts AppError instances into consistent JSON responses that match
         the existing error envelope format used throughout the API.
         """
@@ -215,15 +256,15 @@ def create_app(
     @app.exception_handler(Exception)
     async def _generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
         """Catch-all handler for unhandled exceptions to prevent info disclosure.
-        
+
         Logs the full exception with stack trace while returning a safe generic
         error response to the client. Prevents leaking DB credentials, file paths,
         API keys, or internal implementation details.
-        
+
         Args:
             request: Incoming HTTP request that triggered the exception.
             exc: Unhandled exception instance.
-            
+
         Returns:
             JSONResponse: Generic 500 error response with no sensitive details.
         """
@@ -245,15 +286,27 @@ def create_app(
     # [WORKER-FIX] max seconds of no worker activity before health check flags it
     WORKER_STALE_THRESHOLD = float(os.getenv("WORKER_STALE_THRESHOLD", "600"))
 
-    @app.get("/health", response_model=HealthResponse)
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        tags=["System"],
+        summary="Liveness and readiness probe",
+    )
     def healthcheck() -> HealthResponse:
-        """Expose a snapshot of registered assets and worker health.
+        """Return a snapshot of registered assets and background-worker health.
 
-        Returns:
-            HealthResponse: Status payload used for readiness checks.
+        Used by OpenShift / Kubernetes liveness + readiness probes and by the
+        frontend's connection indicator. Returns HTTP 200 with a snapshot of
+        every asset the ``ServiceRegistry`` knows about when the worker pool
+        is healthy.
 
-        Raises:
-            HTTPException: 503 if worker threads are not alive or stuck.
+        Behavior:
+            - Returns 503 if no worker exists or if all worker threads have died.
+            - Returns 503 if worker threads are alive but idle for longer than
+              ``WORKER_STALE_THRESHOLD`` seconds (default 600), which indicates
+              the pool is stuck (e.g. a thread deadlocked inside a subprocess).
+            - The response body is never cached by the frontend — stale data
+              would defeat the point of the probe.
         """
         # [WORKER-FIX] return 503 if workers died so OpenShift probe detects it
         if worker is None or not worker.threads_alive():
@@ -296,12 +349,27 @@ def create_app(
                 response.headers["Cache-Control"] = "private, max-age=2, stale-while-revalidate=10"
         return response
 
-    @app.get("/queue", response_model=QueueStatusResponse)
+    @app.get(
+        "/queue",
+        response_model=QueueStatusResponse,
+        tags=["System"],
+        summary="Current worker queue depth and health",
+    )
     def get_queue_status() -> QueueStatusResponse:
-        """Return current queue and worker status.
+        """Return a point-in-time snapshot of the background-job queue.
 
-        Returns:
-            QueueStatusResponse: Queue depth and worker health snapshot.
+        Reports how many optimization jobs are pending (waiting to run), how
+        many are actively executing, how many worker threads are configured,
+        and whether those threads are alive. Used by the frontend's queue
+        chip/header and by `/analytics/summary` callers who want to detect
+        backlog buildup.
+
+        If no worker has been started yet (e.g. the lifespan hook hasn't run),
+        the response contains all zeros with ``workers_alive=False`` instead
+        of an error — callers polling at startup get a stable shape.
+
+        Response is cached for 5 seconds to keep this endpoint cheap under
+        aggressive polling from the UI.
         """
         if worker is None:
             return QueueStatusResponse(
@@ -321,16 +389,25 @@ def create_app(
     # ── Domain routers ──
     # Every route except /health and /queue lives in a sub-module under
     # routers/. Each exposes a create_<domain>_router factory returning an
-    # APIRouter wired up with the dependencies it needs.
-    app.include_router(create_models_router())
-    app.include_router(create_code_validation_router())
-    app.include_router(create_submissions_router(service=service, job_store=job_store))
-    app.include_router(create_analytics_router(job_store=job_store))
+    # APIRouter wired up with the dependencies it needs. Tags are applied
+    # here so the OpenAPI spec (and Scalar) groups routes consistently
+    # without touching the router files themselves.
+    app.include_router(create_models_router(), tags=["Models"])
+    app.include_router(create_code_validation_router(), tags=["Code Validation"])
     app.include_router(
-        create_optimizations_router(job_store=job_store, get_worker_ref=lambda: worker)
+        create_submissions_router(service=service, job_store=job_store),
+        tags=["Optimizations"],
     )
-    app.include_router(create_serve_router(job_store=job_store))
-    app.include_router(create_templates_router(job_store=job_store))
-    app.include_router(create_optimizations_meta_router(job_store=job_store))
+    app.include_router(create_analytics_router(job_store=job_store), tags=["Analytics"])
+    app.include_router(
+        create_optimizations_router(job_store=job_store, get_worker_ref=lambda: worker),
+        tags=["Optimizations"],
+    )
+    app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
+    app.include_router(create_templates_router(job_store=job_store), tags=["Templates"])
+    app.include_router(
+        create_optimizations_meta_router(job_store=job_store),
+        tags=["Optimizations"],
+    )
 
     return app
