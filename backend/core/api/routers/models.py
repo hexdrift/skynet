@@ -39,27 +39,55 @@ def create_models_router() -> APIRouter:
     """
     router = APIRouter()
 
-    @router.get("/models", response_model=ModelCatalogResponse)
+    @router.get(
+        "/models",
+        response_model=ModelCatalogResponse,
+        summary="List the curated model catalog",
+    )
     def list_models() -> ModelCatalogResponse:
-        """Return the curated model catalog plus per-provider env-key status.
+        """Return every model the backend knows how to drive, plus whether each
+        provider's API key is already configured in the server environment.
 
-        The frontend uses this to populate the model-name dropdown and to
-        decide whether an explicit ``api_key`` input is required (if the
-        backend's env already has the key, the user can leave it blank).
+        The frontend uses this endpoint to populate the model-name dropdown on
+        the submission form and to decide whether the user needs to type an
+        API key manually: if the provider's key is already set on the server
+        (e.g. ``OPENAI_API_KEY``), the frontend leaves the field optional.
 
-        Cached for 5 minutes — model catalog rarely changes at runtime.
+        Response shape:
+            - ``models``: list of ``{provider, name, display_name, context_window, ...}``
+            - ``provider_status``: map of provider name → ``{has_key: bool}``
+
+        Cached: 5 minutes public, 10 minutes stale-while-revalidate. The
+        catalog rarely changes at runtime so the response is effectively
+        static per process lifetime.
         """
         catalog = get_catalog_cached()
         return catalog
 
-    @router.post("/models/discover", response_model=DiscoverModelsResponse)
+    @router.post(
+        "/models/discover",
+        response_model=DiscoverModelsResponse,
+        summary="Probe an OpenAI-compatible endpoint for its model list",
+    )
     def discover_models(payload: DiscoverModelsRequest) -> DiscoverModelsResponse:
-        """Fetch the live model list from a user-supplied OpenAI-compatible endpoint.
+        """Ask any OpenAI-compatible server (vLLM, Ollama, LM Studio, LiteLLM
+        proxies, etc.) for the models it currently serves.
 
-        Targets ``GET {base_url}/v1/models`` (vLLM, Ollama, LM Studio, proxies).
-        Falls back to ``{base_url}/models`` if the first attempt 404s. Returns
-        an empty list with a human-readable ``error`` on failure instead of
-        raising — the frontend treats it as advisory.
+        How it works:
+            1. Calls ``GET {base_url}/v1/models`` with an 8-second timeout.
+            2. If that returns 404, retries ``GET {base_url}/models`` (some
+               deployments skip the ``/v1`` prefix).
+            3. Parses the OpenAI response shape (``{"data": [{"id": ...}]}``)
+               or a plain list, extracts model IDs, deduplicates and sorts.
+
+        Error handling: this endpoint never raises. If the probe fails (DNS,
+        timeout, 401, malformed JSON, etc.), ``models`` is empty and
+        ``error`` contains a human-readable reason. The frontend treats the
+        result as advisory — users can still type a model name manually.
+
+        Authentication: pass ``api_key`` in the body if the target requires
+        a bearer token. The key is used only for this one outbound request
+        and is not stored anywhere.
         """
         base = payload.base_url.rstrip("/")
         candidates = [f"{base}/v1/models", f"{base}/models"]
