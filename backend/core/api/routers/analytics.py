@@ -37,26 +37,37 @@ def create_analytics_router(*, job_store) -> APIRouter:
     """
     router = APIRouter()
 
-    @router.get("/analytics/summary", response_model=AnalyticsSummaryResponse)
+    @router.get(
+        "/analytics/summary",
+        response_model=AnalyticsSummaryResponse,
+        summary="Dashboard KPIs across all optimization jobs",
+    )
     def get_analytics_summary(
-        optimizer: Optional[str] = Query(default=None, description="Filter by optimizer name"),
-        model: Optional[str] = Query(default=None, description="Filter by model name"),
-        status: Optional[str] = Query(default=None, description="Filter by job status"),
-        username: Optional[str] = Query(default=None, description="Filter by username"),
+        optimizer: Optional[str] = Query(default=None, description="Exact-match optimizer name (e.g. 'miprov2', 'gepa', 'copro')"),
+        model: Optional[str] = Query(default=None, description="Exact-match model name, compared against the primary model used by the job"),
+        status: Optional[str] = Query(default=None, description="Job status filter: pending, running, success, failed, cancelled"),
+        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> AnalyticsSummaryResponse:
-        """Pre-compute dashboard KPIs with optional filters.
+        """Return a single aggregated KPI snapshot powering the dashboard header.
 
-        Returns aggregated metrics across all matching jobs including success rate,
-        average improvement, average runtime, and dataset statistics.
+        Computes every headline number the dashboard needs in one round-trip:
+        total jobs, per-status counts, overall success rate, improvement
+        statistics (min/avg/max delta between baseline and optimized test
+        metric), average runtime, total dataset rows processed, and — for
+        grid-search jobs — total/completed/failed pair counts.
 
-        Args:
-            optimizer: Filter by optimizer name (e.g., 'miprov2', 'gepa').
-            model: Filter by model name (exact match on model_name field).
-            status: Filter by job status.
-            username: Filter by username.
-
-        Returns:
-            AnalyticsSummaryResponse: Aggregated KPIs across filtered jobs.
+        Behavior notes:
+            - Iterates every job the caller can see (hard cap 10,000).
+              Filters are applied in Python because several of them operate
+              on the embedded ``overview`` payload, not top-level columns.
+            - Improvement = ``optimized_test_metric - baseline_test_metric``.
+              Only ``success`` jobs with numeric metrics contribute.
+            - For grid-search jobs the ``best_pair`` is used as the
+              representative result, not the aggregate across all pairs.
+            - ``running_count`` folds in ``validating`` jobs so the UI
+              shows a single "in progress" number.
+            - All filters combine with AND. Passing no filters returns the
+              global numbers across every job the user is allowed to see.
         """
         # Fetch all jobs (no pagination for analytics)
         all_jobs = job_store.list_jobs(
@@ -174,24 +185,34 @@ def create_analytics_router(*, job_store) -> APIRouter:
             failed_pairs=failed_pairs,
         )
 
-    @router.get("/analytics/optimizers", response_model=OptimizerStatsResponse)
+    @router.get(
+        "/analytics/optimizers",
+        response_model=OptimizerStatsResponse,
+        summary="Per-optimizer aggregated statistics",
+    )
     def get_optimizer_stats(
-        model: Optional[str] = Query(default=None, description="Filter by model name"),
-        status: Optional[str] = Query(default=None, description="Filter by job status"),
-        username: Optional[str] = Query(default=None, description="Filter by username"),
+        model: Optional[str] = Query(default=None, description="Exact-match model name to scope the stats to a single model"),
+        status: Optional[str] = Query(default=None, description="Restrict aggregation to a single status bucket"),
+        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> OptimizerStatsResponse:
-        """Pre-compute per-optimizer statistics with optional filters.
+        """Group every job by optimizer name and return one row per optimizer.
 
-        Aggregates metrics grouped by optimizer name, showing success rate,
-        average improvement, and average runtime for each optimizer.
+        Powers the dashboard's "Optimizer performance" table, letting users
+        compare the optimizers they've used side by side.
 
-        Args:
-            model: Filter by model name.
-            status: Filter by job status.
-            username: Filter by username.
+        Each row contains:
+            - ``name``: canonical optimizer identifier
+            - ``total_jobs``: how many jobs used this optimizer under the filter
+            - ``success_count``: subset that finished successfully
+            - ``success_rate``: ``success_count / total_jobs`` (0.0-1.0)
+            - ``avg_improvement``: average ``optimized - baseline`` test metric
+              across successful jobs; ``null`` if no numeric metrics exist
+            - ``avg_runtime``: mean wall-clock seconds for successful jobs;
+              ``null`` if unavailable
 
-        Returns:
-            OptimizerStatsResponse: List of per-optimizer statistics.
+        Rows are returned sorted by ``total_jobs`` descending, so the most
+        frequently used optimizer is first. Jobs without a declared
+        optimizer name are excluded from the aggregation entirely.
         """
         # Fetch all jobs
         all_jobs = job_store.list_jobs(
@@ -284,24 +305,34 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
         return OptimizerStatsResponse(items=items)
 
-    @router.get("/analytics/models", response_model=ModelStatsResponse)
+    @router.get(
+        "/analytics/models",
+        response_model=ModelStatsResponse,
+        summary="Per-model aggregated statistics",
+    )
     def get_model_stats(
-        optimizer: Optional[str] = Query(default=None, description="Filter by optimizer name"),
-        status: Optional[str] = Query(default=None, description="Filter by job status"),
-        username: Optional[str] = Query(default=None, description="Filter by username"),
+        optimizer: Optional[str] = Query(default=None, description="Exact-match optimizer name to scope the stats"),
+        status: Optional[str] = Query(default=None, description="Restrict aggregation to a single status bucket"),
+        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> ModelStatsResponse:
-        """Pre-compute per-model statistics with optional filters.
+        """Group every job by model name and return one row per model.
 
-        Aggregates metrics grouped by model name, showing success rate,
-        average improvement, and usage count for each model.
+        Powers the dashboard's "Model performance" table. Answers the
+        question "which model worked best on my workloads?".
 
-        Args:
-            optimizer: Filter by optimizer name.
-            status: Filter by job status.
-            username: Filter by username.
+        Each row contains:
+            - ``name``: model identifier as stored on the job overview
+            - ``total_jobs``: jobs that used this model under the filter
+            - ``success_count``: subset that finished successfully
+            - ``success_rate``: 0.0-1.0
+            - ``avg_improvement``: average ``optimized - baseline`` test metric
+              across successful jobs; ``null`` when no numeric metrics exist
+            - ``use_count``: total usages, equal to ``total_jobs`` today but
+              reserved separately in case future work tracks non-primary
+              model usages (e.g. judges or decoders) as well
 
-        Returns:
-            ModelStatsResponse: List of per-model statistics.
+        Rows are returned sorted by ``use_count`` descending. Jobs without
+        a declared primary model are excluded.
         """
         # Fetch all jobs
         all_jobs = job_store.list_jobs(

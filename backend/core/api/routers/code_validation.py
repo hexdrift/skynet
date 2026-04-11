@@ -32,9 +32,29 @@ def create_code_validation_router() -> APIRouter:
     """
     router = APIRouter()
 
-    @router.post("/format-code", response_model=FormatCodeResponse)
+    @router.post(
+        "/format-code",
+        response_model=FormatCodeResponse,
+        summary="Format user-authored Python code with ruff",
+    )
     def format_code(payload: FormatCodeRequest) -> FormatCodeResponse:
-        """Format Python code using ruff."""
+        """Run ``ruff format`` against the supplied code snippet and return the
+        reformatted result.
+
+        Used by the submit wizard's code editor to auto-format signature and
+        metric code on demand. The input is written to a tempfile, formatted,
+        read back, and deleted — no state is persisted.
+
+        Response fields:
+            - ``code``: the formatted source (or original source on failure)
+            - ``changed``: whether formatting produced any difference
+            - ``error``: human-readable failure reason (ruff missing,
+              timeout, syntax error, etc.) or ``null`` on success
+
+        This endpoint never raises 5xx for user input errors. A malformed
+        snippet is returned with ``error`` set and the original ``code`` intact.
+        A 5-second timeout protects the server from pathological input.
+        """
         import os
         import subprocess
         import tempfile
@@ -61,12 +81,46 @@ def create_code_validation_router() -> APIRouter:
         except Exception as exc:
             return FormatCodeResponse(code=payload.code, changed=False, error=str(exc))
 
-    @router.post("/validate-code", response_model=ValidateCodeResponse)
+    @router.post(
+        "/validate-code",
+        response_model=ValidateCodeResponse,
+        summary="Pre-submit validation for signature and metric code",
+    )
     def validate_code(payload: ValidateCodeRequest) -> ValidateCodeResponse:
-        """Validate signature and metric code before job submission.
+        """Parse and smoke-test the user's DSPy signature and/or metric code
+        before an optimization job is enqueued.
 
-        Parses signature code, checks field/mapping compatibility, parses
-        metric code, and runs the metric on a sample row to verify it works.
+        Catching errors here — instead of inside the worker — saves users a
+        round-trip and keeps the queue clean of jobs that can never succeed.
+
+        Checks performed (in order):
+            1. **Signature parse**: compile ``signature_code`` into a ``dspy.Signature``
+               subclass and extract its declared input/output field names.
+            2. **Column mapping consistency**: verify every signature field is
+               mapped to a dataset column. Unmapped inputs/outputs become
+               errors; extra columns in the mapping that don't exist in the
+               signature become warnings.
+            3. **Metric parse**: compile ``metric_code`` and locate a callable
+               suitable for the declared optimizer.
+            4. **GEPA arity check**: if the selected optimizer is GEPA, the
+               metric signature must accept five parameters
+               ``(gold, pred, trace, pred_name, pred_trace)``.
+            5. **Live sample run**: invoke the metric on a synthetic
+               ``dspy.Example`` built from ``sample_row``. Verifies the return
+               type matches what the chosen optimizer expects — a numeric
+               score for most optimizers, or a ``dspy.Prediction`` with
+               ``score`` and ``feedback`` for GEPA.
+
+        Response shape:
+            - ``valid``: ``True`` only if ``errors`` is empty
+            - ``signature_fields``: ``{inputs: [...], outputs: [...]}``
+              populated whenever signature parsing succeeds
+            - ``errors``: hard failures that will block submission
+            - ``warnings``: soft issues that don't block submission
+              (e.g. unused columns, non-fatal style problems)
+
+        Accepts either ``signature_code``, ``metric_code``, or both. Passing
+        neither is itself an error.
         """
         from ...service_gateway.data import (
             extract_signature_fields,
