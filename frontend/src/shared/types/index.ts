@@ -38,7 +38,7 @@ export type {
   CatalogProvider,
   ModelCatalogResponse,
   DiscoverModelsResponse,
-} from "@/lib/types";
+} from "./api";
 
 // Alias for cleaner imports
-export type { OptimizationSummaryResponse as Job } from "@/lib/types";
+export type { OptimizationSummaryResponse as Job } from "./api";

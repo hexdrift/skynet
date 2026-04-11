@@ -1,4 +1,4 @@
-import type { JobStatus } from "./types";
+import type { JobStatus } from "@/shared/types/api";
 
 export const ACTIVE_STATUSES = new Set<JobStatus>(["pending", "validating", "running"]);
 export const TERMINAL_STATUSES = new Set<JobStatus>(["success", "failed", "cancelled"]);

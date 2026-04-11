@@ -1,4 +1,4 @@
-import type { ModelConfig, SplitFractions } from "@/lib/types";
+import type { ModelConfig, SplitFractions } from "@/shared/types/api";
 
 export const emptyModelConfig = (): ModelConfig => ({
   name: "",

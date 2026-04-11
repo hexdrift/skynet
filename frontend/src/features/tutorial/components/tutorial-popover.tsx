@@ -3,8 +3,8 @@
 import { motion } from "framer-motion";
 import * as React from "react";
 import { ArrowLeft, ArrowRight, X, Play, Pause } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { TutorialStep } from "@/lib/tutorial-steps";
+import { cn } from "@/shared/lib/utils";
+import type { TutorialStep } from "@/features/tutorial/lib/steps";
 
 interface TutorialPopoverProps {
   step: TutorialStep;

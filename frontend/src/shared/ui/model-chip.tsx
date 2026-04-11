@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { Settings, Copy, RotateCcw, Sparkles, Plus, Thermometer, Coins, Brain } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { ModelConfig } from "@/lib/types";
+import { cn } from "@/shared/lib/utils";
+import type { ModelConfig } from "@/shared/types/api";
 
 interface ModelChipProps {
   config: ModelConfig;

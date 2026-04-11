@@ -3,7 +3,7 @@
 import { BarChart3, Database, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { FadeIn } from "@/components/motion";
+import { FadeIn } from "@/shared/ui/motion";
 
 interface AnalyticsEmptyProps {
   variant?: "no-data" | "no-results" | "loading-error";

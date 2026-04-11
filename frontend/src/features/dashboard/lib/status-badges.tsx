@@ -2,8 +2,8 @@
 
 import type React from "react";
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "@/lib/constants";
-import type { OptimizationSummaryResponse, JobStatus } from "@/lib/types";
+import { STATUS_LABELS } from "@/shared/constants/job-status";
+import type { OptimizationSummaryResponse, JobStatus } from "@/shared/types/api";
 import { formatPercent } from "@/shared/lib";
 
 export function statusBadge(status: JobStatus) {

@@ -7,8 +7,8 @@
  */
 
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "@/lib/constants";
-import type { JobStatus } from "@/lib/types";
+import { STATUS_LABELS } from "@/shared/constants/job-status";
+import type { JobStatus } from "@/shared/types/api";
 
 interface StatusBadgeProps {
   status: JobStatus | string;

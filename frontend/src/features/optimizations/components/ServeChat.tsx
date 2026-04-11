@@ -11,7 +11,7 @@
 import { useRef, useState } from "react";
 import { Loader2, MessageSquare, Pencil, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { ServeInfoResponse } from "@/lib/types";
+import type { ServeInfoResponse } from "@/shared/types/api";
 import { CopyButton } from "./ui-primitives";
 import { formatOutput } from "@/shared/lib";
 

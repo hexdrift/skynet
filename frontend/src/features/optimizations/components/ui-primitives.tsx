@@ -12,7 +12,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, Clipboard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "@/lib/constants";
+import { STATUS_LABELS } from "@/shared/constants/job-status";
 import { STATUS_COLORS } from "../constants";
 
 export function StatusBadge({ status }: { status: string }) {

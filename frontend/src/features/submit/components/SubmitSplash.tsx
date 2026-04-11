@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { AnimatedWordmark } from "@/components/animated-wordmark";
+import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";
 

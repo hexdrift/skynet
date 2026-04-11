@@ -4,7 +4,6 @@
  * Single import point for UI components across features
  */
 
-// Shared UI primitives
 export { EmptyState } from "./empty-state";
 export { LoadingState } from "./loading-state";
 export { StatusBadge } from "./status-badge";

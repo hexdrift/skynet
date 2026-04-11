@@ -12,11 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ModelPicker, modelSupportsThinking } from "@/components/model-picker";
-import { NumberInput } from "@/components/number-input";
-import { cn } from "@/lib/utils";
-import type { ModelConfig, CatalogModel } from "@/lib/types";
-import { HelpTip } from "@/components/help-tip";
+import { ModelPicker, modelSupportsThinking } from "@/features/submit/components/ModelPicker";
+import { NumberInput } from "@/shared/ui/number-input";
+import { cn } from "@/shared/lib/utils";
+import type { ModelConfig, CatalogModel } from "@/shared/types/api";
+import { HelpTip } from "@/shared/ui/help-tip";
 
 interface ModelConfigModalProps {
   open: boolean;

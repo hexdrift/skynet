@@ -11,20 +11,20 @@ import {
   useColumnResize,
   ResetColumnsButton,
   type SortDir,
-} from "@/components/excel-filter";
+} from "@/shared/ui/excel-filter";
 import { Skeleton } from "boneyard-js/react";
-import { dataTabBones } from "@/components/data-tab-bones";
-import { FadeIn } from "@/components/motion";
-import { HelpTip } from "@/components/help-tip";
+import { dataTabBones } from "@/features/optimizations/lib/data-tab-bones";
+import { FadeIn } from "@/shared/ui/motion";
+import { HelpTip } from "@/shared/ui/help-tip";
 import { msg } from "@/features/shared/messages";
-import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/lib/api";
+import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/shared/lib/api";
 import type {
   OptimizationDatasetResponse,
   DatasetRow,
   OptimizationStatusResponse,
   EvalExampleResult,
-} from "@/lib/types";
-import { DEMO_OPTIMIZATION_ID } from "@/lib/tutorial-demo-data";
+} from "@/shared/types/api";
+import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial/lib/demo-data";
 
 type Split = "all" | "train" | "val" | "test";
 type ProgramType = "optimized" | "baseline";
@@ -53,7 +53,6 @@ export function DataTab({
   );
   const [testResultsLoading, setTestResultsLoading] = useState(false);
 
-  // Column sorting & filtering
   const colFilters = useColumnFilters();
   const [sortKey, setSortKey] = useState<string>("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -68,7 +67,6 @@ export function DataTab({
 
   const isDemoMode = job.optimization_id === DEMO_OPTIMIZATION_ID;
 
-  // Load dataset
   useEffect(() => {
     if (isDemoMode) {
       // Provide mock dataset for tutorial demo
@@ -142,7 +140,6 @@ export function DataTab({
         column_mapping: { inputs: { email_text: "email_text" }, outputs: { category: "category" } },
         split_counts: { train: 7, val: 2, test: 3 },
       });
-      // Mock test results with predictions and scores
       setTestResults({
         optimized: {
           9: { index: 9, outputs: { category: "promotional" }, score: 1.0, pass: true },
@@ -164,7 +161,6 @@ export function DataTab({
       .finally(() => setLoading(false));
   }, [job.optimization_id, isDemoMode]);
 
-  // Load cached test results
   useEffect(() => {
     if (isDemoMode || job.status !== "success") return;
     setTestResultsLoading(true);
@@ -205,7 +201,6 @@ export function DataTab({
     return dataset.splits[split];
   }, [dataset, split]);
 
-  // Filter + sort rows
   const filtered = useMemo(() => {
     let result = rows.filter((r) => {
       for (const [col, allowed] of Object.entries(colFilters.filters)) {
@@ -226,7 +221,6 @@ export function DataTab({
     return result;
   }, [rows, colFilters.filters, sortKey, sortDir]);
 
-  // Filter options per column
   const filterOptions = useMemo(() => {
     const opts: Record<string, { value: string; label: string }[]> = {};
     for (const col of allColumns) {

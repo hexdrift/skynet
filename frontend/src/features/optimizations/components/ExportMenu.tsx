@@ -17,7 +17,7 @@ import type {
   OptimizationLogEntry,
   OptimizationStatusResponse,
   OptimizedPredictor,
-} from "@/lib/types";
+} from "@/shared/types/api";
 
 function downloadFile(content: string, filename: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });

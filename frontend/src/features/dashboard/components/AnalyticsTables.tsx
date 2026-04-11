@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { HelpTip } from "@/components/help-tip";
+import { HelpTip } from "@/shared/ui/help-tip";
 
 interface OptimizerComparisonData {
   name: string;

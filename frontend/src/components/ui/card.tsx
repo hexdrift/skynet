@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRef, useCallback } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -33,13 +33,10 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
       className={cn(
         "group/card relative flex flex-col gap-4 rounded-2xl",
         "py-5 text-card-foreground",
-        // Light mode
         "bg-gradient-to-b from-white/95 to-[#F8F4EF]",
         "border border-[#DDD4C8]/50",
         "shadow-[0_1px_3px_rgba(28,22,18,0.03),0_4px_16px_rgba(28,22,18,0.025)]",
-        // Backdrop
         "backdrop-blur-sm",
-        // Transition
         "transition-[border-color,box-shadow] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
         className,
       )}

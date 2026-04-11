@@ -30,7 +30,6 @@
  * directory structure.
  */
 export const MESSAGES = {
-  // ── submit wizard ────────────────────────────────────────────────────
   "submit.validation.username_required": "נא להזין שם משתמש",
   "submit.validation.name_required": "נא להזין שם לאופטימיזציה",
   "submit.validation.dataset_required": "נא להעלות קובץ דאטאסט",
@@ -51,15 +50,11 @@ export const MESSAGES = {
   "submit.dataset.file_error": "שגיאה בטעינת הקובץ",
   "submit.clone.success": "הגדרות שוכפלו בהצלחה",
   "submit.clone.failed": "שגיאה בטעינת הגדרות לשכפול",
-
-  // ── dashboard ────────────────────────────────────────────────────────
   "dashboard.load_error": "שגיאה בטעינת אופטימיזציות",
   "dashboard.delete_failed": "מחיקה נכשלה",
   "dashboard.header.title": "לוח בקרה",
   "dashboard.header.jobs_suffix": "אופטימיזציות",
   "dashboard.header.active_suffix": "פעילות",
-
-  // ── sidebar ──────────────────────────────────────────────────────────
   "sidebar.delete.success": "נמחק",
   "sidebar.delete.failed": "שגיאה במחיקה",
   "sidebar.link.copied": "קישור הועתק",
@@ -68,18 +63,12 @@ export const MESSAGES = {
   "sidebar.pin.on": "הוצמד",
   "sidebar.pin.off": "הוסר מהצמדה",
   "sidebar.generic_error": "שגיאה",
-
-  // ── compare ──────────────────────────────────────────────────────────
   "compare.select_two": "בחר שתי אופטימיזציות מלוח הבקרה כדי להשוות ביניהן",
   "compare.load_error": "שגיאה בטעינת האופטימיזציות",
-
-  // ── optimization detail ──────────────────────────────────────────────
   "optimization.cancel.sent": "בקשת ביטול נשלחה",
   "optimization.cancel.failed": "ביטול נכשל",
   "optimization.delete.failed": "מחיקה נכשלה",
   "optimization.file.parse_error": "שגיאה בפענוח הקובץ",
-
-  // ── clipboard / generic ──────────────────────────────────────────────
   "clipboard.copied": "הועתק בהצלחה",
   "clipboard.copied_short": "הועתק",
 } as const;

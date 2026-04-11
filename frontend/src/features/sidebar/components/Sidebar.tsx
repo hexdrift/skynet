@@ -22,7 +22,9 @@ import {
   Grid2x2,
   ChevronLeft,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Skeleton } from "boneyard-js/react";
+import { sidebarMoreBones } from "@/features/sidebar/lib/bones";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,10 +40,10 @@ import {
   deleteJob,
   renameOptimization,
   togglePinOptimization,
-} from "@/lib/api";
-import type { SidebarJobItem } from "@/lib/api";
-import { ACTIVE_STATUSES, STATUS_LABELS } from "@/lib/constants";
-import type { OptimizationSummaryResponse } from "@/lib/types";
+} from "@/shared/lib/api";
+import type { SidebarJobItem } from "@/shared/lib/api";
+import { ACTIVE_STATUSES, STATUS_LABELS } from "@/shared/constants/job-status";
+import type { OptimizationSummaryResponse } from "@/shared/types/api";
 // Sidebar now uses SidebarJobItem from api.ts but falls back to OptimizationSummaryResponse shape
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
@@ -78,26 +80,42 @@ export function Sidebar() {
   const [activeCount, setActiveCount] = React.useState(0);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [loadedAll, setLoadedAll] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  // Sidebar infinite scroll: fetchData (polling + external invalidation)
+  // re-requests ``max(PAGE_SIZE, loadedItemsRef.current)`` rows so a
+  // background 30s refresh doesn't truncate the user's scrolled position
+  // back to page 1. The ref lives outside React state so fetchData doesn't
+  // need to be re-created when the loaded count changes.
+  const loadedItemsRef = React.useRef(0);
   const listRef = React.useRef<HTMLDivElement>(null);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
 
   const fetchData = React.useCallback(async () => {
     try {
+      const limit = Math.min(
+        200,
+        Math.max(PAGE_SIZE, loadedItemsRef.current),
+      );
       const res = await listJobsSidebar({
         username: isAdmin ? undefined : sessionUser || undefined,
-        limit: PAGE_SIZE,
+        limit,
         offset: 0,
       });
       setJobs(res.items);
       setTotalJobs(res.total);
       setActiveCount(res.items.filter((j) => ACTIVE_STATUSES.has(j.status as never)).length);
       setLoadedAll(res.items.length >= res.total);
+      loadedItemsRef.current = res.items.length;
     } catch {
       /* ignore */
     }
   }, [sessionUser, isAdmin]);
 
   React.useEffect(() => {
+    // Dep change (login / admin toggle) — reset depth so the next fetch
+    // starts fresh at one page.
+    loadedItemsRef.current = 0;
     fetchData();
     const interval = setInterval(fetchData, 30000);
     // Listen for cross-component invalidation (dashboard delete, etc.)
@@ -109,20 +127,51 @@ export function Sidebar() {
     };
   }, [fetchData]);
 
-  const loadMore = async () => {
-    if (loadedAll) return;
+  const loadMore = React.useCallback(async () => {
+    if (loadingMore || loadedAll) return;
+    setLoadingMore(true);
     try {
       const res = await listJobsSidebar({
         username: isAdmin ? undefined : sessionUser || undefined,
         limit: PAGE_SIZE,
         offset: jobs.length,
       });
-      setJobs((prev) => [...prev, ...res.items]);
-      setLoadedAll(jobs.length + res.items.length >= res.total);
+      setJobs((prev) => {
+        // Dedupe by optimization_id in case a new job was inserted above
+        // the offset between the previous fetch and this one.
+        const existing = new Set(prev.map((j) => j.optimization_id));
+        const appended = res.items.filter((j) => !existing.has(j.optimization_id));
+        const merged = [...prev, ...appended];
+        loadedItemsRef.current = merged.length;
+        setLoadedAll(merged.length >= res.total);
+        return merged;
+      });
+      setTotalJobs(res.total);
     } catch {
       /* ignore */
+    } finally {
+      setLoadingMore(false);
     }
-  };
+  }, [loadingMore, loadedAll, isAdmin, sessionUser, jobs.length]);
+
+  // Infinite-scroll sentinel. The sidebar scrolls in its own container
+  // (``listRef``), so the observer's root must point at that element — not
+  // the default viewport — otherwise the sentinel would appear "in view"
+  // based on page scroll rather than sidebar scroll and fire incorrectly.
+  React.useEffect(() => {
+    const node = sentinelRef.current;
+    const root = listRef.current;
+    if (!node || !root) return;
+    if (loadedAll || loadingMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMore();
+      },
+      { root, rootMargin: "120px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadedAll, loadingMore, loadMore, jobs.length]);
 
   const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
@@ -159,15 +208,6 @@ export function Sidebar() {
     [jobs, searchQuery],
   );
   const groupedJobs = React.useMemo(() => groupJobsByRecency(filteredJobs), [filteredJobs]);
-
-  // Scroll to load more
-  const handleScroll = () => {
-    const el = listRef.current;
-    if (!el || loadedAll) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-      loadMore();
-    }
-  };
 
   return (
     <aside
@@ -322,7 +362,6 @@ export function Sidebar() {
           </div>
           <div
             ref={listRef}
-            onScroll={handleScroll}
             className="flex-1 overflow-y-auto px-3 pb-2 no-scrollbar"
           >
             {groupedJobs.length === 0 && searchQuery && (
@@ -332,8 +371,11 @@ export function Sidebar() {
             )}
             {groupedJobs.map((group) => (
               <div key={group.label} className="mb-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
-                  {group.label}
+                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
+                  <span>{group.label}</span>
+                  <span className="tabular-nums text-muted-foreground/40 font-normal">
+                    {group.jobs.length}
+                  </span>
                 </p>
                 {group.jobs.map((job) => (
                   <JobRow
@@ -354,14 +396,21 @@ export function Sidebar() {
                 ))}
               </div>
             ))}
-            {!loadedAll && filteredJobs.length > 0 && (
-              <button
-                type="button"
-                onClick={loadMore}
-                className="w-full text-[10px] text-muted-foreground/50 hover:text-muted-foreground py-2 cursor-pointer transition-colors"
-              >
-                טען עוד ({totalJobs - jobs.length} נוספים)
-              </button>
+            {loadingMore && (
+              <div className="px-1 pt-1 pb-2" aria-hidden="true">
+                <Skeleton
+                  name="sidebar-more"
+                  loading={true}
+                  initialBones={sidebarMoreBones}
+                  color="var(--muted)"
+                  animate="shimmer"
+                >
+                  <div />
+                </Skeleton>
+              </div>
+            )}
+            {!loadedAll && !searchQuery && (
+              <div ref={sentinelRef} aria-hidden="true" className="h-1 w-full" />
             )}
           </div>
         </div>
@@ -442,7 +491,6 @@ function JobRow({
 
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  // Close menu on outside click
   React.useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
@@ -455,7 +503,6 @@ function JobRow({
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  // Focus rename input
   React.useEffect(() => {
     if (renaming) renameRef.current?.focus();
   }, [renaming]);
@@ -506,7 +553,6 @@ function JobRow({
     setMenuOpen(false);
   };
 
-  // Rename mode
   if (renaming) {
     return (
       <div className="px-2 py-1.5">

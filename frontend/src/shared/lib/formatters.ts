@@ -5,7 +5,7 @@
  * All Hebrew strings and RTL-aware
  */
 
-import type { OptimizationSummaryResponse } from "@/lib/types";
+import type { OptimizationSummaryResponse } from "@/shared/types/api";
 
 /* ── Date & Time Formatting ── */
 

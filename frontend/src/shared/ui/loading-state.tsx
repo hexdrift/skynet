@@ -46,7 +46,6 @@ export function LoadingState({ variant, rows = 3, className = "" }: LoadingState
     );
   }
 
-  // table variant (default)
   return (
     <div className={`space-y-2 ${className}`}>
       {Array.from({ length: rows }).map((_, i) => (

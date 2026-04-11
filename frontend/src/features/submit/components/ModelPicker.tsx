@@ -3,9 +3,9 @@
 import * as React from "react";
 import { Check, ChevronDown, Search, Loader2, RefreshCw } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { getModelCatalog, cachedCatalog, discoverModels } from "@/lib/model-catalog";
-import type { CatalogModel, CatalogProvider } from "@/lib/types";
+import { cn } from "@/shared/lib/utils";
+import { getModelCatalog, cachedCatalog, discoverModels } from "@/shared/lib/model-catalog";
+import type { CatalogModel, CatalogProvider } from "@/shared/types/api";
 
 interface ModelPickerProps {
   value: string;
@@ -72,7 +72,6 @@ export function ModelPicker({
     };
   }, [catalog]);
 
-  // Discover models from base_url
   const runDiscover = React.useCallback(async () => {
     if (!discoverUrl) {
       setDiscovered([]);
@@ -105,7 +104,6 @@ export function ModelPicker({
     return () => clearTimeout(t);
   }, [discoverUrl, runDiscover]);
 
-  // Close on click-outside
   React.useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -115,7 +113,6 @@ export function ModelPicker({
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  // Focus search when opening
   React.useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
   }, [open]);
@@ -126,7 +123,6 @@ export function ModelPicker({
       ? staticModels.filter((m) => m.provider === providerFilter)
       : staticModels;
     if (discovered.length === 0) return filtered;
-    // Merge discovered into "custom" provider section
     const existingValues = new Set(filtered.map((m) => m.value));
     const discoveredEntries: EnrichedModel[] = discovered
       .filter((id) => !existingValues.has(id))
@@ -149,7 +145,6 @@ export function ModelPicker({
     );
   }, [allModels, query]);
 
-  // Group by provider
   const grouped = React.useMemo(() => {
     const groups = new Map<string, EnrichedModel[]>();
     for (const m of filtered) {

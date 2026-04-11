@@ -1,9 +1,4 @@
-/**
- * Dashboard feature — public API.
- *
- * The page lives in `app/page.tsx`; this module exposes the pure helpers,
- * status badge renderers, and constants it consumes.
- */
+export { DashboardView } from "./components/DashboardView";
 export { PAGE_SIZE, STATUS_COLORS } from "./constants";
 export {
   formatElapsed,

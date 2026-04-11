@@ -3,7 +3,7 @@
  * Re-exports for convenient importing
  */
 
-export { TutorialOverlay } from "./tutorial-overlay";
-export { TutorialMenu } from "./tutorial-menu";
-export { TutorialPopover } from "./tutorial-popover";
-export { SpotlightMask } from "./spotlight-mask";
+export { TutorialOverlay } from "./components/tutorial-overlay";
+export { TutorialMenu } from "./components/tutorial-menu";
+export { TutorialPopover } from "./components/tutorial-popover";
+export { SpotlightMask } from "./components/spotlight-mask";

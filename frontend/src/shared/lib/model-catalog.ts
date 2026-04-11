@@ -1,7 +1,7 @@
 /* Model catalog client — fires a single fetch on module load and caches forever.
  * Also persists to localStorage for instant availability on subsequent visits.
  */
-import type { ModelCatalogResponse, DiscoverModelsResponse } from "./types";
+import type { ModelCatalogResponse, DiscoverModelsResponse } from "@/shared/types/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const LS_KEY = "skynet:model-catalog";

@@ -23,28 +23,22 @@ function tableRow(y: number, w: number): Bone[] {
 /* ── Desktop ── */
 const dW = 960;
 const desktopBones: Bone[] = [
-  // Eval summary bar
   bone(0, 0, dW, 72, 16, true),
   bone(dW - 16, 14, -140, 14, 4),
   bone(dW - 16, 36, -200, 10, 4),
   bone(16, 52, dW - 32, 8, 4), // gradient bar
 
-  // Split tabs
   bone(0, 88, dW, 36, 8, true),
   bone(16, 96, 60, 18, 4),
   bone(92, 96, 60, 18, 4),
   bone(168, 96, 60, 18, 4),
   bone(244, 96, 60, 18, 4),
 
-  // Row count
   bone(dW - 80, 140, 64, 12, 4),
 
-  // Table container
   bone(0, 160, dW, 340, 12, true),
-  // Header row
   bone(16, 176, dW - 32, 28, 4, true),
 
-  // Data rows
   ...tableRow(220, dW),
   ...tableRow(252, dW),
   ...tableRow(284, dW),

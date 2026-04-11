@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { useReducer, useEffect, useCallback, createContext, useContext } from "react";
-import type { TutorialTrack } from "@/lib/tutorial-steps";
-import { getTrack } from "@/lib/tutorial-steps";
+import type { TutorialTrack } from "@/features/tutorial/lib/steps";
+import { getTrack } from "@/features/tutorial/lib/steps";
 
 /* ═══════════════════════════════════════════════════════════
    State Shape

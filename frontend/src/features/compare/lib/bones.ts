@@ -14,14 +14,11 @@ const dW = 1000;
 const halfW = (dW - 16) / 2;
 
 const desktopBones: Bone[] = [
-  // Breadcrumb
   bone(dW - 100, 0, 48, 14, 4),
   bone(dW - 170, 0, 56, 14, 4),
 
-  // Title
   bone(dW - 200, 32, 180, 24, 4),
 
-  // Left card
   bone(0, 72, halfW, 180, 12, true),
   bone(halfW - 16, 88, -200, 16, 4),
   bone(halfW - 16, 114, -60, 40, 4),
@@ -29,7 +26,6 @@ const desktopBones: Bone[] = [
   bone(halfW - 16, 186, -100, 12, 4),
   bone(halfW - 16, 208, -80, 12, 4),
 
-  // Right card
   bone(halfW + 16, 72, halfW, 180, 12, true),
   bone(halfW + 16 + halfW - 16, 88, -200, 16, 4),
   bone(halfW + 16 + halfW - 16, 114, -60, 40, 4),
@@ -37,7 +33,6 @@ const desktopBones: Bone[] = [
   bone(halfW + 16 + halfW - 16, 186, -100, 12, 4),
   bone(halfW + 16 + halfW - 16, 208, -80, 12, 4),
 
-  // Comparison table
   bone(0, 276, dW, 220, 12, true),
   bone(16, 292, dW - 32, 28, 4, true),
   bone(16, 336, dW * 0.3, 14, 4),
@@ -64,7 +59,6 @@ const mobileBones: Bone[] = [
   bone(mW - 136, 0, 44, 12, 4),
   bone(mW - 160, 24, 140, 20, 4),
 
-  // Stacked cards
   bone(0, 56, mW, 150, 12, true),
   bone(mW - 12, 68, -160, 14, 4),
   bone(mW - 12, 92, -50, 32, 4),

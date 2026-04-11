@@ -6,7 +6,7 @@
  * Works even for users with zero optimizations.
  */
 
-import { resetDemoSimulation } from "./tutorial-demo-data";
+import { resetDemoSimulation } from "./demo-data";
 
 export type TutorialTrack = "deep-dive";
 
@@ -32,7 +32,7 @@ export interface TutorialTrackDefinition {
 
 /* ── Navigation helpers ── */
 
-import { callTutorialHook, hasTutorialHook, setTutorialNavigating } from "./tutorial-bridge";
+import { callTutorialHook, hasTutorialHook, setTutorialNavigating } from "./bridge";
 
 function navigateTo(path: string) {
   // Prefer in-app client navigation via the tutorial-overlay hook.
@@ -151,9 +151,6 @@ function injectSampleDataset() {
    ═══════════════════════════════════════════════════════════ */
 
 const tutorialSteps: TutorialStep[] = [
-  // ══════════════════════════════════════
-  // Dashboard (4 steps)
-  // ══════════════════════════════════════
   {
     id: "dd-kpis",
     title: "מדדים מרכזיים",
@@ -212,11 +209,7 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 5,
   },
 
-  // ══════════════════════════════════════
-  // Submit wizard — sequential step order
-  // ══════════════════════════════════════
 
-  // ── Stepper overview ──
   {
     id: "dd-stepper",
     title: "טופס הגשה",
@@ -231,7 +224,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 4,
   },
 
-  // ── Step 1: Basics ──
   {
     id: "dd-basics",
     title: "פרטים בסיסיים",
@@ -247,7 +239,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 5,
   },
 
-  // ── Step 2: Dataset ──
   {
     id: "dd-data-upload",
     title: "העלאת דאטאסט",
@@ -279,7 +270,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 7,
   },
 
-  // ── Step 3: Model & Optimizer ──
   {
     id: "dd-module",
     title: "מודול",
@@ -323,7 +313,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 7,
   },
 
-  // ── Step 4: Code ──
   {
     id: "dd-signature",
     title: "חתימה",
@@ -353,7 +342,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 8,
   },
 
-  // ── Step 5: Parameters ──
   {
     id: "dd-splits",
     title: "חלוקת נתונים",
@@ -413,7 +401,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 16,
   },
 
-  // ── Step 6: Review & Submit ──
   {
     id: "dd-review",
     title: "סקירה",
@@ -444,9 +431,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 8,
   },
 
-  // ══════════════════════════════════════
-  // Optimization detail page (demo simulation)
-  // ══════════════════════════════════════
   {
     id: "dd-detail-header",
     title: "דף תוצאות",
@@ -565,7 +549,6 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 7,
   },
 
-  // ── Done ──
   {
     id: "dd-done",
     title: "זהו!",

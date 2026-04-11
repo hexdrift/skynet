@@ -5,12 +5,12 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTutorialContext } from "./tutorial-provider";
-import { getTrack } from "@/lib/tutorial-steps";
+import { getTrack } from "@/features/tutorial/lib/steps";
 import { SpotlightMask } from "./spotlight-mask";
 import { TutorialPopover } from "./tutorial-popover";
-import { AnimatedWordmark } from "@/components/animated-wordmark";
-import { DEMO_OPTIMIZATION_ID } from "@/lib/tutorial-demo-data";
-import { isTutorialNavigating, registerTutorialHook } from "@/lib/tutorial-bridge";
+import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
+import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial/lib/demo-data";
+import { isTutorialNavigating, registerTutorialHook } from "@/features/tutorial/lib/bridge";
 
 export function TutorialOverlay() {
   const { state, currentStep, nextStep, prevStep, exitTutorial, completeTrack, toggleAutoPlay } =
@@ -112,7 +112,6 @@ export function TutorialOverlay() {
     setPopoverPosition(calculatePosition(rect, currentStep.placement || "auto"));
   }, [currentStep, calculatePosition]);
 
-  // Smooth position tracking via rAF
   const trackPosition = React.useCallback(() => {
     updatePositions();
     rafRef.current = requestAnimationFrame(trackPosition);
@@ -149,7 +148,6 @@ export function TutorialOverlay() {
     };
   }, [state.isVisible, currentStep, trackPosition]);
 
-  // Auto-advance timer when auto-playing
   React.useEffect(() => {
     if (!stepReady || !state.isAutoPlaying || !currentStep) return;
     const track = state.activeTrack ? getTrack(state.activeTrack) : null;
@@ -182,7 +180,6 @@ export function TutorialOverlay() {
     }
   }, [exitTutorial, router]);
 
-  // Keyboard navigation
   React.useEffect(() => {
     if (!state.isVisible) return;
 

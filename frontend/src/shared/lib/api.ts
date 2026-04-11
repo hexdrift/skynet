@@ -7,7 +7,7 @@ import type {
   OptimizationPayloadResponse,
   ServeInfoResponse,
   ServeResponse,
-} from "./types";
+} from "@/shared/types/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -33,7 +33,6 @@ const GET_CACHE_MS = 2000;
 function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
   const key = path;
 
-  // Return from cache if fresh
   const cached = _cache.get(key);
   if (cached && Date.now() - cached.ts < maxAge) {
     return Promise.resolve(cached.data as T);
@@ -129,6 +128,88 @@ export function listJobs(params?: {
   return cachedGet<PaginatedJobsResponse>(`/optimizations${qs ? `?${qs}` : ""}`);
 }
 
+export interface OptimizationCounts {
+  total: number;
+  pending: number;
+  validating: number;
+  running: number;
+  success: number;
+  failed: number;
+  cancelled: number;
+}
+
+export function getOptimizationCounts(username?: string) {
+  const q = new URLSearchParams();
+  if (username) q.set("username", username);
+  const qs = q.toString();
+  return cachedGet<OptimizationCounts>(`/optimizations/counts${qs ? `?${qs}` : ""}`);
+}
+
+export interface DashboardAnalyticsJob {
+  optimization_id: string;
+  name?: string | null;
+  optimizer_name?: string | null;
+  model_name?: string | null;
+  status: string;
+  baseline_test_metric?: number | null;
+  optimized_test_metric?: number | null;
+  metric_improvement?: number | null;
+  elapsed_seconds?: number | null;
+  dataset_rows?: number | null;
+  optimization_type?: string | null;
+  best_pair_label?: string | null;
+  created_at?: string | null;
+}
+
+export interface DashboardAnalytics {
+  filtered_total: number;
+  status_counts: Record<string, number>;
+  optimizer_counts: Record<string, number>;
+  job_type_counts: Record<string, number>;
+  model_usage: { name: string; value: number }[];
+  success_count: number;
+  failed_count: number;
+  running_count: number;
+  terminal_count: number;
+  success_rate: number;
+  avg_improvement: number | null;
+  avg_runtime_seconds: number | null;
+  total_dataset_rows: number;
+  total_pairs_run: number;
+  grid_search_count: number;
+  single_run_count: number;
+  best_improvement: number | null;
+  improvement_by_optimizer: { name: string; average: number; count: number }[];
+  runtime_minutes_by_optimizer: { name: string; average: number; count: number }[];
+  top_improvement: DashboardAnalyticsJob[];
+  runtime_distribution: DashboardAnalyticsJob[];
+  dataset_vs_improvement: DashboardAnalyticsJob[];
+  efficiency: DashboardAnalyticsJob[];
+  top_jobs_by_improvement: DashboardAnalyticsJob[];
+  timeline: { date: string; count: number }[];
+  available_optimizers: string[];
+  available_models: string[];
+}
+
+export function getDashboardAnalytics(params?: {
+  username?: string;
+  optimizer?: string;
+  model?: string;
+  status?: string;
+  optimization_id?: string;
+  date?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.username) q.set("username", params.username);
+  if (params?.optimizer) q.set("optimizer", params.optimizer);
+  if (params?.model) q.set("model", params.model);
+  if (params?.status) q.set("status", params.status);
+  if (params?.optimization_id) q.set("optimization_id", params.optimization_id);
+  if (params?.date) q.set("date", params.date);
+  const qs = q.toString();
+  return cachedGet<DashboardAnalytics>(`/analytics/dashboard${qs ? `?${qs}` : ""}`);
+}
+
 export function getJob(optimizationId: string) {
   return cachedGet<OptimizationStatusResponse>(`/optimizations/${optimizationId}`, 1000);
 }
@@ -138,7 +219,7 @@ export function getOptimizationPayload(optimizationId: string) {
 }
 
 export function getOptimizationDataset(optimizationId: string) {
-  return request<import("./types").OptimizationDatasetResponse>(
+  return request<import("@/shared/types/api").OptimizationDatasetResponse>(
     `/optimizations/${optimizationId}/dataset`,
   );
 }
@@ -148,7 +229,7 @@ export function evaluateExamples(
   indices: number[],
   programType: "optimized" | "baseline",
 ) {
-  return request<{ results: import("./types").EvalExampleResult[]; program_type: string }>(
+  return request<{ results: import("@/shared/types/api").EvalExampleResult[]; program_type: string }>(
     `/optimizations/${optimizationId}/evaluate-examples`,
     {
       method: "POST",
@@ -159,8 +240,8 @@ export function evaluateExamples(
 
 export function getTestResults(optimizationId: string) {
   return request<{
-    baseline: import("./types").EvalExampleResult[];
-    optimized: import("./types").EvalExampleResult[];
+    baseline: import("@/shared/types/api").EvalExampleResult[];
+    optimized: import("@/shared/types/api").EvalExampleResult[];
   }>(`/optimizations/${optimizationId}/test-results`);
 }
 
@@ -178,6 +259,18 @@ export async function deleteJob(optimizationId: string) {
     `/optimizations/${optimizationId}`,
     { method: "DELETE" },
   );
+  invalidateCache("/optimizations");
+  return res;
+}
+
+export async function bulkDeleteJobs(optimizationIds: string[]) {
+  const res = await request<{
+    deleted: string[];
+    skipped: { optimization_id: string; reason: string }[];
+  }>("/optimizations/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ optimization_ids: optimizationIds }),
+  });
   invalidateCache("/optimizations");
   return res;
 }
@@ -217,11 +310,11 @@ export async function toggleArchiveOptimization(optimizationId: string) {
 export function validateCode(payload: {
   signature_code?: string;
   metric_code?: string;
-  column_mapping: import("./types").ColumnMapping;
+  column_mapping: import("@/shared/types/api").ColumnMapping;
   sample_row: Record<string, unknown>;
   optimizer_name?: string;
 }) {
-  return request<import("./types").ValidateCodeResponse>("/validate-code", {
+  return request<import("@/shared/types/api").ValidateCodeResponse>("/validate-code", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -230,11 +323,11 @@ export function validateCode(payload: {
 /* ── System Status ── */
 
 export function getQueueStatus() {
-  return cachedGet<import("./types").QueueStatusResponse>("/queue", 5000);
+  return cachedGet<import("@/shared/types/api").QueueStatusResponse>("/queue", 5000);
 }
 
 export function getHealth() {
-  return request<import("./types").HealthResponse>("/health");
+  return request<import("@/shared/types/api").HealthResponse>("/health");
 }
 
 /* ── Sidebar (lightweight) ── */
@@ -277,8 +370,8 @@ export function getPairServeInfo(optimizationId: string, pairIndex: number) {
 
 export function getPairTestResults(optimizationId: string, pairIndex: number) {
   return request<{
-    baseline: import("./types").EvalExampleResult[];
-    optimized: import("./types").EvalExampleResult[];
+    baseline: import("@/shared/types/api").EvalExampleResult[];
+    optimized: import("@/shared/types/api").EvalExampleResult[];
   }>(`/optimizations/${optimizationId}/pair/${pairIndex}/test-results`);
 }
 
@@ -474,15 +567,15 @@ export async function servePairProgramStream(
 
 /* ── Templates (with prefetch cache) ── */
 
-let _templatesCache: import("./types").TemplateResponse[] | null = null;
-let _templatesFlight: Promise<import("./types").TemplateResponse[]> | null = null;
+let _templatesCache: import("@/shared/types/api").TemplateResponse[] | null = null;
+let _templatesFlight: Promise<import("@/shared/types/api").TemplateResponse[]> | null = null;
 
-export function listTemplates(username?: string): Promise<import("./types").TemplateResponse[]> {
+export function listTemplates(username?: string): Promise<import("@/shared/types/api").TemplateResponse[]> {
   // Only cache the "all templates" call (no username filter)
   if (!username) {
     if (_templatesCache) return Promise.resolve(_templatesCache);
     if (_templatesFlight) return _templatesFlight;
-    _templatesFlight = request<import("./types").TemplateResponse[]>("/templates").then((r) => {
+    _templatesFlight = request<import("@/shared/types/api").TemplateResponse[]>("/templates").then((r) => {
       _templatesCache = r;
       _templatesFlight = null;
       return r;
@@ -490,7 +583,7 @@ export function listTemplates(username?: string): Promise<import("./types").Temp
     return _templatesFlight;
   }
   const q = `?username=${encodeURIComponent(username)}`;
-  return request<import("./types").TemplateResponse[]>(`/templates${q}`);
+  return request<import("@/shared/types/api").TemplateResponse[]>(`/templates${q}`);
 }
 
 /** Prefetch templates on module load so they're ready when submit page opens. */
@@ -506,7 +599,7 @@ export async function createTemplate(payload: {
   username: string;
   config: Record<string, unknown>;
 }) {
-  const result = await request<import("./types").TemplateResponse>("/templates", {
+  const result = await request<import("@/shared/types/api").TemplateResponse>("/templates", {
     method: "POST",
     body: JSON.stringify(payload),
   });

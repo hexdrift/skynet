@@ -6,7 +6,7 @@
  * Used when the tutorial navigates to /optimizations/tutorial-demo.
  */
 
-import type { OptimizationStatusResponse, ProgressEvent, OptimizationLogEntry } from "./types";
+import type { OptimizationStatusResponse, ProgressEvent, OptimizationLogEntry } from "@/shared/types/api";
 
 export const DEMO_OPTIMIZATION_ID = "a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b";
 
@@ -528,7 +528,6 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
 
   const set = (job: OptimizationStatusResponse) => setJob(() => job);
 
-  // Phase 1: Validating
   timers.push(
     setTimeout(() => {
       setLoading(false);
@@ -536,10 +535,8 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
     }, 400),
   );
 
-  // Phase 2: Splitting
   timers.push(setTimeout(() => set(buildSplitting(start)), 2000));
 
-  // Phase 3: Baseline
   timers.push(setTimeout(() => set(buildBaseline(start)), 3500));
 
   // Phase 4: Optimizing — trials appear one by one

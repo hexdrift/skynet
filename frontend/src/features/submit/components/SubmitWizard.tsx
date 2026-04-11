@@ -29,7 +29,6 @@ export function SubmitWizard() {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-8">
-      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <a href="/" className="hover:text-foreground transition-colors">
           לוח בקרה
@@ -38,10 +37,8 @@ export function SubmitWizard() {
         <span className="text-foreground font-medium">אופטימיזציה חדשה</span>
       </div>
 
-      {/* Step indicator — numbered circles with connecting lines */}
       <SubmitStepper w={w} />
 
-      {/* Animated step content */}
       <div className="relative overflow-hidden pt-[10px]" data-tutorial="submit-wizard">
         <AnimatePresence mode="wait" custom={w.direction}>
           <motion.div
@@ -58,7 +55,6 @@ export function SubmitWizard() {
         </AnimatePresence>
       </div>
 
-      {/* Navigation */}
       <SubmitNav w={w} />
 
       {/* Submit splash overlay — portal to body so it covers sidebar + header */}

@@ -12,11 +12,9 @@ function bone(x: number, y: number, w: number, h: number, r: number, container =
 /* ── Desktop (1280+) ── */
 const dW = 1000;
 const desktopBones: Bone[] = [
-  // Breadcrumb
   bone(dW - 120, 0, 60, 14, 4),
   bone(dW - 200, 0, 60, 14, 4),
 
-  // Header card
   bone(0, 32, dW, 140, 12, true),
   bone(dW - 24, 48, -300, 22, 4), // name (RTL aligned right)
   bone(dW - 340, 48, -72, 22, 11), // status badge
@@ -25,7 +23,6 @@ const desktopBones: Bone[] = [
   bone(dW - 24, 124, -60, 20, 8), // badge
   bone(dW - 100, 124, -80, 20, 4), // elapsed
 
-  // Score cards row
   bone(0, 192, 220, 90, 12, true),
   bone(16, 208, 80, 12, 4),
   bone(16, 232, 120, 28, 4),
@@ -38,14 +35,12 @@ const desktopBones: Bone[] = [
   bone(488, 208, 80, 12, 4),
   bone(488, 232, 120, 28, 4),
 
-  // Tabs
   bone(0, 304, dW, 44, 8, true),
   bone(16, 316, 80, 18, 4),
   bone(112, 316, 80, 18, 4),
   bone(208, 316, 80, 18, 4),
   bone(304, 316, 80, 18, 4),
 
-  // Content area
   bone(0, 368, dW, 300, 12, true),
   bone(16, 384, dW - 32, 16, 4),
   bone(16, 416, dW - 100, 14, 4),
@@ -59,11 +54,9 @@ const desktopBones: Bone[] = [
 /* ── Mobile (375) ── */
 const mW = 343;
 const mobileBones: Bone[] = [
-  // Breadcrumb
   bone(mW - 100, 0, 50, 12, 4),
   bone(mW - 160, 0, 50, 12, 4),
 
-  // Header card
   bone(0, 28, mW, 120, 12, true),
   bone(mW - 16, 40, -200, 18, 4),
   bone(mW - 230, 40, -56, 18, 11),
@@ -72,7 +65,6 @@ const mobileBones: Bone[] = [
   bone(mW - 16, 104, -50, 16, 8),
   bone(mW - 80, 104, -60, 16, 4),
 
-  // Score cards (stacked 2 col)
   bone(0, 164, (mW - 8) / 2, 80, 12, true),
   bone(16, 178, 60, 10, 4),
   bone(16, 198, 80, 22, 4),
@@ -81,13 +73,11 @@ const mobileBones: Bone[] = [
   bone((mW + 8) / 2 + 16, 178, 60, 10, 4),
   bone((mW + 8) / 2 + 16, 198, 80, 22, 4),
 
-  // Tabs
   bone(0, 260, mW, 40, 8, true),
   bone(16, 272, 60, 14, 4),
   bone(88, 272, 60, 14, 4),
   bone(160, 272, 60, 14, 4),
 
-  // Content area
   bone(0, 316, mW, 240, 12, true),
   bone(16, 330, mW - 32, 14, 4),
   bone(16, 358, mW - 60, 12, 4),
