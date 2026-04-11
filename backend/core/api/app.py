@@ -58,23 +58,29 @@ _SCALAR_CUSTOM_CSS = """
 /* Hide Generate/Connect MCP sidebar block — no-op in air-gapped mode */
 .scalar-mcp-layer { display: none !important; }
 
-/* Hide the version + OAS chips from the introduction section */
-.introduction-section .badge { display: none !important; }
-
-/* Render the Skynet logo next to the API title */
+/* Hide the version + OAS chips and the "Skynet" h1 from the intro */
+.introduction-section .badge,
 .introduction-section .section-header-label {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  display: none !important;
 }
-.introduction-section .section-header-label::before {
+
+/* Place the Skynet logo in the top-left of the Scalar toolbar.
+   The toolbar is `relative` and `h-10`, so absolute positioning
+   anchors the logo regardless of the centered toolbar contents. */
+.api-reference-toolbar {
+  position: relative;
+}
+.api-reference-toolbar::before {
   content: '';
-  display: inline-block;
-  width: 56px;
-  height: 56px;
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
   background: url('/scalar-static/skynet_logo.svg') no-repeat center center;
   background-size: contain;
-  flex-shrink: 0;
+  pointer-events: none;
 }
 
 /* Skynet warm-beige light theme to match the main app */
