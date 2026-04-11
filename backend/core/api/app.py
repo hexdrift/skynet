@@ -321,25 +321,16 @@ def create_app(
     # ── Domain routers ──
     # Every route except /health and /queue lives in a sub-module under
     # routers/. Each exposes a create_<domain>_router factory returning an
-    # APIRouter wired up with the dependencies it needs. Tags are applied
-    # here so the OpenAPI spec (and Scalar) groups routes consistently
-    # without touching the router files themselves.
-    app.include_router(create_models_router(), tags=["Models"])
-    app.include_router(create_code_validation_router(), tags=["Code Validation"])
+    # APIRouter wired up with the dependencies it needs.
+    app.include_router(create_models_router())
+    app.include_router(create_code_validation_router())
+    app.include_router(create_submissions_router(service=service, job_store=job_store))
+    app.include_router(create_analytics_router(job_store=job_store))
     app.include_router(
-        create_submissions_router(service=service, job_store=job_store),
-        tags=["Optimizations"],
+        create_optimizations_router(job_store=job_store, get_worker_ref=lambda: worker)
     )
-    app.include_router(create_analytics_router(job_store=job_store), tags=["Analytics"])
-    app.include_router(
-        create_optimizations_router(job_store=job_store, get_worker_ref=lambda: worker),
-        tags=["Optimizations"],
-    )
-    app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
-    app.include_router(create_templates_router(job_store=job_store), tags=["Templates"])
-    app.include_router(
-        create_optimizations_meta_router(job_store=job_store),
-        tags=["Optimizations"],
-    )
+    app.include_router(create_serve_router(job_store=job_store))
+    app.include_router(create_templates_router(job_store=job_store))
+    app.include_router(create_optimizations_meta_router(job_store=job_store))
 
     return app
