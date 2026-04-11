@@ -148,7 +148,11 @@ def create_app(
             document_download_type=DocumentDownloadType.NONE,
             persist_auth=True,
             default_open_all_tags=False,
-            dark_mode=True,
+            dark_mode=False,
+            # Hide Scalar's "Generate MCP" / "Connect MCP" sidebar block.
+            # scalar-fastapi has no dedicated flag for this yet, and the
+            # MCP feature has no use in an air-gapped deployment.
+            custom_css=".scalar-mcp-layer { display: none !important; }",
         )
 
     allowed_origins = os.getenv(
