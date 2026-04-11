@@ -50,6 +50,60 @@ logger = logging.getLogger(__name__)
 
 _SCALAR_STATIC_DIR = Path(__file__).parent / "static" / "scalar"
 
+# Custom CSS for Scalar that (a) hides UI chrome we don't want in an
+# air-gapped deployment, (b) renders the Skynet logo next to the API
+# title, and (c) retints the reference in the same warm beige/brown
+# palette as the main app (see frontend/src/app/globals.css light mode).
+_SCALAR_CUSTOM_CSS = """
+/* Hide Generate/Connect MCP sidebar block — no-op in air-gapped mode */
+.scalar-mcp-layer { display: none !important; }
+
+/* Hide the version + OAS chips from the introduction section */
+.introduction-section .badge { display: none !important; }
+
+/* Render the Skynet logo next to the API title */
+.introduction-section .section-header-label {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.introduction-section .section-header-label::before {
+  content: '';
+  display: inline-block;
+  width: 56px;
+  height: 56px;
+  background: url('/scalar-static/skynet_logo.svg') no-repeat center center;
+  background-size: contain;
+  flex-shrink: 0;
+}
+
+/* Skynet warm-beige light theme to match the main app */
+.light-mode {
+  --scalar-background-1: #faf8f5;
+  --scalar-background-2: #f5f1ec;
+  --scalar-background-3: #f0ebe4;
+  --scalar-background-accent: #ede7dd;
+  --scalar-background-card: #ffffff;
+  --scalar-color-1: #1c1612;
+  --scalar-color-2: #5c4f42;
+  --scalar-color-3: #8c7a6b;
+  --scalar-color-accent: #3d2e22;
+  --scalar-border-color: #ddd6cc;
+}
+.light-mode .t-doc__sidebar {
+  --scalar-sidebar-background-1: #f5f1ec;
+  --scalar-sidebar-item-hover-background: #ede7dd;
+  --scalar-sidebar-item-active-background: #e3dcd0;
+  --scalar-sidebar-border-color: #ddd6cc;
+  --scalar-sidebar-color-1: #1c1612;
+  --scalar-sidebar-color-2: #8c7a6b;
+  --scalar-sidebar-color-active: #3d2e22;
+  --scalar-sidebar-search-background: #ffffff;
+  --scalar-sidebar-search-border-color: #ddd6cc;
+  --scalar-sidebar-search--color: #8c7a6b;
+}
+"""
+
 _OPENAPI_TAGS = [
     {"name": "Optimizations", "description": "Submit, list, inspect, and manage DSPy optimization jobs."},
     {"name": "Inference", "description": "Run inference against an optimized program."},
@@ -150,29 +204,7 @@ def create_app(
             persist_auth=True,
             default_open_all_tags=False,
             dark_mode=False,
-            custom_css=(
-                # Hide Scalar's "Generate MCP" / "Connect MCP" sidebar block.
-                # scalar-fastapi has no dedicated flag for this, and the MCP
-                # feature has no use in an air-gapped deployment.
-                ".scalar-mcp-layer { display: none !important; }"
-                # Render the Skynet logo next to the API title in the
-                # introduction header. The ::before pseudo-element on the h1
-                # label is a flex item sized to match the text height.
-                ".introduction-section .section-header-label {"
-                "  display: flex;"
-                "  align-items: center;"
-                "  gap: 16px;"
-                "}"
-                ".introduction-section .section-header-label::before {"
-                "  content: '';"
-                "  display: inline-block;"
-                "  width: 56px;"
-                "  height: 56px;"
-                "  background: url('/scalar-static/skynet_logo.svg') no-repeat center center;"
-                "  background-size: contain;"
-                "  flex-shrink: 0;"
-                "}"
-            ),
+            custom_css=_SCALAR_CUSTOM_CSS,
         )
 
     allowed_origins = os.getenv(
