@@ -3,10 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 
-class ServiceError(RuntimeError):
-    """Raised when the service_gateway cannot fulfill a request."""
-
-
 # ── Phase 1: Exception Hierarchy ──
 # Domain exceptions that map to HTTP status codes.
 # Services raise these instead of HTTPException for clean separation of concerns.
@@ -35,6 +31,18 @@ class AppError(Exception):
         self.status_code = status_code
         self.error_code = error_code
         self.details = details or {}
+
+
+class ServiceError(AppError):
+    """Raised when the service_gateway cannot fulfill a request."""
+    
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(
+            message,
+            status_code=500,
+            error_code="SERVICE_ERROR",
+            details=details,
+        )
 
 
 class NotFoundError(AppError):
