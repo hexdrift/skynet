@@ -50,6 +50,43 @@ logger = logging.getLogger(__name__)
 
 _SCALAR_STATIC_DIR = Path(__file__).parent / "static" / "scalar"
 
+# Routes that should be hidden from the *public* API reference shown by
+# Scalar. These are still live and still in /openapi.json — the filter
+# is applied only to the copy served at /openapi.public.json, which is
+# what Scalar fetches. The cut is aimed at developers integrating with
+# Skynet: submit jobs, poll, download artifacts, run inference, done.
+# Hidden routes fall into three categories:
+#   1. Frontend plumbing (sidebar lists, SSE streams, dataset reshuffle,
+#      code formatter, analytics dashboards, template CRUD)
+#   2. Redundant per-example readers whose data is already in
+#      /optimizations/{id} and /optimizations/{id}/grid-result
+#   3. Dashboard-only mutations (rename, pin, archive toggles, per-user
+#      evaluate-examples playground)
+_SCALAR_HIDDEN_PATHS = frozenset({
+    "/optimizations/sidebar",
+    "/optimizations/stream",
+    "/optimizations/{optimization_id}/stream",
+    "/optimizations/{optimization_id}/dataset",
+    "/optimizations/{optimization_id}/test-results",
+    "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
+    "/optimizations/{optimization_id}/payload",
+    "/optimizations/{optimization_id}/evaluate-examples",
+    "/optimizations/{optimization_id}/name",
+    "/optimizations/{optimization_id}/pin",
+    "/optimizations/{optimization_id}/archive",
+    "/serve/{optimization_id}/stream",
+    "/serve/{optimization_id}/pair/{pair_index}/stream",
+    "/analytics/summary",
+    "/analytics/optimizers",
+    "/analytics/models",
+    "/models/discover",
+    "/format-code",
+    "/validate-code",
+    "/templates",
+    "/templates/{template_id}",
+    "/queue",
+})
+
 # Custom CSS for Scalar that (a) hides UI chrome we don't want in an
 # air-gapped deployment, (b) renders the Skynet logo next to the API
 # title, and (c) retints the reference in the same warm beige/brown
@@ -321,10 +358,39 @@ def create_app(
         name="scalar-static",
     )
 
+    @app.get("/openapi.public.json", include_in_schema=False)
+    async def public_openapi() -> JSONResponse:
+        """Filtered copy of /openapi.json for the public API reference.
+
+        Strips routes listed in ``_SCALAR_HIDDEN_PATHS`` (frontend plumbing,
+        SSE streams, dashboard mutations, etc.) and prunes any OpenAPI
+        tag groups that become empty after filtering. The underlying
+        ``/openapi.json`` remains unchanged so FastAPI's own /docs and
+        any existing consumers that rely on the full schema keep working.
+        """
+        from copy import deepcopy
+        base = app.openapi()
+        spec = deepcopy(base)
+        paths = spec.get("paths", {})
+        for path in list(paths.keys()):
+            if path in _SCALAR_HIDDEN_PATHS:
+                del paths[path]
+        used_tags: set[str] = set()
+        for methods in paths.values():
+            if not isinstance(methods, dict):
+                continue
+            for op in methods.values():
+                if isinstance(op, dict):
+                    for tag in op.get("tags", []):
+                        used_tags.add(tag)
+        if "tags" in spec:
+            spec["tags"] = [t for t in spec["tags"] if t.get("name") in used_tags]
+        return JSONResponse(spec)
+
     @app.get("/scalar", include_in_schema=False)
     async def scalar_docs() -> HTMLResponse:
         base = get_scalar_api_reference(
-            openapi_url=app.openapi_url,
+            openapi_url="/openapi.public.json",
             title=f"{app.title} API",
             scalar_favicon_url="/scalar-static/favicon.svg",
             scalar_js_url="/scalar-static/standalone.js",
