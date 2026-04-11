@@ -175,16 +175,13 @@
     var aspectRatio = TOTAL_WIDTH / 92;
     var svgWidth = Math.round(SIZE * aspectRatio);
 
-    var wrap = document.createElement("a");
+    // Wordmark is non-interactive on its own — parent containers
+    // (toolbar brand button, sidebar home link) handle click behavior.
+    var wrap = document.createElement("span");
     wrap.className = "skynet-wordmark";
     wrap.setAttribute("role", "img");
     wrap.setAttribute("aria-label", "SKYNET");
     wrap.setAttribute("dir", "ltr");
-    wrap.href = "#";
-    wrap.addEventListener("click", function (e) {
-      e.preventDefault();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
 
     var svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("width", svgWidth);
@@ -241,10 +238,15 @@
   }
 
   // ── Sidebar collapse toggle ────────────────────────────────────────────
-  // A small icon button we mount alongside the wordmark that toggles
-  // sidebar visibility via a data attribute on <html>. Actual show/hide
-  // is handled by the CSS rules in _SCALAR_CUSTOM_CSS. State persists
-  // across reloads in localStorage. Default is hidden.
+  // Inspired by chatgpt.com: the wordmark doubles as the "open sidebar"
+  // button while the sidebar is collapsed. Hovering the toolbar brand
+  // fades the wordmark out and reveals a sidebar-toggle icon in its
+  // place (click to open). When the sidebar is open, the wordmark is
+  // hidden from the toolbar and re-mounted inside a sidebar header,
+  // paired with a close button on the right.
+  //
+  // State is persisted in localStorage under skynet-scalar-sidebar.
+  // Default on first visit is hidden.
 
   var SIDEBAR_STORAGE_KEY = "skynet-scalar-sidebar";
 
@@ -269,28 +271,87 @@
     document.documentElement.dataset.skynetSidebar = state;
   }
 
-  function createSidebarToggle() {
+  function toggleSidebar() {
+    var current = document.documentElement.dataset.skynetSidebar === "visible";
+    var next = current ? "hidden" : "visible";
+    applySidebarState(next);
+    writeSidebarState(next);
+  }
+
+  function createSidebarIcon() {
+    // Rounded rectangle with a vertical divider near the left edge —
+    // the same visual language as chatgpt.com and VS Code's sidebar icon.
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "20");
+    svg.setAttribute("height", "20");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.7");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+
+    var rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", "3");
+    rect.setAttribute("y", "3");
+    rect.setAttribute("width", "18");
+    rect.setAttribute("height", "18");
+    rect.setAttribute("rx", "2");
+    svg.appendChild(rect);
+
+    var line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", "9");
+    line.setAttribute("y1", "3");
+    line.setAttribute("x2", "9");
+    line.setAttribute("y2", "21");
+    svg.appendChild(line);
+
+    return svg;
+  }
+
+  function createToolbarBrand() {
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "skynet-sidebar-toggle";
-    btn.setAttribute("aria-label", "Toggle sidebar");
-    btn.title = "Toggle sidebar";
-    // Simple two-panel icon — left bar is the sidebar, right bar is content.
-    btn.innerHTML =
-      '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" ' +
-      'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
-      'stroke-linejoin="round">' +
-      '<rect x="2.5" y="4" width="15" height="12" rx="1.5"/>' +
-      '<line x1="8" y1="4" x2="8" y2="16"/>' +
-      "</svg>";
+    btn.className = "skynet-toolbar-brand";
+    btn.setAttribute("aria-label", "Open sidebar");
+    btn.title = "Open sidebar";
 
-    btn.addEventListener("click", function () {
-      var current = document.documentElement.dataset.skynetSidebar === "visible";
-      var next = current ? "hidden" : "visible";
-      applySidebarState(next);
-      writeSidebarState(next);
-    });
+    btn.appendChild(createWordmark());
+
+    var icon = createSidebarIcon();
+    icon.classList.add("skynet-toolbar-icon");
+    btn.appendChild(icon);
+
+    btn.addEventListener("click", toggleSidebar);
     return btn;
+  }
+
+  function createSidebarHeader() {
+    var header = document.createElement("div");
+    header.className = "skynet-sidebar-header";
+
+    var home = document.createElement("a");
+    home.className = "skynet-sidebar-home";
+    home.href = "#";
+    home.setAttribute("aria-label", "Scroll to top");
+    home.appendChild(createWordmark());
+    home.addEventListener("click", function (e) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    header.appendChild(home);
+
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "skynet-sidebar-close";
+    close.setAttribute("aria-label", "Close sidebar");
+    close.title = "Close sidebar";
+    close.appendChild(createSidebarIcon());
+    close.addEventListener("click", toggleSidebar);
+    header.appendChild(close);
+
+    return header;
   }
 
   // Apply the saved (or default) state as early as possible so there's
@@ -299,18 +360,22 @@
 
   function mount() {
     var toolbar = document.querySelector(".api-reference-toolbar");
+    var sidebar = document.querySelector(".t-doc__sidebar");
     if (!toolbar) return false;
-    if (!toolbar.querySelector(".skynet-wordmark")) {
-      toolbar.appendChild(createWordmark());
+
+    if (!toolbar.querySelector(".skynet-toolbar-brand")) {
+      toolbar.appendChild(createToolbarBrand());
     }
-    if (!toolbar.querySelector(".skynet-sidebar-toggle")) {
-      toolbar.appendChild(createSidebarToggle());
+    if (sidebar && !sidebar.querySelector(".skynet-sidebar-header")) {
+      sidebar.insertBefore(createSidebarHeader(), sidebar.firstChild);
     }
-    return true;
+    // Require both mount points before we stop observing
+    return !!sidebar;
   }
 
   // Scalar renders the toolbar asynchronously after the bundle loads.
-  // Try immediately, then keep watching until the toolbar exists.
+  // Try immediately, then keep watching until the toolbar AND sidebar
+  // both exist.
   if (!mount()) {
     var observer = new MutationObserver(function () {
       if (mount()) observer.disconnect();
