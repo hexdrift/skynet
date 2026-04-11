@@ -91,25 +91,40 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
     """
     router = APIRouter()
 
-    @router.get("/optimizations", response_model=PaginatedJobsResponse)
+    @router.get(
+        "/optimizations",
+        response_model=PaginatedJobsResponse,
+        summary="List optimization jobs with filtering and pagination",
+    )
     def list_jobs(
-        status: Optional[str] = Query(default=None, description="Filter by job status"),
-        username: Optional[str] = Query(default=None, description="Filter by username"),
-        optimization_type: Optional[str] = Query(default=None, description="Filter by job type (run or grid_search)"),
-        limit: int = Query(default=50, ge=1, le=500, description="Max results"),
-        offset: int = Query(default=0, ge=0, description="Skip N results"),
+        status: Optional[str] = Query(default=None, description="Exact-match status filter: pending, validating, running, success, failed, cancelled"),
+        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this user"),
+        optimization_type: Optional[str] = Query(default=None, description="'run' (single optimization) or 'grid_search' (model-pair sweep)"),
+        limit: int = Query(default=50, ge=1, le=500, description="Page size; the per-user quota keeps total job counts bounded in practice"),
+        offset: int = Query(default=0, ge=0, description="Number of jobs to skip before returning; combine with limit for stable pagination"),
     ) -> PaginatedJobsResponse:
-        """List all jobs with optional filtering and pagination.
+        """Return a page of optimization jobs ordered by ``created_at`` descending.
 
-        Args:
-            status: Optional status filter.
-            username: Optional username filter.
-            optimization_type: Optional job type filter ('run' or 'grid_search').
-            limit: Maximum number of jobs to return.
-            offset: Number of jobs to skip.
+        This is the primary dashboard endpoint. Every job summary in the
+        response is a compact card (status, module, optimizer, model,
+        timing, latest metrics) built by ``build_summary``, not the full
+        result/artifact blob.
 
-        Returns:
-            PaginatedJobsResponse: Paginated jobs ordered by creation time (newest first).
+        Filter semantics:
+            - ``status``, ``username``, ``optimization_type`` combine with AND.
+            - ``status`` and ``optimization_type`` are validated server-side
+              against closed lists and return HTTP 422 with the allowed
+              values on mismatch.
+            - ``username`` is an exact string match — no wildcards.
+
+        Pagination: ``total`` in the response is the full count before
+        ``limit``/``offset`` are applied, so clients can render "showing 50
+        of 312" indicators. Ordering is stable as long as no new jobs are
+        inserted between pages; new submissions can push the window.
+
+        Response caching: a brief private cache is applied by the
+        app-level middleware when no status filter is set, since the
+        unfiltered dashboard view is the hottest path.
         """
         if status is not None and status not in _VALID_STATUSES:
             raise HTTPException(
@@ -126,16 +141,31 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         items = [build_summary(job_data) for job_data in rows]
         return PaginatedJobsResponse(items=items, total=total, limit=limit, offset=offset)
 
-    @router.get("/optimizations/sidebar", response_model=SidebarJobsResponse)
+    @router.get(
+        "/optimizations/sidebar",
+        response_model=SidebarJobsResponse,
+        summary="Compact job list tuned for sidebar navigation",
+    )
     def list_jobs_sidebar(
-        username: Optional[str] = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-        offset: int = Query(default=0, ge=0),
+        username: Optional[str] = Query(default=None, description="Restrict the list to a single user's jobs"),
+        limit: int = Query(default=50, ge=1, le=200, description="Page size; capped at 200 because the sidebar only renders a finite slice"),
+        offset: int = Query(default=0, ge=0, description="Number of jobs to skip before the returned slice"),
     ) -> SidebarJobsResponse:
-        """Lightweight job listing for sidebar navigation.
+        """Return a minimal per-job summary optimized for the left sidebar.
 
-        Returns only the minimal fields needed for the sidebar (no result
-        data, metrics, or logs). Much faster than the full /jobs endpoint.
+        Trimmed counterpart to ``GET /optimizations``: each item contains
+        only what the sidebar card needs to render — ID, status, display
+        name, optimizer, model, username, creation time, pin state, and
+        (for grid searches) total pair count.
+
+        No result payload, no metrics, no logs, no progress events. This
+        endpoint is safe to poll aggressively because the database query
+        hits the same table but avoids materializing the full summary
+        shape, and the response stays small regardless of how many jobs
+        the user has.
+
+        Ordering is newest-first. Pinned jobs are *not* reordered by this
+        endpoint — the UI handles the "pinned on top" sort client-side.
         """
         total = job_store.count_jobs(username=username)
         rows = job_store.list_jobs(username=username, limit=limit, offset=offset)
@@ -160,12 +190,31 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
     # ── Server-Sent Events (SSE) for real-time dashboard streaming ──
     # NOTE: Must be registered BEFORE /optimizations/{optimization_id} to avoid route shadowing.
 
-    @router.get("/optimizations/stream")
+    @router.get(
+        "/optimizations/stream",
+        summary="Stream live dashboard updates (all active jobs) as SSE",
+    )
     async def stream_dashboard():
-        """Stream dashboard-level updates via Server-Sent Events.
+        """Server-Sent Events feed that pushes a snapshot of every currently
+        active optimization every 3 seconds.
 
-        Sends a JSON event every 3 seconds with a summary of all active jobs.
-        Sends an 'idle' event and closes when no active jobs remain.
+        "Active" = in ``pending``, ``validating``, or ``running`` status.
+        Each snapshot includes a compact record per active job: ID,
+        status, display name, latest metrics, log count, and progress
+        count. The client uses this to animate dashboard cards in real
+        time without polling ``/optimizations`` repeatedly.
+
+        Event stream shape:
+            - ``data: {"active_jobs": [...], "active_count": N}``
+              Sent every 3 seconds while at least one job is active.
+            - ``event: idle`` → ``{"active_count": 0}``
+              Sent once when the last active job transitions to terminal,
+              after which the server closes the connection.
+
+        Because the response auto-closes on idle, long-running SPAs need
+        to reconnect whenever they transition from "some jobs running"
+        back to "jobs running again". The frontend hides this behind a
+        reconnecting EventSource wrapper.
         """
         import asyncio
         import json
@@ -208,20 +257,40 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             },
         )
 
-    @router.get("/optimizations/{optimization_id}", response_model=OptimizationStatusResponse)
+    @router.get(
+        "/optimizations/{optimization_id}",
+        response_model=OptimizationStatusResponse,
+        summary="Full job detail with logs, progress, metrics, and result",
+    )
     def get_job(optimization_id: str, request: Request) -> OptimizationStatusResponse:
-        """Return the status of a queued or running job.
+        """Return the complete state of a single optimization.
 
-        Supports conditional GET via ETag/If-None-Match for caching.
+        This is the richest endpoint for a specific job — it aggregates
+        status, overview fields (module, optimizer, model, mapping,
+        dataset metadata), timing (created/started/completed), elapsed
+        and estimated-remaining, latest metrics, all captured logs, all
+        progress events, and the final result (for run jobs) or grid
+        result (for grid-search jobs). The "Overview" tab of the job
+        detail view is built almost entirely from this response.
 
-        Args:
-            optimization_id: Identifier returned during submission.
+        Conditional GET:
+            The response includes an ``ETag`` derived from the job's
+            current status and the counts of logs, progress events, and
+            metrics. Clients can send ``If-None-Match`` with the last
+            ETag they saw; if nothing changed, the server returns HTTP
+            304 with no body. Terminal jobs are cached for 60 seconds;
+            active jobs for 1 second so the UI stays responsive.
 
-        Returns:
-            OptimizationStatusResponse: Current job metadata and latest metrics.
+        Grid-search handling:
+            For grid searches, the ``grid_result`` field is populated
+            even while the job is still running, so partial per-pair
+            output is visible before the whole sweep finishes. This is
+            different from ``result``, which is only set once a single
+            run has reached ``success``.
 
-        Raises:
-            HTTPException: If the job is not found.
+        Errors: HTTP 404 if the optimization ID is unknown. Corrupted
+        result data is tolerated — the endpoint logs a warning and
+        omits the offending section rather than 500ing.
         """
 
         try:
@@ -317,15 +386,26 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             headers=headers,
         )
 
-    @router.get("/optimizations/{optimization_id}/summary", response_model=OptimizationSummaryResponse)
+    @router.get(
+        "/optimizations/{optimization_id}/summary",
+        response_model=OptimizationSummaryResponse,
+        summary="Lightweight summary card for one optimization",
+    )
     def get_job_summary(optimization_id: str) -> OptimizationSummaryResponse:
-        """Return a coarse summary of job progress and metadata.
+        """Return the same compact card shape used by ``GET /optimizations``
+        but for a single specific ID.
 
-        Args:
-            optimization_id: Identifier for the job returned during submission.
+        Useful when a client already has the ID (e.g. just submitted a
+        job) and wants the dashboard-row representation without paying
+        for the full logs/progress/result payload returned by
+        ``GET /optimizations/{id}``.
 
-        Returns:
-            OptimizationSummaryResponse: Aggregated job metadata and timing information.
+        The returned summary includes counts for logs and progress events
+        (``log_count``, ``progress_count``) but not the events themselves —
+        clients who need to render logs should still call
+        ``/optimizations/{id}/logs``.
+
+        Returns HTTP 404 if the optimization doesn't exist.
         """
 
         try:
@@ -338,15 +418,37 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         job_data["log_count"] = job_store.get_log_count(optimization_id)
         return build_summary(job_data)
 
-    @router.get("/optimizations/{optimization_id}/dataset")
+    @router.get(
+        "/optimizations/{optimization_id}/dataset",
+        summary="Reconstruct the train/val/test split used by this optimization",
+    )
     def get_job_dataset(optimization_id: str) -> dict:
-        """Return the dataset rows grouped by split (train/val/test).
+        """Return the dataset exactly as it was split into train, validation,
+        and test partitions when the job ran.
 
-        Args:
-            optimization_id: Identifier for the job returned during submission.
+        The server does not store the splits directly — they're
+        reconstructed on demand by replaying the same algorithm
+        ``service_gateway.data`` uses: optional shuffle with a
+        deterministic seed, then slice by ``split_fractions.train`` /
+        ``.val`` / ``.test``. Passing ``shuffle=True`` with no seed at
+        submission time falls back to a seed derived from the
+        optimization ID, guaranteeing the splits are reproducible
+        regardless of when this endpoint is called.
 
-        Returns:
-            dict: Dataset rows partitioned into splits with metadata.
+        Response shape:
+            ``{"total_rows": N, "splits": {"train": [{"index": i, "row": {...}}],
+            "val": [...], "test": [...]}, "column_mapping": {...},
+            "split_counts": {...}}``
+
+        Each row carries its global ``index`` into the original dataset
+        so the UI can highlight which rows ended up in which split.
+        ``column_mapping`` is echoed to save the client a second fetch.
+
+        Errors:
+            - 404 if the optimization doesn't exist, or if it was
+              submitted without a dataset (very old jobs).
+            - 500 if the stored ``column_mapping`` fails validation —
+              this indicates data corruption.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -426,12 +528,44 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             },
         }
 
-    @router.post("/optimizations/{optimization_id}/evaluate-examples")
+    @router.post(
+        "/optimizations/{optimization_id}/evaluate-examples",
+        summary="Run the optimized or baseline program on specific dataset rows",
+    )
     def evaluate_examples(optimization_id: str, req: dict) -> dict:
-        """Evaluate examples using the actual metric function.
+        """Ad-hoc evaluation against arbitrary dataset rows using the stored
+        metric and program.
 
-        Body: { "indices": [0,1,...], "program_type": "optimized"|"baseline" }
-        Returns per-example results with predictions and metric scores.
+        Users can pick any row indices from the submitted dataset and get
+        back per-row predictions + metric scores, without having to
+        re-submit a whole optimization. This powers the "Try it on this
+        example" workflow in the job detail view.
+
+        Request body:
+            ``{"indices": [int, ...], "program_type": "optimized" | "baseline"}``
+
+            - ``indices``: global indices into the original dataset
+              (same numbering as ``GET /optimizations/{id}/dataset``).
+              Out-of-range indices are silently skipped rather than
+              erroring.
+            - ``program_type``: ``"optimized"`` (default) loads the
+              compiled program from the successful run. ``"baseline"``
+              re-constructs a fresh, unoptimized module from the stored
+              signature and module kwargs — useful for before/after
+              comparisons on the same examples.
+
+        Response:
+            ``{"results": [{"index": i, "outputs": {...}, "score": float,
+            "pass": bool, "error"?: str}, ...], "program_type": "..."}``
+
+            The metric score is always normalized to a float; ``pass``
+            is ``score > 0``. Rows where the program itself raises
+            include the exception message in ``error`` but still appear
+            in the list so UIs can render them.
+
+        Errors: 404 (optimization missing), 400 (no metric code stored,
+        no model config), 409 (no optimized program when
+        ``program_type="optimized"``).
         """
         import base64
         import pickle
@@ -567,13 +701,38 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
         return {"results": results, "program_type": program_type}
 
-    @router.get("/optimizations/{optimization_id}/test-results")
+    @router.get(
+        "/optimizations/{optimization_id}/test-results",
+        summary="Per-example baseline and optimized test scores",
+    )
     def get_test_results(optimization_id: str) -> dict:
-        """Return per-example test results stored during optimization.
+        """Return the test-set evaluation captured during optimization, split
+        into baseline and optimized rows for side-by-side comparison.
 
-        The stored results use sequential indices within the test split.
-        This endpoint remaps them to global dataset indices so the frontend
-        can match results to dataset rows.
+        The worker evaluates both the baseline (unoptimized) and
+        optimized programs against every example in the test split and
+        stores the results on the job's ``result`` blob. This endpoint
+        just exposes them — no inference runs again, so it's cheap.
+
+        Index remapping:
+            Internally the stored results use sequential indices
+            within the test split (0, 1, 2, ...) because that's how the
+            evaluator walked them. Those are remapped here to **global**
+            dataset indices so the frontend can highlight the same
+            rows on the Dataset tab without a second lookup. The
+            remapping replays the split algorithm deterministically
+            using the job's seed.
+
+        Response:
+            ``{"baseline": [{"index": i, "outputs": {...}, "score": float,
+            "pass": bool, ...}, ...], "optimized": [...]}``
+
+            Both arrays have the same length (one row per test example).
+            The ``score`` comes straight from the metric function used
+            during optimization.
+
+        Errors: 404 (unknown job), 409 (no result yet — run still in
+        progress or failed before evaluation completed).
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -617,15 +776,34 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             "optimized": remap(result.optimized_test_results),
         }
 
-    @router.get("/optimizations/{optimization_id}/artifact", response_model=ProgramArtifactResponse)
+    @router.get(
+        "/optimizations/{optimization_id}/artifact",
+        response_model=ProgramArtifactResponse,
+        summary="Download the compiled DSPy program artifact",
+    )
     def get_job_artifact(optimization_id: str) -> ProgramArtifactResponse:
-        """Return the serialized artifact once the job succeeds.
+        """Return the serialized program artifact produced by a successful
+        single-run optimization.
 
-        Args:
-            optimization_id: Identifier for the job returned during submission.
+        The artifact contains the base64-encoded pickled program plus
+        the extracted ``optimized_prompt`` (instructions, input/output
+        fields, and few-shot demos). Downstream code uses this to
+        either round-trip the program back into DSPy via pickle, or to
+        re-render the prompt outside the service.
 
-        Returns:
-            ProgramArtifactResponse: Serialized program artifact payload.
+        This endpoint is only valid for single-run jobs that finished
+        successfully:
+            - HTTP 404 if the optimization ID is unknown.
+            - HTTP 404 (with explanatory detail) if the job is a grid
+              search; use ``/optimizations/{id}/grid-result`` instead,
+              since grid searches produce one artifact per pair.
+            - HTTP 409 if the job is still ``pending``, ``validating``,
+              or ``running``.
+            - HTTP 409 if the job is in ``failed`` or ``cancelled``
+              status — the detail includes the failure message so the
+              caller can surface it.
+            - HTTP 500 if the stored result data fails schema
+              validation (indicates upstream corruption).
         """
 
         try:
@@ -675,9 +853,35 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
         raise HTTPException(status_code=409, detail="Optimization did not produce an artifact.")
 
-    @router.get("/optimizations/{optimization_id}/grid-result", response_model=GridSearchResponse)
+    @router.get(
+        "/optimizations/{optimization_id}/grid-result",
+        response_model=GridSearchResponse,
+        summary="Retrieve the full grid-search result with per-pair details",
+    )
     def get_grid_search_result(optimization_id: str) -> GridSearchResponse:
-        """Return the full grid search result once the job completes."""
+        """Return the complete outcome of a grid-search sweep.
+
+        Unlike ``/artifact`` (which is single-run only), this endpoint
+        surfaces every pair's individual result: baseline and optimized
+        test metrics, runtime, compiled program, status, and any
+        per-pair error. The ``best_pair`` field identifies which
+        ``(generation_model, reflection_model)`` combination won by
+        optimized test metric.
+
+        Only valid for grid-search jobs in a terminal status:
+            - HTTP 404 if the optimization ID is unknown or if the job
+              is not a grid search.
+            - HTTP 409 if the grid search is still running (wait for a
+              terminal status before calling).
+            - HTTP 409 with the failure message if the grid search
+              failed or was cancelled before producing any result.
+            - HTTP 500 on result-data corruption.
+
+        For live per-pair progress during a running grid search, call
+        ``GET /optimizations/{id}`` — its ``grid_result`` field is
+        populated from the same underlying data while the sweep is in
+        progress.
+        """
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
@@ -711,18 +915,36 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         except ValidationError:
             raise HTTPException(status_code=500, detail="Grid search result data is corrupted.")
 
-    @router.post("/optimizations/{optimization_id}/cancel", response_model=JobCancelResponse, status_code=200)
+    @router.post(
+        "/optimizations/{optimization_id}/cancel",
+        response_model=JobCancelResponse,
+        status_code=200,
+        summary="Cancel a pending or running optimization",
+    )
     def cancel_job(optimization_id: str) -> JobCancelResponse:
-        """Cancel a pending or running job.
+        """Request cancellation of an active optimization.
 
-        Args:
-            optimization_id: Identifier for the job to cancel.
+        What happens:
+            1. The job's status is flipped to ``cancelled`` in the store
+               with a Hebrew "cancelled by user" message and a
+               ``completed_at`` timestamp.
+            2. The live worker is asked to stop executing the job. This
+               is a *cooperative* cancellation — the worker checks for
+               the cancel flag between DSPy calls. If a single LLM call
+               is in flight it will finish before the worker observes
+               the cancel, so the actual stop can take a few seconds.
+            3. For grid searches, cancellation stops the entire sweep;
+               remaining pairs will not start.
 
-        Returns:
-            dict: Confirmation with optimization_id and new status.
+        Cancellation is only valid for non-terminal statuses. Attempting
+        to cancel a job that already finished returns HTTP 409. Unknown
+        IDs return HTTP 404.
 
-        Raises:
-            HTTPException: If the job is not found or already in a terminal state.
+        This endpoint is a one-way trip — there is no "uncancel". If
+        the cancel lands before the worker has started the job it
+        simply disappears from the queue; otherwise the partial
+        progress remains on the job (logs, progress events) but
+        ``result`` will be unset.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -745,18 +967,31 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         logger.info("Optimization %s (%s) cancelled", optimization_id, status.value)
         return JobCancelResponse(optimization_id=optimization_id, status="cancelled")
 
-    @router.delete("/optimizations/{optimization_id}", response_model=JobDeleteResponse, status_code=200)
+    @router.delete(
+        "/optimizations/{optimization_id}",
+        response_model=JobDeleteResponse,
+        status_code=200,
+        summary="Permanently delete an optimization and all its data",
+    )
     def delete_job(optimization_id: str) -> JobDeleteResponse:
-        """Delete a completed, failed, or cancelled job and all its data.
+        """Hard-delete an optimization from the store.
 
-        Args:
-            optimization_id: Identifier for the job to delete.
+        Removes the job row, its stored payload, its result, its
+        progress events, and its logs. This is **not** a soft delete —
+        there is no tombstone or recovery. Use
+        ``PATCH /optimizations/{id}/archive`` if you want to hide a job
+        from the dashboard without losing it.
 
-        Returns:
-            dict: Confirmation with deleted optimization_id.
+        Safety rails:
+            - Only jobs in a terminal status (``success``, ``failed``,
+              ``cancelled``) can be deleted. Attempting to delete an
+              active job returns HTTP 409 with guidance to cancel first.
+            - HTTP 404 if the optimization doesn't exist. Deleting an
+              already-deleted job returns 404 rather than silently
+              succeeding, which catches double-deletes from the UI.
 
-        Raises:
-            HTTPException: If the job is not found or still active.
+        Returns ``{"optimization_id": ..., "deleted": true}`` on
+        success. The deletion is immediate and not recoverable.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -776,22 +1011,36 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
     # ── Server-Sent Events (SSE) for real-time job streaming ──
 
-    @router.get("/optimizations/{optimization_id}/stream")
+    @router.get(
+        "/optimizations/{optimization_id}/stream",
+        summary="Stream one job's live status updates as SSE",
+    )
     async def stream_job(optimization_id: str):
-        """Stream job status updates via Server-Sent Events.
+        """Per-job Server-Sent Events stream, complementary to
+        ``/optimizations/stream`` (which covers every active job).
 
-        Sends a JSON event every 2 seconds with the current job state.
-        Stops when the job reaches a terminal status. Returns 404 for
-        nonexistent jobs before opening the stream.
+        Every 2 seconds the server emits a compact status event for the
+        target job: current status, latest worker message, latest
+        metrics, log count, and progress event count. The job detail
+        page uses this to animate metric charts and log counters
+        without polling.
 
-        Args:
-            optimization_id: The optimization identifier to stream.
+        Event sequence:
+            1. ``data: {"optimization_id": ..., "status": ..., "message": ...,
+               "latest_metrics": {...}, "log_count": N, "progress_count": M}``
+               Emitted every 2 seconds while the job is non-terminal.
+            2. Once the job reaches ``success``, ``failed``, or
+               ``cancelled``, a final ``data:`` event is sent followed
+               by ``event: done`` → ``{"status": ...}`` and the server
+               closes the connection.
+            3. If the job vanishes mid-stream (e.g. deleted), an
+               ``event: error`` → ``{"error": "Optimization not found"}``
+               is sent and the stream ends.
 
-        Returns:
-            StreamingResponse: SSE stream of job status updates.
-
-        Raises:
-            HTTPException: 404 if the job does not exist.
+        Pre-flight check: the endpoint returns HTTP 404 *before* opening
+        the stream if the optimization ID is unknown, so clients don't
+        have to handle missing-job errors as SSE messages on first
+        connect.
         """
         import asyncio
         import json
@@ -844,11 +1093,32 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             },
         )
 
-    @router.get("/optimizations/{optimization_id}/pair/{pair_index}/test-results")
+    @router.get(
+        "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
+        summary="Per-example test scores for one grid-search pair",
+    )
     def get_pair_test_results(optimization_id: str, pair_index: int) -> dict:
-        """Return per-example test results for a specific grid search pair.
+        """Per-pair analogue of
+        ``GET /optimizations/{id}/test-results``.
 
-        Applies the same index remapping as the main test-results endpoint.
+        For grid searches, each ``(generation_model, reflection_model)``
+        pair evaluates its own baseline and optimized programs against
+        the test split. This endpoint exposes a single pair's results,
+        with the same global-index remapping applied as the single-run
+        variant so results can be matched to dataset rows.
+
+        ``pair_index`` is 0-based and matches the
+        ``pair_results[*].pair_index`` field in
+        ``/optimizations/{id}/grid-result``.
+
+        Response shape is identical to the single-run test-results
+        endpoint: ``{"baseline": [...], "optimized": [...]}``.
+
+        Errors:
+            - HTTP 404: optimization missing, or pair index doesn't
+              exist in the grid result.
+            - HTTP 409: the optimization is not a grid search, or
+              hasn't reached ``success``, or stored no result data.
         """
         try:
             job_data = job_store.get_job(optimization_id)
