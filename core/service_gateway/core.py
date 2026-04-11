@@ -267,7 +267,6 @@ class DspyService:
             total_pairs, payload.module_name, payload.optimizer_name,
         )
 
-        # --- shared setup (done once) ---
         signature_cls = load_signature_from_code(payload.signature_code)
         signature_inputs, signature_outputs = extract_signature_fields(signature_cls)
         self._require_mapping_matches_signature(
@@ -299,7 +298,6 @@ class DspyService:
                 "total_pairs": total_pairs,
             })
 
-        # --- iterate pairs ---
         pair_results: List[PairResult] = []
         for i, (gen_cfg, ref_cfg) in enumerate(pairs):
             pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
@@ -403,7 +401,6 @@ class DspyService:
                         "failed_so_far": len([p for p in pair_results if p.error is not None]),
                     })
 
-        # --- pick best pair ---
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
         best_pair = max(successful, key=lambda p: p.optimized_test_metric) if successful else None
 
