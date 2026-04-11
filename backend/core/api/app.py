@@ -340,6 +340,11 @@ def create_app(
         lifespan=lifespan,
         openapi_tags=_OPENAPI_TAGS,
         servers=[{"url": "/", "description": "This server"}],
+        # Disable FastAPI's built-in Swagger UI and ReDoc — Scalar at
+        # /scalar replaces both. /openapi.json stays enabled so Scalar
+        # and any other consumers can still fetch the spec.
+        docs_url=None,
+        redoc_url=None,
         description=(
             "Backend API for **Skynet** — a DSPy-as-a-service platform for "
             "submitting, comparing, and serving optimized language-model "
