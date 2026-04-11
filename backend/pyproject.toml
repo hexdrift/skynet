@@ -11,6 +11,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["core*"]
 
+[tool.setuptools.package-data]
+"core.api" = ["static/scalar/*.js", "static/scalar/fonts/*.woff2"]
+
 [project]
 name = "skynet"
 version = "0.1.0"
@@ -22,6 +25,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.23",
     "pydantic>=2.5",
+    "pydantic-settings>=2.0",
     "dspy>=2.5",
     "litellm>=1.40",
     "sqlalchemy>=2.0",
@@ -30,6 +34,7 @@ dependencies = [
     "openpyxl>=3.1",
     "requests>=2.31",
     "python-dotenv>=1.0",
+    "scalar-fastapi>=1.8",
 ]
 
 [project.optional-dependencies]
