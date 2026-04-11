@@ -27,6 +27,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from ..exceptions import AppError
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
@@ -132,6 +133,20 @@ def create_app(
         500: "internal_error",
         503: "service_unavailable",
     }
+
+    @app.exception_handler(AppError)
+    async def _app_error_handler(
+        request: Request, exc: AppError
+    ) -> JSONResponse:
+        """Handle domain exceptions raised by services.
+        
+        Converts AppError instances into consistent JSON responses that match
+        the existing error envelope format used throughout the API.
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": exc.error_code.lower(), "detail": exc.message},
+        )
 
     @app.exception_handler(HTTPException)
     async def _http_error_handler(

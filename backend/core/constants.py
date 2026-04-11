@@ -81,3 +81,31 @@ OPTIMIZER_NAME_MIPROV2 = "miprov2"
 # Per-user job quota. Counts every job owned by a username across all
 # statuses. Admins and users listed in job_quota_overrides bypass this.
 MAX_JOBS_PER_USER = 100
+
+# ── Phase 1: Worker Configuration ──
+# Worker health and polling configuration
+WORKER_STALE_THRESHOLD = 300  # seconds of inactivity before health check flags worker as stuck
+WORKER_POLL_INTERVAL = 1.0  # seconds between queue polling cycles
+WORKER_MAX_THREADS = 4  # maximum number of concurrent worker threads
+WORKER_QUEUE_MAX_SIZE = 100  # maximum pending jobs in queue
+
+# ── Phase 1: Timeout Configuration ──
+# Default timeout values in seconds
+DEFAULT_TIMEOUT = 30.0  # standard request timeout
+LONG_RUNNING_TIMEOUT = 120.0  # extended timeout for complex operations
+SUBPROCESS_TIMEOUT = 300.0  # timeout for subprocess execution
+
+# ── Phase 1: Optimizer Names ──
+# Canonical optimizer identifiers (must match registry keys)
+OPTIMIZER_MIPROV2 = "miprov2"
+OPTIMIZER_GEPA = "gepa"
+
+# ── Phase 1: Module Names ──
+# Canonical DSPy module identifiers
+MODULE_PREDICT = "Predict"
+MODULE_COT = "ChainOfThought"
+
+# ── Phase 1: Serve Defaults ──
+# Default parameters for inference serving
+SERVE_DEFAULT_TEMPERATURE = 0.7
+SERVE_DEFAULT_MAX_TOKENS = 1000
