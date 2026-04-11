@@ -4,7 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Menu, LogOut, GraduationCap } from "lucide-react";
+import { Menu, LogOut, GraduationCap, BookOpen } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "./animated-wordmark";
 import { useTutorialContext } from "./tutorial/tutorial-provider";
@@ -18,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const { openMenu } = useTutorialContext();
+  const scalarDocsUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/scalar`;
 
   // Close mobile sidebar on route change
   React.useEffect(() => {
@@ -111,6 +112,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </TooltipTrigger>
             <TooltipContent side="bottom" dir="rtl">
               סיור מודרך במערכת
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <a
+                href={scalarDocsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex"
+                aria-label="תיעוד API"
+              >
+                <BookOpen className="size-4" />
+              </a>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" dir="rtl">
+              תיעוד API אינטראקטיבי
             </TooltipContent>
           </Tooltip>
         </div>
