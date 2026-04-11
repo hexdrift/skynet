@@ -64,24 +64,23 @@ _SCALAR_CUSTOM_CSS = """
   display: none !important;
 }
 
-/* Place the Skynet logo in the top-left of the Scalar toolbar.
-   The toolbar is `relative` and `h-10`, so absolute positioning
-   anchors the logo regardless of the centered toolbar contents. */
-.api-reference-toolbar {
-  position: relative;
-}
-.api-reference-toolbar::before {
-  content: '';
+/* The animated wordmark is injected by wordmark.js into the toolbar.
+   Anchor it to the top-left of the `relative` toolbar so the centered
+   Developer Tools / Configure / Share / Deploy group stays undisturbed. */
+.api-reference-toolbar { position: relative; }
+.skynet-wordmark {
   position: absolute;
   left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-  background: url('/scalar-static/skynet_logo.svg') no-repeat center center;
-  background-size: contain;
-  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  color: #3D2E22;
+  text-decoration: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
+.skynet-wordmark svg { overflow: visible; }
 
 /* Skynet warm-beige light theme to match the main app */
 .light-mode {
@@ -189,6 +188,16 @@ def create_app(
         lifespan=lifespan,
         openapi_tags=_OPENAPI_TAGS,
         servers=[{"url": "/", "description": "This server"}],
+        description=(
+            "Backend API for **Skynet** — a DSPy-as-a-service platform for "
+            "submitting, comparing, and serving optimized language-model "
+            "programs. Submit optimization runs or grid searches, stream "
+            "live progress and metrics, inspect per-example baselines vs. "
+            "optimized predictions, and run inference against the final "
+            "compiled program. All traffic stays on your local network; "
+            "this interactive reference is served directly from the "
+            "running backend and works fully offline."
+        ),
     )
 
     app.mount(
@@ -199,7 +208,7 @@ def create_app(
 
     @app.get("/scalar", include_in_schema=False)
     async def scalar_docs() -> HTMLResponse:
-        return get_scalar_api_reference(
+        base = get_scalar_api_reference(
             openapi_url=app.openapi_url,
             title=f"{app.title} API",
             scalar_favicon_url="/scalar-static/favicon.svg",
@@ -212,6 +221,12 @@ def create_app(
             dark_mode=False,
             custom_css=_SCALAR_CUSTOM_CSS,
         )
+        # Inject the animated wordmark script. scalar-fastapi only exposes
+        # custom_css, so we append our own <script> tag just before </body>.
+        html = base.body.decode("utf-8")
+        script_tag = '<script src="/scalar-static/wordmark.js" defer></script>'
+        html = html.replace("</body>", f"{script_tag}</body>")
+        return HTMLResponse(content=html)
 
     allowed_origins = os.getenv(
         "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"
