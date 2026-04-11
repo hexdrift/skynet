@@ -240,11 +240,72 @@
     return wrap;
   }
 
+  // ── Sidebar collapse toggle ────────────────────────────────────────────
+  // A small icon button we mount alongside the wordmark that toggles
+  // sidebar visibility via a data attribute on <html>. Actual show/hide
+  // is handled by the CSS rules in _SCALAR_CUSTOM_CSS. State persists
+  // across reloads in localStorage. Default is hidden.
+
+  var SIDEBAR_STORAGE_KEY = "skynet-scalar-sidebar";
+
+  function readSidebarState() {
+    try {
+      var v = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+      return v === "visible" ? "visible" : "hidden";
+    } catch (e) {
+      return "hidden";
+    }
+  }
+
+  function writeSidebarState(state) {
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, state);
+    } catch (e) {
+      /* ignore quota errors */
+    }
+  }
+
+  function applySidebarState(state) {
+    document.documentElement.dataset.skynetSidebar = state;
+  }
+
+  function createSidebarToggle() {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "skynet-sidebar-toggle";
+    btn.setAttribute("aria-label", "Toggle sidebar");
+    btn.title = "Toggle sidebar";
+    // Simple two-panel icon — left bar is the sidebar, right bar is content.
+    btn.innerHTML =
+      '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
+      'stroke-linejoin="round">' +
+      '<rect x="2.5" y="4" width="15" height="12" rx="1.5"/>' +
+      '<line x1="8" y1="4" x2="8" y2="16"/>' +
+      "</svg>";
+
+    btn.addEventListener("click", function () {
+      var current = document.documentElement.dataset.skynetSidebar === "visible";
+      var next = current ? "hidden" : "visible";
+      applySidebarState(next);
+      writeSidebarState(next);
+    });
+    return btn;
+  }
+
+  // Apply the saved (or default) state as early as possible so there's
+  // no flash of open sidebar before the toolbar mount runs.
+  applySidebarState(readSidebarState());
+
   function mount() {
     var toolbar = document.querySelector(".api-reference-toolbar");
     if (!toolbar) return false;
-    if (toolbar.querySelector(".skynet-wordmark")) return true;
-    toolbar.appendChild(createWordmark());
+    if (!toolbar.querySelector(".skynet-wordmark")) {
+      toolbar.appendChild(createWordmark());
+    }
+    if (!toolbar.querySelector(".skynet-sidebar-toggle")) {
+      toolbar.appendChild(createSidebarToggle());
+    }
     return true;
   }
 

@@ -64,9 +64,10 @@ _SCALAR_CUSTOM_CSS = """
   display: none !important;
 }
 
-/* The animated wordmark is injected by wordmark.js into the toolbar.
-   Anchor it to the top-left of the `relative` toolbar so the centered
-   Developer Tools / Configure / Share / Deploy group stays undisturbed. */
+/* The animated wordmark and sidebar toggle are injected by wordmark.js
+   into the toolbar. Anchor both to the `relative` toolbar so the
+   centered Developer Tools / Configure / Share / Deploy group stays
+   undisturbed. */
 .api-reference-toolbar { position: relative; }
 .skynet-wordmark {
   position: absolute;
@@ -81,6 +82,37 @@ _SCALAR_CUSTOM_CSS = """
   -webkit-user-select: none;
 }
 .skynet-wordmark svg { overflow: visible; }
+
+.skynet-sidebar-toggle {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #ddd6cc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #3D2E22;
+  cursor: pointer;
+  transition: background-color 120ms, border-color 120ms;
+}
+.skynet-sidebar-toggle:hover { background: #f0ebe4; border-color: #b5a796; }
+.skynet-sidebar-toggle:focus-visible {
+  outline: 2px solid #3D2E22;
+  outline-offset: 2px;
+}
+
+/* Collapsible sidebar — toggled via [data-skynet-sidebar] on <html>.
+   Default (hidden) removes the sidebar from the layout by zeroing its
+   width variable and hiding the aside; main content reclaims the space.
+   Visible state restores Scalar's normal layout. */
+html[data-skynet-sidebar="hidden"] .t-doc__sidebar { display: none; }
+html[data-skynet-sidebar="hidden"] { --refs-sidebar-width: 0px; }
 
 /* Skynet warm-beige light theme to match the main app */
 .light-mode {
