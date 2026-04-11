@@ -5,7 +5,7 @@ import { signIn, getProviders } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
-import { AnimatedWordmark } from "@/components/animated-wordmark";
+import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";

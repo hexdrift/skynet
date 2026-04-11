@@ -19,10 +19,10 @@ import {
   useColumnResize,
   ResetColumnsButton,
   type SortDir,
-} from "@/components/excel-filter";
-import { FadeIn } from "@/components/motion";
+} from "@/shared/ui/excel-filter";
+import { FadeIn } from "@/shared/ui/motion";
 import { msg } from "@/features/shared/messages";
-import type { OptimizationLogEntry } from "@/lib/types";
+import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
 
 export function LogsTab({

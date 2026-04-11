@@ -4,7 +4,7 @@
  * Looks at a job's progress event stream + latest metrics to classify
  * what step of the DSPy pipeline it is currently executing.
  */
-import type { OptimizationStatusResponse } from "@/lib/types";
+import type { OptimizationStatusResponse } from "@/shared/types/api";
 import type { PipelineStage } from "../constants";
 
 export function detectStage(job: OptimizationStatusResponse): PipelineStage {

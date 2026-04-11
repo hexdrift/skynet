@@ -10,10 +10,10 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import type { ServeInfoResponse } from "@/lib/types";
+import type { ServeInfoResponse } from "@/shared/types/api";
 import { LangPicker } from "./ui-primitives";
 
-const CodeEditor = dynamic(() => import("@/components/code-editor").then((m) => m.CodeEditor), {
+const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
   loading: () => (
     <div className="h-[180px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" />

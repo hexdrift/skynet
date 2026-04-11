@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { OptimizationStatusResponse } from "@/lib/types";
+import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { PIPELINE_STAGES, STAGE_INFO, type PipelineStage } from "../constants";
 
 export function StageInfoModal({

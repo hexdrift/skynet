@@ -11,18 +11,18 @@ import {
   validateCode,
   getOptimizationPayload,
   getJob,
-} from "@/lib/api";
+} from "@/shared/lib/api";
 import type {
   ModelConfig,
   ColumnMapping,
   SplitFractions,
   ValidateCodeResponse,
   ModelCatalogResponse,
-} from "@/lib/types";
-import { parseDatasetFile, type ParsedDataset } from "@/lib/parse-dataset";
-import type { ValidationResult as EditorValidationResult } from "@/components/code-editor";
-import { getModelCatalog, cachedCatalog } from "@/lib/model-catalog";
-import { registerTutorialHook } from "@/lib/tutorial-bridge";
+} from "@/shared/types/api";
+import { parseDatasetFile, type ParsedDataset } from "@/features/submit/lib/parse-dataset";
+import type { ValidationResult as EditorValidationResult } from "@/shared/ui/code-editor";
+import { getModelCatalog, cachedCatalog } from "@/shared/lib/model-catalog";
+import { registerTutorialHook } from "@/features/tutorial/lib/bridge";
 import { msg } from "@/features/shared/messages";
 
 import { STEPS, emptyModelConfig, defaultSplit, RECENT_KEY, MAX_RECENT } from "../constants";
@@ -39,13 +39,11 @@ export function useSubmitWizard() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
 
-  // Wizard state
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [summaryTab, setSummaryTab] = useState(0);
   const [summaryCodeTab, setSummaryCodeTab] = useState<string>("signature");
 
-  // Job type
   const [jobType, setOptimizationType] = useState<"run" | "grid_search">("run");
 
   // Username — always from the logged-in session
@@ -59,12 +57,10 @@ export function useSubmitWizard() {
   const [metricCode, setMetricCode] = useState(METRIC_TEMPLATE_MIPRO);
   const metricIsTemplate = isMetricTemplate(metricCode);
 
-  // Dataset
   const [parsedDataset, setParsedDataset] = useState<ParsedDataset | null>(null);
   const [datasetFileName, setDatasetFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Column mapping
   const [columnRoles, setColumnRoles] = useState<Record<string, "input" | "output" | "ignore">>({});
   const [signatureManuallyEdited, setSignatureManuallyEdited] = useState(false);
 
@@ -76,7 +72,6 @@ export function useSubmitWizard() {
   const [modelConfig, setModelConfig] = useState<ModelConfig>(emptyModelConfig());
   const [secondModelConfig, setSecondModelConfig] = useState<ModelConfig | null>(null);
 
-  // Model config modal state
   const [editingModel, setEditingModel] = useState<{
     config: ModelConfig;
     onSave: (c: ModelConfig) => void;
@@ -119,11 +114,9 @@ export function useSubmitWizard() {
   // Check if ANY provider has an env key configured on the backend
   const anyProviderHasEnvKey = catalog?.providers.some((p) => p.has_env_key) ?? false;
 
-  // Grid search model lists
   const [generationModels, setGenerationModels] = useState<ModelConfig[]>([emptyModelConfig()]);
   const [reflectionModels, setReflectionModels] = useState<ModelConfig[]>([emptyModelConfig()]);
 
-  // Split fractions
   const [split, setSplit] = useState<SplitFractions>(defaultSplit);
 
   // Code validation — each block is validated independently
@@ -137,13 +130,11 @@ export function useSubmitWizard() {
   const [numTrials, setNumTrials] = useState<string>("10");
   const [minibatch, setMinibatch] = useState(true);
   const [minibatchSize, setMinibatchSize] = useState<string>("35");
-  // GEPA-specific
   const [reflectionMinibatchSize, setReflectionMinibatchSize] = useState<string>("3");
   const [maxFullEvals, setMaxFullEvals] = useState<string>("6");
   const [useMerge, setUseMerge] = useState(true);
   const [shuffle, setShuffle] = useState(true);
 
-  // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<"idle" | "sending" | "splash" | "done">("idle");
 
@@ -191,8 +182,7 @@ export function useSubmitWizard() {
     // Fetch both payload and job display name in parallel
     Promise.all([getOptimizationPayload(cloneId), getJob(cloneId).catch(() => null)])
       .then(([{ optimization_type, payload }, jobData]) => {
-        // Job type
-        setOptimizationType(optimization_type === "grid_search" ? "grid_search" : "run");
+              setOptimizationType(optimization_type === "grid_search" ? "grid_search" : "run");
 
         // Basic fields — prefer the current display name over the payload name
         const displayName = jobData?.name || payload.name;
@@ -206,8 +196,7 @@ export function useSubmitWizard() {
         }
         if (payload.metric_code) setMetricCode(String(payload.metric_code));
 
-        // Dataset
-        if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
+              if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
           const rows = payload.dataset as Record<string, unknown>[];
           const columns = Object.keys(rows[0] ?? {});
           setParsedDataset({ columns, rows, rowCount: rows.length });
@@ -218,8 +207,7 @@ export function useSubmitWizard() {
           );
         }
 
-        // Column mapping
-        const cm = payload.column_mapping as
+              const cm = payload.column_mapping as
           | { inputs?: Record<string, string>; outputs?: Record<string, string> }
           | undefined;
         if (cm) {
@@ -235,15 +223,13 @@ export function useSubmitWizard() {
           setColumnRoles(roles);
         }
 
-        // Split fractions
-        const sf = payload.split_fractions as
+              const sf = payload.split_fractions as
           | { train?: number; val?: number; test?: number }
           | undefined;
         if (sf) setSplit({ train: sf.train ?? 0.7, val: sf.val ?? 0.15, test: sf.test ?? 0.15 });
 
         if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
 
-        // Model config (run type)
         const mc = payload.model_config as ModelConfig | undefined;
         if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
 
@@ -252,14 +238,12 @@ export function useSubmitWizard() {
           payload.prompt_model_config) as ModelConfig | undefined;
         if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
 
-        // Grid search models
         const gm = payload.generation_models as ModelConfig[] | undefined;
         if (gm?.length) setGenerationModels(gm.map((m) => ({ ...emptyModelConfig(), ...m })));
 
         const rm = payload.reflection_models as ModelConfig[] | undefined;
         if (rm?.length) setReflectionModels(rm.map((m) => ({ ...emptyModelConfig(), ...m })));
 
-        // Optimizer / compile kwargs
         const optKw = payload.optimizer_kwargs as Record<string, unknown> | undefined;
         if (optKw) {
           if (optKw.auto) setAutoLevel(String(optKw.auto));
@@ -671,7 +655,6 @@ export function useSubmitWizard() {
   };
 
   return {
-    // Navigation / step state
     step,
     setStep,
     direction,
@@ -687,7 +670,6 @@ export function useSubmitWizard() {
     validateStep,
     handleNext,
     handleTabClick,
-    // Job type / basics
     jobType,
     setOptimizationType,
     username,
@@ -699,7 +681,6 @@ export function useSubmitWizard() {
     setModuleName,
     optimizerName,
     setOptimizerName,
-    // Code editors
     signatureCode,
     setSignatureCode,
     setSignatureManuallyEdited,
@@ -711,23 +692,19 @@ export function useSubmitWizard() {
     setMetricValidation,
     runSignatureValidation,
     runMetricValidation,
-    // Dataset
-    parsedDataset,
+      parsedDataset,
     setParsedDataset,
     datasetFileName,
     setDatasetFileName,
     fileInputRef,
     handleFileUpload,
-    // Column mapping
-    columnRoles,
+      columnRoles,
     setColumnRoles,
-    // Global provider
     globalBaseUrl,
     setGlobalBaseUrl,
     globalApiKey,
     setGlobalApiKey,
     anyProviderHasEnvKey,
-    // Run model configs
     modelConfig,
     setModelConfig,
     secondModelConfig,
@@ -738,18 +715,15 @@ export function useSubmitWizard() {
     saveToRecent,
     clearRecentConfigs,
     catalog,
-    // Grid search
     generationModels,
     setGenerationModels,
     reflectionModels,
     setReflectionModels,
-    // Split / shuffle
     split,
     updateSplit,
     splitSum,
     shuffle,
     setShuffle,
-    // Advanced params
     autoLevel,
     setAutoLevel,
     maxBootstrappedDemos,
@@ -768,11 +742,9 @@ export function useSubmitWizard() {
     setMaxFullEvals,
     useMerge,
     setUseMerge,
-    // Submission
     submitting,
     submitPhase,
     handleSubmit,
-    // Clone
     cloneLoading,
   };
 }

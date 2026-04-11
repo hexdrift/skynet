@@ -22,7 +22,6 @@ export const validators = {
       return type === 'signature' ? "חתימת מודול חובה" : "קוד מטריקה חובה";
     }
 
-    // Basic Python syntax check
     const lines = code.split('\n');
     const indentationIssue = lines.some((line, i) => {
       if (i === 0) return false;
@@ -34,7 +33,6 @@ export const validators = {
       return "קוד פייתון חייב להשתמש ב-4 רווחים להזחה";
     }
 
-    // Check for required elements
     if (type === 'signature') {
       if (!code.includes('->')) {
         return "חתימת המודול חייבת לכלול -> לסוג החזרה";

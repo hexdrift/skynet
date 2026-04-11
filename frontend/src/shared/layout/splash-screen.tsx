@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatedWordmark } from "./animated-wordmark";
+import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 
 /**
  * Splash screen — story.foundation-style preloader.

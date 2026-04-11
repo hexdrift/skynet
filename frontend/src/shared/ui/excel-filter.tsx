@@ -88,7 +88,6 @@ export function ColumnHeader<K extends string>({
       const MIN_W = 60;
       const MAX_W = 600;
 
-      // Collect all cells in this column (header + body)
       const cells: HTMLElement[] = [th];
       table.querySelectorAll("tbody tr").forEach((row) => {
         const cell = row.children[colIdx] as HTMLElement | undefined;
@@ -107,12 +106,10 @@ export function ColumnHeader<K extends string>({
         cell.style.width = "auto";
         cell.style.overflow = "visible";
       }
-      // Force layout reflow then measure
       let widest = 0;
       for (const cell of cells) {
         widest = Math.max(widest, cell.scrollWidth);
       }
-      // Restore original styles
       for (const s of saved) {
         s.el.style.maxWidth = s.maxW;
         s.el.style.width = s.w;
@@ -231,7 +228,6 @@ function FilterDropdown({
     updatePos();
   }, [updatePos]);
 
-  // Close dropdown when any ancestor scrolls
   useEffect(() => {
     const scrollParents: HTMLElement[] = [];
     let el = anchorRef?.current?.parentElement;

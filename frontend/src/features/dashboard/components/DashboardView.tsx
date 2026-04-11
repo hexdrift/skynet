@@ -62,9 +62,9 @@ const TimelineChart = dynamic(
   { ssr: false, loading: () => <div className="h-[160px]" /> },
 );
 
-import { AnalyticsSection } from "@/components/analytics-sections";
-import { AnalyticsEmpty } from "@/components/analytics-empty";
-import { OptimizerComparisonTable, ModelPerformanceTable } from "@/components/analytics-tables";
+import { AnalyticsSection } from "@/features/dashboard/components/AnalyticsSection";
+import { AnalyticsEmpty } from "@/features/dashboard/components/AnalyticsEmpty";
+import { OptimizerComparisonTable, ModelPerformanceTable } from "@/features/dashboard/components/AnalyticsTables";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -80,7 +80,7 @@ import {
   AnimatedNumber,
   StaggerContainer,
   StaggerItem,
-} from "@/components/motion";
+} from "@/shared/ui/motion";
 import {
   Dialog,
   DialogContent,
@@ -104,7 +104,7 @@ import {
   useColumnResize,
   ResetColumnsButton,
   type SortDir,
-} from "@/components/excel-filter";
+} from "@/shared/ui/excel-filter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -114,31 +114,40 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "boneyard-js/react";
-import { listJobs, cancelJob, deleteJob, getQueueStatus } from "@/lib/api";
-import { HelpTip } from "@/components/help-tip";
-import { ACTIVE_STATUSES, STATUS_LABELS } from "@/lib/constants";
-import { dashboardBones } from "@/components/dashboard-bones";
+import {
+  listJobs,
+  cancelJob,
+  deleteJob,
+  bulkDeleteJobs,
+  getQueueStatus,
+  getOptimizationCounts,
+  getDashboardAnalytics,
+  type OptimizationCounts,
+  type DashboardAnalytics,
+} from "@/shared/lib/api";
+import { HelpTip } from "@/shared/ui/help-tip";
+import { ACTIVE_STATUSES, STATUS_LABELS } from "@/shared/constants/job-status";
+import { dashboardBones } from "@/features/dashboard/lib/bones";
 import type {
   PaginatedJobsResponse,
   OptimizationSummaryResponse,
   JobStatus,
   QueueStatusResponse,
-} from "@/lib/types";
+} from "@/shared/types/api";
+import { STATUS_COLORS } from "../constants";
+import { statusBadge, typeBadge, formatScore } from "../lib/status-badges";
 import {
-  PAGE_SIZE,
-  STATUS_COLORS,
-  statusBadge,
-  typeBadge,
   formatElapsed,
   formatDate,
   formatRelativeTime,
-  formatScore,
   formatId,
-} from "@/features/dashboard";
-import { registerTutorialHook } from "@/lib/tutorial-bridge";
+} from "@/shared/lib";
+import { registerTutorialHook } from "@/features/tutorial/lib/bridge";
 import { msg } from "@/features/shared/messages";
 
-export default function DashboardPage() {
+const FETCH_PAGE_SIZE = 50;
+
+export function DashboardView() {
   const router = useRouter();
   const { data: session } = useSession();
   const sessionUser = session?.user?.name ?? "";
@@ -147,7 +156,6 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Analytics filters
   const [activeTab, setActiveTab] = useState("jobs");
   // Expose for tutorial beforeShow
   useEffect(() => registerTutorialHook("setTab", setActiveTab), []);
@@ -162,10 +170,23 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true); // only true on first mount
   const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
+  // Backend page offset for the dashboard table. Paginated with the
+  // prev/next arrows — each click moves this by FETCH_PAGE_SIZE.
+  const [pageOffset, setPageOffset] = useState(0);
+  const [counts, setCounts] = useState<OptimizationCounts | null>(null);
+  // Pre-shaped analytics payload returned by /analytics/dashboard.
+  // Every chart, KPI and ranked table on the analytics tab reads out
+  // of this object, so the tab aggregates over every job the session
+  // owns instead of just the current jobs-tab page. Fetched lazily
+  // when the user opens the analytics tab, re-fetched whenever any
+  // analytics filter changes, and invalidated (set back to null) on
+  // every mutation so the next visit re-pulls.
+  const [analyticsData, setAnalyticsData] = useState<DashboardAnalytics | null>(
+    null,
+  );
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(null);
 
-  // Excel-style column filters + sort
   const { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount } =
     useColumnFilters();
   const colResize = useColumnResize();
@@ -185,17 +206,25 @@ export default function DashboardPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; status: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  // The per-user job quota (constants.MAX_JOBS_PER_USER) guarantees the
-  // result set stays bounded, so the dashboard fetches the full list and
-  // filters + sorts client-side. Admins can exceed the cap via
-  // job_quota_overrides.ADMIN_USERNAMES and will see everyone's jobs.
+  // Page-based dashboard: fetches exactly one backend page of
+  // FETCH_PAGE_SIZE rows for the current `pageOffset`. Prev/next
+  // arrows shift the offset; SSE/polling refreshes the current page
+  // in place. Counts come from the dedicated /optimizations/counts
+  // endpoint so the stat cards stay honest regardless of what page
+  // the user is on.
   const fetchJobs = useCallback(async () => {
     try {
-      const result = await listJobs({
-        username: isAdmin ? undefined : sessionUser || undefined,
-      });
+      const username = isAdmin ? undefined : sessionUser || undefined;
+      const [result, countsResult] = await Promise.all([
+        listJobs({ username, limit: FETCH_PAGE_SIZE, offset: pageOffset }),
+        getOptimizationCounts(username).catch(() => null),
+      ]);
       setData(result);
+      if (countsResult) setCounts(countsResult);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : msg("dashboard.load_error"));
@@ -203,7 +232,39 @@ export default function DashboardPage() {
       setLoading(false);
       setInitialLoad(false);
     }
-  }, [sessionUser, isAdmin]);
+  }, [sessionUser, isAdmin, pageOffset]);
+
+  // Fetch the pre-shaped analytics payload from the backend. Filters
+  // are applied server-side so this is a single, bounded request
+  // regardless of dataset size.
+  const fetchDashboardAnalytics = useCallback(async () => {
+    const username = isAdmin ? undefined : sessionUser || undefined;
+    setAnalyticsLoading(true);
+    try {
+      const result = await getDashboardAnalytics({
+        username,
+        optimizer: analyticsOptimizer !== "all" ? analyticsOptimizer : undefined,
+        model: analyticsModel !== "all" ? analyticsModel : undefined,
+        status: analyticsStatus !== "all" ? analyticsStatus : undefined,
+        optimization_id: analyticsJobId ?? undefined,
+        date: analyticsDate ?? undefined,
+      });
+      setAnalyticsData(result);
+    } catch {
+      // Leave analyticsData untouched; the existing error banner from
+      // `fetchJobs` surfaces network-level issues.
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [
+    isAdmin,
+    sessionUser,
+    analyticsOptimizer,
+    analyticsModel,
+    analyticsStatus,
+    analyticsJobId,
+    analyticsDate,
+  ]);
 
   useEffect(() => {
     // Only show skeleton on very first load, not on revisits
@@ -211,10 +272,24 @@ export default function DashboardPage() {
     fetchJobs();
 
     // Listen for cross-component sync (sidebar delete, rename, etc.)
-    const onJobsChanged = () => fetchJobs();
+    // Both the current jobs page and the analytics cache are
+    // invalidated so the next analytics-tab visit re-pulls.
+    const onJobsChanged = () => {
+      fetchJobs();
+      setAnalyticsData(null);
+    };
     window.addEventListener("optimizations-changed", onJobsChanged);
     return () => window.removeEventListener("optimizations-changed", onJobsChanged);
   }, [fetchJobs]);
+
+  // Refetch the analytics payload whenever the user opens the tab,
+  // or changes any of the analytics filters. Because filters are
+  // baked into `fetchDashboardAnalytics`'s dependency list, this
+  // effect re-runs on every filter change automatically.
+  useEffect(() => {
+    if (activeTab !== "analytics") return;
+    fetchDashboardAnalytics();
+  }, [activeTab, fetchDashboardAnalytics]);
 
   useEffect(() => {
     getQueueStatus()
@@ -262,6 +337,96 @@ export default function DashboardPage() {
     }
   };
 
+  const toggleRowSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const confirmBulkDelete = async () => {
+    if (bulkDeleting) return;
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setBulkDeleting(true);
+
+    // Single-delete cancels active jobs before deleting, so bulk
+    // delete should too. Cancel every selected row whose current
+    // status is non-terminal, in parallel, then bulk-delete.
+    const activeIds = data
+      ? data.items
+          .filter((j) => idSet.has(j.optimization_id) && ACTIVE_STATUSES.has(j.status))
+          .map((j) => j.optimization_id)
+      : [];
+
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: prev.items.filter((j) => !idSet.has(j.optimization_id)),
+            total: Math.max(0, prev.total - ids.length),
+          }
+        : prev,
+    );
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+    // Jump back to page 1 so the user lands on the freshly-reduced
+    // list instead of being stranded at an offset that just shifted
+    // 50 different rows into view — the main reason bulk delete
+    // "feels like nothing happened" on large pages.
+    setPageOffset(0);
+    try {
+      if (activeIds.length > 0) {
+        await Promise.allSettled(activeIds.map((id) => cancelJob(id)));
+      }
+      const res = await bulkDeleteJobs(ids);
+      // A "not_found" skip means the job was already gone from the
+      // server (stale cached list, concurrent delete, etc.). From the
+      // user's perspective the outcome is identical to a successful
+      // delete — they wanted the job gone, and it's gone. Only real
+      // failures (non-terminal status, server errors) are surfaced.
+      const realSkips = res.skipped.filter((s) => s.reason !== "not_found");
+      const effectivelyDeleted = res.deleted.length + (res.skipped.length - realSkips.length);
+      if (effectivelyDeleted > 0 && realSkips.length === 0) {
+        toast.success(
+          effectivelyDeleted === 1
+            ? "נמחקה אופטימיזציה אחת"
+            : `נמחקו ${effectivelyDeleted} אופטימיזציות`,
+        );
+      } else if (effectivelyDeleted > 0 && realSkips.length > 0) {
+        const delPart =
+          effectivelyDeleted === 1
+            ? "נמחקה אופטימיזציה אחת"
+            : `נמחקו ${effectivelyDeleted} אופטימיזציות`;
+        const skipPart =
+          realSkips.length === 1 ? "אחת לא נמחקה" : `${realSkips.length} לא נמחקו`;
+        toast.warning(`${delPart}, ${skipPart}`);
+      } else {
+        toast.error(
+          realSkips.length === 1
+            ? "לא ניתן היה למחוק את האופטימיזציה"
+            : `לא ניתן היה למחוק ${realSkips.length} אופטימיזציות`,
+        );
+      }
+      // Always re-fetch after delete to reconcile with server truth,
+      // even in the all-success branch. The optimistic update only
+      // removes the selected items; a concurrent SSE refresh or
+      // cached list read could have restored them otherwise.
+      await fetchJobs();
+      window.dispatchEvent(new Event("optimizations-changed"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
+      fetchJobs();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   /* ── SSE real-time dashboard updates (with polling fallback) ── */
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -296,9 +461,19 @@ export default function DashboardPage() {
     };
   }, [data, fetchJobs]);
 
+  // Drop selected IDs that no longer exist in the current dataset
+  // (e.g. after another user deletes or a status change removed them).
   useEffect(() => {
-    setOffset(0);
-  }, [filters, sortKey, sortDir]);
+    if (!data || selectedIds.size === 0) return;
+    const present = new Set(data.items.map((j) => j.optimization_id));
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of selectedIds) {
+      if (present.has(id)) next.add(id);
+      else changed = true;
+    }
+    if (changed) setSelectedIds(next);
+  }, [data, selectedIds]);
 
   /* ── Client-side filter + sort ── */
   const filteredItems = useMemo(() => {
@@ -320,9 +495,28 @@ export default function DashboardPage() {
     return items;
   }, [data, filters, sortKey, sortDir]);
 
-  const pagedItems = filteredItems.slice(offset, offset + PAGE_SIZE);
-  const totalPages = Math.ceil(filteredItems.length / PAGE_SIZE);
-  const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+  // Every currently-visible (filtered + loaded) row is selectable. The
+  // bulk-delete handler cancels active jobs before deleting, mirroring
+  // the single-row delete button's behavior.
+  const selectablePageIds = useMemo(
+    () => filteredItems.map((j) => j.optimization_id),
+    [filteredItems],
+  );
+  const selectedOnPage = selectablePageIds.filter((id) => selectedIds.has(id)).length;
+  const pageAllSelected =
+    selectablePageIds.length > 0 && selectedOnPage === selectablePageIds.length;
+  const pageSomeSelected = selectedOnPage > 0 && !pageAllSelected;
+  const togglePageSelection = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (pageAllSelected) {
+        for (const id of selectablePageIds) next.delete(id);
+      } else {
+        for (const id of selectablePageIds) next.add(id);
+      }
+      return next;
+    });
+  };
 
   /* ── Unique values for filter dropdowns ── */
   const filterOptions = useMemo(() => {
@@ -348,242 +542,189 @@ export default function DashboardPage() {
   }, [data]);
 
   /* ── Aggregated chart data ── */
-  // Unique values for analytics filter dropdowns
+  // Filter dropdown options come from the analytics endpoint so the
+  // dropdowns expose every optimizer/model the user has ever used.
+  // While the payload is still loading (or errored), fall back to
+  // the current jobs-tab page so the dropdowns at least show
+  // something rather than going empty.
   const analyticsOptions = useMemo(() => {
-    if (!data) return { optimizers: [], models: [] };
-    const optimizers = [
-      ...new Set(data.items.map((j) => j.optimizer_name).filter(Boolean)),
-    ] as string[];
-    const models = [...new Set(data.items.map((j) => j.model_name).filter(Boolean))] as string[];
-    return { optimizers, models };
-  }, [data]);
+    if (analyticsData) {
+      return {
+        optimizers: analyticsData.available_optimizers,
+        models: analyticsData.available_models,
+      };
+    }
+    const source = data?.items ?? [];
+    if (source.length === 0) return { optimizers: [], models: [] };
+    return {
+      optimizers: [
+        ...new Set(source.map((j) => j.optimizer_name).filter(Boolean)),
+      ] as string[],
+      models: [
+        ...new Set(source.map((j) => j.model_name).filter(Boolean)),
+      ] as string[],
+    };
+  }, [analyticsData, data]);
 
   const chartData = useMemo(() => {
-    if (!data)
-      return {
-        status: [],
-        improvement: [],
-        improvementJobIds: [] as string[],
-        optimizer: [],
-        kpis: null,
-        avgByOptimizer: [],
-        runtimeByOptimizer: [],
-        modelUsage: [],
-        topJobs: [],
-        jobTypeData: [],
-        runtimeDistribution: [],
-        runtimeDistributionJobIds: [] as string[],
-        datasetVsImprovement: [],
-        datasetVsImprovementIds: [] as string[],
-        efficiencyData: [],
-        efficiencyJobIds: [] as string[],
-        timelineData: [],
-        timelineDates: [] as string[],
-      };
-    let items = data.items;
-    if (analyticsJobId) items = items.filter((j) => j.optimization_id === analyticsJobId);
-    if (analyticsDate) items = items.filter((j) => j.created_at.slice(0, 10) === analyticsDate);
-    if (analyticsOptimizer !== "all")
-      items = items.filter((j) => j.optimizer_name === analyticsOptimizer);
-    if (analyticsModel !== "all") items = items.filter((j) => j.model_name === analyticsModel);
-    if (analyticsStatus !== "all") items = items.filter((j) => j.status === analyticsStatus);
-    const successful = items.filter((j) => j.status === "success");
-    const terminal = items.filter((j) => j.status === "success" || j.status === "failed");
+    const empty = {
+      status: [] as { key: string; name: string; value: number; fill: string }[],
+      improvement: [] as {
+        name: string;
+        ציון_משופר: number;
+        ציון_התחלתי: number;
+        delta: number | undefined;
+      }[],
+      improvementJobIds: [] as string[],
+      optimizer: [] as { name: string; value: number }[],
+      kpis: null as null | {
+        successRate: number;
+        avgImprovement: number;
+        avgRuntime: number;
+        totalRows: number;
+        successCount: number;
+        terminalCount: number;
+        totalPairsRun: number;
+        gridSearchCount: number;
+        singleRunCount: number;
+        bestImprovement: number;
+      },
+      avgByOptimizer: [] as { name: string; שיפור_ממוצע: number; count: number }[],
+      runtimeByOptimizer: [] as { name: string; זמן_ממוצע: number; count: number }[],
+      modelUsage: [] as { name: string; count: number }[],
+      topJobs: [] as OptimizationSummaryResponse[],
+      jobTypeData: [] as { name: string; value: number }[],
+      runtimeDistribution: [] as { name: string; זמן_דקות: number }[],
+      runtimeDistributionJobIds: [] as string[],
+      datasetVsImprovement: [] as { שורות: number; שיפור: number; name: string }[],
+      datasetVsImprovementIds: [] as string[],
+      efficiencyData: [] as { name: string; יעילות: number }[],
+      efficiencyJobIds: [] as string[],
+      timelineData: [] as { name: string; אופטימיזציות: number }[],
+      timelineDates: [] as string[],
+    };
+    if (!analyticsData) return empty;
 
-    // Status distribution
-    const statusCounts: Record<string, number> = {};
-    for (const j of items) {
-      statusCounts[j.status] = (statusCounts[j.status] ?? 0) + 1;
-    }
-    const statusData = Object.entries(statusCounts).map(([status, count]) => ({
-      key: status,
-      name: STATUS_LABELS[status] ?? status,
-      value: count,
-      fill: STATUS_COLORS[status] ?? "var(--color-chart-5)",
-    }));
+    // Treat a raw metric delta < 1 in magnitude as a 0-1 ratio and
+    // scale to percentage; otherwise pass through (already a
+    // percentage-like number). Mirrors the old client-side logic.
+    const toPct = (v: number) => (Math.abs(v) > 1 ? v : v * 100);
+    const formatId = (id: string) => id.slice(0, 8) + "…";
 
-    // Improvement per completed job (bar chart)
-    const successJobsForChart = items
-      .filter((j) => j.status === "success" && j.optimized_test_metric != null)
-      .slice(0, 10);
-    const improvementData = successJobsForChart.map((j) => {
+    const status = Object.entries(analyticsData.status_counts).map(
+      ([key, count]) => ({
+        key,
+        name: STATUS_LABELS[key] ?? key,
+        value: count,
+        fill: STATUS_COLORS[key] ?? "var(--color-chart-5)",
+      }),
+    );
+
+    const improvement = analyticsData.top_improvement.map((j) => {
       const opt = j.optimized_test_metric ?? 0;
       const bl = j.baseline_test_metric ?? 0;
-      const imp = j.metric_improvement;
-      const delta = imp != null ? (Math.abs(imp) > 1 ? imp : imp * 100) : undefined;
       return {
-        name: j.optimization_id.slice(0, 8) + "…",
+        name: formatId(j.optimization_id),
         ציון_משופר: Math.round(opt > 1 ? opt : opt * 100),
         ציון_התחלתי: Math.round(bl > 1 ? bl : bl * 100),
-        delta,
+        delta: j.metric_improvement != null ? toPct(j.metric_improvement) : undefined,
       };
     });
-    const improvementJobIds = successJobsForChart.map((j) => j.optimization_id);
-
-    // Optimizer usage
-    const optCounts: Record<string, number> = {};
-    for (const j of items) {
-      const opt = j.optimizer_name ?? "אחר";
-      optCounts[opt] = (optCounts[opt] ?? 0) + 1;
-    }
-    const optimizerData = Object.entries(optCounts).map(([name, count]) => ({
-      name,
-      value: count,
-    }));
-
-    // ── KPIs ──
-    const successRate = terminal.length > 0 ? (successful.length / terminal.length) * 100 : 0;
-    const improvements = successful
-      .filter((j) => j.metric_improvement != null)
-      .map((j) => {
-        const v = j.metric_improvement!;
-        return Math.abs(v) > 1 ? v : v * 100;
-      });
-    const avgImprovement =
-      improvements.length > 0 ? improvements.reduce((a, b) => a + b, 0) / improvements.length : 0;
-    const runtimes = successful
-      .filter((j) => j.elapsed_seconds != null)
-      .map((j) => j.elapsed_seconds!);
-    const avgRuntime =
-      runtimes.length > 0 ? runtimes.reduce((a, b) => a + b, 0) / runtimes.length : 0;
-    const totalRows = items.reduce((sum, j) => sum + (j.dataset_rows ?? 0), 0);
-    const totalPairsRun = items.reduce(
-      (sum, j) => sum + (j.total_pairs ?? (j.optimization_type === "run" ? 1 : 0)),
-      0,
+    const improvementJobIds = analyticsData.top_improvement.map(
+      (j) => j.optimization_id,
     );
-    const gridSearchCount = items.filter((j) => j.optimization_type === "grid_search").length;
-    const singleRunCount = items.filter((j) => j.optimization_type === "run").length;
-    const bestImprovement = improvements.length > 0 ? Math.max(...improvements) : 0;
+
+    const optimizer = Object.entries(analyticsData.optimizer_counts).map(
+      ([name, value]) => ({ name, value }),
+    );
+
     const kpis = {
-      successRate,
-      avgImprovement,
-      avgRuntime,
-      totalRows,
-      successCount: successful.length,
-      terminalCount: terminal.length,
-      totalPairsRun,
-      gridSearchCount,
-      singleRunCount,
-      bestImprovement,
+      successRate: analyticsData.success_rate * 100,
+      avgImprovement:
+        analyticsData.avg_improvement != null
+          ? toPct(analyticsData.avg_improvement)
+          : 0,
+      avgRuntime: analyticsData.avg_runtime_seconds ?? 0,
+      totalRows: analyticsData.total_dataset_rows,
+      successCount: analyticsData.success_count,
+      terminalCount: analyticsData.terminal_count,
+      totalPairsRun: analyticsData.total_pairs_run,
+      gridSearchCount: analyticsData.grid_search_count,
+      singleRunCount: analyticsData.single_run_count,
+      bestImprovement:
+        analyticsData.best_improvement != null
+          ? toPct(analyticsData.best_improvement)
+          : 0,
     };
 
-    // ── Average improvement by optimizer ──
-    const optGroups: Record<string, number[]> = {};
-    for (const j of successful) {
-      if (j.metric_improvement == null || !j.optimizer_name) continue;
-      const v =
-        Math.abs(j.metric_improvement) > 1 ? j.metric_improvement : j.metric_improvement * 100;
-      (optGroups[j.optimizer_name] ??= []).push(v);
-    }
-    const avgByOptimizer = Object.entries(optGroups).map(([name, vals]) => ({
-      name,
-      שיפור_ממוצע: +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1),
-      count: vals.length,
+    const avgByOptimizer = analyticsData.improvement_by_optimizer.map((o) => ({
+      name: o.name,
+      שיפור_ממוצע: +toPct(o.average).toFixed(1),
+      count: o.count,
     }));
 
-    // ── Average runtime by optimizer ──
-    const rtGroups: Record<string, number[]> = {};
-    for (const j of successful) {
-      if (j.elapsed_seconds == null || !j.optimizer_name) continue;
-      (rtGroups[j.optimizer_name] ??= []).push(j.elapsed_seconds);
-    }
-    const runtimeByOptimizer = Object.entries(rtGroups).map(([name, vals]) => ({
-      name,
-      זמן_ממוצע: +(vals.reduce((a, b) => a + b, 0) / vals.length / 60).toFixed(1),
-      count: vals.length,
-    }));
-
-    // ── Model usage ──
-    const modelCounts: Record<string, number> = {};
-    for (const j of items) {
-      const m = j.model_name ?? j.best_pair_label?.split(" + ")[0];
-      if (m) modelCounts[m] = (modelCounts[m] ?? 0) + 1;
-    }
-    const modelUsage = Object.entries(modelCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, count]) => ({ name, count }));
-
-    // ── Job type distribution ──
-    const typeCounts: Record<string, number> = {};
-    for (const j of items) {
-      const t = j.optimization_type === "grid_search" ? "סריקה" : "ריצה בודדת";
-      typeCounts[t] = (typeCounts[t] ?? 0) + 1;
-    }
-    const jobTypeData = Object.entries(typeCounts).map(([name, value]) => ({ name, value }));
-
-    // ── Top improvements ──
-    const topJobs = [...successful]
-      .filter((j) => j.metric_improvement != null)
-      .sort((a, b) => {
-        const ai =
-          Math.abs(a.metric_improvement!) > 1 ? a.metric_improvement! : a.metric_improvement! * 100;
-        const bi =
-          Math.abs(b.metric_improvement!) > 1 ? b.metric_improvement! : b.metric_improvement! * 100;
-        return bi - ai;
-      })
-      .slice(0, 5);
-
-    // ── Runtime distribution ──
-    const runtimeJobs = successful.filter((j) => j.elapsed_seconds != null).slice(0, 15);
-    const runtimeDistribution = runtimeJobs.map((j) => ({
-      name: j.optimization_id.slice(0, 8) + "…",
-      זמן_דקות: +(j.elapsed_seconds! / 60).toFixed(1),
-    }));
-    const runtimeDistributionJobIds = runtimeJobs.map((j) => j.optimization_id);
-
-    // ── Dataset size vs improvement ──
-    const dvsJobs = successful.filter(
-      (j) => j.dataset_rows != null && j.metric_improvement != null,
+    const runtimeByOptimizer = analyticsData.runtime_minutes_by_optimizer.map(
+      (o) => ({
+        name: o.name,
+        זמן_ממוצע: o.average,
+        count: o.count,
+      }),
     );
-    const datasetVsImprovement = dvsJobs.map((j) => ({
-      שורות: j.dataset_rows!,
-      שיפור: +(
-        Math.abs(j.metric_improvement!) > 1 ? j.metric_improvement! : j.metric_improvement! * 100
-      ).toFixed(1),
-      name: j.optimization_id.slice(0, 8) + "…",
-    }));
-    const datasetVsImprovementIds = dvsJobs.map((j) => j.optimization_id);
 
-    // ── Efficiency (improvement per minute) ──
-    const effJobs = successful
-      .filter(
-        (j) => j.metric_improvement != null && j.elapsed_seconds != null && j.elapsed_seconds > 0,
-      )
-      .map((j) => {
-        const imp =
-          Math.abs(j.metric_improvement!) > 1 ? j.metric_improvement! : j.metric_improvement! * 100;
-        return {
-          name: j.optimization_id.slice(0, 8) + "…",
-          יעילות: +((imp / j.elapsed_seconds!) * 60).toFixed(2),
-          _id: j.optimization_id,
-        };
-      })
-      .sort((a, b) => b.יעילות - a.יעילות)
-      .slice(0, 10);
-    const efficiencyData = effJobs.map(({ name, יעילות }) => ({ name, יעילות }));
-    const efficiencyJobIds = effJobs.map((j) => j._id);
-
-    // ── Timeline (jobs per day) ──
-    const timelineBuckets: Record<string, number> = {};
-    for (const j of items) {
-      const day = j.created_at.slice(0, 10);
-      timelineBuckets[day] = (timelineBuckets[day] ?? 0) + 1;
-    }
-    const timelineEntries = Object.entries(timelineBuckets)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-14);
-    const timelineData = timelineEntries.map(([date, count]) => ({
-      name: new Date(date).toLocaleDateString("he-IL", { day: "numeric", month: "short" }),
-      אופטימיזציות: count,
+    const modelUsage = analyticsData.model_usage.map((m) => ({
+      name: m.name,
+      count: m.value,
     }));
-    const timelineDates = timelineEntries.map(([date]) => date);
+
+    const topJobs = analyticsData.top_jobs_by_improvement as unknown as OptimizationSummaryResponse[];
+
+    const jobTypeData = Object.entries(analyticsData.job_type_counts).map(
+      ([key, value]) => ({
+        name: key === "grid_search" ? "סריקה" : "ריצה בודדת",
+        value,
+      }),
+    );
+
+    const runtimeDistribution = analyticsData.runtime_distribution.map((j) => ({
+      name: formatId(j.optimization_id),
+      זמן_דקות: +((j.elapsed_seconds ?? 0) / 60).toFixed(1),
+    }));
+    const runtimeDistributionJobIds = analyticsData.runtime_distribution.map(
+      (j) => j.optimization_id,
+    );
+
+    const datasetVsImprovement = analyticsData.dataset_vs_improvement.map((j) => ({
+      שורות: j.dataset_rows ?? 0,
+      שיפור: +toPct(j.metric_improvement ?? 0).toFixed(1),
+      name: formatId(j.optimization_id),
+    }));
+    const datasetVsImprovementIds = analyticsData.dataset_vs_improvement.map(
+      (j) => j.optimization_id,
+    );
+
+    const efficiencyData = analyticsData.efficiency.map((j) => {
+      const delta = j.metric_improvement ?? 0;
+      const elapsed = j.elapsed_seconds ?? 0;
+      const יעילות =
+        elapsed > 0 ? +((toPct(delta) / elapsed) * 60).toFixed(2) : 0;
+      return { name: formatId(j.optimization_id), יעילות };
+    });
+    const efficiencyJobIds = analyticsData.efficiency.map((j) => j.optimization_id);
+
+    const timelineData = analyticsData.timeline.map((t) => ({
+      name: new Date(t.date).toLocaleDateString("he-IL", {
+        day: "numeric",
+        month: "short",
+      }),
+      אופטימיזציות: t.count,
+    }));
+    const timelineDates = analyticsData.timeline.map((t) => t.date);
 
     return {
-      status: statusData,
-      improvement: improvementData,
+      status,
+      improvement,
       improvementJobIds,
-      optimizer: optimizerData,
+      optimizer,
       kpis,
       avgByOptimizer,
       runtimeByOptimizer,
@@ -599,28 +740,35 @@ export default function DashboardPage() {
       timelineData,
       timelineDates,
     };
-  }, [data, analyticsJobId, analyticsDate, analyticsOptimizer, analyticsModel, analyticsStatus]);
+  }, [analyticsData]);
 
-  const analyticsFilteredItems = useMemo(() => {
-    if (!data) return [];
-    let items = data.items;
-    if (analyticsJobId) items = items.filter((j) => j.optimization_id === analyticsJobId);
-    if (analyticsDate) items = items.filter((j) => j.created_at.slice(0, 10) === analyticsDate);
-    if (analyticsOptimizer !== "all")
-      items = items.filter((j) => j.optimizer_name === analyticsOptimizer);
-    if (analyticsModel !== "all") items = items.filter((j) => j.model_name === analyticsModel);
-    if (analyticsStatus !== "all") items = items.filter((j) => j.status === analyticsStatus);
-    return items;
-  }, [data, analyticsJobId, analyticsDate, analyticsOptimizer, analyticsModel, analyticsStatus]);
-
-  const statsSource = activeTab === "analytics" ? analyticsFilteredItems : filteredItems;
+  // Aggregate totals come from the dedicated `/optimizations/counts`
+  // endpoint for the jobs tab and from `/analytics/dashboard` for the
+  // analytics tab — whichever tab is active dictates which source the
+  // stat cards use. When filters are active on the analytics tab the
+  // cards reflect the filtered totals returned by the analytics
+  // endpoint (`filtered_total` + status breakdown).
   const stats = data
-    ? {
-        total: statsSource.length,
-        success: statsSource.filter((j) => j.status === "success").length,
-        running: statsSource.filter((j) => ACTIVE_STATUSES.has(j.status)).length,
-        failed: statsSource.filter((j) => j.status === "failed").length,
-      }
+    ? activeTab === "analytics" && analyticsData
+      ? {
+          total: analyticsData.filtered_total,
+          success: analyticsData.success_count,
+          running: analyticsData.running_count,
+          failed: analyticsData.failed_count,
+        }
+      : !counts
+      ? {
+          total: filteredItems.length,
+          success: filteredItems.filter((j) => j.status === "success").length,
+          running: filteredItems.filter((j) => ACTIVE_STATUSES.has(j.status)).length,
+          failed: filteredItems.filter((j) => j.status === "failed").length,
+        }
+      : {
+          total: counts.total,
+          success: counts.success,
+          running: counts.pending + counts.validating + counts.running,
+          failed: counts.failed,
+        }
     : null;
 
   return (
@@ -660,9 +808,9 @@ export default function DashboardPage() {
             data-tutorial="dashboard-kpis"
           >
             {/* Total */}
-            <TiltCard>
-              <Card className="border-border/40 hover:border-border/70 transition-colors duration-300">
-                <CardContent className="p-5 sm:p-6">
+            <TiltCard className="h-full">
+              <Card className="h-full border-border/40 hover:border-border/70 transition-colors duration-300">
+                <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                   <div className="flex items-start justify-between">
                     <div className="space-y-3">
                       <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
@@ -681,11 +829,11 @@ export default function DashboardPage() {
               </Card>
             </TiltCard>
             {/* Running */}
-            <TiltCard>
+            <TiltCard className="h-full">
               <Card
-                className={`border-border/40 hover:border-border/70 transition-colors duration-300 ${stats.running > 0 ? "border-[var(--warning)]/20" : ""}`}
+                className={`h-full border-border/40 hover:border-border/70 transition-colors duration-300 ${stats.running > 0 ? "border-[var(--warning)]/20" : ""}`}
               >
-                <CardContent className="p-5 sm:p-6">
+                <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                   <div className="flex items-start justify-between">
                     <div className="space-y-3">
                       <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
@@ -710,9 +858,9 @@ export default function DashboardPage() {
               </Card>
             </TiltCard>
             {/* Success */}
-            <TiltCard>
-              <Card className="border-border/40 hover:border-border/70 transition-colors duration-300">
-                <CardContent className="p-5 sm:p-6">
+            <TiltCard className="h-full">
+              <Card className="h-full border-border/40 hover:border-border/70 transition-colors duration-300">
+                <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                   <div className="flex items-start justify-between">
                     <div className="space-y-3">
                       <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
@@ -749,9 +897,9 @@ export default function DashboardPage() {
               </Card>
             </TiltCard>
             {/* Failed */}
-            <TiltCard>
-              <Card className="border-border/40 hover:border-border/70 transition-colors duration-300">
-                <CardContent className="p-5 sm:p-6">
+            <TiltCard className="h-full">
+              <Card className="h-full border-border/40 hover:border-border/70 transition-colors duration-300">
+                <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                   <div className="flex items-start justify-between">
                     <div className="space-y-3">
                       <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
@@ -860,26 +1008,45 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {!loading && data && filteredItems.length === 0 && (
+                    {!loading && data && filteredItems.length === 0 && data.total === 0 && (
                       <div className="flex flex-col items-center gap-3 py-16 text-center">
                         <p className="text-base font-medium">לא נמצאו אופטימיזציות</p>
                         <p className="text-sm text-muted-foreground max-w-xs">
                           העלה דאטאסט, הגדר חתימה ומטריקה, והמערכת תשפר את הפרומפט אוטומטית
                         </p>
-                        <Button asChild size="pill" className="mt-2">
+                        <Button
+                          asChild
+                          className="group mt-2 gap-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(124,99,80,0.3)] active:scale-[0.97]"
+                        >
                           <Link href="/submit">
-                            <Plus className="size-4" />
+                            <Plus className="size-4 transition-transform duration-200 group-hover:rotate-90" />
                             אופטימיזציה חדשה
                           </Link>
                         </Button>
                       </div>
                     )}
 
-                    {pagedItems.length > 0 && (
+                    {filteredItems.length > 0 && (
                       <div className="overflow-x-auto" data-tutorial="dashboard-table">
                         <Table style={{ minWidth: "800px" }}>
                           <thead className="bg-muted/30 [&_tr]:border-b [&_tr]:border-border/50">
                             <tr>
+                              {isAdmin && (
+                                <th className="w-10 px-3">
+                                  <input
+                                    type="checkbox"
+                                    aria-label="בחר הכל בעמוד"
+                                    className="size-4 cursor-pointer accent-primary"
+                                    checked={pageAllSelected}
+                                    ref={(el) => {
+                                      if (el) el.indeterminate = pageSomeSelected;
+                                    }}
+                                    disabled={selectablePageIds.length === 0}
+                                    onChange={togglePageSelection}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </th>
+                              )}
                               <ColumnHeader
                                 label="מזהה אופטימיזציה"
                                 sortKey="optimization_id"
@@ -995,16 +1162,22 @@ export default function DashboardPage() {
                             </tr>
                           </thead>
                           <TableBody className="transition-opacity duration-200">
-                            {pagedItems.map((job, idx) => (
+                            {filteredItems.map((job, idx) => {
+                              const isSelected = selectedIds.has(job.optimization_id);
+                              return (
                               <TableRow
                                 key={job.optimization_id}
-                                className="group border-border/40 cursor-pointer [&_td:last-child]:cursor-default"
+                                data-selected={isSelected}
+                                className={`group border-border/40 cursor-pointer transition-colors duration-150 data-[selected=true]:bg-primary/10 hover:bg-accent/30 data-[selected=true]:hover:bg-primary/15 [&_td:last-child]:cursor-default ${isAdmin ? "[&_td:first-child]:cursor-default" : ""}`}
                                 style={{
                                   animation: `fadeSlideIn 0.25s ease-out ${idx * 0.03}s both`,
                                 }}
                                 onClick={(e) => {
                                   const td = (e.target as HTMLElement).closest("td");
-                                  if (!td || td === td.parentElement?.lastElementChild) return;
+                                  if (!td) return;
+                                  const parent = td.parentElement;
+                                  if (td === parent?.lastElementChild) return;
+                                  if (isAdmin && td === parent?.firstElementChild) return;
                                   const text = td.textContent?.trim();
                                   if (text) {
                                     navigator.clipboard.writeText(text);
@@ -1013,6 +1186,18 @@ export default function DashboardPage() {
                                 }}
                                 data-tutorial="job-link"
                               >
+                                {isAdmin && (
+                                  <TableCell className="w-10 px-3">
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`בחר אופטימיזציה ${job.optimization_id}`}
+                                      className="size-4 cursor-pointer accent-primary"
+                                      checked={selectedIds.has(job.optimization_id)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={() => toggleRowSelected(job.optimization_id)}
+                                    />
+                                  </TableCell>
+                                )}
                                 <TableCell
                                   className="max-w-[180px] truncate overflow-hidden"
                                   title={job.optimization_id}
@@ -1113,32 +1298,36 @@ export default function DashboardPage() {
                                   </div>
                                 </TableCell>
                               </TableRow>
-                            ))}
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
                     )}
 
-                    {data && totalPages > 1 && (
+                    {data && data.total > FETCH_PAGE_SIZE && (
                       <div className="flex items-center justify-center gap-3 pt-5 border-t border-border/50 mt-4">
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={offset === 0}
-                          onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                          disabled={pageOffset === 0 || loading}
+                          onClick={() =>
+                            setPageOffset(Math.max(0, pageOffset - FETCH_PAGE_SIZE))
+                          }
                           className="gap-1"
                         >
                           <ChevronRight className="size-3.5" />
                           הקודם
                         </Button>
                         <span className="text-sm text-muted-foreground tabular-nums px-3 py-1 rounded-md bg-muted/50">
-                          {currentPage} / {totalPages}
+                          {Math.floor(pageOffset / FETCH_PAGE_SIZE) + 1} /{" "}
+                          {Math.max(1, Math.ceil(data.total / FETCH_PAGE_SIZE))}
                         </span>
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={offset + PAGE_SIZE >= (data?.total ?? 0)}
-                          onClick={() => setOffset(offset + PAGE_SIZE)}
+                          disabled={pageOffset + FETCH_PAGE_SIZE >= data.total || loading}
+                          onClick={() => setPageOffset(pageOffset + FETCH_PAGE_SIZE)}
                           className="gap-1"
                         >
                           הבא
@@ -1152,7 +1341,14 @@ export default function DashboardPage() {
 
               {/* ── Analytics tab ── */}
               <TabsContent value="analytics" data-tutorial="dashboard-stats">
-                {data && data.items.length > 0 ? (
+                {analyticsLoading && analyticsData === null ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-24">
+                    <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      טוען נתוני אנליטיקה...
+                    </p>
+                  </div>
+                ) : (analyticsData?.filtered_total ?? 0) > 0 ? (
                   <div className="space-y-6">
                     {/* ── Active filter chips ── */}
                     {(() => {
@@ -2096,7 +2292,7 @@ export default function DashboardPage() {
                       </motion.div>
                     </AnimatePresence>
                     {/* Empty state for filtered results */}
-                    {analyticsFilteredItems.length === 0 &&
+                    {(analyticsData?.filtered_total ?? 0) === 0 &&
                       (analyticsJobId ||
                         analyticsDate ||
                         analyticsOptimizer !== "all" ||
@@ -2119,6 +2315,107 @@ export default function DashboardPage() {
             </Tabs>
           )}
         </FadeIn>
+
+        {/* Floating bulk-action bar (admins only, when rows selected) */}
+        <AnimatePresence>
+          {isAdmin && selectedIds.size > 0 && (
+            <motion.div
+              initial={{ y: 24, opacity: 0, scale: 0.96 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 24, opacity: 0, scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+              dir="rtl"
+            >
+              <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/95 backdrop-blur-xl px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+                <span className="px-1 text-sm text-foreground">
+                  {selectedIds.size === 1 ? (
+                    <>נבחרה אופטימיזציה אחת</>
+                  ) : (
+                    <>
+                      נבחרו{" "}
+                      <span className="font-semibold tabular-nums">{selectedIds.size}</span>{" "}
+                      אופטימיזציות
+                    </>
+                  )}
+                </span>
+                <div className="mx-1 h-5 w-px bg-border/60" />
+                <TooltipProvider delayDuration={150}>
+                  <UiTooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent/80 hover:text-foreground active:scale-95 transition-all cursor-pointer"
+                        aria-label="נקה בחירה"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">נקה בחירה</TooltipContent>
+                  </UiTooltip>
+                  <UiTooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setBulkDeleteOpen(true)}
+                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all cursor-pointer"
+                        aria-label="מחק נבחרים"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">מחק נבחרים</TooltipContent>
+                  </UiTooltip>
+                </TooltipProvider>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Bulk delete confirmation dialog */}
+        <Dialog
+          open={bulkDeleteOpen}
+          onOpenChange={(open) => {
+            if (!open) setBulkDeleteOpen(false);
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                {selectedIds.size === 1 ? "מחיקת אופטימיזציה" : "מחיקת מספר אופטימיזציות"}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedIds.size === 1 ? (
+                  <>האם למחוק אופטימיזציה אחת? פעולה זו אינה הפיכה.</>
+                ) : (
+                  <>
+                    האם למחוק <span className="font-semibold">{selectedIds.size}</span>{" "}
+                    אופטימיזציות? פעולה זו אינה הפיכה.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setBulkDeleteOpen(false)}
+                disabled={bulkDeleting}
+                className="w-full justify-center"
+              >
+                ביטול
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmBulkDelete}
+                disabled={bulkDeleting}
+                className="w-full justify-center"
+              >
+                {bulkDeleting ? <Loader2 className="size-4 animate-spin" /> : "מחק הכל"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Delete confirmation dialog */}
         <Dialog

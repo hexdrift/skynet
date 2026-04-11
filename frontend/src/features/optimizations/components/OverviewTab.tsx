@@ -25,9 +25,9 @@ import {
   Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/components/motion";
-import { HelpTip } from "@/components/help-tip";
-import type { OptimizationStatusResponse } from "@/lib/types";
+import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
+import { HelpTip } from "@/shared/ui/help-tip";
+import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { PIPELINE_STAGES, type PipelineStage } from "../constants";
 import { detectStage } from "../lib/detect-stage";
 import { formatDuration, formatImprovement, formatPercent } from "@/shared/lib";
@@ -35,7 +35,7 @@ import type { ScorePoint } from "../lib/extract-scores";
 import { GridOverview } from "./GridOverview";
 import { InfoCard } from "./ui-primitives";
 
-const ScoreChart = dynamic(() => import("@/components/score-chart").then((m) => m.ScoreChart), {
+const ScoreChart = dynamic(() => import("@/shared/ui/score-chart").then((m) => m.ScoreChart), {
   ssr: false,
   loading: () => <div className="h-full" />,
 });

@@ -5,9 +5,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { NumberInput } from "@/components/number-input";
-import { HelpTip } from "@/components/help-tip";
-import { cn } from "@/lib/utils";
+import { NumberInput } from "@/shared/ui/number-input";
+import { HelpTip } from "@/shared/ui/help-tip";
+import { cn } from "@/shared/lib/utils";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
@@ -49,7 +49,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
         <CardDescription>חלוקת הנתונים והגדרות האופטימייזר</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Split fractions */}
         <div className="space-y-3" data-tutorial="data-splits">
           <div className="flex items-center justify-between">
             <Label className="font-semibold">
@@ -122,7 +121,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
 
         <Separator />
 
-        {/* Advanced settings inline */}
         <div className="space-y-4">
           <Label className="font-semibold">הגדרות נוספות</Label>
           <div className="flex items-center justify-between">
@@ -133,11 +131,9 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
             </Label>
             <Switch id="shuffle" checked={shuffle} onCheckedChange={setShuffle} />
           </div>
-          {/* Optimizer-specific parameters */}
           <Separator />
           <Label className="font-semibold text-xs text-muted-foreground">פרמטרי אופטימייזר</Label>
 
-          {/* Common: auto level */}
           <div className="space-y-2" data-tutorial="auto-level">
             <Label className="text-sm">
               <HelpTip text="עומק החיפוש — קלה מהירה עם פחות ניסיונות, מעמיקה בודקת יותר שילובים אך לוקחת זמן רב יותר">

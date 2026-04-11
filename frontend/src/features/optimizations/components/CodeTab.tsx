@@ -13,12 +13,12 @@ import dynamic from "next/dynamic";
 import { Code, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FadeIn } from "@/components/motion";
-import { HelpTip } from "@/components/help-tip";
-import type { OptimizedPredictor } from "@/lib/types";
+import { FadeIn } from "@/shared/ui/motion";
+import { HelpTip } from "@/shared/ui/help-tip";
+import type { OptimizedPredictor } from "@/shared/types/api";
 import { CopyButton } from "./ui-primitives";
 
-const CodeEditor = dynamic(() => import("@/components/code-editor").then((m) => m.CodeEditor), {
+const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
   loading: () => (
     <div className="h-[180px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" />

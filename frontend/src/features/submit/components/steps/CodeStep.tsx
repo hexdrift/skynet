@@ -4,11 +4,11 @@ import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { HelpTip } from "@/components/help-tip";
+import { HelpTip } from "@/shared/ui/help-tip";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
-const CodeEditor = dynamic(() => import("@/components/code-editor").then((m) => m.CodeEditor), {
+const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
   loading: () => (
     <div className="h-[200px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" />

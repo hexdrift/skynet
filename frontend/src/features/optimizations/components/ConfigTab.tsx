@@ -27,12 +27,11 @@ import {
   Thermometer,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FadeIn } from "@/components/motion";
-import { HelpTip } from "@/components/help-tip";
-import type { OptimizationPayloadResponse, OptimizationStatusResponse } from "@/lib/types";
+import { FadeIn } from "@/shared/ui/motion";
+import { HelpTip } from "@/shared/ui/help-tip";
+import type { OptimizationPayloadResponse, OptimizationStatusResponse } from "@/shared/types/api";
 import { InfoCard } from "./ui-primitives";
 
-// ── Known optimizer param labels and tooltips (Hebrew) ──
 const OPT_PARAM_LABELS: Record<string, string> = {
   auto: "רמת חיפוש",
   max_bootstrapped_demos: "דוגמאות אוטומטיות",

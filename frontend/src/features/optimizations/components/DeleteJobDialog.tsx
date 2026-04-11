@@ -26,7 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { deleteJob } from "@/lib/api";
+import { deleteJob } from "@/shared/lib/api";
 import { msg } from "@/features/shared/messages";
 
 export function DeleteJobDialog({

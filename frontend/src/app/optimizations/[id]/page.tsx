@@ -24,8 +24,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { useColumnFilters, useColumnResize } from "@/components/excel-filter";
-import { FadeIn } from "@/components/motion";
+import { useColumnFilters, useColumnResize } from "@/shared/ui/excel-filter";
+import { FadeIn } from "@/shared/ui/motion";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
@@ -41,24 +41,20 @@ import {
   getPairServeInfo,
   serveProgramStream,
   servePairProgramStream,
-} from "@/lib/api";
-import type { ServeInfoResponse } from "@/lib/types";
-import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/lib/tutorial-demo-data";
+} from "@/shared/lib/api";
+import type { ServeInfoResponse } from "@/shared/types/api";
+import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/features/tutorial/lib/demo-data";
 import { Skeleton } from "boneyard-js/react";
-import { optimizationDetailBones } from "@/components/optimization-detail-bones";
+import { optimizationDetailBones } from "@/features/optimizations/lib/bones";
 import { msg } from "@/features/shared/messages";
-import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/lib/constants";
-import { registerTutorialHook } from "@/lib/tutorial-bridge";
-import { HelpTip } from "@/components/help-tip";
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-status";
+import { registerTutorialHook } from "@/features/tutorial/lib/bridge";
+import { HelpTip } from "@/shared/ui/help-tip";
 import type {
   OptimizationStatusResponse,
   OptimizationLogEntry,
   OptimizationPayloadResponse,
-} from "@/lib/types";
-
-/* ── Helpers ── */
-// Pure helpers, constants, and the pipeline-stage detector have moved
-// to @/features/optimizations — see index.ts for the public surface.
+} from "@/shared/types/api";
 
 import {
   type PipelineStage,

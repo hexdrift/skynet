@@ -20,9 +20,9 @@ import {
   Cell,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/components/motion";
-import { HelpTip } from "@/components/help-tip";
-import type { OptimizationStatusResponse } from "@/lib/types";
+import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
+import { HelpTip } from "@/shared/ui/help-tip";
+import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { formatPercent, formatImprovement } from "@/shared/lib";
 
 export function GridOverview({

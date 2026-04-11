@@ -18,12 +18,12 @@ import {
   Database,
   Cpu,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ModelChip } from "@/components/model-chip";
+import { cn } from "@/shared/lib/utils";
+import { ModelChip } from "@/shared/ui/model-chip";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
-const CodeEditor = dynamic(() => import("@/components/code-editor").then((m) => m.CodeEditor), {
+const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
   loading: () => (
     <div className="h-[200px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" />
@@ -72,14 +72,12 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
 
   return (
     <div className="space-y-4" data-tutorial="wizard-step-6">
-      {/* Tabbed sections */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
         className="rounded-2xl border border-border bg-card/80 backdrop-blur-xl shadow-lg overflow-hidden"
       >
-        {/* Tab bar */}
         <div className="relative flex border-b border-border bg-secondary/50 p-1 gap-0.5">
           <div
             className="absolute top-1 bottom-1 rounded-lg bg-background shadow-sm transition-[inset-inline-start] duration-200 ease-out pointer-events-none"
@@ -106,7 +104,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
           ))}
         </div>
 
-        {/* Tab content */}
         <div className="p-5">
           <AnimatePresence mode="wait">
             <motion.div
@@ -116,7 +113,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.15 }}
             >
-              {/* General */}
               {summaryTab === 0 && (
                 <div className="space-y-0">
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
@@ -156,7 +152,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                 </div>
               )}
 
-              {/* Dataset */}
               {summaryTab === 1 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
@@ -255,7 +250,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                 </div>
               )}
 
-              {/* Models */}
               {summaryTab === 2 && (
                 <div className="space-y-2 pointer-events-none">
                   {jobType === "run" ? (
@@ -296,7 +290,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                 </div>
               )}
 
-              {/* Optimizer */}
               {summaryTab === 3 && (
                 <div className="space-y-0">
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
@@ -379,7 +372,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                 </div>
               )}
 
-              {/* Code */}
               {summaryTab === 4 && (
                 <Tabs
                   defaultValue={signatureCode ? "signature" : "metric"}

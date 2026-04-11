@@ -4,8 +4,8 @@
  * Extracted from components/sidebar.tsx — these don't touch React state,
  * so they can be unit-tested in isolation.
  */
-import type { SidebarJobItem } from "@/lib/api";
-import { ACTIVE_STATUSES } from "@/lib/constants";
+import type { SidebarJobItem } from "@/shared/lib/api";
+import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 
 export interface JobGroup {
   label: string;

@@ -11,9 +11,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * resets to the default variant.
  */
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type RectDef = { x: number; y: number; w: number; h: number };
 
@@ -33,14 +30,10 @@ type LetterDef = {
   variants: LetterVariants;
 };
 
-// ---------------------------------------------------------------------------
-// Letter definitions
 // Translated & custom-calculated to match the STORY design language exactly,
 // all scaled within a 92-unit high viewBox.
-// ---------------------------------------------------------------------------
 
 const LETTERS: LetterDef[] = [
-  // ── S (Directly matching STORY's S) ────────────────────────────────────
   {
     offset: 0,
     variants: {
@@ -56,7 +49,6 @@ const LETTERS: LetterDef[] = [
       sans: "M35.3,92c-10.4,0-18.8-2.4-25-7.3C4.1,79.9,0.9,73.3,0.9,65H13c0,5.7,2.1,10,6.2,13c4.1,2.9,9.5,4.4,16.2,4.4 c3,0,5.9-0.3,8.5-0.9c2.6-0.6,4.9-1.6,7-2.8c2.1-1.3,3.7-3,4.9-5.2c1.2-2.2,1.8-4.8,1.8-7.6c0-1.5-0.2-2.8-0.5-4 c-0.4-1.2-0.8-2.2-1.4-3.1c-0.5-0.9-1.4-1.7-2.5-2.5c-1.2-0.8-2.2-1.5-3.3-1.9c-1-0.5-2.5-1.1-4.6-1.7c-2-0.6-3.7-1.1-5.3-1.5 c-1.5-0.4-3.7-0.9-6.5-1.6c-2.2-0.5-4-0.9-5.3-1.3c-1.3-0.3-3-0.8-5-1.4s-3.6-1.1-4.9-1.6c-1.2-0.5-2.7-1.2-4.4-1.9 c-1.6-0.8-3-1.6-4-2.4c-1-0.8-2.1-1.8-3.1-2.9c-1.1-1.2-2-2.4-2.5-3.7c-0.6-1.2-1.1-2.7-1.5-4.3c-0.4-1.7-0.6-3.4-0.6-5.2 c0-7.4,3-13.5,9-18.2c5.9-4.6,13.7-7,23-7c9.8,0,17.8,2.4,24,7.3s9.3,11.3,9.3,19H56c0-5-2-9-6-12.1c-4-3.1-9.2-4.7-15.6-4.7 c-6,0-11,1.4-14.9,4s-5.9,6.4-5.9,11.4c0,1.4,0.2,2.6,0.5,3.7c0.4,1.1,0.8,2.1,1.4,2.9c0.6,0.8,1.4,1.7,2.6,2.4 c1.2,0.7,2.4,1.4,3.4,1.9c1.1,0.5,2.7,1.1,4.7,1.7c2.1,0.6,3.9,1.1,5.5,1.6c1.7,0.4,3.9,0.9,6.8,1.7c2.2,0.5,3.9,0.9,5.1,1.3 c1.2,0.3,2.9,0.7,4.9,1.3c2,0.6,3.6,1.1,4.8,1.6c1.2,0.5,2.5,1.1,4.2,1.9c1.6,0.8,2.9,1.5,3.8,2.4c0.9,0.8,2,1.8,3,2.9 c1.1,1.1,1.9,2.4,2.5,3.7c0.6,1.3,1,2.8,1.4,4.4c0.4,1.7,0.6,3.5,0.6,5.4c0,7.6-3,13.9-8.9,18.9C54.1,89.5,45.9,92,35.3,92z",
     },
   },
-  // ── K ──────────────────────────────────────────────────────────────────
   {
     offset: 75,
     variants: {
@@ -72,7 +64,6 @@ const LETTERS: LetterDef[] = [
       sans: "M 2 2.1 h 11 v 87.9 h -11 Z M 6 46 L 52 2.1 h 14 L 6 54 Z M 28 35 L 66 90 h -14 L 16 45 Z",
     },
   },
-  // ── Y (Adapted from STORY's Y) ─────────────────────────────────────────
   {
     offset: 155,
     variants: {
@@ -88,7 +79,6 @@ const LETTERS: LetterDef[] = [
       sans: "M82.9,2.2 l-32.9,59.5 V90 h-11.5 V61.7 L5.8,2.2 h12.7 L44.3,50 l25.9,-47.8 H82.9 z",
     },
   },
-  // ── N ──────────────────────────────────────────────────────────────────
   {
     offset: 245,
     variants: {
@@ -104,7 +94,6 @@ const LETTERS: LetterDef[] = [
       sans: "M 2 2.1 h 11 v 87.9 h -11 Z M 52 2.1 h 11 v 87.9 h -11 Z M 2 2.1 l 61 87.9 h -11 l -50 -87.9 Z",
     },
   },
-  // ── E ──────────────────────────────────────────────────────────────────
   {
     offset: 325,
     variants: {
@@ -119,7 +108,6 @@ const LETTERS: LetterDef[] = [
       sans: "M 2 2.1 h 50 v 10.2 h -39 v 28 h 32 v 10.2 h -32 v 29.3 h 41 v 10.2 h -52 Z",
     },
   },
-  // ── T (Adapted from STORY's T) ─────────────────────────────────────────
   {
     offset: 395,
     variants: {
@@ -140,9 +128,6 @@ const TOTAL_WIDTH = 475;
 const VARIANT_NAMES = ["default", "glyph", "serif", "sans"] as const;
 type VariantName = (typeof VARIANT_NAMES)[number];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /** Pick `count` unique random indices from [0, total) */
 function pickRandom(total: number, count: number): number[] {
@@ -162,9 +147,6 @@ function randomOtherVariant(current: VariantName): VariantName {
   return others[Math.floor(Math.random() * others.length)]!;
 }
 
-// ---------------------------------------------------------------------------
-// Render helpers
-// ---------------------------------------------------------------------------
 
 // Uses cubic-bezier equivalent to 'ease-out-cubic' for incredibly smooth overlaps
 const TRANSITION = "opacity 300ms cubic-bezier(0.215, 0.610, 0.355, 1.000)";
@@ -197,9 +179,6 @@ function VariantGroup({
   return <path d={d} style={style} fillRule="nonzero" />;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function AnimatedWordmark({
   size = 28,
@@ -220,7 +199,6 @@ export function AnimatedWordmark({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotionRef = useRef(false);
 
-  // Reduced motion detection
   useEffect(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
     reducedMotionRef.current = mql.matches;
@@ -231,7 +209,6 @@ export function AnimatedWordmark({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Start morphing on hover
   const startMorph = useCallback(() => {
     if (intervalRef.current) return;
 
@@ -284,7 +261,6 @@ export function AnimatedWordmark({
     };
   }, [autoMorph, startMorph]);
 
-  // Dynamically calculate width based on the SVG's ratio
   const aspectRatio = TOTAL_WIDTH / 92;
   const svgWidth = size * aspectRatio;
 

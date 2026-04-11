@@ -2,7 +2,7 @@
 
 import { Check } from "lucide-react";
 import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 
 import { STEPS } from "../constants";
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";

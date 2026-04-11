@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { HelpTip } from "@/components/help-tip";
-import { ModelChip, AddModelButton } from "@/components/model-chip";
-import { ModelConfigModal } from "@/components/model-config-modal";
+import { cn } from "@/shared/lib/utils";
+import { HelpTip } from "@/shared/ui/help-tip";
+import { ModelChip, AddModelButton } from "@/shared/ui/model-chip";
+import { ModelConfigModal } from "@/features/submit/components/ModelConfigModal";
 
 import { emptyModelConfig } from "../../constants";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -121,7 +121,6 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
         </div>
         <Separator />
 
-        {/* Global provider settings */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="baseUrl">כתובת שרת (Base URL)</Label>
@@ -164,7 +163,6 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
 
         <Separator />
 
-        {/* Model chips */}
         {jobType === "run" ? (
           <div className="space-y-3" data-tutorial="model-catalog">
             <Label className="text-sm font-semibold">מודלים</Label>

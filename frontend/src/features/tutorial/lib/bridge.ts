@@ -19,7 +19,7 @@
  * in the browser — identical behavior to the old window globals, but with
  * full type checking at both ends.
  */
-import type { ParsedDataset } from "./parse-dataset";
+import type { ParsedDataset } from "@/features/submit/lib/parse-dataset";
 
 /**
  * The set of hooks the tutorial system can invoke. Every hook is a

@@ -6,12 +6,12 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { Menu, LogOut, GraduationCap, BookOpen } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
-import { AnimatedWordmark } from "./animated-wordmark";
-import { useTutorialContext } from "./tutorial/tutorial-provider";
+import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
+import { useTutorialContext } from "@/features/tutorial/components/tutorial-provider";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
-import { ParticleHero } from "./particle-hero";
-const Sidebar = dynamic(() => import("./sidebar").then((m) => m.Sidebar), { ssr: false });
+import { ParticleHero } from "@/shared/ui/particle-hero";
+const Sidebar = dynamic(() => import("@/features/sidebar/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);

@@ -22,15 +22,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
-import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/components/motion";
-import { getJob } from "@/lib/api";
-import { STATUS_LABELS } from "@/lib/constants";
-import type { OptimizationStatusResponse, OptimizedPredictor } from "@/lib/types";
+import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
+import { getJob } from "@/shared/lib/api";
+import { STATUS_LABELS } from "@/shared/constants/job-status";
+import type { OptimizationStatusResponse, OptimizedPredictor } from "@/shared/types/api";
 import { Skeleton } from "boneyard-js/react";
-import { compareBones } from "@/components/compare-bones";
-import { HelpTip } from "@/components/help-tip";
-
-/* ── Formatters ── */
+import { compareBones } from "@/features/compare/lib/bones";
+import { HelpTip } from "@/shared/ui/help-tip";
 
 function fmt(v: number | undefined | null): string {
   if (v == null) return "—";
@@ -54,8 +52,6 @@ function fmtElapsed(s?: number | null): string {
   return `${mins}:${pad(secs)}`;
 }
 
-/* ── Score Card ── */
-
 function ScoreCard({
   label,
   valueA,
@@ -76,7 +72,6 @@ function ScoreCard({
           {label}
         </p>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          {/* A */}
           <div
             className={`text-center rounded-lg py-2 px-3 transition-colors ${winner === "a" ? "bg-emerald-50 border border-emerald-200/60" : "bg-muted/30"}`}
           >
@@ -89,9 +84,7 @@ function ScoreCard({
               <Trophy className="size-3 text-emerald-500 inline-block ms-1.5 -mt-0.5" />
             )}
           </div>
-          {/* VS */}
           <span className="text-[10px] text-muted-foreground/50 font-bold">VS</span>
-          {/* B */}
           <div
             className={`text-center rounded-lg py-2 px-3 transition-colors ${winner === "b" ? "bg-emerald-50 border border-emerald-200/60" : "bg-muted/30"}`}
           >
@@ -109,8 +102,6 @@ function ScoreCard({
     </StaggerItem>
   );
 }
-
-/* ── Config Row ── */
 
 function ConfigRow({
   icon: Icon,
@@ -139,8 +130,6 @@ function ConfigRow({
   );
 }
 
-/* ── Copy Button ── */
-
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
@@ -164,8 +153,6 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
-/* ── Prompt Block ── */
-
 function PromptBlock({
   prompt,
   label,
@@ -186,7 +173,6 @@ function PromptBlock({
         {label}
       </h4>
 
-      {/* Instructions */}
       <div className="space-y-1.5">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
           <HelpTip text="ההנחיות שהאופטימייזר יצר למודל — מתארות את המשימה ואיך לבצע אותה">
@@ -204,7 +190,6 @@ function PromptBlock({
         </div>
       </div>
 
-      {/* Demos */}
       {prompt.demos.length > 0 && (
         <div className="space-y-2">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -241,8 +226,6 @@ function PromptBlock({
     </div>
   );
 }
-
-/* ── Page ── */
 
 export default function ComparePage() {
   const searchParams = useSearchParams();
@@ -297,7 +280,6 @@ export default function ComparePage() {
 
   const [a, b] = jobs as [OptimizationStatusResponse, OptimizationStatusResponse];
 
-  // Extract metrics
   const aBaseline =
     a.result?.baseline_test_metric ?? a.grid_result?.best_pair?.baseline_test_metric;
   const bBaseline =
@@ -336,7 +318,6 @@ export default function ComparePage() {
           : null
       : null;
 
-  // Prompts
   const aPrompt =
     a.result?.program_artifact?.optimized_prompt ??
     a.grid_result?.best_pair?.program_artifact?.optimized_prompt;
@@ -354,7 +335,6 @@ export default function ComparePage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
     >
-      {/* Breadcrumb */}
       <FadeIn>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-foreground transition-colors">
