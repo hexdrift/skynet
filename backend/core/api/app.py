@@ -212,6 +212,36 @@ def create_app(
             },
         )
 
+    @app.exception_handler(Exception)
+    async def _generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Catch-all handler for unhandled exceptions to prevent info disclosure.
+        
+        Logs the full exception with stack trace while returning a safe generic
+        error response to the client. Prevents leaking DB credentials, file paths,
+        API keys, or internal implementation details.
+        
+        Args:
+            request: Incoming HTTP request that triggered the exception.
+            exc: Unhandled exception instance.
+            
+        Returns:
+            JSONResponse: Generic 500 error response with no sensitive details.
+        """
+        logger.error(
+            "Unhandled exception in %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "internal_error",
+                "detail": "An internal server error occurred. Please contact support.",
+            },
+        )
+
     # [WORKER-FIX] max seconds of no worker activity before health check flags it
     WORKER_STALE_THRESHOLD = float(os.getenv("WORKER_STALE_THRESHOLD", "600"))
 
@@ -291,17 +321,25 @@ def create_app(
     # ── Domain routers ──
     # Every route except /health and /queue lives in a sub-module under
     # routers/. Each exposes a create_<domain>_router factory returning an
-    # APIRouter wired up with the dependencies it needs.
-    app.include_router(create_models_router())
-    app.include_router(create_code_validation_router())
-    app.include_router(create_submissions_router(service=service, job_store=job_store))
-    app.include_router(create_analytics_router(job_store=job_store))
-    app.include_router(create_optimizations_router(
-        job_store=job_store,
-        get_worker_ref=lambda: worker,
-    ))
-    app.include_router(create_serve_router(job_store=job_store))
-    app.include_router(create_templates_router(job_store=job_store))
-    app.include_router(create_optimizations_meta_router(job_store=job_store))
+    # APIRouter wired up with the dependencies it needs. Tags are applied
+    # here so the OpenAPI spec (and Scalar) groups routes consistently
+    # without touching the router files themselves.
+    app.include_router(create_models_router(), tags=["Models"])
+    app.include_router(create_code_validation_router(), tags=["Code Validation"])
+    app.include_router(
+        create_submissions_router(service=service, job_store=job_store),
+        tags=["Optimizations"],
+    )
+    app.include_router(create_analytics_router(job_store=job_store), tags=["Analytics"])
+    app.include_router(
+        create_optimizations_router(job_store=job_store, get_worker_ref=lambda: worker),
+        tags=["Optimizations"],
+    )
+    app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
+    app.include_router(create_templates_router(job_store=job_store), tags=["Templates"])
+    app.include_router(
+        create_optimizations_meta_router(job_store=job_store),
+        tags=["Optimizations"],
+    )
 
     return app
