@@ -49,7 +49,7 @@ import { LogsTab } from "./LogsTab";
 import { ExportMenu } from "./ExportMenu";
 import { ServeChat, type ServeChatProps } from "./ServeChat";
 import { CopyButton, InfoCard } from "./ui-primitives";
-import { formatDuration, formatImprovement, formatPercent } from "../lib/formatters";
+import { formatDuration, formatImprovement, formatPercent } from "@/shared/lib";
 import type { ScorePoint } from "../lib/extract-scores";
 
 const ScoreChart = dynamic(() => import("@/components/score-chart").then((m) => m.ScoreChart), {

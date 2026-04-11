@@ -30,7 +30,7 @@ import { HelpTip } from "@/components/help-tip";
 import type { OptimizationStatusResponse } from "@/lib/types";
 import { PIPELINE_STAGES, type PipelineStage } from "../constants";
 import { detectStage } from "../lib/detect-stage";
-import { formatDuration, formatImprovement, formatPercent } from "../lib/formatters";
+import { formatDuration, formatImprovement, formatPercent } from "@/shared/lib";
 import type { ScorePoint } from "../lib/extract-scores";
 import { GridOverview } from "./GridOverview";
 import { InfoCard } from "./ui-primitives";
