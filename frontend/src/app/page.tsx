@@ -31,7 +31,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 
 const ScoresChart = dynamic(
-  () => import("@/components/analytics-charts").then((m) => m.ScoresChart),
+  () => import("@/shared/charts").then((m) => m.ScoresChart),
   {
     ssr: false,
     loading: () => (
@@ -42,23 +42,23 @@ const ScoresChart = dynamic(
   },
 );
 const OptimizerChart = dynamic(
-  () => import("@/components/analytics-charts").then((m) => m.OptimizerChart),
+  () => import("@/shared/charts").then((m) => m.OptimizerChart),
   { ssr: false, loading: () => <div className="h-[280px]" /> },
 );
 const RuntimeDistributionChart = dynamic(
-  () => import("@/components/analytics-charts").then((m) => m.RuntimeDistributionChart),
+  () => import("@/shared/charts").then((m) => m.RuntimeDistributionChart),
   { ssr: false, loading: () => <div className="h-[250px]" /> },
 );
 const DatasetVsImprovementChart = dynamic(
-  () => import("@/components/analytics-charts").then((m) => m.DatasetVsImprovementChart),
+  () => import("@/shared/charts").then((m) => m.DatasetVsImprovementChart),
   { ssr: false, loading: () => <div className="h-[250px]" /> },
 );
 const EfficiencyChart = dynamic(
-  () => import("@/components/analytics-charts").then((m) => m.EfficiencyChart),
+  () => import("@/shared/charts").then((m) => m.EfficiencyChart),
   { ssr: false, loading: () => <div className="h-[250px]" /> },
 );
 const TimelineChart = dynamic(
-  () => import("@/components/analytics-charts").then((m) => m.TimelineChart),
+  () => import("@/shared/charts").then((m) => m.TimelineChart),
   { ssr: false, loading: () => <div className="h-[160px]" /> },
 );
 
