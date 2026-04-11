@@ -96,7 +96,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         status: Optional[str] = Query(default=None, description="Filter by job status"),
         username: Optional[str] = Query(default=None, description="Filter by username"),
         optimization_type: Optional[str] = Query(default=None, description="Filter by job type (run or grid_search)"),
-        limit: int = Query(default=2000, ge=1, le=2000, description="Max results"),
+        limit: int = Query(default=50, ge=1, le=500, description="Max results"),
         offset: int = Query(default=0, ge=0, description="Skip N results"),
     ) -> PaginatedJobsResponse:
         """List all jobs with optional filtering and pagination.
