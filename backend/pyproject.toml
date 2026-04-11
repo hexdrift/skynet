@@ -12,7 +12,11 @@ build-backend = "setuptools.build_meta"
 include = ["core*"]
 
 [tool.setuptools.package-data]
-"core.api" = ["static/scalar/*.js", "static/scalar/fonts/*.woff2"]
+"core.api" = [
+    "static/scalar/*.js",
+    "static/scalar/*.svg",
+    "static/scalar/fonts/*.woff2",
+]
 
 [project]
 name = "skynet"

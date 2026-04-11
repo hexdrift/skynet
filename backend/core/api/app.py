@@ -142,6 +142,7 @@ def create_app(
         return get_scalar_api_reference(
             openapi_url=app.openapi_url,
             title=f"{app.title} API",
+            scalar_favicon_url="/scalar-static/favicon.svg",
             scalar_js_url="/scalar-static/standalone.js",
             agent=AgentScalarConfig(disabled=True),
             telemetry=False,
@@ -149,10 +150,29 @@ def create_app(
             persist_auth=True,
             default_open_all_tags=False,
             dark_mode=False,
-            # Hide Scalar's "Generate MCP" / "Connect MCP" sidebar block.
-            # scalar-fastapi has no dedicated flag for this yet, and the
-            # MCP feature has no use in an air-gapped deployment.
-            custom_css=".scalar-mcp-layer { display: none !important; }",
+            custom_css=(
+                # Hide Scalar's "Generate MCP" / "Connect MCP" sidebar block.
+                # scalar-fastapi has no dedicated flag for this, and the MCP
+                # feature has no use in an air-gapped deployment.
+                ".scalar-mcp-layer { display: none !important; }"
+                # Render the Skynet logo next to the API title in the
+                # introduction header. The ::before pseudo-element on the h1
+                # label is a flex item sized to match the text height.
+                ".introduction-section .section-header-label {"
+                "  display: flex;"
+                "  align-items: center;"
+                "  gap: 16px;"
+                "}"
+                ".introduction-section .section-header-label::before {"
+                "  content: '';"
+                "  display: inline-block;"
+                "  width: 56px;"
+                "  height: 56px;"
+                "  background: url('/scalar-static/skynet_logo.svg') no-repeat center center;"
+                "  background-size: contain;"
+                "  flex-shrink: 0;"
+                "}"
+            ),
         )
 
     allowed_origins = os.getenv(
