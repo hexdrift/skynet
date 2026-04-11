@@ -65,18 +65,45 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
     """
     router = APIRouter()
 
-    @router.post("/run", response_model=OptimizationSubmissionResponse, status_code=201)
+    @router.post(
+        "/run",
+        response_model=OptimizationSubmissionResponse,
+        status_code=201,
+        summary="Submit a single DSPy optimization run",
+    )
     def submit_job(payload: RunRequest) -> OptimizationSubmissionResponse:
-        """Validate and queue a DSPy optimization request.
+        """Queue one end-to-end DSPy optimization for background execution.
 
-        Args:
-            payload: Parsed request containing dataset and optimizer settings.
+        This is the primary write endpoint of the service. It takes a fully
+        specified optimization request (dataset, column mapping, optimizer,
+        model(s), signature, metric), validates it synchronously, and hands
+        it to the background worker. The response returns immediately with
+        an ``optimization_id`` the caller can poll with
+        ``GET /optimizations/{id}/summary`` or stream via
+        ``GET /optimizations/{id}/stream``.
 
-        Returns:
-            OptimizationSubmissionResponse: Optimization identifier and scheduling metadata.
+        Pipeline on success:
+            1. Payload is validated against the registered module/optimizer
+               and the user-supplied signature/metric code. A ``ServiceError``
+               or ``RegistryError`` here returns HTTP 400 with details.
+            2. Per-user quota is enforced. Returns HTTP 409 with a Hebrew
+               error message if the user has hit ``MAX_JOBS_PER_USER``.
+            3. A UUID is generated. The split seed defaults to a deterministic
+               hash of the UUID if the caller didn't supply one, so train/val/test
+               splits are reproducible without forcing the user to pick a number.
+            4. A job row is created in the store with status ``pending`` and
+               its payload overview (a scrubbed, API-key-free copy of the
+               request) saved for later display.
+            5. The job is pushed onto the worker queue. The worker picks it
+               up asynchronously — this call returns before any optimization
+               actually runs.
+            6. A ``notify_job_started`` event fires (audit log / webhook).
 
-        Raises:
-            HTTPException: If validation fails.
+        Security: ``model_settings.api_key`` is stripped before the overview
+        is persisted. Keys only exist in memory inside the worker process.
+
+        Returns HTTP 201 with ``OptimizationSubmissionResponse`` on success.
+        Errors: 400 (validation), 409 (quota), 422 (malformed body).
         """
 
         try:
@@ -158,9 +185,38 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             optimizer_name=payload.optimizer_name,
         )
 
-    @router.post("/grid-search", response_model=OptimizationSubmissionResponse, status_code=201)
+    @router.post(
+        "/grid-search",
+        response_model=OptimizationSubmissionResponse,
+        status_code=201,
+        summary="Submit a grid search over model pairs",
+    )
     def submit_grid_search(payload: GridSearchRequest) -> OptimizationSubmissionResponse:
-        """Submit a grid search over (generation, reflection) model pairs."""
+        """Queue a sweep that runs one optimization per ``(generation_model,
+        reflection_model)`` pair and then reports the best.
+
+        The Cartesian product of ``generation_models × reflection_models``
+        defines the pair count. Every pair reuses the same dataset, split
+        fractions, signature, metric, and optimizer kwargs — only the two
+        model slots vary. This is the right shape for questions like
+        "which base model + reflection model combo works best on my task?".
+
+        Contract with the caller:
+            - Both lists must be non-empty; request body validation
+              enforces that before this handler runs.
+            - ``total_pairs`` is persisted on the overview as
+              ``len(generation_models) * len(reflection_models)`` so the UI
+              can render a determinate progress bar.
+            - Each individual pair is executed serially inside the same
+              grid-search job — the worker does not fan them out to
+              parallel subprocesses. Cancel the grid to stop all remaining
+              pairs.
+
+        Same error handling as ``POST /run``: HTTP 400 on validation
+        failure, 409 if the user is at quota, 422 on malformed body.
+        Returns 201 with the submission response; poll
+        ``/optimizations/{id}/summary`` for per-pair progress.
+        """
         if hasattr(service, "validate_grid_search_payload"):
             try:
                 service.validate_grid_search_payload(payload)
