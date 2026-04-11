@@ -71,7 +71,6 @@ from .converters import (
 
 logger = logging.getLogger(__name__)
 
-# Terminal job states that cannot be cancelled or restarted
 _TERMINAL_STATUSES = {JobStatus.success, JobStatus.failed, JobStatus.cancelled}
 
 
@@ -148,10 +147,8 @@ def create_app(
         allow_headers=["*"],
     )
 
-    # ---- Consistent error response format ----
     # All error responses use {"error": "<type>", "detail": "..."}
     # so API consumers can write a single error handler.
-
     _STATUS_TO_ERROR_TYPE = {
         400: "validation_error",
         404: "not_found",
@@ -408,7 +405,6 @@ def create_app(
         if job_status not in _TERMINAL_STATUSES:
             est_remaining = extract_estimated_remaining(job_data)
 
-        # Extract result metrics
         result_data = job_data.get("result")
         latest_metrics = job_data.get("latest_metrics", {})
         baseline = None
@@ -441,7 +437,6 @@ def create_app(
                 live_failed = latest_metrics.get("failed_so_far")
                 failed_pairs = live_failed if isinstance(live_failed, int) else 0
 
-        # Compute metric improvement
         metric_improvement = None
         if baseline is not None and optimized is not None:
             metric_improvement = round(optimized - baseline, 6)
@@ -564,7 +559,6 @@ def create_app(
         if status not in _TERMINAL_STATUSES:
             est_remaining = extract_estimated_remaining(job_data)
 
-        # Pair counters for grid search jobs
         latest_metrics = job_data.get("latest_metrics", {})
         completed_pairs = None
         failed_pairs = None
