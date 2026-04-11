@@ -16,7 +16,14 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3001")
 
 
 def _job_url(optimization_id: str) -> str:
-    """Build a link to the job detail page."""
+    """Build a link to the job detail page.
+
+    Args:
+        optimization_id: Identifier of the optimization being linked.
+
+    Returns:
+        Fully qualified URL pointing at the job's detail page.
+    """
     return f"{FRONTEND_URL}/jobs/{optimization_id}"
 
 
@@ -37,6 +44,9 @@ def notify_job_started(
         optimizer_name: Optimizer being used.
         module_name: DSPy module being optimized.
         model_name: LLM model name (if applicable).
+
+    Returns:
+        None.
     """
     type_label = "חיפוש רשת" if optimization_type == "grid_search" else "הרצה"
     model_part = f" | מודל: {model_name}" if model_name else ""
@@ -69,6 +79,9 @@ def notify_job_completed(
         message: Status message from the backend.
         baseline_score: Baseline test metric (if available).
         optimized_score: Optimized test metric (if available).
+
+    Returns:
+        None.
     """
     link = _job_url(optimization_id)
 

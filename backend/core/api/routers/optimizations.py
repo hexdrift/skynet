@@ -25,12 +25,16 @@ from ...constants import (
     PAYLOAD_OVERVIEW_USERNAME,
 )
 from ...models import (
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    BulkDeleteSkipped,
     ColumnMapping,
     GridSearchResponse,
     JobCancelResponse,
     JobDeleteResponse,
     JobLogEntry,
     ModelConfig,
+    OptimizationCountsResponse,
     OptimizationStatus,
     OptimizationStatusResponse,
     OptimizationSummaryResponse,
@@ -125,6 +129,19 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         Response caching: a brief private cache is applied by the
         app-level middleware when no status filter is set, since the
         unfiltered dashboard view is the hottest path.
+
+        Args:
+            status: Exact-match job status filter.
+            username: Only include jobs submitted by this user.
+            optimization_type: Filter by ``run`` or ``grid_search``.
+            limit: Maximum number of jobs returned in this page.
+            offset: Number of jobs to skip before the returned slice.
+
+        Returns:
+            PaginatedJobsResponse with one compact card per job.
+
+        Raises:
+            HTTPException: 422 if ``status`` or ``optimization_type`` is invalid.
         """
         if status is not None and status not in _VALID_STATUSES:
             raise HTTPException(
@@ -140,6 +157,40 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         rows = job_store.list_jobs(status=status, username=username, optimization_type=optimization_type, limit=limit, offset=offset)
         items = [build_summary(job_data) for job_data in rows]
         return PaginatedJobsResponse(items=items, total=total, limit=limit, offset=offset)
+
+    @router.get(
+        "/optimizations/counts",
+        response_model=OptimizationCountsResponse,
+        summary="Aggregate job counts grouped by status",
+    )
+    def get_optimization_counts(
+        username: Optional[str] = Query(default=None, description="Restrict counts to a single user"),
+    ) -> OptimizationCountsResponse:
+        """Return the full backend row counts grouped by status.
+
+        The dashboard pulls job pages incrementally via infinite scroll,
+        so summing locally-loaded items would under-report the true
+        totals displayed in the stat cards. This endpoint issues one
+        ``COUNT`` per status (plus a grand total) so the dashboard can
+        render "סה״כ", "נכשלו", "הצליחו" etc. against the full dataset
+        without loading every row.
+
+        Args:
+            username: Restrict counts to jobs owned by this user.
+
+        Returns:
+            OptimizationCountsResponse with totals per status.
+        """
+        total = job_store.count_jobs(username=username)
+        return OptimizationCountsResponse(
+            total=total,
+            pending=job_store.count_jobs(status="pending", username=username),
+            validating=job_store.count_jobs(status="validating", username=username),
+            running=job_store.count_jobs(status="running", username=username),
+            success=job_store.count_jobs(status="success", username=username),
+            failed=job_store.count_jobs(status="failed", username=username),
+            cancelled=job_store.count_jobs(status="cancelled", username=username),
+        )
 
     @router.get(
         "/optimizations/sidebar",
@@ -166,6 +217,14 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
         Ordering is newest-first. Pinned jobs are *not* reordered by this
         endpoint — the UI handles the "pinned on top" sort client-side.
+
+        Args:
+            username: Restrict the list to a single user's jobs.
+            limit: Maximum page size.
+            offset: Number of jobs to skip before the returned slice.
+
+        Returns:
+            SidebarJobsResponse with minimal per-job entries for the sidebar.
         """
         total = job_store.count_jobs(username=username)
         rows = job_store.list_jobs(username=username, limit=limit, offset=offset)
@@ -187,7 +246,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             ))
         return SidebarJobsResponse(items=items, total=total)
 
-    # ── Server-Sent Events (SSE) for real-time dashboard streaming ──
     # NOTE: Must be registered BEFORE /optimizations/{optimization_id} to avoid route shadowing.
 
     @router.get(
@@ -215,11 +273,20 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         to reconnect whenever they transition from "some jobs running"
         back to "jobs running again". The frontend hides this behind a
         reconnecting EventSource wrapper.
+
+        Returns:
+            StreamingResponse yielding ``text/event-stream`` snapshots.
         """
         import asyncio
         import json
 
         async def event_generator():
+            """Yield active-job snapshots as SSE payloads until the queue drains.
+
+            Yields:
+                SSE-formatted strings describing the active job set, ending with
+                an ``event: idle`` payload once no jobs remain.
+            """
             while True:
                 active_rows = []
                 for s in ("pending", "validating", "running"):
@@ -291,6 +358,17 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         Errors: HTTP 404 if the optimization ID is unknown. Corrupted
         result data is tolerated — the endpoint logs a warning and
         omits the offending section rather than 500ing.
+
+        Args:
+            optimization_id: Identifier of the optimization job to fetch.
+            request: Incoming HTTP request used for conditional ``If-None-Match``.
+
+        Returns:
+            OptimizationStatusResponse with the full job detail, or a 304 response
+            when the client's ETag matches the current job state.
+
+        Raises:
+            HTTPException: 404 when the optimization ID is unknown.
         """
 
         try:
@@ -330,7 +408,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         if status not in _TERMINAL_STATUSES:
             est_remaining = extract_estimated_remaining(job_data)
 
-        # Pair counters for grid search jobs
         latest_metrics = job_data.get("latest_metrics", {})
         completed_pairs = None
         failed_pairs = None
@@ -406,6 +483,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         ``/optimizations/{id}/logs``.
 
         Returns HTTP 404 if the optimization doesn't exist.
+
+        Args:
+            optimization_id: Identifier of the optimization job to summarize.
+
+        Returns:
+            OptimizationSummaryResponse with the compact card shape.
+
+        Raises:
+            HTTPException: 404 when the optimization ID is unknown.
         """
 
         try:
@@ -449,6 +535,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
               submitted without a dataset (very old jobs).
             - 500 if the stored ``column_mapping`` fails validation —
               this indicates data corruption.
+
+        Args:
+            optimization_id: Identifier of the optimization job whose dataset is fetched.
+
+        Returns:
+            Dict with total rows, per-split rows, column mapping, and split counts.
+
+        Raises:
+            HTTPException: 404 (missing job or dataset) or 500 (invalid mapping).
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -469,7 +564,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                 detail="Dataset not available for this job.",
             )
 
-        # Parse column mapping
         raw_mapping = payload.get("column_mapping", {})
         try:
             column_mapping = ColumnMapping.model_validate(raw_mapping)
@@ -506,6 +600,14 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         test_indices = indices[val_end:]
 
         def _build_rows(idx_list: list[int]) -> list[dict]:
+            """Build row dicts with original indices for a split.
+
+            Args:
+                idx_list: Global dataset indices belonging to a single split.
+
+            Returns:
+                List of ``{"index", "row"}`` dicts in the same order as ``idx_list``.
+            """
             return [{"index": i, "row": dataset[i]} for i in idx_list]
 
         splits = {
@@ -566,6 +668,16 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         Errors: 404 (optimization missing), 400 (no metric code stored,
         no model config), 409 (no optimized program when
         ``program_type="optimized"``).
+
+        Args:
+            optimization_id: Identifier of the optimization job to run against.
+            req: Request body with ``indices`` and ``program_type`` keys.
+
+        Returns:
+            Dict with ``results`` (list of per-example outputs) and ``program_type``.
+
+        Raises:
+            HTTPException: 404/400/409 depending on missing dependencies.
         """
         import base64
         import pickle
@@ -609,13 +721,11 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         val_end = train_end + int(total * fractions.val)
         test_indices_set = set(ordered[val_end:])
 
-        # Load metric
         metric_code = payload.get("metric_code", "")
         if not metric_code:
             raise HTTPException(status_code=400, detail="Optimization has no metric code.")
         metric = load_metric_from_code(metric_code)
 
-        # Load model config
         model_settings = payload.get("model_config") or overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS, {})
         model_name_str = overview.get(PAYLOAD_OVERVIEW_MODEL_NAME, "")
         if model_settings:
@@ -627,7 +737,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
         lm = build_language_model(model_config)
 
-        # Build program
         if program_type == "baseline":
             signature_code = payload.get("signature_code", "")
             signature_cls = load_signature_from_code(signature_code)
@@ -640,7 +749,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                 module_kwargs["signature"] = signature_cls
             program = module_factory(**module_kwargs)
         else:
-            # Load optimized program
             result_data = job_data.get("result")
             if not result_data:
                 raise HTTPException(status_code=409, detail="Optimization has no result.")
@@ -653,14 +761,12 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                 _program_cache[optimization_id] = pickle.loads(program_bytes)  # noqa: S301
             program = _program_cache[optimization_id]
 
-        # Convert requested rows to DSPy examples and evaluate
         results = []
         with dspy.context(lm=lm):
             for idx in indices:
                 if idx < 0 or idx >= total:
                     continue
                 row = dataset[idx]
-                # Build example
                 example_dict = {}
                 for sig_field, col_name in column_mapping.inputs.items():
                     example_dict[sig_field] = row.get(col_name, "")
@@ -677,7 +783,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                     for sig_field in column_mapping.outputs:
                         outputs[sig_field] = getattr(prediction, sig_field, None)
 
-                    # Run metric
                     try:
                         score = metric(example, prediction)
                         score = float(score) if isinstance(score, (int, float, bool)) else 0.0
@@ -733,6 +838,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
         Errors: 404 (unknown job), 409 (no result yet — run still in
         progress or failed before evaluation completed).
+
+        Args:
+            optimization_id: Identifier of the optimization job to inspect.
+
+        Returns:
+            Dict with ``baseline`` and ``optimized`` per-example result arrays.
+
+        Raises:
+            HTTPException: 404 (unknown job) or 409 (no result yet).
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -764,6 +878,14 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         test_indices = ordered[val_end:]
 
         def remap(results: list) -> list:
+            """Rewrite sequential test indices to global dataset indices.
+
+            Args:
+                results: Per-example result dicts keyed by sequential test index.
+
+            Returns:
+                New list of result dicts with ``index`` remapped to the global dataset.
+            """
             remapped = []
             for r in results:
                 seq_idx = r.get("index", 0)
@@ -804,6 +926,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
               caller can surface it.
             - HTTP 500 if the stored result data fails schema
               validation (indicates upstream corruption).
+
+        Args:
+            optimization_id: Identifier of the optimization whose artifact is fetched.
+
+        Returns:
+            ProgramArtifactResponse containing the serialized program artifact.
+
+        Raises:
+            HTTPException: 404, 409, or 500 depending on the failure mode described above.
         """
 
         try:
@@ -881,6 +1012,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         ``GET /optimizations/{id}`` — its ``grid_result`` field is
         populated from the same underlying data while the sweep is in
         progress.
+
+        Args:
+            optimization_id: Identifier of the grid-search job.
+
+        Returns:
+            GridSearchResponse with per-pair metrics, artifacts, and the best pair.
+
+        Raises:
+            HTTPException: 404, 409, or 500 depending on the failure described above.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -945,6 +1085,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         simply disappears from the queue; otherwise the partial
         progress remains on the job (logs, progress events) but
         ``result`` will be unset.
+
+        Args:
+            optimization_id: Identifier of the optimization to cancel.
+
+        Returns:
+            JobCancelResponse confirming the cancellation.
+
+        Raises:
+            HTTPException: 404 (unknown job) or 409 (already terminal).
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -992,6 +1141,15 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
 
         Returns ``{"optimization_id": ..., "deleted": true}`` on
         success. The deletion is immediate and not recoverable.
+
+        Args:
+            optimization_id: Identifier of the optimization to delete.
+
+        Returns:
+            JobDeleteResponse confirming the delete succeeded.
+
+        Raises:
+            HTTPException: 404 (unknown job) or 409 (still active).
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -1009,7 +1167,97 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         logger.info("Optimization %s deleted", optimization_id)
         return JobDeleteResponse(optimization_id=optimization_id, deleted=True)
 
-    # ── Server-Sent Events (SSE) for real-time job streaming ──
+    @router.post(
+        "/optimizations/bulk-delete",
+        response_model=BulkDeleteResponse,
+        status_code=200,
+        summary="Delete many optimizations in a single request",
+    )
+    def bulk_delete_jobs(body: BulkDeleteRequest) -> BulkDeleteResponse:
+        """Hard-delete a batch of optimizations in one call.
+
+        Accepts ``{"optimization_ids": [...]}`` and deletes every job
+        that exists and is in a terminal status (``success``, ``failed``,
+        ``cancelled``). This endpoint never raises 404 or 409 for
+        individual IDs — instead it returns per-id results so the caller
+        can report partial failures:
+
+            {
+              "deleted": ["opt_a", "opt_b"],
+              "skipped": [
+                {"optimization_id": "opt_c", "reason": "not_found"},
+                {"optimization_id": "opt_d", "reason": "running"}
+              ]
+            }
+
+        Duplicate IDs in the request are deduplicated. The request as
+        a whole only fails if the body is malformed.
+
+        Performance: validation and deletion run in two bulk queries
+        regardless of batch size — one ``SELECT ... WHERE id IN (...)``
+        to fetch existing statuses and one batched ``DELETE`` on the
+        terminal subset (plus the associated logs/progress rows).
+
+        Args:
+            body: Request payload containing the ``optimization_ids`` to delete.
+
+        Returns:
+            BulkDeleteResponse with the IDs deleted and per-ID skip reasons.
+        """
+        deleted: list[str] = []
+        skipped: list[BulkDeleteSkipped] = []
+        seen: set[str] = set()
+        ordered_unique: list[str] = []
+        for optimization_id in body.optimization_ids:
+            if optimization_id in seen:
+                continue
+            seen.add(optimization_id)
+            ordered_unique.append(optimization_id)
+
+        if not ordered_unique:
+            return BulkDeleteResponse(deleted=deleted, skipped=skipped)
+
+        status_by_id = job_store.get_jobs_status_by_ids(ordered_unique)
+
+        deletable: list[str] = []
+        for optimization_id in ordered_unique:
+            raw_status = status_by_id.get(optimization_id)
+            if raw_status is None:
+                skipped.append(
+                    BulkDeleteSkipped(optimization_id=optimization_id, reason="not_found")
+                )
+                continue
+            status = status_to_job_status(raw_status)
+            if status not in _TERMINAL_STATUSES:
+                skipped.append(
+                    BulkDeleteSkipped(optimization_id=optimization_id, reason=status.value)
+                )
+                continue
+            deletable.append(optimization_id)
+
+        if deletable:
+            try:
+                job_store.delete_jobs(deletable)
+            except Exception as exc:
+                logger.exception("Bulk delete failed for %d ids", len(deletable))
+                for optimization_id in deletable:
+                    skipped.append(
+                        BulkDeleteSkipped(
+                            optimization_id=optimization_id,
+                            reason=f"error: {exc}",
+                        )
+                    )
+            else:
+                deleted.extend(deletable)
+
+        logger.info(
+            "Bulk delete: %d deleted, %d skipped (requested %d)",
+            len(deleted),
+            len(skipped),
+            len(body.optimization_ids),
+        )
+        return BulkDeleteResponse(deleted=deleted, skipped=skipped)
+
 
     @router.get(
         "/optimizations/{optimization_id}/stream",
@@ -1041,11 +1289,19 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         the stream if the optimization ID is unknown, so clients don't
         have to handle missing-job errors as SSE messages on first
         connect.
+
+        Args:
+            optimization_id: Identifier of the optimization to stream.
+
+        Returns:
+            StreamingResponse yielding ``text/event-stream`` events until completion.
+
+        Raises:
+            HTTPException: 404 if the optimization ID is unknown.
         """
         import asyncio
         import json
 
-        # Check job exists before opening stream
         try:
             raw = job_store.get_job(optimization_id)
         except KeyError:
@@ -1056,14 +1312,18 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         terminal = {"success", "failed", "cancelled"}
 
         async def event_generator():
-            """Yield SSE events until job completes."""
+            """Yield SSE events until job completes.
+
+            Yields:
+                SSE-formatted strings with the job's latest status, ending with a
+                ``done`` event on terminal status or an ``error`` event if the job vanishes.
+            """
             while True:
                 raw = job_store.get_job(optimization_id)
                 if raw is None:
                     yield f"event: error\ndata: {json.dumps({'error': 'Optimization not found'})}\n\n"
                     return
 
-                # Build a lightweight status payload
                 status = raw.get("status", "pending")
                 metrics = raw.get("latest_metrics", {})
                 payload = {
@@ -1119,6 +1379,16 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
               exist in the grid result.
             - HTTP 409: the optimization is not a grid search, or
               hasn't reached ``success``, or stored no result data.
+
+        Args:
+            optimization_id: Identifier of the grid-search job.
+            pair_index: 0-based index of the pair within the grid-search sweep.
+
+        Returns:
+            Dict with ``baseline`` and ``optimized`` per-example result arrays.
+
+        Raises:
+            HTTPException: 404 or 409 as described above.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -1177,6 +1447,14 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         test_indices = ordered[val_end:]
 
         def remap(results: list) -> list:
+            """Rewrite per-pair sequential test indices to global dataset indices.
+
+            Args:
+                results: Per-example result dicts keyed by sequential test index.
+
+            Returns:
+                New list of result dicts with ``index`` remapped to the global dataset.
+            """
             remapped = []
             for r in results:
                 seq_idx = r.get("index", 0)

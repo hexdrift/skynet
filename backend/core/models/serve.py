@@ -21,6 +21,14 @@ class ServeRequest(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_inputs(self) -> "ServeRequest":
+        """Reject requests whose ``inputs`` mapping is empty.
+
+        Returns:
+            The validated ``ServeRequest`` instance.
+
+        Raises:
+            ValueError: If no input field values were supplied.
+        """
         if not self.inputs:
             raise ValueError("At least one input field is required.")
         return self

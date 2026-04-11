@@ -114,9 +114,6 @@ def _cleanup(job_id: str) -> None:
         pass
 
 
-# ════════════════════════════════════════════
-# 1. FULL JOB LIFECYCLE
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -189,14 +186,12 @@ class TestFullJobLifecycle:
         logs = data.get("logs", [])
         assert len(logs) > 5, f"Too few logs: {len(logs)}"
 
-        # Check log structure
         for log in logs[:3]:
             assert "timestamp" in log
             assert "level" in log
             assert "message" in log
             assert log["level"] in ("DEBUG", "INFO", "WARNING", "ERROR")
 
-        # Should have INFO-level optimizer messages
         info_logs = [l for l in logs if l["level"] == "INFO"]
         assert len(info_logs) > 0, "No INFO logs"
         _cleanup(job_id)
@@ -233,9 +228,6 @@ class TestFullJobLifecycle:
         assert r.status_code == 404
 
 
-# ════════════════════════════════════════════
-# 2. SSE STREAMING
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -298,9 +290,6 @@ class TestSSEStreaming:
         assert r.status_code == 404
 
 
-# ════════════════════════════════════════════
-# 3. CANCEL & ERROR HANDLING
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -333,7 +322,6 @@ class TestCancelAndErrors:
         """Cannot delete a job that hasn't finished."""
         job_id = _submit_run_job(username="delete-active")
 
-        # Try to delete immediately
         r = requests.delete(f"{BASE_URL}/jobs/{job_id}", timeout=10)
         assert r.status_code == 409, f"Expected 409, got {r.status_code}"
 
@@ -351,9 +339,6 @@ class TestCancelAndErrors:
         _cleanup(job_id)
 
 
-# ════════════════════════════════════════════
-# 4. FILTERING & SEARCH
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -423,9 +408,6 @@ class TestFilteringAndSearch:
         assert r.json()["items"] == []
 
 
-# ════════════════════════════════════════════
-# 5. CONCURRENT JOBS
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -437,7 +419,6 @@ class TestConcurrentJobs:
         job1 = _submit_run_job(username="concurrent-1")
         job2 = _submit_run_job(username="concurrent-2")
 
-        # Both should be tracked
         r = requests.get(f"{BASE_URL}/queue", timeout=10)
         assert r.status_code == 200
         queue = r.json()
@@ -446,7 +427,6 @@ class TestConcurrentJobs:
         data1 = _wait_for_terminal(job1)
         data2 = _wait_for_terminal(job2)
 
-        # Both reached terminal
         assert data1["status"] in ("success", "failed")
         assert data2["status"] in ("success", "failed")
 
@@ -454,9 +434,6 @@ class TestConcurrentJobs:
         _cleanup(job2)
 
 
-# ════════════════════════════════════════════
-# 6. VALIDATION (real API, not mocked)
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -528,9 +505,6 @@ class TestValidationWithRealAPI:
         assert r.status_code == 404
 
 
-# ════════════════════════════════════════════
-# 6. SERVING OPTIMIZED PROGRAMS
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -630,14 +604,12 @@ class TestServingEndpoints:
     def test_serve_pending_job_returns_409(self):
         """Serving a job that hasn't finished returns 409."""
         job_id = _submit_run_job(username="serve-pending")
-        # Immediately try to serve before it completes
         r = requests.post(
             f"{BASE_URL}/serve/{job_id}",
             json={"inputs": {"question": "hello"}},
             timeout=10,
         )
         assert r.status_code == 409
-        # Clean up
         requests.post(f"{BASE_URL}/jobs/{job_id}/cancel", timeout=5)
         time.sleep(1)
         _cleanup(job_id)
@@ -655,9 +627,6 @@ class TestServingEndpoints:
             assert r.json()["outputs"]["answer"]  # not empty
 
 
-# ════════════════════════════════════════════
-# 7. GRID SEARCH LIFECYCLE
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -757,9 +726,6 @@ class TestGridSearchLifecycle:
         assert r.status_code == 404
 
 
-# ════════════════════════════════════════════
-# 8. CODE VALIDATION EDGE CASES
-# ════════════════════════════════════════════
 
 @requires_server
 class TestCodeValidation:
@@ -847,9 +813,6 @@ class TestCodeValidation:
             _cleanup(job_id)
 
 
-# ════════════════════════════════════════════
-# 9. LOG FILTERING AND PAGINATION
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server
@@ -893,9 +856,6 @@ class TestLogFiltering:
         _cleanup(job_with_logs)
 
 
-# ════════════════════════════════════════════
-# 10. COMBINED FILTERS AND EDGE CASES
-# ════════════════════════════════════════════
 
 @requires_llm
 @requires_server

@@ -108,9 +108,6 @@ def _print_results(name: str, r: dict) -> None:
     print(f"  Total:     {r['total_time']:.1f}s")
 
 
-# ════════════════════════════════════════════
-# READ ENDPOINT STRESS TESTS
-# ════════════════════════════════════════════
 
 @requires_server
 class TestReadEndpointLoad:
@@ -145,9 +142,6 @@ class TestReadEndpointLoad:
         assert r["rps"] > 50, f"RPS too low: {r['rps']:.1f}"
 
 
-# ════════════════════════════════════════════
-# WRITE ENDPOINT STRESS TESTS
-# ════════════════════════════════════════════
 
 @requires_server
 class TestWriteEndpointLoad:
@@ -168,10 +162,8 @@ class TestWriteEndpointLoad:
         r = asyncio.run(_hammer("POST", f"{BASE_URL}/run", n=10, concurrency=5, json_body=payload))
         _print_results("POST /run (10 rapid submissions)", r)
 
-        # All should be accepted (201)
         assert r["status_codes"].get(201, 0) == 10, f"Not all accepted: {r['status_codes']}"
 
-        # Clean up all submitted jobs
         jobs = requests.get(f"{BASE_URL}/jobs?username=load-test-submit&limit=50", timeout=10).json()
         for job in jobs["items"]:
             try:
@@ -187,14 +179,10 @@ class TestWriteEndpointLoad:
         r = asyncio.run(_hammer("POST", f"{BASE_URL}/run", n=50, concurrency=20, json_body=bad_payload))
         _print_results("POST /run invalid (50 reqs, 20 concurrent)", r)
 
-        # All should be 422 (validation error)
         assert r["status_codes"].get(422, 0) == 50, f"Not all 422: {r['status_codes']}"
         assert r["p99"] < 2.0
 
 
-# ════════════════════════════════════════════
-# MIXED WORKLOAD
-# ════════════════════════════════════════════
 
 @requires_server
 class TestMixedWorkload:
@@ -202,7 +190,6 @@ class TestMixedWorkload:
 
     def test_mixed_reads_during_job(self):
         """While a job is running, hammer read endpoints concurrently."""
-        # Submit a job
         payload = {
             "username": "load-test-mixed",
             "module_name": "predict",
@@ -216,7 +203,6 @@ class TestMixedWorkload:
         r = requests.post(f"{BASE_URL}/run", json=payload, timeout=10)
         job_id = r.json()["job_id"]
 
-        # Hammer multiple endpoints while job exists
         async def mixed_load():
             results = {}
             results["health"] = await _hammer("GET", f"{BASE_URL}/health", n=50, concurrency=20)
@@ -232,7 +218,6 @@ class TestMixedWorkload:
             _print_results(f"Mixed: {name}", r)
             assert r["errors"] == 0, f"{name} had {r['errors']} errors"
 
-        # Clean up
         try:
             requests.post(f"{BASE_URL}/jobs/{job_id}/cancel", timeout=5)
             time.sleep(1)
@@ -241,9 +226,6 @@ class TestMixedWorkload:
             pass
 
 
-# ════════════════════════════════════════════
-# DATABASE STRESS
-# ════════════════════════════════════════════
 
 @requires_server
 class TestDatabaseStress:

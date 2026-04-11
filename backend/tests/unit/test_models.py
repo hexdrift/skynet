@@ -26,7 +26,6 @@ from core.models import (
 )
 
 
-# ── ColumnMapping ────────────────────────────────────────────────────────────
 
 def test_column_mapping_requires_inputs() -> None:
     with pytest.raises(ValidationError, match="At least one input"):
@@ -44,7 +43,6 @@ def test_column_mapping_accepts_disjoint_columns() -> None:
     assert m.outputs == {"a": "answer"}
 
 
-# ── SplitFractions ───────────────────────────────────────────────────────────
 
 def test_split_fractions_default_sums_to_one() -> None:
     s = SplitFractions()
@@ -61,7 +59,6 @@ def test_split_fractions_rejects_wrong_total() -> None:
         SplitFractions(train=0.5, val=0.25, test=0.25 + 0.01)
 
 
-# ── ModelConfig ──────────────────────────────────────────────────────────────
 
 def test_model_config_normalized_identifier_strips_slashes() -> None:
     assert ModelConfig(name="/gpt-4o-mini/").normalized_identifier() == "gpt-4o-mini"
@@ -74,7 +71,6 @@ def test_model_config_temperature_bounds() -> None:
         ModelConfig(name="x", temperature=-0.1)
 
 
-# ── RunRequest ───────────────────────────────────────────────────────────────
 
 def _base_run_payload(**overrides) -> dict:
     base = dict(
@@ -110,7 +106,6 @@ def test_run_request_description_max_length() -> None:
     assert len(req.description) == 280
 
 
-# ── GridSearchRequest ────────────────────────────────────────────────────────
 
 def test_grid_search_requires_both_model_lists() -> None:
     base = _base_run_payload()
@@ -135,7 +130,6 @@ def test_grid_search_accepts_both_lists() -> None:
     assert len(req.reflection_models) == 1
 
 
-# ── ValidateCodeRequest ──────────────────────────────────────────────────────
 
 def test_validate_code_request_accepts_single_block() -> None:
     req = ValidateCodeRequest.model_validate(
@@ -155,7 +149,6 @@ def test_validate_code_response_default_shape() -> None:
     assert r.signature_fields is None
 
 
-# ── ProgramArtifact + OptimizedPredictor ─────────────────────────────────────
 
 def test_optimized_predictor_defaults() -> None:
     p = OptimizedPredictor(predictor_name="pred0", instructions="Do X.")
@@ -177,7 +170,6 @@ def test_program_artifact_nested_predictor() -> None:
     assert len(art.optimized_prompt.demos) == 1
 
 
-# ── TemplateCreateRequest ────────────────────────────────────────────────────
 
 def test_template_create_rejects_oversized_config() -> None:
     huge = {"x": "y" * 150_000}
@@ -194,7 +186,6 @@ def test_template_create_name_length() -> None:
     assert ok.name == "valid"
 
 
-# ── OptimizationStatus ───────────────────────────────────────────────────────
 
 def test_optimization_status_values() -> None:
     assert OptimizationStatus.success.value == "success"

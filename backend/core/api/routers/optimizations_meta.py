@@ -70,6 +70,18 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
               worker after the query ran will not appear mid-response.
 
         Returns HTTP 404 if the optimization ID is unknown.
+
+        Args:
+            optimization_id: Identifier of the optimization whose logs are fetched.
+            limit: Optional cap on the number of log entries returned.
+            offset: Number of entries to skip before returning.
+            level: Optional case-insensitive level filter.
+
+        Returns:
+            List of JobLogEntry records in chronological order.
+
+        Raises:
+            HTTPException: 404 when the optimization ID is unknown.
         """
 
         if not job_store.job_exists(optimization_id):
@@ -109,6 +121,15 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         stored overview, but the original payload stored here is the
         *complete* submission including any keys the user supplied inline.
         Access to this endpoint should be treated accordingly.
+
+        Args:
+            optimization_id: Identifier of the optimization to fetch.
+
+        Returns:
+            OptimizationPayloadResponse containing the original submission payload.
+
+        Raises:
+            HTTPException: 404 when the optimization or payload is unavailable.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -146,6 +167,16 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
 
         Returns ``{"optimization_id": ..., "name": ...}`` on success, 404
         if the optimization doesn't exist.
+
+        Args:
+            optimization_id: Identifier of the optimization to rename.
+            req: Request body containing the new display name.
+
+        Returns:
+            Dict with the optimization ID and the trimmed name.
+
+        Raises:
+            HTTPException: 404 when the optimization doesn't exist.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -175,6 +206,15 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
 
         Returns ``{"optimization_id": ..., "pinned": <new_state>}``.
         404 if the optimization doesn't exist.
+
+        Args:
+            optimization_id: Identifier of the optimization whose pin state flips.
+
+        Returns:
+            Dict with the optimization ID and the new ``pinned`` flag.
+
+        Raises:
+            HTTPException: 404 when the optimization doesn't exist.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -204,6 +244,15 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
 
         Returns ``{"optimization_id": ..., "archived": <new_state>}``.
         404 if the optimization doesn't exist.
+
+        Args:
+            optimization_id: Identifier of the optimization whose archive state flips.
+
+        Returns:
+            Dict with the optimization ID and the new ``archived`` flag.
+
+        Raises:
+            HTTPException: 404 when the optimization doesn't exist.
         """
         try:
             job_data = job_store.get_job(optimization_id)

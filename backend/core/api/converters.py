@@ -174,7 +174,6 @@ def overview_to_base_fields(overview: dict) -> dict:
         dict: Keyword arguments for _JobResponseBase fields.
     """
     return {
-        # Universal
         "optimization_type": overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN),
         "name": overview.get(PAYLOAD_OVERVIEW_NAME),
         "description": overview.get(PAYLOAD_OVERVIEW_DESCRIPTION),
@@ -186,13 +185,11 @@ def overview_to_base_fields(overview: dict) -> dict:
         "optimizer_name": overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME),
         "column_mapping": overview.get(PAYLOAD_OVERVIEW_COLUMN_MAPPING),
         "dataset_rows": overview.get(PAYLOAD_OVERVIEW_DATASET_ROWS),
-        # Run-specific
         "model_name": overview.get(PAYLOAD_OVERVIEW_MODEL_NAME),
         "model_settings": overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS),
         "reflection_model_name": overview.get(PAYLOAD_OVERVIEW_REFLECTION_MODEL),
         "prompt_model_name": overview.get(PAYLOAD_OVERVIEW_PROMPT_MODEL),
         "task_model_name": overview.get(PAYLOAD_OVERVIEW_TASK_MODEL),
-        # Grid-search-specific
         "total_pairs": overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
         "generation_models": overview.get(PAYLOAD_OVERVIEW_GENERATION_MODELS),
         "reflection_models": overview.get(PAYLOAD_OVERVIEW_REFLECTION_MODELS),

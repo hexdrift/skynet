@@ -24,6 +24,9 @@ def require_mapping_matches_signature(
         signature_inputs: List of input field names from the DSPy signature.
         signature_outputs: List of output field names from the DSPy signature.
 
+    Returns:
+        None.
+
     Raises:
         ServiceError: If any signature fields are missing from the mapping.
     """
@@ -46,6 +49,9 @@ def require_mapping_columns_in_dataset(
     Args:
         mapping: ColumnMapping specifying input/output column mappings.
         dataset: Non-empty list of row dicts from the request.
+
+    Returns:
+        None.
 
     Raises:
         ServiceError: If mapped columns are not found in dataset keys.

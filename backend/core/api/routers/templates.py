@@ -56,6 +56,12 @@ def create_templates_router(*, job_store) -> APIRouter:
 
         Returns the saved template including the server-assigned
         ``template_id`` (UUID) and ``created_at`` timestamp. HTTP 201.
+
+        Args:
+            req: Template creation request with name, description, owner, and config.
+
+        Returns:
+            TemplateResponse describing the newly persisted template.
         """
         template_id = str(uuid4())
         now = datetime.now(timezone.utc)
@@ -103,6 +109,14 @@ def create_templates_router(*, job_store) -> APIRouter:
 
         Response is an array of the same shape as
         ``POST /templates`` returns.
+
+        Args:
+            username: Only return templates created by this user.
+            limit: Maximum page size.
+            offset: Number of templates to skip.
+
+        Returns:
+            List of TemplateResponse items ordered newest-first.
         """
         with Session(job_store.engine) as session:
             query = session.query(TemplateModel).order_by(TemplateModel.created_at.desc())
@@ -135,6 +149,15 @@ def create_templates_router(*, job_store) -> APIRouter:
         Returns HTTP 404 if no template with that ID exists. The lookup is
         public — anyone who knows the ID can read the template, since the
         ID itself is the security boundary.
+
+        Args:
+            template_id: UUID of the template to fetch.
+
+        Returns:
+            TemplateResponse describing the requested template.
+
+        Raises:
+            HTTPException: 404 when the template doesn't exist.
         """
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(
@@ -171,6 +194,16 @@ def create_templates_router(*, job_store) -> APIRouter:
         not the owner. The operation is idempotent in the sense that
         deleting an already-missing template 404s rather than silently
         succeeding — this catches bugs where the frontend fails to refresh.
+
+        Args:
+            template_id: UUID of the template to delete.
+            username: Requester's username — must match the template's owner.
+
+        Returns:
+            Dict ``{"template_id": ..., "deleted": True}`` on success.
+
+        Raises:
+            HTTPException: 404 when missing, 403 when not owned by the requester.
         """
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(

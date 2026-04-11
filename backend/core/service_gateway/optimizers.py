@@ -118,7 +118,6 @@ def evaluate_on_test(
     )
     eval_result = evaluator(program)
 
-    # Extract aggregate score
     if isinstance(eval_result, (int, float)):
         aggregate = float(eval_result)
         raw_results = []
@@ -135,8 +134,7 @@ def evaluate_on_test(
     if not collect_per_example:
         return aggregate
 
-    # Build per-example results from EvaluationResult.results
-    # Each entry is (example, prediction, score)
+    # Each EvaluationResult.results entry is (example, prediction, score).
     per_example: list[dict] = []
     for i, entry in enumerate(raw_results):
         try:

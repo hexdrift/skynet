@@ -28,7 +28,14 @@ _FORK_SERVICE: Optional[DspyService] = None
 
 
 def set_fork_service(service: Optional[DspyService]) -> None:
-    """Store a service instance that child processes may reuse after fork."""
+    """Store a service instance that child processes may reuse after fork.
+
+    Args:
+        service: The DspyService instance to share, or ``None`` to clear.
+
+    Returns:
+        None.
+    """
     global _FORK_SERVICE
     _FORK_SERVICE = service
 
@@ -39,6 +46,9 @@ def safe_queue_put(event_queue: Any, event: Dict[str, Any]) -> None:
     Args:
         event_queue: Multiprocessing queue to write to.
         event: Event dictionary to enqueue.
+
+    Returns:
+        None.
     """
     try:
         event_queue.put(event)
@@ -64,6 +74,9 @@ class SubprocessLogHandler(logging.Handler):
 
         Args:
             record: Log record to forward.
+
+        Returns:
+            None.
         """
         try:
             message = self.format(record)
@@ -95,6 +108,9 @@ def run_service_in_subprocess(
         event_queue: Multiprocessing queue for streaming progress, log, and
             result events back to the parent process.
         start_method: Multiprocessing start method (e.g. "fork", "spawn").
+
+    Returns:
+        None.
     """
     service = _FORK_SERVICE if start_method == "fork" and _FORK_SERVICE is not None else DspyService(ServiceRegistry())
     dspy_logger = logging.getLogger("dspy")
@@ -111,6 +127,15 @@ def run_service_in_subprocess(
         optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
 
         def progress_callback(message: str, metrics: Dict[str, Any]) -> None:
+            """Forward a progress event from the optimizer to the parent queue.
+
+            Args:
+                message: Short event name describing the progress step.
+                metrics: Structured metrics payload accompanying the event.
+
+            Returns:
+                None.
+            """
             safe_queue_put(
                 event_queue,
                 {
