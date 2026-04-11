@@ -693,7 +693,6 @@ class BackgroundWorker:
         return len(self._threads)
 
 
-# Global worker instance
 _worker: Optional[BackgroundWorker] = None
 _worker_lock = threading.Lock()
 
