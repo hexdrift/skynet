@@ -64,57 +64,112 @@ _SCALAR_CUSTOM_CSS = """
   display: none !important;
 }
 
-/* The animated wordmark and sidebar toggle are injected by wordmark.js
-   into the toolbar. Anchor both to the `relative` toolbar so the
-   centered Developer Tools / Configure / Share / Deploy group stays
-   undisturbed. */
+/* ── Toolbar brand button ─────────────────────────────────────────
+   The brand button sits in the top-left of the toolbar. When the
+   sidebar is hidden, hovering the button fades the SKYNET wordmark
+   out and reveals a sidebar-toggle icon in the same spot — click to
+   open. When the sidebar is open, the brand button is hidden entirely
+   (the wordmark + close button move into the sidebar header instead).
+   This mirrors chatgpt.com's sidebar UX. */
 .api-reference-toolbar { position: relative; }
-.skynet-wordmark {
+
+.skynet-toolbar-brand {
   position: absolute;
   left: 16px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
-  color: #3D2E22;
-  text-decoration: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.skynet-wordmark svg { overflow: visible; }
-
-/* Toggle button sits just to the right of the wordmark so both brand
-   and control share the top-left corner, matching the Notion / Linear
-   / VS Code layout. */
-.skynet-sidebar-toggle {
-  position: absolute;
-  left: 148px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid #ddd6cc;
-  border-radius: 6px;
-  background: #ffffff;
+  height: 32px;
+  width: 124px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
   color: #3D2E22;
   cursor: pointer;
-  transition: background-color 120ms, border-color 120ms;
+  border-radius: 8px;
+  transition: background-color 140ms ease;
 }
-.skynet-sidebar-toggle:hover { background: #f0ebe4; border-color: #b5a796; }
-.skynet-sidebar-toggle:focus-visible {
+.skynet-toolbar-brand:hover { background: #f0ebe4; }
+.skynet-toolbar-brand:focus-visible {
   outline: 2px solid #3D2E22;
   outline-offset: 2px;
 }
-/* Icon flips horizontally between states as a subtle state cue */
-.skynet-sidebar-toggle svg {
-  transition: transform 320ms cubic-bezier(0.4, 0, 0.2, 1);
+
+.skynet-toolbar-brand .skynet-wordmark,
+.skynet-toolbar-brand .skynet-toolbar-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: opacity 200ms ease;
 }
-html[data-skynet-sidebar="hidden"] .skynet-sidebar-toggle svg {
-  transform: scaleX(-1);
+.skynet-toolbar-brand .skynet-toolbar-icon {
+  opacity: 0;
+  pointer-events: none;
+}
+.skynet-wordmark { color: #3D2E22; user-select: none; }
+.skynet-wordmark svg { overflow: visible; }
+
+/* Hover swap is only meaningful while the sidebar can still be opened */
+html[data-skynet-sidebar="hidden"] .skynet-toolbar-brand:hover .skynet-wordmark {
+  opacity: 0;
+}
+html[data-skynet-sidebar="hidden"] .skynet-toolbar-brand:hover .skynet-toolbar-icon {
+  opacity: 1;
+}
+
+/* When the sidebar is open, the brand moves into the sidebar header */
+html[data-skynet-sidebar="visible"] .skynet-toolbar-brand {
+  display: none;
+}
+
+/* ── Sidebar header (only shown while sidebar is visible) ─────────── */
+.skynet-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid #ddd6cc;
+  flex-shrink: 0;
+}
+html[data-skynet-sidebar="hidden"] .skynet-sidebar-header {
+  display: none;
+}
+
+.skynet-sidebar-home {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #3D2E22;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+.skynet-sidebar-home:hover { background: #ede7dd; }
+.skynet-sidebar-home:focus-visible {
+  outline: 2px solid #3D2E22;
+  outline-offset: 2px;
+}
+
+.skynet-sidebar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #3D2E22;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 120ms ease;
+}
+.skynet-sidebar-close:hover { background: #ede7dd; }
+.skynet-sidebar-close:focus-visible {
+  outline: 2px solid #3D2E22;
+  outline-offset: 2px;
 }
 
 /* ── Animated collapsible sidebar ───────────────────────────────────
