@@ -310,19 +310,23 @@
     return svg;
   }
 
-  function createToolbarBrand() {
+  function createToolbarWordmark() {
+    // Static, non-interactive wordmark wrapper so the logo area itself
+    // doesn't act as a hover target — only the adjacent toggle button
+    // is interactive.
+    var wrap = document.createElement("div");
+    wrap.className = "skynet-toolbar-wordmark-wrap";
+    wrap.appendChild(createWordmark());
+    return wrap;
+  }
+
+  function createToolbarToggle() {
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "skynet-toolbar-brand";
+    btn.className = "skynet-toolbar-toggle";
     btn.setAttribute("aria-label", "Open sidebar");
     btn.title = "Open sidebar";
-
-    btn.appendChild(createWordmark());
-
-    var icon = createSidebarIcon();
-    icon.classList.add("skynet-toolbar-icon");
-    btn.appendChild(icon);
-
+    btn.appendChild(createSidebarIcon());
     btn.addEventListener("click", toggleSidebar);
     return btn;
   }
@@ -363,8 +367,11 @@
     var sidebar = document.querySelector(".t-doc__sidebar");
     if (!toolbar) return false;
 
-    if (!toolbar.querySelector(".skynet-toolbar-brand")) {
-      toolbar.appendChild(createToolbarBrand());
+    if (!toolbar.querySelector(".skynet-toolbar-wordmark-wrap")) {
+      toolbar.appendChild(createToolbarWordmark());
+    }
+    if (!toolbar.querySelector(".skynet-toolbar-toggle")) {
+      toolbar.appendChild(createToolbarToggle());
     }
     if (sidebar && !sidebar.querySelector(".skynet-sidebar-header")) {
       sidebar.insertBefore(createSidebarHeader(), sidebar.firstChild);

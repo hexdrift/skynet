@@ -64,25 +64,36 @@ _SCALAR_CUSTOM_CSS = """
   display: none !important;
 }
 
-/* ── Toolbar brand button ─────────────────────────────────────────
-   The brand button sits in the top-left of the toolbar. When the
-   sidebar is hidden, hovering the button fades the SKYNET wordmark
-   out and reveals a sidebar-toggle icon in the same spot — click to
-   open. When the sidebar is open, the brand button is hidden entirely
-   (the wordmark + close button move into the sidebar header instead).
-   This mirrors chatgpt.com's sidebar UX. */
+/* ── Toolbar wordmark + toggle ────────────────────────────────────
+   The wordmark is a static, non-interactive logo — hovering over it
+   does nothing. The sidebar-toggle icon sits as a separate small
+   button just to its right; only the icon is hoverable and clickable.
+   When the sidebar is open, both move into the sidebar header. */
 .api-reference-toolbar { position: relative; }
 
-.skynet-toolbar-brand {
+.skynet-toolbar-wordmark-wrap {
   position: absolute;
   left: 16px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
+  pointer-events: none;
+}
+.skynet-wordmark { color: #3D2E22; user-select: none; }
+.skynet-wordmark svg { overflow: visible; }
+
+.skynet-toolbar-toggle {
+  position: absolute;
+  left: 148px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
   height: 32px;
-  width: 124px;
-  padding: 0 8px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: #3D2E22;
@@ -90,37 +101,15 @@ _SCALAR_CUSTOM_CSS = """
   border-radius: 8px;
   transition: background-color 140ms ease;
 }
-.skynet-toolbar-brand:hover { background: #f0ebe4; }
-.skynet-toolbar-brand:focus-visible {
+.skynet-toolbar-toggle:hover { background: #f0ebe4; }
+.skynet-toolbar-toggle:focus-visible {
   outline: 2px solid #3D2E22;
   outline-offset: 2px;
 }
 
-.skynet-toolbar-brand .skynet-wordmark,
-.skynet-toolbar-brand .skynet-toolbar-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  transition: opacity 200ms ease;
-}
-.skynet-toolbar-brand .skynet-toolbar-icon {
-  opacity: 0;
-  pointer-events: none;
-}
-.skynet-wordmark { color: #3D2E22; user-select: none; }
-.skynet-wordmark svg { overflow: visible; }
-
-/* Hover swap is only meaningful while the sidebar can still be opened */
-html[data-skynet-sidebar="hidden"] .skynet-toolbar-brand:hover .skynet-wordmark {
-  opacity: 0;
-}
-html[data-skynet-sidebar="hidden"] .skynet-toolbar-brand:hover .skynet-toolbar-icon {
-  opacity: 1;
-}
-
-/* When the sidebar is open, the brand moves into the sidebar header */
-html[data-skynet-sidebar="visible"] .skynet-toolbar-brand {
+/* When the sidebar is open, both move into the sidebar header */
+html[data-skynet-sidebar="visible"] .skynet-toolbar-wordmark-wrap,
+html[data-skynet-sidebar="visible"] .skynet-toolbar-toggle {
   display: none;
 }
 
