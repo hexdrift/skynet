@@ -38,22 +38,26 @@ def create_code_validation_router() -> APIRouter:
         summary="Format user-authored Python code with ruff",
     )
     def format_code(payload: FormatCodeRequest) -> FormatCodeResponse:
-        """Run ``ruff format`` against the supplied code snippet and return the
-        reformatted result.
+        """Run ``ruff format`` against the supplied code snippet.
 
-        Used by the submit wizard's code editor to auto-format signature and
-        metric code on demand. The input is written to a tempfile, formatted,
-        read back, and deleted — no state is persisted.
+        Used by the submit wizard's code editor to auto-format signature
+        and metric code on demand. The input is written to a tempfile,
+        formatted, read back, and deleted — no state is persisted. This
+        endpoint never raises 5xx for user input errors: a malformed
+        snippet is returned with ``error`` set and the original ``code``
+        intact. A five-second timeout protects the server from
+        pathological input.
 
-        Response fields:
-            - ``code``: the formatted source (or original source on failure)
-            - ``changed``: whether formatting produced any difference
-            - ``error``: human-readable failure reason (ruff missing,
-              timeout, syntax error, etc.) or ``null`` on success
+        Args:
+            payload: Request body containing the ``code`` field to
+                format.
 
-        This endpoint never raises 5xx for user input errors. A malformed
-        snippet is returned with ``error`` set and the original ``code`` intact.
-        A 5-second timeout protects the server from pathological input.
+        Returns:
+            ``FormatCodeResponse`` with fields ``code`` (the formatted
+            source, or original on failure), ``changed`` (whether
+            formatting produced any difference) and ``error`` (a human
+            readable failure reason such as ruff missing, timeout or
+            syntax error, or ``None`` on success).
         """
         import os
         import subprocess
@@ -87,40 +91,42 @@ def create_code_validation_router() -> APIRouter:
         summary="Pre-submit validation for signature and metric code",
     )
     def validate_code(payload: ValidateCodeRequest) -> ValidateCodeResponse:
-        """Parse and smoke-test the user's DSPy signature and/or metric code
-        before an optimization job is enqueued.
+        """Parse and smoke-test DSPy signature/metric code before enqueue.
 
-        Catching errors here — instead of inside the worker — saves users a
-        round-trip and keeps the queue clean of jobs that can never succeed.
+        Catching errors here — instead of inside the worker — saves
+        users a round-trip and keeps the queue clean of jobs that can
+        never succeed. Accepts either ``signature_code``,
+        ``metric_code``, or both; passing neither is itself an error.
 
         Checks performed (in order):
-            1. **Signature parse**: compile ``signature_code`` into a ``dspy.Signature``
-               subclass and extract its declared input/output field names.
-            2. **Column mapping consistency**: verify every signature field is
-               mapped to a dataset column. Unmapped inputs/outputs become
-               errors; extra columns in the mapping that don't exist in the
-               signature become warnings.
-            3. **Metric parse**: compile ``metric_code`` and locate a callable
-               suitable for the declared optimizer.
-            4. **GEPA arity check**: if the selected optimizer is GEPA, the
-               metric signature must accept five parameters
+            1. **Signature parse**: compile ``signature_code`` into a
+               ``dspy.Signature`` subclass and extract its declared
+               input/output field names.
+            2. **Column mapping consistency**: verify every signature
+               field is mapped to a dataset column. Unmapped fields
+               become errors; extra mapped columns that don't exist in
+               the signature become warnings.
+            3. **Metric parse**: compile ``metric_code`` and locate a
+               callable suitable for the declared optimizer.
+            4. **GEPA arity check**: if the selected optimizer is GEPA,
+               the metric signature must accept five parameters
                ``(gold, pred, trace, pred_name, pred_trace)``.
             5. **Live sample run**: invoke the metric on a synthetic
-               ``dspy.Example`` built from ``sample_row``. Verifies the return
-               type matches what the chosen optimizer expects — a numeric
-               score for most optimizers, or a ``dspy.Prediction`` with
-               ``score`` and ``feedback`` for GEPA.
+               ``dspy.Example`` built from ``sample_row`` and verify the
+               return type matches what the chosen optimizer expects.
 
-        Response shape:
-            - ``valid``: ``True`` only if ``errors`` is empty
-            - ``signature_fields``: ``{inputs: [...], outputs: [...]}``
-              populated whenever signature parsing succeeds
-            - ``errors``: hard failures that will block submission
-            - ``warnings``: soft issues that don't block submission
-              (e.g. unused columns, non-fatal style problems)
+        Args:
+            payload: Request body with optional ``signature_code`` and
+                ``metric_code``, the active ``column_mapping``, the
+                ``optimizer_name`` (needed for GEPA arity checks) and
+                an optional ``sample_row`` used by the live smoke test.
 
-        Accepts either ``signature_code``, ``metric_code``, or both. Passing
-        neither is itself an error.
+        Returns:
+            ``ValidateCodeResponse`` with ``valid`` (``True`` only when
+            ``errors`` is empty), ``signature_fields`` populated
+            whenever signature parsing succeeds, ``errors`` listing
+            hard failures that block submission, and ``warnings``
+            listing soft issues that don't block submission.
         """
         from ...service_gateway.data import (
             extract_signature_fields,
@@ -136,7 +142,6 @@ def create_code_validation_router() -> APIRouter:
         if not payload.signature_code and not payload.metric_code:
             errors.append("Provide signature_code and/or metric_code to validate.")
 
-        # 1. Validate signature code (if provided)
         if payload.signature_code:
             try:
                 signature_cls = load_signature_from_code(payload.signature_code)
@@ -147,7 +152,6 @@ def create_code_validation_router() -> APIRouter:
             except Exception as exc:
                 errors.append(f"Signature error: {exc}")
 
-            # 2. Check signature fields match column mapping
             if sig_fields:
                 missing_inputs = set(sig_fields["inputs"]) - set(payload.column_mapping.inputs.keys())
                 missing_outputs = set(sig_fields["outputs"]) - set(payload.column_mapping.outputs.keys())
@@ -172,7 +176,6 @@ def create_code_validation_router() -> APIRouter:
                         f"Output columns not in Signature (will be ignored): {sorted(extra_outputs)}"
                     )
 
-        # 3. Validate metric code (if provided)
         metric_fn = None
         metric_errors_before = len(errors)
         if payload.metric_code:
@@ -183,7 +186,6 @@ def create_code_validation_router() -> APIRouter:
             except Exception as exc:
                 errors.append(f"Metric error: {exc}")
 
-            # 3b. GEPA metrics must accept 5 parameters: (gold, pred, trace, pred_name, pred_trace)
             if metric_fn and payload.optimizer_name == "gepa":
                 import inspect
                 sig = inspect.signature(metric_fn)
@@ -196,7 +198,6 @@ def create_code_validation_router() -> APIRouter:
                         f"See https://dspy.ai/api/optimizers/GEPA for details."
                     )
 
-            # 4. Run the metric on a sample (uses mapping keys, doesn't require signature)
             metric_has_errors = len(errors) > metric_errors_before
             if metric_fn and payload.sample_row and not metric_has_errors:
                 try:

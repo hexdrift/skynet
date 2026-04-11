@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-# ── Pydantic response models ────────────────────────────────────────────────
 
 
 class CatalogModel(BaseModel):
@@ -49,7 +48,6 @@ class ModelCatalogResponse(BaseModel):
     models: List[CatalogModel]
 
 
-# ── Provider metadata ────────────────────────────────────────────────────────
 # Maps LiteLLM provider slug → (display label, env var, default base URL).
 
 _PROVIDER_META: Dict[str, tuple[str, Optional[str], Optional[str]]] = {
@@ -73,7 +71,14 @@ _DATE_SUFFIX_RE = re.compile(r"-\d{4}-\d{2}-\d{2}$")
 
 
 def _make_label(model_id: str) -> str:
-    """Turn a LiteLLM model ID into a human-friendly label."""
+    """Turn a LiteLLM model ID into a human-friendly label.
+
+    Args:
+        model_id: Raw LiteLLM model identifier, optionally prefixed with a provider.
+
+    Returns:
+        The model name with any provider prefix stripped.
+    """
 
     # Strip provider prefix if present (e.g. "openai/gpt-4o" → "gpt-4o")
     name = model_id.split("/", 1)[-1] if "/" in model_id else model_id
@@ -87,6 +92,9 @@ def get_catalog() -> ModelCatalogResponse:
     - De-duplicates dated variants (keeps the base name).
     - Uses ``litellm.get_valid_models()`` to flag available models.
     - Reads ``supports_reasoning`` from LiteLLM metadata.
+
+    Returns:
+        ModelCatalogResponse containing providers and available models.
     """
 
     cost: Dict[str, dict] = litellm.model_cost
@@ -96,7 +104,6 @@ def get_catalog() -> ModelCatalogResponse:
         logger.warning("litellm.get_valid_models() failed; marking none as available")
         valid_set = set()
 
-    # Collect providers that appear in the catalog
     seen_providers: Dict[str, CatalogProvider] = {}
     models: List[CatalogModel] = []
     base_names_seen: Set[str] = set()
@@ -107,7 +114,6 @@ def get_catalog() -> ModelCatalogResponse:
 
         provider_slug: str = meta.get("litellm_provider", "unknown")
 
-        # Skip providers we don't surface
         if provider_slug not in _PROVIDER_META:
             continue
 
@@ -121,7 +127,6 @@ def get_catalog() -> ModelCatalogResponse:
             continue
         base_names_seen.add(base_name)
 
-        # Build provider entry if new
         if provider_slug not in seen_providers:
             label, env_var, default_url = _PROVIDER_META[provider_slug]
             has_key = bool(env_var and os.getenv(env_var))
@@ -148,7 +153,6 @@ def get_catalog() -> ModelCatalogResponse:
     # Only return models the backend has API keys for
     models = [m for m in models if m.available]
 
-    # Sort alphabetically by provider then name
     models.sort(key=lambda m: (m.provider, m.value))
 
     # Only return providers that have at least one available model or no key needed (ollama)
@@ -161,12 +165,15 @@ def get_catalog() -> ModelCatalogResponse:
     return ModelCatalogResponse(providers=providers, models=models)
 
 
-# ── Cached singleton — computed once on first call ───────────────────────────
 _cached_response: Optional[ModelCatalogResponse] = None
 
 
 def get_catalog_cached() -> ModelCatalogResponse:
-    """Return the catalog, computing it once and caching forever."""
+    """Return the catalog, computing it once and caching forever.
+
+    Returns:
+        ModelCatalogResponse served from the process-wide cache.
+    """
 
     global _cached_response
     if _cached_response is None:

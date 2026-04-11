@@ -18,7 +18,6 @@ class _FakeJobStore:
         return self._counts.get(username or "", 0)
 
 
-# ── get_user_quota ──
 
 
 def test_get_user_quota_returns_default_for_unknown_user() -> None:
@@ -46,7 +45,6 @@ def test_get_user_quota_admin_wins_over_override() -> None:
         assert get_user_quota("alice", default=100) is None
 
 
-# ── enforce_user_quota ──
 
 
 def test_enforce_user_quota_allows_user_below_cap() -> None:

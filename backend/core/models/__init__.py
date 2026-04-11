@@ -7,6 +7,11 @@ re-exports the old flat surface.
 """
 from .analytics import (
     AnalyticsSummaryResponse,
+    DashboardAnalyticsJob,
+    DashboardAnalyticsNameValue,
+    DashboardAnalyticsOptimizerAverage,
+    DashboardAnalyticsResponse,
+    DashboardAnalyticsTimelineBucket,
     ModelStatsItem,
     ModelStatsResponse,
     OptimizerStatsItem,
@@ -23,8 +28,12 @@ from .common import (
 )
 from .infra import HealthResponse, QueueStatusResponse
 from .optimizations import (
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    BulkDeleteSkipped,
     JobCancelResponse,
     JobDeleteResponse,
+    OptimizationCountsResponse,
     OptimizationPayloadResponse,
     OptimizationStatusResponse,
     OptimizationSummaryResponse,
@@ -45,55 +54,53 @@ from .templates import TemplateCreateRequest, TemplateResponse
 from .validation import ValidateCodeRequest, ValidateCodeResponse
 
 __all__ = [
-    # common
     "HEALTH_STATUS_OK",
     "ColumnMapping",
     "ModelConfig",
     "OptimizationStatus",
     "SplitCounts",
     "SplitFractions",
-    # telemetry
     "JobLogEntry",
     "ProgressEvent",
-    # artifacts
     "OptimizedDemo",
     "OptimizedPredictor",
     "ProgramArtifact",
-    # results
     "GridSearchResponse",
     "PairResult",
     "RunResponse",
-    # submissions
     "GridSearchRequest",
     "OptimizationSubmissionResponse",
     "RunRequest",
     "_OptimizationRequestBase",
-    # optimizations
+    "BulkDeleteRequest",
+    "BulkDeleteResponse",
+    "BulkDeleteSkipped",
     "JobCancelResponse",
     "JobDeleteResponse",
+    "OptimizationCountsResponse",
     "OptimizationPayloadResponse",
     "OptimizationStatusResponse",
     "OptimizationSummaryResponse",
     "PaginatedJobsResponse",
     "ProgramArtifactResponse",
     "_JobResponseBase",
-    # validation
     "ValidateCodeRequest",
     "ValidateCodeResponse",
-    # serve
     "ServeInfoResponse",
     "ServeRequest",
     "ServeResponse",
-    # templates
     "TemplateCreateRequest",
     "TemplateResponse",
-    # analytics
     "AnalyticsSummaryResponse",
+    "DashboardAnalyticsJob",
+    "DashboardAnalyticsNameValue",
+    "DashboardAnalyticsOptimizerAverage",
+    "DashboardAnalyticsResponse",
+    "DashboardAnalyticsTimelineBucket",
     "ModelStatsItem",
     "ModelStatsResponse",
     "OptimizerStatsItem",
     "OptimizerStatsResponse",
-    # infra
     "HealthResponse",
     "QueueStatusResponse",
 ]

@@ -39,7 +39,6 @@ def send_message(text: str, channel: Optional[str] = None) -> bool:
     target = channel or CHANNEL
 
     try:
-        # ── Rocket.Chat webhook format ──
         # Adapt this payload to your messaging platform:
         #
         # Rocket.Chat:

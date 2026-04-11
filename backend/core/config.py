@@ -27,16 +27,14 @@ class Settings(BaseSettings):
         env_file=str(_ENV_FILE) if _ENV_FILE.exists() else None,
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore",  # Ignore unknown env vars
+        extra="ignore",
     )
     
-    # ── Database ──
     remote_db_url: SecretStr | None = Field(
         default=None,
         description="PostgreSQL connection string for remote storage"
     )
     
-    # ── API Keys ──
     openai_api_key: SecretStr | None = Field(
         default=None,
         description="OpenAI API key for model access"
@@ -46,7 +44,6 @@ class Settings(BaseSettings):
         description="Anthropic API key for Claude models"
     )
     
-    # ── Worker Configuration ──
     worker_threads: int = Field(
         default=4,
         ge=1,
@@ -76,7 +73,6 @@ class Settings(BaseSettings):
         description="Multiprocessing start method for job execution"
     )
     
-    # ── Paths ──
     artifacts_dir: str = Field(
         default="artifacts",
         description="Directory for storing optimized program artifacts"
@@ -86,7 +82,6 @@ class Settings(BaseSettings):
         description="Directory for job execution logs"
     )
     
-    # ── Timeouts ──
     default_timeout: float = Field(
         default=30.0,
         ge=1.0,
@@ -103,7 +98,6 @@ class Settings(BaseSettings):
         description="Timeout for subprocess execution in seconds"
     )
     
-    # ── Server ──
     host: str = Field(
         default="0.0.0.0",
         description="Server bind address"
@@ -119,14 +113,12 @@ class Settings(BaseSettings):
         description="Enable auto-reload on code changes (dev only)"
     )
     
-    # ── CORS ──
     cors_origins: str = Field(
         default="http://localhost:3000,http://localhost:3001",
         description="Comma-separated list of allowed CORS origins",
         alias="ALLOWED_ORIGINS"
     )
     
-    # ── Logging ──
     log_level: str = Field(
         default="INFO",
         description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
@@ -134,9 +126,13 @@ class Settings(BaseSettings):
     
     @property
     def cors_origins_list(self) -> list[str]:
-        """Parse CORS origins from comma-separated string."""
+        """Parse CORS origins from the comma-separated settings string.
+
+        Returns:
+            List of origin strings with surrounding whitespace stripped
+            and empty entries removed.
+        """
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
-# Global settings instance
 settings = Settings()

@@ -127,6 +127,9 @@ class BackgroundWorker:
 
         Args:
             optimization_id: Unique optimization identifier.
+
+        Returns:
+            None.
         """
         with self._queue_lock:
             self._cancel_events[optimization_id] = threading.Event()
@@ -140,6 +143,9 @@ class BackgroundWorker:
         Args:
             optimization_id: Unique optimization identifier.
             payload: The optimization request payload.
+
+        Returns:
+            None.
         """
         self._job_store.update_job(
             optimization_id,
@@ -165,6 +171,9 @@ class BackgroundWorker:
 
         Args:
             optimization_id: The optimization identifier to mark as done.
+
+        Returns:
+            None.
         """
         with self._queue_lock:
             self._processing_jobs.discard(optimization_id)
@@ -175,6 +184,9 @@ class BackgroundWorker:
 
         Args:
             worker_id: Identifier for this worker thread.
+
+        Returns:
+            None.
         """
         logger.info("Worker %d started", worker_id)
 
@@ -212,6 +224,9 @@ class BackgroundWorker:
             optimization_id: The optimization identifier to process.
             worker_id: Owning worker thread id for activity tracking.
 
+        Returns:
+            None.
+
         Raises:
             ValueError: If job has no payload.
         """
@@ -221,6 +236,14 @@ class BackgroundWorker:
             cancel_event = self._cancel_events.get(optimization_id)
 
         def _check_cancel() -> None:
+            """Raise CancellationError if the job's cancel event has been set.
+
+            Returns:
+                None.
+
+            Raises:
+                CancellationError: If the user has requested cancellation.
+            """
             if cancel_event and cancel_event.is_set():
                 raise CancellationError(f"Optimization {optimization_id} cancelled by user")
 
@@ -361,7 +384,6 @@ class BackgroundWorker:
                         result=result_dict,
                     )
                     logger.info("Optimization %s completed with status=%s", optimization_id, final_status)
-                    # Send completion notification
                     _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "")
                     _baseline = result_dict.get("baseline_test_metric") if isinstance(result_dict, dict) else None
                     _optimized = result_dict.get("optimized_test_metric") if isinstance(result_dict, dict) else None
@@ -420,7 +442,11 @@ class BackgroundWorker:
                 raise
 
     def start(self) -> None:
-        """Start the background worker threads."""
+        """Start the background worker threads.
+
+        Returns:
+            None.
+        """
         if self._running:
             return
 
@@ -441,6 +467,9 @@ class BackgroundWorker:
 
         Args:
             timeout: Maximum seconds to wait for threads to finish.
+
+        Returns:
+            None.
         """
         if not self._running:
             return
@@ -476,6 +505,9 @@ class BackgroundWorker:
 
         Args:
             worker_id: Identifier of the worker thread.
+
+        Returns:
+            None.
         """
         with self._activity_lock:
             self._last_activity[worker_id] = time.monotonic()
@@ -486,6 +518,9 @@ class BackgroundWorker:
         Args:
             run_process: The subprocess to terminate.
             optimization_id: Optimization identifier for logging.
+
+        Returns:
+            None.
         """
         run_process.terminate()
         run_process.join(timeout=3.0)
@@ -649,7 +684,6 @@ class BackgroundWorker:
         return len(self._threads)
 
 
-# Global worker instance
 _worker: Optional[BackgroundWorker] = None
 _worker_lock = threading.Lock()
 
@@ -694,6 +728,9 @@ def reset_worker_for_tests(timeout: float = 5.0) -> None:
 
     Args:
         timeout: Maximum seconds to wait for the worker to stop. Defaults to 5.0.
+
+    Returns:
+        None.
     """
     global _worker
     with _worker_lock:

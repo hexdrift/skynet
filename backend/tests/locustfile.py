@@ -78,7 +78,6 @@ class SkynetAPIUser(HttpUser):
             if r.status_code == 201:
                 r.success()
                 job_id = r.json()["job_id"]
-                # Poll once
                 self.client.get(f"/jobs/{job_id}/summary")
                 # Cancel to avoid burning API credits
                 self.client.post(f"/jobs/{job_id}/cancel")

@@ -48,9 +48,7 @@ class RemoteDBJobStore:
         self._session_factory = sessionmaker(bind=self._engine)
         logger.info("Initialized PostgreSQL database at %s", db_url.split("@")[-1] if "@" in db_url else db_url)
 
-        # ── Migrations ──
         with self._engine.connect() as conn:
-            # Add pair_index column to job_logs if missing
             result = conn.execute(text(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name = 'job_logs' AND column_name = 'pair_index'"
@@ -62,7 +60,11 @@ class RemoteDBJobStore:
 
     @property
     def engine(self):
-        """Expose the SQLAlchemy engine for shared table operations."""
+        """Expose the SQLAlchemy engine for shared table operations.
+
+        Returns:
+            The SQLAlchemy engine backing this job store.
+        """
         return self._engine
 
     def _get_session(self) -> Session:
@@ -141,6 +143,9 @@ class RemoteDBJobStore:
             optimization_id: Identifier of the job to update.
             **kwargs: Field names and values to set. Datetime string values
                 are automatically parsed, and latest_metrics is merged.
+
+        Returns:
+            None.
         """
         datetime_fields = {"created_at", "started_at", "completed_at"}
         session = self._get_session()
@@ -202,6 +207,9 @@ class RemoteDBJobStore:
 
         Args:
             optimization_id: Identifier of the job to delete.
+
+        Returns:
+            None.
         """
         session = self._get_session()
         try:
@@ -209,6 +217,68 @@ class RemoteDBJobStore:
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).delete()
             session.query(JobModel).filter(JobModel.optimization_id == optimization_id).delete()
             session.commit()
+        finally:
+            session.close()
+
+    def get_jobs_status_by_ids(self, optimization_ids: List[str]) -> Dict[str, str]:
+        """Return a ``{id: status}`` map for the requested IDs.
+
+        Runs a single ``SELECT ... WHERE optimization_id IN (...)``
+        so batch existence + status checks cost one round trip
+        regardless of how many IDs are supplied.
+
+        Args:
+            optimization_ids: Identifiers to look up.
+
+        Returns:
+            Mapping from existing job IDs to their current status
+            string. Missing IDs are absent from the returned dict.
+        """
+        if not optimization_ids:
+            return {}
+        session = self._get_session()
+        try:
+            rows = (
+                session.query(JobModel.optimization_id, JobModel.status)
+                .filter(JobModel.optimization_id.in_(optimization_ids))
+                .all()
+            )
+            return {r[0]: r[1] for r in rows}
+        finally:
+            session.close()
+
+    def delete_jobs(self, optimization_ids: List[str]) -> int:
+        """Hard-delete a batch of jobs in a single transaction.
+
+        Drops the associated log and progress-event rows first
+        (three bulk ``DELETE`` queries total) then commits once, so
+        the round-trip cost is bounded regardless of batch size.
+
+        Args:
+            optimization_ids: Identifiers to delete. Missing IDs are
+                tolerated — only rows that actually exist are
+                removed.
+
+        Returns:
+            Number of job rows actually deleted.
+        """
+        if not optimization_ids:
+            return 0
+        session = self._get_session()
+        try:
+            session.query(LogEntryModel).filter(
+                LogEntryModel.optimization_id.in_(optimization_ids)
+            ).delete(synchronize_session=False)
+            session.query(ProgressEventModel).filter(
+                ProgressEventModel.optimization_id.in_(optimization_ids)
+            ).delete(synchronize_session=False)
+            deleted = (
+                session.query(JobModel)
+                .filter(JobModel.optimization_id.in_(optimization_ids))
+                .delete(synchronize_session=False)
+            )
+            session.commit()
+            return int(deleted or 0)
         finally:
             session.close()
 
@@ -262,6 +332,9 @@ class RemoteDBJobStore:
         Args:
             optimization_id: Identifier of the job.
             overview: Dictionary of overview fields to persist.
+
+        Returns:
+            None.
         """
         session = self._get_session()
         try:
@@ -280,6 +353,9 @@ class RemoteDBJobStore:
             optimization_id: Identifier of the job.
             message: Optional human-readable progress description.
             metrics: Dictionary of metric key-value pairs to merge.
+
+        Returns:
+            None.
         """
         now = datetime.now(timezone.utc)
         session = self._get_session()
@@ -362,6 +438,10 @@ class RemoteDBJobStore:
             logger_name: Name of the logger that produced the entry.
             message: Log message text.
             timestamp: Optional explicit timestamp; defaults to now (UTC).
+            pair_index: Optional grid-search pair index the log belongs to.
+
+        Returns:
+            None.
         """
         ts = timestamp or datetime.now(timezone.utc)
         session = self._get_session()

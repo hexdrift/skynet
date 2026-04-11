@@ -60,6 +60,9 @@ def create_models_router() -> APIRouter:
         Cached: 5 minutes public, 10 minutes stale-while-revalidate. The
         catalog rarely changes at runtime so the response is effectively
         static per process lifetime.
+
+        Returns:
+            ModelCatalogResponse with the curated model and provider list.
         """
         catalog = get_catalog_cached()
         return catalog
@@ -88,6 +91,12 @@ def create_models_router() -> APIRouter:
         Authentication: pass ``api_key`` in the body if the target requires
         a bearer token. The key is used only for this one outbound request
         and is not stored anywhere.
+
+        Args:
+            payload: Request body with base URL and optional bearer token.
+
+        Returns:
+            DiscoverModelsResponse with the discovered model IDs, or an error.
         """
         base = payload.base_url.rstrip("/")
         candidates = [f"{base}/v1/models", f"{base}/models"]

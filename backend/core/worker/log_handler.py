@@ -21,12 +21,23 @@ _thread_pair_index = threading.local()
 
 
 def set_current_pair_index(pair_index: int | None) -> None:
-    """Set the current pair index for the calling thread."""
+    """Set the current pair index for the calling thread.
+
+    Args:
+        pair_index: 0-based grid-search pair index, or ``None`` to clear.
+
+    Returns:
+        None.
+    """
     _thread_pair_index.value = pair_index
 
 
 def get_current_pair_index() -> int | None:
-    """Get the current pair index for the calling thread."""
+    """Get the current pair index for the calling thread.
+
+    Returns:
+        The pair index previously set on this thread, or ``None`` if unset.
+    """
     return getattr(_thread_pair_index, "value", None)
 
 
@@ -51,7 +62,11 @@ class JobLogHandler(logging.Handler):
         self._thread_lock = threading.Lock()
 
     def register_current_thread(self) -> None:
-        """Allow log records emitted by the calling thread for this job."""
+        """Allow log records emitted by the calling thread for this job.
+
+        Returns:
+            None.
+        """
         with self._thread_lock:
             self._thread_ids.add(threading.get_ident())
 

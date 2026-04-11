@@ -13,7 +13,6 @@ from .telemetry import JobLogEntry, ProgressEvent
 class _JobResponseBase(BaseModel):
     """Shared fields across job response endpoints."""
 
-    # Identity & status
     optimization_id: str
     optimization_type: str
     status: OptimizationStatus
@@ -23,7 +22,6 @@ class _JobResponseBase(BaseModel):
     pinned: bool = False
     archived: bool = False
 
-    # Timestamps
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -31,7 +29,6 @@ class _JobResponseBase(BaseModel):
     elapsed_seconds: Optional[float] = None
     estimated_remaining: Optional[str] = None
 
-    # Payload summary (universal)
     username: Optional[str] = None
     module_name: Optional[str] = None
     module_kwargs: Dict[str, Any] = Field(default_factory=dict)
@@ -39,7 +36,6 @@ class _JobResponseBase(BaseModel):
     column_mapping: Optional[ColumnMapping] = None
     dataset_rows: Optional[int] = None
 
-    # Live telemetry
     latest_metrics: Dict[str, Any] = Field(default_factory=dict)
 
     # Run-specific (null for grid search)
@@ -82,7 +78,6 @@ class OptimizationSummaryResponse(_JobResponseBase):
     optimized_test_metric: Optional[float] = None
     metric_improvement: Optional[float] = None
 
-    # Grid search (null for run)
     best_pair_label: Optional[str] = None
 
 
@@ -93,6 +88,24 @@ class PaginatedJobsResponse(BaseModel):
     total: int = 0
     limit: int = 50
     offset: int = 0
+
+
+class OptimizationCountsResponse(BaseModel):
+    """Aggregate counts by status for dashboard stat cards.
+
+    The dashboard fetches pages incrementally via infinite scroll, so
+    counting locally-loaded items would under-report totals. This
+    endpoint runs cheap ``COUNT`` queries and returns the full picture
+    in one call.
+    """
+
+    total: int = 0
+    pending: int = 0
+    validating: int = 0
+    running: int = 0
+    success: int = 0
+    failed: int = 0
+    cancelled: int = 0
 
 
 class JobCancelResponse(BaseModel):
@@ -107,6 +120,26 @@ class JobDeleteResponse(BaseModel):
 
     optimization_id: str
     deleted: bool
+
+
+class BulkDeleteSkipped(BaseModel):
+    """One entry in the ``skipped`` list of a bulk-delete response."""
+
+    optimization_id: str
+    reason: str
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request payload for the bulk-delete endpoint."""
+
+    optimization_ids: List[str] = Field(default_factory=list)
+
+
+class BulkDeleteResponse(BaseModel):
+    """Response payload for the bulk-delete endpoint."""
+
+    deleted: List[str] = Field(default_factory=list)
+    skipped: List[BulkDeleteSkipped] = Field(default_factory=list)
 
 
 class OptimizationPayloadResponse(BaseModel):

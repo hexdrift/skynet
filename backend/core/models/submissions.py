@@ -32,6 +32,14 @@ class _OptimizationRequestBase(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_dataset(self) -> "_OptimizationRequestBase":
+        """Reject submissions whose ``dataset`` list is empty.
+
+        Returns:
+            The validated request instance.
+
+        Raises:
+            ValueError: If ``dataset`` is empty.
+        """
         if not self.dataset:
             raise ValueError("Dataset must contain at least one row.")
         return self
@@ -60,6 +68,15 @@ class GridSearchRequest(_OptimizationRequestBase):
 
     @model_validator(mode="after")
     def _validate_model_lists(self) -> "GridSearchRequest":
+        """Require non-empty generation and reflection model lists.
+
+        Returns:
+            The validated ``GridSearchRequest`` instance.
+
+        Raises:
+            ValueError: If either ``generation_models`` or
+                ``reflection_models`` is empty.
+        """
         if not self.generation_models:
             raise ValueError("At least one generation model is required.")
         if not self.reflection_models:

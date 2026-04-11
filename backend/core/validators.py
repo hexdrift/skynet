@@ -18,7 +18,10 @@ def validate_job_name(name: str | None) -> None:
     
     Args:
         name: Job name to validate
-        
+
+    Returns:
+        None.
+
     Raises:
         ValidationError: If name is invalid
     """
@@ -38,7 +41,10 @@ def validate_optimizer_name(optimizer: str) -> None:
     
     Args:
         optimizer: Optimizer name to validate
-        
+
+    Returns:
+        None.
+
     Raises:
         ValidationError: If optimizer is not allowed
     """
@@ -57,7 +63,10 @@ def validate_module_name(module: str) -> None:
     
     Args:
         module: Module name to validate
-        
+
+    Returns:
+        None.
+
     Raises:
         ValidationError: If module is not allowed
     """
@@ -74,7 +83,10 @@ def validate_dataset_file(file_path: str | Path) -> None:
     
     Args:
         file_path: Path to dataset file
-        
+
+    Returns:
+        None.
+
     Raises:
         ValidationError: If file doesn't exist or isn't readable
     """
@@ -92,7 +104,10 @@ def validate_model_config(config: dict[str, Any]) -> None:
     
     Args:
         config: Model configuration to validate
-        
+
+    Returns:
+        None.
+
     Raises:
         ValidationError: If configuration is invalid
     """
@@ -105,7 +120,6 @@ def validate_model_config(config: dict[str, Any]) -> None:
     if not isinstance(config["name"], str) or len(config["name"].strip()) == 0:
         raise ValidationError("Model name must be a non-empty string", details={"field": "model_config.name"})
     
-    # Validate temperature if present
     if "temperature" in config:
         temp = config["temperature"]
         if not isinstance(temp, (int, float)):
@@ -116,7 +130,6 @@ def validate_model_config(config: dict[str, Any]) -> None:
                 details={"field": "model_config.temperature"}
             )
     
-    # Validate max_tokens if present
     if "max_tokens" in config:
         max_tok = config["max_tokens"]
         if max_tok is not None:

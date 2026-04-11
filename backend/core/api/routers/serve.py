@@ -59,6 +59,12 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         Errors: 404 if the optimization doesn't exist, 409 if the job
         didn't finish successfully (no artifact to serve).
+
+        Args:
+            optimization_id: Identifier of the optimization to inspect.
+
+        Returns:
+            ServeInfoResponse describing the compiled program's signature.
         """
         _, result, overview = load_program(job_store, optimization_id)
         artifact = result.program_artifact
@@ -115,6 +121,16 @@ def create_serve_router(*, job_store) -> APIRouter:
         Errors: 400 (missing inputs or no model), 404 (job missing), 409
         (job didn't succeed), plus anything the provider raises during
         inference.
+
+        Args:
+            optimization_id: Identifier of the optimization to run inference against.
+            req: Serve request with inputs and optional model override.
+
+        Returns:
+            ServeResponse with the predicted outputs and echoed metadata.
+
+        Raises:
+            HTTPException: 400/404/409 depending on the failure mode above.
         """
         import dspy
 
@@ -123,7 +139,6 @@ def create_serve_router(*, job_store) -> APIRouter:
         program, result, overview = load_program(job_store, optimization_id)
         artifact = result.program_artifact
 
-        # Determine model config
         if req.model_config_override:
             model_config = req.model_config_override
         else:
@@ -139,7 +154,6 @@ def create_serve_router(*, job_store) -> APIRouter:
                     detail="No model config found for this job. Provide model_config_override.",
                 )
 
-        # Validate input fields
         input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
         output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
 
@@ -151,13 +165,11 @@ def create_serve_router(*, job_store) -> APIRouter:
                     detail=f"Missing required input fields: {missing}. Expected: {input_fields}",
                 )
 
-        # Build LM and run inference
         lm = build_language_model(model_config)
 
         with dspy.context(lm=lm):
             prediction = program(**req.inputs)
 
-        # Extract outputs
         outputs: dict[str, Any] = {}
         if output_fields:
             for field in output_fields:
@@ -210,6 +222,13 @@ def create_serve_router(*, job_store) -> APIRouter:
         ``X-Accel-Buffering: no`` to prevent proxies from collapsing the
         stream. Input validation and model resolution are identical to
         the non-streaming endpoint.
+
+        Args:
+            optimization_id: Identifier of the optimization to run inference against.
+            req: Serve request with inputs and optional model override.
+
+        Returns:
+            StreamingResponse yielding ``text/event-stream`` token and final events.
         """
         import dspy
         from dspy.streaming import StreamListener, StreamResponse
@@ -219,7 +238,6 @@ def create_serve_router(*, job_store) -> APIRouter:
         program, result, overview = load_program(job_store, optimization_id)
         artifact = result.program_artifact
 
-        # Determine model config (same logic as /serve/{optimization_id})
         if req.model_config_override:
             model_config = req.model_config_override
         else:
@@ -251,7 +269,21 @@ def create_serve_router(*, job_store) -> APIRouter:
         listeners = [StreamListener(signature_field_name=f) for f in output_fields]
 
         async def event_generator():
+            """Yield SSE events for streaming single-run inference.
+
+            Yields:
+                SSE-formatted strings emitting ``token``, ``final``, or ``error`` events.
+            """
             def sse(event: str, payload: dict) -> str:
+                """Format an SSE event frame.
+
+                Args:
+                    event: Event name placed on the ``event:`` line.
+                    payload: JSON-serializable payload for the ``data:`` line.
+
+                Returns:
+                    The fully formatted ``event:/data:`` SSE string.
+                """
                 return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
             try:
                 final_outputs: dict[str, Any] = {}
@@ -317,7 +349,6 @@ def create_serve_router(*, job_store) -> APIRouter:
             },
         )
 
-    # ── Per-pair serving (grid search) ──
 
     @router.get(
         "/serve/{optimization_id}/pair/{pair_index}/info",
@@ -340,6 +371,13 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         Errors: 404 if the optimization or pair index doesn't exist, 409 if
         the specific pair failed or hasn't finished yet.
+
+        Args:
+            optimization_id: Identifier of the grid-search job.
+            pair_index: 0-based index of the pair within the grid sweep.
+
+        Returns:
+            ServeInfoResponse describing the pair's compiled program.
         """
         program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
         artifact = pair.program_artifact
@@ -382,6 +420,17 @@ def create_serve_router(*, job_store) -> APIRouter:
         Input validation and output extraction are identical to
         ``POST /serve/{optimization_id}``. Errors: 400 (missing inputs),
         404 (optimization or pair missing), 409 (pair didn't succeed).
+
+        Args:
+            optimization_id: Identifier of the grid-search job.
+            pair_index: 0-based index of the pair within the grid sweep.
+            req: Serve request with inputs and optional model override.
+
+        Returns:
+            ServeResponse with the pair's predicted outputs and metadata.
+
+        Raises:
+            HTTPException: 400/404/409 as described above.
         """
         import dspy
 
@@ -390,13 +439,11 @@ def create_serve_router(*, job_store) -> APIRouter:
         program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
         artifact = pair.program_artifact
 
-        # Determine model config
         if req.model_config_override:
             model_config = req.model_config_override
         else:
             model_config = ModelConfig(name=pair.generation_model)
 
-        # Validate input fields
         input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
         output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
 
@@ -408,13 +455,11 @@ def create_serve_router(*, job_store) -> APIRouter:
                     detail=f"Missing required input fields: {missing}. Expected: {input_fields}",
                 )
 
-        # Build LM and run inference
         lm = build_language_model(model_config)
 
         with dspy.context(lm=lm):
             prediction = program(**req.inputs)
 
-        # Extract outputs
         outputs: dict[str, Any] = {}
         if output_fields:
             for field in output_fields:
@@ -452,6 +497,14 @@ def create_serve_router(*, job_store) -> APIRouter:
             3. Open an SSE connection to this endpoint with valid ``inputs``.
             4. Render incoming ``token`` events live, then flip to the
                canonical outputs in the ``final`` event.
+
+        Args:
+            optimization_id: Identifier of the grid-search job.
+            pair_index: 0-based index of the pair within the grid sweep.
+            req: Serve request with inputs and optional model override.
+
+        Returns:
+            StreamingResponse yielding ``text/event-stream`` token and final events.
         """
         import dspy
         from dspy.streaming import StreamListener, StreamResponse
@@ -461,7 +514,6 @@ def create_serve_router(*, job_store) -> APIRouter:
         program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
         artifact = pair.program_artifact
 
-        # Determine model config
         if req.model_config_override:
             model_config = req.model_config_override
         else:
@@ -483,7 +535,21 @@ def create_serve_router(*, job_store) -> APIRouter:
         listeners = [StreamListener(signature_field_name=f) for f in output_fields]
 
         async def event_generator():
+            """Yield SSE events for streaming per-pair inference.
+
+            Yields:
+                SSE-formatted strings emitting ``token``, ``final``, or ``error`` events.
+            """
             def sse(event: str, payload: dict) -> str:
+                """Format an SSE event frame.
+
+                Args:
+                    event: Event name placed on the ``event:`` line.
+                    payload: JSON-serializable payload for the ``data:`` line.
+
+                Returns:
+                    The fully formatted ``event:/data:`` SSE string.
+                """
                 return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
             try:
                 final_outputs: dict[str, Any] = {}

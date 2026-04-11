@@ -33,7 +33,6 @@ class FakeJobStore:
         self._logs: dict[str, list] = {}
         self._progress: dict[str, list] = {}
 
-    # ── construction helpers ────────────────────────────────────────────────
     def seed_job(self, optimization_id: str, **fields: Any) -> dict:
         now = datetime.now(timezone.utc).isoformat()
         job = {
@@ -52,7 +51,6 @@ class FakeJobStore:
         self._jobs[optimization_id] = job
         return job
 
-    # ── lookup ──────────────────────────────────────────────────────────────
     def get_job(self, optimization_id: str) -> dict:
         if optimization_id not in self._jobs:
             raise KeyError(optimization_id)
@@ -95,7 +93,6 @@ class FakeJobStore:
     def get_progress_count(self, optimization_id: str) -> int:
         return len(self._progress.get(optimization_id, []))
 
-    # ── mutation ────────────────────────────────────────────────────────────
     def set_payload_overview(self, optimization_id: str, overview: dict) -> None:
         self._jobs[optimization_id]["payload_overview"] = dict(overview)
 

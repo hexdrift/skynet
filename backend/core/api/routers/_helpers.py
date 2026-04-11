@@ -45,7 +45,6 @@ from ..converters import (
 
 logger = logging.getLogger(__name__)
 
-# Terminal job states that cannot be cancelled or restarted
 _TERMINAL_STATUSES = {OptimizationStatus.success, OptimizationStatus.failed, OptimizationStatus.cancelled}
 
 _VALID_STATUSES = {s.value for s in OptimizationStatus}
@@ -58,7 +57,14 @@ _program_cache: dict[str, Any] = {}
 
 
 def strip_api_key(d: dict) -> dict:
-    """Remove api_key from a model settings dict before persisting."""
+    """Remove api_key from a model settings dict before persisting.
+
+    Args:
+        d: Model settings dictionary possibly containing an ``extra.api_key`` field.
+
+    Returns:
+        A shallow copy of ``d`` with any ``api_key`` removed from ``extra``.
+    """
     result = dict(d)
     extra = result.get("extra")
     if isinstance(extra, dict) and "api_key" in extra:
@@ -72,6 +78,16 @@ def enforce_user_quota(job_store, username: str) -> None:
     Admins and users with an explicit ``None`` override in
     ``job_quota_overrides`` bypass the check entirely. The count
     includes every job owned by the user across all statuses.
+
+    Args:
+        job_store: Job store instance used to count existing jobs.
+        username: Identifier of the user whose quota is being checked.
+
+    Returns:
+        None.
+
+    Raises:
+        HTTPException: 409 when the user is at or over their allowed quota.
     """
     quota = get_user_quota(username, MAX_JOBS_PER_USER)
     if quota is None:
@@ -85,7 +101,14 @@ def enforce_user_quota(job_store, username: str) -> None:
 
 
 def build_summary(job_data: dict) -> OptimizationSummaryResponse:
-    """Build a OptimizationSummaryResponse from a raw job store dict."""
+    """Build a OptimizationSummaryResponse from a raw job store dict.
+
+    Args:
+        job_data: Raw job record as returned by the job store.
+
+    Returns:
+        OptimizationSummaryResponse populated from the job record.
+    """
     created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
     started_at = parse_timestamp(job_data.get("started_at"))
     completed_at = parse_timestamp(job_data.get("completed_at"))
@@ -98,7 +121,6 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
     if job_status not in _TERMINAL_STATUSES:
         est_remaining = extract_estimated_remaining(job_data)
 
-    # Extract result metrics
     result_data = job_data.get("result")
     latest_metrics = job_data.get("latest_metrics", {})
     baseline = None
@@ -131,7 +153,6 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
             live_failed = latest_metrics.get("failed_so_far")
             failed_pairs = live_failed if isinstance(live_failed, int) else 0
 
-    # Compute metric improvement
     metric_improvement = None
     if baseline is not None and optimized is not None:
         metric_improvement = round(optimized - baseline, 6)

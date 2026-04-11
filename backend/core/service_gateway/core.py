@@ -311,7 +311,6 @@ class DspyService:
             total_pairs, payload.module_name, payload.optimizer_name,
         )
 
-        # --- shared setup (done once) ---
         signature_cls = load_signature_from_code(payload.signature_code)
         signature_inputs, signature_outputs = extract_signature_fields(signature_cls)
         self._require_mapping_matches_signature(
@@ -343,7 +342,6 @@ class DspyService:
                 "total_pairs": total_pairs,
             })
 
-        # --- run pairs concurrently ---
         import threading
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -353,6 +351,17 @@ class DspyService:
         failed_count_ref = [0]
 
         def _run_pair(i: int, gen_cfg, ref_cfg) -> PairResult:
+            """Execute one grid-search pair end-to-end and return its result.
+
+            Args:
+                i: 0-based index of this pair within the sweep.
+                gen_cfg: Generation model config for the pair.
+                ref_cfg: Reflection model config for the pair.
+
+            Returns:
+                PairResult with metrics, runtime, and artifact — or error details
+                if the pair failed.
+            """
             from ..worker.log_handler import set_current_pair_index
             set_current_pair_index(i)
             pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
@@ -503,7 +512,6 @@ class DspyService:
                 idx = futures[future]
                 pair_results[idx] = future.result()
 
-        # --- pick best pair ---
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
         best_pair = max(successful, key=lambda p: p.optimized_test_metric) if successful else None
 
@@ -536,6 +544,9 @@ class DspyService:
 
         Args:
             payload: GridSearchRequest to validate.
+
+        Returns:
+            None.
 
         Raises:
             ServiceError: If signature, metric, module, or optimizer validation fails.

@@ -104,6 +104,15 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
 
         Returns HTTP 201 with ``OptimizationSubmissionResponse`` on success.
         Errors: 400 (validation), 409 (quota), 422 (malformed body).
+
+        Args:
+            payload: Validated submission request describing the optimization.
+
+        Returns:
+            OptimizationSubmissionResponse acknowledging the queued job.
+
+        Raises:
+            HTTPException: 400 (validation) or 409 (quota) as described above.
         """
 
         try:
@@ -216,6 +225,15 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         failure, 409 if the user is at quota, 422 on malformed body.
         Returns 201 with the submission response; poll
         ``/optimizations/{id}/summary`` for per-pair progress.
+
+        Args:
+            payload: Validated grid-search submission request.
+
+        Returns:
+            OptimizationSubmissionResponse acknowledging the queued grid search.
+
+        Raises:
+            HTTPException: 400 (validation) or 409 (quota) as described above.
         """
         if hasattr(service, "validate_grid_search_payload"):
             try:

@@ -302,7 +302,16 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        """Manage application lifecycle - start/stop worker."""
+        """Manage application lifecycle - start/stop worker.
+
+        Args:
+            app: The FastAPI application instance being managed.
+
+        Yields:
+            Control back to FastAPI while the server handles requests;
+            the background worker is started before the yield and
+            stopped after it.
+        """
         nonlocal worker
         job_store.recover_orphaned_jobs()  # [WORKER-FIX] mark crashed jobs from previous run as failed
         pending_ids = job_store.recover_pending_jobs()
@@ -317,6 +326,15 @@ def create_app(
         original_handler = signal.getsignal(signal.SIGTERM) if can_register_signal else None
 
         def _graceful_shutdown(signum, frame):
+            """Stop the background worker when SIGTERM is received.
+
+            Args:
+                signum: Signal number delivered to the handler.
+                frame: Current stack frame at the time the signal was caught.
+
+            Returns:
+                None.
+            """
             logger.info("SIGTERM received, stopping worker gracefully")
             if worker:
                 worker.stop()
@@ -372,6 +390,9 @@ def create_app(
         tag groups that become empty after filtering. The underlying
         ``/openapi.json`` remains unchanged so FastAPI's own /docs and
         any existing consumers that rely on the full schema keep working.
+
+        Returns:
+            JSONResponse containing the filtered OpenAPI spec.
         """
         from copy import deepcopy
         base = app.openapi()
@@ -394,6 +415,11 @@ def create_app(
 
     @app.get("/scalar", include_in_schema=False)
     async def scalar_docs() -> HTMLResponse:
+        """Render the Scalar API reference HTML with the animated wordmark injected.
+
+        Returns:
+            HTMLResponse containing the Scalar documentation page.
+        """
         base = get_scalar_api_reference(
             openapi_url="/openapi.public.json",
             title=f"{app.title} API",
@@ -425,10 +451,8 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    # ---- Consistent error response format ----
-    # All error responses use {"error": "<type>", "detail": "..."}
-    # so API consumers can write a single error handler.
-
+    # All error responses share {"error": "<type>", "detail": "..."} so
+    # API consumers can write a single error handler.
     _STATUS_TO_ERROR_TYPE = {
         400: "validation_error",
         404: "not_found",
@@ -446,6 +470,13 @@ def create_app(
 
         Converts AppError instances into consistent JSON responses that match
         the existing error envelope format used throughout the API.
+
+        Args:
+            request: Incoming HTTP request that raised the error.
+            exc: Domain exception instance to convert into a JSON response.
+
+        Returns:
+            JSONResponse with the standard error envelope.
         """
         return JSONResponse(
             status_code=exc.status_code,
@@ -456,6 +487,15 @@ def create_app(
     async def _http_error_handler(
         request: Request, exc: HTTPException
     ) -> JSONResponse:
+        """Convert FastAPI HTTPException instances into the standard error envelope.
+
+        Args:
+            request: Incoming HTTP request that raised the exception.
+            exc: The HTTPException instance being handled.
+
+        Returns:
+            JSONResponse with the shared ``{"error", "detail"}`` shape.
+        """
         error_type = _STATUS_TO_ERROR_TYPE.get(exc.status_code, "error")
         return JSONResponse(
             status_code=exc.status_code,
@@ -570,6 +610,12 @@ def create_app(
               the pool is stuck (e.g. a thread deadlocked inside a subprocess).
             - The response body is never cached by the frontend — stale data
               would defeat the point of the probe.
+
+        Returns:
+            HealthResponse snapshot with the registered-asset inventory.
+
+        Raises:
+            HTTPException: 503 when workers are dead or stuck past the stale threshold.
         """
         # [WORKER-FIX] return 503 if workers died so OpenShift probe detects it
         if worker is None or not worker.threads_alive():
@@ -595,7 +641,15 @@ def create_app(
 
     @app.middleware("http")
     async def add_cache_headers(request: Request, call_next):
-        """Add Cache-Control headers to cacheable GET endpoints."""
+        """Add Cache-Control headers to cacheable GET endpoints.
+
+        Args:
+            request: Incoming HTTP request being processed.
+            call_next: Downstream middleware/handler that produces the response.
+
+        Returns:
+            The response with appropriate Cache-Control headers applied.
+        """
         response = await call_next(request)
         path = request.url.path
         if request.method == "GET":
@@ -633,6 +687,9 @@ def create_app(
 
         Response is cached for 5 seconds to keep this endpoint cheap under
         aggressive polling from the UI.
+
+        Returns:
+            QueueStatusResponse describing pending/active jobs and worker health.
         """
         if worker is None:
             return QueueStatusResponse(
@@ -649,7 +706,6 @@ def create_app(
             workers_alive=worker.threads_alive(),
         )
 
-    # ── Domain routers ──
     # Every route except /health and /queue lives in a sub-module under
     # routers/. Each exposes a create_<domain>_router factory returning an
     # APIRouter wired up with the dependencies it needs. Tags are applied

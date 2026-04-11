@@ -36,6 +36,17 @@ def _thread_aware_wrap(original_factory: Callable[..., Any]) -> Callable[..., An
 
     @wraps(original_factory)
     def _create(*args: Any, **kwargs: Any) -> Any:
+        """Build a tqdm bar, wrapping in ``_TqdmProxy`` when a callback exists.
+
+        Args:
+            *args: Positional arguments forwarded to the real tqdm factory.
+            **kwargs: Keyword arguments forwarded to the real tqdm factory.
+
+        Returns:
+            The raw tqdm bar when the calling thread has no registered
+            callback, otherwise a ``_TqdmProxy`` that relays updates to
+            that callback.
+        """
         callback = getattr(_tqdm_thread_local, "progress_callback", None)
         bar = original_factory(*args, **kwargs)
         if callback is None:
@@ -61,8 +72,10 @@ def capture_tqdm(progress_callback: Optional[Callable[[str, dict[str, Any]], Non
     Args:
         progress_callback: Callable invoked with progress events.
 
-    Returns:
-        Context manager that cleans up per-thread state on exit.
+    Yields:
+        Control back to the caller while the tqdm patch is active.
+        On exit, the per-thread callback is cleared and — if this was
+        the last concurrent caller — the global patch is removed.
     """
 
     if progress_callback is None:

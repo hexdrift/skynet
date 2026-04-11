@@ -36,9 +36,16 @@ QUOTA_OVERRIDES: Final[dict[str, Optional[int]]] = {}
 def get_user_quota(username: str, default: int) -> Optional[int]:
     """Return the effective job quota for ``username``.
 
-    Returns ``None`` if the user has unlimited quota (admin or explicit
-    override). Returns an ``int`` otherwise — the maximum number of
-    jobs the user may own concurrently across all statuses.
+    Args:
+        username: The submitting user as recorded on the request.
+        default: Fallback quota applied when the user is neither an
+            admin nor present in ``QUOTA_OVERRIDES``.
+
+    Returns:
+        ``None`` if the user has unlimited quota (admin or explicit
+        override set to ``None``), otherwise the ``int`` maximum
+        number of jobs the user may own concurrently across all
+        statuses.
     """
     if username in ADMIN_USERNAMES:
         return None

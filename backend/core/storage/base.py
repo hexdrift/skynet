@@ -26,6 +26,9 @@ class JobStore(Protocol):
         Args:
             optimization_id: Identifier of the job to update.
             **kwargs: Field names and values to set.
+
+        Returns:
+            None.
         """
         ...
 
@@ -59,6 +62,43 @@ class JobStore(Protocol):
 
         Args:
             optimization_id: Identifier of the job to delete.
+
+        Returns:
+            None.
+        """
+        ...
+
+    def get_jobs_status_by_ids(self, optimization_ids: List[str]) -> Dict[str, str]:
+        """Return a ``{id: status}`` map for the requested IDs.
+
+        Used by the bulk-delete endpoint to partition a batch into
+        deletable / non-terminal / not-found in a single round trip,
+        instead of running N individual ``get_job`` calls.
+
+        Args:
+            optimization_ids: Identifiers to look up.
+
+        Returns:
+            Mapping from existing job IDs to their current status
+            string. IDs that don't exist are simply absent from the
+            returned dict.
+        """
+        ...
+
+    def delete_jobs(self, optimization_ids: List[str]) -> int:
+        """Hard-delete a batch of jobs and their associated rows.
+
+        Implementations should run this in a single transaction with
+        bulk ``DELETE ... WHERE id IN (...)`` queries so the cost is
+        O(1) round trips instead of O(n).
+
+        Args:
+            optimization_ids: Identifiers to delete. Duplicates and
+                missing IDs are tolerated — the method deletes
+                whatever subset currently exists.
+
+        Returns:
+            Number of job rows actually removed.
         """
         ...
 
@@ -69,6 +109,9 @@ class JobStore(Protocol):
             optimization_id: Identifier of the job.
             message: Optional human-readable progress description.
             metrics: Dictionary of metric key-value pairs.
+
+        Returns:
+            None.
         """
         ...
 
@@ -112,6 +155,10 @@ class JobStore(Protocol):
             logger_name: Name of the logger that produced the entry.
             message: Log message text.
             timestamp: Optional explicit timestamp; defaults to now.
+            pair_index: Optional grid-search pair index the log belongs to.
+
+        Returns:
+            None.
         """
         ...
 
@@ -154,6 +201,9 @@ class JobStore(Protocol):
         Args:
             optimization_id: Identifier of the job.
             overview: Dictionary of overview fields to persist.
+
+        Returns:
+            None.
         """
         ...
 

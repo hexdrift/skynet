@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 
-# ── Phase 1: Exception Hierarchy ──
 # Domain exceptions that map to HTTP status codes.
 # Services raise these instead of HTTPException for clean separation of concerns.
 
