@@ -3,8 +3,7 @@
 PostgreSQL only. No SQLite.
 """
 
-import os
-
+from ..config import settings
 from .base import JobStore
 from .remote import RemoteDBJobStore
 
@@ -12,7 +11,7 @@ from .remote import RemoteDBJobStore
 def get_job_store() -> JobStore:
     """Return the PostgreSQL job store backend.
 
-    Reads REMOTE_DB_URL for the connection string.
+    Reads REMOTE_DB_URL from settings for the connection string.
 
     Returns:
         JobStore: PostgreSQL storage backend.
@@ -20,14 +19,13 @@ def get_job_store() -> JobStore:
     Raises:
         RuntimeError: If REMOTE_DB_URL is not set.
     """
-    url = os.getenv("REMOTE_DB_URL")
-    if not url:
+    if not settings.remote_db_url:
         raise RuntimeError(
             "REMOTE_DB_URL is not set. Configure your PostgreSQL connection:\n"
             "  REMOTE_DB_URL=postgresql://user:password@host:5432/skynet\n"
             "See backend/.env.example for a template."
         )
-    return RemoteDBJobStore(db_url=url)
+    return RemoteDBJobStore(db_url=settings.remote_db_url.get_secret_value())
 
 
 __all__ = ["JobStore", "RemoteDBJobStore", "get_job_store"]

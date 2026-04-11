@@ -14,8 +14,16 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from ..constants import PAYLOAD_OVERVIEW_JOB_TYPE, PAYLOAD_OVERVIEW_USERNAME
+from ..config import settings
+from ..constants import (
+    OPTIMIZATION_TYPE_GRID_SEARCH,
+    OPTIMIZATION_TYPE_RUN,
+    PAYLOAD_OVERVIEW_JOB_TYPE,
+    PAYLOAD_OVERVIEW_USERNAME,
+)
+from ..models import GridSearchRequest, RunRequest
 from ..notifications import notify_job_completed
+from ..registry import ServiceRegistry
 from ..storage import JobStore
 from ..service_gateway import DspyService
 from .subprocess_runner import (
@@ -64,7 +72,7 @@ class BackgroundWorker:
         self._processing_jobs: set[str] = set()
         self._cancel_events: Dict[str, threading.Event] = {}
         self._queue_lock = threading.Lock()
-        poll_raw = os.getenv("CANCEL_POLL_INTERVAL", "1.0")
+        poll_raw = str(settings.cancel_poll_interval)
         try:
             self._cancel_poll_interval = max(float(poll_raw), 0.05)
         except ValueError:
@@ -85,7 +93,7 @@ class BackgroundWorker:
             Multiprocessing context configured from the JOB_RUN_START_METHOD
             environment variable, falling back to the system default.
         """
-        requested = os.getenv("JOB_RUN_START_METHOD", "fork").strip().lower()
+        requested = settings.job_run_start_method
         try:
             ctx = mp.get_context(requested)
         except ValueError:
@@ -664,8 +672,8 @@ def get_worker(
 
     with _worker_lock:
         if _worker is None or not _worker.threads_alive():
-            num_workers = int(os.getenv("WORKER_CONCURRENCY", "2"))
-            poll_interval = float(os.getenv("WORKER_POLL_INTERVAL", "2.0"))
+            num_workers = settings.worker_threads
+            poll_interval = settings.worker_poll_interval
             _worker = BackgroundWorker(
                 job_store=job_store,
                 num_workers=num_workers,
