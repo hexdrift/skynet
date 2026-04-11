@@ -42,23 +42,34 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
     """
     router = APIRouter()
 
-    @router.get("/optimizations/{optimization_id}/logs", response_model=List[JobLogEntry])
+    @router.get(
+        "/optimizations/{optimization_id}/logs",
+        response_model=List[JobLogEntry],
+        summary="Fetch the chronological log trail for an optimization",
+    )
     def get_job_logs(
         optimization_id: str,
-        limit: Optional[int] = Query(default=None, ge=1, le=5000, description="Max log entries to return"),
-        offset: int = Query(default=0, ge=0, description="Skip N log entries"),
-        level: Optional[str] = Query(default=None, description="Filter by log level (e.g. ERROR, WARNING, INFO)"),
+        limit: Optional[int] = Query(default=None, ge=1, le=5000, description="Maximum number of log entries to return; omit to return everything captured (subject to the 5000-entry ceiling)"),
+        offset: int = Query(default=0, ge=0, description="Number of log entries to skip before returning — use with limit for simple pagination"),
+        level: Optional[str] = Query(default=None, description="Case-insensitive level filter: DEBUG, INFO, WARNING, ERROR, CRITICAL"),
     ) -> List[JobLogEntry]:
-        """Return the chronological run log for the job.
+        """Return every log line captured while the optimization ran, in order.
 
-        Args:
-            optimization_id: Identifier for the job returned during submission.
-            limit: Maximum number of log entries to return.
-            offset: Number of log entries to skip.
-            level: Filter by log level (case-insensitive).
+        The worker writes structured log entries (``timestamp``, ``level``,
+        ``message``, optional ``pair_index`` for grid searches) to the job
+        store as the optimization progresses. This endpoint is what the
+        "Logs" tab in the UI polls to tail the run in near real time.
 
-        Returns:
-            List[JobLogEntry]: Ordered log entries captured during execution.
+        Behavior:
+            - Returns an empty list for jobs that haven't produced any log
+              lines yet (e.g. a job still in ``pending``).
+            - ``level`` is an exact match after uppercasing. Passing "info"
+              returns only INFO-level entries, not INFO-and-above.
+            - Pagination via ``offset``/``limit`` is stable under the
+              natural timestamp ordering, but new log lines appended by the
+              worker after the query ran will not appear mid-response.
+
+        Returns HTTP 404 if the optimization ID is unknown.
         """
 
         if not job_store.job_exists(optimization_id):
@@ -71,15 +82,33 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         )
         return [JobLogEntry(**entry) for entry in log_entries]
 
-    @router.get("/optimizations/{optimization_id}/payload", response_model=OptimizationPayloadResponse)
+    @router.get(
+        "/optimizations/{optimization_id}/payload",
+        response_model=OptimizationPayloadResponse,
+        summary="Retrieve the original submission payload",
+    )
     def get_job_payload(optimization_id: str) -> OptimizationPayloadResponse:
-        """Return the original request payload submitted for this job.
+        """Return the exact request body the user submitted when the job was
+        created — the dataset, column mapping, signature code, metric code,
+        optimizer kwargs, everything.
 
-        Args:
-            optimization_id: Identifier for the job returned during submission.
+        Used by the "Duplicate" / "Re-run with changes" UX flow so users can
+        pop a new submit wizard prefilled with everything from a previous
+        run. Also useful for reproducing a run exactly, or for auditing
+        what was actually submitted vs. what the overview card shows.
 
-        Returns:
-            OptimizationPayloadResponse: The stored request payload.
+        The response includes ``optimization_type`` (``run`` or ``grid_search``)
+        so the client can decide which wizard to open.
+
+        Errors:
+            - 404 if the optimization ID is unknown.
+            - 404 if the payload was not stored (very old jobs predate the
+              feature) — the error detail says "Payload not available".
+
+        Security note: ``model_settings.api_key`` is stripped from the
+        stored overview, but the original payload stored here is the
+        *complete* submission including any keys the user supplied inline.
+        Access to this endpoint should be treated accordingly.
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -97,9 +126,27 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
         return OptimizationPayloadResponse(optimization_id=optimization_id, optimization_type=optimization_type, payload=payload)
 
-    @router.patch("/optimizations/{optimization_id}/name", status_code=200)
+    @router.patch(
+        "/optimizations/{optimization_id}/name",
+        status_code=200,
+        summary="Rename an optimization's display label",
+    )
     def rename_job(optimization_id: str, req: RenameRequest) -> dict:
-        """Update the display name of a job."""
+        """Update the human-friendly display name shown on dashboard cards
+        and in the sidebar.
+
+        Only the display name is changed. The UUID, stored payload, result
+        artifact, and everything else stay untouched. Lets users rename a
+        run after the fact — e.g. a job submitted as "test1" can become
+        "prod MIPRO v2 run" once it finishes successfully.
+
+        Validation: the new name is required (1-200 characters) and leading
+        and trailing whitespace is trimmed server-side. Passing an empty or
+        whitespace-only string is rejected by Pydantic with a 422.
+
+        Returns ``{"optimization_id": ..., "name": ...}`` on success, 404
+        if the optimization doesn't exist.
+        """
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
@@ -109,9 +156,26 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         job_store.set_payload_overview(optimization_id, overview)
         return {"optimization_id": optimization_id, "name": req.name.strip()}
 
-    @router.patch("/optimizations/{optimization_id}/pin", status_code=200)
+    @router.patch(
+        "/optimizations/{optimization_id}/pin",
+        status_code=200,
+        summary="Toggle pinned state for an optimization",
+    )
     def toggle_pin_job(optimization_id: str) -> dict:
-        """Toggle the pinned state of a job."""
+        """Flip the ``pinned`` flag on an optimization's overview.
+
+        Pinned jobs surface at the top of the dashboard sidebar so
+        important runs don't get lost as newer jobs are submitted. This is
+        a pure toggle — the endpoint reads the current flag and writes the
+        opposite. There is no explicit "pin" or "unpin" parameter.
+
+        Idempotency: two calls in a row return the job to its original
+        state. If the UI needs a specific final state it must read the
+        returned ``pinned`` value and call again if needed.
+
+        Returns ``{"optimization_id": ..., "pinned": <new_state>}``.
+        404 if the optimization doesn't exist.
+        """
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
@@ -122,9 +186,25 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         job_store.set_payload_overview(optimization_id, overview)
         return {"optimization_id": optimization_id, "pinned": not current}
 
-    @router.patch("/optimizations/{optimization_id}/archive", status_code=200)
+    @router.patch(
+        "/optimizations/{optimization_id}/archive",
+        status_code=200,
+        summary="Toggle archived state for an optimization",
+    )
     def toggle_archive_job(optimization_id: str) -> dict:
-        """Toggle the archived state of a job."""
+        """Flip the ``archived`` flag on an optimization's overview.
+
+        Archiving hides a job from the default sidebar view without
+        deleting it. It's the soft-delete equivalent: the job, its logs,
+        and its artifact all remain on disk and can still be fetched by
+        ID. The UI offers a "Show archived" toggle to bring them back.
+
+        Like ``/pin``, this is a pure toggle — no explicit state parameter.
+        Use ``DELETE /optimizations/{id}`` for actual removal.
+
+        Returns ``{"optimization_id": ..., "archived": <new_state>}``.
+        404 if the optimization doesn't exist.
+        """
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
