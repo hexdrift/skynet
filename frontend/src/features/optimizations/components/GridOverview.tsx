@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/components/motion";
 import { HelpTip } from "@/components/help-tip";
 import type { OptimizationStatusResponse } from "@/lib/types";
-import { formatPercent, formatImprovement } from "../lib/formatters";
+import { formatPercent, formatImprovement } from "@/shared/lib";
 
 export function GridOverview({
   job,

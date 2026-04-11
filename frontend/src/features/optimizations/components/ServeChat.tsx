@@ -13,7 +13,7 @@ import { Loader2, MessageSquare, Pencil, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ServeInfoResponse } from "@/lib/types";
 import { CopyButton } from "./ui-primitives";
-import { formatOutput } from "../lib/formatters";
+import { formatOutput } from "@/shared/lib";
 
 export interface ServeChatProps {
   serveInfo: ServeInfoResponse;

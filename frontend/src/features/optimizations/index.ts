@@ -15,7 +15,7 @@ export {
   formatLogTimestamp,
   logTimeBucket,
   formatOutput,
-} from "./lib/formatters";
+} from "@/shared/lib";
 export { detectStage } from "./lib/detect-stage";
 export { extractScoresFromLogs, type ScorePoint } from "./lib/extract-scores";
 export { DataTab } from "./components/DataTab";

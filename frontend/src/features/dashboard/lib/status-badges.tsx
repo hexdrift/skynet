@@ -4,7 +4,7 @@ import type React from "react";
 import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS } from "@/lib/constants";
 import type { OptimizationSummaryResponse, JobStatus } from "@/lib/types";
-import { formatPercent } from "./formatters";
+import { formatPercent } from "@/shared/lib";
 
 export function statusBadge(status: JobStatus) {
   const label = STATUS_LABELS[status] ?? status;

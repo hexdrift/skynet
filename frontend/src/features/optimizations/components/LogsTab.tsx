@@ -23,7 +23,7 @@ import {
 import { FadeIn } from "@/components/motion";
 import { msg } from "@/features/shared/messages";
 import type { OptimizationLogEntry } from "@/lib/types";
-import { formatLogTimestamp, logTimeBucket } from "../lib/formatters";
+import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
 
 export function LogsTab({
   logs,

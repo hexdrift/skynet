@@ -13,5 +13,5 @@ export {
   formatId,
   normalizeImprovement,
   extractScoreParts,
-} from "./lib/formatters";
+} from "@/shared/lib";
 export { statusBadge, typeBadge, formatScore } from "./lib/status-badges";
