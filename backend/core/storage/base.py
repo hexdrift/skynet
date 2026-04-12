@@ -1,14 +1,14 @@
 """JobStore Protocol defining the contract for all storage backends."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class JobStore(Protocol):
     """Protocol that all job storage backends must satisfy."""
 
-    def create_job(self, optimization_id: str, estimated_remaining_seconds: Optional[float] = None) -> Dict[str, Any]:
+    def create_job(self, optimization_id: str, estimated_remaining_seconds: float | None = None) -> dict[str, Any]:
         """Create a new job record in the store.
 
         Args:
@@ -32,7 +32,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def get_job(self, optimization_id: str) -> Dict[str, Any]:
+    def get_job(self, optimization_id: str) -> dict[str, Any]:
         """Retrieve a single job by its identifier.
 
         Args:
@@ -68,7 +68,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def get_jobs_status_by_ids(self, optimization_ids: List[str]) -> Dict[str, str]:
+    def get_jobs_status_by_ids(self, optimization_ids: list[str]) -> dict[str, str]:
         """Return a ``{id: status}`` map for the requested IDs.
 
         Used by the bulk-delete endpoint to partition a batch into
@@ -85,7 +85,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def delete_jobs(self, optimization_ids: List[str]) -> int:
+    def delete_jobs(self, optimization_ids: list[str]) -> int:
         """Hard-delete a batch of jobs and their associated rows.
 
         Implementations should run this in a single transaction with
@@ -102,7 +102,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def record_progress(self, optimization_id: str, message: Optional[str], metrics: Dict[str, Any]) -> None:
+    def record_progress(self, optimization_id: str, message: str | None, metrics: dict[str, Any]) -> None:
         """Record a progress event for a job.
 
         Args:
@@ -115,7 +115,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def get_progress_events(self, optimization_id: str) -> List[Dict[str, Any]]:
+    def get_progress_events(self, optimization_id: str) -> list[dict[str, Any]]:
         """Retrieve all progress events for a job in chronological order.
 
         Args:
@@ -144,8 +144,8 @@ class JobStore(Protocol):
         level: str,
         logger_name: str,
         message: str,
-        timestamp: Optional[datetime] = None,
-        pair_index: Optional[int] = None,
+        timestamp: datetime | None = None,
+        pair_index: int | None = None,
     ) -> None:
         """Append a log entry to a job's log history.
 
@@ -166,10 +166,10 @@ class JobStore(Protocol):
         self,
         optimization_id: str,
         *,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         offset: int = 0,
-        level: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        level: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Retrieve log entries for a job with optional filtering and pagination.
 
         Args:
@@ -183,7 +183,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def get_log_count(self, optimization_id: str, *, level: Optional[str] = None) -> int:
+    def get_log_count(self, optimization_id: str, *, level: str | None = None) -> int:
         """Return the number of log entries for a job.
 
         Args:
@@ -195,7 +195,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def set_payload_overview(self, optimization_id: str, overview: Dict[str, Any]) -> None:
+    def set_payload_overview(self, optimization_id: str, overview: dict[str, Any]) -> None:
         """Store a summary overview of the job payload.
 
         Args:
@@ -210,12 +210,12 @@ class JobStore(Protocol):
     def list_jobs(
         self,
         *,
-        status: Optional[str] = None,
-        username: Optional[str] = None,
-        optimization_type: Optional[str] = None,
+        status: str | None = None,
+        username: str | None = None,
+        optimization_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List jobs with optional filtering and pagination.
 
         Args:
@@ -233,9 +233,9 @@ class JobStore(Protocol):
     def count_jobs(
         self,
         *,
-        status: Optional[str] = None,
-        username: Optional[str] = None,
-        optimization_type: Optional[str] = None,
+        status: str | None = None,
+        username: str | None = None,
+        optimization_type: str | None = None,
     ) -> int:
         """Count jobs matching the given filters.
 
@@ -257,7 +257,7 @@ class JobStore(Protocol):
         """
         ...
 
-    def recover_pending_jobs(self) -> List[str]:
+    def recover_pending_jobs(self) -> list[str]:
         """Retrieve optimization IDs that are still pending, ordered by creation time.
 
         Returns:

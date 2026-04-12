@@ -1,7 +1,10 @@
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+
 import dspy
+
 from ..exceptions import ServiceError
 from ..models import ColumnMapping, SplitFractions
 
@@ -10,12 +13,12 @@ from ..models import ColumnMapping, SplitFractions
 class DatasetSplits:
     """Container for train/validation/test partitions."""
 
-    train: List[Any]
-    val: List[Any]
-    test: List[Any]
+    train: list[Any]
+    val: list[Any]
+    test: list[Any]
 
 
-def extract_signature_fields(signature_cls: type[dspy.Signature]) -> tuple[List[str], List[str]]:
+def extract_signature_fields(signature_cls: type[dspy.Signature]) -> tuple[list[str], list[str]]:
     """Inspect a DSPy signature class to derive input and output field names.
 
     Args:
@@ -25,12 +28,10 @@ def extract_signature_fields(signature_cls: type[dspy.Signature]) -> tuple[List[
         tuple[list[str], list[str]]: Names of input fields followed by output fields.
     """
 
-    inputs: List[str] = []
-    outputs: List[str] = []
+    inputs: list[str] = []
+    outputs: list[str] = []
 
-    fields_mapping = getattr(signature_cls, "model_fields", None) or getattr(
-        signature_cls, "__pydantic_fields__", None
-    )
+    fields_mapping = getattr(signature_cls, "model_fields", None) or getattr(signature_cls, "__pydantic_fields__", None)
     if fields_mapping:
         for field_name, field_info in fields_mapping.items():
             if _is_signature_field(field_info, field_type="input"):
@@ -48,7 +49,7 @@ def extract_signature_fields(signature_cls: type[dspy.Signature]) -> tuple[List[
     return inputs, outputs
 
 
-def rows_to_examples(dataset: List[Dict[str, Any]], mapping: ColumnMapping) -> List[Any]:
+def rows_to_examples(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> list[Any]:
     """Convert dataframe-like rows into DSPy Example instances.
 
     Args:
@@ -62,25 +63,21 @@ def rows_to_examples(dataset: List[Dict[str, Any]], mapping: ColumnMapping) -> L
         ServiceError: If a required column is missing from any row.
     """
 
-    examples: List[Any] = []
+    examples: list[Any] = []
     for row_idx, row in enumerate(dataset):
         if not isinstance(row, dict):
             raise ServiceError(f"Row {row_idx} is not a mapping: {row!r}")
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         for signature_field, column_name in mapping.inputs.items():
             try:
                 payload[signature_field] = row[column_name]
             except KeyError as exc:
-                raise ServiceError(
-                    f"Missing input column '{column_name}' for row {row_idx}"
-                ) from exc
+                raise ServiceError(f"Missing input column '{column_name}' for row {row_idx}") from exc
         for signature_field, column_name in mapping.outputs.items():
             try:
                 payload[signature_field] = row[column_name]
             except KeyError as exc:
-                raise ServiceError(
-                    f"Missing output column '{column_name}' for row {row_idx}"
-                ) from exc
+                raise ServiceError(f"Missing output column '{column_name}' for row {row_idx}") from exc
 
         example = dspy.Example(**payload)
         if hasattr(example, "with_inputs"):
@@ -108,7 +105,7 @@ def load_signature_from_code(code: str) -> type[dspy.Signature]:
         ServiceError: If zero or multiple signature classes are defined.
     """
 
-    namespace: Dict[str, Any] = {"dspy": dspy}
+    namespace: dict[str, Any] = {"dspy": dspy}
     try:
         exec(code, namespace)
     except SyntaxError as exc:
@@ -138,7 +135,7 @@ def load_metric_from_code(code: str) -> Callable[..., Any]:
         ServiceError: If no callable metric is found.
     """
 
-    namespace: Dict[str, Any] = {"dspy": dspy}
+    namespace: dict[str, Any] = {"dspy": dspy}
     try:
         exec(code, namespace)
     except SyntaxError as exc:
@@ -154,11 +151,11 @@ def load_metric_from_code(code: str) -> Callable[..., Any]:
 
 
 def split_examples(
-    examples: List[Any],
+    examples: list[Any],
     fractions: SplitFractions,
     *,
     shuffle: bool,
-    seed: Optional[int],
+    seed: int | None,
 ) -> DatasetSplits:
     """Split examples into train, val, and test partitions.
 
@@ -214,7 +211,4 @@ def _is_signature_field(value: Any, *, field_type: str) -> bool:
         return True
 
     extra = getattr(value, "json_schema_extra", None)
-    if isinstance(extra, dict) and extra.get("__dspy_field_type") == field_type:
-        return True
-
-    return False
+    return bool(isinstance(extra, dict) and extra.get("__dspy_field_type") == field_type)

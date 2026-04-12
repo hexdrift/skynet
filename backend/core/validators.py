@@ -3,6 +3,7 @@
 All validators raise domain ValidationError on failure, never HTTPException.
 This allows services to use validation logic without coupling to HTTP layer.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,7 +16,7 @@ from .exceptions import ValidationError
 
 def validate_job_name(name: str | None) -> None:
     """Validate job display name.
-    
+
     Args:
         name: Job name to validate
 
@@ -36,9 +37,9 @@ def validate_job_name(name: str | None) -> None:
 
 def validate_optimizer_name(optimizer: str) -> None:
     """Validate optimizer name against allowed optimizers.
-    
+
     Only MIPROv2 and GEPA are permitted.
-    
+
     Args:
         optimizer: Optimizer name to validate
 
@@ -52,15 +53,15 @@ def validate_optimizer_name(optimizer: str) -> None:
     if optimizer not in allowed:
         raise ValidationError(
             f"Optimizer '{optimizer}' not allowed. Must be one of: {', '.join(sorted(allowed))}",
-            details={"field": "optimizer_name", "allowed": sorted(allowed)}
+            details={"field": "optimizer_name", "allowed": sorted(allowed)},
         )
 
 
 def validate_module_name(module: str) -> None:
     """Validate module name against allowed modules.
-    
+
     Only Predict and ChainOfThought are permitted.
-    
+
     Args:
         module: Module name to validate
 
@@ -74,13 +75,13 @@ def validate_module_name(module: str) -> None:
     if module not in allowed:
         raise ValidationError(
             f"Module '{module}' not allowed. Must be one of: {', '.join(sorted(allowed))}",
-            details={"field": "module_name", "allowed": sorted(allowed)}
+            details={"field": "module_name", "allowed": sorted(allowed)},
         )
 
 
 def validate_dataset_file(file_path: str | Path) -> None:
     """Validate that a dataset file exists and is readable.
-    
+
     Args:
         file_path: Path to dataset file
 
@@ -101,7 +102,7 @@ def validate_dataset_file(file_path: str | Path) -> None:
 
 def validate_model_config(config: dict[str, Any]) -> None:
     """Validate model configuration dictionary.
-    
+
     Args:
         config: Model configuration to validate
 
@@ -113,28 +114,23 @@ def validate_model_config(config: dict[str, Any]) -> None:
     """
     if not isinstance(config, dict):
         raise ValidationError("Model config must be a dictionary", details={"field": "model_config"})
-    
+
     if "name" not in config:
         raise ValidationError("Model config must include 'name' field", details={"field": "model_config.name"})
-    
+
     if not isinstance(config["name"], str) or len(config["name"].strip()) == 0:
         raise ValidationError("Model name must be a non-empty string", details={"field": "model_config.name"})
-    
+
     if "temperature" in config:
         temp = config["temperature"]
         if not isinstance(temp, (int, float)):
             raise ValidationError("Temperature must be a number", details={"field": "model_config.temperature"})
         if not 0.0 <= temp <= 2.0:
             raise ValidationError(
-                "Temperature must be between 0.0 and 2.0",
-                details={"field": "model_config.temperature"}
+                "Temperature must be between 0.0 and 2.0", details={"field": "model_config.temperature"}
             )
-    
+
     if "max_tokens" in config:
         max_tok = config["max_tokens"]
-        if max_tok is not None:
-            if not isinstance(max_tok, int) or max_tok < 1:
-                raise ValidationError(
-                    "max_tokens must be a positive integer",
-                    details={"field": "model_config.max_tokens"}
-                )
+        if max_tok is not None and (not isinstance(max_tok, int) or max_tok < 1):
+            raise ValidationError("max_tokens must be a positive integer", details={"field": "model_config.max_tokens"})

@@ -1,5 +1,6 @@
 """Request/response models for the /validate-code endpoint."""
-from typing import Any, Dict, List, Optional
+
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -13,17 +14,17 @@ class ValidateCodeRequest(BaseModel):
     wizard can validate each code block independently.
     """
 
-    signature_code: Optional[str] = None
-    metric_code: Optional[str] = None
+    signature_code: str | None = None
+    metric_code: str | None = None
     column_mapping: ColumnMapping
-    sample_row: Dict[str, Any] = Field(default_factory=dict)
-    optimizer_name: Optional[str] = None
+    sample_row: dict[str, Any] = Field(default_factory=dict)
+    optimizer_name: str | None = None
 
 
 class ValidateCodeResponse(BaseModel):
     """Response payload for code validation."""
 
     valid: bool
-    signature_fields: Optional[Dict[str, List[str]]] = None
-    errors: List[str] = Field(default_factory=list)
-    warnings: List[str] = Field(default_factory=list)
+    signature_fields: dict[str, list[str]] | None = None
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

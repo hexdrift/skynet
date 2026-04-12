@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path
+
 import uvicorn
 from dotenv import load_dotenv
+
 from core import ServiceRegistry, create_app
 
 # Load .env file if it exists (won't override existing env vars)

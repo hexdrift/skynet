@@ -1,6 +1,8 @@
 from __future__ import annotations
+
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, MutableMapping
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import dspy
@@ -99,7 +101,7 @@ class ServiceRegistry:
         """
         return self._get(self.optimizers, name, kind="optimizer")
 
-    def snapshot(self) -> Dict[str, list[str]]:
+    def snapshot(self) -> dict[str, list[str]]:
         """Return summary information about registered assets.
 
         Args:

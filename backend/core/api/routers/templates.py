@@ -4,17 +4,18 @@ Templates let users save and reload submission configurations. This router
 also ensures the backing table exists by calling
 ``StorageBase.metadata.create_all(job_store.engine)`` on construction.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ...models import TemplateCreateRequest, TemplateResponse
-from ...storage.models import TemplateModel, Base as StorageBase
+from ...storage.models import Base as StorageBase
+from ...storage.models import TemplateModel
 
 
 def create_templates_router(*, job_store) -> APIRouter:
@@ -89,14 +90,14 @@ def create_templates_router(*, job_store) -> APIRouter:
 
     @router.get(
         "/templates",
-        response_model=List[TemplateResponse],
+        response_model=list[TemplateResponse],
         summary="List saved submission templates",
     )
     def list_templates(
-        username: Optional[str] = Query(default=None, description="Only return templates created by this user"),
+        username: str | None = Query(default=None, description="Only return templates created by this user"),
         limit: int = Query(default=100, ge=1, le=500, description="Page size"),
         offset: int = Query(default=0, ge=0, description="Number of templates to skip"),
-    ) -> List[TemplateResponse]:
+    ) -> list[TemplateResponse]:
         """Return templates ordered newest-first, with optional owner filter.
 
         Called by the submit wizard's "Start from template" picker. Omit
@@ -160,9 +161,7 @@ def create_templates_router(*, job_store) -> APIRouter:
             HTTPException: 404 when the template doesn't exist.
         """
         with Session(job_store.engine) as session:
-            row = session.query(TemplateModel).filter(
-                TemplateModel.template_id == template_id
-            ).first()
+            row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
                 raise HTTPException(status_code=404, detail="Template not found.")
             return TemplateResponse(
@@ -206,9 +205,7 @@ def create_templates_router(*, job_store) -> APIRouter:
             HTTPException: 404 when missing, 403 when not owned by the requester.
         """
         with Session(job_store.engine) as session:
-            row = session.query(TemplateModel).filter(
-                TemplateModel.template_id == template_id
-            ).first()
+            row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
                 raise HTTPException(status_code=404, detail="Template not found.")
             if row.username != username:

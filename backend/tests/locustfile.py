@@ -9,7 +9,8 @@ Headless mode (CI):
     locust -f tests/locustfile.py --host=http://localhost:8000 \
         --headless -u 50 -r 10 --run-time 60s
 """
-from locust import HttpUser, task, between, tag
+
+from locust import HttpUser, between, tag, task
 
 
 class SkynetAPIUser(HttpUser):

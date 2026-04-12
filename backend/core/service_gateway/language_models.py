@@ -1,5 +1,5 @@
-from typing import Dict
 import dspy
+
 from ..exceptions import ServiceError
 from ..models import ModelConfig
 
@@ -18,7 +18,7 @@ def build_language_model(config: ModelConfig) -> dspy.LM:
     """
 
     model_name = config.name.strip("/")
-    lm_kwargs: Dict[str, object] = {
+    lm_kwargs: dict[str, object] = {
         "model": model_name,
         "temperature": config.temperature,
     }

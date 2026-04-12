@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import dspy
 
@@ -24,19 +25,12 @@ from ..constants import (
 )
 from ..exceptions import ServiceError
 from ..models import (
-    ColumnMapping,
     GridSearchRequest,
     GridSearchResponse,
-    ModelConfig,
     PairResult,
     RunRequest,
     RunResponse,
     SplitCounts,
-)
-from .progress import capture_tqdm
-from .validators import (
-    require_mapping_columns_in_dataset,
-    require_mapping_matches_signature,
 )
 from ..registry import (
     ResolverError,
@@ -61,6 +55,11 @@ from .optimizers import (
     validate_optimizer_kwargs,
     validate_optimizer_signature,
 )
+from .progress import capture_tqdm
+from .validators import (
+    require_mapping_columns_in_dataset,
+    require_mapping_matches_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,7 @@ class DspyService:
     def __init__(
         self,
         registry: ServiceRegistry,
-        default_seed: Optional[int] = None,
+        default_seed: int | None = None,
     ):
         """Create a new DspyService instance.
 
@@ -86,8 +85,8 @@ class DspyService:
         self,
         payload: RunRequest,
         *,
-        artifact_id: Optional[str] = None,
-        progress_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        artifact_id: str | None = None,
+        progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> RunResponse:
         """Execute an optimization workflow for a single request.
 
@@ -118,9 +117,7 @@ class DspyService:
             signature_inputs,
             signature_outputs,
         )
-        self._require_mapping_matches_signature(
-            payload.column_mapping, signature_inputs, signature_outputs
-        )
+        require_mapping_matches_signature(payload.column_mapping, signature_inputs, signature_outputs)
         module_factory, auto_signature = self._get_module_factory(payload.module_name)
         module_kwargs = dict(payload.module_kwargs)
         if auto_signature or "signature" not in module_kwargs:
@@ -173,7 +170,10 @@ class DspyService:
             baseline_test_results: list[dict] = []
             if splits.test:
                 baseline_test_metric, baseline_test_results = evaluate_on_test(
-                    program, splits.test, metric, collect_per_example=True,
+                    program,
+                    splits.test,
+                    metric,
+                    collect_per_example=True,
                 )
                 logger.info("Baseline test metric: %s", baseline_test_metric)
                 if progress_callback and baseline_test_metric is not None:
@@ -197,7 +197,10 @@ class DspyService:
             optimized_test_results: list[dict] = []
             if splits.test:
                 optimized_test_metric, optimized_test_results = evaluate_on_test(
-                    compiled_program, splits.test, metric, collect_per_example=True,
+                    compiled_program,
+                    splits.test,
+                    metric,
+                    collect_per_example=True,
                 )
                 logger.info("Optimized test metric: %s", optimized_test_metric)
                 if progress_callback and optimized_test_metric is not None:
@@ -216,7 +219,8 @@ class DspyService:
             ):
                 logger.warning(
                     "Optimized program (%.4f) is worse than baseline (%.4f) — returning baseline program",
-                    optimized_test_metric, baseline_test_metric,
+                    optimized_test_metric,
+                    baseline_test_metric,
                 )
                 best_program = program
                 # Swap so the "optimized" metric reflects what we're actually returning
@@ -226,11 +230,9 @@ class DspyService:
         if program_artifact:
             logger.info("Program artifact created with base64 payload")
 
-        split_counts = SplitCounts(
-            train=len(splits.train), val=len(splits.val), test=len(splits.test)
-        )
+        split_counts = SplitCounts(train=len(splits.train), val=len(splits.val), test=len(splits.test))
 
-        details: Dict[str, Any] = {
+        details: dict[str, Any] = {
             DETAIL_TRAIN: split_counts.train,
             DETAIL_VAL: split_counts.val,
             DETAIL_TEST: split_counts.test,
@@ -283,8 +285,8 @@ class DspyService:
         self,
         payload: GridSearchRequest,
         *,
-        artifact_id: Optional[str] = None,
-        progress_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        artifact_id: str | None = None,
+        progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> GridSearchResponse:
         """Run GEPA optimization for every (generation, reflection) model pair.
 
@@ -300,21 +302,21 @@ class DspyService:
             GridSearchResponse with per-pair results and the best-performing pair.
         """
         grid_start = datetime.now(timezone.utc)
-        pairs = [
-            (gen_cfg, ref_cfg)
-            for gen_cfg in payload.generation_models
-            for ref_cfg in payload.reflection_models
-        ]
+        pairs = [(gen_cfg, ref_cfg) for gen_cfg in payload.generation_models for ref_cfg in payload.reflection_models]
         total_pairs = len(pairs)
         logger.info(
             "Starting grid search: %d pairs, module=%s optimizer=%s",
-            total_pairs, payload.module_name, payload.optimizer_name,
+            total_pairs,
+            payload.module_name,
+            payload.optimizer_name,
         )
 
         signature_cls = load_signature_from_code(payload.signature_code)
         signature_inputs, signature_outputs = extract_signature_fields(signature_cls)
-        self._require_mapping_matches_signature(
-            payload.column_mapping, signature_inputs, signature_outputs,
+        require_mapping_matches_signature(
+            payload.column_mapping,
+            signature_inputs,
+            signature_outputs,
         )
         module_factory, auto_signature = self._get_module_factory(payload.module_name)
         module_kwargs = dict(payload.module_kwargs)
@@ -327,25 +329,31 @@ class DspyService:
 
         examples = rows_to_examples(payload.dataset, payload.column_mapping)
         splits = split_examples(
-            examples, payload.split_fractions,
+            examples,
+            payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
         )
         split_counts = SplitCounts(
-            train=len(splits.train), val=len(splits.val), test=len(splits.test),
+            train=len(splits.train),
+            val=len(splits.val),
+            test=len(splits.test),
         )
         if progress_callback:
-            progress_callback(PROGRESS_SPLITS_READY, {
-                DETAIL_TRAIN: split_counts.train,
-                DETAIL_VAL: split_counts.val,
-                DETAIL_TEST: split_counts.test,
-                "total_pairs": total_pairs,
-            })
+            progress_callback(
+                PROGRESS_SPLITS_READY,
+                {
+                    DETAIL_TRAIN: split_counts.train,
+                    DETAIL_VAL: split_counts.val,
+                    DETAIL_TEST: split_counts.test,
+                    "total_pairs": total_pairs,
+                },
+            )
 
         import threading
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        pair_results: List[PairResult] = [None] * total_pairs  # type: ignore[list-item]
+        pair_results: list[PairResult] = [None] * total_pairs  # type: ignore[list-item]
         results_lock = threading.Lock()
         completed_count_ref = [0]
         failed_count_ref = [0]
@@ -363,25 +371,34 @@ class DspyService:
                 if the pair failed.
             """
             from ..worker.log_handler import set_current_pair_index
+
             set_current_pair_index(i)
             pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
             logger.info("Grid pair %d/%d: %s", i + 1, total_pairs, pair_label)
             if progress_callback:
-                progress_callback(PROGRESS_GRID_PAIR_STARTED, {
-                    "pair_index": i,
-                    "total_pairs": total_pairs,
-                    "generation_model": gen_cfg.name,
-                    "reflection_model": ref_cfg.name,
-                })
+                progress_callback(
+                    PROGRESS_GRID_PAIR_STARTED,
+                    {
+                        "pair_index": i,
+                        "total_pairs": total_pairs,
+                        "generation_model": gen_cfg.name,
+                        "reflection_model": ref_cfg.name,
+                    },
+                )
 
             pair_start = datetime.now(timezone.utc)
             try:
                 program = module_factory(**module_kwargs)
                 language_model = build_language_model(gen_cfg)
                 optimizer = instantiate_optimizer(
-                    optimizer_factory, payload.optimizer_name,
-                    payload.optimizer_kwargs, metric,
-                    gen_cfg, ref_cfg, None, None,
+                    optimizer_factory,
+                    payload.optimizer_name,
+                    payload.optimizer_kwargs,
+                    metric,
+                    gen_cfg,
+                    ref_cfg,
+                    None,
+                    None,
                 )
 
                 with dspy.context(lm=language_model):
@@ -389,18 +406,26 @@ class DspyService:
                     baseline_test_results: list[dict] = []
                     if splits.test:
                         baseline, baseline_test_results = evaluate_on_test(
-                            program, splits.test, metric, collect_per_example=True,
+                            program,
+                            splits.test,
+                            metric,
+                            collect_per_example=True,
                         )
                         if progress_callback and baseline is not None:
-                            progress_callback(PROGRESS_BASELINE, {
-                                DETAIL_BASELINE: baseline,
-                                "pair_index": i,
-                            })
+                            progress_callback(
+                                PROGRESS_BASELINE,
+                                {
+                                    DETAIL_BASELINE: baseline,
+                                    "pair_index": i,
+                                },
+                            )
 
                     with capture_tqdm(progress_callback):
                         compiled = compile_program(
-                            optimizer=optimizer, program=program,
-                            splits=splits, metric=metric,
+                            optimizer=optimizer,
+                            program=program,
+                            splits=splits,
+                            metric=metric,
                             compile_kwargs=payload.compile_kwargs,
                         )
 
@@ -408,17 +433,28 @@ class DspyService:
                     optimized_test_results: list[dict] = []
                     if splits.test:
                         optimized, optimized_test_results = evaluate_on_test(
-                            compiled, splits.test, metric, collect_per_example=True,
+                            compiled,
+                            splits.test,
+                            metric,
+                            collect_per_example=True,
                         )
                         if progress_callback and optimized is not None:
-                            progress_callback(PROGRESS_OPTIMIZED, {
-                                DETAIL_OPTIMIZED: optimized,
-                                "pair_index": i,
-                            })
+                            progress_callback(
+                                PROGRESS_OPTIMIZED,
+                                {
+                                    DETAIL_OPTIMIZED: optimized,
+                                    "pair_index": i,
+                                },
+                            )
 
                 best = compiled
                 if baseline is not None and optimized is not None and optimized < baseline:
-                    logger.warning("Grid pair %d: optimized (%.4f) worse than baseline (%.4f) — keeping baseline", i, optimized, baseline)
+                    logger.warning(
+                        "Grid pair %d: optimized (%.4f) worse than baseline (%.4f) — keeping baseline",
+                        i,
+                        optimized,
+                        baseline,
+                    )
                     best = program
                     optimized = baseline
 
@@ -450,24 +486,30 @@ class DspyService:
                     completed_count_ref[0] += 1
                 logger.info(
                     "Grid pair %d/%d completed: baseline=%.4f optimized=%.4f (%.1fs)",
-                    i + 1, total_pairs,
-                    baseline or 0, optimized or 0, pair_runtime,
+                    i + 1,
+                    total_pairs,
+                    baseline or 0,
+                    optimized or 0,
+                    pair_runtime,
                 )
                 if progress_callback:
                     with results_lock:
                         c, f = completed_count_ref[0], failed_count_ref[0]
-                    progress_callback(PROGRESS_GRID_PAIR_COMPLETED, {
-                        "pair_index": i,
-                        "total_pairs": total_pairs,
-                        "generation_model": gen_cfg.name,
-                        "reflection_model": ref_cfg.name,
-                        "baseline_test_metric": baseline,
-                        "optimized_test_metric": optimized,
-                        "metric_improvement": improvement,
-                        "runtime_seconds": round(pair_runtime, 2),
-                        "completed_so_far": c,
-                        "failed_so_far": f,
-                    })
+                    progress_callback(
+                        PROGRESS_GRID_PAIR_COMPLETED,
+                        {
+                            "pair_index": i,
+                            "total_pairs": total_pairs,
+                            "generation_model": gen_cfg.name,
+                            "reflection_model": ref_cfg.name,
+                            "baseline_test_metric": baseline,
+                            "optimized_test_metric": optimized,
+                            "metric_improvement": improvement,
+                            "runtime_seconds": round(pair_runtime, 2),
+                            "completed_so_far": c,
+                            "failed_so_far": f,
+                        },
+                    )
                 set_current_pair_index(None)
                 return result
 
@@ -485,29 +527,32 @@ class DspyService:
                     failed_count_ref[0] += 1
                 logger.warning(
                     "Grid pair %d/%d failed (%s): %s",
-                    i + 1, total_pairs, pair_label, error_msg,
+                    i + 1,
+                    total_pairs,
+                    pair_label,
+                    error_msg,
                 )
                 if progress_callback:
                     with results_lock:
                         c, f = completed_count_ref[0], failed_count_ref[0]
-                    progress_callback(PROGRESS_GRID_PAIR_FAILED, {
-                        "pair_index": i,
-                        "total_pairs": total_pairs,
-                        "generation_model": gen_cfg.name,
-                        "reflection_model": ref_cfg.name,
-                        "error": error_msg,
-                        "completed_so_far": c,
-                        "failed_so_far": f,
-                    })
+                    progress_callback(
+                        PROGRESS_GRID_PAIR_FAILED,
+                        {
+                            "pair_index": i,
+                            "total_pairs": total_pairs,
+                            "generation_model": gen_cfg.name,
+                            "reflection_model": ref_cfg.name,
+                            "error": error_msg,
+                            "completed_so_far": c,
+                            "failed_so_far": f,
+                        },
+                    )
                 set_current_pair_index(None)
                 return result
 
         max_workers = min(total_pairs, 4)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(_run_pair, i, gen_cfg, ref_cfg): i
-                for i, (gen_cfg, ref_cfg) in enumerate(pairs)
-            }
+            futures = {executor.submit(_run_pair, i, gen_cfg, ref_cfg): i for i, (gen_cfg, ref_cfg) in enumerate(pairs)}
             for future in as_completed(futures):
                 idx = futures[future]
                 pair_results[idx] = future.result()
@@ -521,7 +566,9 @@ class DspyService:
 
         logger.info(
             "Grid search finished: %d/%d completed, %d failed, best=%s (%.1fs total)",
-            completed_count, total_pairs, failed_count,
+            completed_count,
+            total_pairs,
+            failed_count,
             f"{best_pair.generation_model}+{best_pair.reflection_model}" if best_pair else "none",
             grid_runtime,
         )
@@ -560,7 +607,9 @@ class DspyService:
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         validate_optimizer_signature(optimizer_factory, payload.optimizer_name)
         validate_optimizer_kwargs(
-            optimizer_factory, payload.optimizer_kwargs, payload.optimizer_name,
+            optimizer_factory,
+            payload.optimizer_kwargs,
+            payload.optimizer_name,
         )
 
     def validate_payload(self, payload: RunRequest) -> None:
@@ -590,9 +639,7 @@ class DspyService:
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         validate_optimizer_signature(optimizer_factory, payload.optimizer_name)
-        validate_optimizer_kwargs(
-            optimizer_factory, payload.optimizer_kwargs, payload.optimizer_name
-        )
+        validate_optimizer_kwargs(optimizer_factory, payload.optimizer_kwargs, payload.optimizer_name)
         logger.info("Payload validation succeeded for module=%s", payload.module_name)
 
     def _get_module_factory(self, name: str) -> tuple[Callable[..., Any], bool]:
@@ -635,4 +682,3 @@ class DspyService:
                 return resolve_optimizer_factory(name)
             except ResolverError as exc:
                 raise ServiceError(str(exc)) from exc
-

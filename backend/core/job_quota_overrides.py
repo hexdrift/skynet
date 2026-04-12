@@ -24,16 +24,17 @@ Example::
         "researcher": None,  # unlimited
     }
 """
+
 from __future__ import annotations
 
-from typing import Final, Optional
+from typing import Final
 
 ADMIN_USERNAMES: Final[frozenset[str]] = frozenset()
 
-QUOTA_OVERRIDES: Final[dict[str, Optional[int]]] = {}
+QUOTA_OVERRIDES: Final[dict[str, int | None]] = {}
 
 
-def get_user_quota(username: str, default: int) -> Optional[int]:
+def get_user_quota(username: str, default: int) -> int | None:
     """Return the effective job quota for ``username``.
 
     Args:

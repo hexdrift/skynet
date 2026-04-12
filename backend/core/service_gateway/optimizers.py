@@ -1,6 +1,7 @@
 import inspect
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 import dspy
 
@@ -12,7 +13,7 @@ from ..constants import (
     OPTIMIZER_NAME_MIPROV2,
     OPTIMIZER_PROMPT_MODEL_KEY,
     OPTIMIZER_REFLECTION_LM_KEY,
-    OPTIMIZER_TASK_MODEL_KEY
+    OPTIMIZER_TASK_MODEL_KEY,
 )
 from ..exceptions import ServiceError
 from ..models import ModelConfig
@@ -27,8 +28,8 @@ def compile_program(
     optimizer: Any,
     program: Any,
     splits: DatasetSplits,
-    metric: Optional[Any],
-    compile_kwargs: Dict[str, Any],
+    metric: Any | None,
+    compile_kwargs: dict[str, Any],
 ) -> Any:
     """Run the optimizer compile step with derived datasets.
 
@@ -47,9 +48,7 @@ def compile_program(
     """
 
     if not splits.train:
-        raise ServiceError(
-            "Training split is empty; increase the train fraction or provide more data."
-        )
+        raise ServiceError("Training split is empty; increase the train fraction or provide more data.")
 
     kwargs = dict(compile_kwargs or {})
     if COMPILE_TRAINSET_KEY not in kwargs:
@@ -62,10 +61,7 @@ def compile_program(
     try:
         return optimizer.compile(program, **kwargs)
     except TypeError as exc:
-        raise ServiceError(
-            "Optimizer.compile rejected the provided arguments; update compile_kwargs: "
-            f"{exc}"
-        ) from exc
+        raise ServiceError(f"Optimizer.compile rejected the provided arguments; update compile_kwargs: {exc}") from exc
 
 
 def _compile_accepts_valset(optimizer: Any) -> bool:
@@ -89,11 +85,11 @@ def _compile_accepts_valset(optimizer: Any) -> bool:
 
 def evaluate_on_test(
     program: Any,
-    test_examples: List[Any],
+    test_examples: list[Any],
     metric,
     *,
     collect_per_example: bool = False,
-) -> "tuple[Optional[float], list[dict]] | Optional[float]":
+) -> "tuple[float | None, list[dict]] | float | None":
     """Evaluate a compiled program on the test split.
 
     Args:
@@ -126,9 +122,7 @@ def evaluate_on_test(
         if isinstance(score, (int, float)):
             aggregate = float(score)
         else:
-            raise ServiceError(
-                "Evaluator returned a non-numeric result; ensure the metric's score is a float."
-            )
+            raise ServiceError("Evaluator returned a non-numeric result; ensure the metric's score is a float.")
         raw_results = getattr(eval_result, "results", []) or []
 
     if not collect_per_example:
@@ -144,7 +138,7 @@ def evaluate_on_test(
                 ex_score = ex_score.score
             ex_score = float(ex_score) if isinstance(ex_score, (int, float, bool)) else 0.0
             outputs = {}
-            for k in example.labels().keys():
+            for k in example.labels():
                 outputs[k] = getattr(prediction, k, None) if prediction else None
             per_example.append({"index": i, "outputs": outputs, "score": ex_score, "pass": ex_score > 0})
         except Exception:
@@ -172,10 +166,7 @@ def optimizer_requires_metric(factory: Callable[..., Any]) -> bool:
 
     if _callable_accepts_metric(factory):
         return True
-    for target in _extract_factory_targets(factory):
-        if _callable_accepts_metric(target):
-            return True
-    return False
+    return any(_callable_accepts_metric(target) for target in _extract_factory_targets(factory))
 
 
 def validate_optimizer_signature(factory: Callable[..., Any], name: str) -> None:
@@ -195,9 +186,7 @@ def validate_optimizer_signature(factory: Callable[..., Any], name: str) -> None
         logger.warning("Unable to introspect optimizer '%s' signature.", name)
 
 
-def validate_optimizer_kwargs(
-    factory: Callable[..., Any], kwargs: Dict[str, Any], name: str
-) -> None:
+def validate_optimizer_kwargs(factory: Callable[..., Any], kwargs: dict[str, Any], name: str) -> None:
     """Ensure user-supplied optimizer kwargs match the factory signature.
 
     Args:
@@ -221,20 +210,18 @@ def validate_optimizer_kwargs(
     try:
         sig.bind_partial(**kwargs)
     except TypeError as exc:
-        raise ServiceError(
-            f"optimizer_kwargs contain unsupported entries for '{name}': {exc}"
-        ) from exc
+        raise ServiceError(f"optimizer_kwargs contain unsupported entries for '{name}': {exc}") from exc
 
 
 def instantiate_optimizer(
     factory: Callable[..., Any],
     optimizer_name: str,
-    optimizer_kwargs: Dict[str, Any],
+    optimizer_kwargs: dict[str, Any],
     metric: Callable[..., Any],
     default_model: ModelConfig,
-    reflection_model: Optional[ModelConfig],
-    prompt_model: Optional[ModelConfig],
-    task_model: Optional[ModelConfig],
+    reflection_model: ModelConfig | None,
+    prompt_model: ModelConfig | None,
+    task_model: ModelConfig | None,
 ) -> Any:
     """Instantiate an optimizer, injecting language models and metrics as needed.
 
@@ -266,9 +253,10 @@ def instantiate_optimizer(
     if requires_metric and OPTIMIZER_METRIC_KEY not in kwargs:
         kwargs[OPTIMIZER_METRIC_KEY] = metric
     # GEPA requires one of auto/max_full_evals/max_metric_calls — default to "light"
-    if optimizer_key == OPTIMIZER_NAME_GEPA:
-        if not any(k in kwargs for k in ("auto", "max_full_evals", "max_metric_calls")):
-            kwargs["auto"] = "light"
+    if optimizer_key == OPTIMIZER_NAME_GEPA and not any(
+        k in kwargs for k in ("auto", "max_full_evals", "max_metric_calls")
+    ):
+        kwargs["auto"] = "light"
     needs_reflection = optimizer_key in reflection_required_optimizers
     if OPTIMIZER_REFLECTION_LM_KEY not in kwargs:
         if reflection_model and needs_reflection:
@@ -343,5 +331,6 @@ def _extract_factory_targets(factory: Callable[..., Any]) -> list[Any]:
     if closure_cells:
         for cell in closure_cells:
             targets.append(cell.cell_contents)
-    targets.append(getattr(factory, "__call__", None))
+    if callable(factory):
+        targets.append(factory)
     return targets

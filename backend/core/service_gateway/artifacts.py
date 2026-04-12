@@ -4,8 +4,9 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 from uuid import uuid4
+
 from ..exceptions import ServiceError
 from ..models import OptimizedDemo, OptimizedPredictor, ProgramArtifact
 
@@ -14,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 def _format_prompt_string(
     instructions: str,
-    input_fields: List[str],
-    output_fields: List[str],
-    demos: List[OptimizedDemo],
+    input_fields: list[str],
+    output_fields: list[str],
+    demos: list[OptimizedDemo],
     signature: Any,
 ) -> str:
     """Build a complete formatted prompt string from predictor components.
@@ -31,14 +32,14 @@ def _format_prompt_string(
     Returns:
         str: Complete formatted prompt as a single string.
     """
-    parts: List[str] = []
+    parts: list[str] = []
 
     if instructions:
         parts.append(instructions)
         parts.append("")
 
     if input_fields or output_fields:
-        field_lines: List[str] = []
+        field_lines: list[str] = []
         for field_name in input_fields:
             desc = ""
             try:
@@ -85,7 +86,7 @@ def _format_prompt_string(
     return "\n".join(parts).strip()
 
 
-def extract_optimized_prompt(program: Any) -> Optional[OptimizedPredictor]:
+def extract_optimized_prompt(program: Any) -> OptimizedPredictor | None:
     """Extract optimized prompt and demos from a compiled DSPy program.
 
     Extracts the instructions, signature fields, and few-shot demonstration
@@ -116,35 +117,25 @@ def extract_optimized_prompt(program: Any) -> Optional[OptimizedPredictor]:
         instructions = getattr(signature, "instructions", "") or ""
         signature_name = signature.__class__.__name__
 
-        input_fields: List[str] = []
-        output_fields: List[str] = []
+        input_fields: list[str] = []
+        output_fields: list[str] = []
         try:
             input_fields = list(signature.input_fields.keys())
             output_fields = list(signature.output_fields.keys())
         except Exception:
             logger.debug("Could not extract field names from signature")
 
-        demos: List[OptimizedDemo] = []
+        demos: list[OptimizedDemo] = []
         raw_demos = getattr(predictor, "demos", []) or []
         for demo in raw_demos:
             try:
-                demo_inputs = {
-                    field: getattr(demo, field, None)
-                    for field in input_fields
-                    if hasattr(demo, field)
-                }
-                demo_outputs = {
-                    field: getattr(demo, field, None)
-                    for field in output_fields
-                    if hasattr(demo, field)
-                }
+                demo_inputs = {field: getattr(demo, field, None) for field in input_fields if hasattr(demo, field)}
+                demo_outputs = {field: getattr(demo, field, None) for field in output_fields if hasattr(demo, field)}
                 demos.append(OptimizedDemo(inputs=demo_inputs, outputs=demo_outputs))
             except Exception as demo_exc:
                 logger.debug("Could not extract demo: %s", demo_exc)
 
-        formatted_prompt = _format_prompt_string(
-            instructions, input_fields, output_fields, demos, signature
-        )
+        formatted_prompt = _format_prompt_string(instructions, input_fields, output_fields, demos, signature)
 
         return OptimizedPredictor(
             predictor_name=name,
@@ -162,8 +153,8 @@ def extract_optimized_prompt(program: Any) -> Optional[OptimizedPredictor]:
 
 def persist_program(
     program: Any,
-    artifact_id: Optional[str],
-) -> Optional[ProgramArtifact]:
+    artifact_id: str | None,
+) -> ProgramArtifact | None:
     """Save the compiled DSPy program to temp, encode to base64, then cleanup.
 
     All artifact data is returned in the ProgramArtifact for storage.

@@ -14,15 +14,17 @@ Every other route has been extracted into ``backend/core/api/routers/``
 and wired up via ``app.include_router``. See ``AGENTS.md`` for the
 extraction rules.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import signal  # [WORKER-FIX] for SIGTERM graceful shutdown
 import threading
+from collections.abc import Iterable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -62,30 +64,39 @@ _SCALAR_STATIC_DIR = Path(__file__).parent / "static" / "scalar"
 #      /optimizations/{id} and /optimizations/{id}/grid-result
 #   3. Dashboard-only mutations (rename, pin, archive toggles, per-user
 #      evaluate-examples playground)
-_SCALAR_HIDDEN_PATHS = frozenset({
-    "/optimizations/sidebar",
-    "/optimizations/stream",
-    "/optimizations/{optimization_id}/stream",
-    "/optimizations/{optimization_id}/dataset",
-    "/optimizations/{optimization_id}/test-results",
-    "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
-    "/optimizations/{optimization_id}/payload",
-    "/optimizations/{optimization_id}/evaluate-examples",
-    "/optimizations/{optimization_id}/name",
-    "/optimizations/{optimization_id}/pin",
-    "/optimizations/{optimization_id}/archive",
-    "/serve/{optimization_id}/stream",
-    "/serve/{optimization_id}/pair/{pair_index}/stream",
-    "/analytics/summary",
-    "/analytics/optimizers",
-    "/analytics/models",
-    "/models/discover",
-    "/format-code",
-    "/validate-code",
-    "/templates",
-    "/templates/{template_id}",
-    "/queue",
-})
+_SCALAR_HIDDEN_PATHS = frozenset(
+    {
+        # Dashboard plumbing
+        "/optimizations/sidebar",
+        "/optimizations/counts",
+        "/optimizations/bulk-delete",
+        "/optimizations/{optimization_id}/name",
+        "/optimizations/{optimization_id}/pin",
+        "/optimizations/{optimization_id}/archive",
+        "/optimizations/{optimization_id}/payload",
+        "/optimizations/{optimization_id}/evaluate-examples",
+        "/optimizations/{optimization_id}/dataset",
+        "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
+        # SSE streams (frontend real-time updates)
+        "/optimizations/stream",
+        "/optimizations/{optimization_id}/stream",
+        "/serve/{optimization_id}/stream",
+        "/serve/{optimization_id}/pair/{pair_index}/stream",
+        # Grid-pair-level serve (too granular for public docs)
+        "/serve/{optimization_id}/pair/{pair_index}",
+        "/serve/{optimization_id}/pair/{pair_index}/info",
+        # Analytics (dashboard-only aggregations)
+        "/analytics/summary",
+        "/analytics/optimizers",
+        "/analytics/models",
+        "/analytics/dashboard",
+        # Internal tools
+        "/models/discover",
+        "/format-code",
+        "/templates",
+        "/templates/{template_id}",
+    }
+)
 
 # Custom CSS for Scalar that (a) hides UI chrome we don't want in an
 # air-gapped deployment, (b) renders the Skynet logo next to the API
@@ -95,10 +106,67 @@ _SCALAR_CUSTOM_CSS = """
 /* Hide Generate/Connect MCP sidebar block — no-op in air-gapped mode */
 .scalar-mcp-layer { display: none !important; }
 
+/* Hide all toolbar popover buttons (Share, Deploy, Configure, Developer Tools).
+   HeadlessUI IDs are dynamic, so match the stable prefix. */
+[id^="headlessui-popover-button"] { display: none !important; }
+
 /* Hide the version + OAS chips and the "Skynet" h1 from the intro */
 .introduction-section .badge,
 .introduction-section .section-header-label {
   display: none !important;
+}
+
+/* Sidebar: hide "Introduction" link (visible at page top anyway)
+   and the auto-generated "Models" schemas section (duplicate of the
+   tagged Models group — devs see schemas inline per endpoint). */
+[data-sidebar-id="api-1/description/introduction"],
+[data-sidebar-id="api-1/models"] {
+  display: none !important;
+}
+
+/* Animate sidebar group expand/collapse — chevron rotates and
+   child list slides open with height transition. */
+.group\/group-button > button .size-4 {
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.group\/group-button > button[aria-expanded="true"] .size-4 {
+  transform: rotate(90deg);
+}
+.group\/group-button + ul,
+.group\/group-button + div {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.group\/group-button > button[aria-expanded="true"] ~ ul,
+.group\/group-button > button[aria-expanded="true"] ~ div {
+  grid-template-rows: 1fr;
+}
+.group\/group-button + ul > *,
+.group\/group-button + div > * {
+  min-height: 0;
+}
+
+/* Hide "Powered by Scalar" footer and dark mode toggle in sidebar */
+.t-doc__sidebar [href*="scalar.com"],
+.t-doc__sidebar [href*="scalar.com"] ~ button,
+.t-doc__header [href*="scalar.com"],
+.t-doc__header [href*="scalar.com"] ~ button {
+  display: none !important;
+}
+
+/* Remove the empty client-libraries / server-url bar above the
+   description so the intro paragraph sits higher on the page. */
+.introduction-section .custom-scroll {
+  display: none !important;
+}
+.introduction-section .section-column {
+  padding-top: 0 !important;
+}
+.introduction-section {
+  padding-top: 16px !important;
+  gap: 0 !important;
 }
 
 /* ── Toolbar brand button ─────────────────────────────────────────
@@ -108,7 +176,11 @@ _SCALAR_CUSTOM_CSS = """
    open. When the sidebar is open, the brand button is hidden entirely
    (the wordmark + close button move into the sidebar header instead).
    This mirrors chatgpt.com's sidebar UX. */
-.api-reference-toolbar { position: relative; }
+.api-reference-toolbar {
+  position: sticky !important;
+  top: 0;
+  z-index: 40;
+}
 
 .skynet-toolbar-brand {
   position: absolute;
@@ -118,7 +190,7 @@ _SCALAR_CUSTOM_CSS = """
   display: inline-flex;
   align-items: center;
   height: 32px;
-  width: 124px;
+  width: 40px;
   padding: 0 8px;
   border: 0;
   background: transparent;
@@ -126,6 +198,7 @@ _SCALAR_CUSTOM_CSS = """
   cursor: pointer;
   border-radius: 8px;
   transition: background-color 140ms ease;
+  overflow: visible;
 }
 .skynet-toolbar-brand:hover { background: #f0ebe4; }
 .skynet-toolbar-brand:focus-visible {
@@ -209,29 +282,37 @@ html[data-skynet-sidebar="hidden"] .skynet-sidebar-header {
   outline-offset: 2px;
 }
 
-/* ── Animated collapsible sidebar ───────────────────────────────────
-   Scalar's layout is a CSS Grid. We pin the template to an explicit
-   `288px 1fr` baseline so the transition has matching track types,
-   then flip the first track to 0px when hidden. The sidebar itself
-   translates offscreen in sync so it doesn't bleed into the content
-   column during the reflow. Same interaction model as Notion / Linear. */
-.references-layout {
-  grid-template-columns: 288px minmax(0, 1fr) !important;
-  transition: grid-template-columns 320ms cubic-bezier(0.4, 0, 0.2, 1);
+/* ── Animated collapsible sidebar (desktop only) ───────────────────
+   Only override Scalar's grid on viewports wide enough for the
+   sidebar. Below 1024px Scalar's own responsive layout takes over. */
+@media (min-width: 1024px) {
+  .references-layout {
+    grid-template-columns: 288px minmax(0, 1fr) !important;
+    transition: grid-template-columns 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .t-doc__sidebar {
+    min-width: 0 !important;
+    transition:
+      transform 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 220ms ease;
+  }
+  html[data-skynet-sidebar="hidden"] .references-layout {
+    grid-template-columns: 0px minmax(0, 1fr) !important;
+    overflow: hidden;
+  }
+  html[data-skynet-sidebar="hidden"] .t-doc__sidebar {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    width: 0 !important;
+    min-width: 0 !important;
+    overflow: hidden;
+  }
 }
-.t-doc__sidebar {
-  min-width: 0 !important;
-  transition:
-    transform 320ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 220ms ease;
-}
-html[data-skynet-sidebar="hidden"] .references-layout {
-  grid-template-columns: 0px minmax(0, 1fr) !important;
-}
-html[data-skynet-sidebar="hidden"] .t-doc__sidebar {
-  transform: translateX(-100%);
-  opacity: 0;
-  pointer-events: none;
+
+/* Let the content fill the full width on wide viewports */
+.scalar-api-reference {
+  --refs-content-max-width: none !important;
 }
 
 /* Skynet warm-beige light theme to match the main app */
@@ -258,6 +339,52 @@ html[data-skynet-sidebar="hidden"] .t-doc__sidebar {
   --scalar-sidebar-search-background: #ffffff;
   --scalar-sidebar-search-border-color: #ddd6cc;
   --scalar-sidebar-search--color: #8c7a6b;
+}
+
+/* ── Mobile sidebar slide animation ────────────────────────────────
+   Scalar's mobile menu lives inside .t-doc__header (NOT .t-doc__sidebar).
+   When the hamburger is tapped, the header expands to full screen.
+   We animate that expansion with a slide-in from the left. The desktop
+   .t-doc__sidebar stays hidden on mobile (Tailwind's `hidden` class). */
+@media (max-width: 1023px) {
+  .skynet-toolbar-brand { display: none !important; }
+
+  .t-doc__header {
+    transform-origin: left top;
+    transition:
+      transform 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 200ms ease;
+  }
+
+  /* When the mobile menu is closed, the header is just the toolbar bar */
+  .references-layout:not(.references-sidebar-mobile-open) .t-doc__header {
+    /* no extra styles — Scalar handles the collapsed state */
+  }
+
+  /* When open, slide in from left */
+  .references-sidebar-mobile-open .t-doc__header {
+    animation: skynet-slide-in 320ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+}
+
+@keyframes skynet-slide-in {
+  from {
+    transform: translateX(-40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (max-width: 768px) {
+  .section-container,
+  .endpoint-container {
+    padding-inline: 12px !important;
+  }
+  .api-reference-toolbar {
+    padding-inline: 8px !important;
+  }
 }
 """
 
@@ -298,7 +425,7 @@ def create_app(
 
     job_store = get_job_store()
 
-    worker: Optional[BackgroundWorker] = None
+    worker: BackgroundWorker | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -395,6 +522,7 @@ def create_app(
             JSONResponse containing the filtered OpenAPI spec.
         """
         from copy import deepcopy
+
         base = app.openapi()
         spec = deepcopy(base)
         paths = spec.get("paths", {})
@@ -440,9 +568,7 @@ def create_app(
         html = html.replace("</body>", f"{script_tag}</body>")
         return HTMLResponse(content=html)
 
-    allowed_origins = os.getenv(
-        "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"
-    ).split(",")
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[o.strip() for o in allowed_origins],
@@ -463,9 +589,7 @@ def create_app(
     }
 
     @app.exception_handler(AppError)
-    async def _app_error_handler(
-        request: Request, exc: AppError
-    ) -> JSONResponse:
+    async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         """Handle domain exceptions raised by services.
 
         Converts AppError instances into consistent JSON responses that match
@@ -484,9 +608,7 @@ def create_app(
         )
 
     @app.exception_handler(HTTPException)
-    async def _http_error_handler(
-        request: Request, exc: HTTPException
-    ) -> JSONResponse:
+    async def _http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
         """Convert FastAPI HTTPException instances into the standard error envelope.
 
         Args:
@@ -504,9 +626,7 @@ def create_app(
         )
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         """Transform Pydantic validation errors into a consistent response payload.
 
         Args:
@@ -628,7 +748,8 @@ def create_app(
             stack_dump = worker.dump_thread_stacks()
             logger.error(
                 "Health check failed: workers stuck for %.0fs. Thread stacks:\n%s",
-                stale_seconds, stack_dump,
+                stale_seconds,
+                stack_dump,
             )
             raise HTTPException(
                 status_code=503,

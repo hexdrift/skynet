@@ -5,8 +5,9 @@ the primitive building blocks (mappings, model configs, split specs,
 status enum, and the health status constant) that every other model
 file depends on.
 """
+
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -16,8 +17,8 @@ HEALTH_STATUS_OK = "ok"
 class ColumnMapping(BaseModel):
     """Describe how dataframe columns map onto DSPy signature fields."""
 
-    inputs: Dict[str, str] = Field(default_factory=dict)
-    outputs: Dict[str, str] = Field(default_factory=dict)
+    inputs: dict[str, str] = Field(default_factory=dict)
+    outputs: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _ensure_non_empty(self) -> "ColumnMapping":
@@ -36,10 +37,7 @@ class ColumnMapping(BaseModel):
             raise ValueError("At least one input column must be specified.")
         shared = set(self.inputs.values()) & set(self.outputs.values())
         if shared:
-            raise ValueError(
-                "Input and output column mappings must not reuse the same columns:"
-                f" {sorted(shared)}"
-            )
+            raise ValueError(f"Input and output column mappings must not reuse the same columns: {sorted(shared)}")
         return self
 
 
@@ -47,11 +45,11 @@ class ModelConfig(BaseModel):
     """Configuration block for language-model/backbone selection."""
 
     name: str
-    base_url: Optional[str] = None
+    base_url: str | None = None
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
-    max_tokens: Optional[int] = Field(default=None, ge=1)
-    top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    extra: Dict[str, Any] = Field(default_factory=dict)
+    max_tokens: int | None = Field(default=None, ge=1)
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0)
+    extra: dict[str, Any] = Field(default_factory=dict)
 
     def normalized_identifier(self) -> str:
         """Return the Litellm identifier (deprecated: identical to ``name``).

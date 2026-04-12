@@ -4,15 +4,16 @@ Simple threaded worker that polls the job store for pending jobs
 and processes them sequentially or with configurable concurrency.
 """
 
+import contextlib
 import logging
 import multiprocessing as mp
-import os
 import queue
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..config import settings
 from ..constants import (
@@ -24,8 +25,8 @@ from ..constants import (
 from ..models import GridSearchRequest, RunRequest
 from ..notifications import notify_job_completed
 from ..registry import ServiceRegistry
-from ..storage import JobStore
 from ..service_gateway import DspyService
+from ..storage import JobStore
 from .subprocess_runner import (
     EVENT_ERROR,
     EVENT_LOG,
@@ -59,18 +60,18 @@ class BackgroundWorker:
         job_store: JobStore,
         num_workers: int = 2,
         poll_interval: float = 2.0,
-        service: Optional[DspyService] = None,
+        service: DspyService | None = None,
     ) -> None:
         self._job_store = job_store
         self._num_workers = num_workers
         self._poll_interval = poll_interval
         self._running = False
         self._threads: list[threading.Thread] = []
-        self._service: Optional[DspyService] = service
+        self._service: DspyService | None = service
 
         self._pending_jobs: list[str] = []
         self._processing_jobs: set[str] = set()
-        self._cancel_events: Dict[str, threading.Event] = {}
+        self._cancel_events: dict[str, threading.Event] = {}
         self._queue_lock = threading.Lock()
         poll_raw = str(settings.cancel_poll_interval)
         try:
@@ -82,7 +83,7 @@ class BackgroundWorker:
         self._mp_start_method = self._mp_ctx.get_start_method()
 
         # [WORKER-FIX] track last activity time to detect stuck (alive but hanging) threads
-        self._last_activity: Dict[int, float] = {}
+        self._last_activity: dict[int, float] = {}
         self._activity_lock = threading.Lock()
 
     @staticmethod
@@ -153,7 +154,7 @@ class BackgroundWorker:
         )
         self.enqueue_job(optimization_id)
 
-    def _get_next_job(self) -> Optional[str]:
+    def _get_next_job(self) -> str | None:
         """Get the next pending job from the queue.
 
         Returns:
@@ -259,6 +260,7 @@ class BackgroundWorker:
             overview = job_data.get("payload_overview", {})
             if isinstance(overview, str):
                 import json
+
                 try:
                     overview = json.loads(overview)
                 except (json.JSONDecodeError, TypeError):
@@ -291,10 +293,10 @@ class BackgroundWorker:
                 started_at=datetime.now(timezone.utc).isoformat(),
             )
 
-            run_process: Optional[mp.process.BaseProcess] = None
-            event_queue: Optional[Any] = None
-            result_dict: Optional[Dict[str, Any]] = None
-            subprocess_error: Optional[Dict[str, Any]] = None
+            run_process: mp.process.BaseProcess | None = None
+            event_queue: Any | None = None
+            result_dict: dict[str, Any] | None = None
+            subprocess_error: dict[str, Any] | None = None
 
             # Preserve registry-backed service in child when using fork.
             if self._mp_start_method == "fork":
@@ -335,15 +337,13 @@ class BackgroundWorker:
                     if traceback_text:
                         logger.error("Optimization %s subprocess traceback:\n%s", optimization_id, traceback_text)
                         # Persist traceback so users can see it via GET /jobs/{id}/logs
-                        try:
+                        with contextlib.suppress(Exception):
                             self._job_store.append_log(
                                 optimization_id,
                                 level="ERROR",
                                 logger_name="dspy.subprocess",
                                 message=traceback_text,
                             )
-                        except Exception:
-                            pass
                     raise RuntimeError(str(subprocess_error.get("error", "Unknown subprocess error")))
 
                 if run_process.exitcode not in (0, None) and result_dict is None:
@@ -388,25 +388,28 @@ class BackgroundWorker:
                     _baseline = result_dict.get("baseline_test_metric") if isinstance(result_dict, dict) else None
                     _optimized = result_dict.get("optimized_test_metric") if isinstance(result_dict, dict) else None
                     notify_job_completed(
-                        optimization_id=optimization_id, username=_username, status=final_status,
-                        message=final_message, baseline_score=_baseline, optimized_score=_optimized,
+                        optimization_id=optimization_id,
+                        username=_username,
+                        status=final_status,
+                        message=final_message,
+                        baseline_score=_baseline,
+                        optimized_score=_optimized,
                     )
                 except KeyError:
-                    logger.info("Optimization %s was deleted during execution (likely cancelled), skipping result", optimization_id)
+                    logger.info(
+                        "Optimization %s was deleted during execution (likely cancelled), skipping result",
+                        optimization_id,
+                    )
             except BaseException:
                 if run_process is not None and run_process.is_alive():
                     self._terminate_run_process(run_process, optimization_id)
                 raise
             finally:
                 if event_queue is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         event_queue.close()
-                    except Exception:
-                        pass
-                    try:
+                    with contextlib.suppress(Exception):
                         event_queue.join_thread()
-                    except Exception:
-                        pass
 
         except BaseException as exc:  # [WORKER-FIX] catch BaseException to handle shutdown signals
             is_shutdown = isinstance(exc, (SystemExit, KeyboardInterrupt))
@@ -436,7 +439,10 @@ class BackgroundWorker:
                 except Exception:
                     logger.exception("Optimization %s: failed to update status to %s", optimization_id, final_status)
                 notify_job_completed(
-                    optimization_id=optimization_id, username=_username, status=final_status, message=error_message,
+                    optimization_id=optimization_id,
+                    username=_username,
+                    status=final_status,
+                    message=error_message,
                 )
             if is_shutdown:
                 raise
@@ -536,7 +542,7 @@ class BackgroundWorker:
         self,
         optimization_id: str,
         event_queue: Any,
-    ) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         """Persist queued child-process events and return latest result/error payloads.
 
         Args:
@@ -546,8 +552,8 @@ class BackgroundWorker:
         Returns:
             Tuple of (result_payload, error_payload), each None if not found.
         """
-        result_payload: Optional[Dict[str, Any]] = None
-        error_payload: Optional[Dict[str, Any]] = None
+        result_payload: dict[str, Any] | None = None
+        error_payload: dict[str, Any] | None = None
         while True:
             try:
                 event = event_queue.get_nowait()
@@ -597,7 +603,7 @@ class BackgroundWorker:
 
         return result_payload, error_payload
 
-    def seconds_since_last_activity(self) -> Optional[float]:  # [WORKER-FIX] detect stuck threads
+    def seconds_since_last_activity(self) -> float | None:  # [WORKER-FIX] detect stuck threads
         """Return seconds since any worker was last active, or None if no activity yet.
 
         Returns:
@@ -684,14 +690,14 @@ class BackgroundWorker:
         return len(self._threads)
 
 
-_worker: Optional[BackgroundWorker] = None
+_worker: BackgroundWorker | None = None
 _worker_lock = threading.Lock()
 
 
 def get_worker(
     job_store: JobStore,
-    service: Optional[DspyService] = None,
-    pending_optimization_ids: Optional[list] = None,
+    service: DspyService | None = None,
+    pending_optimization_ids: list | None = None,
 ) -> BackgroundWorker:
     """Get or create the global background worker.
 
@@ -715,7 +721,7 @@ def get_worker(
                 service=service,
             )
             _worker.start()
-            for optimization_id in (pending_optimization_ids or []):
+            for optimization_id in pending_optimization_ids or []:
                 _worker.enqueue_job(optimization_id)
 
     return _worker

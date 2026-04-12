@@ -1,11 +1,13 @@
 """Routes for the core optimizations resource (list, detail, lifecycle)."""
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import random
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -65,15 +67,15 @@ logger = logging.getLogger(__name__)
 class SidebarJobItem(BaseModel):
     optimization_id: str
     status: str
-    name: Optional[str] = None
-    module_name: Optional[str] = None
-    optimizer_name: Optional[str] = None
-    model_name: Optional[str] = None
-    username: Optional[str] = None
-    created_at: Optional[datetime] = None
+    name: str | None = None
+    module_name: str | None = None
+    optimizer_name: str | None = None
+    model_name: str | None = None
+    username: str | None = None
+    created_at: datetime | None = None
     pinned: bool = False
-    optimization_type: Optional[str] = None
-    total_pairs: Optional[int] = None
+    optimization_type: str | None = None
+    total_pairs: int | None = None
 
 
 class SidebarJobsResponse(BaseModel):
@@ -101,11 +103,25 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         summary="List optimization jobs with filtering and pagination",
     )
     def list_jobs(
-        status: Optional[str] = Query(default=None, description="Exact-match status filter: pending, validating, running, success, failed, cancelled"),
-        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this user"),
-        optimization_type: Optional[str] = Query(default=None, description="'run' (single optimization) or 'grid_search' (model-pair sweep)"),
-        limit: int = Query(default=50, ge=1, le=500, description="Page size; the per-user quota keeps total job counts bounded in practice"),
-        offset: int = Query(default=0, ge=0, description="Number of jobs to skip before returning; combine with limit for stable pagination"),
+        status: str | None = Query(
+            default=None,
+            description="Exact-match status filter: pending, validating, running, success, failed, cancelled",
+        ),
+        username: str | None = Query(default=None, description="Only include jobs submitted by this user"),
+        optimization_type: str | None = Query(
+            default=None, description="'run' (single optimization) or 'grid_search' (model-pair sweep)"
+        ),
+        limit: int = Query(
+            default=50,
+            ge=1,
+            le=500,
+            description="Page size; the per-user quota keeps total job counts bounded in practice",
+        ),
+        offset: int = Query(
+            default=0,
+            ge=0,
+            description="Number of jobs to skip before returning; combine with limit for stable pagination",
+        ),
     ) -> PaginatedJobsResponse:
         """Return a page of optimization jobs ordered by ``created_at`` descending.
 
@@ -154,7 +170,9 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                 detail=f"Invalid optimization_type filter '{optimization_type}'. Valid values: {sorted(_VALID_JOB_TYPES)}",
             )
         total = job_store.count_jobs(status=status, username=username, optimization_type=optimization_type)
-        rows = job_store.list_jobs(status=status, username=username, optimization_type=optimization_type, limit=limit, offset=offset)
+        rows = job_store.list_jobs(
+            status=status, username=username, optimization_type=optimization_type, limit=limit, offset=offset
+        )
         items = [build_summary(job_data) for job_data in rows]
         return PaginatedJobsResponse(items=items, total=total, limit=limit, offset=offset)
 
@@ -164,7 +182,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         summary="Aggregate job counts grouped by status",
     )
     def get_optimization_counts(
-        username: Optional[str] = Query(default=None, description="Restrict counts to a single user"),
+        username: str | None = Query(default=None, description="Restrict counts to a single user"),
     ) -> OptimizationCountsResponse:
         """Return the full backend row counts grouped by status.
 
@@ -198,8 +216,13 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         summary="Compact job list tuned for sidebar navigation",
     )
     def list_jobs_sidebar(
-        username: Optional[str] = Query(default=None, description="Restrict the list to a single user's jobs"),
-        limit: int = Query(default=50, ge=1, le=200, description="Page size; capped at 200 because the sidebar only renders a finite slice"),
+        username: str | None = Query(default=None, description="Restrict the list to a single user's jobs"),
+        limit: int = Query(
+            default=50,
+            ge=1,
+            le=200,
+            description="Page size; capped at 200 because the sidebar only renders a finite slice",
+        ),
         offset: int = Query(default=0, ge=0, description="Number of jobs to skip before the returned slice"),
     ) -> SidebarJobsResponse:
         """Return a minimal per-job summary optimized for the left sidebar.
@@ -231,19 +254,21 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         items = []
         for row in rows:
             overview = parse_overview(row)
-            items.append(SidebarJobItem(
-                optimization_id=row["optimization_id"],
-                status=row.get("status", "pending"),
-                name=overview.get(PAYLOAD_OVERVIEW_NAME),
-                module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME),
-                optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME),
-                model_name=overview.get(PAYLOAD_OVERVIEW_MODEL_NAME),
-                username=overview.get(PAYLOAD_OVERVIEW_USERNAME),
-                created_at=parse_timestamp(row.get("created_at")),
-                pinned=bool(overview.get("pinned", False)),
-                optimization_type=overview.get(PAYLOAD_OVERVIEW_JOB_TYPE),
-                total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
-            ))
+            items.append(
+                SidebarJobItem(
+                    optimization_id=row["optimization_id"],
+                    status=row.get("status", "pending"),
+                    name=overview.get(PAYLOAD_OVERVIEW_NAME),
+                    module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME),
+                    optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME),
+                    model_name=overview.get(PAYLOAD_OVERVIEW_MODEL_NAME),
+                    username=overview.get(PAYLOAD_OVERVIEW_USERNAME),
+                    created_at=parse_timestamp(row.get("created_at")),
+                    pinned=bool(overview.get("pinned", False)),
+                    optimization_type=overview.get(PAYLOAD_OVERVIEW_JOB_TYPE),
+                    total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
+                )
+            )
         return SidebarJobsResponse(items=items, total=total)
 
     # NOTE: Must be registered BEFORE /optimizations/{optimization_id} to avoid route shadowing.
@@ -290,21 +315,21 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             while True:
                 active_rows = []
                 for s in ("pending", "validating", "running"):
-                    active_rows.extend(
-                        job_store.list_jobs(status=s, limit=100)
-                    )
+                    active_rows.extend(job_store.list_jobs(status=s, limit=100))
 
                 summaries = []
                 for row in active_rows:
                     overview = parse_overview(row)
-                    summaries.append({
-                        "optimization_id": row["optimization_id"],
-                        "status": row.get("status", "pending"),
-                        "name": overview.get(PAYLOAD_OVERVIEW_NAME),
-                        "latest_metrics": row.get("latest_metrics", {}),
-                        "log_count": job_store.get_log_count(row["optimization_id"]),
-                        "progress_count": job_store.get_progress_count(row["optimization_id"]),
-                    })
+                    summaries.append(
+                        {
+                            "optimization_id": row["optimization_id"],
+                            "status": row.get("status", "pending"),
+                            "name": overview.get(PAYLOAD_OVERVIEW_NAME),
+                            "latest_metrics": row.get("latest_metrics", {}),
+                            "log_count": job_store.get_log_count(row["optimization_id"]),
+                            "progress_count": job_store.get_progress_count(row["optimization_id"]),
+                        }
+                    )
 
                 yield f"data: {json.dumps({'active_jobs': summaries, 'active_count': len(summaries)}, default=str)}\n\n"
 
@@ -375,7 +400,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             job_data = job_store.get_job(optimization_id)
         except KeyError:
             logger.warning("Optimization status requested for unknown optimization_id=%s", optimization_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         status = status_to_job_status(job_data.get("status", "pending"))
 
@@ -445,7 +470,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         )
 
         # ETag based on status + metrics hash for conditional GET
-        etag_src = f"{status}:{len(logs)}:{len(progress_events)}:{str(latest_metrics)}"
+        etag_src = f"{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}"
         etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
         if_none_match = request.headers.get("if-none-match")
         if if_none_match == etag:
@@ -498,7 +523,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             job_data = job_store.get_job(optimization_id)
         except KeyError:
             logger.warning("Optimization summary requested for unknown optimization_id=%s", optimization_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         job_data["progress_count"] = job_store.get_progress_count(optimization_id)
         job_data["log_count"] = job_store.get_log_count(optimization_id)
@@ -548,7 +573,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         payload = job_data.get("payload")
         if not payload or not isinstance(payload, dict):
@@ -571,7 +596,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             raise HTTPException(
                 status_code=500,
                 detail="Stored column mapping is invalid.",
-            )
+            ) from None
 
         # Parse split fractions (fall back to defaults)
         raw_fractions = payload.get("split_fractions", {})
@@ -696,7 +721,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         overview = parse_overview(job_data)
         payload = job_data.get("payload")
@@ -704,22 +729,9 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             raise HTTPException(status_code=404, detail="Optimization has no payload.")
 
         dataset = payload.get("dataset", [])
+        total = len(dataset)
         column_mapping_raw = payload.get("column_mapping", {})
         column_mapping = ColumnMapping.model_validate(column_mapping_raw)
-        fractions_raw = payload.get("split_fractions", {})
-        fractions = SplitFractions.model_validate(fractions_raw)
-        shuffle = payload.get("shuffle", True)
-        seed = payload.get("seed")
-
-        # Reconstruct splits to identify test rows
-        total = len(dataset)
-        ordered = list(range(total))
-        if shuffle:
-            rng = random.Random(seed)
-            rng.shuffle(ordered)
-        train_end = int(total * fractions.train)
-        val_end = train_end + int(total * fractions.val)
-        test_indices_set = set(ordered[val_end:])
 
         metric_code = payload.get("metric_code", "")
         if not metric_code:
@@ -744,6 +756,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             module_kwargs = dict(payload.get("module_kwargs", {}))
 
             from ...service_gateway import DspyService
+
             module_factory, auto_signature = DspyService._get_module_factory(None, module_name)
             if auto_signature or "signature" not in module_kwargs:
                 module_kwargs["signature"] = signature_cls
@@ -758,7 +771,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                 raise HTTPException(status_code=409, detail="No program artifact.")
             if optimization_id not in _program_cache:
                 program_bytes = base64.b64decode(artifact.program_pickle_base64)
-                _program_cache[optimization_id] = pickle.loads(program_bytes)  # noqa: S301
+                _program_cache[optimization_id] = pickle.loads(program_bytes)
             program = _program_cache[optimization_id]
 
         results = []
@@ -773,9 +786,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                 for sig_field, col_name in column_mapping.outputs.items():
                     example_dict[sig_field] = row.get(col_name, "")
 
-                example = dspy.Example(**example_dict).with_inputs(
-                    *list(column_mapping.inputs.keys())
-                )
+                example = dspy.Example(**example_dict).with_inputs(*list(column_mapping.inputs.keys()))
 
                 try:
                     prediction = program(**{k: example_dict[k] for k in column_mapping.inputs})
@@ -789,20 +800,24 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                     except Exception:
                         score = 0.0
 
-                    results.append({
-                        "index": idx,
-                        "outputs": outputs,
-                        "score": score,
-                        "pass": score > 0,
-                    })
+                    results.append(
+                        {
+                            "index": idx,
+                            "outputs": outputs,
+                            "score": score,
+                            "pass": score > 0,
+                        }
+                    )
                 except Exception as exc:
-                    results.append({
-                        "index": idx,
-                        "outputs": {},
-                        "score": 0.0,
-                        "pass": False,
-                        "error": str(exc),
-                    })
+                    results.append(
+                        {
+                            "index": idx,
+                            "outputs": {},
+                            "score": 0.0,
+                            "pass": False,
+                            "error": str(exc),
+                        }
+                    )
 
         return {"results": results, "program_type": program_type}
 
@@ -851,7 +866,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         result_data = job_data.get("result")
         if not result_data:
@@ -941,7 +956,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             job_data = job_store.get_job(optimization_id)
         except KeyError:
             logger.warning("Artifact requested for unknown optimization_id=%s", optimization_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
@@ -977,7 +992,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
                     result = RunResponse.model_validate(result_data)
                 except ValidationError:
                     logger.warning("Optimization %s has corrupted result data", optimization_id)
-                    raise HTTPException(status_code=500, detail="Optimization result data is corrupted.")
+                    raise HTTPException(status_code=500, detail="Optimization result data is corrupted.") from None
                 return ProgramArtifactResponse(
                     program_artifact=result.program_artifact,
                 )
@@ -1025,7 +1040,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         overview = parse_overview(job_data)
         if overview.get(PAYLOAD_OVERVIEW_JOB_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
@@ -1053,7 +1068,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             return GridSearchResponse.model_validate(result_data)
         except ValidationError:
-            raise HTTPException(status_code=500, detail="Grid search result data is corrupted.")
+            raise HTTPException(status_code=500, detail="Grid search result data is corrupted.") from None
 
     @router.post(
         "/optimizations/{optimization_id}/cancel",
@@ -1098,7 +1113,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status in _TERMINAL_STATUSES:
@@ -1154,7 +1169,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in _TERMINAL_STATUSES:
@@ -1223,15 +1238,11 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         for optimization_id in ordered_unique:
             raw_status = status_by_id.get(optimization_id)
             if raw_status is None:
-                skipped.append(
-                    BulkDeleteSkipped(optimization_id=optimization_id, reason="not_found")
-                )
+                skipped.append(BulkDeleteSkipped(optimization_id=optimization_id, reason="not_found"))
                 continue
             status = status_to_job_status(raw_status)
             if status not in _TERMINAL_STATUSES:
-                skipped.append(
-                    BulkDeleteSkipped(optimization_id=optimization_id, reason=status.value)
-                )
+                skipped.append(BulkDeleteSkipped(optimization_id=optimization_id, reason=status.value))
                 continue
             deletable.append(optimization_id)
 
@@ -1257,7 +1268,6 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
             len(body.optimization_ids),
         )
         return BulkDeleteResponse(deleted=deleted, skipped=skipped)
-
 
     @router.get(
         "/optimizations/{optimization_id}/stream",
@@ -1307,7 +1317,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         except KeyError:
             raw = None
         if raw is None:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         terminal = {"success", "failed", "cancelled"}
 
@@ -1393,7 +1403,7 @@ def create_optimizations_router(*, job_store, get_worker_ref: Callable[[], Any])
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)

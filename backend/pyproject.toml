@@ -46,7 +46,24 @@ dev = [
     "httpx>=0.25",
     "pytest>=7.4",
     "pytest-asyncio>=0.21",
+    "ruff>=0.11",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["usage_guide"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["RUF012"]
+"core/notifications/*" = ["RUF001"]
 
 [tool.pytest.ini_options]
 # Unit tests (backend/tests/unit/) run without Postgres, OPENAI_API_KEY,

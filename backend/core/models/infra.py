@@ -1,5 +1,4 @@
 """Models for the infra endpoints exposed from app.py — /health and /queue."""
-from typing import Dict, List
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +14,7 @@ class HealthResponse(BaseModel):
     """
 
     status: str = Field(default=HEALTH_STATUS_OK)
-    registered_assets: Dict[str, List[str]]
+    registered_assets: dict[str, list[str]]
 
 
 class QueueStatusResponse(BaseModel):

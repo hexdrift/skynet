@@ -1,5 +1,4 @@
 """Aggregation response models for /analytics/* endpoints."""
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,10 +13,10 @@ class AnalyticsSummaryResponse(BaseModel):
     pending_count: int = 0
     running_count: int = 0
     success_rate: float = 0.0
-    avg_improvement: Optional[float] = None
-    max_improvement: Optional[float] = None
-    min_improvement: Optional[float] = None
-    avg_runtime: Optional[float] = None
+    avg_improvement: float | None = None
+    max_improvement: float | None = None
+    min_improvement: float | None = None
+    avg_runtime: float | None = None
     total_dataset_rows: int = 0
     total_pairs: int = 0
     completed_pairs: int = 0
@@ -30,15 +29,15 @@ class OptimizerStatsItem(BaseModel):
     name: str
     total_jobs: int = 0
     success_count: int = 0
-    avg_improvement: Optional[float] = None
+    avg_improvement: float | None = None
     success_rate: float = 0.0
-    avg_runtime: Optional[float] = None
+    avg_runtime: float | None = None
 
 
 class OptimizerStatsResponse(BaseModel):
     """Response payload for /analytics/optimizers endpoint."""
 
-    items: List[OptimizerStatsItem] = Field(default_factory=list)
+    items: list[OptimizerStatsItem] = Field(default_factory=list)
 
 
 class ModelStatsItem(BaseModel):
@@ -47,7 +46,7 @@ class ModelStatsItem(BaseModel):
     name: str
     total_jobs: int = 0
     success_count: int = 0
-    avg_improvement: Optional[float] = None
+    avg_improvement: float | None = None
     success_rate: float = 0.0
     use_count: int = 0
 
@@ -55,7 +54,7 @@ class ModelStatsItem(BaseModel):
 class ModelStatsResponse(BaseModel):
     """Response payload for /analytics/models endpoint."""
 
-    items: List[ModelStatsItem] = Field(default_factory=list)
+    items: list[ModelStatsItem] = Field(default_factory=list)
 
 
 class DashboardAnalyticsJob(BaseModel):
@@ -69,18 +68,18 @@ class DashboardAnalyticsJob(BaseModel):
     """
 
     optimization_id: str
-    name: Optional[str] = None
-    optimizer_name: Optional[str] = None
-    model_name: Optional[str] = None
+    name: str | None = None
+    optimizer_name: str | None = None
+    model_name: str | None = None
     status: str
-    baseline_test_metric: Optional[float] = None
-    optimized_test_metric: Optional[float] = None
-    metric_improvement: Optional[float] = None
-    elapsed_seconds: Optional[float] = None
-    dataset_rows: Optional[int] = None
-    optimization_type: Optional[str] = None
-    best_pair_label: Optional[str] = None
-    created_at: Optional[str] = None
+    baseline_test_metric: float | None = None
+    optimized_test_metric: float | None = None
+    metric_improvement: float | None = None
+    elapsed_seconds: float | None = None
+    dataset_rows: int | None = None
+    optimization_type: str | None = None
+    best_pair_label: str | None = None
+    created_at: str | None = None
 
 
 class DashboardAnalyticsNameValue(BaseModel):
@@ -132,43 +131,39 @@ class DashboardAnalyticsResponse(BaseModel):
     job_type_counts: dict[str, int] = Field(default_factory=dict)
 
     # Model usage — list of {name, value} sorted desc, trimmed to top 8.
-    model_usage: List[DashboardAnalyticsNameValue] = Field(default_factory=list)
+    model_usage: list[DashboardAnalyticsNameValue] = Field(default_factory=list)
 
     success_count: int = 0
     failed_count: int = 0
     running_count: int = 0
     terminal_count: int = 0
     success_rate: float = 0.0
-    avg_improvement: Optional[float] = None
-    avg_runtime_seconds: Optional[float] = None
+    avg_improvement: float | None = None
+    avg_runtime_seconds: float | None = None
     total_dataset_rows: int = 0
     total_pairs_run: int = 0
     grid_search_count: int = 0
     single_run_count: int = 0
-    best_improvement: Optional[float] = None
+    best_improvement: float | None = None
 
     # Per-optimizer averages (powering avg-improvement and
     # avg-runtime grouped-bar charts). Runtime is in minutes, not
     # seconds — the frontend rendered it that way already.
-    improvement_by_optimizer: List[DashboardAnalyticsOptimizerAverage] = Field(
-        default_factory=list
-    )
-    runtime_minutes_by_optimizer: List[DashboardAnalyticsOptimizerAverage] = Field(
-        default_factory=list
-    )
+    improvement_by_optimizer: list[DashboardAnalyticsOptimizerAverage] = Field(default_factory=list)
+    runtime_minutes_by_optimizer: list[DashboardAnalyticsOptimizerAverage] = Field(default_factory=list)
 
-    top_improvement: List[DashboardAnalyticsJob] = Field(default_factory=list)
-    runtime_distribution: List[DashboardAnalyticsJob] = Field(default_factory=list)
-    dataset_vs_improvement: List[DashboardAnalyticsJob] = Field(default_factory=list)
-    efficiency: List[DashboardAnalyticsJob] = Field(default_factory=list)
-    top_jobs_by_improvement: List[DashboardAnalyticsJob] = Field(default_factory=list)
+    top_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
+    runtime_distribution: list[DashboardAnalyticsJob] = Field(default_factory=list)
+    dataset_vs_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
+    efficiency: list[DashboardAnalyticsJob] = Field(default_factory=list)
+    top_jobs_by_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
 
     # Timeline bucket series, last 14 days with a job count each.
-    timeline: List[DashboardAnalyticsTimelineBucket] = Field(default_factory=list)
+    timeline: list[DashboardAnalyticsTimelineBucket] = Field(default_factory=list)
 
     # Filter dropdown option lists (every unique optimizer/model
     # the caller has ever used — the user can pick any of these
     # from the analytics filter UI without needing to scroll the
     # paginated jobs table first).
-    available_optimizers: List[str] = Field(default_factory=list)
-    available_models: List[str] = Field(default_factory=list)
+    available_optimizers: list[str] = Field(default_factory=list)
+    available_models: list[str] = Field(default_factory=list)

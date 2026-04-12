@@ -11,15 +11,15 @@ Requires:
 Run:
     cd backend && ../.venv/bin/python -m pytest tests/test_llm_integration.py -v
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import time
-from typing import Optional
 
-import requests
 import pytest
-
+import requests
 from conftest import requires_llm
 
 BASE_URL = "http://localhost:8000"
@@ -84,8 +84,7 @@ def _submit_run_job(username: str = "e2e-test", model: str = "gpt-4o-mini") -> s
             "    answer: str = dspy.OutputField()\n"
         ),
         "metric_code": (
-            "def metric(example, pred, trace=None):\n"
-            "    return example.answer.strip() == pred.answer.strip()\n"
+            "def metric(example, pred, trace=None):\n    return example.answer.strip() == pred.answer.strip()\n"
         ),
         "optimizer_name": "miprov2",
         "dataset": [
@@ -108,11 +107,8 @@ def _submit_run_job(username: str = "e2e-test", model: str = "gpt-4o-mini") -> s
 
 def _cleanup(job_id: str) -> None:
     """Delete a job, ignoring errors."""
-    try:
+    with contextlib.suppress(Exception):
         requests.delete(f"{BASE_URL}/jobs/{job_id}", timeout=5)
-    except Exception:
-        pass
-
 
 
 @requires_llm
@@ -192,7 +188,7 @@ class TestFullJobLifecycle:
             assert "message" in log
             assert log["level"] in ("DEBUG", "INFO", "WARNING", "ERROR")
 
-        info_logs = [l for l in logs if l["level"] == "INFO"]
+        info_logs = [entry for entry in logs if entry["level"] == "INFO"]
         assert len(info_logs) > 0, "No INFO logs"
         _cleanup(job_id)
 
@@ -226,7 +222,6 @@ class TestFullJobLifecycle:
 
         r = requests.get(f"{BASE_URL}/jobs/{job_id}", timeout=10)
         assert r.status_code == 404
-
 
 
 @requires_llm
@@ -290,7 +285,6 @@ class TestSSEStreaming:
         assert r.status_code == 404
 
 
-
 @requires_llm
 @requires_server
 class TestCancelAndErrors:
@@ -337,7 +331,6 @@ class TestCancelAndErrors:
 
         _wait_for_terminal(job_id)
         _cleanup(job_id)
-
 
 
 @requires_llm
@@ -408,7 +401,6 @@ class TestFilteringAndSearch:
         assert r.json()["items"] == []
 
 
-
 @requires_llm
 @requires_server
 class TestConcurrentJobs:
@@ -432,7 +424,6 @@ class TestConcurrentJobs:
 
         _cleanup(job1)
         _cleanup(job2)
-
 
 
 @requires_llm
@@ -503,7 +494,6 @@ class TestValidationWithRealAPI:
 
         r = requests.delete(f"{BASE_URL}/jobs/{fake}", timeout=5)
         assert r.status_code == 404
-
 
 
 @requires_llm
@@ -627,7 +617,6 @@ class TestServingEndpoints:
             assert r.json()["outputs"]["answer"]  # not empty
 
 
-
 @requires_llm
 @requires_server
 class TestGridSearchLifecycle:
@@ -651,8 +640,7 @@ class TestGridSearchLifecycle:
                 "    answer: str = dspy.OutputField()\n"
             ),
             "metric_code": (
-                "def metric(example, pred, trace=None):\n"
-                "    return example.answer.strip() == pred.answer.strip()\n"
+                "def metric(example, pred, trace=None):\n    return example.answer.strip() == pred.answer.strip()\n"
             ),
             "optimizer_name": "miprov2",
             "dataset": [
@@ -726,7 +714,6 @@ class TestGridSearchLifecycle:
         assert r.status_code == 404
 
 
-
 @requires_server
 class TestCodeValidation:
     """Test malformed signature/metric code rejection."""
@@ -742,7 +729,11 @@ class TestCodeValidation:
 
     def test_syntax_error_in_signature(self):
         """Signature with syntax error returns 400."""
-        payload = {**self._BASE, "signature_code": "class Broken(\n", "metric_code": "def metric(e,p,t=None): return 1.0"}
+        payload = {
+            **self._BASE,
+            "signature_code": "class Broken(\n",
+            "metric_code": "def metric(e,p,t=None): return 1.0",
+        }
         r = requests.post(f"{BASE_URL}/run", json=payload, timeout=10)
         assert r.status_code == 400
         assert "syntax" in r.json()["detail"].lower()
@@ -813,7 +804,6 @@ class TestCodeValidation:
             _cleanup(job_id)
 
 
-
 @requires_llm
 @requires_server
 class TestLogFiltering:
@@ -854,7 +844,6 @@ class TestLogFiltering:
 
     def test_log_cleanup(self, job_with_logs: str):
         _cleanup(job_with_logs)
-
 
 
 @requires_llm

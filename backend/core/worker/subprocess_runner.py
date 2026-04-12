@@ -7,10 +7,11 @@ module so ``engine.py`` can stay focused on the parent-side worker
 lifecycle.
 """
 
+import contextlib
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN
 from ..models import GridSearchRequest, RunRequest
@@ -24,10 +25,10 @@ EVENT_ERROR = "error"
 
 # Populated by the parent via ``set_fork_service`` before forking so
 # child processes can reuse the same registry-backed service.
-_FORK_SERVICE: Optional[DspyService] = None
+_FORK_SERVICE: DspyService | None = None
 
 
-def set_fork_service(service: Optional[DspyService]) -> None:
+def set_fork_service(service: DspyService | None) -> None:
     """Store a service instance that child processes may reuse after fork.
 
     Args:
@@ -40,7 +41,7 @@ def set_fork_service(service: Optional[DspyService]) -> None:
     _FORK_SERVICE = service
 
 
-def safe_queue_put(event_queue: Any, event: Dict[str, Any]) -> None:
+def safe_queue_put(event_queue: Any, event: dict[str, Any]) -> None:
     """Put an event onto a multiprocessing queue, suppressing errors.
 
     Args:
@@ -50,11 +51,8 @@ def safe_queue_put(event_queue: Any, event: Dict[str, Any]) -> None:
     Returns:
         None.
     """
-    try:
+    with contextlib.suppress(Exception):
         event_queue.put(event)
-    except Exception:
-        # Parent may have already torn down the queue during cancellation/shutdown.
-        pass
 
 
 class SubprocessLogHandler(logging.Handler):
@@ -95,7 +93,7 @@ class SubprocessLogHandler(logging.Handler):
 
 
 def run_service_in_subprocess(
-    payload_dict: Dict[str, Any],
+    payload_dict: dict[str, Any],
     artifact_id: str,
     event_queue: Any,
     start_method: str,
@@ -126,7 +124,7 @@ def run_service_in_subprocess(
     try:
         optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
 
-        def progress_callback(message: str, metrics: Dict[str, Any]) -> None:
+        def progress_callback(message: str, metrics: dict[str, Any]) -> None:
             """Forward a progress event from the optimizer to the parent queue.
 
             Args:

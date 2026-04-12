@@ -3,9 +3,8 @@
 These guard the invariants enforced by the old `backend/core/models.py`
 that are now spread across `backend/core/models/*.py`.
 """
-from __future__ import annotations
 
-from datetime import datetime, timezone
+from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
@@ -26,7 +25,6 @@ from core.models import (
 )
 
 
-
 def test_column_mapping_requires_inputs() -> None:
     with pytest.raises(ValidationError, match="At least one input"):
         ColumnMapping(inputs={}, outputs={"answer": "answer"})
@@ -43,7 +41,6 @@ def test_column_mapping_accepts_disjoint_columns() -> None:
     assert m.outputs == {"a": "answer"}
 
 
-
 def test_split_fractions_default_sums_to_one() -> None:
     s = SplitFractions()
     assert abs(s.train + s.val + s.test - 1.0) < 1e-6
@@ -55,9 +52,8 @@ def test_split_fractions_rejects_negative() -> None:
 
 
 def test_split_fractions_rejects_wrong_total() -> None:
-    with pytest.raises(ValidationError, match="sum to 1.0"):
+    with pytest.raises(ValidationError, match=r"sum to 1\.0"):
         SplitFractions(train=0.5, val=0.25, test=0.25 + 0.01)
-
 
 
 def test_model_config_normalized_identifier_strips_slashes() -> None:
@@ -69,7 +65,6 @@ def test_model_config_temperature_bounds() -> None:
         ModelConfig(name="x", temperature=2.5)
     with pytest.raises(ValidationError):
         ModelConfig(name="x", temperature=-0.1)
-
 
 
 def _base_run_payload(**overrides) -> dict:
@@ -106,18 +101,13 @@ def test_run_request_description_max_length() -> None:
     assert len(req.description) == 280
 
 
-
 def test_grid_search_requires_both_model_lists() -> None:
     base = _base_run_payload()
     base.pop("model_config")
     with pytest.raises(ValidationError, match="generation model"):
-        GridSearchRequest.model_validate(
-            dict(base, generation_models=[], reflection_models=[{"name": "r"}])
-        )
+        GridSearchRequest.model_validate(dict(base, generation_models=[], reflection_models=[{"name": "r"}]))
     with pytest.raises(ValidationError, match="reflection model"):
-        GridSearchRequest.model_validate(
-            dict(base, generation_models=[{"name": "g"}], reflection_models=[])
-        )
+        GridSearchRequest.model_validate(dict(base, generation_models=[{"name": "g"}], reflection_models=[]))
 
 
 def test_grid_search_accepts_both_lists() -> None:
@@ -128,7 +118,6 @@ def test_grid_search_accepts_both_lists() -> None:
     )
     assert len(req.generation_models) == 1
     assert len(req.reflection_models) == 1
-
 
 
 def test_validate_code_request_accepts_single_block() -> None:
@@ -147,7 +136,6 @@ def test_validate_code_response_default_shape() -> None:
     assert r.errors == []
     assert r.warnings == []
     assert r.signature_fields is None
-
 
 
 def test_optimized_predictor_defaults() -> None:
@@ -170,7 +158,6 @@ def test_program_artifact_nested_predictor() -> None:
     assert len(art.optimized_prompt.demos) == 1
 
 
-
 def test_template_create_rejects_oversized_config() -> None:
     huge = {"x": "y" * 150_000}
     with pytest.raises(ValidationError, match="maximum size"):
@@ -186,10 +173,14 @@ def test_template_create_name_length() -> None:
     assert ok.name == "valid"
 
 
-
 def test_optimization_status_values() -> None:
     assert OptimizationStatus.success.value == "success"
     assert OptimizationStatus.pending.value == "pending"
     assert {s.value for s in OptimizationStatus} == {
-        "pending", "validating", "running", "success", "failed", "cancelled",
+        "pending",
+        "validating",
+        "running",
+        "success",
+        "failed",
+        "cancelled",
     }

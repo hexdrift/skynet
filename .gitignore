@@ -63,3 +63,4 @@ skills-lock.json
 # Tooling output
 /codedb.snapshot
 frontend/perf-results/
+logs/

@@ -46,11 +46,12 @@ def test_connection(url: str) -> bool:
     """
     try:
         from sqlalchemy import create_engine, text
+
         engine = create_engine(url, echo=False, pool_pre_ping=True)
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))
             version = result.scalar()
-            print(f"✓ Connected successfully")
+            print("✓ Connected successfully")
             print(f"  PostgreSQL version: {version}")
         return True
     except Exception as e:
@@ -69,12 +70,14 @@ def create_tables(url: str) -> None:
     """
     try:
         from sqlalchemy import create_engine
+
         # Import the models to register them with Base
         sys.path.insert(0, ".")
         from core.storage.models import Base
+
         engine = create_engine(url, echo=False)
         Base.metadata.create_all(engine)
-        print(f"✓ Tables created/verified:")
+        print("✓ Tables created/verified:")
         for table_name in Base.metadata.tables:
             print(f"  - {table_name}")
     except Exception as e:
@@ -110,7 +113,7 @@ LOG_LEVEL=INFO
     with open(env_path, "w") as f:
         f.write(env_content)
     print(f"✓ Configuration written to {env_path}")
-    print(f"  Start the server with: python main.py")
+    print("  Start the server with: python main.py")
 
 
 def main() -> None:
@@ -158,7 +161,7 @@ Examples:
 
     url = build_url(args)
     masked_url = url.split("@")[-1] if "@" in url else url
-    print(f"\n🔧 Skynet PostgreSQL Setup")
+    print("\n🔧 Skynet PostgreSQL Setup")
     print(f"   Target: {masked_url}\n")
 
     if not test_connection(url):
@@ -175,8 +178,8 @@ Examples:
         print()
         generate_env(url, args.env_file)
 
-    print(f"\n✓ Setup complete! Start the server:")
-    print(f"  python main.py")
+    print("\n✓ Setup complete! Start the server:")
+    print("  python main.py")
 
 
 if __name__ == "__main__":

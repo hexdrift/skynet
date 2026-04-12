@@ -1,4 +1,5 @@
 """Routes for inference on optimized programs (single runs and grid-search pairs)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -274,6 +275,7 @@ def create_serve_router(*, job_store) -> APIRouter:
             Yields:
                 SSE-formatted strings emitting ``token``, ``final``, or ``error`` events.
             """
+
             def sse(event: str, payload: dict) -> str:
                 """Format an SSE event frame.
 
@@ -285,6 +287,7 @@ def create_serve_router(*, job_store) -> APIRouter:
                     The fully formatted ``event:/data:`` SSE string.
                 """
                 return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
+
             try:
                 final_outputs: dict[str, Any] = {}
                 try:
@@ -306,14 +309,17 @@ def create_serve_router(*, job_store) -> APIRouter:
                                     for key, val in item.toDict().items():
                                         if key not in req.inputs:
                                             final_outputs[key] = val
-                    yield sse("final", {
-                        "outputs": final_outputs,
-                        "input_fields": input_fields,
-                        "output_fields": output_fields,
-                        "model_used": model_used,
-                    })
+                    yield sse(
+                        "final",
+                        {
+                            "outputs": final_outputs,
+                            "input_fields": input_fields,
+                            "output_fields": output_fields,
+                            "model_used": model_used,
+                        },
+                    )
                     return
-                except Exception as stream_exc:  # noqa: BLE001
+                except Exception as stream_exc:
                     # Fall back to non-streaming: some modules/fields aren't streamable
                     with dspy.context(lm=lm):
                         prediction = await asyncio.to_thread(lambda: program(**req.inputs))
@@ -324,21 +330,25 @@ def create_serve_router(*, job_store) -> APIRouter:
                         for key, val in prediction.toDict().items():
                             if key not in req.inputs:
                                 final_outputs[key] = val
-                    yield sse("final", {
-                        "outputs": final_outputs,
-                        "input_fields": input_fields,
-                        "output_fields": output_fields,
-                        "model_used": model_used,
-                        "streaming_fallback": True,
-                        "fallback_reason": str(stream_exc),
-                    })
+                    yield sse(
+                        "final",
+                        {
+                            "outputs": final_outputs,
+                            "input_fields": input_fields,
+                            "output_fields": output_fields,
+                            "model_used": model_used,
+                            "streaming_fallback": True,
+                            "fallback_reason": str(stream_exc),
+                        },
+                    )
                     return
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 yield sse("error", {"error": "streaming failed"})
                 logger.exception("Serve stream failed for job %s: %s", optimization_id, exc)
                 return
+
         return StreamingResponse(
             event_generator(),
             media_type="text/event-stream",
@@ -348,7 +358,6 @@ def create_serve_router(*, job_store) -> APIRouter:
                 "X-Accel-Buffering": "no",
             },
         )
-
 
     @router.get(
         "/serve/{optimization_id}/pair/{pair_index}/info",
@@ -379,7 +388,7 @@ def create_serve_router(*, job_store) -> APIRouter:
         Returns:
             ServeInfoResponse describing the pair's compiled program.
         """
-        program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
+        _program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
         artifact = pair.program_artifact
 
         input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
@@ -436,13 +445,10 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         from ...service_gateway.language_models import build_language_model
 
-        program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
+        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index)
         artifact = pair.program_artifact
 
-        if req.model_config_override:
-            model_config = req.model_config_override
-        else:
-            model_config = ModelConfig(name=pair.generation_model)
+        model_config = req.model_config_override or ModelConfig(name=pair.generation_model)
 
         input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
         output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
@@ -511,13 +517,10 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         from ...service_gateway.language_models import build_language_model
 
-        program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
+        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index)
         artifact = pair.program_artifact
 
-        if req.model_config_override:
-            model_config = req.model_config_override
-        else:
-            model_config = ModelConfig(name=pair.generation_model)
+        model_config = req.model_config_override or ModelConfig(name=pair.generation_model)
 
         input_fields = artifact.optimized_prompt.input_fields if artifact.optimized_prompt else []
         output_fields = artifact.optimized_prompt.output_fields if artifact.optimized_prompt else []
@@ -540,6 +543,7 @@ def create_serve_router(*, job_store) -> APIRouter:
             Yields:
                 SSE-formatted strings emitting ``token``, ``final``, or ``error`` events.
             """
+
             def sse(event: str, payload: dict) -> str:
                 """Format an SSE event frame.
 
@@ -551,6 +555,7 @@ def create_serve_router(*, job_store) -> APIRouter:
                     The fully formatted ``event:/data:`` SSE string.
                 """
                 return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
+
             try:
                 final_outputs: dict[str, Any] = {}
                 try:
@@ -572,14 +577,17 @@ def create_serve_router(*, job_store) -> APIRouter:
                                     for key, val in item.toDict().items():
                                         if key not in req.inputs:
                                             final_outputs[key] = val
-                    yield sse("final", {
-                        "outputs": final_outputs,
-                        "input_fields": input_fields,
-                        "output_fields": output_fields,
-                        "model_used": model_used,
-                    })
+                    yield sse(
+                        "final",
+                        {
+                            "outputs": final_outputs,
+                            "input_fields": input_fields,
+                            "output_fields": output_fields,
+                            "model_used": model_used,
+                        },
+                    )
                     return
-                except Exception as stream_exc:  # noqa: BLE001
+                except Exception as stream_exc:
                     with dspy.context(lm=lm):
                         prediction = await asyncio.to_thread(lambda: program(**req.inputs))
                     if output_fields:
@@ -589,21 +597,25 @@ def create_serve_router(*, job_store) -> APIRouter:
                         for key, val in prediction.toDict().items():
                             if key not in req.inputs:
                                 final_outputs[key] = val
-                    yield sse("final", {
-                        "outputs": final_outputs,
-                        "input_fields": input_fields,
-                        "output_fields": output_fields,
-                        "model_used": model_used,
-                        "streaming_fallback": True,
-                        "fallback_reason": str(stream_exc),
-                    })
+                    yield sse(
+                        "final",
+                        {
+                            "outputs": final_outputs,
+                            "input_fields": input_fields,
+                            "output_fields": output_fields,
+                            "model_used": model_used,
+                            "streaming_fallback": True,
+                            "fallback_reason": str(stream_exc),
+                        },
+                    )
                     return
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 yield sse("error", {"error": "streaming failed"})
                 logger.exception("Serve pair stream failed for job %s pair %d: %s", optimization_id, pair_index, exc)
                 return
+
         return StreamingResponse(
             event_generator(),
             media_type="text/event-stream",

@@ -1,5 +1,6 @@
 """Compiled DSPy program artifact models (prompts, demos, serialized pickle)."""
-from typing import Any, Dict, List, Optional
+
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,8 +13,8 @@ class OptimizedDemo(BaseModel):
         outputs: Dictionary of output field names to their values.
     """
 
-    inputs: Dict[str, Any] = Field(default_factory=dict)
-    outputs: Dict[str, Any] = Field(default_factory=dict)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
 
 
 class OptimizedPredictor(BaseModel):
@@ -30,11 +31,11 @@ class OptimizedPredictor(BaseModel):
     """
 
     predictor_name: str
-    signature_name: Optional[str] = None
+    signature_name: str | None = None
     instructions: str
-    input_fields: List[str] = Field(default_factory=list)
-    output_fields: List[str] = Field(default_factory=list)
-    demos: List[OptimizedDemo] = Field(default_factory=list)
+    input_fields: list[str] = Field(default_factory=list)
+    output_fields: list[str] = Field(default_factory=list)
+    demos: list[OptimizedDemo] = Field(default_factory=list)
     formatted_prompt: str = Field(
         default="",
         description="Complete prompt as a single formatted string including instructions and demos.",
@@ -44,15 +45,15 @@ class OptimizedPredictor(BaseModel):
 class ProgramArtifact(BaseModel):
     """Serializable payload that carries the optimized DSPy program files."""
 
-    path: Optional[str] = Field(
+    path: str | None = Field(
         default=None,
         description="Absolute path on the server where the artifact lives.",
     )
-    program_pickle_base64: Optional[str] = Field(
+    program_pickle_base64: str | None = Field(
         default=None,
         description="Base64-encoded contents of the saved program.pkl file.",
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None,
         description="metadata.json contents already parsed into a dict.",
     )

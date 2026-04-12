@@ -1,5 +1,6 @@
 """Request/response models for the /serve/* inference endpoints."""
-from typing import Any, Dict, List, Optional
+
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -9,10 +10,8 @@ from .common import ModelConfig
 class ServeRequest(BaseModel):
     """Request payload for running inference on an optimized program."""
 
-    inputs: Dict[str, Any] = Field(
-        ..., description="Input field values matching the program's signature."
-    )
-    model_config_override: Optional[ModelConfig] = Field(
+    inputs: dict[str, Any] = Field(..., description="Input field values matching the program's signature.")
+    model_config_override: ModelConfig | None = Field(
         default=None,
         description="Optional model config override. Uses the original optimization model if omitted.",
     )
@@ -38,9 +37,9 @@ class ServeResponse(BaseModel):
     """Response payload from program inference."""
 
     optimization_id: str
-    outputs: Dict[str, Any]
-    input_fields: List[str]
-    output_fields: List[str]
+    outputs: dict[str, Any]
+    input_fields: list[str]
+    output_fields: list[str]
     model_used: str
 
 
@@ -51,7 +50,7 @@ class ServeInfoResponse(BaseModel):
     module_name: str
     optimizer_name: str
     model_name: str
-    input_fields: List[str]
-    output_fields: List[str]
-    instructions: Optional[str] = None
+    input_fields: list[str]
+    output_fields: list[str]
+    instructions: str | None = None
     demo_count: int = 0

@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import importlib
-from dataclasses import dataclass
 import inspect
-from functools import lru_cache, wraps
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Callable
+from dataclasses import dataclass
+from functools import cache, wraps
+from typing import Any
+
 from ..constants import RESOLUTION_HINT
 
 DSPY_PREFIX = "dspy."
@@ -17,7 +20,7 @@ class ModuleAlias:
     auto_signature: bool = False
 
 
-MODULE_ALIASES: Dict[str, ModuleAlias] = {
+MODULE_ALIASES: dict[str, ModuleAlias] = {
     "predict": ModuleAlias(("dspy.Predict",), auto_signature=True),
     "cot": ModuleAlias(
         (
@@ -28,24 +31,19 @@ MODULE_ALIASES: Dict[str, ModuleAlias] = {
     ),
 }
 
-OPTIMIZER_ALIASES: Dict[str, str] = {
+OPTIMIZER_ALIASES: dict[str, str] = {
     "miprov2": "dspy.teleprompt.MIPROv2",
     "gepa": "dspy.teleprompt.GEPA",
 }
 
-AUTO_SIGNATURE_PATHS = {
-    path
-    for alias in MODULE_ALIASES.values()
-    if alias.auto_signature
-    for path in alias.paths
-}
+AUTO_SIGNATURE_PATHS = {path for alias in MODULE_ALIASES.values() if alias.auto_signature for path in alias.paths}
 
 
 class ResolverError(RuntimeError):
     """Raised when a requested DSPy asset cannot be resolved."""
 
 
-def resolve_module_factory(name: str) -> Tuple[Callable[..., Any], bool]:
+def resolve_module_factory(name: str) -> tuple[Callable[..., Any], bool]:
     """Resolve a module factory from aliases or dotted paths.
 
     Args:
@@ -62,7 +60,7 @@ def resolve_module_factory(name: str) -> Tuple[Callable[..., Any], bool]:
 
     spec = _match_module_alias(name)
     if spec is not None:
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for path in spec.paths:
             try:
                 target = _load_callable(path)
@@ -101,7 +99,7 @@ def resolve_optimizer_factory(name: str) -> Callable[..., Any]:
     raise ResolverError(f"Unknown optimizer '{name}'. {RESOLUTION_HINT}")
 
 
-def _match_module_alias(name: str) -> Optional[ModuleAlias]:
+def _match_module_alias(name: str) -> ModuleAlias | None:
     """Return the module alias specification when available.
 
     Args:
@@ -114,7 +112,7 @@ def _match_module_alias(name: str) -> Optional[ModuleAlias]:
     return MODULE_ALIASES.get(name.lower())
 
 
-def _match_optimizer_alias(name: str) -> Optional[str]:
+def _match_optimizer_alias(name: str) -> str | None:
     """Return the optimizer dotted path when alias is provided.
 
     Args:
@@ -127,7 +125,7 @@ def _match_optimizer_alias(name: str) -> Optional[str]:
     return OPTIMIZER_ALIASES.get(name.lower())
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_callable(path: str) -> Callable[..., Any]:
     """Import a callable attribute specified by dotted path.
 
