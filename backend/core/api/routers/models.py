@@ -3,12 +3,12 @@
 ``GET /models`` returns the curated catalog. ``POST /models/discover`` probes
 an OpenAI-compatible endpoint for its available models.
 """
+
 from __future__ import annotations
 
 import json as _json
 import urllib.error
 import urllib.request
-from typing import List, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -20,15 +20,15 @@ class DiscoverModelsRequest(BaseModel):
     """Request payload for POST /models/discover."""
 
     base_url: str
-    api_key: Optional[str] = None
+    api_key: str | None = None
 
 
 class DiscoverModelsResponse(BaseModel):
     """Response payload for POST /models/discover."""
 
-    models: List[str] = []
+    models: list[str] = []
     base_url: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 def create_models_router() -> APIRouter:
@@ -104,7 +104,7 @@ def create_models_router() -> APIRouter:
         if payload.api_key:
             headers["Authorization"] = f"Bearer {payload.api_key}"
 
-        last_error: Optional[str] = None
+        last_error: str | None = None
         for url in candidates:
             try:
                 req = urllib.request.Request(url, headers=headers, method="GET")
@@ -115,7 +115,7 @@ def create_models_router() -> APIRouter:
                 if not isinstance(raw, list):
                     last_error = "Unexpected response shape"
                     continue
-                ids: List[str] = []
+                ids: list[str] = []
                 for item in raw:
                     if isinstance(item, dict):
                         val = item.get("id") or item.get("name")

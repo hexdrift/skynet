@@ -3,15 +3,14 @@
 These don't touch Postgres, don't call OpenAI, and don't spin up the real
 worker — they exercise the extracted router factories in isolation.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
 from fastapi.testclient import TestClient
 
 from tests.unit.conftest import FakeJobStore
-
 
 
 def test_get_job_logs_404_for_unknown_id(client: TestClient) -> None:
@@ -68,7 +67,6 @@ def test_get_job_payload_returns_when_present(client: TestClient, job_store: Fak
     assert body["payload"]["dataset"] == [{"q": 1}]
 
 
-
 def test_rename_job_validates_length(client: TestClient, job_store: FakeJobStore) -> None:
     job_store.seed_job("rn1", payload_overview={})
     r = client.patch("/optimizations/rn1/name", json={"name": ""})
@@ -106,7 +104,6 @@ def test_toggle_archive_flips_state(client: TestClient, job_store: FakeJobStore)
     assert r1.json()["archived"] is True
     r2 = client.patch("/optimizations/arc1/archive")
     assert r2.json()["archived"] is False
-
 
 
 def test_analytics_summary_empty_returns_zeros(client: TestClient) -> None:

@@ -8,6 +8,7 @@ Requires backend server running on localhost:8000.
 Run:
     cd backend && ../.venv/bin/python -m pytest tests/test_load.py -v -s
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -101,12 +102,13 @@ def _print_results(name: str, r: dict) -> None:
     print(f"  {name}")
     print(f"{'=' * 50}")
     print(f"  Requests:  {r['total']}")
-    print(f"  Errors:    {r['errors']} ({r['errors']/r['total']*100:.1f}%)")
+    print(f"  Errors:    {r['errors']} ({r['errors'] / r['total'] * 100:.1f}%)")
     print(f"  RPS:       {r['rps']:.1f}")
-    print(f"  Latency:   p50={r['p50']*1000:.0f}ms  p95={r['p95']*1000:.0f}ms  p99={r['p99']*1000:.0f}ms  mean={r['mean']*1000:.0f}ms")
+    print(
+        f"  Latency:   p50={r['p50'] * 1000:.0f}ms  p95={r['p95'] * 1000:.0f}ms  p99={r['p99'] * 1000:.0f}ms  mean={r['mean'] * 1000:.0f}ms"
+    )
     print(f"  Codes:     {r['status_codes']}")
     print(f"  Total:     {r['total_time']:.1f}s")
-
 
 
 @requires_server
@@ -140,7 +142,6 @@ class TestReadEndpointLoad:
         _print_results("GET /health (500 rapid fire, 100 concurrent)", r)
         assert r["errors"] == 0
         assert r["rps"] > 50, f"RPS too low: {r['rps']:.1f}"
-
 
 
 @requires_server
@@ -183,7 +184,6 @@ class TestWriteEndpointLoad:
         assert r["p99"] < 2.0
 
 
-
 @requires_server
 class TestMixedWorkload:
     """Simulate realistic mixed read/write traffic."""
@@ -224,7 +224,6 @@ class TestMixedWorkload:
             requests.delete(f"{BASE_URL}/jobs/{job_id}", timeout=5)
         except Exception:
             pass
-
 
 
 @requires_server

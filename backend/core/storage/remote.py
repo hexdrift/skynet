@@ -5,7 +5,7 @@ Provides RemoteDBJobStore for persisting job state to a PostgreSQL database.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy import create_engine, func, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -49,10 +49,12 @@ class RemoteDBJobStore:
         logger.info("Initialized PostgreSQL database at %s", db_url.split("@")[-1] if "@" in db_url else db_url)
 
         with self._engine.connect() as conn:
-            result = conn.execute(text(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = 'job_logs' AND column_name = 'pair_index'"
-            ))
+            result = conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'job_logs' AND column_name = 'pair_index'"
+                )
+            )
             if result.fetchone() is None:
                 conn.execute(text("ALTER TABLE job_logs ADD COLUMN pair_index INTEGER"))
                 conn.commit()
@@ -75,7 +77,7 @@ class RemoteDBJobStore:
         """
         return self._session_factory()
 
-    def _job_to_dict(self, job: JobModel) -> Dict[str, Any]:
+    def _job_to_dict(self, job: JobModel) -> dict[str, Any]:
         """Convert a JobModel ORM instance to a plain dictionary.
 
         Args:
@@ -98,7 +100,7 @@ class RemoteDBJobStore:
             "payload": job.payload,
         }
 
-    def create_job(self, optimization_id: str, estimated_remaining_seconds: Optional[float] = None) -> Dict[str, Any]:
+    def create_job(self, optimization_id: str, estimated_remaining_seconds: float | None = None) -> dict[str, Any]:
         """Create a new job record in the PostgreSQL database.
 
         Args:
@@ -166,7 +168,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def get_job(self, optimization_id: str) -> Dict[str, Any]:
+    def get_job(self, optimization_id: str) -> dict[str, Any]:
         """Retrieve a single job by its identifier.
 
         Args:
@@ -220,7 +222,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def get_jobs_status_by_ids(self, optimization_ids: List[str]) -> Dict[str, str]:
+    def get_jobs_status_by_ids(self, optimization_ids: list[str]) -> dict[str, str]:
         """Return a ``{id: status}`` map for the requested IDs.
 
         Runs a single ``SELECT ... WHERE optimization_id IN (...)``
@@ -247,7 +249,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def delete_jobs(self, optimization_ids: List[str]) -> int:
+    def delete_jobs(self, optimization_ids: list[str]) -> int:
         """Hard-delete a batch of jobs in a single transaction.
 
         Drops the associated log and progress-event rows first
@@ -266,12 +268,12 @@ class RemoteDBJobStore:
             return 0
         session = self._get_session()
         try:
-            session.query(LogEntryModel).filter(
-                LogEntryModel.optimization_id.in_(optimization_ids)
-            ).delete(synchronize_session=False)
-            session.query(ProgressEventModel).filter(
-                ProgressEventModel.optimization_id.in_(optimization_ids)
-            ).delete(synchronize_session=False)
+            session.query(LogEntryModel).filter(LogEntryModel.optimization_id.in_(optimization_ids)).delete(
+                synchronize_session=False
+            )
+            session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id.in_(optimization_ids)).delete(
+                synchronize_session=False
+            )
             deleted = (
                 session.query(JobModel)
                 .filter(JobModel.optimization_id.in_(optimization_ids))
@@ -291,11 +293,7 @@ class RemoteDBJobStore:
         session = self._get_session()
         try:
             now = datetime.now(timezone.utc)
-            orphaned = (
-                session.query(JobModel)
-                .filter(JobModel.status.in_(["running", "validating"]))
-                .all()
-            )
+            orphaned = session.query(JobModel).filter(JobModel.status.in_(["running", "validating"])).all()
             for job in orphaned:
                 job.status = "failed"
                 job.message = "Job interrupted by service restart"
@@ -308,7 +306,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def recover_pending_jobs(self) -> List[str]:
+    def recover_pending_jobs(self) -> list[str]:
         """Retrieve optimization IDs that are still pending, ordered by creation time.
 
         Returns:
@@ -317,16 +315,13 @@ class RemoteDBJobStore:
         session = self._get_session()
         try:
             jobs = (
-                session.query(JobModel)
-                .filter(JobModel.status == "pending")
-                .order_by(JobModel.created_at.asc())
-                .all()
+                session.query(JobModel).filter(JobModel.status == "pending").order_by(JobModel.created_at.asc()).all()
             )
             return [j.optimization_id for j in jobs]
         finally:
             session.close()
 
-    def set_payload_overview(self, optimization_id: str, overview: Dict[str, Any]) -> None:
+    def set_payload_overview(self, optimization_id: str, overview: dict[str, Any]) -> None:
         """Store a summary overview of the job payload.
 
         Args:
@@ -346,7 +341,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def record_progress(self, optimization_id: str, message: Optional[str], metrics: Dict[str, Any]) -> None:
+    def record_progress(self, optimization_id: str, message: str | None, metrics: dict[str, Any]) -> None:
         """Record a progress event and merge metrics into the job's latest_metrics.
 
         Args:
@@ -364,7 +359,9 @@ class RemoteDBJobStore:
             if not job:
                 return
 
-            event = ProgressEventModel(optimization_id=optimization_id, timestamp=now, event=message, metrics=metrics or {})
+            event = ProgressEventModel(
+                optimization_id=optimization_id, timestamp=now, event=message, metrics=metrics or {}
+            )
             session.add(event)
 
             if metrics:
@@ -372,7 +369,9 @@ class RemoteDBJobStore:
                 merged.update(metrics)
                 job.latest_metrics = merged
 
-            event_count = session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
+            event_count = (
+                session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
+            )
             if event_count > MAX_PROGRESS_EVENTS:
                 oldest = (
                     session.query(ProgressEventModel)
@@ -387,7 +386,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def get_progress_events(self, optimization_id: str) -> List[Dict[str, Any]]:
+    def get_progress_events(self, optimization_id: str) -> list[dict[str, Any]]:
         """Retrieve all progress events for a job in chronological order.
 
         Args:
@@ -405,7 +404,11 @@ class RemoteDBJobStore:
                 .all()
             )
             return [
-                {"timestamp": e.timestamp.isoformat() if e.timestamp else None, "event": e.event, "metrics": e.metrics or {}}
+                {
+                    "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+                    "event": e.event,
+                    "metrics": e.metrics or {},
+                }
                 for e in events
             ]
         finally:
@@ -422,11 +425,22 @@ class RemoteDBJobStore:
         """
         session = self._get_session()
         try:
-            return session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
+            return (
+                session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
+            )
         finally:
             session.close()
 
-    def append_log(self, optimization_id: str, *, level: str, logger_name: str, message: str, timestamp: Optional[datetime] = None, pair_index: Optional[int] = None) -> None:
+    def append_log(
+        self,
+        optimization_id: str,
+        *,
+        level: str,
+        logger_name: str,
+        message: str,
+        timestamp: datetime | None = None,
+        pair_index: int | None = None,
+    ) -> None:
         """Append a log entry to a job's log history.
 
         Silently discards entries if the job has been deleted. Enforces a
@@ -446,11 +460,21 @@ class RemoteDBJobStore:
         ts = timestamp or datetime.now(timezone.utc)
         session = self._get_session()
         try:
-            exists = session.query(JobModel.optimization_id).filter(JobModel.optimization_id == optimization_id).scalar() is not None
+            exists = (
+                session.query(JobModel.optimization_id).filter(JobModel.optimization_id == optimization_id).scalar()
+                is not None
+            )
             if not exists:
                 return
 
-            entry = LogEntryModel(optimization_id=optimization_id, timestamp=ts, level=level, logger=logger_name, message=message, pair_index=pair_index)
+            entry = LogEntryModel(
+                optimization_id=optimization_id,
+                timestamp=ts,
+                level=level,
+                logger=logger_name,
+                message=message,
+                pair_index=pair_index,
+            )
             session.add(entry)
 
             log_count = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).count()
@@ -472,10 +496,10 @@ class RemoteDBJobStore:
         self,
         optimization_id: str,
         *,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         offset: int = 0,
-        level: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        level: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Retrieve log entries for a job with optional filtering and pagination.
 
         Args:
@@ -489,10 +513,7 @@ class RemoteDBJobStore:
         """
         session = self._get_session()
         try:
-            q = (
-                session.query(LogEntryModel)
-                .filter(LogEntryModel.optimization_id == optimization_id)
-            )
+            q = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id)
             if level:
                 q = q.filter(LogEntryModel.level == level)
             q = q.order_by(LogEntryModel.timestamp.asc())
@@ -502,13 +523,19 @@ class RemoteDBJobStore:
                 q = q.limit(limit)
             logs = q.all()
             return [
-                {"timestamp": log.timestamp.isoformat() if log.timestamp else None, "level": log.level, "logger": log.logger, "message": log.message, "pair_index": log.pair_index}
+                {
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                    "level": log.level,
+                    "logger": log.logger,
+                    "message": log.message,
+                    "pair_index": log.pair_index,
+                }
                 for log in logs
             ]
         finally:
             session.close()
 
-    def get_log_count(self, optimization_id: str, *, level: Optional[str] = None) -> int:
+    def get_log_count(self, optimization_id: str, *, level: str | None = None) -> int:
         """Return the number of log entries for a job.
 
         Args:
@@ -527,7 +554,15 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def list_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None, optimization_type: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    def list_jobs(
+        self,
+        *,
+        status: str | None = None,
+        username: str | None = None,
+        optimization_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         """List jobs with optional filtering and pagination.
 
         Args:
@@ -553,16 +588,26 @@ class RemoteDBJobStore:
             jobs = q.offset(offset).limit(limit).all()
             optimization_ids = [j.optimization_id for j in jobs]
 
-            progress_counts = dict(
-                session.query(ProgressEventModel.optimization_id, func.count())
-                .filter(ProgressEventModel.optimization_id.in_(optimization_ids))
-                .group_by(ProgressEventModel.optimization_id).all()
-            ) if optimization_ids else {}
-            log_counts = dict(
-                session.query(LogEntryModel.optimization_id, func.count())
-                .filter(LogEntryModel.optimization_id.in_(optimization_ids))
-                .group_by(LogEntryModel.optimization_id).all()
-            ) if optimization_ids else {}
+            progress_counts = (
+                dict(
+                    session.query(ProgressEventModel.optimization_id, func.count())
+                    .filter(ProgressEventModel.optimization_id.in_(optimization_ids))
+                    .group_by(ProgressEventModel.optimization_id)
+                    .all()
+                )
+                if optimization_ids
+                else {}
+            )
+            log_counts = (
+                dict(
+                    session.query(LogEntryModel.optimization_id, func.count())
+                    .filter(LogEntryModel.optimization_id.in_(optimization_ids))
+                    .group_by(LogEntryModel.optimization_id)
+                    .all()
+                )
+                if optimization_ids
+                else {}
+            )
 
             result = []
             for j in jobs:
@@ -574,7 +619,9 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def count_jobs(self, *, status: Optional[str] = None, username: Optional[str] = None, optimization_type: Optional[str] = None) -> int:
+    def count_jobs(
+        self, *, status: str | None = None, username: str | None = None, optimization_type: str | None = None
+    ) -> int:
         """Count jobs matching the given filters.
 
         Args:

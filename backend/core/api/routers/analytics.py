@@ -1,9 +1,10 @@
 """Routes for dashboard analytics and per-model / per-optimizer aggregation."""
+
 from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Query
 
@@ -54,10 +55,16 @@ def create_analytics_router(*, job_store) -> APIRouter:
         summary="Dashboard KPIs across all optimization jobs",
     )
     def get_analytics_summary(
-        optimizer: Optional[str] = Query(default=None, description="Exact-match optimizer name (e.g. 'miprov2', 'gepa', 'copro')"),
-        model: Optional[str] = Query(default=None, description="Exact-match model name, compared against the primary model used by the job"),
-        status: Optional[str] = Query(default=None, description="Job status filter: pending, running, success, failed, cancelled"),
-        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this username"),
+        optimizer: str | None = Query(
+            default=None, description="Exact-match optimizer name (e.g. 'miprov2', 'gepa', 'copro')"
+        ),
+        model: str | None = Query(
+            default=None, description="Exact-match model name, compared against the primary model used by the job"
+        ),
+        status: str | None = Query(
+            default=None, description="Job status filter: pending, running, success, failed, cancelled"
+        ),
+        username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> AnalyticsSummaryResponse:
         """Return a single aggregated KPI snapshot powering the dashboard header.
 
@@ -200,9 +207,11 @@ def create_analytics_router(*, job_store) -> APIRouter:
         summary="Per-optimizer aggregated statistics",
     )
     def get_optimizer_stats(
-        model: Optional[str] = Query(default=None, description="Exact-match model name to scope the stats to a single model"),
-        status: Optional[str] = Query(default=None, description="Restrict aggregation to a single status bucket"),
-        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this username"),
+        model: str | None = Query(
+            default=None, description="Exact-match model name to scope the stats to a single model"
+        ),
+        status: str | None = Query(default=None, description="Restrict aggregation to a single status bucket"),
+        username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> OptimizerStatsResponse:
         """Group every job by optimizer name and return one row per optimizer.
 
@@ -295,23 +304,19 @@ def create_analytics_router(*, job_store) -> APIRouter:
             total = stats["total"]
             success_count = stats["success"]
             success_rate = (success_count / total) if total > 0 else 0.0
-            avg_improvement = (
-                sum(stats["improvements"]) / len(stats["improvements"])
-                if stats["improvements"] else None
-            )
-            avg_runtime = (
-                sum(stats["runtimes"]) / len(stats["runtimes"])
-                if stats["runtimes"] else None
-            )
+            avg_improvement = sum(stats["improvements"]) / len(stats["improvements"]) if stats["improvements"] else None
+            avg_runtime = sum(stats["runtimes"]) / len(stats["runtimes"]) if stats["runtimes"] else None
 
-            items.append(OptimizerStatsItem(
-                name=optimizer_name,
-                total_jobs=total,
-                success_count=success_count,
-                avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
-                success_rate=round(success_rate, 4),
-                avg_runtime=round(avg_runtime, 2) if avg_runtime is not None else None,
-            ))
+            items.append(
+                OptimizerStatsItem(
+                    name=optimizer_name,
+                    total_jobs=total,
+                    success_count=success_count,
+                    avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
+                    success_rate=round(success_rate, 4),
+                    avg_runtime=round(avg_runtime, 2) if avg_runtime is not None else None,
+                )
+            )
 
         items.sort(key=lambda x: x.total_jobs, reverse=True)
 
@@ -323,9 +328,9 @@ def create_analytics_router(*, job_store) -> APIRouter:
         summary="Per-model aggregated statistics",
     )
     def get_model_stats(
-        optimizer: Optional[str] = Query(default=None, description="Exact-match optimizer name to scope the stats"),
-        status: Optional[str] = Query(default=None, description="Restrict aggregation to a single status bucket"),
-        username: Optional[str] = Query(default=None, description="Only include jobs submitted by this username"),
+        optimizer: str | None = Query(default=None, description="Exact-match optimizer name to scope the stats"),
+        status: str | None = Query(default=None, description="Restrict aggregation to a single status bucket"),
+        username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> ModelStatsResponse:
         """Group every job by model name and return one row per model.
 
@@ -413,19 +418,18 @@ def create_analytics_router(*, job_store) -> APIRouter:
             total = stats["total"]
             success_count = stats["success"]
             success_rate = (success_count / total) if total > 0 else 0.0
-            avg_improvement = (
-                sum(stats["improvements"]) / len(stats["improvements"])
-                if stats["improvements"] else None
-            )
+            avg_improvement = sum(stats["improvements"]) / len(stats["improvements"]) if stats["improvements"] else None
 
-            items.append(ModelStatsItem(
-                name=model_name,
-                total_jobs=total,
-                success_count=success_count,
-                avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
-                success_rate=round(success_rate, 4),
-                use_count=stats["use_count"],
-            ))
+            items.append(
+                ModelStatsItem(
+                    name=model_name,
+                    total_jobs=total,
+                    success_count=success_count,
+                    avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
+                    success_rate=round(success_rate, 4),
+                    use_count=stats["use_count"],
+                )
+            )
 
         items.sort(key=lambda x: x.use_count, reverse=True)
 
@@ -437,12 +441,12 @@ def create_analytics_router(*, job_store) -> APIRouter:
         summary="Full pre-shaped dashboard analytics payload",
     )
     def get_dashboard_analytics(
-        optimizer: Optional[str] = Query(default=None, description="Exact-match optimizer name filter"),
-        model: Optional[str] = Query(default=None, description="Exact-match primary model name filter"),
-        status: Optional[str] = Query(default=None, description="Job status filter"),
-        username: Optional[str] = Query(default=None, description="Only include jobs owned by this user"),
-        optimization_id: Optional[str] = Query(default=None, description="Limit the aggregation to a single optimization"),
-        date: Optional[str] = Query(default=None, description="YYYY-MM-DD day filter on created_at"),
+        optimizer: str | None = Query(default=None, description="Exact-match optimizer name filter"),
+        model: str | None = Query(default=None, description="Exact-match primary model name filter"),
+        status: str | None = Query(default=None, description="Job status filter"),
+        username: str | None = Query(default=None, description="Only include jobs owned by this user"),
+        optimization_id: str | None = Query(default=None, description="Limit the aggregation to a single optimization"),
+        date: str | None = Query(default=None, description="YYYY-MM-DD day filter on created_at"),
     ) -> DashboardAnalyticsResponse:
         """Return a pre-shaped payload for the whole analytics dashboard tab.
 
@@ -555,20 +559,13 @@ def create_analytics_router(*, job_store) -> APIRouter:
             if m:
                 model_counter[m] += 1
         model_usage = [
-            DashboardAnalyticsNameValue(name=name, value=count)
-            for name, count in model_counter.most_common(8)
+            DashboardAnalyticsNameValue(name=name, value=count) for name, count in model_counter.most_common(8)
         ]
 
         # Improvement-based aggregates (only successful jobs with a numeric delta)
-        improvements = [
-            (s, s.metric_improvement)
-            for s in success_items
-            if s.metric_improvement is not None
-        ]
+        improvements = [(s, s.metric_improvement) for s in success_items if s.metric_improvement is not None]
         numeric_improvements = [v for _, v in improvements]
-        avg_improvement = (
-            sum(numeric_improvements) / len(numeric_improvements) if numeric_improvements else None
-        )
+        avg_improvement = sum(numeric_improvements) / len(numeric_improvements) if numeric_improvements else None
         best_improvement = max(numeric_improvements) if numeric_improvements else None
         success_rate = (success_count / terminal_count) if terminal_count else 0.0
 
@@ -613,13 +610,9 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 dashboard charts and ranked tables render.
             """
             status_value = str(s.status).rsplit(".", 1)[-1]
-            created_at_str: Optional[str] = None
+            created_at_str: str | None = None
             if s.created_at is not None:
-                created_at_str = (
-                    s.created_at.isoformat()
-                    if isinstance(s.created_at, datetime)
-                    else str(s.created_at)
-                )
+                created_at_str = s.created_at.isoformat() if isinstance(s.created_at, datetime) else str(s.created_at)
             return DashboardAnalyticsJob(
                 optimization_id=s.optimization_id,
                 name=s.name,
@@ -637,32 +630,20 @@ def create_analytics_router(*, job_store) -> APIRouter:
             )
 
         # Top 10 successful jobs with optimized metric for the improvement bar chart.
-        top_improvement_items = [
-            s for s in success_items if s.optimized_test_metric is not None
-        ][:10]
+        top_improvement_items = [s for s in success_items if s.optimized_test_metric is not None][:10]
         top_improvement = [_as_job_ref(s) for s in top_improvement_items]
 
         # Runtime distribution — first 15 successful jobs with an elapsed time.
-        runtime_distribution_items = [
-            s for s in success_items if s.elapsed_seconds is not None
-        ][:15]
+        runtime_distribution_items = [s for s in success_items if s.elapsed_seconds is not None][:15]
         runtime_distribution = [_as_job_ref(s) for s in runtime_distribution_items]
 
-        dvs_items = [
-            s
-            for s in success_items
-            if s.dataset_rows is not None and s.metric_improvement is not None
-        ]
+        dvs_items = [s for s in success_items if s.dataset_rows is not None and s.metric_improvement is not None]
         dataset_vs_improvement = [_as_job_ref(s) for s in dvs_items]
 
         # Efficiency (improvement per minute) — top 10
         eff_items: list[tuple[float, Any]] = []
         for s in success_items:
-            if (
-                s.metric_improvement is None
-                or s.elapsed_seconds is None
-                or s.elapsed_seconds <= 0
-            ):
+            if s.metric_improvement is None or s.elapsed_seconds is None or s.elapsed_seconds <= 0:
                 continue
             delta = s.metric_improvement
             if abs(delta) <= 1:
@@ -675,9 +656,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         # Top 5 ranked by improvement (signed)
         ranked = sorted(
             improvements,
-            key=lambda pair: (
-                pair[1] if abs(pair[1]) > 1 else pair[1] * 100
-            ),
+            key=lambda pair: pair[1] if abs(pair[1]) > 1 else pair[1] * 100,
             reverse=True,
         )
         top_jobs_by_improvement = [_as_job_ref(s) for s, _ in ranked[:5]]
@@ -688,14 +667,10 @@ def create_analytics_router(*, job_store) -> APIRouter:
             created = s.created_at
             if created is None:
                 continue
-            day = (
-                created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else str(created)[:10]
-            )
+            day = created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else str(created)[:10]
             timeline_buckets[day] = timeline_buckets.get(day, 0) + 1
         timeline_entries = sorted(timeline_buckets.items())[-14:]
-        timeline = [
-            DashboardAnalyticsTimelineBucket(date=d, count=c) for d, c in timeline_entries
-        ]
+        timeline = [DashboardAnalyticsTimelineBucket(date=d, count=c) for d, c in timeline_entries]
 
         return DashboardAnalyticsResponse(
             filtered_total=filtered_total,

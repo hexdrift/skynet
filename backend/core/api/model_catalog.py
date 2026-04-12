@@ -11,13 +11,11 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Dict, List, Optional, Set
 
 import litellm
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
-
 
 
 class CatalogModel(BaseModel):
@@ -28,7 +26,7 @@ class CatalogModel(BaseModel):
     provider: str = Field(..., description="Provider slug for grouping (e.g. 'openai').")
     supports_thinking: bool = Field(default=False, description="Model supports reasoning_effort.")
     available: bool = Field(default=False, description="True if backend has an API key for this model.")
-    max_input_tokens: Optional[int] = Field(default=None, description="Context window size.")
+    max_input_tokens: int | None = Field(default=None, description="Context window size.")
 
 
 class CatalogProvider(BaseModel):
@@ -36,21 +34,21 @@ class CatalogProvider(BaseModel):
 
     slug: str
     label: str
-    env_var: Optional[str] = None
-    default_base_url: Optional[str] = None
+    env_var: str | None = None
+    default_base_url: str | None = None
     has_env_key: bool = False
 
 
 class ModelCatalogResponse(BaseModel):
     """Response for GET /models."""
 
-    providers: List[CatalogProvider]
-    models: List[CatalogModel]
+    providers: list[CatalogProvider]
+    models: list[CatalogModel]
 
 
 # Maps LiteLLM provider slug → (display label, env var, default base URL).
 
-_PROVIDER_META: Dict[str, tuple[str, Optional[str], Optional[str]]] = {
+_PROVIDER_META: dict[str, tuple[str, str | None, str | None]] = {
     "openai": ("OpenAI", "OPENAI_API_KEY", "https://api.openai.com/v1"),
     "anthropic": ("Anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com"),
     "gemini": ("Google Gemini", "GEMINI_API_KEY", None),
@@ -97,16 +95,16 @@ def get_catalog() -> ModelCatalogResponse:
         ModelCatalogResponse containing providers and available models.
     """
 
-    cost: Dict[str, dict] = litellm.model_cost
+    cost: dict[str, dict] = litellm.model_cost
     try:
-        valid_set: Set[str] = set(litellm.get_valid_models())
+        valid_set: set[str] = set(litellm.get_valid_models())
     except Exception:
         logger.warning("litellm.get_valid_models() failed; marking none as available")
         valid_set = set()
 
-    seen_providers: Dict[str, CatalogProvider] = {}
-    models: List[CatalogModel] = []
-    base_names_seen: Set[str] = set()
+    seen_providers: dict[str, CatalogProvider] = {}
+    models: list[CatalogModel] = []
+    base_names_seen: set[str] = set()
 
     for model_id, meta in cost.items():
         if meta.get("mode") != "chat":
@@ -141,14 +139,16 @@ def get_catalog() -> ModelCatalogResponse:
         # Ensure dspy.LM-compatible provider prefix (e.g. "openai/gpt-4o-mini")
         prefixed_id = model_id if "/" in model_id else f"{provider_slug}/{model_id}"
 
-        models.append(CatalogModel(
-            value=prefixed_id,
-            label=_make_label(model_id),
-            provider=provider_slug,
-            supports_thinking=bool(meta.get("supports_reasoning")),
-            available=model_id in valid_set or prefixed_id in valid_set,
-            max_input_tokens=meta.get("max_input_tokens"),
-        ))
+        models.append(
+            CatalogModel(
+                value=prefixed_id,
+                label=_make_label(model_id),
+                provider=provider_slug,
+                supports_thinking=bool(meta.get("supports_reasoning")),
+                available=model_id in valid_set or prefixed_id in valid_set,
+                max_input_tokens=meta.get("max_input_tokens"),
+            )
+        )
 
     # Only return models the backend has API keys for
     models = [m for m in models if m.available]
@@ -165,7 +165,7 @@ def get_catalog() -> ModelCatalogResponse:
     return ModelCatalogResponse(providers=providers, models=models)
 
 
-_cached_response: Optional[ModelCatalogResponse] = None
+_cached_response: ModelCatalogResponse | None = None
 
 
 def get_catalog_cached() -> ModelCatalogResponse:
@@ -178,5 +178,9 @@ def get_catalog_cached() -> ModelCatalogResponse:
     global _cached_response
     if _cached_response is None:
         _cached_response = get_catalog()
-        logger.info("Model catalog built: %d providers, %d models", len(_cached_response.providers), len(_cached_response.models))
+        logger.info(
+            "Model catalog built: %d providers, %d models",
+            len(_cached_response.providers),
+            len(_cached_response.models),
+        )
     return _cached_response

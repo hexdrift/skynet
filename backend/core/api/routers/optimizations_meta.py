@@ -8,10 +8,10 @@ Separated from ``app.py`` as the pilot for the domain-router pattern. Heavier
 optimization endpoints (summary, dataset, cancel, delete, streams, etc.) still
 live in ``app.py`` and will follow the same template.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -44,15 +44,26 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
 
     @router.get(
         "/optimizations/{optimization_id}/logs",
-        response_model=List[JobLogEntry],
+        response_model=list[JobLogEntry],
         summary="Fetch the chronological log trail for an optimization",
     )
     def get_job_logs(
         optimization_id: str,
-        limit: Optional[int] = Query(default=None, ge=1, le=5000, description="Maximum number of log entries to return; omit to return everything captured (subject to the 5000-entry ceiling)"),
-        offset: int = Query(default=0, ge=0, description="Number of log entries to skip before returning — use with limit for simple pagination"),
-        level: Optional[str] = Query(default=None, description="Case-insensitive level filter: DEBUG, INFO, WARNING, ERROR, CRITICAL"),
-    ) -> List[JobLogEntry]:
+        limit: int | None = Query(
+            default=None,
+            ge=1,
+            le=5000,
+            description="Maximum number of log entries to return; omit to return everything captured (subject to the 5000-entry ceiling)",
+        ),
+        offset: int = Query(
+            default=0,
+            ge=0,
+            description="Number of log entries to skip before returning — use with limit for simple pagination",
+        ),
+        level: str | None = Query(
+            default=None, description="Case-insensitive level filter: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+        ),
+    ) -> list[JobLogEntry]:
         """Return every log line captured while the optimization ran, in order.
 
         The worker writes structured log entries (``timestamp``, ``level``,
@@ -86,11 +97,14 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
 
         if not job_store.job_exists(optimization_id):
             logger.warning("Optimization logs requested for unknown optimization_id=%s", optimization_id)
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         normalized_level = level.upper() if level else None
         log_entries = job_store.get_logs(
-            optimization_id, limit=limit, offset=offset, level=normalized_level,
+            optimization_id,
+            limit=limit,
+            offset=offset,
+            level=normalized_level,
         )
         return [JobLogEntry(**entry) for entry in log_entries]
 
@@ -134,7 +148,7 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
         payload = job_data.get("payload")
         if not payload or not isinstance(payload, dict):
@@ -145,7 +159,9 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
 
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
-        return OptimizationPayloadResponse(optimization_id=optimization_id, optimization_type=optimization_type, payload=payload)
+        return OptimizationPayloadResponse(
+            optimization_id=optimization_id, optimization_type=optimization_type, payload=payload
+        )
 
     @router.patch(
         "/optimizations/{optimization_id}/name",
@@ -181,7 +197,7 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Optimization not found.")
+            raise HTTPException(status_code=404, detail="Optimization not found.") from None
         overview = parse_overview(job_data)
         overview[PAYLOAD_OVERVIEW_NAME] = req.name.strip()
         job_store.set_payload_overview(optimization_id, overview)
@@ -219,7 +235,7 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Optimization not found.")
+            raise HTTPException(status_code=404, detail="Optimization not found.") from None
         overview = parse_overview(job_data)
         current = overview.get("pinned", False)
         overview["pinned"] = not current
@@ -257,7 +273,7 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         try:
             job_data = job_store.get_job(optimization_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Optimization not found.")
+            raise HTTPException(status_code=404, detail="Optimization not found.") from None
         overview = parse_overview(job_data)
         current = overview.get("archived", False)
         overview["archived"] = not current

@@ -3,6 +3,7 @@
 ``POST /run`` — single optimization run.
 ``POST /grid-search`` — sweep over (generation, reflection) model pairs.
 """
+
 from __future__ import annotations
 
 import logging
@@ -119,7 +120,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             service.validate_payload(payload)
         except (ServiceError, RegistryError) as exc:
             logger.warning("Payload validation failed: %s", exc)
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         enforce_user_quota(job_store, payload.username)
 
@@ -143,15 +144,14 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_MODEL_SETTINGS: strip_api_key(payload.model_settings.model_dump()),
                 PAYLOAD_OVERVIEW_REFLECTION_MODEL: (
                     payload.reflection_model_settings.normalized_identifier()
-                    if payload.reflection_model_settings else None
+                    if payload.reflection_model_settings
+                    else None
                 ),
                 PAYLOAD_OVERVIEW_PROMPT_MODEL: (
-                    payload.prompt_model_settings.normalized_identifier()
-                    if payload.prompt_model_settings else None
+                    payload.prompt_model_settings.normalized_identifier() if payload.prompt_model_settings else None
                 ),
                 PAYLOAD_OVERVIEW_TASK_MODEL: (
-                    payload.task_model_settings.normalized_identifier()
-                    if payload.task_model_settings else None
+                    payload.task_model_settings.normalized_identifier() if payload.task_model_settings else None
                 ),
                 PAYLOAD_OVERVIEW_COLUMN_MAPPING: payload.column_mapping.model_dump(),
                 PAYLOAD_OVERVIEW_DATASET_ROWS: len(payload.dataset),
@@ -204,7 +204,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         """Queue a sweep that runs one optimization per ``(generation_model,
         reflection_model)`` pair and then reports the best.
 
-        The Cartesian product of ``generation_models × reflection_models``
+        The Cartesian product of ``generation_models x reflection_models``
         defines the pair count. Every pair reuses the same dataset, split
         fractions, signature, metric, and optimizer kwargs — only the two
         model slots vary. This is the right shape for questions like
@@ -240,7 +240,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 service.validate_grid_search_payload(payload)
             except (ServiceError, RegistryError) as exc:
                 logger.warning("Grid search validation failed: %s", exc)
-                raise HTTPException(status_code=400, detail=str(exc))
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         enforce_user_quota(job_store, payload.username)
 
@@ -279,7 +279,10 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
 
         logger.info(
             "Enqueued grid search %s: %d pairs, module=%s optimizer=%s",
-            optimization_id, total_pairs, payload.module_name, payload.optimizer_name,
+            optimization_id,
+            total_pairs,
+            payload.module_name,
+            payload.optimizer_name,
         )
 
         notify_job_started(

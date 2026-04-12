@@ -4,11 +4,12 @@ These tests run without a live server, a real database, or an LLM key.
 They rely on in-memory fakes of the job store and FastAPI's ``TestClient``.
 Intended to run in CI as a fast gate.
 """
+
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
 from typing import Any
 
 import pytest
@@ -72,7 +73,7 @@ class FakeJobStore:
             rows = [r for r in rows if r.get("payload_overview", {}).get("job_type") == optimization_type]
         limit = kwargs.get("limit", len(rows))
         offset = kwargs.get("offset", 0)
-        return rows[offset:offset + limit]
+        return rows[offset : offset + limit]
 
     def count_jobs(self, **kwargs: Any) -> int:
         # Count matching, ignoring limit/offset
@@ -120,7 +121,6 @@ def router_app(job_store: FakeJobStore) -> FastAPI:
     from core.api.routers.analytics import create_analytics_router
     from core.api.routers.models import create_models_router
     from core.api.routers.optimizations_meta import create_optimizations_meta_router
-    from core.api.routers.templates import create_templates_router
 
     app = FastAPI()
     app.include_router(create_models_router())

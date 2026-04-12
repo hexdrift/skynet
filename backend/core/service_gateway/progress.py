@@ -1,7 +1,8 @@
 import threading as _threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any
 
 from ..constants import (
     PROGRESS_OPTIMIZER,
@@ -11,7 +12,7 @@ from ..constants import (
     TQDM_PERCENT_KEY,
     TQDM_RATE_KEY,
     TQDM_REMAINING_KEY,
-    TQDM_TOTAL_KEY
+    TQDM_TOTAL_KEY,
 )
 
 # Module-level state for concurrency-safe tqdm patching.
@@ -61,7 +62,7 @@ def _thread_aware_wrap(original_factory: Callable[..., Any]) -> Callable[..., An
 
 
 @contextmanager
-def capture_tqdm(progress_callback: Optional[Callable[[str, dict[str, Any]], None]]):
+def capture_tqdm(progress_callback: Callable[[str, dict[str, Any]], None] | None):
     """Relay tqdm progress updates to the provided callback, concurrency-safe.
 
     Uses a reference count so the global tqdm patch is installed once (by the
@@ -129,9 +130,7 @@ class _TqdmProxy:
         self._bar = bar
         self._callback = callback
         self._last_metrics: dict[str, Any] | None = None
-        self._emit_enabled = self._is_gepa_bar(
-            bar, getattr(bar, "desc", None)
-        )
+        self._emit_enabled = self._is_gepa_bar(bar, getattr(bar, "desc", None))
         self._emit(PROGRESS_OPTIMIZER, force=True)
 
     def update(self, n: int = 1) -> Any:
@@ -243,9 +242,7 @@ class _TqdmProxy:
         desc = getattr(self._bar, "desc", None)
         if self._is_gepa_bar(self._bar, desc):
             self._emit_enabled = True
-        elif self._looks_like_nested_bar(desc):
-            return
-        elif not self._emit_enabled:
+        elif self._looks_like_nested_bar(desc) or not self._emit_enabled:
             return
 
         format_dict = getattr(self._bar, "format_dict", {}) or {}
@@ -305,9 +302,7 @@ class _TqdmProxy:
             return True
 
         unit = getattr(bar, "unit", None)
-        if isinstance(unit, str) and unit.strip().lower() == "rollouts":
-            return True
-        return False
+        return bool(isinstance(unit, str) and unit.strip().lower() == "rollouts")
 
     @staticmethod
     def _looks_like_nested_bar(desc: Any) -> bool:

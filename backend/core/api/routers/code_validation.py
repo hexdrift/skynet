@@ -3,9 +3,8 @@
 Two POST endpoints used by the submit wizard to lint/format user-authored
 DSPy signature and metric code before a job is enqueued.
 """
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -21,7 +20,7 @@ class FormatCodeRequest(BaseModel):
 class FormatCodeResponse(BaseModel):
     code: str
     changed: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 def create_code_validation_router() -> APIRouter:
@@ -70,11 +69,13 @@ def create_code_validation_router() -> APIRouter:
                 tmp_path = f.name
             result = subprocess.run(
                 ["ruff", "format", tmp_path],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode != 0:
                 return FormatCodeResponse(code=payload.code, changed=False, error=result.stderr.strip())
-            with open(tmp_path, "r") as f:
+            with open(tmp_path) as f:
                 formatted = f.read()
             os.unlink(tmp_path)
             return FormatCodeResponse(code=formatted, changed=formatted != payload.code)
@@ -128,12 +129,13 @@ def create_code_validation_router() -> APIRouter:
             hard failures that block submission, and ``warnings``
             listing soft issues that don't block submission.
         """
+        import dspy
+
         from ...service_gateway.data import (
             extract_signature_fields,
             load_metric_from_code,
             load_signature_from_code,
         )
-        import dspy
 
         errors: list[str] = []
         warnings: list[str] = []
@@ -168,13 +170,9 @@ def create_code_validation_router() -> APIRouter:
                 extra_inputs = set(payload.column_mapping.inputs.keys()) - set(sig_fields["inputs"])
                 extra_outputs = set(payload.column_mapping.outputs.keys()) - set(sig_fields["outputs"])
                 if extra_inputs:
-                    warnings.append(
-                        f"Input columns not in Signature (will be ignored): {sorted(extra_inputs)}"
-                    )
+                    warnings.append(f"Input columns not in Signature (will be ignored): {sorted(extra_inputs)}")
                 if extra_outputs:
-                    warnings.append(
-                        f"Output columns not in Signature (will be ignored): {sorted(extra_outputs)}"
-                    )
+                    warnings.append(f"Output columns not in Signature (will be ignored): {sorted(extra_outputs)}")
 
         metric_fn = None
         metric_errors_before = len(errors)
@@ -188,6 +186,7 @@ def create_code_validation_router() -> APIRouter:
 
             if metric_fn and payload.optimizer_name == "gepa":
                 import inspect
+
                 sig = inspect.signature(metric_fn)
                 params = list(sig.parameters.values())
                 if len(params) < 5:
@@ -215,8 +214,11 @@ def create_code_validation_router() -> APIRouter:
                     if result is None:
                         errors.append(
                             "Metric returned None. "
-                            + ("GEPA requires dspy.Prediction with score and feedback fields." if is_gepa
-                               else "Expected a numeric (float) or boolean return value.")
+                            + (
+                                "GEPA requires dspy.Prediction with score and feedback fields."
+                                if is_gepa
+                                else "Expected a numeric (float) or boolean return value."
+                            )
                         )
                     elif isinstance(result, dspy.Prediction) and hasattr(result, "score"):
                         if not is_gepa:
@@ -232,8 +234,11 @@ def create_code_validation_router() -> APIRouter:
                     else:
                         errors.append(
                             f"Metric returned {type(result).__name__}. "
-                            + ("GEPA requires dspy.Prediction with score and feedback fields." if is_gepa
-                               else "Expected a numeric (float) or boolean return value.")
+                            + (
+                                "GEPA requires dspy.Prediction with score and feedback fields."
+                                if is_gepa
+                                else "Expected a numeric (float) or boolean return value."
+                            )
                         )
                 except Exception as exc:
                     errors.append(f"Error running metric on sample row: {exc}")

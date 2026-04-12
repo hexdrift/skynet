@@ -1,4 +1,5 @@
 """Tests for the shared helpers used by multiple domain routers."""
+
 from __future__ import annotations
 
 import pytest
@@ -32,24 +33,27 @@ def test_strip_api_key_does_not_mutate_input() -> None:
 
 def test_valid_statuses_match_enum() -> None:
     from core.models import OptimizationStatus
-    assert _VALID_STATUSES == {s.value for s in OptimizationStatus}
+
+    assert {s.value for s in OptimizationStatus} == _VALID_STATUSES
 
 
 def test_terminal_statuses_are_finite() -> None:
     from core.models import OptimizationStatus
-    assert _TERMINAL_STATUSES == {
+
+    assert {
         OptimizationStatus.success,
         OptimizationStatus.failed,
         OptimizationStatus.cancelled,
-    }
+    } == _TERMINAL_STATUSES
 
 
 def test_valid_job_types_covers_run_and_grid() -> None:
-    assert _VALID_JOB_TYPES == {"run", "grid_search"}
+    assert {"run", "grid_search"} == _VALID_JOB_TYPES
 
 
 def test_build_summary_on_pending_job_without_result() -> None:
     from datetime import datetime, timezone
+
     now = datetime.now(timezone.utc)
     job_data = {
         "optimization_id": "abc123",
@@ -78,6 +82,7 @@ def test_build_summary_on_pending_job_without_result() -> None:
 
 def test_build_summary_computes_improvement() -> None:
     from datetime import datetime, timezone
+
     now = datetime.now(timezone.utc)
     job_data = {
         "optimization_id": "job42",

@@ -4,6 +4,7 @@ Contains the small number of functions, constants, and caches that were
 closures inside ``create_app`` but are needed by more than one extracted
 router. Kept under a leading underscore to signal "package-internal".
 """
+
 from __future__ import annotations
 
 import base64
@@ -18,13 +19,13 @@ from ...constants import (
     MAX_JOBS_PER_USER,
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
+    PAYLOAD_OVERVIEW_COMPILE_KWARGS,
     PAYLOAD_OVERVIEW_JOB_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
+    PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS,
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
-    PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS,
-    PAYLOAD_OVERVIEW_COMPILE_KWARGS,
 )
 from ...job_quota_overrides import get_user_quota
 from ...models import (
@@ -204,7 +205,7 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
     try:
         job_data = job_store.get_job(optimization_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+        raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
     overview = parse_overview(job_data)
     optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
@@ -248,7 +249,7 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
 
     if optimization_id not in _program_cache:
         program_bytes = base64.b64decode(artifact.program_pickle_base64)
-        _program_cache[optimization_id] = pickle.loads(program_bytes)  # noqa: S301
+        _program_cache[optimization_id] = pickle.loads(program_bytes)
 
     return _program_cache[optimization_id], result, overview
 
@@ -269,7 +270,7 @@ def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple
     try:
         job_data = job_store.get_job(optimization_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.")
+        raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
 
     overview = parse_overview(job_data)
     optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
@@ -320,6 +321,6 @@ def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple
     cache_key = f"{optimization_id}_pair_{pair_index}"
     if cache_key not in _program_cache:
         program_bytes = base64.b64decode(artifact.program_pickle_base64)
-        _program_cache[cache_key] = pickle.loads(program_bytes)  # noqa: S301
+        _program_cache[cache_key] = pickle.loads(program_bytes)
 
     return _program_cache[cache_key], pair, overview

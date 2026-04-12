@@ -6,7 +6,7 @@ dataset. Extracted from ``core.py`` so they can be unit-tested
 without constructing a full ``DspyService``.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from ..exceptions import ServiceError
 from ..models import ColumnMapping
@@ -14,8 +14,8 @@ from ..models import ColumnMapping
 
 def require_mapping_matches_signature(
     mapping: ColumnMapping,
-    signature_inputs: List[str],
-    signature_outputs: List[str],
+    signature_inputs: list[str],
+    signature_outputs: list[str],
 ) -> None:
     """Ensure the column mapping covers every signature field exactly once.
 
@@ -42,7 +42,7 @@ def require_mapping_matches_signature(
 
 def require_mapping_columns_in_dataset(
     mapping: ColumnMapping,
-    dataset: List[Dict[str, Any]],
+    dataset: list[dict[str, Any]],
 ) -> None:
     """Ensure every mapped column name exists in the dataset rows.
 

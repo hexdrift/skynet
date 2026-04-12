@@ -11,7 +11,6 @@ To integrate:
 
 import logging
 import os
-from typing import Optional
 
 import requests
 
@@ -22,7 +21,7 @@ CHANNEL = os.getenv("COMMS_CHANNEL", "#skynet-notifications")
 ENABLED = bool(WEBHOOK_URL)
 
 
-def send_message(text: str, channel: Optional[str] = None) -> bool:
+def send_message(text: str, channel: str | None = None) -> bool:
     """Send a message to the internal communications service.
 
     Args:

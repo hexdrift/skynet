@@ -8,11 +8,12 @@ Requirements:
     - PostgreSQL running with skynet_test database
     - Backend server running on localhost:8000 (for integration + load tests)
 """
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv

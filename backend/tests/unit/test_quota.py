@@ -1,4 +1,5 @@
 """Tests for the per-user job quota enforcement."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -16,8 +17,6 @@ class _FakeJobStore:
 
     def count_jobs(self, *, username: str | None = None, **_: object) -> int:
         return self._counts.get(username or "", 0)
-
-
 
 
 def test_get_user_quota_returns_default_for_unknown_user() -> None:
@@ -40,11 +39,11 @@ def test_get_user_quota_override_none_means_unlimited() -> None:
 
 
 def test_get_user_quota_admin_wins_over_override() -> None:
-    with patch("core.job_quota_overrides.ADMIN_USERNAMES", frozenset({"alice"})), \
-         patch("core.job_quota_overrides.QUOTA_OVERRIDES", {"alice": 50}):
+    with (
+        patch("core.job_quota_overrides.ADMIN_USERNAMES", frozenset({"alice"})),
+        patch("core.job_quota_overrides.QUOTA_OVERRIDES", {"alice": 50}),
+    ):
         assert get_user_quota("alice", default=100) is None
-
-
 
 
 def test_enforce_user_quota_allows_user_below_cap() -> None:
@@ -82,8 +81,7 @@ def test_enforce_user_quota_override_raises_cap() -> None:
 
 def test_enforce_user_quota_override_still_rejects_at_new_cap() -> None:
     store = _FakeJobStore({"power": 500})
-    with patch("core.api.routers._helpers.get_user_quota", return_value=500):
-        with pytest.raises(HTTPException) as exc:
-            enforce_user_quota(store, "power")
+    with patch("core.api.routers._helpers.get_user_quota", return_value=500), pytest.raises(HTTPException) as exc:
+        enforce_user_quota(store, "power")
     assert exc.value.status_code == 409
     assert "500" in exc.value.detail

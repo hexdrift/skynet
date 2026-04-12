@@ -6,7 +6,6 @@ submitted or completed.
 
 import logging
 import os
-from typing import Optional
 
 from .comms import send_message
 
@@ -33,7 +32,7 @@ def notify_job_started(
     optimization_type: str,
     optimizer_name: str,
     module_name: str,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> None:
     """Send a notification when a job is submitted.
 
@@ -66,9 +65,9 @@ def notify_job_completed(
     optimization_id: str,
     username: str,
     status: str,
-    message: Optional[str] = None,
-    baseline_score: Optional[float] = None,
-    optimized_score: Optional[float] = None,
+    message: str | None = None,
+    baseline_score: float | None = None,
+    optimized_score: float | None = None,
 ) -> None:
     """Send a notification when a job finishes.
 
@@ -90,23 +89,11 @@ def notify_job_completed(
         if baseline_score is not None and optimized_score is not None:
             improvement = optimized_score - baseline_score
             scores = f"\nציון: {baseline_score:.1f}% → {optimized_score:.1f}% ({'+' if improvement >= 0 else ''}{improvement:.1f}%)"
-        text = (
-            f"✅ *אופטימיזציה הושלמה בהצלחה*\n"
-            f"משתמש: *{username}*{scores}\n"
-            f"[צפייה בתוצאות]({link})"
-        )
+        text = f"✅ *אופטימיזציה הושלמה בהצלחה*\nמשתמש: *{username}*{scores}\n[צפייה בתוצאות]({link})"
     elif status == "cancelled":
-        text = (
-            f"⚠️ *אופטימיזציה בוטלה*\n"
-            f"משתמש: *{username}*\n"
-            f"[פרטי המשימה]({link})"
-        )
+        text = f"⚠️ *אופטימיזציה בוטלה*\nמשתמש: *{username}*\n[פרטי המשימה]({link})"
     else:
         error_part = f"\nשגיאה: {message[:150]}" if message else ""
-        text = (
-            f"❌ *אופטימיזציה נכשלה*\n"
-            f"משתמש: *{username}*{error_part}\n"
-            f"[פרטי המשימה]({link})"
-        )
+        text = f"❌ *אופטימיזציה נכשלה*\nמשתמש: *{username}*{error_part}\n[פרטי המשימה]({link})"
 
     send_message(text)

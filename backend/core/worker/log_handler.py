@@ -1,8 +1,10 @@
 import logging
 import re
 import threading
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Iterable, Tuple
+from typing import Any
+
 from ..storage import JobStore
 
 _ITERATION_SCORE_RE = re.compile(
@@ -12,9 +14,7 @@ _AVERAGE_METRIC_RE = re.compile(
     r"Average Metric: (?P<numerator>[0-9.]+) / (?P<denominator>[0-9.]+) \((?P<percent>[0-9.]+)%\)"
 )
 _PERFECT_SUBSAMPLE_RE = re.compile(r"Iteration (?P<iteration>\d+): All subsample scores perfect")
-_NO_MUTATION_RE = re.compile(
-    r"Iteration (?P<iteration>\d+): Reflective mutation did not propose a new candidate"
-)
+_NO_MUTATION_RE = re.compile(r"Iteration (?P<iteration>\d+): Reflective mutation did not propose a new candidate")
 
 
 _thread_pair_index = threading.local()
@@ -110,7 +110,7 @@ class JobLogHandler(logging.Handler):
             self.handleError(record)
 
 
-def _extract_progress_from_log(message: str) -> Iterable[Tuple[str, dict[str, Any]]]:
+def _extract_progress_from_log(message: str) -> Iterable[tuple[str, dict[str, Any]]]:
     """Parse well-known DSPy log lines into structured telemetry.
 
     Args:
@@ -120,7 +120,7 @@ def _extract_progress_from_log(message: str) -> Iterable[Tuple[str, dict[str, An
         Iterable[Tuple[str, dict[str, Any]]]: Zero or more derived progress events.
     """
 
-    events: list[Tuple[str, dict[str, Any]]] = []
+    events: list[tuple[str, dict[str, Any]]] = []
     if match := _ITERATION_SCORE_RE.search(message):
         events.append(
             (

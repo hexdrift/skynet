@@ -3,26 +3,26 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from ..constants import (
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_COLUMN_MAPPING,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
+    PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
     PAYLOAD_OVERVIEW_JOB_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
     PAYLOAD_OVERVIEW_MODULE_KWARGS,
     PAYLOAD_OVERVIEW_MODULE_NAME,
+    PAYLOAD_OVERVIEW_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
     PAYLOAD_OVERVIEW_PROMPT_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODELS,
     PAYLOAD_OVERVIEW_TASK_MODEL,
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
-    PAYLOAD_OVERVIEW_NAME,
-    PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_USERNAME,
     TQDM_REMAINING_KEY,
 )
@@ -46,7 +46,7 @@ def status_to_job_status(status: str) -> OptimizationStatus:
         return OptimizationStatus.pending
 
 
-def parse_timestamp(val: Any) -> Optional[datetime]:
+def parse_timestamp(val: Any) -> datetime | None:
     """Convert value to datetime, handling None and ISO strings.
 
     Args:
@@ -85,9 +85,9 @@ def _seconds_to_hhmmss(seconds: float) -> str:
 
 def _compute_elapsed_raw(
     created_at: datetime,
-    started_at: Optional[datetime],
-    completed_at: Optional[datetime],
-) -> Optional[float]:
+    started_at: datetime | None,
+    completed_at: datetime | None,
+) -> float | None:
     """Compute elapsed seconds for a job.
 
     Args:
@@ -110,9 +110,9 @@ def _compute_elapsed_raw(
 
 def compute_elapsed(
     created_at: datetime,
-    started_at: Optional[datetime],
-    completed_at: Optional[datetime],
-) -> tuple[Optional[str], Optional[float]]:
+    started_at: datetime | None,
+    completed_at: datetime | None,
+) -> tuple[str | None, float | None]:
     """Compute elapsed time for a job as (HH:MM:SS string, raw seconds).
 
     Args:
@@ -148,7 +148,7 @@ def parse_overview(job_data: dict) -> dict:
     return overview
 
 
-def extract_estimated_remaining(job_data: dict) -> Optional[str]:
+def extract_estimated_remaining(job_data: dict) -> str | None:
     """Extract estimated remaining time from latest_metrics tqdm data as HH:MM:SS.
 
     Args:

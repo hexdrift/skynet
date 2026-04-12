@@ -18,19 +18,41 @@
 │   ├── docker-compose.yml
 │   ├── core/
 │   │   ├── __init__.py          Exports: ServiceRegistry, create_app
-│   │   ├── models.py            Pydantic models (JobRequest, JobResponse, etc.)
 │   │   ├── constants.py         Shared constants
 │   │   ├── exceptions.py        Custom exception classes
+│   │   ├── models/              Pydantic models (split by domain)
+│   │   │   ├── common.py        Shared base models
+│   │   │   ├── submissions.py   Job submission models
+│   │   │   ├── optimizations.py Optimization result models
+│   │   │   ├── analytics.py     Analytics/metrics models
+│   │   │   ├── artifacts.py     Artifact storage models
+│   │   │   ├── results.py       Result/output models
+│   │   │   ├── serve.py         Serving/inference models
+│   │   │   ├── templates.py     Template models
+│   │   │   ├── telemetry.py     Telemetry models
+│   │   │   ├── validation.py    Validation models
+│   │   │   └── infra.py         Infrastructure models
 │   │   ├── api/
-│   │   │   ├── app.py           FastAPI app factory, all route handlers
-│   │   │   └── converters.py    Data conversion utilities
+│   │   │   ├── app.py           FastAPI app factory, route wiring
+│   │   │   ├── converters.py    Data conversion utilities
+│   │   │   ├── static/scalar/   Bundled Scalar API docs (offline)
+│   │   │   └── routers/         Domain routers (factory pattern)
+│   │   │       ├── analytics.py
+│   │   │       ├── code_validation.py
+│   │   │       ├── models.py
+│   │   │       ├── optimizations.py
+│   │   │       ├── optimizations_meta.py
+│   │   │       ├── serve.py
+│   │   │       ├── submissions.py
+│   │   │       └── templates.py
 │   │   ├── storage/
 │   │   │   ├── base.py          Abstract storage interface
-│   │   │   ├── local.py         In-memory job store
-│   │   │   └── remote.py        PostgreSQL job store (SQLAlchemy)
+│   │   │   ├── models.py        SQLAlchemy ORM models
+│   │   │   └── remote.py        PostgreSQL job store
 │   │   ├── worker/
 │   │   │   ├── engine.py        Background job processor (poll + execute)
-│   │   │   └── log_handler.py   Structured logging for jobs
+│   │   │   ├── log_handler.py   Structured logging for jobs
+│   │   │   └── subprocess_runner.py  Subprocess execution
 │   │   ├── registry/
 │   │   │   ├── core.py          Module/optimizer registration
 │   │   │   └── resolvers.py     Dynamic module/optimizer resolution
@@ -40,14 +62,21 @@
 │   │   │   ├── language_models.py  LM configuration via LiteLLM
 │   │   │   ├── optimizers.py    MIPROv2/GEPA optimizer setup
 │   │   │   ├── artifacts.py     Optimized program storage
-│   │   │   └── progress.py      Job progress tracking
+│   │   │   ├── progress.py      Job progress tracking
+│   │   │   └── validators.py    Input validation
 │   │   └── notifications/
 │   │       ├── comms.py         Webhook sender (Slack/Rocket.Chat)
 │   │       └── notifier.py      Event-driven notification dispatch
 │   ├── tests/
-│   │   ├── test_llm_integration.py  34 integration tests (real API)
-│   │   ├── test_load.py             9 load/stress tests
-│   │   └── locustfile.py            Sustained load testing
+│   │   ├── test_llm_integration.py  Integration tests (real API)
+│   │   ├── test_load.py             Load/stress tests
+│   │   ├── locustfile.py            Sustained load testing
+│   │   └── unit/                    Unit tests
+│   │       ├── test_helpers.py
+│   │       ├── test_models.py
+│   │       ├── test_quota.py
+│   │       ├── test_routers.py
+│   │       └── test_validators.py
 │   └── usage_guide/             Notebooks + API client examples
 │
 ├── frontend/                    Next.js 16 + shadcn/ui
@@ -55,44 +84,46 @@
 │   ├── .env.local / .env.example  Config (API URL, auth)
 │   ├── next.config.ts
 │   ├── src/
-│   │   ├── app/
+│   │   ├── app/                 Thin route wrappers
 │   │   │   ├── layout.tsx       Root layout (RTL, fonts, theme)
-│   │   │   ├── page.tsx         Dashboard (job list)
+│   │   │   ├── page.tsx         Dashboard → features/dashboard
 │   │   │   ├── login/page.tsx   Auth login page
-│   │   │   ├── submit/page.tsx  Job submission wizard
-│   │   │   ├── jobs/[id]/page.tsx  Job detail + results + playground
-│   │   │   ├── robots.ts       SEO robots
-│   │   │   └── sitemap.ts      SEO sitemap
-│   │   ├── components/
-│   │   │   ├── app-shell.tsx    Main layout shell
-│   │   │   ├── sidebar.tsx      Navigation sidebar
-│   │   │   ├── motion.tsx       Framer Motion wrappers
-│   │   │   ├── excel-filter.tsx Dataset filter UI
-│   │   │   ├── session-provider.tsx  NextAuth session
-│   │   │   ├── theme-provider.tsx    Dark/light theme
-│   │   │   ├── toast-container.tsx   Notifications
-│   │   │   └── ui/             shadcn/ui primitives (button, card, dialog, etc.)
-│   │   ├── lib/
-│   │   │   ├── api.ts          Backend API client
-│   │   │   ├── auth.ts         NextAuth configuration
-│   │   │   ├── types.ts        TypeScript types
-│   │   │   ├── constants.ts    Shared constants
-│   │   │   ├── parse-dataset.ts  Excel/CSV parser
-│   │   │   └── utils.ts        Utility functions
-│   │   └── middleware.ts       Auth middleware
+│   │   │   ├── submit/page.tsx  Job submission → features/submit
+│   │   │   ├── optimizations/[id]/  Job detail → features/optimizations
+│   │   │   ├── compare/page.tsx Compare jobs → features/compare
+│   │   │   ├── api/auth/        NextAuth API route
+│   │   │   ├── robots.ts        SEO robots
+│   │   │   └── sitemap.ts       SEO sitemap
+│   │   ├── features/            Feature slices (see pattern below)
+│   │   │   ├── dashboard/       Job list, analytics, bulk actions
+│   │   │   ├── submit/          Job submission wizard + model picker
+│   │   │   ├── optimizations/   Job detail, results, logs, serve, export
+│   │   │   ├── compare/         Side-by-side job comparison
+│   │   │   ├── sidebar/         Navigation sidebar
+│   │   │   ├── tutorial/        Interactive tutorial overlay
+│   │   │   └── shared/          Cross-feature shared messages
+│   │   ├── shared/              Shared UI, hooks, types, utilities
+│   │   │   ├── ui/              Reusable components (motion, excel-filter, metric-card, etc.)
+│   │   │   ├── charts/          Recharts chart components
+│   │   │   ├── hooks/           use-api-call, use-debounce, use-local-storage
+│   │   │   ├── layout/          app-shell, splash-screen
+│   │   │   ├── providers/       session, theme, toast providers
+│   │   │   ├── lib/             api client, formatters, validation, utils
+│   │   │   ├── types/           Shared TypeScript types
+│   │   │   └── constants/       dspy-constants, job-status
+│   │   ├── components/ui/       shadcn/ui primitives (button, card, dialog, etc.)
+│   │   └── lib/auth.ts          NextAuth configuration
 │
-├── docs/                        DSPy/FastAPI/Next.js reference docs
 ├── scripts/
-│   ├── setup-init.sh           First-time setup script
-│   └── setup-maintenance.sh    Maintenance/update script
-├── Justfile                    Task runner aliases
-└── README.md                   Full project documentation
+│   └── update_scalar.sh         Rebuild bundled Scalar API docs
+├── Justfile                     Task runner (just <recipe>)
+└── README.md                    Full project documentation
 ```
 
 ## Key URLs
 - **Frontend**: http://localhost:3001
 - **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+- **API Docs**: http://localhost:8000/reference (Scalar UI)
 
 ## Running
 ```bash
@@ -105,6 +136,9 @@ cd frontend && npm run dev
 
 ## Testing
 ```bash
+# Backend unit tests
+cd backend && uv run pytest tests/unit/ -v
+
 # Backend integration tests (requires running server + OPENAI_API_KEY)
 cd backend && uv run pytest tests/test_llm_integration.py -v
 

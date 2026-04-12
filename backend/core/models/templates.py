@@ -1,7 +1,8 @@
 """Request/response models for the /templates CRUD endpoints."""
+
 import json as _json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -12,9 +13,9 @@ class TemplateCreateRequest(BaseModel):
     """Request payload for creating a job template."""
 
     name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
+    description: str | None = None
     username: str
-    config: Dict[str, Any] = Field(
+    config: dict[str, Any] = Field(
         ..., description="Template configuration (signature, metric, model, optimizer, etc.)"
     )
 
@@ -30,9 +31,7 @@ class TemplateCreateRequest(BaseModel):
                 ``_TEMPLATE_CONFIG_MAX_BYTES`` bytes of JSON.
         """
         if len(_json.dumps(self.config)) > _TEMPLATE_CONFIG_MAX_BYTES:
-            raise ValueError(
-                f"Template config exceeds maximum size of {_TEMPLATE_CONFIG_MAX_BYTES // 1000}KB."
-            )
+            raise ValueError(f"Template config exceeds maximum size of {_TEMPLATE_CONFIG_MAX_BYTES // 1000}KB.")
         return self
 
 
@@ -41,7 +40,7 @@ class TemplateResponse(BaseModel):
 
     template_id: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     username: str
-    config: Dict[str, Any]
+    config: dict[str, Any]
     created_at: datetime
