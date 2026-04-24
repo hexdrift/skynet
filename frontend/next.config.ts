@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   compress: true,
   poweredByHeader: false,
@@ -48,11 +49,9 @@ const nextConfig: NextConfig = {
       "recharts",
       "@fontsource-variable/heebo",
       "@fontsource-variable/inter",
-      "@fontsource-variable/jetbrains-mono",
-      "exceljs",
-      "xlsx",
       "@uiw/react-codemirror",
       "@codemirror/lang-python",
+      "xlsx",
     ],
   },
 };

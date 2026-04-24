@@ -5,7 +5,7 @@ import {
   type OptimizationCounts,
 } from "@/shared/lib/api";
 import type { PaginatedJobsResponse } from "@/shared/types/api";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
 import { FETCH_PAGE_SIZE } from "../constants";
 
 type UseJobsListArgs = {

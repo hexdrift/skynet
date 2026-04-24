@@ -18,6 +18,7 @@ import {
   Cell,
 } from "recharts";
 import { ChartTooltip, ChartEmptyState } from "./chart-utils";
+import { TERMS } from "@/shared/lib/terms";
 
 interface ScoresChartProps {
   data: Array<{ name: string; ציון_התחלתי: number; ציון_משופר: number; delta?: number }>;
@@ -27,13 +28,23 @@ interface ScoresChartProps {
 
 export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
 
   if (data.length === 0) {
-    return <ChartEmptyState message="אין עדיין אופטימיזציות שהושלמו" />;
+    return <ChartEmptyState message={`אין עדיין ${TERMS.optimizationPlural} שהושלמו`} />;
   }
 
   const handleClick = (index: number) => {
     if (onBarClick && optimizationIds?.[index]) onBarClick(optimizationIds[index]);
+  };
+
+  const toggleSeries = (key: string) => {
+    setHiddenSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   return (
@@ -58,54 +69,69 @@ export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartPr
             />
             <YAxis type="category" dataKey="name" hide />
             <Tooltip content={<ChartTooltip />} />
-            <Bar
-              dataKey="ציון_התחלתי"
-              name="ציון התחלתי"
-              fill="var(--color-chart-4)"
-              radius={[0, 4, 4, 0]}
-              barSize={16}
-              animationDuration={300}
-              cursor={onBarClick ? "pointer" : "default"}
-              onClick={(_, index) => handleClick(index)}
-            />
-            <Bar
-              dataKey="ציון_משופר"
-              name="ציון משופר"
-              fill="var(--color-chart-2)"
-              radius={[0, 4, 4, 0]}
-              barSize={16}
-              animationDuration={300}
-              cursor={onBarClick ? "pointer" : "default"}
-              onClick={(_, index) => handleClick(index)}
-              onMouseEnter={(_, index) => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-            >
-              {data.map((_, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={hoveredIndex === index ? "var(--color-chart-1)" : "var(--color-chart-2)"}
-                  style={{ transition: "fill 200ms ease" }}
-                />
-              ))}
-            </Bar>
+            {!hiddenSeries.has(TERMS.baselineScore) && (
+              <Bar
+                dataKey="ציון_התחלתי"
+                name={TERMS.baselineScore}
+                fill="var(--color-chart-4)"
+                radius={[0, 4, 4, 0]}
+                barSize={16}
+                animationDuration={300}
+                cursor={onBarClick ? "pointer" : "default"}
+                onClick={(_, index) => handleClick(index)}
+              />
+            )}
+            {!hiddenSeries.has(TERMS.optimizedScore) && (
+              <Bar
+                dataKey="ציון_משופר"
+                name={TERMS.optimizedScore}
+                fill="var(--color-chart-2)"
+                radius={[0, 4, 4, 0]}
+                barSize={16}
+                animationDuration={300}
+                cursor={onBarClick ? "pointer" : "default"}
+                onClick={(_, index) => handleClick(index)}
+                onMouseEnter={(_, index) => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+              >
+                {data.map((_, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={hoveredIndex === index ? "var(--color-chart-1)" : "var(--color-chart-2)"}
+                    style={{ transition: "fill 200ms ease" }}
+                  />
+                ))}
+              </Bar>
+            )}
           </BarChart>
         </ResponsiveContainer>
       </div>
       <div className="flex justify-center gap-4 mt-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className="size-2.5 rounded-full"
-            style={{ backgroundColor: "var(--color-chart-4)" }}
-          />
-          ציון התחלתי
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className="size-2.5 rounded-full"
-            style={{ backgroundColor: "var(--color-chart-2)" }}
-          />
-          ציון משופר
-        </div>
+        {[
+          { key: TERMS.baselineScore, color: "var(--color-chart-4)" },
+          { key: TERMS.optimizedScore, color: "var(--color-chart-2)" },
+        ].map(({ key, color }) => {
+          const isHidden = hiddenSeries.has(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleSeries(key)}
+              className={`flex items-center gap-1.5 text-xs cursor-pointer transition-colors ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
+              aria-pressed={!isHidden}
+            >
+              <span
+                className="size-2.5 rounded-full transition-all"
+                style={
+                  isHidden
+                    ? { backgroundColor: "transparent", boxShadow: `inset 0 0 0 1.5px ${color}` }
+                    : { backgroundColor: color }
+                }
+              />
+              {key}
+            </button>
+          );
+        })}
       </div>
     </>
   );

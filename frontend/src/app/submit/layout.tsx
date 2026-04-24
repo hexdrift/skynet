@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import { TERMS } from "@/shared/lib/terms";
 
 export const metadata: Metadata = {
   title: "New Optimization",
-  description: "צור אופטימיזציית פרומפטים חדשה עם DSPy — בחר מודל, העלה דאטאסט, ושפר ביצועים",
+  description: `צור אופטימיזציית פרומפטים חדשה עם DSPy — בחר ${TERMS.model}, העלה ${TERMS.dataset}, ושפר ביצועים`,
 };
 
 export default function SubmitLayout({ children }: { children: React.ReactNode }) {

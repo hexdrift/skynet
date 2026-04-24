@@ -21,7 +21,6 @@ PAYLOAD_OVERVIEW_OPTIMIZER_NAME = "optimizer_name"
 PAYLOAD_OVERVIEW_MODEL_NAME = "model_name"
 PAYLOAD_OVERVIEW_MODEL_SETTINGS = "model_settings"
 PAYLOAD_OVERVIEW_REFLECTION_MODEL = "reflection_model_name"
-PAYLOAD_OVERVIEW_PROMPT_MODEL = "prompt_model_name"
 PAYLOAD_OVERVIEW_TASK_MODEL = "task_model_name"
 PAYLOAD_OVERVIEW_COLUMN_MAPPING = "column_mapping"
 PAYLOAD_OVERVIEW_DATASET_ROWS = "dataset_rows"
@@ -31,6 +30,7 @@ PAYLOAD_OVERVIEW_SHUFFLE = "shuffle"
 PAYLOAD_OVERVIEW_SEED = "seed"
 PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS = "optimizer_kwargs"
 PAYLOAD_OVERVIEW_COMPILE_KWARGS = "compile_kwargs"
+PAYLOAD_OVERVIEW_TASK_FINGERPRINT = "task_fingerprint"
 
 PROGRESS_SPLITS_READY = "dataset_splits_ready"
 PROGRESS_BASELINE = "baseline_evaluated"
@@ -41,7 +41,23 @@ PROGRESS_GRID_PAIR_STARTED = "grid_pair_started"
 PROGRESS_GRID_PAIR_COMPLETED = "grid_pair_completed"
 PROGRESS_GRID_PAIR_FAILED = "grid_pair_failed"
 
-PAYLOAD_OVERVIEW_JOB_TYPE = "optimization_type"
+# Phase-marker events the UI relies on to render pipeline stages and
+# per-pair status. They fire once per phase (not per step), so they're
+# cheap to keep — but they also happen early, which makes them the
+# first casualties of a naive FIFO eviction. The jobstore preserves
+# these before touching optimizer_progress and other high-volume rows.
+STRUCTURAL_PROGRESS_EVENTS = frozenset(
+    {
+        PROGRESS_SPLITS_READY,
+        PROGRESS_BASELINE,
+        PROGRESS_OPTIMIZED,
+        PROGRESS_GRID_PAIR_STARTED,
+        PROGRESS_GRID_PAIR_COMPLETED,
+        PROGRESS_GRID_PAIR_FAILED,
+    }
+)
+
+PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE = "optimization_type"
 OPTIMIZATION_TYPE_RUN = "run"
 OPTIMIZATION_TYPE_GRID_SEARCH = "grid_search"
 
@@ -61,29 +77,6 @@ COMPILE_TRAINSET_KEY = "trainset"
 COMPILE_VALSET_KEY = "valset"
 OPTIMIZER_METRIC_KEY = "metric"
 OPTIMIZER_REFLECTION_LM_KEY = "reflection_lm"
-OPTIMIZER_PROMPT_MODEL_KEY = "prompt_model"
-OPTIMIZER_TASK_MODEL_KEY = "task_model"
 
 OPTIMIZER_NAME_GEPA = "gepa"
-OPTIMIZER_NAME_MIPROV2 = "miprov2"
 
-# Admins and users listed in job_quota_overrides bypass this cap.
-MAX_JOBS_PER_USER = 100
-
-WORKER_STALE_THRESHOLD = 300  # seconds of inactivity before health check flags worker as stuck
-WORKER_POLL_INTERVAL = 1.0  # seconds between queue polling cycles
-WORKER_MAX_THREADS = 4
-WORKER_QUEUE_MAX_SIZE = 100
-
-DEFAULT_TIMEOUT = 30.0
-LONG_RUNNING_TIMEOUT = 120.0
-SUBPROCESS_TIMEOUT = 300.0
-
-OPTIMIZER_MIPROV2 = "miprov2"
-OPTIMIZER_GEPA = "gepa"
-
-MODULE_PREDICT = "Predict"
-MODULE_COT = "ChainOfThought"
-
-SERVE_DEFAULT_TEMPERATURE = 0.7
-SERVE_DEFAULT_MAX_TOKENS = 1000

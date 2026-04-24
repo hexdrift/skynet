@@ -1,18 +1,35 @@
-import type { JobStatus } from "@/shared/types/api";
+import { TERMS } from "@/shared/lib/terms";
+import type { JobStatus, OptimizationType } from "@/shared/types/api";
 
 export const ACTIVE_STATUSES = new Set<JobStatus>(["pending", "validating", "running"]);
 export const TERMINAL_STATUSES = new Set<JobStatus>(["success", "failed", "cancelled"]);
 
-export const STATUS_LABELS: Record<string, string> = {
-  pending: "ממתין",
-  validating: "מאמת",
-  running: "רץ",
-  success: "הצליח",
-  failed: "נכשל",
-  cancelled: "בוטל",
+export const STATUS_LABELS: Record<JobStatus, string> = {
+  pending: TERMS.statusPending,
+  validating: TERMS.statusValidating,
+  running: TERMS.statusRunning,
+  success: TERMS.statusSuccess,
+  failed: TERMS.statusFailed,
+  cancelled: TERMS.statusCancelled,
 };
 
-export const JOB_TYPE_LABELS: Record<string, string> = {
-  run: "ריצה בודדת",
-  grid_search: "סריקה",
+export const JOB_TYPE_LABELS: Record<OptimizationType, string> = {
+  run: TERMS.optimizationTypeRun,
+  grid_search: TERMS.optimizationTypeGrid,
 };
+
+export function getStatusLabel(status: string): string {
+  return isJobStatus(status) ? STATUS_LABELS[status] : status;
+}
+
+export function getJobTypeLabel(type: string): string {
+  return isOptimizationType(type) ? JOB_TYPE_LABELS[type] : type;
+}
+
+function isJobStatus(status: string): status is JobStatus {
+  return status in STATUS_LABELS;
+}
+
+function isOptimizationType(type: string): type is OptimizationType {
+  return type in JOB_TYPE_LABELS;
+}

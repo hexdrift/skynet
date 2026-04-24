@@ -6,16 +6,16 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .artifacts import ProgramArtifact
-from .common import ColumnMapping, OptimizationStatus, SplitFractions
+from .common import ColumnMapping, OptimizationStatus, OptimizationType, SplitFractions
 from .results import GridSearchResponse, RunResponse
 from .telemetry import JobLogEntry, ProgressEvent
 
 
 class _JobResponseBase(BaseModel):
-    """Shared fields across job response endpoints."""
+    """Shared fields across optimization response endpoints."""
 
     optimization_id: str
-    optimization_type: str
+    optimization_type: OptimizationType
     status: OptimizationStatus
     message: str | None = None
     name: str | None = None
@@ -43,7 +43,6 @@ class _JobResponseBase(BaseModel):
     model_name: str | None = None
     model_settings: dict[str, Any] | None = None
     reflection_model_name: str | None = None
-    prompt_model_name: str | None = None
     task_model_name: str | None = None
 
     # Grid-search-specific (null for run)
@@ -55,7 +54,7 @@ class _JobResponseBase(BaseModel):
 
 
 class OptimizationStatusResponse(_JobResponseBase):
-    """Full job detail returned by GET /jobs/{id}."""
+    """Full optimization detail returned by GET /optimizations/{optimization_id}."""
 
     progress_events: list[ProgressEvent] = Field(default_factory=list)
     logs: list[JobLogEntry] = Field(default_factory=list)
@@ -64,7 +63,7 @@ class OptimizationStatusResponse(_JobResponseBase):
 
 
 class OptimizationSummaryResponse(_JobResponseBase):
-    """Lightweight dashboard view of a job."""
+    """Lightweight dashboard view of an optimization."""
 
     split_fractions: SplitFractions | None = None
     shuffle: bool | None = None
@@ -81,9 +80,14 @@ class OptimizationSummaryResponse(_JobResponseBase):
 
     best_pair_label: str | None = None
 
+    # Stable hash of (signature_code, metric_code, dataset_content).
+    # Two optimizations with the same fingerprint can be compared apples-to-apples.
+    # ``None`` on optimizations submitted before this field was introduced.
+    task_fingerprint: str | None = None
+
 
 class PaginatedJobsResponse(BaseModel):
-    """Paginated wrapper for job listings."""
+    """Paginated wrapper for optimization listings."""
 
     items: list[OptimizationSummaryResponse] = Field(default_factory=list)
     total: int = 0
@@ -92,13 +96,7 @@ class PaginatedJobsResponse(BaseModel):
 
 
 class OptimizationCountsResponse(BaseModel):
-    """Aggregate counts by status for dashboard stat cards.
-
-    The dashboard fetches pages incrementally via infinite scroll, so
-    counting locally-loaded items would under-report totals. This
-    endpoint runs cheap ``COUNT`` queries and returns the full picture
-    in one call.
-    """
+    """Aggregate counts by status for dashboard stat cards."""
 
     total: int = 0
     pending: int = 0
@@ -143,19 +141,35 @@ class BulkDeleteResponse(BaseModel):
     skipped: list[BulkDeleteSkipped] = Field(default_factory=list)
 
 
+class BulkCancelSkipped(BaseModel):
+    """One entry in the ``skipped`` list of a bulk-cancel response."""
+
+    optimization_id: str
+    reason: str
+
+
+class BulkCancelRequest(BaseModel):
+    """Request payload for the bulk-cancel endpoint."""
+
+    optimization_ids: list[str] = Field(default_factory=list)
+
+
+class BulkCancelResponse(BaseModel):
+    """Response payload for the bulk-cancel endpoint."""
+
+    cancelled: list[str] = Field(default_factory=list)
+    skipped: list[BulkCancelSkipped] = Field(default_factory=list)
+
+
 class OptimizationPayloadResponse(BaseModel):
     """Response payload for the payload retrieval endpoint."""
 
     optimization_id: str
-    optimization_type: str
+    optimization_type: OptimizationType
     payload: dict[str, Any]
 
 
 class ProgramArtifactResponse(BaseModel):
-    """Response payload for the artifact retrieval endpoint.
-
-    Attributes:
-        program_artifact: Serialized artifact containing base64-encoded program pickle.
-    """
+    """Response payload for the artifact retrieval endpoint."""
 
     program_artifact: ProgramArtifact | None

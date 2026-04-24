@@ -28,7 +28,7 @@ const badgeVariants = cva(
         meta: "border-[#E5DDD4]/50 bg-[#FAF8F5] text-[#8C7A6B] [a&]:hover:bg-[#FAF8F5]/80",
       },
       size: {
-        sm: "px-2 py-0.5 text-[10px] font-medium",
+        sm: "px-2 py-0.5 text-[0.625rem] font-medium",
         md: "px-2.5 py-1 text-xs font-semibold",
         lg: "px-3 py-1.5 text-sm font-semibold",
       },

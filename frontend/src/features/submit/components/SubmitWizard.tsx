@@ -2,12 +2,14 @@
 
 import { ChevronLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { TERMS } from "@/shared/lib/terms";
 
 import { useSubmitWizard } from "../hooks/use-submit-wizard";
 import { slideVariants } from "../constants";
 import { SubmitStepper } from "./SubmitStepper";
 import { SubmitNav } from "./SubmitNav";
 import { SubmitSplash } from "./SubmitSplash";
+import { WizardRecommendationCard } from "./WizardRecommendationCard";
 import { BasicsStep } from "./steps/BasicsStep";
 import { DatasetStep } from "./steps/DatasetStep";
 import { ModelStep } from "./steps/ModelStep";
@@ -21,20 +23,27 @@ export function SubmitWizard() {
   const steps = [
     <BasicsStep key="basics" w={w} />,
     <DatasetStep key="data" w={w} />,
-    <ModelStep key="model" w={w} />,
-    <CodeStep key="code" w={w} />,
     <ParamsStep key="params" w={w} />,
+    <CodeStep key="code" w={w} />,
+    <ModelStep key="model" w={w} />,
     <SummaryStep key="review" w={w} />,
   ];
 
+  // Code step (index 3) renders a two-pane layout with an agent side-panel
+  // in auto mode, so it needs more horizontal room than the other steps.
+  const isCodeStep = w.step === 3;
+  const containerWidthClass = isCodeStep && w.codeAssistMode === "auto" ? "max-w-5xl" : "max-w-2xl";
+
   return (
-    <div className="space-y-6 max-w-2xl mx-auto pb-8">
+    <div
+      className={`space-y-6 ${containerWidthClass} mx-auto pb-8 transition-[max-width] duration-300`}
+    >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <a href="/" className="hover:text-foreground transition-colors">
           לוח בקרה
         </a>
         <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">אופטימיזציה חדשה</span>
+        <span className="text-foreground font-medium">{TERMS.notificationNewOpt}</span>
       </div>
 
       <SubmitStepper w={w} />
@@ -59,6 +68,10 @@ export function SubmitWizard() {
 
       {/* Submit splash overlay — portal to body so it covers sidebar + header */}
       <SubmitSplash w={w} />
+
+      {/* Floating recommendation card (PER-11 Feature A) — only appears once
+          the user has drafted a signature in the code step. */}
+      <WizardRecommendationCard w={w} />
     </div>
   );
 }

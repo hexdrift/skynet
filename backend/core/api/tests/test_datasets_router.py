@@ -1,0 +1,108 @@
+"""Tests for the ``/datasets/profile`` route."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
+
+from core.exceptions import AppError
+
+from ..routers.datasets import create_datasets_router
+
+
+@pytest.fixture
+def datasets_client() -> TestClient:
+    """TestClient wired to a minimal FastAPI app hosting only the datasets router."""
+    app = FastAPI()
+    app.include_router(create_datasets_router())
+
+    # Mirror the app-level AppError handler so ValidationError (400) surfaces
+    # as a proper HTTP response instead of bubbling up as a 500.
+    @app.exception_handler(AppError)
+    async def _app_error_handler(_request, exc: AppError) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": exc.error_code.lower(), "detail": exc.message},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(_request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"error": "invalid_request", "detail": exc.errors()})
+
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_profile_returns_plan_and_profile(datasets_client: TestClient) -> None:
+    """A well-formed request returns both a profile and a recommended plan."""
+    payload = {
+        "dataset": [
+            {"q": "q1", "a": "yes"},
+            {"q": "q2", "a": "no"},
+            {"q": "q3", "a": "yes"},
+            {"q": "q4", "a": "no"},
+        ]
+        * 100,
+        "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+        "seed": 42,
+    }
+
+    resp = datasets_client.post("/datasets/profile", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["profile"]["row_count"] == 400
+    assert body["profile"]["target"]["name"] == "a"
+    assert body["plan"]["seed"] == 42
+    counts = body["plan"]["counts"]
+    assert counts["train"] + counts["val"] + counts["test"] == 400
+
+
+def test_profile_empty_dataset_returns_400(datasets_client: TestClient) -> None:
+    """An empty dataset surfaces the ValidationError as HTTP 400."""
+    payload = {
+        "dataset": [],
+        "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+    }
+
+    resp = datasets_client.post("/datasets/profile", json=payload)
+
+    assert resp.status_code == 400
+    assert "at least one row" in resp.json()["detail"]
+
+
+def test_profile_missing_column_mapping_returns_422(datasets_client: TestClient) -> None:
+    """Omitting column_mapping is a body validation error (422)."""
+    resp = datasets_client.post("/datasets/profile", json={"dataset": [{"q": "x"}]})
+
+    assert resp.status_code == 422
+
+
+def test_profile_flags_too_small_warning(datasets_client: TestClient) -> None:
+    """Tiny datasets surface a too_small warning in the profile."""
+    payload = {
+        "dataset": [{"q": f"q{i}", "a": "yes"} for i in range(5)],
+        "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+        "seed": 1,
+    }
+
+    resp = datasets_client.post("/datasets/profile", json=payload)
+
+    assert resp.status_code == 200
+    warning_codes = {w["code"] for w in resp.json()["profile"]["warnings"]}
+    assert "too_small" in warning_codes
+
+
+def test_profile_omitted_seed_is_still_populated(datasets_client: TestClient) -> None:
+    """Omitting seed produces a fully-specified plan with a generated seed."""
+    payload = {
+        "dataset": [{"q": f"q{i}", "a": "yes"} for i in range(50)],
+        "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+    }
+
+    resp = datasets_client.post("/datasets/profile", json=payload)
+
+    assert resp.status_code == 200
+    assert isinstance(resp.json()["plan"]["seed"], int)

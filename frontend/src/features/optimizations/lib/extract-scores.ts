@@ -1,7 +1,7 @@
 /**
- * Parse per-trial scores from MIPROv2 and GEPA optimizer log messages.
+ * Parse per-trial scores from GEPA optimizer log messages.
  *
- * Both optimizers emit their progress as free-text log lines; this parses
+ * GEPA emits its progress as free-text log lines; this parses
  * the known patterns into a structured series suitable for charting.
  */
 
@@ -13,35 +13,10 @@ export interface ScorePoint {
 
 export function extractScoresFromLogs(logs: { message: string }[]): ScorePoint[] {
   const points: ScorePoint[] = [];
-  let currentTrial = 0;
   let bestSoFar = -1;
 
   for (const log of logs) {
     const msg = log.message;
-
-    // MIPROv2: "===== Trial N / M =====" or "== Trial N / M"
-    const trialMatch = msg.match(/Trial (\d+)\s*\/\s*\d+/);
-    if (trialMatch) {
-      currentTrial = parseInt(trialMatch[1]!, 10);
-    }
-
-    // MIPROv2: "Score: 85.0 with parameters ..."
-    const scoreMatch = msg.match(/^Score:\s*([\d.]+)\s+(?:with parameters|on minibatch)/);
-    if (scoreMatch && currentTrial > 0) {
-      const score = parseFloat(scoreMatch[1]!);
-      bestSoFar = Math.max(bestSoFar, score);
-      points.push({ trial: currentTrial, score, best: bestSoFar });
-      continue;
-    }
-
-    // MIPROv2: "Default program score: 85.0"
-    const defaultMatch = msg.match(/Default program score:\s*([\d.]+)/);
-    if (defaultMatch) {
-      const score = parseFloat(defaultMatch[1]!);
-      bestSoFar = Math.max(bestSoFar, score);
-      points.push({ trial: currentTrial || 1, score, best: bestSoFar });
-      continue;
-    }
 
     // GEPA: "Iteration N: Full valset score for new program: 0.78"
     const gepaScoreMatch = msg.match(

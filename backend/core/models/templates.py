@@ -10,7 +10,7 @@ _TEMPLATE_CONFIG_MAX_BYTES = 100_000
 
 
 class TemplateCreateRequest(BaseModel):
-    """Request payload for creating a job template."""
+    """Request payload for creating an optimization template."""
 
     name: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
@@ -21,22 +21,14 @@ class TemplateCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_config_size(self) -> "TemplateCreateRequest":
-        """Reject templates whose JSON-serialised config exceeds the cap.
-
-        Returns:
-            The validated ``TemplateCreateRequest`` instance.
-
-        Raises:
-            ValueError: If ``config`` serialises to more than
-                ``_TEMPLATE_CONFIG_MAX_BYTES`` bytes of JSON.
-        """
+        """Reject template configs whose JSON serialization exceeds 100 KB."""
         if len(_json.dumps(self.config)) > _TEMPLATE_CONFIG_MAX_BYTES:
             raise ValueError(f"Template config exceeds maximum size of {_TEMPLATE_CONFIG_MAX_BYTES // 1000}KB.")
         return self
 
 
 class TemplateResponse(BaseModel):
-    """Response payload for a job template."""
+    """Response payload for an optimization template."""
 
     template_id: str
     name: str

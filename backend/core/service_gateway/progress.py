@@ -4,6 +4,9 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import Any
 
+import tqdm
+import tqdm.auto as tqdm_auto
+
 from ..constants import (
     PROGRESS_OPTIMIZER,
     TQDM_DESC_KEY,
@@ -26,28 +29,10 @@ _tqdm_thread_local = _threading.local()
 
 
 def _thread_aware_wrap(original_factory: Callable[..., Any]) -> Callable[..., Any]:
-    """Return a tqdm factory that dispatches to the calling thread's callback.
-
-    Args:
-        original_factory: The real tqdm class/factory to wrap.
-
-    Returns:
-        Callable[..., Any]: Wrapper that routes to the per-thread callback.
-    """
+    """Return a tqdm factory that wraps bars in _TqdmProxy for the calling thread's callback."""
 
     @wraps(original_factory)
     def _create(*args: Any, **kwargs: Any) -> Any:
-        """Build a tqdm bar, wrapping in ``_TqdmProxy`` when a callback exists.
-
-        Args:
-            *args: Positional arguments forwarded to the real tqdm factory.
-            **kwargs: Keyword arguments forwarded to the real tqdm factory.
-
-        Returns:
-            The raw tqdm bar when the calling thread has no registered
-            callback, otherwise a ``_TqdmProxy`` that relays updates to
-            that callback.
-        """
         callback = getattr(_tqdm_thread_local, "progress_callback", None)
         bar = original_factory(*args, **kwargs)
         if callback is None:
@@ -63,30 +48,18 @@ def _thread_aware_wrap(original_factory: Callable[..., Any]) -> Callable[..., An
 
 @contextmanager
 def capture_tqdm(progress_callback: Callable[[str, dict[str, Any]], None] | None):
-    """Relay tqdm progress updates to the provided callback, concurrency-safe.
+    """Patch tqdm globally (ref-counted) and relay updates to this thread's callback.
 
-    Uses a reference count so the global tqdm patch is installed once (by the
-    first concurrent caller) and removed once (by the last). Each thread
-    registers its own callback via threading.local, so concurrent jobs never
-    receive each other's progress events.
+    The patch is installed on first entry and removed on last exit, making it
+    safe for concurrent callers in separate threads.  Each thread stores its own
+    callback in thread-local storage so progress events are not cross-wired.
 
     Args:
-        progress_callback: Callable invoked with progress events.
-
-    Yields:
-        Control back to the caller while the tqdm patch is active.
-        On exit, the per-thread callback is cleared and — if this was
-        the last concurrent caller — the global patch is removed.
+        progress_callback: Callable receiving ``(event_name, metrics_dict)`` on
+            each tqdm tick.  Passing ``None`` is a no-op.
     """
 
     if progress_callback is None:
-        yield
-        return
-
-    try:
-        import tqdm
-        from tqdm import auto as tqdm_auto
-    except ImportError:
         yield
         return
 
@@ -114,19 +87,24 @@ def capture_tqdm(progress_callback: Callable[[str, dict[str, Any]], None] | None
 
 
 class _TqdmProxy:
-    """Proxy that forwards attribute access to the wrapped tqdm instance."""
+    """Proxy that forwards attribute access to the wrapped tqdm instance.
+
+    Wraps a live tqdm bar so that update/close/refresh calls emit structured
+    progress events via the supplied callback.  Uses ref-counted global state
+    (managed by ``capture_tqdm``) so concurrent pairs each patch tqdm only once
+    and restore it when the last active context exits.
+
+    Only GEPA-identified bars (desc starts with 'gepa' or unit='rollouts') emit
+    events; inner bars like 'Average Metric' are suppressed to reduce noise.
+    """
 
     def __init__(self, bar: Any, callback: Callable[[str, dict[str, Any]], None]):
-        """Create a proxy that emits optimizer progress events.
+        """Wrap a tqdm bar and emit an initial progress event if the bar is a GEPA bar.
 
         Args:
-            bar: tqdm progress bar being wrapped.
-            callback: Callable receiving progress updates.
-
-        Returns:
-            None
+            bar: The underlying tqdm progress bar instance.
+            callback: Callable receiving ``(event_name, metrics_dict)`` on each tick.
         """
-
         self._bar = bar
         self._callback = callback
         self._last_metrics: dict[str, Any] | None = None
@@ -134,111 +112,49 @@ class _TqdmProxy:
         self._emit(PROGRESS_OPTIMIZER, force=True)
 
     def update(self, n: int = 1) -> Any:
-        """Advance the progress bar and emit a telemetry event.
-
-        Args:
-            n: Step size passed through to tqdm.update.
-
-        Returns:
-            Any: Result returned by the wrapped update call.
-        """
-
+        """Advance the bar by n steps and emit a progress event if metrics changed."""
         result = self._bar.update(n)
         self._emit(PROGRESS_OPTIMIZER)
         return result
 
     def close(self) -> Any:
-        """Close the progress bar and emit a telemetry event.
-
-        Args:
-            None.
-
-        Returns:
-            Any: Result returned by tqdm.close.
-        """
-
+        """Close the bar and emit a final progress event."""
         result = self._bar.close()
         self._emit(PROGRESS_OPTIMIZER)
         return result
 
     def refresh(self) -> Any:
-        """Refresh the progress bar display and emit a telemetry event.
-
-        Args:
-            None.
-
-        Returns:
-            Any: Result returned by tqdm.refresh.
-        """
-
+        """Refresh the bar display and emit a progress event if metrics changed."""
         result = self._bar.refresh()
         self._emit(PROGRESS_OPTIMIZER)
         return result
 
     def __getattr__(self, item: str) -> Any:
-        """Fallback attribute access to the underlying tqdm instance.
-
-        Args:
-            item: Attribute name.
-
-        Returns:
-            Any: Attribute retrieved from the wrapped tqdm bar.
-        """
-
+        """Delegate unknown attribute access to the wrapped bar."""
         return getattr(self._bar, item)
 
     def __enter__(self) -> "_TqdmProxy":
-        """Support context-manager entry by delegating to tqdm.
-
-        Args:
-            None.
-
-        Returns:
-            _TqdmProxy: Self reference for context manager compatibility.
-        """
-
+        """Enter the context manager, delegating to the wrapped bar."""
         self._bar.__enter__()
         return self
 
     def __iter__(self):
-        """Allow iteration so tqdm proxies work inside for-loops.
-
-        Args:
-            None.
-
-        Returns:
-            Iterator[Any]: Iterator yielded by the wrapped tqdm object.
-        """
-
+        """Iterate over the wrapped bar."""
         return iter(self._bar)
 
     def __exit__(self, exc_type, exc_value, traceback) -> Any:
-        """Support context-manager exit while emitting telemetry.
-
-        Args:
-            exc_type: Exception type if one occurred.
-            exc_value: Exception instance if raised.
-            traceback: Traceback object for the exception.
-
-        Returns:
-            Any: Result from the wrapped __exit__ call.
-        """
-
+        """Exit the context manager, emit a final event, and delegate to the wrapped bar."""
         result = self._bar.__exit__(exc_type, exc_value, traceback)
         self._emit(PROGRESS_OPTIMIZER)
         return result
 
     def _emit(self, event: str, *, force: bool = False) -> None:
-        """Emit a progress update using the stored callback.
+        """Compute current metrics and invoke the callback if they have changed.
 
         Args:
-            event: Event name describing the update.
-            force: When True, bypass duplicate-metric suppression.
-
-        Returns:
-            None
+            event: Event name string passed as the first argument to the callback.
+            force: When True, emit even if metrics are identical to the last emission.
         """
-
         desc = getattr(self._bar, "desc", None)
         if self._is_gepa_bar(self._bar, desc):
             self._emit_enabled = True
@@ -272,14 +188,7 @@ class _TqdmProxy:
 
     @staticmethod
     def _desc_mentions_gepa(desc: Any) -> bool:
-        """Return True when desc looks like GEPA's top-level progress bar.
-
-        Args:
-            desc: tqdm ``desc`` attribute to inspect.
-
-        Returns:
-            bool: True when the description references GEPA.
-        """
+        """Return True when desc starts with 'gepa' (case-insensitive)."""
 
         if not isinstance(desc, str):
             return False
@@ -288,15 +197,7 @@ class _TqdmProxy:
 
     @staticmethod
     def _is_gepa_bar(bar: Any, desc: Any) -> bool:
-        """Heuristically determine whether this tqdm bar is GEPA's top-level bar.
-
-        Args:
-            bar: tqdm instance currently being proxied.
-            desc: tqdm description string (may be ``None``).
-
-        Returns:
-            bool: True when the bar appears to represent GEPA's main progress.
-        """
+        """Return True when the bar is GEPA's top-level bar (desc starts with 'gepa' or unit='rollouts')."""
 
         if _TqdmProxy._desc_mentions_gepa(desc):
             return True
@@ -306,14 +207,7 @@ class _TqdmProxy:
 
     @staticmethod
     def _looks_like_nested_bar(desc: Any) -> bool:
-        """Identify inner tqdm bars we intentionally suppress (e.g., Average Metric).
-
-        Args:
-            desc: tqdm description string to inspect.
-
-        Returns:
-            bool: True when the bar should be suppressed to avoid noise.
-        """
+        """Return True for inner bars we suppress (e.g., 'Average Metric')."""
 
         if not isinstance(desc, str):
             return False

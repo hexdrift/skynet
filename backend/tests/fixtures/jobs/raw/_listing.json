@@ -1,0 +1,159 @@
+{
+  "items": [
+    {
+      "archived": false,
+      "baseline_test_metric": 52.89,
+      "best_pair_label": null,
+      "column_mapping": {
+        "inputs": {
+          "keywords": "keywords",
+          "overview": "overview"
+        },
+        "outputs": {
+          "genres": "genres",
+          "tagline": "tagline"
+        }
+      },
+      "compile_kwargs": {},
+      "completed_at": "2026-04-14T11:44:23.732411",
+      "completed_pairs": null,
+      "created_at": "2026-04-13T15:14:51.981641",
+      "dataset_rows": 150,
+      "description": null,
+      "elapsed": "20:29:30",
+      "elapsed_seconds": 73770.81,
+      "estimated_remaining": null,
+      "failed_pairs": null,
+      "generation_models": null,
+      "latest_metrics": {
+        "baseline_test_metric": 52.89,
+        "optimized_test_metric": 75.9,
+        "test_examples": 23,
+        "train_examples": 105,
+        "val_examples": 22
+      },
+      "log_count": 864,
+      "message": "Optimization completed successfully",
+      "metric_improvement": 23.01,
+      "model_name": "openai/gpt-5.4-nano",
+      "model_settings": {
+        "base_url": null,
+        "extra": {
+          "reasoning_effort": "high"
+        },
+        "max_tokens": 20000,
+        "name": "openai/gpt-5.4-nano",
+        "temperature": 1.0,
+        "top_p": null
+      },
+      "module_kwargs": {},
+      "module_name": "cot",
+      "name": "\u05e0\u05d9\u05ea\u05d5\u05d7 \u05e1\u05e8\u05d8\u05d9\u05dd",
+      "optimization_id": "edfd9b24-bbe5-4c21-a020-6e463134e8a3",
+      "optimization_type": "run",
+      "optimized_test_metric": 75.9,
+      "optimizer_kwargs": {
+        "auto": "heavy",
+        "reflection_minibatch_size": 3,
+        "use_merge": true
+      },
+      "optimizer_name": "gepa",
+      "pinned": false,
+      "progress_count": 3,
+      "prompt_model_name": null,
+      "reflection_model_name": "openai/gpt-5.4-mini",
+      "reflection_models": null,
+      "seed": 472873869,
+      "shuffle": true,
+      "split_fractions": {
+        "test": 0.15,
+        "train": 0.7,
+        "val": 0.15
+      },
+      "started_at": "2026-04-13T15:14:52.923889",
+      "status": "success",
+      "task_model_name": null,
+      "total_pairs": null,
+      "username": "gilad"
+    },
+    {
+      "archived": false,
+      "baseline_test_metric": 55.88,
+      "best_pair_label": null,
+      "column_mapping": {
+        "inputs": {
+          "keywords": "keywords",
+          "overview": "overview"
+        },
+        "outputs": {
+          "genres": "genres",
+          "tagline": "tagline"
+        }
+      },
+      "compile_kwargs": {},
+      "completed_at": "2026-04-13T14:09:00.274523",
+      "completed_pairs": null,
+      "created_at": "2026-04-13T13:44:02.456138",
+      "dataset_rows": 150,
+      "description": null,
+      "elapsed": "00:24:57",
+      "elapsed_seconds": 1497.75,
+      "estimated_remaining": null,
+      "failed_pairs": null,
+      "generation_models": null,
+      "latest_metrics": {
+        "baseline_test_metric": 55.88,
+        "optimized_test_metric": 75.14,
+        "test_examples": 23,
+        "train_examples": 105,
+        "val_examples": 22
+      },
+      "log_count": 862,
+      "message": "Optimization completed successfully",
+      "metric_improvement": 19.26,
+      "model_name": "openai/gpt-5.4-nano",
+      "model_settings": {
+        "base_url": null,
+        "extra": {
+          "reasoning_effort": "high"
+        },
+        "max_tokens": 20000,
+        "name": "openai/gpt-5.4-nano",
+        "temperature": 1.0,
+        "top_p": null
+      },
+      "module_kwargs": {},
+      "module_name": "cot",
+      "name": "\u05e0\u05d9\u05ea\u05d5\u05d7 \u05e1\u05e8\u05d8\u05d9\u05dd",
+      "optimization_id": "ad28f6e4-a1f5-4537-b051-c24179a5d1b6",
+      "optimization_type": "run",
+      "optimized_test_metric": 75.14,
+      "optimizer_kwargs": {
+        "auto": "heavy",
+        "reflection_minibatch_size": 3,
+        "use_merge": true
+      },
+      "optimizer_name": "gepa",
+      "pinned": false,
+      "progress_count": 3,
+      "prompt_model_name": null,
+      "reflection_model_name": "openai/gpt-5.4-mini",
+      "reflection_models": null,
+      "seed": 1770641814,
+      "shuffle": true,
+      "split_fractions": {
+        "test": 0.15,
+        "train": 0.7,
+        "val": 0.15
+      },
+      "started_at": "2026-04-13T13:44:02.528119",
+      "status": "success",
+      "task_model_name": null,
+      "total_pairs": null,
+      "username": "gilad"
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "total": 14
+}

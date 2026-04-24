@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useReducer, useEffect, useCallback, createContext, useContext } from "react";
+import { useReducer, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import type { TutorialTrack } from "@/features/tutorial/lib/steps";
 import { getTrack } from "@/features/tutorial/lib/steps";
 
@@ -227,6 +227,15 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
   const toggleAutoPlay = useCallback(() => dispatch({ type: "TOGGLE_AUTO_PLAY" }), []);
+
+  // Notify listeners (e.g. dashboard demo overlay) when tutorial closes
+  const prevVisible = useRef(state.isVisible);
+  useEffect(() => {
+    if (prevVisible.current && !state.isVisible) {
+      window.dispatchEvent(new Event("tutorial-exited"));
+    }
+    prevVisible.current = state.isVisible;
+  }, [state.isVisible]);
 
   const currentStep = state.activeTrack
     ? getTrack(state.activeTrack)?.steps[state.currentStepIndex]

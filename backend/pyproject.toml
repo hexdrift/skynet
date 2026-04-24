@@ -30,15 +30,18 @@ dependencies = [
     "uvicorn>=0.23",
     "pydantic>=2.5",
     "pydantic-settings>=2.0",
-    "dspy>=2.5",
+    "dspy~=3.0",
     "litellm>=1.40",
     "sqlalchemy>=2.0",
     "psycopg2-binary>=2.9",
+    "pgvector>=0.3",
     "pandas>=2.1",
     "openpyxl>=3.1",
     "requests>=2.31",
     "python-dotenv>=1.0",
     "scalar-fastapi>=1.8",
+    "scipy>=1.15.3",
+    "fastmcp>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +50,13 @@ dev = [
     "pytest>=7.4",
     "pytest-asyncio>=0.21",
     "ruff>=0.11",
+]
+load = [
+    "locust>=2.0",
+]
+recommendations = [
+    "sentence-transformers>=2.5",
+    "numpy>=1.24",
 ]
 
 [tool.ruff]
@@ -63,15 +73,28 @@ known-first-party = ["core"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["RUF012"]
+"core/**/tests/*" = ["RUF012"]
 "core/notifications/*" = ["RUF001"]
+"core/dataset/*" = ["RUF001"]
 
 [tool.pytest.ini_options]
-# Unit tests (backend/tests/unit/) run without Postgres, OPENAI_API_KEY,
-# or a live server. Integration tests (test_llm_integration.py, test_load.py)
+# Unit tests live next to the code they cover under ``core/<subpkg>/tests/``
+# and run without Postgres, OPENAI_API_KEY, or a live server. Integration
+# tests (test_llm_integration.py, test_load.py) live under ``tests/`` and
 # require all three. Run each tier separately:
 #
-#   uv run pytest tests/unit/ -v          # fast CI gate, no credentials
-#   uv run pytest tests/test_llm_integration.py -v  # nightly paid tier
+#   pytest core/ -v                          # fast CI gate, no credentials
+#   pytest tests/test_llm_integration.py -v  # nightly paid tier
+#   pytest tests/ -m smoke -v               # quick smoke pass (subset)
+#   pytest tests/ -m "not slow" -v          # skip long-running LLM tests
 #
-testpaths = ["tests"]
+testpaths = ["core", "tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
+addopts = ["--strict-markers"]
+markers = [
+    "smoke: quick sanity checks — no LLM calls, just server availability and validation",
+    "e2e: full end-to-end tests requiring a live LLM (slow, costs API credits)",
+    "slow: tests that take > 30 s to complete",
+    "load: concurrency / latency stress tests",
+]

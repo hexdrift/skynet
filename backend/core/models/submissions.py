@@ -5,11 +5,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .common import ColumnMapping, ModelConfig, OptimizationStatus, SplitFractions
+from .common import ColumnMapping, ModelConfig, OptimizationStatus, OptimizationType, SplitFractions
 
 
 class _OptimizationRequestBase(BaseModel):
-    """Shared fields for all optimization job submissions."""
+    """Shared fields for all optimization submissions."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -29,19 +29,27 @@ class _OptimizationRequestBase(BaseModel):
     column_mapping: ColumnMapping
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
+    stratify: bool = Field(
+        default=False,
+        description=(
+            "Stratify the train/val/test split. Recommended by the planner "
+            "when an output is categorical and the profiler flagged class "
+            "imbalance or a rare class."
+        ),
+    )
+    stratify_column: str | None = Field(
+        default=None,
+        description=(
+            "Dataset column whose values define the strata. When omitted "
+            "while ``stratify`` is true, the first output column is used."
+        ),
+    )
     seed: int | None = None
     dataset_filename: str | None = Field(default=None, description="Original dataset file name.")
 
     @model_validator(mode="after")
     def _ensure_dataset(self) -> "_OptimizationRequestBase":
-        """Reject submissions whose ``dataset`` list is empty.
-
-        Returns:
-            The validated request instance.
-
-        Raises:
-            ValueError: If ``dataset`` is empty.
-        """
+        """Reject requests with an empty dataset."""
         if not self.dataset:
             raise ValueError("Dataset must contain at least one row.")
         return self
@@ -52,30 +60,40 @@ class RunRequest(_OptimizationRequestBase):
 
     model_settings: ModelConfig = Field(alias="model_config")
     reflection_model_settings: ModelConfig | None = Field(default=None, alias="reflection_model_config")
-    prompt_model_settings: ModelConfig | None = Field(default=None, alias="prompt_model_config")
     task_model_settings: ModelConfig | None = Field(default=None, alias="task_model_config")
 
 
 class GridSearchRequest(_OptimizationRequestBase):
     """Payload for the /grid-search endpoint — sweep over model pairs."""
 
-    generation_models: list[ModelConfig]
-    reflection_models: list[ModelConfig]
+    generation_models: list[ModelConfig] = Field(default_factory=list)
+    reflection_models: list[ModelConfig] = Field(default_factory=list)
+    use_all_available_generation_models: bool = Field(
+        default=False,
+        description=(
+            "Populate generation_models from every available model in the catalog. "
+            "When true, generation_models may be omitted and is replaced server-side."
+        ),
+    )
+    use_all_available_reflection_models: bool = Field(
+        default=False,
+        description=(
+            "Populate reflection_models from every available model in the catalog. "
+            "When true, reflection_models may be omitted and is replaced server-side."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_model_lists(self) -> "GridSearchRequest":
-        """Require non-empty generation and reflection model lists.
+        """Reject requests missing required model lists.
 
-        Returns:
-            The validated ``GridSearchRequest`` instance.
-
-        Raises:
-            ValueError: If either ``generation_models`` or
-                ``reflection_models`` is empty.
+        Each side (``generation_models``, ``reflection_models``) must either be
+        non-empty or be marked for server-side expansion via its matching
+        ``use_all_available_*`` flag.
         """
-        if not self.generation_models:
+        if not self.use_all_available_generation_models and not self.generation_models:
             raise ValueError("At least one generation model is required.")
-        if not self.reflection_models:
+        if not self.use_all_available_reflection_models and not self.reflection_models:
             raise ValueError("At least one reflection model is required.")
         return self
 
@@ -84,7 +102,7 @@ class OptimizationSubmissionResponse(BaseModel):
     """Immediate response to POST /run or POST /grid-search."""
 
     optimization_id: str
-    optimization_type: str
+    optimization_type: OptimizationType
     status: OptimizationStatus
     created_at: datetime
     name: str | None = None

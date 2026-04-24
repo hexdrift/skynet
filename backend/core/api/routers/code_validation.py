@@ -6,11 +6,28 @@ DSPy signature and metric code before a job is enqueued.
 
 from __future__ import annotations
 
+import inspect
+import os
+import subprocess
+import tempfile
+
+import dspy
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ...models import ValidateCodeRequest, ValidateCodeResponse
 from ...service_gateway import ServiceError
+from ...service_gateway.data import (
+    extract_signature_fields,
+    load_metric_from_code,
+    load_signature_from_code,
+)
+from ..response_limits import AGENT_MAX_ERROR, truncate_text
+
+
+def _bounded_error(message: str) -> str:
+    """Truncate an exception / traceback string to a context-safe length."""
+    return truncate_text(message, AGENT_MAX_ERROR) or message
 
 
 class FormatCodeRequest(BaseModel):
@@ -24,11 +41,7 @@ class FormatCodeResponse(BaseModel):
 
 
 def create_code_validation_router() -> APIRouter:
-    """Build the code-validation router.
-
-    Returns:
-        APIRouter: Router with ``POST /format-code`` and ``POST /validate-code``.
-    """
+    """Build the code-validation router."""
     router = APIRouter()
 
     @router.post(
@@ -37,31 +50,17 @@ def create_code_validation_router() -> APIRouter:
         summary="Format user-authored Python code with ruff",
     )
     def format_code(payload: FormatCodeRequest) -> FormatCodeResponse:
-        """Run ``ruff format`` against the supplied code snippet.
+        """Run ``ruff format`` on the supplied snippet.
 
-        Used by the submit wizard's code editor to auto-format signature
-        and metric code on demand. The input is written to a tempfile,
-        formatted, read back, and deleted — no state is persisted. This
-        endpoint never raises 5xx for user input errors: a malformed
-        snippet is returned with ``error`` set and the original ``code``
-        intact. A five-second timeout protects the server from
-        pathological input.
+        Never raises 5xx — any formatting error is returned in the ``error`` field.
 
         Args:
-            payload: Request body containing the ``code`` field to
-                format.
+            payload: Request body containing the Python code snippet to format.
 
         Returns:
-            ``FormatCodeResponse`` with fields ``code`` (the formatted
-            source, or original on failure), ``changed`` (whether
-            formatting produced any difference) and ``error`` (a human
-            readable failure reason such as ruff missing, timeout or
-            syntax error, or ``None`` on success).
+            FormatCodeResponse with the (possibly reformatted) code, a changed
+            flag, and an optional error message.
         """
-        import os
-        import subprocess
-        import tempfile
-
         try:
             with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                 f.write(payload.code)
@@ -90,53 +89,24 @@ def create_code_validation_router() -> APIRouter:
         "/validate-code",
         response_model=ValidateCodeResponse,
         summary="Pre-submit validation for signature and metric code",
+        tags=["agent"],
     )
     def validate_code(payload: ValidateCodeRequest) -> ValidateCodeResponse:
         """Parse and smoke-test DSPy signature/metric code before enqueue.
 
-        Catching errors here — instead of inside the worker — saves
-        users a round-trip and keeps the queue clean of jobs that can
-        never succeed. Accepts either ``signature_code``,
-        ``metric_code``, or both; passing neither is itself an error.
-
-        Checks performed (in order):
-            1. **Signature parse**: compile ``signature_code`` into a
-               ``dspy.Signature`` subclass and extract its declared
-               input/output field names.
-            2. **Column mapping consistency**: verify every signature
-               field is mapped to a dataset column. Unmapped fields
-               become errors; extra mapped columns that don't exist in
-               the signature become warnings.
-            3. **Metric parse**: compile ``metric_code`` and locate a
-               callable suitable for the declared optimizer.
-            4. **GEPA arity check**: if the selected optimizer is GEPA,
-               the metric signature must accept five parameters
-               ``(gold, pred, trace, pred_name, pred_trace)``.
-            5. **Live sample run**: invoke the metric on a synthetic
-               ``dspy.Example`` built from ``sample_row`` and verify the
-               return type matches what the chosen optimizer expects.
+        Checks: signature parse → column-mapping consistency → metric parse →
+        GEPA arity (if applicable) → live sample run. Returns ``valid=True`` only
+        when ``errors`` is empty; ``warnings`` lists soft issues that don't block
+        submission.
 
         Args:
-            payload: Request body with optional ``signature_code`` and
-                ``metric_code``, the active ``column_mapping``, the
-                ``optimizer_name`` (needed for GEPA arity checks) and
-                an optional ``sample_row`` used by the live smoke test.
+            payload: Validation request containing signature code, metric code,
+                column mapping, and an optional sample row.
 
         Returns:
-            ``ValidateCodeResponse`` with ``valid`` (``True`` only when
-            ``errors`` is empty), ``signature_fields`` populated
-            whenever signature parsing succeeds, ``errors`` listing
-            hard failures that block submission, and ``warnings``
-            listing soft issues that don't block submission.
+            ValidateCodeResponse indicating validity, detected signature fields,
+            any blocking errors, and non-blocking warnings.
         """
-        import dspy
-
-        from ...service_gateway.data import (
-            extract_signature_fields,
-            load_metric_from_code,
-            load_signature_from_code,
-        )
-
         errors: list[str] = []
         warnings: list[str] = []
         sig_fields: dict[str, list[str]] | None = None
@@ -150,9 +120,9 @@ def create_code_validation_router() -> APIRouter:
                 inputs, outputs = extract_signature_fields(signature_cls)
                 sig_fields = {"inputs": inputs, "outputs": outputs}
             except ServiceError as exc:
-                errors.append(str(exc))
+                errors.append(_bounded_error(str(exc)))
             except Exception as exc:
-                errors.append(f"Signature error: {exc}")
+                errors.append(_bounded_error(f"Signature error: {exc}"))
 
             if sig_fields:
                 missing_inputs = set(sig_fields["inputs"]) - set(payload.column_mapping.inputs.keys())
@@ -180,13 +150,11 @@ def create_code_validation_router() -> APIRouter:
             try:
                 metric_fn = load_metric_from_code(payload.metric_code)
             except ServiceError as exc:
-                errors.append(str(exc))
+                errors.append(_bounded_error(str(exc)))
             except Exception as exc:
-                errors.append(f"Metric error: {exc}")
+                errors.append(_bounded_error(f"Metric error: {exc}"))
 
             if metric_fn and payload.optimizer_name == "gepa":
-                import inspect
-
                 sig = inspect.signature(metric_fn)
                 params = list(sig.parameters.values())
                 if len(params) < 5:
@@ -241,7 +209,7 @@ def create_code_validation_router() -> APIRouter:
                             )
                         )
                 except Exception as exc:
-                    errors.append(f"Error running metric on sample row: {exc}")
+                    errors.append(_bounded_error(f"Error running metric on sample row: {exc}"))
 
         return ValidateCodeResponse(
             valid=len(errors) == 0,

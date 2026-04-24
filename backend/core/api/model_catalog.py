@@ -58,9 +58,12 @@ _PROVIDER_META: dict[str, tuple[str, str | None, str | None]] = {
     "together_ai": ("Together AI", "TOGETHERAI_API_KEY", "https://api.together.xyz/v1"),
     "openrouter": ("OpenRouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"),
     "cerebras": ("Cerebras", "CEREBRAS_API_KEY", None),
-    "fireworks_ai": ("Fireworks AI", "FIREWORKS_API_KEY", None),
+    "fireworks_ai": ("Fireworks AI", "FIREWORKS_AI_API_KEY", None),
     "cohere_chat": ("Cohere", "COHERE_API_KEY", None),
     "mistral": ("Mistral", "MISTRAL_API_KEY", None),
+    "moonshot": ("Moonshot (Kimi)", "MOONSHOT_API_KEY", None),
+    "volcengine": ("Volcengine", "VOLCENGINE_API_KEY", None),
+    "novita": ("Novita AI", "NOVITA_API_KEY", None),
     "ollama": ("Ollama (self-hosted)", None, "http://localhost:11434"),
 }
 
@@ -78,7 +81,6 @@ def _make_label(model_id: str) -> str:
         The model name with any provider prefix stripped.
     """
 
-    # Strip provider prefix if present (e.g. "openai/gpt-4o" → "gpt-4o")
     name = model_id.split("/", 1)[-1] if "/" in model_id else model_id
     return name
 
@@ -120,7 +122,6 @@ def get_catalog() -> ModelCatalogResponse:
         if base_name != model_id and base_name in cost:
             continue  # prefer the un-dated base entry
 
-        # Skip if we already have this base name (handles duplicates)
         if base_name in base_names_seen:
             continue
         base_names_seen.add(base_name)
@@ -150,12 +151,10 @@ def get_catalog() -> ModelCatalogResponse:
             )
         )
 
-    # Only return models the backend has API keys for
     models = [m for m in models if m.available]
 
     models.sort(key=lambda m: (m.provider, m.value))
 
-    # Only return providers that have at least one available model or no key needed (ollama)
     available_providers = {m.provider for m in models}
     providers = sorted(
         (p for p in seen_providers.values() if p.slug in available_providers or not p.env_var),

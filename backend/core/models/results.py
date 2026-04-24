@@ -37,6 +37,8 @@ class PairResult(BaseModel):
     pair_index: int
     generation_model: str
     reflection_model: str
+    generation_reasoning_effort: str | None = None
+    reflection_reasoning_effort: str | None = None
     baseline_test_metric: float | None = None
     optimized_test_metric: float | None = None
     metric_improvement: float | None = None

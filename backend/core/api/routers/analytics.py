@@ -12,11 +12,12 @@ from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
-    PAYLOAD_OVERVIEW_JOB_TYPE,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
 )
+from ...i18n import t
 from ...models import (
     AnalyticsSummaryResponse,
     DashboardAnalyticsJob,
@@ -37,64 +38,31 @@ _TERMINAL_SUCCESS_OR_FAILED = frozenset({"success", "failed"})
 
 
 def create_analytics_router(*, job_store) -> APIRouter:
-    """Build the analytics router.
-
-    Args:
-        job_store: Active job store instance used to read all jobs for
-            aggregation.
-
-    Returns:
-        APIRouter: Router with ``/analytics/summary``, ``/analytics/optimizers``
-        and ``/analytics/models``.
-    """
+    """Build the analytics router."""
     router = APIRouter()
 
     @router.get(
         "/analytics/summary",
         response_model=AnalyticsSummaryResponse,
-        summary="Dashboard KPIs across all optimization jobs",
+        summary="Dashboard KPIs across all optimizations",
+        tags=["agent"],
     )
     def get_analytics_summary(
         optimizer: str | None = Query(
-            default=None, description="Exact-match optimizer name (e.g. 'miprov2', 'gepa', 'copro')"
+            default=None, description="Exact-match optimizer name (e.g. 'gepa')"
         ),
         model: str | None = Query(
-            default=None, description="Exact-match model name, compared against the primary model used by the job"
+            default=None, description="Exact-match model name, compared against the primary model used by the optimization"
         ),
         status: str | None = Query(
-            default=None, description="Job status filter: pending, running, success, failed, cancelled"
+            default=None, description="Optimization status filter: pending, running, success, failed, cancelled"
         ),
-        username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
+        username: str | None = Query(default=None, description="Only include optimizations submitted by this username"),
     ) -> AnalyticsSummaryResponse:
-        """Return a single aggregated KPI snapshot powering the dashboard header.
+        """Return aggregated KPIs: optimization counts, success rate, improvement stats, and runtimes.
 
-        Computes every headline number the dashboard needs in one round-trip:
-        total jobs, per-status counts, overall success rate, improvement
-        statistics (min/avg/max delta between baseline and optimized test
-        metric), average runtime, total dataset rows processed, and — for
-        grid-search jobs — total/completed/failed pair counts.
-
-        Behavior notes:
-            - Iterates every job the caller can see (hard cap 10,000).
-              Filters are applied in Python because several of them operate
-              on the embedded ``overview`` payload, not top-level columns.
-            - Improvement = ``optimized_test_metric - baseline_test_metric``.
-              Only ``success`` jobs with numeric metrics contribute.
-            - For grid-search jobs the ``best_pair`` is used as the
-              representative result, not the aggregate across all pairs.
-            - ``running_count`` folds in ``validating`` jobs so the UI
-              shows a single "in progress" number.
-            - All filters combine with AND. Passing no filters returns the
-              global numbers across every job the user is allowed to see.
-
-        Args:
-            optimizer: Exact-match optimizer name filter.
-            model: Exact-match primary model name filter.
-            status: Job status filter (pending, running, success, failed, cancelled).
-            username: Only include jobs owned by this user.
-
-        Returns:
-            AnalyticsSummaryResponse with headline KPIs for the dashboard.
+        Hard cap: 10,000 optimizations. ``running_count`` folds in ``validating`` status.
+        For grid searches the ``best_pair`` is used as the representative result.
         """
         all_jobs = job_store.list_jobs(
             status=status,
@@ -132,13 +100,12 @@ def create_analytics_router(*, job_store) -> APIRouter:
             if isinstance(rows, int):
                 total_dataset_rows += rows
 
-            optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+            optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
             if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                 pairs = overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS)
                 if isinstance(pairs, int):
                     total_pairs += pairs
 
-            # Only process completed jobs for metrics
             if job_status != "success":
                 continue
 
@@ -147,7 +114,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 continue
 
             if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
-                # Grid search: use best pair metrics
                 best_pair = result_data.get("best_pair")
                 if isinstance(best_pair, dict):
                     baseline = best_pair.get("baseline_test_metric")
@@ -166,7 +132,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 if isinstance(fail, int):
                     failed_pairs += fail
             else:
-                # Regular run: use direct metrics
                 baseline = result_data.get("baseline_test_metric")
                 optimized = result_data.get("optimized_test_metric")
                 if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
@@ -205,6 +170,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         "/analytics/optimizers",
         response_model=OptimizerStatsResponse,
         summary="Per-optimizer aggregated statistics",
+        tags=["agent"],
     )
     def get_optimizer_stats(
         model: str | None = Query(
@@ -213,32 +179,9 @@ def create_analytics_router(*, job_store) -> APIRouter:
         status: str | None = Query(default=None, description="Restrict aggregation to a single status bucket"),
         username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> OptimizerStatsResponse:
-        """Group every job by optimizer name and return one row per optimizer.
+        """Group jobs by optimizer and return per-optimizer success rate and improvement stats.
 
-        Powers the dashboard's "Optimizer performance" table, letting users
-        compare the optimizers they've used side by side.
-
-        Each row contains:
-            - ``name``: canonical optimizer identifier
-            - ``total_jobs``: how many jobs used this optimizer under the filter
-            - ``success_count``: subset that finished successfully
-            - ``success_rate``: ``success_count / total_jobs`` (0.0-1.0)
-            - ``avg_improvement``: average ``optimized - baseline`` test metric
-              across successful jobs; ``null`` if no numeric metrics exist
-            - ``avg_runtime``: mean wall-clock seconds for successful jobs;
-              ``null`` if unavailable
-
-        Rows are returned sorted by ``total_jobs`` descending, so the most
-        frequently used optimizer is first. Jobs without a declared
-        optimizer name are excluded from the aggregation entirely.
-
-        Args:
-            model: Exact-match model name filter.
-            status: Restrict aggregation to a single status bucket.
-            username: Only include jobs owned by this user.
-
-        Returns:
-            OptimizerStatsResponse containing per-optimizer aggregates.
+        Rows sorted by ``total_jobs`` descending. Jobs without an optimizer name are excluded.
         """
         all_jobs = job_store.list_jobs(
             status=status,
@@ -276,7 +219,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
                 result_data = job_data.get("result")
                 if result_data and isinstance(result_data, dict):
-                    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+                    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
                     if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                         best_pair = result_data.get("best_pair")
@@ -326,40 +269,17 @@ def create_analytics_router(*, job_store) -> APIRouter:
         "/analytics/models",
         response_model=ModelStatsResponse,
         summary="Per-model aggregated statistics",
+        tags=["agent"],
     )
     def get_model_stats(
         optimizer: str | None = Query(default=None, description="Exact-match optimizer name to scope the stats"),
         status: str | None = Query(default=None, description="Restrict aggregation to a single status bucket"),
         username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
     ) -> ModelStatsResponse:
-        """Group every job by model name and return one row per model.
+        """Group jobs by model name and return per-model success rate and improvement stats.
 
-        Powers the dashboard's "Model performance" table. Answers the
-        question "which model worked best on my workloads?".
-
-        Each row contains:
-            - ``name``: model identifier as stored on the job overview
-            - ``total_jobs``: jobs that used this model under the filter
-            - ``success_count``: subset that finished successfully
-            - ``success_rate``: 0.0-1.0
-            - ``avg_improvement``: average ``optimized - baseline`` test metric
-              across successful jobs; ``null`` when no numeric metrics exist
-            - ``use_count``: total usages, equal to ``total_jobs`` today but
-              reserved separately in case future work tracks non-primary
-              model usages (e.g. judges or decoders) as well
-
-        Rows are returned sorted by ``use_count`` descending. Jobs without
-        a declared primary model are excluded.
-
-        Args:
-            optimizer: Exact-match optimizer name filter.
-            status: Restrict aggregation to a single status bucket.
-            username: Only include jobs owned by this user.
-
-        Returns:
-            ModelStatsResponse containing per-model aggregates.
+        Rows sorted by ``use_count`` descending. Jobs without a declared model are excluded.
         """
-        # Fetch all jobs
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
@@ -397,7 +317,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
                 result_data = job_data.get("result")
                 if result_data and isinstance(result_data, dict):
-                    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+                    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
                     if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                         best_pair = result_data.get("best_pair")
@@ -412,7 +332,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
                         if isinstance(baseline, (int, float)) and isinstance(optimized, (int, float)):
                             stats["improvements"].append(optimized - baseline)
 
-        # Build response items
         items = []
         for model_name, stats in model_data.items():
             total = stats["total"]
@@ -443,40 +362,14 @@ def create_analytics_router(*, job_store) -> APIRouter:
     def get_dashboard_analytics(
         optimizer: str | None = Query(default=None, description="Exact-match optimizer name filter"),
         model: str | None = Query(default=None, description="Exact-match primary model name filter"),
-        status: str | None = Query(default=None, description="Job status filter"),
-        username: str | None = Query(default=None, description="Only include jobs owned by this user"),
+        status: str | None = Query(default=None, description="Optimization status filter"),
+        username: str | None = Query(default=None, description="Only include optimizations owned by this user"),
         optimization_id: str | None = Query(default=None, description="Limit the aggregation to a single optimization"),
         date: str | None = Query(default=None, description="YYYY-MM-DD day filter on created_at"),
     ) -> DashboardAnalyticsResponse:
-        """Return a pre-shaped payload for the whole analytics dashboard tab.
+        """Return a pre-shaped payload for the whole analytics dashboard in one round-trip.
 
-        One round-trip replaces the old client-side "fetch every page
-        and aggregate in the browser" loop. The endpoint walks every
-        job the caller can see (hard cap 10,000), applies the analytics
-        filters server-side, then computes every chart, KPI, top-N
-        list, timeline bucket, and filter-dropdown option the tab
-        needs.
-
-        Metric normalisation: improvements are returned as floats in
-        whatever units the stored ``metric_improvement`` uses. The
-        frontend takes care of "if |delta| < 1 treat as a ratio and
-        multiply by 100" when rendering.
-
-        Args:
-            optimizer: Exact-match optimizer name filter.
-            model: Exact-match primary model name filter.
-            status: Job status filter (pending, validating, running,
-                success, failed, cancelled).
-            username: Only include jobs owned by this user.
-            optimization_id: Restrict aggregation to a single
-                optimization (drill-down).
-            date: ISO ``YYYY-MM-DD`` string — only keep jobs whose
-                ``created_at`` falls on this day.
-
-        Returns:
-            DashboardAnalyticsResponse with every field the analytics
-            tab renders. Empty lists / zero counts are used when no
-            jobs match the active filters.
+        Hard cap: 10,000 optimizations. Improvements are raw floats; the frontend normalizes ratios.
         """
         all_jobs_raw = job_store.list_jobs(
             status=status,
@@ -538,7 +431,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         grid_search_count = 0
         single_run_count = 0
         for s in summaries:
-            opt = s.optimizer_name or "אחר"
+            opt = s.optimizer_name or t("analytics.other_bucket")
             optimizer_counts[opt] = optimizer_counts.get(opt, 0) + 1
             job_type = s.optimization_type or OPTIMIZATION_TYPE_RUN
             job_type_counts[job_type] = job_type_counts.get(job_type, 0) + 1
@@ -552,7 +445,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 single_run_count += 1
                 total_pairs_run += 1
 
-        # Model usage — primary model or the first half of best_pair_label
         model_counter: Counter = Counter()
         for s in summaries:
             m = s.model_name or (s.best_pair_label.split(" + ")[0] if s.best_pair_label else None)
@@ -562,7 +454,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
             DashboardAnalyticsNameValue(name=name, value=count) for name, count in model_counter.most_common(8)
         ]
 
-        # Improvement-based aggregates (only successful jobs with a numeric delta)
         improvements = [(s, s.metric_improvement) for s in success_items if s.metric_improvement is not None]
         numeric_improvements = [v for _, v in improvements]
         avg_improvement = sum(numeric_improvements) / len(numeric_improvements) if numeric_improvements else None
@@ -600,15 +491,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         ]
 
         def _as_job_ref(s: Any) -> DashboardAnalyticsJob:
-            """Project a summary into the compact dashboard ref shape.
-
-            Args:
-                s: ``OptimizationSummaryResponse`` to flatten.
-
-            Returns:
-                ``DashboardAnalyticsJob`` with only the fields the
-                dashboard charts and ranked tables render.
-            """
+            """Convert an OptimizationSummaryResponse to a compact DashboardAnalyticsJob."""
             status_value = str(s.status).rsplit(".", 1)[-1]
             created_at_str: str | None = None
             if s.created_at is not None:
@@ -629,18 +512,15 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 created_at=created_at_str,
             )
 
-        # Top 10 successful jobs with optimized metric for the improvement bar chart.
         top_improvement_items = [s for s in success_items if s.optimized_test_metric is not None][:10]
         top_improvement = [_as_job_ref(s) for s in top_improvement_items]
 
-        # Runtime distribution — first 15 successful jobs with an elapsed time.
         runtime_distribution_items = [s for s in success_items if s.elapsed_seconds is not None][:15]
         runtime_distribution = [_as_job_ref(s) for s in runtime_distribution_items]
 
         dvs_items = [s for s in success_items if s.dataset_rows is not None and s.metric_improvement is not None]
         dataset_vs_improvement = [_as_job_ref(s) for s in dvs_items]
 
-        # Efficiency (improvement per minute) — top 10
         eff_items: list[tuple[float, Any]] = []
         for s in success_items:
             if s.metric_improvement is None or s.elapsed_seconds is None or s.elapsed_seconds <= 0:
@@ -653,7 +533,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
         eff_items.sort(key=lambda t: t[0], reverse=True)
         efficiency = [_as_job_ref(s) for _, s in eff_items[:10]]
 
-        # Top 5 ranked by improvement (signed)
         ranked = sorted(
             improvements,
             key=lambda pair: pair[1] if abs(pair[1]) > 1 else pair[1] * 100,
@@ -661,7 +540,6 @@ def create_analytics_router(*, job_store) -> APIRouter:
         )
         top_jobs_by_improvement = [_as_job_ref(s) for s, _ in ranked[:5]]
 
-        # Timeline buckets: jobs per day, newest 14 days
         timeline_buckets: dict[str, int] = {}
         for s in summaries:
             created = s.created_at

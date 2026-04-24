@@ -44,13 +44,14 @@ interface OptimizationRequestBase {
 export interface RunRequest extends OptimizationRequestBase {
   model_config: ModelConfig;
   reflection_model_config?: ModelConfig;
-  prompt_model_config?: ModelConfig;
   task_model_config?: ModelConfig;
 }
 
 export interface GridSearchRequest extends OptimizationRequestBase {
   generation_models: ModelConfig[];
   reflection_models: ModelConfig[];
+  use_all_available_generation_models?: boolean;
+  use_all_available_reflection_models?: boolean;
 }
 
 /* ── Response models ── */
@@ -91,7 +92,6 @@ export interface OptimizationSummaryResponse {
   model_name?: string;
   model_settings?: Record<string, unknown>;
   reflection_model_name?: string;
-  prompt_model_name?: string;
   task_model_name?: string;
   total_pairs?: number;
   completed_pairs?: number;
@@ -109,6 +109,7 @@ export interface OptimizationSummaryResponse {
   optimized_test_metric?: number;
   metric_improvement?: number;
   best_pair_label?: string;
+  task_fingerprint?: string;
 }
 
 export interface PaginatedJobsResponse {
@@ -158,6 +159,8 @@ export interface PairResult {
   pair_index: number;
   generation_model: string;
   reflection_model: string;
+  generation_reasoning_effort?: string | null;
+  reflection_reasoning_effort?: string | null;
   baseline_test_metric?: number;
   optimized_test_metric?: number;
   metric_improvement?: number;
@@ -209,11 +212,6 @@ export interface ValidateCodeResponse {
   signature_fields?: { inputs: string[]; outputs: string[] };
   errors: string[];
   warnings: string[];
-}
-
-export interface HealthResponse {
-  status: string;
-  registered_assets: Record<string, string[]>;
 }
 
 export interface QueueStatusResponse {
@@ -315,4 +313,56 @@ export interface DiscoverModelsResponse {
   models: string[];
   base_url: string;
   error?: string;
+}
+
+/* ── Dataset profiling ── */
+
+export type ProfileWarningCode =
+  | "too_small"
+  | "class_imbalance"
+  | "rare_class"
+  | "duplicates"
+  | "missing_target";
+
+export interface ProfileWarning {
+  code: ProfileWarningCode;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+export interface TargetColumnProfile {
+  name: string;
+  kind: "categorical" | "numeric" | "freeform" | string;
+  unique_values: number;
+  class_histogram: Record<string, number>;
+}
+
+export interface DatasetProfile {
+  row_count: number;
+  column_count: number;
+  target: TargetColumnProfile | null;
+  targets: TargetColumnProfile[];
+  duplicate_count: number;
+  warnings: ProfileWarning[];
+}
+
+export interface SplitPlan {
+  fractions: SplitFractions;
+  shuffle: boolean;
+  seed: number;
+  counts: { train: number; val: number; test: number };
+  stratify: boolean;
+  stratify_column: string | null;
+  rationale: string[];
+}
+
+export interface ProfileDatasetRequest {
+  dataset: Record<string, unknown>[];
+  column_mapping: ColumnMapping;
+  seed?: number;
+}
+
+export interface ProfileDatasetResponse {
+  profile: DatasetProfile;
+  plan: SplitPlan;
 }

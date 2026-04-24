@@ -11,6 +11,12 @@ import { useTutorialContext } from "@/features/tutorial/components/tutorial-prov
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 import { ParticleHero } from "@/shared/ui/particle-hero";
+import {
+  GeneralistPanel,
+  GeneralistPanelProvider,
+} from "@/features/agent-panel";
+import { WizardStateProvider } from "@/features/agent-panel/hooks/use-wizard-state";
+import { isGeneralistAgentEnabled } from "@/features/agent-panel/lib/feature-flag";
 const Sidebar = dynamic(() => import("@/features/sidebar/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -50,6 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isLoginPage = pathname === "/login";
+  const generalistEnabled = isGeneralistAgentEnabled();
 
   // Login page renders without shell chrome (no header, sidebar, orbs)
   if (isLoginPage) {
@@ -63,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
+  const shell = (
     <div className="flex min-h-screen flex-col">
       {/* Scroll progress indicator */}
       <div ref={progressRef} className="scroll-progress" aria-hidden="true" />
@@ -104,7 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={openMenu}
-                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground"
+                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
                 aria-label="סיור במערכת"
               >
                 <GraduationCap className="size-4" />
@@ -120,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={scalarDocsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex"
+                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
                 aria-label="תיעוד API"
               >
                 <BookOpen className="size-4" />
@@ -172,7 +179,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Main content — restore RTL for Hebrew */}
         <main className="flex-1 overflow-auto min-w-0 page-gradient grid-pattern" dir="rtl">
-          <div className="relative z-[1] mx-auto max-w-7xl px-4 py-6 md:px-8 md:py-8">
+          <div
+            className="relative z-[1] mx-auto max-w-7xl py-6 md:py-8"
+            style={{ paddingInline: 'clamp(1rem, 5vw - 0.5rem, 2rem)' }}
+          >
             {children}
           </div>
         </main>
@@ -184,6 +194,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Sidebar />
         </div>
       </div>
+
+      {generalistEnabled && <GeneralistPanel />}
     </div>
+  );
+
+  if (!generalistEnabled) return shell;
+
+  return (
+    <WizardStateProvider>
+      <GeneralistPanelProvider>{shell}</GeneralistPanelProvider>
+    </WizardStateProvider>
   );
 }

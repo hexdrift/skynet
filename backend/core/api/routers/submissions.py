@@ -21,49 +21,94 @@ from ...constants import (
     PAYLOAD_OVERVIEW_DATASET_ROWS,
     PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
-    PAYLOAD_OVERVIEW_JOB_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
     PAYLOAD_OVERVIEW_MODULE_KWARGS,
     PAYLOAD_OVERVIEW_MODULE_NAME,
     PAYLOAD_OVERVIEW_NAME,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS,
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
-    PAYLOAD_OVERVIEW_PROMPT_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODELS,
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
+    PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
     PAYLOAD_OVERVIEW_TASK_MODEL,
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
     PAYLOAD_OVERVIEW_USERNAME,
 )
+from ...i18n import t
 from ...models import (
     GridSearchRequest,
     OptimizationStatus,
     OptimizationSubmissionResponse,
     RunRequest,
 )
+from ...models.common import ModelConfig
 from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ...worker import get_worker
-from ._helpers import enforce_user_quota, strip_api_key
+from ..model_catalog import get_catalog_cached
+from ._helpers import compute_task_fingerprint, enforce_user_quota, strip_api_key
 
 logger = logging.getLogger(__name__)
 
 
-def create_submissions_router(*, service, job_store) -> APIRouter:
-    """Build the submissions router.
+def _catalog_models_as_configs() -> list[ModelConfig]:
+    """Return every available catalog model wrapped as a ``ModelConfig``.
 
-    Args:
-        service: DspyService used for payload validation.
-        job_store: Job store used to persist new jobs and their overviews.
+    Queries the shared catalog cache and maps each entry to a minimal
+    ``ModelConfig`` whose ``name`` is the canonical LiteLLM identifier.
+    Used by the grid-search route to expand ``use_all_available_*`` flags
+    into concrete model lists.
 
     Returns:
-        APIRouter: Router with ``POST /run`` and ``POST /grid-search``.
+        One ``ModelConfig`` per model the catalog currently marks as
+        available, in catalog order.
+
+    Raises:
+        HTTPException: ``400`` when the catalog reports no available models,
+            which usually means no provider API keys are configured.
     """
+    catalog = get_catalog_cached()
+    configs = [ModelConfig(name=entry.value) for entry in catalog.models]
+    if not configs:
+        raise HTTPException(
+            status_code=400,
+            detail=t("submit.no_models_available"),
+        )
+    return configs
+
+
+def _expand_catalog_grid_payload(payload: GridSearchRequest) -> None:
+    """Populate generation/reflection model lists from the catalog when flagged.
+
+    Replaces ``payload.generation_models`` and/or ``payload.reflection_models``
+    with every available catalog model when the matching
+    ``use_all_available_*`` flag is set. When neither flag is set this is a
+    no-op.
+
+    Args:
+        payload: The grid-search request to mutate in place.
+
+    Raises:
+        HTTPException: ``400`` when expansion is requested but the catalog
+            reports no available models.
+    """
+    if not (payload.use_all_available_generation_models or payload.use_all_available_reflection_models):
+        return
+    expanded = _catalog_models_as_configs()
+    if payload.use_all_available_generation_models:
+        payload.generation_models = expanded
+    if payload.use_all_available_reflection_models:
+        payload.reflection_models = expanded
+
+
+def create_submissions_router(*, service, job_store) -> APIRouter:
+    """Build the submissions router."""
     router = APIRouter()
 
     @router.post(
@@ -71,49 +116,16 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         response_model=OptimizationSubmissionResponse,
         status_code=201,
         summary="Submit a single DSPy optimization run",
+        tags=["agent"],
     )
     def submit_job(payload: RunRequest) -> OptimizationSubmissionResponse:
         """Queue one end-to-end DSPy optimization for background execution.
 
-        This is the primary write endpoint of the service. It takes a fully
-        specified optimization request (dataset, column mapping, optimizer,
-        model(s), signature, metric), validates it synchronously, and hands
-        it to the background worker. The response returns immediately with
-        an ``optimization_id`` the caller can poll with
-        ``GET /optimizations/{id}/summary`` or stream via
-        ``GET /optimizations/{id}/stream``.
-
-        Pipeline on success:
-            1. Payload is validated against the registered module/optimizer
-               and the user-supplied signature/metric code. A ``ServiceError``
-               or ``RegistryError`` here returns HTTP 400 with details.
-            2. Per-user quota is enforced. Returns HTTP 409 with a Hebrew
-               error message if the user has hit ``MAX_JOBS_PER_USER``.
-            3. A UUID is generated. The split seed defaults to a deterministic
-               hash of the UUID if the caller didn't supply one, so train/val/test
-               splits are reproducible without forcing the user to pick a number.
-            4. A job row is created in the store with status ``pending`` and
-               its payload overview (a scrubbed, API-key-free copy of the
-               request) saved for later display.
-            5. The job is pushed onto the worker queue. The worker picks it
-               up asynchronously — this call returns before any optimization
-               actually runs.
-            6. A ``notify_job_started`` event fires (audit log / webhook).
-
-        Security: ``model_settings.api_key`` is stripped before the overview
-        is persisted. Keys only exist in memory inside the worker process.
-
-        Returns HTTP 201 with ``OptimizationSubmissionResponse`` on success.
+        Validates synchronously, persists a job row, and enqueues the payload.
+        Returns HTTP 201 immediately; poll ``/optimizations/{id}/summary`` or
+        stream via ``/optimizations/{id}/stream`` for progress.
+        Security: ``model_settings.api_key`` is stripped from the persisted overview.
         Errors: 400 (validation), 409 (quota), 422 (malformed body).
-
-        Args:
-            payload: Validated submission request describing the optimization.
-
-        Returns:
-            OptimizationSubmissionResponse acknowledging the queued job.
-
-        Raises:
-            HTTPException: 400 (validation) or 409 (quota) as described above.
         """
 
         try:
@@ -129,11 +141,13 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         if payload.seed is None:
             payload.seed = hash(optimization_id) % (2**31)
 
+        task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
+
         job_store.create_job(optimization_id)
         job_store.set_payload_overview(
             optimization_id,
             {
-                PAYLOAD_OVERVIEW_JOB_TYPE: OPTIMIZATION_TYPE_RUN,
+                PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE: OPTIMIZATION_TYPE_RUN,
                 PAYLOAD_OVERVIEW_NAME: payload.name,
                 PAYLOAD_OVERVIEW_DESCRIPTION: payload.description,
                 PAYLOAD_OVERVIEW_USERNAME: payload.username,
@@ -147,9 +161,6 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                     if payload.reflection_model_settings
                     else None
                 ),
-                PAYLOAD_OVERVIEW_PROMPT_MODEL: (
-                    payload.prompt_model_settings.normalized_identifier() if payload.prompt_model_settings else None
-                ),
                 PAYLOAD_OVERVIEW_TASK_MODEL: (
                     payload.task_model_settings.normalized_identifier() if payload.task_model_settings else None
                 ),
@@ -161,6 +172,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_SEED: payload.seed,
                 PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS: dict(payload.optimizer_kwargs),
                 PAYLOAD_OVERVIEW_COMPILE_KWARGS: dict(payload.compile_kwargs),
+                PAYLOAD_OVERVIEW_TASK_FINGERPRINT: task_fingerprint,
             },
         )
 
@@ -199,42 +211,21 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         response_model=OptimizationSubmissionResponse,
         status_code=201,
         summary="Submit a grid search over model pairs",
+        tags=["agent"],
     )
     def submit_grid_search(payload: GridSearchRequest) -> OptimizationSubmissionResponse:
-        """Queue a sweep that runs one optimization per ``(generation_model,
-        reflection_model)`` pair and then reports the best.
+        """Queue a sweep over ``(generation_model, reflection_model)`` pairs.
 
-        The Cartesian product of ``generation_models x reflection_models``
-        defines the pair count. Every pair reuses the same dataset, split
-        fractions, signature, metric, and optimizer kwargs — only the two
-        model slots vary. This is the right shape for questions like
-        "which base model + reflection model combo works best on my task?".
-
-        Contract with the caller:
-            - Both lists must be non-empty; request body validation
-              enforces that before this handler runs.
-            - ``total_pairs`` is persisted on the overview as
-              ``len(generation_models) * len(reflection_models)`` so the UI
-              can render a determinate progress bar.
-            - Each individual pair is executed serially inside the same
-              grid-search job — the worker does not fan them out to
-              parallel subprocesses. Cancel the grid to stop all remaining
-              pairs.
-
-        Same error handling as ``POST /run``: HTTP 400 on validation
-        failure, 409 if the user is at quota, 422 on malformed body.
-        Returns 201 with the submission response; poll
-        ``/optimizations/{id}/summary`` for per-pair progress.
-
-        Args:
-            payload: Validated grid-search submission request.
-
-        Returns:
-            OptimizationSubmissionResponse acknowledging the queued grid search.
-
-        Raises:
-            HTTPException: 400 (validation) or 409 (quota) as described above.
+        Runs one optimization per Cartesian pair serially inside a single job.
+        When ``use_all_available_generation_models`` or
+        ``use_all_available_reflection_models`` is set, the server replaces the
+        matching list with every model currently available in the catalog
+        before validation or enqueue.
+        Same error handling as ``POST /run``: 400 (validation), 409 (quota), 422 (malformed body).
+        Poll ``/optimizations/{id}/summary`` for per-pair progress.
         """
+        _expand_catalog_grid_payload(payload)
+
         if hasattr(service, "validate_grid_search_payload"):
             try:
                 service.validate_grid_search_payload(payload)
@@ -249,11 +240,13 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             payload.seed = hash(optimization_id) % (2**31)
         total_pairs = len(payload.generation_models) * len(payload.reflection_models)
 
+        task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
+
         job_store.create_job(optimization_id)
         job_store.set_payload_overview(
             optimization_id,
             {
-                PAYLOAD_OVERVIEW_JOB_TYPE: OPTIMIZATION_TYPE_GRID_SEARCH,
+                PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE: OPTIMIZATION_TYPE_GRID_SEARCH,
                 PAYLOAD_OVERVIEW_NAME: payload.name,
                 PAYLOAD_OVERVIEW_DESCRIPTION: payload.description,
                 PAYLOAD_OVERVIEW_USERNAME: payload.username,
@@ -271,6 +264,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_TOTAL_PAIRS: total_pairs,
                 PAYLOAD_OVERVIEW_GENERATION_MODELS: [m.model_dump() for m in payload.generation_models],
                 PAYLOAD_OVERVIEW_REFLECTION_MODELS: [m.model_dump() for m in payload.reflection_models],
+                PAYLOAD_OVERVIEW_TASK_FINGERPRINT: task_fingerprint,
             },
         )
 
@@ -291,7 +285,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             optimization_type=OPTIMIZATION_TYPE_GRID_SEARCH,
             optimizer_name=payload.optimizer_name,
             module_name=payload.module_name,
-            model_name=f"{total_pairs} זוגות",
+            model_name=t("optimization.pairs_label", count=total_pairs),
         )
 
         return OptimizationSubmissionResponse(

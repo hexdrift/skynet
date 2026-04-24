@@ -5,8 +5,11 @@ Defines the shared database models used by the PostgreSQL storage backend.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Float, Integer, PrimaryKeyConstraint, String, Text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, PrimaryKeyConstraint, String, Text
 from sqlalchemy.orm import DeclarativeBase
+
+EMBEDDING_DIM = 512
 
 
 class Base(DeclarativeBase):
@@ -72,3 +75,43 @@ class TemplateModel(Base):
     username = Column(String(255), nullable=False)
     config = Column(JSON, nullable=False)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class JobEmbeddingModel(Base):
+    """Per-job embedding row backing the recommendation service.
+
+    One row is written after a job finishes successfully. Three named
+    aspects are embedded independently so a similarity search can
+    weigh them separately (``summary`` = LLM-authored task description,
+    ``code`` = signature + metric source, ``schema`` = dataset schema
+    digest). All use the same ``jina-code-embeddings-0.5b`` model,
+    MRL-truncated to ``EMBEDDING_DIM``.
+
+    Metadata (``optimization_type``, ``winning_model``, ``winning_rank``)
+    is denormalized from ``jobs`` so the search can filter and rerank
+    without an extra join per-candidate.
+    """
+
+    __tablename__ = "job_embeddings"
+
+    optimization_id = Column(String(36), primary_key=True)
+    user_id = Column(String(255), nullable=True, index=True)
+    optimization_type = Column(String(32), nullable=True, index=True)
+    winning_model = Column(String(255), nullable=True)
+    winning_rank = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    embedding_summary = Column(Vector(EMBEDDING_DIM), nullable=True)
+    embedding_code = Column(Vector(EMBEDDING_DIM), nullable=True)
+    embedding_schema = Column(Vector(EMBEDDING_DIM), nullable=True)
+    is_recommendable = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
+    baseline_metric = Column(Float, nullable=True)
+    optimized_metric = Column(Float, nullable=True)
+    summary_text = Column(Text, nullable=True)
+    signature_code = Column(Text, nullable=True)
+    metric_name = Column(String(255), nullable=True)
+    optimizer_name = Column(String(64), nullable=True)
+    optimizer_kwargs = Column(JSON, nullable=True)
+    module_name = Column(String(128), nullable=True)
+    task_name = Column(String(255), nullable=True)
+    projection_x = Column(Float, nullable=True)
+    projection_y = Column(Float, nullable=True)

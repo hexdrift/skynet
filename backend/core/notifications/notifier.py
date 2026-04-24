@@ -7,6 +7,8 @@ submitted or completed.
 import logging
 import os
 
+from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH
+from ..i18n import GRID_SEARCH_LABEL, RUN_LABEL, t
 from .comms import send_message
 
 logger = logging.getLogger(__name__)
@@ -15,15 +17,8 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3001")
 
 
 def _job_url(optimization_id: str) -> str:
-    """Build a link to the job detail page.
-
-    Args:
-        optimization_id: Identifier of the optimization being linked.
-
-    Returns:
-        Fully qualified URL pointing at the job's detail page.
-    """
-    return f"{FRONTEND_URL}/jobs/{optimization_id}"
+    """Return the full URL for the optimization detail page."""
+    return f"{FRONTEND_URL}/optimizations/{optimization_id}"
 
 
 def notify_job_started(
@@ -34,28 +29,18 @@ def notify_job_started(
     module_name: str,
     model_name: str | None = None,
 ) -> None:
-    """Send a notification when a job is submitted.
-
-    Args:
-        optimization_id: Unique optimization identifier.
-        username: User who submitted the job.
-        optimization_type: "run" or "grid_search".
-        optimizer_name: Optimizer being used.
-        module_name: DSPy module being optimized.
-        model_name: LLM model name (if applicable).
-
-    Returns:
-        None.
-    """
-    type_label = "חיפוש רשת" if optimization_type == "grid_search" else "הרצה"
-    model_part = f" | מודל: {model_name}" if model_name else ""
+    """Send a Hebrew notification when a job is submitted."""
+    type_label = GRID_SEARCH_LABEL if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH else RUN_LABEL
+    model_part = f" | {t('notifier.label.model')}: {model_name}" if model_name else ""
     link = _job_url(optimization_id)
 
     text = (
-        f"🚀 *אופטימיזציה חדשה*\n"
-        f"משתמש: *{username}*\n"
-        f"סוג: {type_label} | מודול: {module_name} | אופטימייזר: {optimizer_name}{model_part}\n"
-        f"[מעקב אחר המשימה]({link})"
+        f"*{t('notifier.title.new')}*\n"
+        f"{t('notifier.label.user')}: *{username}*\n"
+        f"{t('notifier.label.type')}: {type_label} | "
+        f"{t('notifier.label.module')}: {module_name} | "
+        f"{t('notifier.label.optimizer')}: {optimizer_name}{model_part}\n"
+        f"[{t('notifier.link.follow')}]({link})"
     )
 
     send_message(text)
@@ -69,31 +54,34 @@ def notify_job_completed(
     baseline_score: float | None = None,
     optimized_score: float | None = None,
 ) -> None:
-    """Send a notification when a job finishes.
-
-    Args:
-        optimization_id: Unique optimization identifier.
-        username: User who submitted the job.
-        status: Final status ("success", "failed", "cancelled").
-        message: Status message from the backend.
-        baseline_score: Baseline test metric (if available).
-        optimized_score: Optimized test metric (if available).
-
-    Returns:
-        None.
-    """
+    """Send a Hebrew notification when a job finishes (success, failed, or cancelled)."""
     link = _job_url(optimization_id)
+    user_line = f"{t('notifier.label.user')}: *{username}*"
 
     if status == "success":
         scores = ""
         if baseline_score is not None and optimized_score is not None:
             improvement = optimized_score - baseline_score
-            scores = f"\nציון: {baseline_score:.1f}% → {optimized_score:.1f}% ({'+' if improvement >= 0 else ''}{improvement:.1f}%)"
-        text = f"✅ *אופטימיזציה הושלמה בהצלחה*\nמשתמש: *{username}*{scores}\n[צפייה בתוצאות]({link})"
+            sign = "+" if improvement >= 0 else ""
+            scores = (
+                f"\n{t('notifier.label.score')}: "
+                f"{baseline_score:.1f}% → {optimized_score:.1f}% "
+                f"({sign}{improvement:.1f}%)"
+            )
+        text = (
+            f"*{t('notifier.title.completed')}*\n{user_line}{scores}\n"
+            f"[{t('notifier.link.results')}]({link})"
+        )
     elif status == "cancelled":
-        text = f"⚠️ *אופטימיזציה בוטלה*\nמשתמש: *{username}*\n[פרטי המשימה]({link})"
+        text = (
+            f"*{t('notifier.title.cancelled')}*\n{user_line}\n"
+            f"[{t('notifier.link.details')}]({link})"
+        )
     else:
-        error_part = f"\nשגיאה: {message[:150]}" if message else ""
-        text = f"❌ *אופטימיזציה נכשלה*\nמשתמש: *{username}*{error_part}\n[פרטי המשימה]({link})"
+        error_part = f"\n{t('notifier.label.error')}: {message[:150]}" if message else ""
+        text = (
+            f"*{t('notifier.title.failed')}*\n{user_line}{error_part}\n"
+            f"[{t('notifier.link.details')}]({link})"
+        )
 
     send_message(text)

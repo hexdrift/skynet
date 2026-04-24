@@ -1,0 +1,489 @@
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import {
+  Upload,
+  Binary,
+  ListChecks,
+  TextCursorInput,
+  Plus,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/shared/lib/utils";
+import { HelpTip } from "@/shared/ui/help-tip";
+import { tip } from "@/shared/lib/tooltips";
+import { parseDatasetFile } from "@/features/submit/lib/parse-dataset";
+import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial/lib/bridge";
+import type { AnnotationMode, TaggerConfig, DataRow, Category } from "../lib/types";
+
+interface TaggerSetupProps {
+  onStart: (config: TaggerConfig, rows: DataRow[], columns: string[]) => void;
+}
+
+const TAGGER_STEPS = [
+  { id: "data", label: "קובץ נתונים" },
+  { id: "mode", label: "מצב תיוג" },
+  { id: "config", label: "הגדרות" },
+] as const;
+
+const slideVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? -80 : 80,
+    opacity: 0,
+    scale: 0.97,
+  }),
+  center: { x: 0, opacity: 1, scale: 1 },
+  exit: (direction: number) => ({
+    x: direction > 0 ? 80 : -80,
+    opacity: 0,
+    scale: 0.97,
+  }),
+};
+
+const MODE_OPTIONS: { mode: AnnotationMode; label: string; desc: string; icon: typeof Binary }[] = [
+  { mode: "binary", label: "סיווג בינארי", desc: "כן / לא לכל טקסט", icon: Binary },
+  { mode: "multiclass", label: "קטגוריות", desc: "בחירת קטגוריות מרשימה", icon: ListChecks },
+  { mode: "freetext", label: "טקסט חופשי", desc: "חילוץ או כתיבת טקסט", icon: TextCursorInput },
+];
+
+export function TaggerSetup({ onStart }: TaggerSetupProps) {
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+
+  const [file, setFile] = useState<File | null>(null);
+  const [parsedRows, setParsedRows] = useState<DataRow[]>([]);
+  const [parsedCols, setParsedCols] = useState<string[]>([]);
+  const [textCol, setTextCol] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<AnnotationMode | null>(null);
+
+  const [question, setQuestion] = useState("האם הטקסט חיובי?");
+  const [categories, setCategories] = useState<Category[]>([
+    { id: "cat1", label: "קטגוריה 1" },
+    { id: "cat2", label: "קטגוריה 2" },
+  ]);
+  const [prompt, setPrompt] = useState("");
+  const [placeholder, setPlaceholder] = useState("");
+
+  // Tutorial hooks — let the guided tour inject demo data and navigate steps
+  useEffect(() => registerTutorialHook("setTaggerStep", (s: number) => {
+    setDirection(s > step ? 1 : -1);
+    setStep(s);
+  }), [step]);
+  useEffect(() => registerTutorialHook("setTaggerDemoData", (data) => {
+    setFile(new File([""], "demo_dataset.csv"));
+    setParsedRows(data.rows as DataRow[]);
+    setParsedCols(data.cols);
+    setTextCol(data.textCol);
+  }), []);
+  useEffect(() => registerTutorialQuery("hasTaggerData", () => parsedRows.length > 0), [parsedRows]);
+
+  const handleFile = useCallback(async (f: File) => {
+    setError(null);
+    setFile(f);
+    try {
+      const { columns, rows } = await parseDatasetFile(f);
+      setParsedRows(rows as DataRow[]);
+      setParsedCols(columns);
+      const guessText = columns.find((c) => c.toLowerCase() === "text") ?? columns[0] ?? "";
+      setTextCol(guessText);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to parse file");
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    },
+    [handleFile],
+  );
+
+  const addCategory = () => {
+    const id = `cat${Date.now()}`;
+    setCategories((prev) => [...prev, { id, label: "" }]);
+  };
+
+  const removeCategory = (id: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const updateCategory = (id: string, label: string) => {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label } : c)));
+  };
+
+  const validateStep = (s: number): boolean => {
+    if (s === 0) return parsedRows.length > 0 && !!textCol;
+    if (s === 1) return !!mode;
+    if (s === 2) {
+      if (!mode) return false;
+      if (mode === "multiclass") return categories.filter((c) => c.label.trim()).length >= 2;
+      return true;
+    }
+    return false;
+  };
+
+  const maxReachableStep = (() => {
+    for (let i = 0; i < TAGGER_STEPS.length; i++) {
+      if (!validateStep(i)) return i;
+    }
+    return TAGGER_STEPS.length - 1;
+  })();
+
+  const goTo = (idx: number) => {
+    setDirection(idx > step ? 1 : -1);
+    setStep(idx);
+  };
+
+  const handleNext = () => {
+    if (step < TAGGER_STEPS.length - 1 && validateStep(step)) {
+      setDirection(1);
+      setStep(step + 1);
+    }
+  };
+
+  const goPrev = () => {
+    if (step > 0) {
+      setDirection(-1);
+      setStep(step - 1);
+    }
+  };
+
+  const handleTabClick = (idx: number) => {
+    if (idx <= step || idx <= maxReachableStep) goTo(idx);
+  };
+
+  const handleStart = () => {
+    if (!mode || !validateStep(0) || !validateStep(1) || !validateStep(2)) return;
+    const mapped: DataRow[] = parsedRows.map((row, i) => ({
+      ...row,
+      id: i + 1,
+      text: String(row[textCol] ?? ""),
+    }));
+    const config: TaggerConfig = { mode };
+    if (mode === "binary") config.question = question;
+    if (mode === "multiclass") config.categories = categories.filter((c) => c.label.trim());
+    if (mode === "freetext") {
+      config.prompt = prompt || "הקלד טקסט";
+      config.placeholder = placeholder;
+    }
+    onStart(config, mapped, parsedCols);
+  };
+
+  const steps = [
+    /* Step 0: File Upload */
+    <Card key="data">
+      <CardHeader>
+        <CardTitle className="text-base">
+          <HelpTip text={tip("tagger.upload_file")}>קובץ נתונים</HelpTip>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <label
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          className={cn(
+            "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-all duration-300 group",
+            file
+              ? "border-primary/40 bg-primary/5"
+              : "hover:border-primary/50 hover:bg-muted/30",
+          )}
+        >
+          <Upload className="size-8 text-muted-foreground group-hover:text-primary/70 transition-colors duration-300" />
+          {file ? (
+            <div className="text-center">
+              <p className="font-medium text-foreground">{file.name}</p>
+              <p className="text-sm text-muted-foreground">{parsedRows.length} שורות</p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">לחץ להעלאת קובץ CSV, JSON, או Excel</p>
+          )}
+          <input
+            type="file"
+            accept=".json,.csv,.xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+        </label>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {parsedCols.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <p className="text-sm font-medium">
+                <HelpTip text={tip("tagger.text_column")}>עמודת טקסט</HelpTip>
+              </p>
+              <div className="space-y-1">
+                {parsedCols.map((col) => (
+                  <button
+                    key={col}
+                    type="button"
+                    onClick={() => setTextCol(col)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all cursor-pointer",
+                      textCol === col
+                        ? "bg-primary/10 border border-primary/40 text-primary font-medium"
+                        : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                  >
+                    <span className="size-3 rounded-full border-2 flex items-center justify-center shrink-0"
+                      style={{ borderColor: textCol === col ? "var(--primary)" : "var(--border)" }}
+                    >
+                      {textCol === col && <span className="size-1.5 rounded-full bg-primary" />}
+                    </span>
+                    <span className="font-mono text-xs" dir="ltr">{col}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>,
+
+    /* Step 1: Mode Picker */
+    <Card key="mode" data-tutorial="tagger-modes">
+      <CardHeader>
+        <CardTitle className="text-base">
+          <HelpTip text={tip("tagger.mode")}>מצב תיוג</HelpTip>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-3">
+          {MODE_OPTIONS.map((opt) => (
+            <button
+              key={opt.mode}
+              type="button"
+              onClick={() => setMode(opt.mode)}
+              className={cn(
+                "flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all cursor-pointer",
+                "hover:border-primary/40 hover:bg-primary/5",
+                mode === opt.mode
+                  ? "border-primary bg-primary/10 shadow-sm"
+                  : "border-border/50",
+              )}
+            >
+              <opt.icon
+                className={cn(
+                  "size-6",
+                  mode === opt.mode ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span
+                className={cn(
+                  "text-sm font-medium",
+                  mode === opt.mode ? "text-primary" : "text-foreground",
+                )}
+              >
+                {opt.label}
+              </span>
+              <span className="text-xs text-muted-foreground">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>,
+
+    /* Step 2: Mode Config */
+    <Card key="config">
+      <CardHeader>
+        <CardTitle className="text-base">
+          {mode === "binary" && <HelpTip text={tip("tagger.binary_question")}>שאלת הסיווג</HelpTip>}
+          {mode === "multiclass" && <HelpTip text={tip("tagger.multiclass_categories")}>קטגוריות</HelpTip>}
+          {mode === "freetext" && <HelpTip text={tip("tagger.freetext_instruction")}>הנחיה</HelpTip>}
+          {!mode && "הגדרות"}
+        </CardTitle>
+        {mode === "multiclass" && <CardDescription>הוסף לפחות 2 קטגוריות</CardDescription>}
+      </CardHeader>
+      <CardContent>
+        {mode === "binary" && (
+          <input
+            type="text"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            placeholder='לדוגמה: "האם הטקסט חיובי?"'
+            dir="rtl"
+          />
+        )}
+        {mode === "multiclass" && (
+          <div className="space-y-2">
+            {categories.map((cat) => (
+              <div key={cat.id} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={cat.label}
+                  onChange={(e) => updateCategory(cat.id, e.target.value)}
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="שם הקטגוריה"
+                  dir="rtl"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => removeCategory(cat.id)}
+                  disabled={categories.length <= 2}
+                >
+                  <Trash2 className="size-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={addCategory} className="mt-1 w-full" title="הוסף קטגוריה">
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
+        )}
+        {mode === "freetext" && (
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            placeholder="הנחיה שתוצג מעל שדה הטקסט"
+            dir="rtl"
+          />
+        )}
+        {!mode && (
+          <p className="text-sm text-muted-foreground">בחר מצב תיוג בשלב הקודם</p>
+        )}
+      </CardContent>
+    </Card>,
+  ];
+
+  const isLastStep = step === TAGGER_STEPS.length - 1;
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto pb-8" data-tutorial="tagger-setup">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <a href="/" className="hover:text-foreground transition-colors">
+          לוח בקרה
+        </a>
+        <ChevronLeft className="h-3 w-3" />
+        <span className="text-foreground font-medium">הגדרות תיוג</span>
+      </div>
+
+      {/* Stepper */}
+      <div className="relative">
+        <div className="flex items-center justify-between">
+          {TAGGER_STEPS.map((s, i) => {
+            const reachable = i <= maxReachableStep;
+            const completed = i < step && validateStep(i);
+            const active = i === step;
+            return (
+              <div key={s.id} className="flex flex-col items-center relative z-10 flex-1">
+                <button
+                  type="button"
+                  onClick={() => handleTabClick(i)}
+                  disabled={!reachable && i > step}
+                  className={cn(
+                    "relative flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer",
+                    "size-9 sm:size-10 text-sm font-semibold",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(124,99,80,0.4)] scale-110"
+                      : completed
+                        ? "bg-primary/15 text-primary hover:bg-primary/25"
+                        : reachable
+                          ? "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                          : "bg-muted/50 text-muted-foreground/30 cursor-not-allowed",
+                  )}
+                >
+                  {completed ? <Check className="size-4" /> : i + 1}
+                  {active && (
+                    <motion.span
+                      layoutId="tagger-step-ring"
+                      className="absolute inset-0 rounded-full border-2 border-primary"
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                </button>
+                <span
+                  className={cn(
+                    "mt-2 text-[0.6875rem] font-medium transition-colors duration-200 hidden sm:block text-center",
+                    active ? "text-foreground" : completed ? "text-primary" : "text-muted-foreground",
+                  )}
+                >
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="absolute top-[18px] sm:top-5 inset-x-[10%] h-[2px] bg-muted -z-0 rounded-full">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: "linear-gradient(90deg, #c8a882, #a68b6b, #d4b896)" }}
+            initial={{ width: 0 }}
+            animate={{ width: `${(step / (TAGGER_STEPS.length - 1)) * 100}%` }}
+            transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
+          />
+        </div>
+      </div>
+
+      {/* Step Content */}
+      <div className="relative overflow-hidden pt-[10px]">
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.div
+            key={step}
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.1 }}
+          >
+            {steps[step]}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Nav */}
+      {!isLastStep ? (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            onClick={goPrev}
+            disabled={step === 0}
+            className="gap-2"
+          >
+            <ChevronRight className="h-4 w-4" />
+            הקודם
+          </Button>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {step + 1} / {TAGGER_STEPS.length}
+          </span>
+          <Button
+            onClick={handleNext}
+            disabled={!validateStep(step)}
+            className="gap-2"
+          >
+            הבא
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <Button
+          onClick={handleStart}
+          disabled={!validateStep(2)}
+          size="lg"
+          className="w-full"
+        >
+          התחל תיוג
+        </Button>
+      )}
+    </div>
+  );
+}

@@ -5,14 +5,14 @@
 ## Tech Stack
 - **Backend**: Python 3.10+, FastAPI, SQLAlchemy, DSPy, LiteLLM, PostgreSQL
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4, shadcn/ui, Framer Motion, NextAuth
-- **Package Managers**: uv (backend), npm (frontend)
+- **Package Managers**: pip (backend), npm (frontend)
 
 ## Project Layout
 
 ```
 ├── backend/                     FastAPI API + background worker
 │   ├── main.py                  Entry point (uvicorn, registry setup)
-│   ├── pyproject.toml           Python deps (uv)
+│   ├── pyproject.toml           Python deps
 │   ├── .env / .env.example      Config (DB, API keys, worker settings)
 │   ├── Dockerfile
 │   ├── docker-compose.yml
@@ -60,7 +60,7 @@
 │   │   │   ├── core.py          DSPy orchestration pipeline
 │   │   │   ├── data.py          Dataset loading/parsing
 │   │   │   ├── language_models.py  LM configuration via LiteLLM
-│   │   │   ├── optimizers.py    MIPROv2/GEPA optimizer setup
+│   │   │   ├── optimizers.py    GEPA optimizer setup
 │   │   │   ├── artifacts.py     Optimized program storage
 │   │   │   ├── progress.py      Job progress tracking
 │   │   │   └── validators.py    Input validation
@@ -128,7 +128,7 @@
 ## Running
 ```bash
 # Backend
-cd backend && uv run python main.py
+cd backend && python main.py
 
 # Frontend
 cd frontend && npm run dev
@@ -137,10 +137,10 @@ cd frontend && npm run dev
 ## Testing
 ```bash
 # Backend unit tests
-cd backend && uv run pytest tests/unit/ -v
+cd backend && pytest tests/unit/ -v
 
 # Backend integration tests (requires running server + OPENAI_API_KEY)
-cd backend && uv run pytest tests/test_llm_integration.py -v
+cd backend && pytest tests/test_llm_integration.py -v
 
 # Frontend type check
 cd frontend && npm run build

@@ -18,6 +18,7 @@ import {
   Cell,
 } from "recharts";
 import { ChartTooltip } from "./chart-utils";
+import { TERMS } from "@/shared/lib/terms";
 
 interface OptimizerChartProps {
   data: Array<{ name: string; שיפור_ממוצע: number; count: number }>;
@@ -39,7 +40,7 @@ export function OptimizerChart({ data, onBarClick }: OptimizerChartProps) {
             tick={{ fontSize: 12 }}
             className="fill-muted-foreground"
             dy={10}
-            label={{ value: "אופטימייזר", position: "insideBottom", offset: -15, fontSize: 11 }}
+            label={{ value: TERMS.optimizer, position: "insideBottom", offset: -15, fontSize: 11 }}
           />
           <YAxis
             tickLine={false}

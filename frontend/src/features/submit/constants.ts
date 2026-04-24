@@ -1,4 +1,5 @@
 import type { ModelConfig, SplitFractions } from "@/shared/types/api";
+import { TERMS } from "@/shared/lib/terms";
 
 export const emptyModelConfig = (): ModelConfig => ({
   name: "",
@@ -10,10 +11,10 @@ export const defaultSplit: SplitFractions = { train: 0.7, val: 0.15, test: 0.15 
 
 export const STEPS = [
   { id: "basics", label: "פרטים בסיסיים" },
-  { id: "data", label: "דאטאסט" },
-  { id: "model", label: "מודל" },
-  { id: "code", label: "קוד" },
+  { id: "data", label: TERMS.dataset },
   { id: "params", label: "פרמטרים" },
+  { id: "code", label: "קוד" },
+  { id: "model", label: TERMS.model },
   { id: "review", label: "סיכום ושליחה" },
 ] as const;
 

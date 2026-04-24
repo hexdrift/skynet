@@ -1,6 +1,7 @@
 import { Activity, CheckCircle2, Layers, XCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnimatedNumber, FadeIn, TiltCard } from "@/shared/ui/motion";
+import { TERMS } from "@/shared/lib/terms";
 import type { DashboardStats } from "../hooks/use-dashboard-stats";
 
 type DashboardHeaderProps = {
@@ -16,7 +17,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
             <h1 className="text-3xl font-bold tracking-tight">לוח בקרה</h1>
             {stats && (
               <p className="text-sm text-muted-foreground mt-1">
-                {stats.total} אופטימיזציות
+                {stats.total} {TERMS.optimizationPlural}
                 {stats.running > 0 && (
                   <span className="text-[var(--warning)] font-medium">
                     {" "}
@@ -31,10 +32,9 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
 
       {stats && (
         <div
-          className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4"
+          className="grid gap-3 sm:gap-4"
           style={{
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(min(180px, 100%), 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))",
           }}
           data-tutorial="dashboard-kpis"
         >
@@ -43,10 +43,10 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
               <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
-                    <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
+                    <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
                       סה״כ
                     </p>
-                    <p className="text-4xl font-bold tracking-tighter tabular-nums">
+                    <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums">
                       <AnimatedNumber value={stats.total} />
                     </p>
                   </div>
@@ -54,8 +54,8 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                     <Layers className="size-4 text-stone-500" />
                   </div>
                 </div>
-                <p className="mt-3 text-[10px] text-muted-foreground/50">
-                  אופטימיזציות
+                <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
+                  {TERMS.optimizationPlural}
                 </p>
               </CardContent>
             </Card>
@@ -68,11 +68,11 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
               <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
-                    <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
+                    <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
                       פעילות
                     </p>
                     <p
-                      className={`text-4xl font-bold tracking-tighter tabular-nums ${stats.running > 0 ? "text-[var(--warning)]" : "text-muted-foreground"}`}
+                      className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.running > 0 ? "text-[var(--warning)]" : "text-muted-foreground"}`}
                     >
                       <AnimatedNumber value={stats.running} />
                     </p>
@@ -85,9 +85,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                     />
                   </div>
                 </div>
-                <p className="mt-3 text-[10px] text-muted-foreground/50">
-                  כרגע רצות
-                </p>
+                <p className="mt-3 text-[0.625rem] text-muted-foreground/50">כרגע רצות</p>
               </CardContent>
             </Card>
           </TiltCard>
@@ -97,11 +95,11 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
               <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
-                    <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
+                    <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
                       הצליחו
                     </p>
                     <p
-                      className={`text-4xl font-bold tracking-tighter tabular-nums ${stats.success > 0 ? "text-emerald-700" : "text-muted-foreground"}`}
+                      className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.success > 0 ? "text-emerald-700" : "text-muted-foreground"}`}
                     >
                       <AnimatedNumber value={stats.success} />
                     </p>
@@ -124,7 +122,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                         }}
                       />
                     </div>
-                    <span className="text-[10px] tabular-nums text-muted-foreground/50">
+                    <span className="text-[0.625rem] tabular-nums text-muted-foreground/50">
                       {Math.round((stats.success / stats.total) * 100)}%
                     </span>
                   </div>
@@ -138,11 +136,11 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
               <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
-                    <p className="text-[12px] font-medium text-muted-foreground/80 tracking-wide">
+                    <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
                       נכשלו
                     </p>
                     <p
-                      className={`text-4xl font-bold tracking-tighter tabular-nums ${stats.failed > 0 ? "text-red-600" : "text-muted-foreground"}`}
+                      className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.failed > 0 ? "text-red-600" : "text-muted-foreground"}`}
                     >
                       <AnimatedNumber value={stats.failed} />
                     </p>
@@ -165,7 +163,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                         }}
                       />
                     </div>
-                    <span className="text-[10px] tabular-nums text-muted-foreground/50">
+                    <span className="text-[0.625rem] tabular-nums text-muted-foreground/50">
                       {Math.round((stats.failed / stats.total) * 100)}%
                     </span>
                   </div>

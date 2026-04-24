@@ -20,17 +20,17 @@ def _format_prompt_string(
     demos: list[OptimizedDemo],
     signature: Any,
 ) -> str:
-    """Build a complete formatted prompt string from predictor components.
+    """Build a human-readable prompt string from instructions, fields, and demos.
 
     Args:
-        instructions: The instruction text for the predictor.
-        input_fields: List of input field names.
-        output_fields: List of output field names.
-        demos: List of few-shot demonstration examples.
-        signature: The DSPy signature object for field descriptions.
+        instructions: System/task instruction text prepended to the output.
+        input_fields: Ordered list of input field names.
+        output_fields: Ordered list of output field names.
+        demos: List of few-shot demonstrations to include.
+        signature: DSPy signature object used to retrieve field descriptions.
 
     Returns:
-        str: Complete formatted prompt as a single string.
+        A formatted multi-line string suitable for human review.
     """
     parts: list[str] = []
 
@@ -87,16 +87,14 @@ def _format_prompt_string(
 
 
 def extract_optimized_prompt(program: Any) -> OptimizedPredictor | None:
-    """Extract optimized prompt and demos from a compiled DSPy program.
-
-    Extracts the instructions, signature fields, and few-shot demonstration
-    examples from the program's predictor.
+    """Extract instructions, fields, and demos from the first named predictor, or None on failure.
 
     Args:
-        program: Compiled DSPy module produced by an optimizer.
+        program: A compiled DSPy module with a ``named_predictors()`` method.
 
     Returns:
-        Optional[OptimizedPredictor]: Extracted prompt data, or None if extraction fails.
+        An ``OptimizedPredictor`` populated with the first predictor's data,
+        or ``None`` if no predictors are found or extraction fails.
     """
     try:
         named_predictors = list(program.named_predictors())
@@ -155,21 +153,7 @@ def persist_program(
     program: Any,
     artifact_id: str | None,
 ) -> ProgramArtifact | None:
-    """Save the compiled DSPy program to temp, encode to base64, then cleanup.
-
-    All artifact data is returned in the ProgramArtifact for storage.
-    No files are left on disk.
-
-    Args:
-        program: Compiled DSPy module produced by an optimizer.
-        artifact_id: Optional identifier for the artifact.
-
-    Returns:
-        Optional[ProgramArtifact]: Serialized metadata bundle with base64 program.
-
-    Raises:
-        ServiceError: When saving or reading the artifact fails.
-    """
+    """Save the compiled program to a temp dir, encode to base64, clean up, and return the artifact."""
     temp_dir = None
     try:
         temp_dir = tempfile.mkdtemp(prefix=f"dspy_artifact_{artifact_id or uuid4()}_")

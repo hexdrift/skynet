@@ -17,6 +17,7 @@ from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN
 from ..models import GridSearchRequest, RunRequest
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
+from .log_handler import get_current_pair_index
 
 EVENT_PROGRESS = "progress"
 EVENT_LOG = "log"
@@ -29,53 +30,37 @@ _FORK_SERVICE: DspyService | None = None
 
 
 def set_fork_service(service: DspyService | None) -> None:
-    """Store a service instance that child processes may reuse after fork.
-
-    Args:
-        service: The DspyService instance to share, or ``None`` to clear.
-
-    Returns:
-        None.
-    """
+    """Store a service instance that child processes may reuse after fork."""
     global _FORK_SERVICE
     _FORK_SERVICE = service
 
 
 def safe_queue_put(event_queue: Any, event: dict[str, Any]) -> None:
-    """Put an event onto a multiprocessing queue, suppressing errors.
-
-    Args:
-        event_queue: Multiprocessing queue to write to.
-        event: Event dictionary to enqueue.
-
-    Returns:
-        None.
-    """
+    """Put an event onto a multiprocessing queue, suppressing any errors."""
     with contextlib.suppress(Exception):
         event_queue.put(event)
 
 
 class SubprocessLogHandler(logging.Handler):
-    """Forward DSPy logs from the subprocess to the parent worker."""
+    """Forward DSPy log records from the child process to the parent via the event queue.
+
+    Attached to the ``dspy`` logger inside ``run_service_in_subprocess`` and removed
+    in the ``finally`` block so it does not persist across calls.  Each record is
+    serialised into an ``EVENT_LOG`` dict and placed on the shared queue; errors
+    from the queue are suppressed via ``safe_queue_put``.
+    """
 
     def __init__(self, event_queue: Any) -> None:
-        """Initialize the subprocess log handler.
+        """Initialize the handler with the shared multiprocessing queue.
 
         Args:
-            event_queue: Multiprocessing queue for forwarding log events.
+            event_queue: Queue used to send ``EVENT_LOG`` events to the parent.
         """
         super().__init__()
         self._event_queue = event_queue
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Format and forward a log record to the parent process via the event queue.
-
-        Args:
-            record: Log record to forward.
-
-        Returns:
-            None.
-        """
+        """Format and forward a log record to the parent process via the event queue."""
         try:
             message = self.format(record)
         except Exception:
@@ -88,6 +73,7 @@ class SubprocessLogHandler(logging.Handler):
                 "level": record.levelname,
                 "logger": record.name,
                 "message": message,
+                "pair_index": get_current_pair_index(),
             },
         )
 
@@ -98,17 +84,32 @@ def run_service_in_subprocess(
     event_queue: Any,
     start_method: str,
 ) -> None:
-    """Execute a DSPy run in a child process and stream events to parent.
+    """Execute a DSPy optimization in the child process, streaming events back to the parent.
+
+    This is the ``target`` function passed to ``mp.Process``.  It emits four event
+    types onto ``event_queue``:
+
+    - ``EVENT_LOG`` — every record from the ``dspy`` logger at INFO or above,
+      forwarded via ``SubprocessLogHandler``.
+    - ``EVENT_PROGRESS`` — one event per ``progress_callback`` invocation from the
+      optimizer, carrying ``event`` (phase name) and ``metrics`` (dict).
+    - ``EVENT_RESULT`` — emitted once on success, containing the serialised
+      ``RunResponse`` or ``GridSearchResponse``.
+    - ``EVENT_ERROR`` — emitted on any ``BaseException``, containing the error
+      string and formatted traceback.
+
+    When ``start_method == "fork"`` and ``_FORK_SERVICE`` is set, the pre-built
+    service from the parent is reused directly; otherwise a fresh ``DspyService``
+    is constructed.
 
     Args:
-        payload_dict: Serialized request payload including a ``_optimization_type`` key.
-        artifact_id: Identifier used for storing optimization artifacts.
-        event_queue: Multiprocessing queue for streaming progress, log, and
-            result events back to the parent process.
-        start_method: Multiprocessing start method (e.g. "fork", "spawn").
-
-    Returns:
-        None.
+        payload_dict: Serialised job payload; ``_optimization_type`` key is popped
+            before model validation.
+        artifact_id: Passed through to ``service.run`` / ``service.run_grid_search``
+            as the artifact storage identifier.
+        event_queue: Multiprocessing queue used to stream events to the parent.
+        start_method: The context start method (``"fork"`` or ``"spawn"``); controls
+            whether ``_FORK_SERVICE`` is reused.
     """
     service = _FORK_SERVICE if start_method == "fork" and _FORK_SERVICE is not None else DspyService(ServiceRegistry())
     dspy_logger = logging.getLogger("dspy")
@@ -122,18 +123,11 @@ def run_service_in_subprocess(
     dspy_logger.addHandler(log_handler)
 
     try:
+        payload_dict = dict(payload_dict)
         optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
 
         def progress_callback(message: str, metrics: dict[str, Any]) -> None:
-            """Forward a progress event from the optimizer to the parent queue.
-
-            Args:
-                message: Short event name describing the progress step.
-                metrics: Structured metrics payload accompanying the event.
-
-            Returns:
-                None.
-            """
+            """Forward an optimizer progress event to the parent via the queue."""
             safe_queue_put(
                 event_queue,
                 {

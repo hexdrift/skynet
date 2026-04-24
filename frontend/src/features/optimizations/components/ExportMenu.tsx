@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Download, FileJson, FileSpreadsheet, Package } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
 import type {
   OptimizationLogEntry,
   OptimizationStatusResponse,
@@ -71,9 +71,9 @@ export function ExportMenu({
     job.grid_result?.best_pair?.program_artifact?.program_pickle_base64
   );
   const itemCls =
-    "w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] text-foreground hover:bg-muted/40 cursor-pointer transition-colors";
+    "w-full flex items-center gap-2.5 px-3.5 py-2 text-[0.75rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors";
   const iconCls = "size-4 shrink-0 text-muted-foreground/60";
-  const extCls = "text-muted-foreground/60 font-mono text-[10px] ms-auto";
+  const extCls = "text-muted-foreground/60 font-mono text-[0.625rem] ms-auto";
   const divider = <div className="h-px bg-border/40 mx-2 my-1" />;
 
   return (

@@ -8,25 +8,67 @@ also ensures the backing table exists by calling
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ...i18n import t
 from ...models import TemplateCreateRequest, TemplateResponse
 from ...storage.models import Base as StorageBase
 from ...storage.models import TemplateModel
+from ..response_limits import (
+    AGENT_DEFAULT_LIST,
+    AGENT_MAX_CODE_PREVIEW,
+    AGENT_MAX_LIST,
+    clamp_limit,
+    truncate_text,
+)
+
+
+def _compact_template_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a copy of ``config`` with large code blocks replaced by size previews.
+
+    ``signature_code`` and ``metric_code`` can each be a few KB of Python;
+    echoing them inside a list response blows the agent context. This keeps
+    a truncated preview so the agent can tell "what kind of template is this"
+    without pulling the full source. The REST UI calls ``GET /templates/{id}``
+    with ``view=full`` to get the unabridged config.
+    """
+    if not config:
+        return config or {}
+    out = dict(config)
+    for key in ("signature_code", "metric_code"):
+        value = out.get(key)
+        if isinstance(value, str) and value:
+            out[key] = truncate_text(value, AGENT_MAX_CODE_PREVIEW)
+    return out
+
+
+class TemplateUpdateRequest(BaseModel):
+    """Partial update for a saved template (owner-only, at least one field required)."""
+
+    username: str = Field(description="Username of the requester — must match the template's owner.")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    config: dict[str, Any] | None = Field(
+        default=None,
+        description="Replacement template configuration. Supply the full config, not a patch.",
+    )
+
+
+class ApplyTemplateResponse(BaseModel):
+    """Envelope returned by ``POST /templates/{id}/apply`` that carries a wizard_state patch."""
+
+    template_id: str
+    name: str
+    wizard_state: dict[str, Any]
 
 
 def create_templates_router(*, job_store) -> APIRouter:
-    """Build the templates router.
-
-    Args:
-        job_store: Job store whose SQLAlchemy engine backs template storage.
-
-    Returns:
-        APIRouter: Router with four routes — create, list, get, delete.
-    """
+    """Build the templates' router."""
     # Ensure the templates table exists before any request hits the router.
     StorageBase.metadata.create_all(job_store.engine)
 
@@ -37,33 +79,10 @@ def create_templates_router(*, job_store) -> APIRouter:
         response_model=TemplateResponse,
         status_code=201,
         summary="Save a reusable submission template",
+        tags=["agent"],
     )
     def create_template(req: TemplateCreateRequest) -> TemplateResponse:
-        """Persist a full submission config under a user-friendly name so the
-        user can re-load it from the dashboard later.
-
-        Use this to snapshot a working run — optimizer, model, signature,
-        metric, column mapping, dataset settings — as a starting point for
-        future jobs. The saved template is not linked to any specific run:
-        it's just a named blob of configuration.
-
-        Request body:
-            - ``name``: display name shown in the template picker (trimmed)
-            - ``description``: optional longer caption
-            - ``username``: owner, used for the delete authorization check
-            - ``config``: opaque JSON object with whatever the submit wizard
-              stashed. The server does not introspect its shape — it's
-              round-tripped verbatim on ``GET /templates/{id}``.
-
-        Returns the saved template including the server-assigned
-        ``template_id`` (UUID) and ``created_at`` timestamp. HTTP 201.
-
-        Args:
-            req: Template creation request with name, description, owner, and config.
-
-        Returns:
-            TemplateResponse describing the newly persisted template.
-        """
+        """Save a submission config as a named template for re-use. Returns HTTP 201 with a UUID and timestamp."""
         template_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
@@ -92,45 +111,46 @@ def create_templates_router(*, job_store) -> APIRouter:
         "/templates",
         response_model=list[TemplateResponse],
         summary="List saved submission templates",
+        tags=["agent"],
     )
     def list_templates(
         username: str | None = Query(default=None, description="Only return templates created by this user"),
-        limit: int = Query(default=100, ge=1, le=500, description="Page size"),
+        limit: int = Query(
+            default=AGENT_DEFAULT_LIST,
+            ge=1,
+            le=AGENT_MAX_LIST,
+            description=f"Page size (default {AGENT_DEFAULT_LIST}, ceiling {AGENT_MAX_LIST}).",
+        ),
         offset: int = Query(default=0, ge=0, description="Number of templates to skip"),
+        view: str = Query(
+            default="compact",
+            description=(
+                "'compact' (default) truncates template config code blocks for agent calls; "
+                "'full' returns the raw config including full signature/metric code."
+            ),
+        ),
     ) -> list[TemplateResponse]:
-        """Return templates ordered newest-first, with optional owner filter.
+        """Return templates ordered newest-first. Omit ``username`` to see all templates.
 
-        Called by the submit wizard's "Start from template" picker. Omit
-        ``username`` to see every template in the system, or pass a
-        specific user to see only that user's saved configs.
-
-        Pagination is simple offset/limit. The default page size of 100 is
-        plenty for normal use; bump ``limit`` (up to 500) for admin tooling
-        that needs to enumerate everything.
-
-        Response is an array of the same shape as
-        ``POST /templates`` returns.
-
-        Args:
-            username: Only return templates created by this user.
-            limit: Maximum page size.
-            offset: Number of templates to skip.
-
-        Returns:
-            List of TemplateResponse items ordered newest-first.
+        By default (``view=compact``) embedded ``signature_code`` / ``metric_code``
+        in each template's ``config`` is truncated to a short preview so long
+        snippets don't fill the agent context. UI callers that need the full
+        Python source pass ``view=full``.
         """
+        resolved_limit = clamp_limit(limit)
+        compact = view != "full"
         with Session(job_store.engine) as session:
             query = session.query(TemplateModel).order_by(TemplateModel.created_at.desc())
             if username:
                 query = query.filter(TemplateModel.username == username)
-            rows = query.offset(offset).limit(limit).all()
+            rows = query.offset(offset).limit(resolved_limit).all()
             return [
                 TemplateResponse(
                     template_id=r.template_id,
                     name=r.name,
                     description=r.description,
                     username=r.username,
-                    config=r.config,
+                    config=_compact_template_config(r.config) if compact else r.config,
                     created_at=r.created_at,
                 )
                 for r in rows
@@ -140,30 +160,91 @@ def create_templates_router(*, job_store) -> APIRouter:
         "/templates/{template_id}",
         response_model=TemplateResponse,
         summary="Fetch a single template by ID",
+        tags=["agent"],
     )
-    def get_template(template_id: str) -> TemplateResponse:
-        """Retrieve a previously saved template by its UUID.
+    def get_template(
+        template_id: str,
+        view: str = Query(
+            default="compact",
+            description=(
+                "'compact' (default) truncates code blocks inside config; "
+                "'full' returns the raw config — UI callers should pass 'full'."
+            ),
+        ),
+    ) -> TemplateResponse:
+        """Fetch a single template by UUID. 404 if not found.
 
-        Used when the submit wizard needs to load a template into the form,
-        including the opaque ``config`` blob that drives the prefill.
-
-        Returns HTTP 404 if no template with that ID exists. The lookup is
-        public — anyone who knows the ID can read the template, since the
-        ID itself is the security boundary.
-
-        Args:
-            template_id: UUID of the template to fetch.
-
-        Returns:
-            TemplateResponse describing the requested template.
-
-        Raises:
-            HTTPException: 404 when the template doesn't exist.
+        Defaults to a compact projection that truncates large code fields so
+        the agent can introspect a template without burning context. Pass
+        ``view=full`` to retrieve the complete signature/metric source.
         """
+        compact = view != "full"
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
-                raise HTTPException(status_code=404, detail="Template not found.")
+                raise HTTPException(status_code=404, detail=t("template.not_found"))
+            return TemplateResponse(
+                template_id=row.template_id,
+                name=row.name,
+                description=row.description,
+                username=row.username,
+                config=_compact_template_config(row.config) if compact else row.config,
+                created_at=row.created_at,
+            )
+
+    @router.delete(
+        "/templates/{template_id}",
+        status_code=200,
+        summary="Delete a template (owner only)",
+        tags=["agent"],
+    )
+    def delete_template(
+        template_id: str,
+        username: str = Query(..., description="Username of the requester — must match the template's owner"),
+    ) -> dict:
+        """Delete a template. ``username`` must match the owner (403 otherwise). 404 if not found."""
+        with Session(job_store.engine) as session:
+            row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
+            if not row:
+                raise HTTPException(status_code=404, detail=t("template.not_found"))
+            if row.username != username:
+                raise HTTPException(status_code=403, detail=t("template.cannot_delete_others"))
+            session.delete(row)
+            session.commit()
+        return {"template_id": template_id, "deleted": True}
+
+    @router.put(
+        "/templates/{template_id}",
+        response_model=TemplateResponse,
+        status_code=200,
+        summary="Update a template in place (owner only)",
+        tags=["agent"],
+    )
+    def update_template(template_id: str, req: TemplateUpdateRequest) -> TemplateResponse:
+        """Patch a template's name/description/config. Owner-only (403 otherwise).
+
+        At least one of ``name``, ``description``, or ``config`` must be
+        supplied. Missing fields are left untouched. 404 if unknown.
+        """
+        if req.name is None and req.description is None and req.config is None:
+            raise HTTPException(
+                status_code=422,
+                detail=t("template.update_requires_field"),
+            )
+        with Session(job_store.engine) as session:
+            row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
+            if not row:
+                raise HTTPException(status_code=404, detail=t("template.not_found"))
+            if row.username != req.username:
+                raise HTTPException(status_code=403, detail=t("template.cannot_update_others"))
+            if req.name is not None:
+                row.name = req.name.strip()
+            if req.description is not None:
+                row.description = req.description
+            if req.config is not None:
+                row.config = req.config
+            session.commit()
+            session.refresh(row)
             return TemplateResponse(
                 template_id=row.template_id,
                 name=row.name,
@@ -173,45 +254,67 @@ def create_templates_router(*, job_store) -> APIRouter:
                 created_at=row.created_at,
             )
 
-    @router.delete(
-        "/templates/{template_id}",
+    @router.post(
+        "/templates/{template_id}/apply",
+        response_model=ApplyTemplateResponse,
         status_code=200,
-        summary="Delete a template (owner only)",
+        summary="Load a saved template into the wizard",
+        tags=["agent"],
     )
-    def delete_template(
-        template_id: str,
-        username: str = Query(..., description="Username of the requester — must match the template's owner"),
-    ) -> dict:
-        """Remove a template from the store.
+    def apply_template(template_id: str) -> ApplyTemplateResponse:
+        """Return a ``wizard_state`` patch that prefills the submit wizard from a template.
 
-        Authorization: the ``username`` query parameter must exactly match
-        the ``username`` that was saved on the template. Otherwise the
-        request is rejected with HTTP 403. There is no admin override.
-
-        Returns HTTP 200 with ``{"template_id": ..., "deleted": true}`` on
-        success, 404 if the template doesn't exist, 403 if the requester is
-        not the owner. The operation is idempotent in the sense that
-        deleting an already-missing template 404s rather than silently
-        succeeding — this catches bugs where the frontend fails to refresh.
-
-        Args:
-            template_id: UUID of the template to delete.
-            username: Requester's username — must match the template's owner.
-
-        Returns:
-            Dict ``{"template_id": ..., "deleted": True}`` on success.
-
-        Raises:
-            HTTPException: 404 when missing, 403 when not owned by the requester.
+        The template's stored config may include signature_code, metric_code,
+        column_mapping, model config, optimizer, and an optional job name.
+        Only keys the wizard knows about are projected. 404 if unknown.
         """
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
-                raise HTTPException(status_code=404, detail="Template not found.")
-            if row.username != username:
-                raise HTTPException(status_code=403, detail="You can only delete your own templates.")
-            session.delete(row)
-            session.commit()
-        return {"template_id": template_id, "deleted": True}
+                raise HTTPException(status_code=404, detail=t("template.not_found"))
+            cfg: dict[str, Any] = dict(row.config or {})
+            template_name = row.name
+
+        wizard_state: dict[str, Any] = {}
+
+        signature_code = cfg.get("signature_code")
+        if isinstance(signature_code, str) and signature_code.strip():
+            wizard_state["signature_code"] = signature_code
+
+        metric_code = cfg.get("metric_code")
+        if isinstance(metric_code, str) and metric_code.strip():
+            wizard_state["metric_code"] = metric_code
+
+        job_name = cfg.get("name") or cfg.get("job_name")
+        if isinstance(job_name, str) and job_name.strip():
+            wizard_state["job_name"] = job_name
+
+        column_mapping = cfg.get("column_mapping")
+        if isinstance(column_mapping, dict):
+            roles: dict[str, str] = {}
+            inputs = column_mapping.get("inputs", {})
+            outputs = column_mapping.get("outputs", {})
+            if isinstance(inputs, dict):
+                for col in inputs.values():
+                    if isinstance(col, str) and col:
+                        roles[col] = "input"
+            if isinstance(outputs, dict):
+                for col in outputs.values():
+                    if isinstance(col, str) and col:
+                        roles[col] = "output"
+            if roles:
+                wizard_state["column_roles"] = roles
+                wizard_state["columns_configured"] = True
+
+        model_config = cfg.get("model_config") or cfg.get("model_settings")
+        if isinstance(model_config, dict) and model_config.get("name"):
+            wizard_state["model_config"] = model_config
+            wizard_state["model_configured"] = True
+
+        return ApplyTemplateResponse(
+            template_id=template_id,
+            name=template_name,
+            wizard_state=wizard_state,
+        )
 
     return router

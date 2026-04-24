@@ -1,0 +1,61 @@
+{
+  "archived": false,
+  "baseline_test_metric": null,
+  "best_pair_label": null,
+  "column_mapping": {
+    "inputs": {
+      "question": "question"
+    },
+    "outputs": {
+      "answer": "answer"
+    }
+  },
+  "compile_kwargs": {},
+  "completed_at": "2026-04-14T16:55:53.740538",
+  "completed_pairs": null,
+  "created_at": "2026-04-14T16:55:51.722641",
+  "dataset_rows": 5,
+  "description": null,
+  "elapsed": "00:00:01",
+  "elapsed_seconds": 1.38,
+  "estimated_remaining": null,
+  "failed_pairs": null,
+  "generation_models": null,
+  "latest_metrics": {},
+  "log_count": 1,
+  "message": "Failed to build language model 'gpt-5.4-nano': OpenAI's reasoning models require passing temperature=1.0 or None and max_tokens >= 16000 or None to `dspy.LM(...)`, e.g., dspy.LM('openai/gpt-5', temperature=1.0, max_tokens=16000)",
+  "metric_improvement": null,
+  "model_name": "gpt-5.4-nano",
+  "model_settings": {
+    "base_url": null,
+    "extra": {},
+    "max_tokens": null,
+    "name": "gpt-5.4-nano",
+    "temperature": 0.1,
+    "top_p": null
+  },
+  "module_kwargs": {},
+  "module_name": "predict",
+  "name": null,
+  "optimization_id": "7ece2395-b0fb-45e2-8e52-e6f1765f30c8",
+  "optimization_type": "run",
+  "optimized_test_metric": null,
+  "optimizer_kwargs": {},
+  "optimizer_name": "gepa",
+  "pinned": false,
+  "progress_count": 0,
+  "reflection_model_name": null,
+  "reflection_models": null,
+  "seed": 42,
+  "shuffle": false,
+  "split_fractions": {
+    "test": 0.2,
+    "train": 0.6,
+    "val": 0.2
+  },
+  "started_at": "2026-04-14T16:55:52.358471",
+  "status": "failed",
+  "task_model_name": null,
+  "total_pairs": null,
+  "username": "serve-test"
+}

@@ -22,30 +22,6 @@ export function formatDate(iso: string): string {
 }
 
 /**
- * Format ISO date string to short Hebrew date
- * @example "2026-04-11T12:30:00" → "11/04/2026"
- */
-export function formatDateShort(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("he-IL");
-  } catch {
-    return iso;
-  }
-}
-
-/**
- * Format ISO date string to Hebrew time only
- * @example "2026-04-11T12:30:00" → "12:30:00"
- */
-export function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString("he-IL");
-  } catch {
-    return iso;
-  }
-}
-
-/**
  * Format ISO date as relative time in Hebrew
  * @example "לפני 5 דק'" / "לפני 2 שע'" / "לפני 3 ימים"
  */
@@ -128,27 +104,6 @@ export function formatImprovement(v: number | undefined | null): string {
   if (v == null) return "—";
   const pct = Math.abs(v) > 1 ? v : v * 100;
   return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
-}
-
-/**
- * Format large numbers with thousands separators (Hebrew locale)
- * @example 1234567 → "1,234,567"
- */
-export function formatNumber(n: number | undefined | null): string {
-  if (n == null) return "—";
-  return new Intl.NumberFormat("he-IL").format(n);
-}
-
-/**
- * Format file size in bytes to human-readable string
- * @example 1536 → "1.5 KB", 2097152 → "2.0 MB"
- */
-export function formatFileSize(bytes: number | undefined | null): string {
-  if (bytes == null || bytes === 0) return "—";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const k = 1024;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${units[i]}`;
 }
 
 /* ── Data Formatting ── */

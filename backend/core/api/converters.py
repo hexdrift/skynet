@@ -11,14 +11,13 @@ from ..constants import (
     PAYLOAD_OVERVIEW_DATASET_ROWS,
     PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
-    PAYLOAD_OVERVIEW_JOB_TYPE,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
     PAYLOAD_OVERVIEW_MODULE_KWARGS,
     PAYLOAD_OVERVIEW_MODULE_NAME,
     PAYLOAD_OVERVIEW_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
-    PAYLOAD_OVERVIEW_PROMPT_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODELS,
     PAYLOAD_OVERVIEW_TASK_MODEL,
@@ -32,13 +31,13 @@ logger = logging.getLogger(__name__)
 
 
 def status_to_job_status(status: str) -> OptimizationStatus:
-    """Map status string to OptimizationStatus enum.
+    """Convert a raw status string to an OptimizationStatus enum, defaulting to pending.
 
     Args:
-        status: Status string from job store.
+        status: Raw status string from the job store.
 
     Returns:
-        OptimizationStatus: Corresponding enum value.
+        The matching OptimizationStatus, or ``pending`` if the value is unrecognised.
     """
     try:
         return OptimizationStatus(status)
@@ -47,13 +46,14 @@ def status_to_job_status(status: str) -> OptimizationStatus:
 
 
 def parse_timestamp(val: Any) -> datetime | None:
-    """Convert value to datetime, handling None and ISO strings.
+    """Parse a timestamp value into a timezone-aware datetime.
 
     Args:
-        val: Raw value from job store (None, str, or datetime).
+        val: A datetime instance, an ISO-8601 string (with optional ``Z`` suffix),
+            or ``None``/empty string.
 
     Returns:
-        Optional[datetime]: Parsed datetime or None.
+        A datetime object, or ``None`` if the input is absent or unparseable.
     """
     if val is None or val == "":
         return None
@@ -68,13 +68,13 @@ def parse_timestamp(val: Any) -> datetime | None:
 
 
 def _seconds_to_hhmmss(seconds: float) -> str:
-    """Format seconds as HH:MM:SS.
+    """Format a duration in seconds as ``HH:MM:SS``.
 
     Args:
         seconds: Non-negative duration in seconds.
 
     Returns:
-        str: Formatted duration string.
+        Zero-padded ``HH:MM:SS`` string.
     """
     total = int(seconds)
     h = total // 3600
@@ -88,15 +88,18 @@ def _compute_elapsed_raw(
     started_at: datetime | None,
     completed_at: datetime | None,
 ) -> float | None:
-    """Compute elapsed seconds for a job.
+    """Return elapsed seconds between the job reference point and now or completion.
+
+    Uses ``started_at`` as the reference if available; falls back to ``created_at``.
+    Returns ``None`` when the job has not started yet.
 
     Args:
-        created_at: Job creation time.
-        started_at: Job start time (may be None).
-        completed_at: Job completion time (may be None).
+        created_at: Job creation timestamp.
+        started_at: Timestamp when the job began execution, if any.
+        completed_at: Timestamp when the job finished, if any.
 
     Returns:
-        Optional[float]: Elapsed seconds, or None if not started.
+        Elapsed seconds (clamped to 0), or ``None`` if the job hasn't started.
     """
     ref = started_at or created_at
     if completed_at is not None:
@@ -113,15 +116,16 @@ def compute_elapsed(
     started_at: datetime | None,
     completed_at: datetime | None,
 ) -> tuple[str | None, float | None]:
-    """Compute elapsed time for a job as (HH:MM:SS string, raw seconds).
+    """Return a formatted elapsed string and raw seconds for a job.
 
     Args:
-        created_at: Job creation time.
-        started_at: Job start time (may be None).
-        completed_at: Job completion time (may be None).
+        created_at: Job creation timestamp.
+        started_at: Timestamp when the job began execution, if any.
+        completed_at: Timestamp when the job finished, if any.
 
     Returns:
-        tuple: (HH:MM:SS string or None, seconds float or None).
+        A ``(HH:MM:SS string, float seconds)`` pair, or ``(None, None)`` if the
+        job has not started.
     """
     seconds = _compute_elapsed_raw(created_at, started_at, completed_at)
     if seconds is None:
@@ -130,13 +134,15 @@ def compute_elapsed(
 
 
 def parse_overview(job_data: dict) -> dict:
-    """Extract and parse the payload_overview from job data.
+    """Extract and deserialize the ``payload_overview`` field from a job dict.
+
+    Handles both pre-parsed dicts and JSON strings stored by older job rows.
 
     Args:
-        job_data: Raw job dictionary from the store.
+        job_data: Raw job dict from the job store.
 
     Returns:
-        dict: Parsed overview dictionary.
+        The overview as a plain dict, or an empty dict on any parse failure.
     """
     overview = job_data.get("payload_overview", {})
     if isinstance(overview, str):
@@ -149,13 +155,13 @@ def parse_overview(job_data: dict) -> dict:
 
 
 def extract_estimated_remaining(job_data: dict) -> str | None:
-    """Extract estimated remaining time from latest_metrics tqdm data as HH:MM:SS.
+    """Read the tqdm-derived remaining-time metric and format it as ``HH:MM:SS``.
 
     Args:
-        job_data: Raw job dictionary from the store.
+        job_data: Raw job dict that may contain ``latest_metrics``.
 
     Returns:
-        Optional[str]: Remaining time as HH:MM:SS, or None if unavailable.
+        A formatted time string, or ``None`` if the metric is absent or negative.
     """
     metrics = job_data.get("latest_metrics") or {}
     val = metrics.get(TQDM_REMAINING_KEY)
@@ -165,16 +171,16 @@ def extract_estimated_remaining(job_data: dict) -> str | None:
 
 
 def overview_to_base_fields(overview: dict) -> dict:
-    """Map overview keys to the shared _JobResponseBase field names.
+    """Map payload-overview keys to the flat field names expected by response models.
 
     Args:
-        overview: Parsed overview dictionary.
+        overview: Deserialised payload overview dict.
 
     Returns:
-        dict: Keyword arguments for _JobResponseBase fields.
+        Dict of field names suitable for unpacking into response model constructors.
     """
     return {
-        "optimization_type": overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN),
+        "optimization_type": overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN),
         "name": overview.get(PAYLOAD_OVERVIEW_NAME),
         "description": overview.get(PAYLOAD_OVERVIEW_DESCRIPTION),
         "pinned": overview.get("pinned", False),
@@ -188,7 +194,6 @@ def overview_to_base_fields(overview: dict) -> dict:
         "model_name": overview.get(PAYLOAD_OVERVIEW_MODEL_NAME),
         "model_settings": overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS),
         "reflection_model_name": overview.get(PAYLOAD_OVERVIEW_REFLECTION_MODEL),
-        "prompt_model_name": overview.get(PAYLOAD_OVERVIEW_PROMPT_MODEL),
         "task_model_name": overview.get(PAYLOAD_OVERVIEW_TASK_MODEL),
         "total_pairs": overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
         "generation_models": overview.get(PAYLOAD_OVERVIEW_GENERATION_MODELS),

@@ -43,10 +43,17 @@ import {
   servePairProgramStream,
 } from "@/shared/lib/api";
 import type { ServeInfoResponse } from "@/shared/types/api";
-import { DEMO_OPTIMIZATION_ID, startDemoSimulation } from "@/features/tutorial/lib/demo-data";
+import {
+  DEMO_OPTIMIZATION_ID,
+  DEMO_GRID_OPTIMIZATION_ID,
+  buildGridDemoJob,
+  startDemoSimulation,
+} from "@/features/tutorial/lib/demo-data";
 import { Skeleton } from "boneyard-js/react";
 import { optimizationDetailBones } from "@/features/optimizations/lib/bones";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
+import { tip } from "@/shared/lib/tooltips";
+import { TERMS } from "@/shared/lib/terms";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-status";
 import { registerTutorialHook } from "@/features/tutorial/lib/bridge";
 import { HelpTip } from "@/shared/ui/help-tip";
@@ -59,6 +66,7 @@ import type {
 import {
   type PipelineStage,
   extractScoresFromLogs,
+  reconstructGridResult,
   DataTab,
   LogsTab,
   ExportMenu,
@@ -72,6 +80,7 @@ import {
   StageInfoModal,
   PairDetailView,
   OverviewTab,
+  GridServeTab,
 } from "@/features/optimizations";
 
 /* ── Page Component ── */
@@ -86,6 +95,8 @@ export default function JobDetailPage() {
   useEffect(() => registerTutorialHook("setDetailTab", setDetailTab), []);
 
   const isDemoMode = id === DEMO_OPTIMIZATION_ID;
+  const isGridDemoMode = id === DEMO_GRID_OPTIMIZATION_ID;
+  const isAnyDemoMode = isDemoMode || isGridDemoMode;
 
   const [job, setJob] = useState<OptimizationStatusResponse | null>(null);
   const [payload, setPayload] = useState<OptimizationPayloadResponse | null>(null);
@@ -97,6 +108,13 @@ export default function JobDetailPage() {
     if (!isDemoMode) return;
     return startDemoSimulation({ setJob: (fn) => setJob(fn), setLoading });
   }, [isDemoMode]);
+
+  /* Grid demo — inject a fully-completed grid search job synchronously */
+  useEffect(() => {
+    if (!isGridDemoMode) return;
+    setJob(buildGridDemoJob());
+    setLoading(false);
+  }, [isGridDemoMode]);
 
   /* Serving playground */
   const [serveInfo, setServeInfo] = useState<ServeInfoResponse | null>(null);
@@ -129,34 +147,32 @@ export default function JobDetailPage() {
   const activePairIndex =
     searchParams.get("pair") != null ? parseInt(searchParams.get("pair")!, 10) : null;
 
+  /* Cancelled/failed grid jobs have no persisted grid_result — rebuild from
+     progress_events so overview + per-pair views still render. */
+  const effectiveJob = useMemo<OptimizationStatusResponse | null>(() => {
+    if (!job) return null;
+    if (job.grid_result || job.optimization_type !== "grid_search") return job;
+    const rebuilt = reconstructGridResult(job);
+    return rebuilt ? { ...job, grid_result: rebuilt } : job;
+  }, [job]);
+
   const activePair = useMemo(() => {
-    if (activePairIndex === null || !job?.grid_result) return null;
-    return job.grid_result.pair_results.find((p) => p.pair_index === activePairIndex) ?? null;
-  }, [activePairIndex, job?.grid_result]);
+    if (activePairIndex === null || !effectiveJob?.grid_result) return null;
+    return (
+      effectiveJob.grid_result.pair_results.find((p) => p.pair_index === activePairIndex) ?? null
+    );
+  }, [activePairIndex, effectiveJob?.grid_result]);
 
   const pairScorePoints = useMemo(() => {
     if (activePairIndex === null || !job?.logs) return [];
-    // For single-pair grid search, all logs belong to that pair
-    // For multi-pair, we heuristically filter
-    const totalPairs = job.grid_result?.pair_results.length ?? 1;
-    if (totalPairs === 1) return extractScoresFromLogs(job.logs);
-    // Multi-pair: filter logs by pair mention
-    const pairNum = activePairIndex + 1;
-    const pairLogs = job.logs.filter(
-      (l) =>
-        l.message.includes(`Grid pair ${pairNum}/`) || l.message.includes(`Grid pair ${pairNum}:`),
-    );
-    return extractScoresFromLogs(pairLogs.length > 0 ? pairLogs : job.logs);
-  }, [activePairIndex, job?.logs, job?.grid_result]);
+    const pairLogs = job.logs.filter((l) => l.pair_index === activePairIndex);
+    return extractScoresFromLogs(pairLogs);
+  }, [activePairIndex, job?.logs]);
 
   const pairFilteredLogs = useMemo(() => {
     if (activePairIndex === null || !job?.logs) return job?.logs ?? [];
-    const pairNum = activePairIndex + 1;
-    const filtered = job.logs.filter(
-      (l) =>
-        l.message.includes(`Grid pair ${pairNum}/`) || l.message.includes(`Grid pair ${pairNum}:`),
-    );
-    return filtered.length > 0 ? filtered : job.logs;
+    // Show pair-scoped logs + global (pair_index=null) for surrounding context
+    return job.logs.filter((l) => l.pair_index === activePairIndex || l.pair_index == null);
   }, [activePairIndex, job?.logs]);
 
   /* Fetch job data */
@@ -166,7 +182,7 @@ export default function JobDetailPage() {
       setJob(data);
       setError(null);
     } catch (err) {
-      setError("האופטימיזציה לא נמצאה");
+      setError(`ה${TERMS.optimization} לא נמצאה`);
     } finally {
       setLoading(false);
     }
@@ -174,18 +190,18 @@ export default function JobDetailPage() {
 
   /* Fetch payload (once) */
   useEffect(() => {
-    if (isDemoMode) return;
+    if (isAnyDemoMode) return;
     getOptimizationPayload(id)
       .then(setPayload)
       .catch(() => {});
-  }, [id, isDemoMode]);
+  }, [id, isAnyDemoMode]);
 
   /* Initial fetch + SSE streaming for real-time updates */
   const jobRef = useRef(job);
   jobRef.current = job;
 
   useEffect(() => {
-    if (isDemoMode) return;
+    if (isAnyDemoMode) return;
     fetchJob();
 
     const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -260,11 +276,11 @@ export default function JobDetailPage() {
       eventSource?.close();
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
-  }, [id, isDemoMode, fetchJob]);
+  }, [id, isAnyDemoMode, fetchJob]);
 
   /* Listen for rename/update events from sidebar */
   useEffect(() => {
-    if (isDemoMode) return;
+    if (isAnyDemoMode) return;
     const onRenamed = (e: Event) => {
       const { optimizationId, name } = (e as CustomEvent).detail;
       if (optimizationId === id) setJob((prev) => (prev ? { ...prev, name } : prev));
@@ -283,7 +299,7 @@ export default function JobDetailPage() {
 
   /* Actions */
   const handleCancel = async () => {
-    if (isDemoMode) return;
+    if (isAnyDemoMode) return;
     try {
       await cancelJob(id);
       toast.success(msg("optimization.cancel.sent"));
@@ -299,7 +315,7 @@ export default function JobDetailPage() {
       setServeInfo({
         optimization_id: id,
         module_name: "Predict",
-        optimizer_name: "MIPROv2",
+        optimizer_name: "GEPA",
         model_name: "gpt-4o-mini",
         input_fields: ["email_text"],
         output_fields: ["category"],
@@ -307,11 +323,24 @@ export default function JobDetailPage() {
         demo_count: 3,
       });
     }
-  }, [isDemoMode, id, job?.status]);
+    if (isGridDemoMode && job?.status === "success") {
+      const best = job.grid_result?.best_pair;
+      setServeInfo({
+        optimization_id: id,
+        module_name: "ChainOfThought",
+        optimizer_name: "GEPA",
+        model_name: best?.generation_model ?? "openai/gpt-4o-mini",
+        input_fields: ["article"],
+        output_fields: ["summary"],
+        instructions: best?.program_artifact?.optimized_prompt?.instructions ?? "",
+        demo_count: 1,
+      });
+    }
+  }, [isDemoMode, isGridDemoMode, id, job?.status, job?.grid_result]);
 
   /* Fetch serve info once job succeeds */
   useEffect(() => {
-    if (isDemoMode) return;
+    if (isAnyDemoMode) return;
     if (job?.status !== "success") return;
     if (job.optimization_type === "grid_search") {
       if (activePairIndex != null) {
@@ -521,7 +550,9 @@ export default function JobDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <XCircle className="size-12 text-destructive" />
-        <p className="text-lg text-muted-foreground">{error ?? "האופטימיזציה לא נמצאה"}</p>
+        <p className="text-lg text-muted-foreground">
+          {error ?? `ה${TERMS.optimization} לא נמצאה`}
+        </p>
       </div>
     );
   }
@@ -568,7 +599,7 @@ export default function JobDetailPage() {
                 <code
                   className="text-xs font-mono text-muted-foreground/60 cursor-pointer hover:text-primary transition-colors break-all"
                   title="לחץ להעתקה"
-                  aria-label="העתק מזהה אופטימיזציה"
+                  aria-label={`העתק מזהה ${TERMS.optimization}`}
                   role="button"
                   tabIndex={0}
                   onClick={() => {
@@ -586,8 +617,8 @@ export default function JobDetailPage() {
                   {job.optimization_id}
                 </code>
                 <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
-                  <Badge variant="secondary" className="text-[11px]">
-                    {job.optimization_type === "grid_search" ? "סריקה" : "ריצה בודדת"}
+                  <Badge variant="secondary" className="text-[0.6875rem]">
+                    {job.optimization_type === "grid_search" ? "סריקה" : "ריצה"}
                   </Badge>
                   <span className="flex items-center gap-1.5 tabular-nums" dir="ltr">
                     <Clock className="size-3.5" />
@@ -712,9 +743,9 @@ export default function JobDetailPage() {
           <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-300 bg-stone-50 text-stone-700">
             <XCircle className="size-5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold">האופטימיזציה בוטלה</p>
+              <p className="text-sm font-semibold">ה{TERMS.optimization} בוטלה</p>
               <p className="text-xs text-stone-500 mt-0.5">
-                {job.message || "המשימה בוטלה על ידי המשתמש."}
+                {job.message || `ה${TERMS.optimization} בוטלה על ידי המשתמש.`}
               </p>
             </div>
           </div>
@@ -739,17 +770,38 @@ export default function JobDetailPage() {
           </FadeIn>
         )}
 
+      {/* ── Per-pair: pair not found fallback ── */}
+      {job.optimization_type === "grid_search" &&
+        activePairIndex !== null &&
+        (!activePair || !effectiveJob?.grid_result) && (
+          <FadeIn>
+            <div className="rounded-xl border border-border/50 bg-card/80 p-8 text-center space-y-3">
+              <p className="text-sm font-medium">זוג זה לא זמין</p>
+              <p className="text-xs text-muted-foreground">
+                ייתכן שהזוג עדיין לא התחיל, שה{TERMS.optimization} בוטלה לפני שהזוג רץ, או שהמזהה
+                אינו תקין.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/optimizations/${id}`)}
+              >
+                חזרה לסקירה
+              </Button>
+            </div>
+          </FadeIn>
+        )}
+
       {/* ── Per-pair full view (grid search with ?pair=N) ── */}
-      {isTerminal &&
-        job.optimization_type === "grid_search" &&
+      {effectiveJob?.optimization_type === "grid_search" &&
         activePairIndex !== null &&
         activePair &&
-        job.grid_result && (
+        effectiveJob.grid_result && (
           <PairDetailView
-            job={job}
+            job={effectiveJob}
             activePair={activePair}
             activePairIndex={activePairIndex}
-            pairCount={job.grid_result.pair_results.length}
+            pairCount={effectiveJob.grid_result.pair_results.length}
             pairFilteredLogs={pairFilteredLogs}
             pairScorePoints={pairScorePoints}
             initialTab={initialTab}
@@ -767,6 +819,7 @@ export default function JobDetailPage() {
             onPrev={() => router.push(`/optimizations/${id}?pair=${activePairIndex - 1}`)}
             onNext={() => router.push(`/optimizations/${id}?pair=${activePairIndex + 1}`)}
             onClearHistory={handleClearHistory}
+            onStageClick={setStageModal}
           />
         )}
 
@@ -774,12 +827,12 @@ export default function JobDetailPage() {
       {!(job.optimization_type === "grid_search" && activePairIndex !== null) &&
         (() => {
           const tabCls =
-            "relative px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200";
+            "relative px-2.5 sm:px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
           return (
             <Tabs value={detailTab} onValueChange={setDetailTab} dir="rtl">
               <TabsList
                 variant="line"
-                className="border-b border-border/50 pb-0 gap-0"
+                className="border-b border-border/50 pb-0 gap-0 overflow-x-auto no-scrollbar"
                 data-tutorial="detail-tabs"
               >
                 <TabsTrigger value="overview" className={tabCls}>
@@ -791,11 +844,16 @@ export default function JobDetailPage() {
                     </span>
                   )}
                 </TabsTrigger>
-                {serveInfo && job.optimization_type !== "grid_search" && isTerminal && (
-                  <TabsTrigger value="playground" className={tabCls} data-tutorial="playground-tab">
-                    <Send className="size-3.5" /> שימוש
-                  </TabsTrigger>
-                )}
+                {job.status === "success" &&
+                  (job.optimization_type === "grid_search" || serveInfo) && (
+                    <TabsTrigger
+                      value="playground"
+                      className={tabCls}
+                      data-tutorial="playground-tab"
+                    >
+                      <Send className="size-3.5" /> שימוש
+                    </TabsTrigger>
+                  )}
                 {job.optimization_type !== "grid_search" && isTerminal && (
                   <TabsTrigger value="data" className={tabCls} data-tutorial="data-tab-trigger">
                     <Database className="size-3.5" /> נתונים
@@ -804,15 +862,17 @@ export default function JobDetailPage() {
                 <TabsTrigger value="code" className={tabCls}>
                   <Code className="size-3.5" /> קוד
                 </TabsTrigger>
-                <TabsTrigger value="logs" className={tabCls} data-tutorial="logs-tab-trigger">
-                  <Terminal className="size-3.5" /> לוגים
-                  {isActive && (
-                    <span className="relative flex size-2 ms-1">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-                      <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
-                    </span>
-                  )}
-                </TabsTrigger>
+                {job.optimization_type !== "grid_search" && (
+                  <TabsTrigger value="logs" className={tabCls} data-tutorial="logs-tab-trigger">
+                    <Terminal className="size-3.5" /> לוגים
+                    {isActive && (
+                      <span className="relative flex size-2 ms-1">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
+                        <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
+                      </span>
+                    )}
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="config" className={tabCls} data-tutorial="config-tab-trigger">
                   <Settings className="size-3.5" /> הגדרות
                 </TabsTrigger>
@@ -821,17 +881,37 @@ export default function JobDetailPage() {
               {/* ── Overview tab ── */}
               <TabsContent value="overview" className="space-y-6 mt-4" data-tutorial="overview-tab">
                 <OverviewTab
-                  job={job}
+                  job={effectiveJob ?? job}
                   isActive={isActive}
                   scorePoints={scorePoints}
                   activePairIndex={activePairIndex}
                   onStageClick={setStageModal}
                   onPairSelect={(pi) => router.push(`/optimizations/${id}?pair=${pi}`)}
+                  onPairDeleted={(pi) => {
+                    try {
+                      window.localStorage.removeItem(`grid-serve:pair:${id}`);
+                    } catch {
+                      /* localStorage unavailable — nothing to clean up */
+                    }
+                    if (activePairIndex === pi) {
+                      router.replace(`/optimizations/${id}`);
+                    }
+                    fetchJob();
+                  }}
                 />
               </TabsContent>
 
               {/* ── Playground tab ── */}
-              {serveInfo && (
+              {job.status === "success" && job.optimization_type === "grid_search" && (
+                <TabsContent
+                  value="playground"
+                  className="space-y-4 mt-4"
+                  data-tutorial="serve-playground"
+                >
+                  <GridServeTab job={job} />
+                </TabsContent>
+              )}
+              {serveInfo && job.optimization_type !== "grid_search" && (
                 <TabsContent
                   value="playground"
                   className="space-y-4 mt-4"
@@ -884,17 +964,13 @@ export default function JobDetailPage() {
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">
-                        <HelpTip text="כתובת API וקוד לשילוב התוכנית המאומנת באפליקציה שלך">
-                          הרצה
-                        </HelpTip>
+                        <HelpTip text={tip("serve.section_run")}>ריצה</HelpTip>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-1.5">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                          <HelpTip text="כתובת ה-API שאליה שולחים בקשות POST עם שדות הקלט כדי לקבל תשובה מהתוכנית המאומנת">
-                            כתובת שירות
-                          </HelpTip>
+                        <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider">
+                          <HelpTip text={tip("serve.api_url_run")}>כתובת שירות</HelpTip>
                         </p>
                         <div className="rounded-lg bg-muted/40 p-2.5 pe-8 relative group" dir="ltr">
                           <code className="text-xs font-mono break-all">
@@ -911,10 +987,8 @@ export default function JobDetailPage() {
                       <Separator />
 
                       <div className="space-y-2">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                          <HelpTip text="דוגמאות קוד מוכנות להעתקה לשילוב התוכנית המאומנת באפליקציה שלך">
-                            קוד לשילוב
-                          </HelpTip>
+                        <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider">
+                          <HelpTip text={tip("serve.integration_code")}>קוד לשילוב</HelpTip>
                         </p>
                         <ServeCodeSnippets serveInfo={serveInfo} optimizationId={id} />
                       </div>
@@ -937,23 +1011,12 @@ export default function JobDetailPage() {
                 />
               </TabsContent>
 
-              {/* ── Logs tab ── */}
-              <TabsContent value="logs" data-tutorial="live-logs">
-                <LogsTab
-                  logs={job.logs}
-                  pairNames={
-                    job.optimization_type === "grid_search" && job.grid_result
-                      ? Object.fromEntries(
-                          job.grid_result.pair_results.map((p) => [
-                            p.pair_index,
-                            `${p.generation_model.split("/").pop()} × ${p.reflection_model.split("/").pop()}`,
-                          ]),
-                        )
-                      : undefined
-                  }
-                  live={isActive}
-                />
-              </TabsContent>
+              {/* ── Logs tab (hidden for grid_search — logs live per-pair) ── */}
+              {job.optimization_type !== "grid_search" && (
+                <TabsContent value="logs" data-tutorial="live-logs">
+                  <LogsTab logs={job.logs} live={isActive} />
+                </TabsContent>
+              )}
 
               {/* ── Config tab ── */}
               <TabsContent value="config" className="mt-4" data-tutorial="config-section">

@@ -1,0 +1,279 @@
+"use client";
+
+import * as React from "react";
+
+import type { WizardState } from "../lib/types";
+
+const WIZARD_KEYS = [
+  "dataset_ready",
+  "columns_configured",
+  "signature_code",
+  "metric_code",
+  "model_configured",
+  "job_name",
+  "job_description",
+  "job_type",
+  "optimizer_name",
+  "module_name",
+  "dataset_columns",
+  "column_roles",
+  "model_config",
+  "reflection_model_config",
+  "generation_models",
+  "reflection_models",
+  "use_all_generation_models",
+  "use_all_reflection_models",
+  "split_fractions",
+  "split_mode",
+  "seed",
+  "shuffle",
+  "stratify",
+  "stratify_column",
+  "optimizer_kwargs",
+] as const satisfies readonly (keyof WizardState)[];
+
+type WizardKey = (typeof WIZARD_KEYS)[number];
+type WriteSource = "user" | "agent";
+
+interface WizardStateContextValue {
+  state: WizardState;
+  overriddenFields: string[];
+  /** Bumped whenever the agent writes a field so consumers can pulse. */
+  agentPulseTick: number;
+  /** Which keys the agent most recently touched (clears after next render tick). */
+  agentPulseKeys: readonly string[];
+  setField: (key: WizardKey, value: WizardState[WizardKey], source?: WriteSource) => void;
+  applyAgentPatch: (patch: Partial<WizardState>) => void;
+  clearField: (key: WizardKey) => void;
+}
+
+const Ctx = React.createContext<WizardStateContextValue | null>(null);
+
+/**
+ * Shared wizard state between the submit wizard and the generalist
+ * agent. Every field write records the source; user writes after the
+ * agent wrote are marked as overridden so the UI can surface a dot.
+ */
+export function WizardStateProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = React.useState<WizardState>({});
+  const [overridden, setOverridden] = React.useState<Set<string>>(() => new Set());
+  const [pulseTick, setPulseTick] = React.useState(0);
+  const [pulseKeys, setPulseKeys] = React.useState<readonly string[]>([]);
+  const agentWrittenRef = React.useRef<Set<string>>(new Set());
+
+  const setField = React.useCallback<WizardStateContextValue["setField"]>(
+    (key, value, source = "user") => {
+      setState((prev) => {
+        if (prev[key] === value) return prev;
+        return { ...prev, [key]: value } as WizardState;
+      });
+      if (source === "user") {
+        if (agentWrittenRef.current.has(key)) {
+          setOverridden((prev) => {
+            if (prev.has(key)) return prev;
+            const next = new Set(prev);
+            next.add(key);
+            return next;
+          });
+        }
+      } else {
+        agentWrittenRef.current.add(key);
+        setOverridden((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        setPulseKeys([key]);
+        setPulseTick((t) => t + 1);
+      }
+    },
+    [],
+  );
+
+  const applyAgentPatch = React.useCallback((patch: Partial<WizardState>) => {
+    const keys = Object.keys(patch) as WizardKey[];
+    if (keys.length === 0) return;
+    setState((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const k of keys) {
+        const v = patch[k];
+        if (v !== undefined && prev[k] !== v) {
+          (next as Record<string, unknown>)[k] = v;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    for (const k of keys) agentWrittenRef.current.add(k);
+    setOverridden((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (next.has(k)) {
+          next.delete(k);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setPulseKeys(keys);
+    setPulseTick((t) => t + 1);
+  }, []);
+
+  const clearField = React.useCallback<WizardStateContextValue["clearField"]>(
+    (key) => {
+      setState((prev) => {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete (next as Record<string, unknown>)[key];
+        return next;
+      });
+      setOverridden((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const overriddenFields = React.useMemo(
+    () => Array.from(overridden).sort(),
+    [overridden],
+  );
+
+  const value = React.useMemo<WizardStateContextValue>(
+    () => ({
+      state,
+      overriddenFields,
+      agentPulseTick: pulseTick,
+      agentPulseKeys: pulseKeys,
+      setField,
+      applyAgentPatch,
+      clearField,
+    }),
+    [state, overriddenFields, pulseTick, pulseKeys, setField, applyAgentPatch, clearField],
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useWizardState(): WizardStateContextValue {
+  const ctx = React.useContext(Ctx);
+  if (!ctx) {
+    throw new Error("useWizardState must be used within WizardStateProvider");
+  }
+  return ctx;
+}
+
+/** Safe variant — returns null when outside a provider. */
+export function useWizardStateOptional(): WizardStateContextValue | null {
+  return React.useContext(Ctx);
+}
+
+/**
+ * Extract the subset of a tool result that updates the wizard. Defensive:
+ * accepts any object and picks only known wizard keys with expected types.
+ */
+export function extractWizardPatch(result: unknown): Partial<WizardState> {
+  if (!result || typeof result !== "object") return {};
+  const r = result as Record<string, unknown>;
+  const wrap = (r.wizard_state && typeof r.wizard_state === "object")
+    ? (r.wizard_state as Record<string, unknown>)
+    : r;
+  const patch: Partial<WizardState> = {};
+
+  // Phase gates (booleans)
+  if (typeof wrap.dataset_ready === "boolean") patch.dataset_ready = wrap.dataset_ready;
+  if (typeof wrap.columns_configured === "boolean") patch.columns_configured = wrap.columns_configured;
+  if (typeof wrap.model_configured === "boolean") patch.model_configured = wrap.model_configured;
+
+  // Code blocks (strings)
+  if (typeof wrap.signature_code === "string") patch.signature_code = wrap.signature_code;
+  if (typeof wrap.metric_code === "string") patch.metric_code = wrap.metric_code;
+
+  // Job metadata
+  if (typeof wrap.job_name === "string") patch.job_name = wrap.job_name;
+  if (typeof wrap.job_description === "string") patch.job_description = wrap.job_description;
+  if (wrap.job_type === "run" || wrap.job_type === "grid_search") patch.job_type = wrap.job_type;
+
+  // Optimizer / module choice
+  if (typeof wrap.optimizer_name === "string") patch.optimizer_name = wrap.optimizer_name;
+  if (typeof wrap.module_name === "string") patch.module_name = wrap.module_name;
+
+  // Dataset columns + roles
+  if (Array.isArray(wrap.dataset_columns) && wrap.dataset_columns.every((x) => typeof x === "string")) {
+    patch.dataset_columns = wrap.dataset_columns as string[];
+  }
+  if (wrap.column_roles && typeof wrap.column_roles === "object" && !Array.isArray(wrap.column_roles)) {
+    patch.column_roles = wrap.column_roles as Record<string, string>;
+  }
+
+  // Model configs
+  if (wrap.model_config && typeof wrap.model_config === "object" && !Array.isArray(wrap.model_config)) {
+    patch.model_config = wrap.model_config as Record<string, unknown>;
+  }
+  if (
+    wrap.reflection_model_config &&
+    typeof wrap.reflection_model_config === "object" &&
+    !Array.isArray(wrap.reflection_model_config)
+  ) {
+    patch.reflection_model_config = wrap.reflection_model_config as Record<string, unknown>;
+  }
+
+  // Grid-search model lists
+  if (
+    Array.isArray(wrap.generation_models) &&
+    wrap.generation_models.every((m) => m && typeof m === "object" && !Array.isArray(m))
+  ) {
+    patch.generation_models = wrap.generation_models as Record<string, unknown>[];
+  }
+  if (
+    Array.isArray(wrap.reflection_models) &&
+    wrap.reflection_models.every((m) => m && typeof m === "object" && !Array.isArray(m))
+  ) {
+    patch.reflection_models = wrap.reflection_models as Record<string, unknown>[];
+  }
+  if (typeof wrap.use_all_generation_models === "boolean") {
+    patch.use_all_generation_models = wrap.use_all_generation_models;
+  }
+  if (typeof wrap.use_all_reflection_models === "boolean") {
+    patch.use_all_reflection_models = wrap.use_all_reflection_models;
+  }
+
+  // Split plan
+  if (
+    wrap.split_fractions &&
+    typeof wrap.split_fractions === "object" &&
+    !Array.isArray(wrap.split_fractions)
+  ) {
+    const sf = wrap.split_fractions as Record<string, unknown>;
+    const train = typeof sf.train === "number" ? sf.train : NaN;
+    const val = typeof sf.val === "number" ? sf.val : NaN;
+    const test = typeof sf.test === "number" ? sf.test : NaN;
+    if (!Number.isNaN(train) && !Number.isNaN(val) && !Number.isNaN(test)) {
+      patch.split_fractions = { train, val, test };
+    }
+  }
+  if (wrap.split_mode === "auto" || wrap.split_mode === "manual") {
+    patch.split_mode = wrap.split_mode;
+  }
+  if (typeof wrap.seed === "number" && Number.isFinite(wrap.seed)) patch.seed = wrap.seed;
+  if (typeof wrap.shuffle === "boolean") patch.shuffle = wrap.shuffle;
+  if (typeof wrap.stratify === "boolean") patch.stratify = wrap.stratify;
+  if (typeof wrap.stratify_column === "string") patch.stratify_column = wrap.stratify_column;
+
+  // Optimizer kwargs
+  if (
+    wrap.optimizer_kwargs &&
+    typeof wrap.optimizer_kwargs === "object" &&
+    !Array.isArray(wrap.optimizer_kwargs)
+  ) {
+    patch.optimizer_kwargs = wrap.optimizer_kwargs as Record<string, unknown>;
+  }
+
+  return patch;
+}

@@ -9,7 +9,6 @@ import { getTrack } from "@/features/tutorial/lib/steps";
 import { SpotlightMask } from "./spotlight-mask";
 import { TutorialPopover } from "./tutorial-popover";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
-import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial/lib/demo-data";
 import { isTutorialNavigating, registerTutorialHook } from "@/features/tutorial/lib/bridge";
 
 export function TutorialOverlay() {
@@ -43,6 +42,7 @@ export function TutorialOverlay() {
 
   const targetRef = React.useRef<Element | null>(null);
   const rafRef = React.useRef<number>(0);
+  const lastRectRef = React.useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
   const calculatePosition = React.useCallback(
     (rect: DOMRect, placement: "top" | "bottom" | "left" | "right" | "auto") => {
@@ -97,17 +97,28 @@ export function TutorialOverlay() {
 
     const el = document.querySelector(currentStep.target);
     if (!el) {
-      setTargetRect(null);
-      setPopoverPosition({
-        top: window.innerHeight / 2 - 110,
-        left: window.innerWidth / 2 - 180,
-        placement: "bottom",
-      });
+      // Keep last-known rect so the spotlight doesn't flash to full-dark
+      // mid-transition. Popover is already hidden via stepReady gate.
       return;
     }
 
     targetRef.current = el;
     const rect = el.getBoundingClientRect();
+
+    // Skip state updates when rect hasn't meaningfully changed — avoids
+    // re-renders at 60fps when nothing moved.
+    const prev = lastRectRef.current;
+    if (
+      prev &&
+      Math.abs(prev.x - rect.x) < 0.5 &&
+      Math.abs(prev.y - rect.y) < 0.5 &&
+      Math.abs(prev.w - rect.width) < 0.5 &&
+      Math.abs(prev.h - rect.height) < 0.5
+    ) {
+      return;
+    }
+    lastRectRef.current = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+
     setTargetRect(rect);
     setPopoverPosition(calculatePosition(rect, currentStep.placement || "auto"));
   }, [currentStep, calculatePosition]);
@@ -120,11 +131,14 @@ export function TutorialOverlay() {
   React.useEffect(() => {
     if (!state.isVisible || !currentStep) return;
     setStepReady(false);
+    lastRectRef.current = null;
 
+    let cancelled = false;
     const init = async () => {
       if (currentStep.beforeShow) {
         await currentStep.beforeShow();
       }
+      if (cancelled) return;
 
       // Scroll target into view only if off-screen
       const el = document.querySelector(currentStep.target);
@@ -134,8 +148,11 @@ export function TutorialOverlay() {
         if (offScreen) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           await new Promise((r) => setTimeout(r, 250));
+          if (cancelled) return;
         }
       }
+      // Seed positions immediately so the popover mounts at the right spot.
+      updatePositions();
       // Start rAF tracking — handles resize, scroll, layout shifts
       rafRef.current = requestAnimationFrame(trackPosition);
       setStepReady(true);
@@ -144,9 +161,10 @@ export function TutorialOverlay() {
     init();
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [state.isVisible, currentStep, trackPosition]);
+  }, [state.isVisible, currentStep, trackPosition, updatePositions]);
 
   React.useEffect(() => {
     if (!stepReady || !state.isAutoPlaying || !currentStep) return;
@@ -174,8 +192,11 @@ export function TutorialOverlay() {
 
   const handleExit = React.useCallback(() => {
     exitTutorial();
-    // Navigate away from demo page so user doesn't interact with fake data
-    if (window.location.pathname.includes(DEMO_OPTIMIZATION_ID)) {
+    // Always return to the dashboard so the user never lands on a page
+    // still showing fake tutorial data (demo optimization, demo grid,
+    // demo compare, etc.). The dashboard clears its demo overlay via
+    // the `tutorial-exited` event.
+    if (window.location.pathname !== "/") {
       router.push("/");
     }
   }, [exitTutorial, router]);
@@ -246,22 +267,24 @@ export function TutorialOverlay() {
         <div className="fixed inset-0 z-[9998] pointer-events-none">
           <SpotlightMask targetRect={targetRect} padding={8} borderRadius={12} />
 
-          {popoverPosition && (
-            <TutorialPopover
-              key={currentStep.id}
-              step={currentStep}
-              stepNumber={stepNumber}
-              totalSteps={track.stepCount}
-              position={popoverPosition}
-              onNext={handleNext}
-              onPrev={prevStep}
-              onExit={handleExit}
-              isFirst={isFirst}
-              isLast={isLast}
-              isAutoPlaying={state.isAutoPlaying}
-              onToggleAutoPlay={toggleAutoPlay}
-            />
-          )}
+          <AnimatePresence mode="wait">
+            {stepReady && popoverPosition && (
+              <TutorialPopover
+                key={currentStep.id}
+                step={currentStep}
+                stepNumber={stepNumber}
+                totalSteps={track.stepCount}
+                position={popoverPosition}
+                onNext={handleNext}
+                onPrev={prevStep}
+                onExit={handleExit}
+                isFirst={isFirst}
+                isLast={isLast}
+                isAutoPlaying={state.isAutoPlaying}
+                onToggleAutoPlay={toggleAutoPlay}
+              />
+            )}
+          </AnimatePresence>
         </div>,
         document.body,
       )}

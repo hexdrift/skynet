@@ -27,7 +27,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { deleteJob } from "@/shared/lib/api";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
 
 export function DeleteJobDialog({
   optimizationId,
@@ -72,9 +73,9 @@ export function DeleteJobDialog({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>מחיקת אופטימיזציה</DialogTitle>
+            <DialogTitle>מחיקת {TERMS.optimization}</DialogTitle>
             <DialogDescription>
-              האם למחוק את האופטימיזציה{" "}
+              האם למחוק את ה{TERMS.optimization}{" "}
               <span className="font-mono font-medium text-foreground break-all">
                 {optimizationId}
               </span>

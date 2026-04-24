@@ -6,29 +6,14 @@ from pydantic import BaseModel, Field
 
 
 class OptimizedDemo(BaseModel):
-    """A single few-shot demonstration example from an optimized predictor.
-
-    Attributes:
-        inputs: Dictionary of input field names to their values.
-        outputs: Dictionary of output field names to their values.
-    """
+    """A single few-shot demonstration example from an optimized predictor."""
 
     inputs: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
 
 
 class OptimizedPredictor(BaseModel):
-    """Extracted prompt and demos from a single predictor in the compiled program.
-
-    Attributes:
-        predictor_name: Name or identifier of the predictor within the module.
-        signature_name: Class name of the DSPy signature used by this predictor.
-        instructions: The optimized instruction/prompt string for this predictor.
-        input_fields: List of input field names in the signature.
-        output_fields: List of output field names in the signature.
-        demos: List of few-shot demonstration examples.
-        formatted_prompt: Complete prompt as a single formatted string with instructions and demos.
-    """
+    """Extracted prompt and demos from a single predictor in the compiled program."""
 
     predictor_name: str
     signature_name: str | None = None

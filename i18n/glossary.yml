@@ -1,0 +1,54 @@
+# Canonical domain terminology shared by frontend and backend copy.
+#
+# Runtime strings live in i18n/locales/*.json. This file is for translator and
+# reviewer context: why a term is written the way it is, what not to use, and
+# where directionality needs attention.
+
+optimization:
+  en: optimization
+  he: אופטימיזציה
+  note: Top-level user-facing noun. Do not use "job" in Hebrew user copy.
+  do_not_use:
+    - עבודה
+    - ג׳וב
+
+dataset:
+  en: dataset
+  he: דאטאסט
+  note: Borrowing is intentional; do not use the native phrase מערך נתונים.
+  do_not_use:
+    - מערך נתונים
+
+optimizer:
+  en: optimizer
+  he: אופטימייזר
+  note: Keep the borrowed DSPy term.
+
+module:
+  en: module
+  he: מודול
+  note: Keep the borrowed DSPy term.
+
+metric:
+  en: metric
+  he: פונקציית מדידה
+  note: Owner-approved native exception. Do not use מטריקה in product copy.
+  do_not_use:
+    - מטריקה
+
+baseline:
+  en: baseline
+  he: בסיס
+  note: Use תוצאות בסיס for the full pre-optimization result phrase.
+
+generationModel:
+  en: generation model
+  he: מודל מג׳נרט
+  note: Singular label for the model that generates task outputs.
+  direction: Model identifiers remain LTR in UI.
+
+reflectionModel:
+  en: reflection model
+  he: מודל רפלקציה
+  note: GEPA reflection-step model.
+  direction: Model identifiers remain LTR in UI.

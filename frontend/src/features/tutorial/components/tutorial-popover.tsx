@@ -49,14 +49,27 @@ export function TutorialPopover({
     }
   }, [position.placement]);
 
+  const spring = { type: "spring", stiffness: 400, damping: 35, mass: 0.8 } as const;
+
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.12, ease: "easeOut" }}
+      initial={{ opacity: 0, scale: 0.96, y: 4 }}
+      animate={{
+        opacity: 1,
+        scale: 1,
+        y: 0,
+        top: position.top,
+        left: position.left,
+      }}
+      exit={{ opacity: 0, scale: 0.96, y: 4 }}
+      transition={{
+        opacity: { duration: 0.18, ease: [0.16, 1, 0.3, 1] },
+        scale: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+        y: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+        top: spring,
+        left: spring,
+      }}
       className="fixed z-[9999] pointer-events-auto"
-      style={{ top: position.top, left: position.left }}
       dir="rtl"
     >
       <div className="relative w-[min(90vw,360px)] rounded-2xl border border-[#E5DDD4] bg-gradient-to-b from-[#FAF8F5] to-[#F5F1EC] shadow-[0_8px_32px_rgba(28,22,18,0.14)] overflow-hidden">
@@ -65,7 +78,7 @@ export function TutorialPopover({
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-[#3D2E22] leading-tight">{step.title}</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <p className="text-[10px] font-medium text-[#8C7A6B]/70 tabular-nums">
+              <p className="text-[0.625rem] font-medium text-[#8C7A6B]/70 tabular-nums">
                 {stepNumber} מתוך {totalSteps}
               </p>
               <button

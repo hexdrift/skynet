@@ -14,7 +14,7 @@ def get_job_store() -> JobStore:
     Reads REMOTE_DB_URL from settings for the connection string.
 
     Returns:
-        JobStore: PostgreSQL storage backend.
+        PostgreSQL storage backend.
 
     Raises:
         RuntimeError: If REMOTE_DB_URL is not set.

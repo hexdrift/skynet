@@ -3,15 +3,15 @@
 Tutorials for submitting optimization jobs to the Skynet service. For service operators, see the [main README](../README.md).
 
 ## Prerequisites
-- The Skynet service running (locally via `uv run python main.py` or deployed)
+- The Skynet service running (locally via `python main.py` or deployed)
 - Python environment with `dspy` and `requests` installed
 
-### Quick Setup with `uv`
+### Quick Setup
 ```bash
 cd backend/usage_guide
-uv venv .venv
+python -m venv .venv
 source .venv/bin/activate
-uv pip install -r pyproject.toml
+pip install -e ..
 ```
 
 ## Notebooks

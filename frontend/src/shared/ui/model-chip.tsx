@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Settings, Copy, RotateCcw, Sparkles, Plus, Thermometer, Coins, Brain } from "lucide-react";
+import { Settings, Copy, Trash2, Sparkles, Plus, Thermometer, Coins } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { ModelConfig } from "@/shared/types/api";
+import { ReasoningPill } from "@/features/optimizations/components/ui-primitives";
 
 interface ModelChipProps {
   config: ModelConfig;
@@ -31,7 +32,6 @@ export function ModelChip({
   onCopyFrom,
   className,
 }: ModelChipProps) {
-  const hasThinking = !!config.extra?.reasoning_effort;
   const effort = config.extra?.reasoning_effort as string | undefined;
   const name = config.name || (required ? "בחר מודל..." : "לא הוגדר");
   const isEmpty = !config.name;
@@ -51,7 +51,7 @@ export function ModelChip({
       {/* Model info */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {roleLabel && (
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground">
             {roleLabel}
           </span>
         )}
@@ -66,7 +66,10 @@ export function ModelChip({
         </span>
         {/* Settings summary */}
         {!isEmpty && (
-          <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground" dir="ltr">
+          <div
+            className="flex items-center gap-2.5 text-[0.625rem] text-muted-foreground"
+            dir="ltr"
+          >
             <span className="inline-flex items-center gap-0.5">
               <Thermometer className="size-2.5" />
               {config.temperature?.toFixed(1) ?? "0.7"}
@@ -77,12 +80,7 @@ export function ModelChip({
                 {config.max_tokens}
               </span>
             )}
-            {hasThinking && (
-              <span className="inline-flex items-center gap-0.5 text-primary/70">
-                <Brain className="size-2.5" />
-                {effort}
-              </span>
-            )}
+            {effort && <ReasoningPill value={effort} />}
           </div>
         )}
       </div>
@@ -95,7 +93,7 @@ export function ModelChip({
             e.stopPropagation();
             onCopyFrom();
           }}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-dashed border-primary/30 px-2 py-1 text-[10px] font-medium text-primary/80 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer"
+          className="flex shrink-0 items-center gap-1 rounded-md border border-dashed border-primary/30 px-2 py-1 text-[0.625rem] font-medium text-primary/80 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer"
         >
           <Copy className="size-2.5" />
           {copyFromLabel}
@@ -117,7 +115,7 @@ export function ModelChip({
             <Copy className="size-3" />
           </button>
         )}
-        {onRemove && (
+        {onRemove && !isEmpty && (
           <button
             type="button"
             onClick={(e) => {
@@ -125,9 +123,9 @@ export function ModelChip({
               onRemove();
             }}
             className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all cursor-pointer"
-            title="אפס"
+            title="הסר"
           >
-            <RotateCcw className="size-3" />
+            <Trash2 className="size-3" />
           </button>
         )}
         <Settings className="size-3.5 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />

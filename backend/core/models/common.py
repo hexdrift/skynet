@@ -7,32 +7,31 @@ file depends on.
 """
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 HEALTH_STATUS_OK = "ok"
 
+OptimizationType = Literal["run", "grid_search"]
+
 
 class ColumnMapping(BaseModel):
-    """Describe how dataframe columns map onto DSPy signature fields."""
+    """Describe how dataframe columns map onto DSPy signature fields.
+
+    ``inputs`` / ``outputs`` are plural mappings — ``{signature_field: column_name}``
+    — because a single signature can have multiple input or output fields. This
+    is distinct from the ``ServeResponse.input_fields`` / ``output_fields`` lists,
+    which live at a different layer (inference response) and carry only field
+    *names*, not column bindings. The two shapes are intentionally different.
+    """
 
     inputs: dict[str, str] = Field(default_factory=dict)
     outputs: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _ensure_non_empty(self) -> "ColumnMapping":
-        """Validate that mappings include inputs and no shared columns.
-
-        Args:
-            self: The ``ColumnMapping`` instance being validated.
-
-        Returns:
-            ColumnMapping: Validated mapping.
-
-        Raises:
-            ValueError: If inputs are missing or columns overlap.
-        """
+        """Reject empty inputs or overlapping column values between inputs and outputs."""
         if not self.inputs:
             raise ValueError("At least one input column must be specified.")
         shared = set(self.inputs.values()) & set(self.outputs.values())
@@ -46,21 +45,17 @@ class ModelConfig(BaseModel):
 
     name: str
     base_url: str | None = None
-    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     extra: dict[str, Any] = Field(default_factory=dict)
 
     def normalized_identifier(self) -> str:
-        """Return the Litellm identifier (deprecated: identical to ``name``).
-
-        Args:
-            None.
+        """Return the LiteLLM identifier (deprecated: identical to ``name``).
 
         Returns:
-            str: Normalized model identifier preferred by LiteLLM.
+            The model name with leading and trailing slashes stripped.
         """
-
         return self.name.strip("/")
 
 
@@ -73,17 +68,7 @@ class SplitFractions(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "SplitFractions":
-        """Verify that split fractions are non-negative and sum to one.
-
-        Args:
-            self: The ``SplitFractions`` instance being validated.
-
-        Returns:
-            SplitFractions: Validated fraction set.
-
-        Raises:
-            ValueError: If constraints are violated.
-        """
+        """Reject negative fractions or fractions that do not sum to 1.0."""
         parts = [self.train, self.val, self.test]
         if any(part < 0 for part in parts):
             raise ValueError("Split fractions must be non-negative.")
@@ -94,13 +79,7 @@ class SplitFractions(BaseModel):
 
 
 class SplitCounts(BaseModel):
-    """Container for the number of examples in each dataset split.
-
-    Attributes:
-        train: Number of training examples.
-        val: Number of validation examples.
-        test: Number of test examples.
-    """
+    """Container for the number of examples in each dataset split."""
 
     train: int
     val: int

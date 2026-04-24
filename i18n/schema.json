@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skynet shared i18n catalog",
+  "type": "object",
+  "required": ["locale", "terms", "messages", "backend"],
+  "properties": {
+    "locale": { "type": "string" },
+    "terms": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "messages": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "backend": {
+      "type": "object",
+      "required": ["constants", "sampleDatasets"],
+      "properties": {
+        "constants": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "sampleDatasets": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

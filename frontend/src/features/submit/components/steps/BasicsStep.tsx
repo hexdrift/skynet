@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/shared/lib/utils";
+import { TERMS } from "@/shared/lib/terms";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
@@ -19,11 +20,11 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
     >
       <CardHeader>
         <CardTitle className="text-lg">פרטים בסיסיים</CardTitle>
-        <CardDescription>שם וסוג אופטימיזציה</CardDescription>
+        <CardDescription>שם וסוג {TERMS.optimization}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>שם האופטימיזציה</Label>
+          <Label>שם ה{TERMS.optimization}</Label>
           <Input
             placeholder="לדוגמא: ניתוח שאלות מתמטיקה"
             value={jobName}
@@ -36,7 +37,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             <Label>תיאור</Label>
             <span
               className={cn(
-                "text-[10px] tabular-nums transition-colors",
+                "text-[0.625rem] tabular-nums transition-colors",
                 jobDescription.length > 280
                   ? "text-destructive font-medium"
                   : "text-muted-foreground/50",
@@ -51,7 +52,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             onChange={(e) => {
               if (e.target.value.length <= 280) setJobDescription(e.target.value);
             }}
-            placeholder="תיאור קצר של מטרת האופטימיזציה (אופציונלי)"
+            placeholder={`תיאור קצר של מטרת ה${TERMS.optimization} (אופציונלי)`}
             dir="rtl"
             rows={4}
             className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
@@ -59,7 +60,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
         </div>
         <Separator />
         <div className="space-y-3">
-          <Label>סוג אופטימיזציה</Label>
+          <Label>סוג {TERMS.optimization}</Label>
           <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
             <div
               className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
@@ -67,8 +68,12 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             />
             {(
               [
-                ["run", "ריצה בודדת", "אופטימיזציה עם מודל יחיד"],
-                ["grid_search", "סריקה", "סריקת זוגות מודלים למציאת השילוב הטוב ביותר"],
+                ["run", TERMS.optimizationTypeRun, `${TERMS.optimization} עם ${TERMS.model} יחיד`],
+                [
+                  "grid_search",
+                  TERMS.optimizationTypeGrid,
+                  `${TERMS.optimizationTypeGrid} זוגות מודלים למציאת השילוב הטוב ביותר`,
+                ],
               ] as const
             ).map(([val, label, desc]) => (
               <button
@@ -83,7 +88,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
                 <span className="text-sm font-medium">{label}</span>
                 <span
                   className={cn(
-                    "block text-[11px] mt-0.5 transition-colors duration-200",
+                    "block text-[0.6875rem] mt-0.5 transition-colors duration-200",
                     jobType === val ? "text-muted-foreground" : "text-foreground/40",
                   )}
                 >

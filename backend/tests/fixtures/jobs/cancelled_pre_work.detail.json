@@ -1,0 +1,50 @@
+{
+  "archived": false,
+  "column_mapping": {
+    "inputs": {
+      "question": "question"
+    },
+    "outputs": {
+      "answer": "answer"
+    }
+  },
+  "completed_at": "2026-04-14T19:02:41.405407",
+  "completed_pairs": null,
+  "created_at": "2026-04-14T19:02:39.383425",
+  "dataset_rows": 20,
+  "description": null,
+  "elapsed": "00:00:00",
+  "elapsed_seconds": 0.82,
+  "estimated_remaining": null,
+  "failed_pairs": null,
+  "generation_models": null,
+  "grid_result": null,
+  "latest_metrics": {},
+  "logs": [],
+  "message": "\u05d1\u05d5\u05d8\u05dc \u05e2\u05dc \u05d9\u05d3\u05d9 \u05d4\u05de\u05e9\u05ea\u05de\u05e9",
+  "model_name": "openai/gpt-4o-mini",
+  "model_settings": {
+    "base_url": null,
+    "extra": {},
+    "max_tokens": 16000,
+    "name": "openai/gpt-4o-mini",
+    "temperature": 1.0,
+    "top_p": null
+  },
+  "module_kwargs": {},
+  "module_name": "dspy.ChainOfThought",
+  "name": null,
+  "optimization_id": "a99406f8-1796-4dda-8ecc-774d6ddf245d",
+  "optimization_type": "run",
+  "optimizer_name": "gepa",
+  "pinned": false,
+  "progress_events": [],
+  "reflection_model_name": null,
+  "reflection_models": null,
+  "result": null,
+  "started_at": "2026-04-14T19:02:40.584086",
+  "status": "cancelled",
+  "task_model_name": null,
+  "total_pairs": null,
+  "username": "fixture-cancelled"
+}

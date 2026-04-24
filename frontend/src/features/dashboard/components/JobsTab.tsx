@@ -1,21 +1,10 @@
 import Link from "next/link";
 import { toast } from "react-toastify";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
@@ -28,18 +17,11 @@ import {
   useColumnResize,
   type SortDir,
 } from "@/shared/ui/excel-filter";
-import {
-  formatDate,
-  formatElapsed,
-  formatId,
-  formatRelativeTime,
-} from "@/shared/lib";
+import { formatDate, formatElapsed, formatId, formatRelativeTime } from "@/shared/lib";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
-import type {
-  OptimizationSummaryResponse,
-  PaginatedJobsResponse,
-} from "@/shared/types/api";
-import { msg } from "@/features/shared/messages";
+import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
 import { FETCH_PAGE_SIZE } from "../constants";
 import { formatScore, statusBadge, typeBadge } from "../lib/status-badges";
 import type { DeleteTarget } from "../hooks/use-bulk-delete";
@@ -123,7 +105,7 @@ export function JobsTab({
           )}
           <ResetColumnsButton resize={colResize} />
           {filteredItems.length > 0 && (
-            <span className="text-[11px] text-muted-foreground tabular-nums ms-auto">
+            <span className="text-[0.6875rem] text-muted-foreground tabular-nums ms-auto">
               {filteredItems.length} תוצאות
             </span>
           )}
@@ -137,17 +119,15 @@ export function JobsTab({
 
         {!loading && data && filteredItems.length === 0 && data.total === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <p className="text-base font-medium">לא נמצאו אופטימיזציות</p>
+            <p className="text-base font-medium">לא נמצאו {TERMS.optimizationPlural}</p>
             <p className="text-sm text-muted-foreground max-w-xs">
-              העלה דאטאסט, הגדר חתימה ומטריקה, והמערכת תשפר את הפרומפט אוטומטית
+              העלה {TERMS.dataset}, הגדר {TERMS.signature} ו{TERMS.metric}, והמערכת תשפר אותו
+              אוטומטית
             </p>
-            <Button
-              asChild
-              className="group mt-2 gap-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(124,99,80,0.3)] active:scale-[0.97]"
-            >
+            <Button asChild className="group mt-2 gap-2">
               <Link href="/submit">
                 <Plus className="size-4 transition-transform duration-200 group-hover:rotate-90" />
-                אופטימיזציה חדשה
+                {TERMS.notificationNewOpt}
               </Link>
             </Button>
           </div>
@@ -158,24 +138,22 @@ export function JobsTab({
             <Table style={{ minWidth: "800px" }}>
               <thead className="bg-muted/30 [&_tr]:border-b [&_tr]:border-border/50">
                 <tr>
-                  {isAdmin && (
-                    <th className="w-10 px-3">
-                      <input
-                        type="checkbox"
-                        aria-label="בחר הכל בעמוד"
-                        className="size-4 cursor-pointer accent-primary"
-                        checked={pageAllSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = pageSomeSelected;
-                        }}
-                        disabled={selectablePageIds.length === 0}
-                        onChange={togglePageSelection}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </th>
-                  )}
+                  <th className="w-10 px-3">
+                    <input
+                      type="checkbox"
+                      aria-label="בחר הכל בעמוד"
+                      className="size-4 cursor-pointer accent-primary"
+                      checked={pageAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = pageSomeSelected;
+                      }}
+                      disabled={selectablePageIds.length === 0}
+                      onChange={togglePageSelection}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </th>
                   <ColumnHeader
-                    label="מזהה אופטימיזציה"
+                    label={`מזהה ${TERMS.optimization}`}
                     sortKey="optimization_id"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -235,7 +213,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="אופטימייזר"
+                    label={TERMS.optimizer}
                     sortKey="optimizer_name"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -295,7 +273,7 @@ export function JobsTab({
                     <TableRow
                       key={job.optimization_id}
                       data-selected={isSelected}
-                      className={`group border-border/40 cursor-pointer transition-colors duration-150 data-[selected=true]:bg-primary/10 hover:bg-accent/30 data-[selected=true]:hover:bg-primary/15 [&_td:last-child]:cursor-default ${isAdmin ? "[&_td:first-child]:cursor-default" : ""}`}
+                      className="group border-border/40 transition-colors duration-150 data-[selected=true]:bg-primary/10 hover:bg-accent/30 data-[selected=true]:hover:bg-primary/15 cursor-pointer [&_td:first-child]:cursor-default [&_td:last-child]:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       style={{
                         animation: `fadeSlideIn 0.25s ease-out ${idx * 0.03}s both`,
                       }}
@@ -304,7 +282,7 @@ export function JobsTab({
                         if (!td) return;
                         const parent = td.parentElement;
                         if (td === parent?.lastElementChild) return;
-                        if (isAdmin && td === parent?.firstElementChild) return;
+                        if (td === parent?.firstElementChild) return;
                         const text = td.textContent?.trim();
                         if (text) {
                           navigator.clipboard.writeText(text);
@@ -313,20 +291,16 @@ export function JobsTab({
                       }}
                       data-tutorial="job-link"
                     >
-                      {isAdmin && (
-                        <TableCell className="w-10 px-3">
-                          <input
-                            type="checkbox"
-                            aria-label={`בחר אופטימיזציה ${job.optimization_id}`}
-                            className="size-4 cursor-pointer accent-primary"
-                            checked={selectedIds.has(job.optimization_id)}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() =>
-                              toggleRowSelected(job.optimization_id)
-                            }
-                          />
-                        </TableCell>
-                      )}
+                      <TableCell className="w-10 px-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`בחר ${TERMS.optimization} ${job.optimization_id}`}
+                          className="size-4 cursor-pointer accent-primary"
+                          checked={isSelected}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleRowSelected(job.optimization_id)}
+                        />
+                      </TableCell>
                       <TableCell
                         className="max-w-[180px] truncate overflow-hidden"
                         title={job.optimization_id}
@@ -379,9 +353,7 @@ export function JobsTab({
                       >
                         {formatElapsed(job.elapsed_seconds)}
                       </TableCell>
-                      <TableCell className="truncate overflow-hidden">
-                        {formatScore(job)}
-                      </TableCell>
+                      <TableCell className="truncate overflow-hidden">{formatScore(job)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-0.5">
                           <TooltipProvider>
@@ -391,14 +363,12 @@ export function JobsTab({
                                   type="button"
                                   onClick={() => onOpenJob(job.optimization_id)}
                                   className="p-1 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-                                  aria-label="פרטי אופטימיזציה"
+                                  aria-label={`פרטי ${TERMS.optimization}`}
                                 >
                                   <ExternalLink className="size-3.5" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                פרטים
-                              </TooltipContent>
+                              <TooltipContent side="bottom">פרטים</TooltipContent>
                             </UiTooltip>
                           </TooltipProvider>
                           {isAdmin && (
@@ -415,14 +385,12 @@ export function JobsTab({
                                       });
                                     }}
                                     className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all cursor-pointer"
-                                    aria-label="מחק אופטימיזציה"
+                                    aria-label={`מחק ${TERMS.optimization}`}
                                   >
                                     <Trash2 className="size-3.5" />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent side="bottom">
-                                  מחיקה
-                                </TooltipContent>
+                                <TooltipContent side="bottom">מחיקה</TooltipContent>
                               </UiTooltip>
                             </TooltipProvider>
                           )}
@@ -442,9 +410,7 @@ export function JobsTab({
               variant="outline"
               size="sm"
               disabled={pageOffset === 0 || loading}
-              onClick={() =>
-                setPageOffset(Math.max(0, pageOffset - FETCH_PAGE_SIZE))
-              }
+              onClick={() => setPageOffset(Math.max(0, pageOffset - FETCH_PAGE_SIZE))}
               className="gap-1"
             >
               <ChevronRight className="size-3.5" />

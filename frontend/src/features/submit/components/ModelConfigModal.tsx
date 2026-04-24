@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Boxes } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +18,15 @@ import { NumberInput } from "@/shared/ui/number-input";
 import { cn } from "@/shared/lib/utils";
 import type { ModelConfig, CatalogModel } from "@/shared/types/api";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { tip } from "@/shared/lib/tooltips";
+import { TERMS } from "@/shared/lib/terms";
 
 interface ModelConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   config: ModelConfig;
   onSave: (config: ModelConfig) => void;
-  /** Label shown in the dialog header, e.g. "מודל ראשי" or "מודל רפלקציה" */
+  /** Label shown in the dialog header, e.g. "מודל ראשי" or the reflection-model term. */
   roleLabel?: string;
   /** Catalog models for thinking detection */
   catalogModels?: CatalogModel[];
@@ -31,6 +34,12 @@ interface ModelConfigModalProps {
   recentConfigs?: ModelConfig[];
   /** Clear all recent configs */
   onClearRecent?: () => void;
+  /**
+   * When provided, renders a pinned "all available models" sentinel row at the
+   * top of the dialog body. Clicking it closes the modal and invokes the
+   * callback — the caller is expected to flip the matching grid-search flag.
+   */
+  onSelectAllAvailable?: () => void;
 }
 
 export function ModelConfigModal({
@@ -42,6 +51,7 @@ export function ModelConfigModal({
   catalogModels,
   recentConfigs,
   onClearRecent,
+  onSelectAllAvailable,
 }: ModelConfigModalProps) {
   const [draft, setDraft] = React.useState<ModelConfig>(config);
 
@@ -82,19 +92,65 @@ export function ModelConfigModal({
           <DialogTitle>{roleLabel}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+        <div className="space-y-4">
+          {onSelectAllAvailable &&
+            (() => {
+              const availableCount = catalogModels?.length ?? 0;
+              const disabled = availableCount === 0;
+              return (
+                <>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      onSelectAllAvailable();
+                      onOpenChange(false);
+                    }}
+                    className={cn(
+                      "group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-start transition-all",
+                      disabled
+                        ? "cursor-not-allowed border-border/40 bg-muted/20 opacity-60"
+                        : "cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-md",
+                        disabled
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-primary/10 text-primary group-hover:bg-primary/15",
+                      )}
+                    >
+                      <Boxes className="size-4" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="text-sm font-medium text-foreground">
+                        כל המודלים הזמינים
+                      </span>
+                      <span className="text-[0.6875rem] text-muted-foreground">
+                        {disabled
+                          ? "אין מודלים זמינים — הגדר API key"
+                          : `ירוץ ${TERMS.optimization} לכל ${TERMS.model} בקטלוג · ${availableCount} כרגע`}
+                      </span>
+                    </span>
+                  </button>
+                  <Separator />
+                </>
+              );
+            })()}
+
           {/* Recent configs */}
           {recentConfigs && recentConfigs.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <Label className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
                   הגדרות אחרונות
                 </Label>
                 {onClearRecent && (
                   <button
                     type="button"
                     onClick={onClearRecent}
-                    className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors cursor-pointer"
+                    className="text-[0.625rem] text-muted-foreground/60 hover:text-destructive transition-colors cursor-pointer"
                   >
                     נקה
                   </button>
@@ -107,7 +163,7 @@ export function ModelConfigModal({
                     type="button"
                     onClick={() => setDraft({ ...rc })}
                     className={cn(
-                      "flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-mono transition-all cursor-pointer",
+                      "flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.6875rem] font-mono transition-all cursor-pointer",
                       draft.name === rc.name
                         ? "border-primary/50 bg-primary/5 text-foreground"
                         : "border-border/40 bg-muted/30 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/50",
@@ -147,9 +203,7 @@ export function ModelConfigModal({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>
-                <HelpTip text="מידת היצירתיות של המודל — ערך נמוך נותן תשובות עקביות, גבוה מגוון יותר">
-                  טמפרטורה
-                </HelpTip>
+                <HelpTip text={tip("model_config.temperature")}>טמפרטורה</HelpTip>
               </Label>
               <span className="text-xs font-mono text-muted-foreground">
                 {draft.temperature?.toFixed(1) ?? "0.7"}
@@ -171,9 +225,7 @@ export function ModelConfigModal({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>
-                <HelpTip text="מגביל את מגוון המילים שהמודל שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון">
-                  Top P
-                </HelpTip>
+                <HelpTip text={tip("model_config.top_p")}>Top P</HelpTip>
               </Label>
               <span className="text-xs font-mono text-muted-foreground">
                 {draft.top_p?.toFixed(2) ?? "—"}
@@ -194,7 +246,7 @@ export function ModelConfigModal({
           {/* Max tokens */}
           <div className="space-y-2">
             <Label>
-              <HelpTip text="אורך התשובה המקסימלי — טוקן הוא בערך מילה אחת">מקסימום טוקנים</HelpTip>
+              <HelpTip text={tip("model_config.max_tokens")}>מקסימום טוקנים</HelpTip>
             </Label>
             <NumberInput
               min={1}

@@ -13,16 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # TODO: On-premise - Configure pip to use local artifactory
 # Example: RUN pip config set global.index-url https://artifactory.your-company.com/api/pypi/pypi-remote/simple
 
-# Install uv for faster package installation
-RUN pip install uv
-
 # Copy dependency files first for better caching
 COPY pyproject.toml ./
 
-# TODO: On-premise - Add --index-url flag if not using pip.conf
-# Example: RUN uv pip install --system -e . --index-url https://artifactory.your-company.com/api/pypi/pypi-remote/simple
 # Install dependencies
-RUN uv pip install --system -e .
+RUN pip install -e .
 
 # Copy application code
 COPY . .

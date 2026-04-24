@@ -1,0 +1,766 @@
+"use client";
+
+import * as React from "react";
+import { toast } from "react-toastify";
+
+import { streamCodeAgent } from "@/shared/lib/api";
+import { TERMS } from "@/shared/lib/terms";
+import type { ParsedDataset } from "@/features/submit/lib/parse-dataset";
+import type { ValidateCodeResponse } from "@/shared/types/api";
+
+export type AgentStatus = "idle" | "streaming" | "done" | "error";
+export type AgentMode = "seed" | "chat";
+export type ArtifactStatus = "idle" | "waiting" | "writing" | "done";
+
+export type AgentToolName = "edit_signature" | "edit_metric";
+export type AgentToolStatus = "running" | "done" | "error";
+
+export interface AgentToolCall {
+  id: string;
+  tool: AgentToolName;
+  reason: string;
+  status: AgentToolStatus;
+  startedAt: number;
+  endedAt: number | null;
+  prevCode?: string;
+  newCode?: string;
+}
+
+// Per-index line diff — returns 1-based line numbers in `next` that differ
+// from `prev`. Good enough for flashing small refinements; if the agent
+// restructures heavily, most lines will flash (acceptable).
+function diffChangedLines(prev: string, next: string): number[] {
+  if (!prev.trim()) return [];
+  const prevLines = prev.split("\n");
+  const nextLines = next.split("\n");
+  const changed: number[] = [];
+  for (let i = 0; i < nextLines.length; i++) {
+    if (nextLines[i] !== prevLines[i]) changed.push(i + 1);
+  }
+  return changed;
+}
+
+// Compact the backend ValidateCodeResponse into a short string the agent can
+// read on the next turn — gives it concrete "what's broken" context so the
+// retry is targeted, not another blind rewrite.
+function summarizeValidation(v: ValidateCodeResponse | null): string {
+  if (!v) return "";
+  if (v.valid && v.warnings.length === 0) return "OK";
+  const parts: string[] = [];
+  if (v.errors.length > 0) parts.push(`errors: ${v.errors.join(" | ")}`);
+  if (v.warnings.length > 0) parts.push(`warnings: ${v.warnings.join(" | ")}`);
+  return parts.join("; ");
+}
+
+const MAX_AUTO_FIX = 2;
+
+// Synthetic opener shown as a user bubble before the seed reply. It gives
+// the conversation a natural starting point — the AI's first message reads
+// as a response to a real request, not a monologue — and lets the user
+// revise it via the edit pencil to steer the initial generation.
+const SEED_USER_MESSAGE = `תסתכל ב${TERMS.dataset} שלי ותכתוב Signature ו-Metric שיתאימו לו.`;
+
+export interface AgentMessage {
+  role: "assistant" | "user";
+  content: string;
+  toolCalls?: AgentToolCall[];
+}
+
+export interface ArtifactVersion {
+  code: string;
+  ts: number;
+}
+
+export type ArtifactKind = "signature" | "metric";
+
+export interface CodeAgentState {
+  status: AgentStatus;
+  mode: AgentMode;
+  statusLabel: string;
+  signatureStatus: ArtifactStatus;
+  metricStatus: ArtifactStatus;
+  messages: AgentMessage[];
+  error: string | null;
+  canSend: boolean;
+  signatureVersions: ArtifactVersion[];
+  metricVersions: ArtifactVersion[];
+  signatureVersionIndex: number;
+  metricVersionIndex: number;
+  signatureFlashLines: number[];
+  metricFlashLines: number[];
+  reasoning: string;
+  reasoningStartedAt: number | null;
+  reasoningEndedAt: number | null;
+  goToSignatureVersion: (index: number) => void;
+  goToMetricVersion: (index: number) => void;
+  send: (message: string) => void;
+  editAndResend: (messageIndex: number, content: string) => void;
+  retry: () => void;
+  fallbackToManual: () => void;
+  stop: () => void;
+  reset: () => void;
+}
+
+export interface UseCodeAgentArgs {
+  codeAssistMode: "auto" | "manual";
+  setCodeAssistMode: (m: "auto" | "manual") => void;
+  columnRoles: Record<string, "input" | "output" | "ignore">;
+  parsedDataset: ParsedDataset | null;
+  moduleName: string;
+  signatureCode: string;
+  metricCode: string;
+  setSignatureCode: (v: string) => void;
+  setMetricCode: (v: string) => void;
+  signatureManuallyEdited: boolean;
+  metricManuallyEdited: boolean;
+  setSignatureManuallyEdited: (v: boolean) => void;
+  setMetricManuallyEdited: (v: boolean) => void;
+  setSignatureValidation: (v: ValidateCodeResponse | null) => void;
+  setMetricValidation: (v: ValidateCodeResponse | null) => void;
+  signatureValidation: ValidateCodeResponse | null;
+  metricValidation: ValidateCodeResponse | null;
+  runSignatureValidation: (overrideCode?: string) => Promise<unknown>;
+  runMetricValidation: (overrideCode?: string) => Promise<unknown>;
+}
+
+export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
+  const {
+    codeAssistMode,
+    setCodeAssistMode,
+    columnRoles,
+    parsedDataset,
+    moduleName,
+    signatureCode,
+    metricCode,
+    setSignatureCode,
+    setMetricCode,
+    signatureManuallyEdited,
+    metricManuallyEdited,
+    setSignatureManuallyEdited,
+    setMetricManuallyEdited,
+    setSignatureValidation,
+    setMetricValidation,
+    signatureValidation,
+    metricValidation,
+    runSignatureValidation,
+    runMetricValidation,
+  } = args;
+
+  const [status, setStatus] = React.useState<AgentStatus>("idle");
+  const [mode, setMode] = React.useState<AgentMode>("seed");
+  const [statusLabel, setStatusLabel] = React.useState("");
+  const [signatureStatus, setSignatureStatus] = React.useState<ArtifactStatus>("idle");
+  const [metricStatus, setMetricStatus] = React.useState<ArtifactStatus>("idle");
+  const [messages, setMessages] = React.useState<AgentMessage[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [signatureVersions, setSignatureVersions] = React.useState<ArtifactVersion[]>([]);
+  const [metricVersions, setMetricVersions] = React.useState<ArtifactVersion[]>([]);
+  const [signatureVersionIndex, setSignatureVersionIndex] = React.useState(-1);
+  const [metricVersionIndex, setMetricVersionIndex] = React.useState(-1);
+  const [signatureFlashLines, setSignatureFlashLines] = React.useState<number[]>([]);
+  const [metricFlashLines, setMetricFlashLines] = React.useState<number[]>([]);
+  const [reasoning, setReasoning] = React.useState("");
+  const [reasoningStartedAt, setReasoningStartedAt] = React.useState<number | null>(null);
+  const [reasoningEndedAt, setReasoningEndedAt] = React.useState<number | null>(null);
+
+  const abortRef = React.useRef<AbortController | null>(null);
+  const sigBufRef = React.useRef("");
+  const metricBufRef = React.useRef("");
+  const replyBufRef = React.useRef("");
+  const reasoningBufRef = React.useRef("");
+  const autoRanRef = React.useRef(false);
+  const [sessionKey, setSessionKey] = React.useState(0);
+  const pendingValidationsRef = React.useRef<
+    Array<{ kind: "signature" | "metric"; promise: Promise<unknown> }>
+  >([]);
+  const autoFixAttemptsRef = React.useRef(0);
+  const runAgentRef = React.useRef<((msg: string, hist: AgentMessage[]) => void) | null>(null);
+  const messagesRef = React.useRef<AgentMessage[]>([]);
+  const flashClearRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Latest values for the stream callbacks — kept in a ref so closures
+  // created inside `runAgent` stay in sync without re-creating the callback.
+  const snapshotRef = React.useRef({
+    signatureCode,
+    metricCode,
+    signatureValidation,
+    metricValidation,
+  });
+  React.useEffect(() => {
+    snapshotRef.current = {
+      signatureCode,
+      metricCode,
+      signatureValidation,
+      metricValidation,
+    };
+  }, [signatureCode, metricCode, signatureValidation, metricValidation]);
+
+  const runnersRef = React.useRef({ runSignatureValidation, runMetricValidation });
+  React.useEffect(() => {
+    runnersRef.current = { runSignatureValidation, runMetricValidation };
+  }, [runSignatureValidation, runMetricValidation]);
+
+  const versionsRef = React.useRef({ signatureVersions, metricVersions });
+  React.useEffect(() => {
+    versionsRef.current = { signatureVersions, metricVersions };
+  }, [signatureVersions, metricVersions]);
+
+  React.useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const hasRequiredContext = React.useMemo(() => {
+    if (!parsedDataset || parsedDataset.rowCount === 0) return false;
+    const hasInput = Object.values(columnRoles).some((r) => r === "input");
+    const hasOutput = Object.values(columnRoles).some((r) => r === "output");
+    return hasInput && hasOutput;
+  }, [parsedDataset, columnRoles]);
+
+  /* ── helpers that mutate the last assistant message ───────────────── */
+  const appendReply = React.useCallback((chunk: string) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (!last || last.role !== "assistant") return prev;
+      const next = prev.slice();
+      next[next.length - 1] = { ...last, content: last.content + chunk };
+      return next;
+    });
+  }, []);
+
+  const pushToolCall = React.useCallback((call: AgentToolCall) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (!last || last.role !== "assistant") return prev;
+      const next = prev.slice();
+      next[next.length - 1] = {
+        ...last,
+        toolCalls: [...(last.toolCalls ?? []), call],
+      };
+      return next;
+    });
+  }, []);
+
+  const finishToolCall = React.useCallback((id: string, status: AgentToolStatus) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (!last || last.role !== "assistant" || !last.toolCalls?.length) return prev;
+      const next = prev.slice();
+      next[next.length - 1] = {
+        ...last,
+        toolCalls: last.toolCalls.map((t) =>
+          t.id === id ? { ...t, status, endedAt: Date.now() } : t,
+        ),
+      };
+      return next;
+    });
+  }, []);
+
+  const attachCodeToLatestRunningToolCall = React.useCallback(
+    (tool: AgentToolName, prevCode: string, newCode: string) => {
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last || last.role !== "assistant" || !last.toolCalls?.length) return prev;
+        const calls = last.toolCalls;
+        let targetIdx = -1;
+        for (let i = calls.length - 1; i >= 0; i--) {
+          const c = calls[i];
+          if (c && c.tool === tool && c.status === "running") {
+            targetIdx = i;
+            break;
+          }
+        }
+        if (targetIdx < 0) return prev;
+        const updatedCalls = calls.slice();
+        const target = updatedCalls[targetIdx];
+        if (!target) return prev;
+        updatedCalls[targetIdx] = { ...target, prevCode, newCode };
+        const next = prev.slice();
+        next[next.length - 1] = { ...last, toolCalls: updatedCalls };
+        return next;
+      });
+    },
+    [],
+  );
+
+  /* ── main stream runner ──────────────────────────────────────────── */
+  const runAgent = React.useCallback(
+    (userMessage: string, history: AgentMessage[]) => {
+      if (!parsedDataset || !hasRequiredContext) return;
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      sigBufRef.current = "";
+      metricBufRef.current = "";
+      replyBufRef.current = "";
+      reasoningBufRef.current = "";
+      pendingValidationsRef.current = [];
+
+      const isChat = userMessage.length > 0;
+      setMode(isChat ? "chat" : "seed");
+      setStatus("streaming");
+      setStatusLabel(isChat ? "חושב…" : `הסוכן קורא את ה${TERMS.dataset}…`);
+      setSignatureStatus(isChat ? "idle" : "waiting");
+      setMetricStatus(isChat ? "idle" : "waiting");
+      setReasoning("");
+      setReasoningStartedAt(Date.now());
+      setReasoningEndedAt(null);
+      setError(null);
+
+      if (isChat) {
+        setMessages((m) => [
+          ...m,
+          { role: "user", content: userMessage },
+          { role: "assistant", content: "", toolCalls: [] },
+        ]);
+      } else {
+        setMessages((m) => [
+          ...m,
+          { role: "user", content: SEED_USER_MESSAGE },
+          { role: "assistant", content: "", toolCalls: [] },
+        ]);
+      }
+
+      const sampleRows = parsedDataset.rows.slice(0, 5) as Record<string, unknown>[];
+      const snapshot = snapshotRef.current;
+      const { signatureVersions: sigVers, metricVersions: metVers } = versionsRef.current;
+      const initialSignature = sigVers[0]?.code ?? snapshot.signatureCode;
+      const initialMetric = metVers[0]?.code ?? snapshot.metricCode;
+      const chatHistory = history
+        .filter((m) => m.content.trim().length > 0)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      streamCodeAgent(
+        {
+          dataset_columns: parsedDataset.columns,
+          column_roles: columnRoles,
+          sample_rows: sampleRows,
+          user_message: userMessage,
+          chat_history: chatHistory,
+          prior_signature: snapshot.signatureCode,
+          prior_metric: snapshot.metricCode,
+          prior_signature_validation: summarizeValidation(snapshot.signatureValidation),
+          prior_metric_validation: summarizeValidation(snapshot.metricValidation),
+          initial_signature: initialSignature,
+          initial_metric: initialMetric,
+        },
+        {
+          signal: controller.signal,
+          onReasoningPatch: (chunk) => {
+            if (reasoningBufRef.current === "") {
+              setReasoningStartedAt(Date.now());
+            }
+            reasoningBufRef.current += chunk;
+            setReasoning(reasoningBufRef.current);
+          },
+          onSignaturePatch: (chunk) => {
+            if (sigBufRef.current === "") {
+              setStatusLabel("כותב Signature…");
+              setSignatureStatus("writing");
+            }
+            sigBufRef.current += chunk;
+            setSignatureCode(sigBufRef.current);
+            setSignatureValidation(null);
+          },
+          onMetricPatch: (chunk) => {
+            if (metricBufRef.current === "") {
+              setStatusLabel("כותב Metric…");
+              setSignatureStatus("done");
+              setMetricStatus("writing");
+            }
+            metricBufRef.current += chunk;
+            setMetricCode(metricBufRef.current);
+            setMetricValidation(null);
+          },
+          onMessagePatch: (chunk) => {
+            if (replyBufRef.current === "") {
+              setStatusLabel("כותב תשובה…");
+              if (reasoningBufRef.current) setReasoningEndedAt(Date.now());
+            }
+            replyBufRef.current += chunk;
+            appendReply(chunk);
+          },
+          onToolStart: (ev) => {
+            setStatusLabel(ev.tool === "edit_signature" ? "עורך Signature…" : "עורך Metric…");
+            if (ev.tool === "edit_signature") setSignatureStatus("writing");
+            else setMetricStatus("writing");
+            pushToolCall({
+              id: ev.id,
+              tool: ev.tool,
+              reason: ev.reason,
+              status: "running",
+              startedAt: Date.now(),
+              endedAt: null,
+            });
+          },
+          onToolEnd: (ev) => {
+            finishToolCall(ev.id, ev.status === "ok" ? "done" : "error");
+            if (ev.tool === "edit_signature") setSignatureStatus("done");
+            else setMetricStatus("done");
+          },
+          onSignatureReplace: (code) => {
+            const prevCode = snapshot.signatureCode;
+            setSignatureCode(code);
+            setSignatureManuallyEdited(false);
+            attachCodeToLatestRunningToolCall("edit_signature", prevCode, code);
+            const changed = diffChangedLines(prevCode, code);
+            setSignatureFlashLines(changed);
+            if (flashClearRef.current) clearTimeout(flashClearRef.current);
+            flashClearRef.current = setTimeout(() => {
+              setSignatureFlashLines([]);
+            }, 1200);
+            setSignatureVersions((prev) => {
+              const next = [...prev, { code, ts: Date.now() }];
+              setSignatureVersionIndex(next.length - 1);
+              return next;
+            });
+            pendingValidationsRef.current.push({
+              kind: "signature",
+              promise: runnersRef.current.runSignatureValidation(code),
+            });
+          },
+          onMetricReplace: (code) => {
+            const prevCode = snapshot.metricCode;
+            setMetricCode(code);
+            setMetricManuallyEdited(false);
+            attachCodeToLatestRunningToolCall("edit_metric", prevCode, code);
+            const changed = diffChangedLines(prevCode, code);
+            setMetricFlashLines(changed);
+            if (flashClearRef.current) clearTimeout(flashClearRef.current);
+            flashClearRef.current = setTimeout(() => {
+              setMetricFlashLines([]);
+            }, 1200);
+            setMetricVersions((prev) => {
+              const next = [...prev, { code, ts: Date.now() }];
+              setMetricVersionIndex(next.length - 1);
+              return next;
+            });
+            pendingValidationsRef.current.push({
+              kind: "metric",
+              promise: runnersRef.current.runMetricValidation(code),
+            });
+          },
+          onDone: async (result) => {
+            if (!isChat) {
+              setSignatureCode(result.signature_code);
+              setMetricCode(result.metric_code);
+              setSignatureManuallyEdited(false);
+              setMetricManuallyEdited(false);
+              const sigChanged = diffChangedLines(snapshot.signatureCode, result.signature_code);
+              const metChanged = diffChangedLines(snapshot.metricCode, result.metric_code);
+              setSignatureFlashLines(sigChanged);
+              setMetricFlashLines(metChanged);
+              if (flashClearRef.current) clearTimeout(flashClearRef.current);
+              flashClearRef.current = setTimeout(() => {
+                setSignatureFlashLines([]);
+                setMetricFlashLines([]);
+              }, 800);
+              setSignatureVersions((prev) => {
+                const next = [...prev, { code: result.signature_code, ts: Date.now() }];
+                setSignatureVersionIndex(next.length - 1);
+                return next;
+              });
+              setMetricVersions((prev) => {
+                const next = [...prev, { code: result.metric_code, ts: Date.now() }];
+                setMetricVersionIndex(next.length - 1);
+                return next;
+              });
+              pendingValidationsRef.current.push({
+                kind: "signature",
+                promise: runnersRef.current.runSignatureValidation(result.signature_code),
+              });
+              pendingValidationsRef.current.push({
+                kind: "metric",
+                promise: runnersRef.current.runMetricValidation(result.metric_code),
+              });
+            }
+            setSignatureStatus("done");
+            setMetricStatus("done");
+            setStatus("done");
+            setStatusLabel("סיים");
+            if (reasoningBufRef.current) setReasoningEndedAt(Date.now());
+
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (!last || last.role !== "assistant") return prev;
+              const fallback = isChat
+                ? "Done."
+                : "I wrote a Signature and Metric based on your data.";
+              const finalContent = result.assistant_message || last.content || fallback;
+              const next = prev.slice();
+              next[next.length - 1] = { ...last, content: finalContent };
+              return next;
+            });
+
+            // Auto-fix: wait for any validations kicked off during this run,
+            // then if the validator flagged errors, fire a follow-up chat
+            // turn so the agent can see the errors (via prior_*_validation)
+            // and patch them. Bounded by MAX_AUTO_FIX to prevent loops.
+            const pending = pendingValidationsRef.current;
+            pendingValidationsRef.current = [];
+            if (pending.length === 0) return;
+            let results: unknown[];
+            try {
+              results = await Promise.all(pending.map((e) => e.promise));
+            } catch {
+              return;
+            }
+            for (let i = 0; i < pending.length; i++) {
+              const entry = pending[i];
+              if (!entry) continue;
+              const resp = (results[i] as ValidateCodeResponse | null) ?? null;
+              if (entry.kind === "signature") {
+                snapshotRef.current = {
+                  ...snapshotRef.current,
+                  signatureValidation: resp,
+                };
+              } else {
+                snapshotRef.current = {
+                  ...snapshotRef.current,
+                  metricValidation: resp,
+                };
+              }
+            }
+            const hasErrors = results.some((r) => {
+              const resp = r as ValidateCodeResponse | null;
+              return !!resp && !resp.valid && resp.errors.length > 0;
+            });
+            if (!hasErrors) return;
+            if (controller.signal.aborted) return;
+            if (autoFixAttemptsRef.current >= MAX_AUTO_FIX) return;
+            autoFixAttemptsRef.current += 1;
+            const fixMessage = `האימות מצא שגיאות בקוד שנכתב. תקן את ה-Signature ואת ה-Metric כדי שיעברו אימות, תוך שמירה שהשדות ממופים לעמודות של ה${TERMS.dataset}.`;
+            setTimeout(() => {
+              runAgentRef.current?.(fixMessage, messagesRef.current);
+            }, 0);
+          },
+          onError: (message) => {
+            if (controller.signal.aborted) return;
+            setStatus("error");
+            setStatusLabel("שגיאה");
+            setSignatureStatus("idle");
+            setMetricStatus("idle");
+            setError(message);
+            // Drop the empty placeholder assistant bubble so the error UI
+            // isn't followed by a blank message.
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === "assistant" && !last.content && !last.toolCalls?.length) {
+                return prev.slice(0, -1);
+              }
+              return prev;
+            });
+          },
+        },
+      );
+    },
+    [
+      parsedDataset,
+      hasRequiredContext,
+      columnRoles,
+      setSignatureCode,
+      setMetricCode,
+      setSignatureValidation,
+      setMetricValidation,
+      setSignatureManuallyEdited,
+      setMetricManuallyEdited,
+      appendReply,
+      pushToolCall,
+      finishToolCall,
+      attachCodeToLatestRunningToolCall,
+    ],
+  );
+
+  React.useEffect(() => {
+    runAgentRef.current = runAgent;
+  }, [runAgent]);
+
+  const send = React.useCallback(
+    (message: string) => {
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      autoFixAttemptsRef.current = 0;
+      runAgent(trimmed, messages);
+    },
+    [runAgent, messages],
+  );
+
+  const editAndResend = React.useCallback(
+    (messageIndex: number, content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed) return;
+      const truncated = messages.slice(0, messageIndex);
+      setMessages(truncated);
+      autoFixAttemptsRef.current = 0;
+      runAgent(trimmed, truncated);
+    },
+    [runAgent, messages],
+  );
+
+  const retry = React.useCallback(() => {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    autoFixAttemptsRef.current = 0;
+    runAgent(lastUser?.content ?? "", messages);
+  }, [messages, runAgent]);
+
+  const goToSignatureVersion = React.useCallback(
+    (index: number) => {
+      const v = signatureVersions[index];
+      if (!v) return;
+      setSignatureCode(v.code);
+      setSignatureManuallyEdited(false);
+      setSignatureVersionIndex(index);
+      void runnersRef.current.runSignatureValidation(v.code);
+    },
+    [signatureVersions, setSignatureCode, setSignatureManuallyEdited],
+  );
+
+  const goToMetricVersion = React.useCallback(
+    (index: number) => {
+      const v = metricVersions[index];
+      if (!v) return;
+      setMetricCode(v.code);
+      setMetricManuallyEdited(false);
+      setMetricVersionIndex(index);
+      void runnersRef.current.runMetricValidation(v.code);
+    },
+    [metricVersions, setMetricCode, setMetricManuallyEdited],
+  );
+
+  const fallbackToManual = React.useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setCodeAssistMode("manual");
+    toast.info("עברת למצב ידני. אפשר לחזור למצב אוטומטי מהכפתור למעלה.");
+  }, [setCodeAssistMode]);
+
+  const stop = React.useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStatus("idle");
+    setStatusLabel("");
+    setSignatureStatus("idle");
+    setMetricStatus("idle");
+  }, []);
+
+  const reset = React.useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    sigBufRef.current = "";
+    metricBufRef.current = "";
+    replyBufRef.current = "";
+    reasoningBufRef.current = "";
+    pendingValidationsRef.current = [];
+    autoFixAttemptsRef.current = 0;
+    autoRanRef.current = false;
+    if (flashClearRef.current) {
+      clearTimeout(flashClearRef.current);
+      flashClearRef.current = null;
+    }
+    setMessages([]);
+    setStatus("idle");
+    setMode("seed");
+    setStatusLabel("");
+    setSignatureStatus("idle");
+    setMetricStatus("idle");
+    setError(null);
+    setReasoning("");
+    setReasoningStartedAt(null);
+    setReasoningEndedAt(null);
+    setSignatureVersions([]);
+    setMetricVersions([]);
+    setSignatureVersionIndex(-1);
+    setMetricVersionIndex(-1);
+    setSignatureFlashLines([]);
+    setMetricFlashLines([]);
+    // Clear the manual-edit gate so the auto-seed effect re-fires on
+    // sessionKey bump — otherwise "new chat" would wipe the messages
+    // but leave the old Signature/Metric untouched.
+    setSignatureManuallyEdited(false);
+    setMetricManuallyEdited(false);
+    setSessionKey((k) => k + 1);
+  }, [setSignatureManuallyEdited, setMetricManuallyEdited]);
+
+  // Swapping the dataset invalidates the entire conversation: messages,
+  // version history, and any in-flight stream all refer to schemas that no
+  // longer apply. Identity change is a reliable signal — `parseDatasetFile`
+  // returns a fresh object per upload. Skipping the initial null→value
+  // transition keeps the first mount a no-op.
+  const prevDatasetRef = React.useRef(parsedDataset);
+  React.useEffect(() => {
+    if (prevDatasetRef.current !== parsedDataset) {
+      if (prevDatasetRef.current !== null) {
+        reset();
+      } else {
+        autoRanRef.current = false;
+      }
+      prevDatasetRef.current = parsedDataset;
+    }
+  }, [parsedDataset, reset]);
+
+  // Re-arm when the user changes their DSPy module (predict ↔ chain_of_thought
+  // ↔ react, …). The manual-edit gate still protects user-authored edits;
+  // fresh seed output just flips to the new module's expected shape.
+  React.useEffect(() => {
+    autoRanRef.current = false;
+  }, [moduleName]);
+
+  // Kick off the seed run as soon as the user has a dataset + I/O roles.
+  // This hook lives at the wizard level, so the seed fires even when the
+  // user hasn't arrived at the code step yet — by the time they do, the
+  // editors are already filled (or actively filling). We skip the seed
+  // if either artifact has been manually authored (including clone-pre-fill,
+  // which marks both flags true) — a fresh dataset upload clears the flags.
+  React.useEffect(() => {
+    if (codeAssistMode !== "auto") return;
+    if (autoRanRef.current) return;
+    if (!hasRequiredContext) return;
+    if (signatureManuallyEdited || metricManuallyEdited) return;
+    autoRanRef.current = true;
+    autoFixAttemptsRef.current = 0;
+    runAgent("", []);
+  }, [
+    codeAssistMode,
+    hasRequiredContext,
+    signatureManuallyEdited,
+    metricManuallyEdited,
+    runAgent,
+    sessionKey,
+  ]);
+
+  // If the user switches to manual mid-stream, abort and reset.
+  React.useEffect(() => {
+    if (codeAssistMode === "auto") return;
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, [codeAssistMode]);
+
+  return {
+    status,
+    mode,
+    statusLabel,
+    signatureStatus,
+    metricStatus,
+    messages,
+    error,
+    canSend: hasRequiredContext && status !== "streaming",
+    signatureVersions,
+    metricVersions,
+    signatureVersionIndex,
+    metricVersionIndex,
+    signatureFlashLines,
+    metricFlashLines,
+    reasoning,
+    reasoningStartedAt,
+    reasoningEndedAt,
+    goToSignatureVersion,
+    goToMetricVersion,
+    send,
+    editAndResend,
+    retry,
+    fallbackToManual,
+    stop,
+    reset,
+  };
+}
