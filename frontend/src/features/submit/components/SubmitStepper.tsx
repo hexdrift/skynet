@@ -46,7 +46,7 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
               </button>
               <span
                 className={cn(
-                  "mt-2 text-[11px] font-medium transition-colors duration-200 hidden sm:block text-center",
+                  "mt-2 text-[0.6875rem] font-medium transition-colors duration-200 hidden sm:block text-center",
                   active ? "text-foreground" : completed ? "text-primary" : "text-muted-foreground",
                 )}
               >

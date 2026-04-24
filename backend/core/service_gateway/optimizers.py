@@ -10,10 +10,7 @@ from ..constants import (
     COMPILE_VALSET_KEY,
     OPTIMIZER_METRIC_KEY,
     OPTIMIZER_NAME_GEPA,
-    OPTIMIZER_NAME_MIPROV2,
-    OPTIMIZER_PROMPT_MODEL_KEY,
     OPTIMIZER_REFLECTION_LM_KEY,
-    OPTIMIZER_TASK_MODEL_KEY,
 )
 from ..exceptions import ServiceError
 from ..models import ModelConfig
@@ -31,20 +28,23 @@ def compile_program(
     metric: Any | None,
     compile_kwargs: dict[str, Any],
 ) -> Any:
-    """Run the optimizer compile step with derived datasets.
+    """Run optimizer.compile() with the derived trainset/valset.
+
+    Passes ``valset`` only when the optimizer's compile signature accepts it,
+    preventing TypeError on optimizers like BootstrapFewShot that do not.
 
     Args:
-        optimizer: DSPy optimizer instance.
-        program: DSPy module to tune.
-        splits: Dataset partitions generated from user data.
-        metric: Optional metric callable.
-        compile_kwargs: Additional arguments forwarded to ``optimizer.compile``.
+        optimizer: An instantiated DSPy optimizer.
+        program: The DSPy module to compile.
+        splits: Train/val/test partitions; train must be non-empty.
+        metric: Optional metric callable (unused directly here; forwarded via kwargs).
+        compile_kwargs: Additional keyword arguments passed to ``optimizer.compile``.
 
     Returns:
-        Any: Compiled DSPy program returned by the optimizer.
+        The compiled program returned by ``optimizer.compile``.
 
     Raises:
-        ServiceError: If training data is empty or the optimizer rejects kwargs.
+        ServiceError: If ``splits.train`` is empty or the optimizer rejects the kwargs.
     """
 
     if not splits.train:
@@ -65,14 +65,7 @@ def compile_program(
 
 
 def _compile_accepts_valset(optimizer: Any) -> bool:
-    """Check if the optimizer's compile method accepts a valset parameter.
-
-    Args:
-        optimizer: DSPy optimizer instance.
-
-    Returns:
-        bool: True if compile() accepts valset, False otherwise.
-    """
+    """Return True if the optimizer's compile() method accepts a valset parameter."""
     compile_method = getattr(optimizer, "compile", None)
     if compile_method is None:
         return False
@@ -90,23 +83,27 @@ def evaluate_on_test(
     *,
     collect_per_example: bool = False,
 ) -> "tuple[float | None, list[dict]] | float | None":
-    """Evaluate a compiled program on the test split.
+    """Evaluate a compiled program on the test split using dspy.Evaluate.
 
     Args:
-        program: Compiled DSPy module.
-        test_examples: Held-out dataset for final evaluation.
-        metric: Metric callable used by DSPy evaluators.
-        collect_per_example: If True, also return per-example results.
+        program: The DSPy module to evaluate.
+        test_examples: Examples to evaluate against.
+        metric: Scoring callable used by ``dspy.Evaluate``.
+        collect_per_example: When True returns ``(aggregate, per_example_list)``
+            instead of just the aggregate float.
 
     Returns:
-        If collect_per_example is False: Optional[float] aggregate score.
-        If collect_per_example is True: (aggregate_score, per_example_results) tuple.
+        The aggregate score as a float, or ``None`` if ``test_examples`` is empty.
+        When ``collect_per_example=True``, returns ``(score, list[dict])`` where each
+        dict contains ``index``, ``outputs``, ``score``, and ``pass``.
+
+    Raises:
+        ServiceError: If the evaluator returns a non-numeric score.
     """
 
     if not test_examples:
         return (None, []) if collect_per_example else None
 
-    # Use DSPy's Evaluate — returns EvaluationResult with score + per-example results
     evaluator = dspy.Evaluate(
         devset=test_examples,
         metric=metric,
@@ -148,14 +145,7 @@ def evaluate_on_test(
 
 
 def optimizer_requires_metric(factory: Callable[..., Any]) -> bool:
-    """Return True if the optimizer factory signature has a ``metric`` parameter.
-
-    Args:
-        factory: Optimizer factory callable or class constructor.
-
-    Returns:
-        bool: True when ``metric`` is present in any callable path.
-    """
+    """Return True if the optimizer factory (or any wrapped target) accepts a ``metric`` parameter."""
 
     try:
         sig = inspect.signature(factory)
@@ -170,15 +160,7 @@ def optimizer_requires_metric(factory: Callable[..., Any]) -> bool:
 
 
 def validate_optimizer_signature(factory: Callable[..., Any], name: str) -> None:
-    """Ensure we can introspect the optimizer factory for logging.
-
-    Args:
-        factory: Optimizer factory callable.
-        name: Optimizer name used in log messages.
-
-    Returns:
-        None
-    """
+    """Warn if the optimizer factory is not introspectable."""
 
     try:
         inspect.signature(factory)
@@ -187,19 +169,7 @@ def validate_optimizer_signature(factory: Callable[..., Any], name: str) -> None
 
 
 def validate_optimizer_kwargs(factory: Callable[..., Any], kwargs: dict[str, Any], name: str) -> None:
-    """Ensure user-supplied optimizer kwargs match the factory signature.
-
-    Args:
-        factory: Optimizer factory callable.
-        kwargs: Keyword arguments provided by the user.
-        name: Optimizer name for contextual error messages.
-
-    Returns:
-        None
-
-    Raises:
-        ServiceError: If kwargs cannot be bound to the factory signature.
-    """
+    """Raise ServiceError if user-supplied kwargs cannot be bound to the factory signature."""
 
     if not kwargs:
         return
@@ -211,6 +181,20 @@ def validate_optimizer_kwargs(factory: Callable[..., Any], kwargs: dict[str, Any
         sig.bind_partial(**kwargs)
     except TypeError as exc:
         raise ServiceError(f"optimizer_kwargs contain unsupported entries for '{name}': {exc}") from exc
+    # bind_partial is too permissive when the factory accepts **kwargs — every
+    # key matches the wildcard. Flag kwargs that aren't in the named params so
+    # typos surface instead of silently passing.
+    has_var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    if has_var_kw:
+        named = {k for k, p in sig.parameters.items() if p.kind is not inspect.Parameter.VAR_KEYWORD}
+        unknown = sorted(k for k in kwargs if k not in named)
+        if unknown:
+            logger.warning(
+                "Optimizer '%s' received kwargs %s not in named parameters — "
+                "forwarded via **kwargs; verify spelling.",
+                name,
+                unknown,
+            )
 
 
 def instantiate_optimizer(
@@ -220,33 +204,34 @@ def instantiate_optimizer(
     metric: Callable[..., Any],
     default_model: ModelConfig,
     reflection_model: ModelConfig | None,
-    prompt_model: ModelConfig | None,
-    task_model: ModelConfig | None,
 ) -> Any:
     """Instantiate an optimizer, injecting language models and metrics as needed.
 
+    Per-optimizer injection rules:
+    - All optimizers that expose a ``metric`` parameter receive it automatically.
+    - GEPA additionally requires ``reflection_lm`` (built from ``reflection_model``)
+      and defaults ``auto`` to ``"light"`` when no budget kwarg is supplied.
+
     Args:
-        factory: Optimizer factory callable resolved from registry/alias.
-        optimizer_name: Human-readable optimizer identifier.
-        optimizer_kwargs: User-supplied keyword arguments.
-        metric: Metric callable to inject when required.
-        default_model: ModelConfig used as a fallback LM.
-        reflection_model: Optional LM config dedicated to reflection.
-        prompt_model: Optional LM config dedicated to prompt generation.
-        task_model: Optional LM config dedicated to task evaluation.
+        factory: Callable that constructs the optimizer instance.
+        optimizer_name: Lowercase-compared name used to detect GEPA.
+        optimizer_kwargs: User-supplied keyword arguments; may be empty.
+        metric: Metric callable injected unless already in ``optimizer_kwargs``.
+        default_model: Fallback model config (currently unused; preserved for
+            forward compatibility with optimizers that may need a default LM).
+        reflection_model: Required for GEPA; optional for others.
 
     Returns:
-        Any: Instantiated optimizer ready for compilation.
+        An instantiated optimizer ready for ``compile()``.
 
     Raises:
-        ServiceError: If required models or kwargs are missing.
+        ServiceError: If GEPA is requested without a reflection model.
     """
 
     optimizer_key = optimizer_name.lower()
     reflection_required_optimizers = {OPTIMIZER_NAME_GEPA}
-    dual_lm_optimizers = {OPTIMIZER_NAME_MIPROV2}
     requires_metric = optimizer_requires_metric(factory)
-    if not requires_metric and optimizer_key in {OPTIMIZER_NAME_GEPA, OPTIMIZER_NAME_MIPROV2}:
+    if not requires_metric and optimizer_key == OPTIMIZER_NAME_GEPA:
         requires_metric = True
 
     kwargs = dict(optimizer_kwargs or {})
@@ -266,43 +251,12 @@ def instantiate_optimizer(
                 f"Optimizer '{optimizer_name}' requires reflection_model_config "
                 "or a preconfigured 'reflection_lm' in optimizer_kwargs."
             )
-    if optimizer_key in dual_lm_optimizers:
-        prompt_cfg = prompt_model or default_model
-        task_cfg = task_model or default_model
-        if OPTIMIZER_PROMPT_MODEL_KEY not in kwargs:
-            if not prompt_cfg:
-                raise ServiceError(
-                    f"Optimizer '{optimizer_name}' requires prompt_model_config "
-                    "or an explicit 'prompt_model' in optimizer_kwargs."
-                )
-            kwargs[OPTIMIZER_PROMPT_MODEL_KEY] = build_language_model(prompt_cfg)
-        prompt_lm = kwargs[OPTIMIZER_PROMPT_MODEL_KEY]
-        if OPTIMIZER_TASK_MODEL_KEY not in kwargs:
-            if not task_cfg:
-                raise ServiceError(
-                    f"Optimizer '{optimizer_name}' requires task_model_config "
-                    "or an explicit 'task_model' in optimizer_kwargs."
-                )
-            same_config = False
-            if prompt_cfg and task_cfg:
-                same_config = prompt_cfg.model_dump() == task_cfg.model_dump()
-            if same_config:
-                kwargs[OPTIMIZER_TASK_MODEL_KEY] = prompt_lm
-            else:
-                kwargs[OPTIMIZER_TASK_MODEL_KEY] = build_language_model(task_cfg)
     logger.debug("Creating optimizer %s with kwargs keys=%s", optimizer_name, list(kwargs.keys()))
     return factory(**kwargs)
 
 
 def _callable_accepts_metric(target: Any) -> bool:
-    """Return True when the callable exposes a ``metric`` parameter.
-
-    Args:
-        target: Callable object to inspect.
-
-    Returns:
-        bool: True when ``metric`` is present in the signature.
-    """
+    """Return True when the callable exposes a ``metric`` parameter."""
 
     if target is None:
         return False
@@ -314,14 +268,7 @@ def _callable_accepts_metric(target: Any) -> bool:
 
 
 def _extract_factory_targets(factory: Callable[..., Any]) -> list[Any]:
-    """Collect potential callable targets from wrappers/closures.
-
-    Args:
-        factory: Optimizer factory possibly wrapping other callables.
-
-    Returns:
-        list[Any]: Additional callables to inspect for ``metric`` support.
-    """
+    """Collect potential callable targets from wrappers/closures for metric-detection."""
 
     targets: list[Any] = []
     wrapped = getattr(factory, "__wrapped__", None)

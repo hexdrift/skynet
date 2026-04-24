@@ -4,6 +4,7 @@ import { BarChart3, Database, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FadeIn } from "@/shared/ui/motion";
+import { TERMS } from "@/shared/lib/terms";
 
 interface AnalyticsEmptyProps {
   variant?: "no-data" | "no-results" | "loading-error";
@@ -20,13 +21,13 @@ export function AnalyticsEmpty({
     "no-data": {
       icon: Database,
       title: "אין עדיין נתונים",
-      description: "העלה דאטאסט והגדר אופטימיזציה כדי לראות סטטיסטיקות",
+      description: `העלה ${TERMS.dataset} והגדר ${TERMS.optimization} כדי לראות סטטיסטיקות`,
       action: null,
     },
     "no-results": {
       icon: BarChart3,
       title: "לא נמצאו תוצאות",
-      description: "הסינון שלך לא מצא אופטימיזציות. נסה להרחיב את הקריטריונים",
+      description: `הסינון שלך לא מצא ${TERMS.optimizationPlural}. אפשר להרחיב את הקריטריונים`,
       action: onClearFilters ? (
         <Button variant="outline" size="sm" onClick={onClearFilters}>
           נקה סינונים

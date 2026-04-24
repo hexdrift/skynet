@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizedPredictor } from "@/shared/types/api";
+import { tip } from "@/shared/lib/tooltips";
 import { CopyButton } from "./ui-primitives";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
@@ -39,7 +40,7 @@ export function CodeTab({
     <>
       <FadeIn>
         <p className="text-sm text-muted-foreground">
-          קוד המקור של החתימה, המטריקה, והפרומפט המאומן.
+          קוד המקור של הפרומפט ההתחלתי, פונקציית המדידה, והפרומפט המאומן.
         </p>
       </FadeIn>
       {(signatureCode || metricCode) && (
@@ -47,7 +48,7 @@ export function CodeTab({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Code className="size-4" />
-              <HelpTip text="קוד המקור של החתימה והמטריקה שהוגדרו לאופטימיזציה זו">קוד</HelpTip>
+              <HelpTip text={tip("code.signature_metric")}>קוד</HelpTip>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -70,7 +71,7 @@ export function CodeTab({
                     value="signature"
                     className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                   >
-                    חתימה (Signature)
+                    Signature
                   </TabsTrigger>
                 )}
                 {metricCode && (
@@ -78,7 +79,7 @@ export function CodeTab({
                     value="metric"
                     className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                   >
-                    מטריקה (Metric)
+                    Metric
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -112,7 +113,7 @@ export function CodeTab({
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Sparkles className="size-4" />
-              <HelpTip text="הפרומפט שנבנה אוטומטית ע״י האופטימייזר — כולל הנחיות ודוגמאות שנבחרו">
+              <HelpTip text={tip("prompt.optimized")}>
                 פרומפט מאופטם
               </HelpTip>
             </CardTitle>
@@ -134,7 +135,7 @@ export function CodeTab({
               <div className="mt-4 pt-4 border-t border-border">
                 <p className="text-xs text-muted-foreground mb-2">
                   {optimizedPrompt.demos.length}{" "}
-                  <HelpTip text="דוגמאות קלט-פלט שנבחרו מהדאטאסט ומוצגות למודל כדי ללמד אותו את הפורמט הרצוי">
+                  <HelpTip text={tip("prompt.demonstrations")}>
                     דוגמאות מובנות
                   </HelpTip>
                 </p>

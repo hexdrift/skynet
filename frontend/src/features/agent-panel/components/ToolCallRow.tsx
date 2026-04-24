@@ -1,0 +1,375 @@
+"use client";
+
+import * as React from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertTriangle, Check, ChevronDown, Copy, RefreshCw } from "lucide-react";
+
+import { cn } from "@/shared/lib/utils";
+import type { AgentToolCall } from "@/shared/ui/agent/types";
+
+import { EntryRow, isPlainObject } from "../lib/entry-row";
+import { getToolMeta, prettifyToolName } from "../lib/tool-meta";
+
+interface ToolCallRowProps {
+  call: AgentToolCall;
+  isRetry?: boolean;
+  /** Hebrew one-liner that replaces ``call.reason`` in the collapsed trigger. */
+  summary?: string | null;
+  /** Override for the trigger title. Defaults to ``TOOL_META.title``. */
+  title?: string | null;
+}
+
+/**
+ * One tool invocation rendered as an expandable row inside the assistant
+ * bubble. While the call is running the row self-expands and shows a
+ * pulse indicator with a live elapsed counter; once done it auto-collapses
+ * into a compact chip. Errors keep the row expanded. A per-tool summary
+ * string (provided by the renderer registry) replaces the raw LLM reason
+ * in the collapsed view with a domain-specific Hebrew one-liner.
+ */
+export function ToolCallRow({
+  call,
+  isRetry = false,
+  summary,
+  title,
+}: ToolCallRowProps) {
+  const meta = getToolMeta(call.tool);
+  const derivedTitle =
+    title ?? (meta.title === "אישור פעולה" ? prettifyToolName(call.tool) : meta.title);
+  const Icon = meta.icon;
+
+  const initiallyOpen = call.status !== "done";
+  const [open, setOpen] = React.useState(initiallyOpen);
+  const autoCollapsedRef = React.useRef(false);
+  const [nowTs, setNowTs] = React.useState(() => Date.now());
+
+  React.useEffect(() => {
+    if (call.status === "done" && !autoCollapsedRef.current) {
+      autoCollapsedRef.current = true;
+      setOpen(false);
+    }
+    if (call.status === "error" && !open) {
+      setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call.status]);
+
+  React.useEffect(() => {
+    if (call.status !== "running") return;
+    const id = setInterval(() => setNowTs(Date.now()), 200);
+    return () => clearInterval(id);
+  }, [call.status]);
+
+  const elapsedMs =
+    call.status === "running" && call.startedAt
+      ? nowTs - call.startedAt
+      : call.endedAt && call.startedAt
+        ? call.endedAt - call.startedAt
+        : 0;
+  const elapsedLabel =
+    elapsedMs >= 100 || call.status === "running" ? formatElapsed(elapsedMs) : null;
+
+  const payload = (call.payload ?? {}) as Record<string, unknown>;
+  const args = isPlainObject(payload.arguments) ? payload.arguments : {};
+  const result = payload.result;
+  const argEntries = Object.entries(args);
+  const hasArgs = argEntries.length > 0;
+  const hasResult = result !== undefined && result !== null && result !== "";
+
+  const triggerText = summary ?? call.reason ?? null;
+  const isError = call.status === "error";
+  const showReasonInBody = call.reason && call.reason !== triggerText;
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-md",
+        isError && "bg-[#9B2C1F]/[0.04]",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={cn(
+          "flex w-full items-center gap-2 px-2.5 py-1.5 text-start",
+          "transition-colors cursor-pointer",
+          "hover:bg-foreground/[0.04]",
+          isError && "hover:bg-[#9B2C1F]/[0.07]",
+        )}
+      >
+        <StatusGlyph status={call.status} Icon={Icon} isRetry={isRetry} />
+        <span
+          className={cn(
+            "text-[0.8125rem] font-medium leading-tight truncate shrink-0",
+            isError
+              ? "text-[#7A1E13]"
+              : call.status === "running"
+                ? "text-foreground"
+                : "text-foreground/80",
+          )}
+        >
+          {derivedTitle}
+        </span>
+        {triggerText && !open && (
+          <span
+            className="min-w-0 flex-1 truncate text-[0.75rem] text-muted-foreground/70"
+            title={triggerText}
+          >
+            · {triggerText}
+          </span>
+        )}
+        <span className="ms-auto flex items-center gap-1.5 shrink-0">
+          {elapsedLabel && (
+            <span
+              className={cn(
+                "font-mono tabular-nums text-[0.625rem]",
+                call.status === "running"
+                  ? "text-muted-foreground/80"
+                  : "text-muted-foreground/55",
+              )}
+            >
+              {elapsedLabel}
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              "size-3.5 text-muted-foreground/50 transition-transform duration-150",
+              open ? "rotate-0" : "rotate-90",
+            )}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 pt-1 space-y-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <RawName tool={call.tool} />
+                {isRetry && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[0.625rem] text-muted-foreground/70"
+                    title="ניסיון חוזר לאחר שגיאה"
+                  >
+                    <RefreshCw className="size-2.5" aria-hidden="true" />
+                    ניסיון חוזר
+                  </span>
+                )}
+              </div>
+              {showReasonInBody && (
+                <div className="text-[0.75rem] leading-snug text-muted-foreground/85">
+                  {call.reason}
+                </div>
+              )}
+              {hasArgs && (
+                <Section label="קלט">
+                  <dl className="space-y-1.5">
+                    {argEntries.map(([k, v]) => (
+                      <EntryRow key={k} argKey={k} value={v} />
+                    ))}
+                  </dl>
+                </Section>
+              )}
+              {hasResult && (
+                <Section label={isError ? "שגיאה" : "תוצאה"}>
+                  <ResultBody result={result} isError={isError} />
+                </Section>
+              )}
+              {!hasArgs && !hasResult && call.status === "running" && (
+                <div className="text-[0.75rem] text-muted-foreground italic">
+                  פועל כעת…
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function StatusGlyph({
+  status,
+  Icon,
+  isRetry,
+}: {
+  status: AgentToolCall["status"];
+  Icon: React.ComponentType<{
+    className?: string;
+    strokeWidth?: number;
+    "aria-hidden"?: boolean;
+  }>;
+  isRetry: boolean;
+}) {
+  const retryRing = isRetry ? "ring-1 ring-[#A85A1A]/45" : "";
+  if (status === "running") {
+    return (
+      <span
+        className={cn(
+          "relative inline-flex size-4 items-center justify-center shrink-0 rounded-full",
+          retryRing,
+        )}
+        aria-label="פועל"
+      >
+        <span className="absolute inset-0 rounded-full bg-[#3D2E22]/15 animate-ping motion-reduce:animate-none" />
+        <span className="relative size-2 rounded-full bg-[#3D2E22]" />
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span
+        className={cn(
+          "inline-flex size-4 items-center justify-center rounded-full bg-[#9B2C1F]/15 text-[#9B2C1F] shrink-0",
+          retryRing,
+        )}
+        aria-label="שגיאה"
+      >
+        <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "inline-flex size-4 items-center justify-center rounded-full bg-[#3D2E22]/15 text-[#3D2E22] shrink-0",
+        retryRing,
+      )}
+      aria-label="הושלם"
+    >
+      <Icon className="size-2.5" strokeWidth={2.5} aria-hidden />
+    </span>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 text-[0.6875rem] font-medium text-muted-foreground/75">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ResultBody({ result, isError }: { result: unknown; isError: boolean }) {
+  if (typeof result === "string") {
+    const trimmed = result.trim();
+    if (!trimmed) {
+      return <div className="text-[0.75rem] text-muted-foreground">—</div>;
+    }
+    return (
+      <div className="relative" dir="ltr">
+        <pre
+          className={cn(
+            "whitespace-pre-wrap break-words font-mono text-[0.6875rem] leading-relaxed max-h-52 overflow-y-auto rounded-md border p-2 pe-9",
+            isError
+              ? "border-[#9B2C1F]/20 bg-[#FCEFEB]/60 text-[#7A1E13]"
+              : "border-border/40 bg-background/70 text-foreground",
+          )}
+        >
+          {trimmed}
+        </pre>
+        <CopyButton text={trimmed} />
+      </div>
+    );
+  }
+
+  if (isPlainObject(result)) {
+    const entries = Object.entries(result);
+    if (entries.length === 0) {
+      return <div className="text-[0.75rem] text-muted-foreground">—</div>;
+    }
+    return (
+      <dl className="space-y-1.5">
+        {entries.map(([k, v]) => (
+          <EntryRow key={k} argKey={k} value={v} />
+        ))}
+      </dl>
+    );
+  }
+
+  if (Array.isArray(result)) {
+    if (result.length === 0) {
+      return <div className="text-[0.75rem] text-muted-foreground">—</div>;
+    }
+    return (
+      <dl className="space-y-1.5">
+        {result.slice(0, 20).map((item, idx) => (
+          <EntryRow key={idx} argKey={`${idx + 1}`} value={item} />
+        ))}
+        {result.length > 20 && (
+          <div className="text-[0.625rem] text-muted-foreground/70">
+            ועוד {result.length - 20}…
+          </div>
+        )}
+      </dl>
+    );
+  }
+
+  return (
+    <div className="text-[0.75rem] font-mono text-foreground" dir="ltr">
+      {String(result)}
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // Clipboard access denied — silently ignore.
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={copied ? "הועתק" : "העתק"}
+      className={cn(
+        "absolute end-1.5 top-1.5 inline-flex size-6 items-center justify-center rounded-md",
+        "bg-background/85 text-muted-foreground/70 border border-border/40",
+        "hover:bg-background hover:text-foreground transition-colors cursor-pointer",
+      )}
+    >
+      {copied ? (
+        <Check className="size-3" strokeWidth={2.5} aria-hidden="true" />
+      ) : (
+        <Copy className="size-3" aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+function RawName({ tool }: { tool: string }) {
+  return (
+    <div
+      className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[0.625rem] text-muted-foreground/70 bg-muted/40"
+      dir="ltr"
+      title="שם הכלי ב-MCP"
+    >
+      {tool}
+    </div>
+  );
+}
+
+function formatElapsed(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const sec = ms / 1000;
+  if (sec < 10) return `${sec.toFixed(1)}s`;
+  return `${Math.round(sec)}s`;
+}

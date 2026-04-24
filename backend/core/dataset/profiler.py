@@ -1,0 +1,268 @@
+"""Pure functions that describe an uploaded dataset.
+
+The profiler walks the raw row list once and produces a ``DatasetProfile``
+summarizing its shape, the nature of every output column, duplicate
+counts by input columns, and any warnings the user should see before
+submitting an optimization. No side effects; safe to call from request
+handlers.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from typing import Any
+
+from ..exceptions import ValidationError
+from ..i18n import t
+from ..models.common import ColumnMapping
+from ..models.dataset import (
+    DatasetProfile,
+    ProfileWarning,
+    ProfileWarningCode,
+    TargetColumnProfile,
+)
+
+# Adaptive categorical-vs-freeform thresholds. Up to ``MIN_UNIQUE`` distinct
+# values a column is always treated as categorical (the cheap, common case).
+# Between ``MIN_UNIQUE`` and ``MAX_UNIQUE`` we additionally require the
+# unique-to-row ratio to be small enough that each class has roughly five+
+# examples on average — otherwise the "classes" are just per-row labels.
+# Above ``MAX_UNIQUE`` no column is categorical, since stratifying over
+# hundreds of micro-classes is meaningless.
+CATEGORICAL_MIN_UNIQUE = 20
+CATEGORICAL_MAX_UNIQUE = 100
+CATEGORICAL_UNIQUE_RATIO = 0.2
+
+RARE_CLASS_THRESHOLD = 5
+IMBALANCE_RATIO_THRESHOLD = 10.0
+MIN_RECOMMENDED_ROWS = 30
+FREEFORM_AVG_LENGTH = 40
+
+
+def profile_dataset(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> DatasetProfile:
+    """Return a structural summary and warning list for a raw dataset.
+
+    Args:
+        dataset: List of row dicts as uploaded by the user.
+        mapping: Column mapping whose output columns are all profiled.
+
+    Returns:
+        A fully-populated ``DatasetProfile``.
+
+    Raises:
+        ValidationError: When ``dataset`` is empty.
+    """
+    if not dataset:
+        raise ValidationError(t("dataset.profile.empty"))
+
+    row_count = len(dataset)
+    columns: set[str] = set()
+    for row in dataset:
+        columns.update(row.keys())
+
+    warnings: list[ProfileWarning] = []
+    targets = _profile_all_targets(dataset, mapping, warnings)
+    primary_target = _select_primary_target(targets)
+
+    if row_count < MIN_RECOMMENDED_ROWS:
+        warnings.append(
+            ProfileWarning(
+                code=ProfileWarningCode.too_small,
+                message=t("dataset.profile.too_small", row_count=row_count),
+                details={"row_count": row_count, "minimum_recommended": MIN_RECOMMENDED_ROWS},
+            )
+        )
+
+    duplicate_count = _count_duplicates(dataset, mapping)
+    if duplicate_count > 0:
+        warnings.append(
+            ProfileWarning(
+                code=ProfileWarningCode.duplicates,
+                message=t("dataset.profile.duplicates", duplicate_count=duplicate_count),
+                details={"duplicate_count": duplicate_count},
+            )
+        )
+
+    return DatasetProfile(
+        row_count=row_count,
+        column_count=len(columns),
+        target=primary_target,
+        targets=targets,
+        duplicate_count=duplicate_count,
+        warnings=warnings,
+    )
+
+
+def _profile_all_targets(
+    dataset: list[dict[str, Any]],
+    mapping: ColumnMapping,
+    warnings: list[ProfileWarning],
+) -> list[TargetColumnProfile]:
+    """Profile every output column declared in ``mapping``.
+
+    Each output gets its own categorical/numeric/freeform classification,
+    histogram, and per-column warnings. Warning details always include
+    the originating ``target_column`` so downstream consumers (the
+    planner) can attribute findings back to a specific column.
+    """
+    profiles: list[TargetColumnProfile] = []
+    for column_name in mapping.outputs.values():
+        profile = _profile_single_target(dataset, column_name, warnings)
+        if profile is not None:
+            profiles.append(profile)
+    return profiles
+
+
+def _profile_single_target(
+    dataset: list[dict[str, Any]],
+    column_name: str,
+    warnings: list[ProfileWarning],
+) -> TargetColumnProfile | None:
+    """Summarize a single output column and append its warnings."""
+    values: list[Any] = []
+    missing = 0
+    for row in dataset:
+        value = row.get(column_name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing += 1
+        else:
+            values.append(value)
+
+    if missing > 0:
+        warnings.append(
+            ProfileWarning(
+                code=ProfileWarningCode.missing_target,
+                message=t(
+                    "dataset.profile.missing_target",
+                    missing=missing,
+                    column_name=column_name,
+                ),
+                details={"missing_count": missing, "target_column": column_name},
+            )
+        )
+
+    kind = _infer_target_kind(values)
+    histogram: dict[str, int] = {}
+    unique_values = len({_stringify(v) for v in values})
+
+    if kind == "categorical" and values:
+        counts = Counter(_stringify(v) for v in values)
+        histogram = dict(counts.most_common())
+        rare_classes = {k: v for k, v in histogram.items() if v < RARE_CLASS_THRESHOLD}
+        if rare_classes:
+            warnings.append(
+                ProfileWarning(
+                    code=ProfileWarningCode.rare_class,
+                    message=t(
+                        "dataset.profile.rare_class",
+                        column_name=column_name,
+                        rare_classes=", ".join(sorted(rare_classes)),
+                    ),
+                    details={"rare_classes": rare_classes, "target_column": column_name},
+                )
+            )
+        if len(histogram) >= 2:
+            majority = max(histogram.values())
+            minority = min(histogram.values())
+            if minority > 0 and majority / minority > IMBALANCE_RATIO_THRESHOLD:
+                warnings.append(
+                    ProfileWarning(
+                        code=ProfileWarningCode.class_imbalance,
+                        message=t(
+                            "dataset.profile.class_imbalance",
+                            column_name=column_name,
+                            ratio=majority // minority,
+                        ),
+                        details={
+                            "majority": majority,
+                            "minority": minority,
+                            "target_column": column_name,
+                        },
+                    )
+                )
+
+    return TargetColumnProfile(
+        name=column_name,
+        kind=kind,
+        unique_values=unique_values,
+        class_histogram=histogram,
+    )
+
+
+def _select_primary_target(
+    targets: list[TargetColumnProfile],
+) -> TargetColumnProfile | None:
+    """Pick the target column the planner should reason about by default.
+
+    Prefers categorical columns (those let us stratify); among
+    categoricals, picks the one with the fewest unique values, since a
+    smaller class set typically indicates a cleaner label space. Falls
+    back to the first declared output when no categoricals are present.
+    """
+    if not targets:
+        return None
+    categoricals = [t for t in targets if t.kind == "categorical"]
+    if categoricals:
+        return min(categoricals, key=lambda t: t.unique_values or 0)
+    return targets[0]
+
+
+def _infer_target_kind(values: list[Any]) -> str:
+    """Classify the target column as ``categorical`` / ``numeric`` / ``freeform``.
+
+    Empty lists fall back to ``freeform``. Lists of pure numerics are
+    ``numeric``. Strings are ``categorical`` when:
+
+    - the average value length is short (otherwise they're prose), AND
+    - either there are very few distinct values (cheap path), or there
+      are at most ``CATEGORICAL_MAX_UNIQUE`` distinct values AND the
+      unique-to-total ratio is at most ``CATEGORICAL_UNIQUE_RATIO`` (each
+      "class" repeats often enough to mean something).
+    """
+    if not values:
+        return "freeform"
+
+    n = len(values)
+    numeric_count = sum(1 for v in values if isinstance(v, (int, float)) and not isinstance(v, bool))
+    if numeric_count == n:
+        return "numeric"
+
+    avg_len = sum(len(_stringify(v)) for v in values) / n
+    if avg_len > FREEFORM_AVG_LENGTH:
+        return "freeform"
+
+    n_unique = len({_stringify(v) for v in values})
+    if n_unique <= CATEGORICAL_MIN_UNIQUE:
+        return "categorical"
+    if n_unique <= CATEGORICAL_MAX_UNIQUE and n_unique / n <= CATEGORICAL_UNIQUE_RATIO:
+        return "categorical"
+    return "freeform"
+
+
+def _stringify(value: Any) -> str:
+    """Coerce a value to a stable string key for hashing and display."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value)
+
+
+def _count_duplicates(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> int:
+    """Count rows whose input-column tuple has appeared earlier in the list.
+
+    Returns 0 when the mapping declares no input columns, which should
+    never happen in practice (``ColumnMapping`` rejects that at construction).
+    """
+    columns = list(mapping.inputs.values())
+    if not columns:
+        return 0
+    seen: set[tuple[str, ...]] = set()
+    duplicates = 0
+    for row in dataset:
+        key = tuple(_stringify(row.get(col)) for col in columns)
+        if key in seen:
+            duplicates += 1
+        else:
+            seen.add(key)
+    return duplicates

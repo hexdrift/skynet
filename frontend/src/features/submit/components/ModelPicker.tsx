@@ -191,7 +191,7 @@ export function ModelPicker({
       >
         {value ? (
           <span className="flex min-w-0 flex-1 items-center gap-2" dir="ltr">
-            <span className="truncate font-mono text-[13px]">{selectedModel?.label ?? value}</span>
+            <span className="truncate font-mono text-[0.8125rem]">{selectedModel?.label ?? value}</span>
           </span>
         ) : (
           <span className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
@@ -235,7 +235,7 @@ export function ModelPicker({
                 type="button"
                 onClick={runDiscover}
                 disabled={discovering}
-                className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="רענן מודלים מהשרת"
               >
                 {discovering ? (
@@ -263,7 +263,7 @@ export function ModelPicker({
             {Array.from(grouped.entries()).map(([provider, items]) => (
               <div key={provider} className="py-1">
                 <div
-                  className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-start"
+                  className="px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground text-start"
                   dir="ltr"
                 >
                   {providerLabel(provider)}
@@ -283,7 +283,7 @@ export function ModelPicker({
                     aria-selected={value === m.value}
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-1.5" dir="ltr">
-                      <span className="truncate text-[13px]">{m.label}</span>
+                      <span className="truncate text-[0.8125rem]">{m.label}</span>
                       {m.max_input_tokens && (
                         <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
                           {formatCtx(m.max_input_tokens)}
@@ -307,20 +307,9 @@ export function ModelPicker({
   );
 }
 
-/** Is this a model that supports reasoning_effort? */
+/** Is this a model that supports reasoning_effort? Trusts the LiteLLM catalog flag exclusively. */
 export function modelSupportsThinking(modelValue: string, models?: CatalogModel[]): boolean {
-  if (!modelValue) return false;
-  const hit = models?.find((m) => m.value === modelValue);
-  if (hit) return hit.supports_thinking;
-  // Fallback heuristic for custom model names
-  const v = modelValue.toLowerCase();
-  return (
-    /\/o\d(-|$)/.test(v) || // openai/o1, o3, o4
-    /\/gpt-5/.test(v) || // openai/gpt-5 family
-    /claude-(opus|sonnet)-4/.test(v) || // anthropic claude 4.x
-    /deepseek-reasoner/.test(v) ||
-    /gemini-2\.5/.test(v) ||
-    /grok-3-mini/.test(v) ||
-    /grok-4/.test(v)
-  );
+  if (!modelValue || !models) return false;
+  const hit = models.find((m) => m.value === modelValue);
+  return hit?.supports_thinking ?? false;
 }

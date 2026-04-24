@@ -21,7 +21,8 @@ import {
   type SortDir,
 } from "@/shared/ui/excel-filter";
 import { FadeIn } from "@/shared/ui/motion";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
 import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
 
@@ -109,7 +110,9 @@ export function LogsTab({
       <FadeIn>
         <div className="flex items-center justify-between gap-3 mb-4">
           <p className="text-sm text-muted-foreground">
-            {live ? "" : "לוגים מפורטים מתהליך האופטימיזציה — סננו לפי עמודה או חפשו בתוכן."}
+            {live
+              ? ""
+              : `לוגים מפורטים מתהליך ה${TERMS.optimization} — סננו לפי עמודה או חפשו בתוכן.`}
           </p>
           <span className="text-xs text-muted-foreground shrink-0">{filtered.length} רשומות</span>
         </div>
@@ -294,7 +297,7 @@ export function LogsTab({
                                 ? "outline"
                                 : "secondary"
                           }
-                          className="text-[10px] font-mono"
+                          className="text-[0.625rem] font-mono"
                         >
                           {log.level}
                         </Badge>
@@ -335,7 +338,7 @@ export function LogsTab({
                     <tr>
                       <td
                         colSpan={showPairCol ? 5 : 4}
-                        className="text-center py-3 text-[10px] text-muted-foreground"
+                        className="text-center py-3 text-[0.625rem] text-muted-foreground"
                       >
                         מוצגות 300 מתוך {filtered.length} רשומות
                       </td>

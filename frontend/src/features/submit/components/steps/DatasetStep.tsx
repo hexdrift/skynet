@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/shared/lib/utils";
+import { TERMS } from "@/shared/lib/terms";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
@@ -25,7 +26,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
       data-tutorial="wizard-step-2"
     >
       <CardHeader>
-        <CardTitle className="text-lg">דאטאסט</CardTitle>
+        <CardTitle className="text-lg">{TERMS.dataset}</CardTitle>
         <CardDescription>העלה קובץ נתונים והגדר את מיפוי העמודות</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -42,7 +43,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
             className="text-sm font-medium truncate max-w-full px-4"
             title={datasetFileName ?? undefined}
           >
-            {datasetFileName ?? "לחץ להעלאת קובץ CSV או JSON"}
+            {datasetFileName ?? "לחץ להעלאת קובץ CSV, JSON, או Excel"}
           </p>
           {parsedDataset && (
             <Badge variant="secondary" className="mt-2">
@@ -52,7 +53,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.json"
+            accept=".csv,.json,.xlsx,.xls"
             className="hidden"
             onChange={handleFileUpload}
           />

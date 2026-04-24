@@ -1,0 +1,205 @@
+{
+  "archived": false,
+  "column_mapping": {
+    "inputs": {
+      "question": "question"
+    },
+    "outputs": {
+      "answer": "answer"
+    }
+  },
+  "completed_at": "2026-04-14T17:30:04.743217",
+  "completed_pairs": null,
+  "created_at": "2026-04-14T17:28:24.710709",
+  "dataset_rows": 5,
+  "description": null,
+  "elapsed": "00:01:38",
+  "elapsed_seconds": 98.91,
+  "estimated_remaining": null,
+  "failed_pairs": null,
+  "generation_models": null,
+  "grid_result": null,
+  "latest_metrics": {
+    "baseline_test_metric": 0.0,
+    "test_examples": 1,
+    "train_examples": 3,
+    "val_examples": 1
+  },
+  "logs": [
+    {
+      "level": "ERROR",
+      "logger": "dspy.utils.parallelizer",
+      "message": "Error for Example({'question': 'What is 4+4?', 'answer': '8'}) (input_keys={'question'}): litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers. Set `provide_traceback=True` for traceback.",
+      "timestamp": "2026-04-14T17:28:33.128319"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.evaluate.evaluate",
+      "message": "Average Metric: 0.0 / 1 (0.0%)",
+      "timestamp": "2026-04-14T17:28:33.129269"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "\nRUNNING WITH THE FOLLOWING LIGHT AUTO RUN SETTINGS:\nnum_trials: 10\nminibatch: False\nnum_fewshot_candidates: 6\nnum_instruct_candidates: 3\nvalset size: 1\n",
+      "timestamp": "2026-04-14T17:28:33.154549"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "\n==> STEP 1: BOOTSTRAP FEWSHOT EXAMPLES <==",
+      "timestamp": "2026-04-14T17:28:33.154671"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "These will be used as few-shot example candidates for our program and for creating instructions.\n",
+      "timestamp": "2026-04-14T17:28:33.154741"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "Bootstrapping N=6 sets of demonstrations...",
+      "timestamp": "2026-04-14T17:28:33.154811"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 2+2?', 'answer': '4'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:28:39.244278"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 3+3?', 'answer': '6'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:28:45.338276"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 5+5?', 'answer': '10'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:28:51.419018"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 2+2?', 'answer': '4'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:28:57.508788"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 3+3?', 'answer': '6'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:03.567083"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 5+5?', 'answer': '10'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:09.653614"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 3+3?', 'answer': '6'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:15.745558"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 5+5?', 'answer': '10'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:21.850458"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 2+2?', 'answer': '4'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:27.949816"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 2+2?', 'answer': '4'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:34.023087"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 5+5?', 'answer': '10'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:40.119853"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.teleprompt.bootstrap",
+      "message": "Failed to run or to evaluate example Example({'question': 'What is 3+3?', 'answer': '6'}) (input_keys={'question'}) with <function metric at 0x116c81440> due to litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers.",
+      "timestamp": "2026-04-14T17:29:46.206460"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "\n==> STEP 2: PROPOSE INSTRUCTION CANDIDATES <==",
+      "timestamp": "2026-04-14T17:29:46.207067"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "We will use the few-shot examples from the previous step, a generated dataset summary, a summary of the program code, and a randomly selected prompting tip to propose instructions.",
+      "timestamp": "2026-04-14T17:29:46.207138"
+    },
+    {
+      "level": "INFO",
+      "logger": "dspy.teleprompt.gepa",
+      "message": "\nProposing N=3 instructions...\n",
+      "timestamp": "2026-04-14T17:29:52.289950"
+    },
+    {
+      "level": "ERROR",
+      "logger": "dspy.subprocess",
+      "message": "Traceback (most recent call last):\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1274, in wrapper\n    result = original_function(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 4080, in completion\n    raise exception_type(\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 1243, in completion\n    model, custom_llm_provider, dynamic_api_key, api_base = get_llm_provider(\n                                                            ^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 455, in get_llm_provider\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 432, in get_llm_provider\n    raise litellm.exceptions.BadRequestError(  # type: ignore\nlitellm.exceptions.BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/chat_adapter.py\", line 38, in __call__\n    return super().__call__(lm, lm_kwargs, signature, demos, inputs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/base.py\", line 198, in __call__\n    outputs = lm(messages=inputs, **lm_kwargs)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/utils/callback.py\", line 326, in sync_wrapper\n    return fn(instance, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/base_lm.py\", line 85, in __call__\n    response = self.forward(prompt=prompt, messages=messages, **kwargs)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/lm.py\", line 148, in forward\n    results = completion(\n              ^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/cache.py\", line 245, in sync_wrapper\n    result = fn(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/lm.py\", line 346, in litellm_completion\n    return litellm.completion(\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1385, in wrapper\n    return litellm.completion_with_retries(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 4118, in completion_with_retries\n    return retryer(original_function, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 477, in __call__\n    do = self.iter(retry_state=retry_state)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 378, in iter\n    result = action(retry_state)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 420, in exc_check\n    raise retry_exc.reraise()\n          ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 187, in reraise\n    raise self.last_attempt.result()\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.11/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.11/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 480, in __call__\n    result = fn(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1405, in wrapper\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1274, in wrapper\n    result = original_function(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 4080, in completion\n    raise exception_type(\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 1243, in completion\n    model, custom_llm_provider, dynamic_api_key, api_base = get_llm_provider(\n                                                            ^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 455, in get_llm_provider\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 432, in get_llm_provider\n    raise litellm.exceptions.BadRequestError(  # type: ignore\nlitellm.exceptions.BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1274, in wrapper\n    result = original_function(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 4080, in completion\n    raise exception_type(\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 1243, in completion\n    model, custom_llm_provider, dynamic_api_key, api_base = get_llm_provider(\n                                                            ^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 455, in get_llm_provider\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 432, in get_llm_provider\n    raise litellm.exceptions.BadRequestError(  # type: ignore\nlitellm.exceptions.BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/worker/subprocess_runner.py\", line 143, in run_service_in_subprocess\n    result = service.run(\n             ^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/service_gateway/core.py\", line 187, in run\n    compiled_program = compile_program(\n                       ^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/service_gateway/optimizers.py\", line 62, in compile_program\n    return optimizer.compile(program, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/teleprompt/gepa/gepa.py\", line 189, in compile\n    instruction_candidates = self._propose_instructions(\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/teleprompt/gepa/gepa.py\", line 412, in _propose_instructions\n    instruction_candidates = proposer.propose_instructions_for_program(\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/propose/grounded_proposer.py\", line 375, in propose_instructions_for_program\n    self.propose_instruction_for_predictor(\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/propose/grounded_proposer.py\", line 423, in propose_instruction_for_predictor\n    proposed_instruction = instruction_generator(\n                           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/utils/callback.py\", line 326, in sync_wrapper\n    return fn(instance, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/primitives/module.py\", line 81, in __call__\n    return self.forward(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/propose/grounded_proposer.py\", line 253, in forward\n    instruct = self.generate_module_instruction(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/predict/predict.py\", line 103, in __call__\n    return super().__call__(**kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/utils/callback.py\", line 326, in sync_wrapper\n    return fn(instance, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/primitives/module.py\", line 81, in __call__\n    return self.forward(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/predict/predict.py\", line 192, in forward\n    completions = adapter(lm, lm_kwargs=config, signature=signature, demos=demos, inputs=kwargs)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/chat_adapter.py\", line 47, in __call__\n    return JSONAdapter()(lm, lm_kwargs, signature, demos, inputs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/json_adapter.py\", line 73, in __call__\n    result = self._json_adapter_call_common(lm, lm_kwargs, signature, demos, inputs, super().__call__)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/json_adapter.py\", line 52, in _json_adapter_call_common\n    return call_fn(lm, lm_kwargs, signature, demos, inputs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/chat_adapter.py\", line 46, in __call__\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/chat_adapter.py\", line 38, in __call__\n    return super().__call__(lm, lm_kwargs, signature, demos, inputs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/adapters/base.py\", line 198, in __call__\n    outputs = lm(messages=inputs, **lm_kwargs)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/utils/callback.py\", line 326, in sync_wrapper\n    return fn(instance, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/base_lm.py\", line 85, in __call__\n    response = self.forward(prompt=prompt, messages=messages, **kwargs)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/lm.py\", line 148, in forward\n    results = completion(\n              ^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/cache.py\", line 245, in sync_wrapper\n    result = fn(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/lm.py\", line 346, in litellm_completion\n    return litellm.completion(\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1385, in wrapper\n    return litellm.completion_with_retries(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 4118, in completion_with_retries\n    return retryer(original_function, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 477, in __call__\n    do = self.iter(retry_state=retry_state)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 378, in iter\n    result = action(retry_state)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 420, in exc_check\n    raise retry_exc.reraise()\n          ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 187, in reraise\n    raise self.last_attempt.result()\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.11/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.11/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/tenacity/__init__.py\", line 480, in __call__\n    result = fn(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1405, in wrapper\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/utils.py\", line 1274, in wrapper\n    result = original_function(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 4080, in completion\n    raise exception_type(\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/main.py\", line 1243, in completion\n    model, custom_llm_provider, dynamic_api_key, api_base = get_llm_provider(\n                                                            ^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 455, in get_llm_provider\n    raise e\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py\", line 432, in get_llm_provider\n    raise litellm.exceptions.BadRequestError(  # type: ignore\nlitellm.exceptions.BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers\n",
+      "timestamp": "2026-04-14T17:30:04.737699"
+    }
+  ],
+  "message": "litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gpt-5.4-nano\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers",
+  "model_name": "gpt-5.4-nano",
+  "model_settings": {
+    "base_url": null,
+    "extra": {},
+    "max_tokens": null,
+    "name": "gpt-5.4-nano",
+    "temperature": null,
+    "top_p": null
+  },
+  "module_kwargs": {},
+  "module_name": "predict",
+  "name": null,
+  "optimization_id": "5ce29432-f335-4300-8dd8-62415ad3731e",
+  "optimization_type": "run",
+  "optimizer_name": "gepa",
+  "pinned": false,
+  "progress_events": [
+    {
+      "event": "dataset_splits_ready",
+      "metrics": {
+        "test_examples": 1,
+        "train_examples": 3,
+        "val_examples": 1
+      },
+      "timestamp": "2026-04-14T17:28:27.846725"
+    },
+    {
+      "event": "baseline_evaluated",
+      "metrics": {
+        "baseline_test_metric": 0.0
+      },
+      "timestamp": "2026-04-14T17:28:33.868870"
+    }
+  ],
+  "reflection_model_name": null,
+  "reflection_models": null,
+  "result": null,
+  "started_at": "2026-04-14T17:28:25.833289",
+  "status": "failed",
+  "task_model_name": null,
+  "total_pairs": null,
+  "username": "lifecycle-payload"
+}

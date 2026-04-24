@@ -22,15 +22,7 @@ ENABLED = bool(WEBHOOK_URL)
 
 
 def send_message(text: str, channel: str | None = None) -> bool:
-    """Send a message to the internal communications service.
-
-    Args:
-        text: Message body (supports markdown).
-        channel: Target channel/room. Defaults to COMMS_CHANNEL env var.
-
-    Returns:
-        bool: True if sent successfully, False otherwise.
-    """
+    """Send a message to the internal comms webhook; returns True on success."""
     if not ENABLED:
         logger.debug("Comms not configured (COMMS_WEBHOOK_URL not set), skipping: %s", text[:80])
         return False

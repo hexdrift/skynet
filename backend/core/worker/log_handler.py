@@ -1,3 +1,9 @@
+"""Log handler that routes DSPy log records into the job store.
+
+Captures optimizer iteration scores and average-metric snapshots from
+log lines and converts them into structured progress events.
+"""
+
 import logging
 import re
 import threading
@@ -21,23 +27,12 @@ _thread_pair_index = threading.local()
 
 
 def set_current_pair_index(pair_index: int | None) -> None:
-    """Set the current pair index for the calling thread.
-
-    Args:
-        pair_index: 0-based grid-search pair index, or ``None`` to clear.
-
-    Returns:
-        None.
-    """
+    """Set the grid-search pair index for the calling thread (or clear with None)."""
     _thread_pair_index.value = pair_index
 
 
 def get_current_pair_index() -> int | None:
-    """Get the current pair index for the calling thread.
-
-    Returns:
-        The pair index previously set on this thread, or ``None`` if unset.
-    """
+    """Return the grid-search pair index set on this thread, or None if unset."""
     return getattr(_thread_pair_index, "value", None)
 
 
@@ -45,16 +40,6 @@ class JobLogHandler(logging.Handler):
     """Route DSPy log records into the job manager for later inspection."""
 
     def __init__(self, optimization_id: str, jobs: JobStore) -> None:
-        """Initialize the handler with job context.
-
-        Args:
-            optimization_id: Identifier for the job receiving log entries.
-            jobs: Job manager or remote DB store responsible for persisting logs.
-
-        Returns:
-            None
-        """
-
         super().__init__()
         self._optimization_id = optimization_id
         self._jobs = jobs
@@ -62,11 +47,7 @@ class JobLogHandler(logging.Handler):
         self._thread_lock = threading.Lock()
 
     def register_current_thread(self) -> None:
-        """Allow log records emitted by the calling thread for this job.
-
-        Returns:
-            None.
-        """
+        """Allow log records emitted by the calling thread for this job."""
         with self._thread_lock:
             self._thread_ids.add(threading.get_ident())
 
@@ -78,9 +59,6 @@ class JobLogHandler(logging.Handler):
 
         Args:
             record: Log record emitted by DSPy or optimizer components.
-
-        Returns:
-            None
         """
 
         with self._thread_lock:
@@ -111,14 +89,7 @@ class JobLogHandler(logging.Handler):
 
 
 def _extract_progress_from_log(message: str) -> Iterable[tuple[str, dict[str, Any]]]:
-    """Parse well-known DSPy log lines into structured telemetry.
-
-    Args:
-        message: Raw log line emitted by DSPy or optimizer code.
-
-    Returns:
-        Iterable[Tuple[str, dict[str, Any]]]: Zero or more derived progress events.
-    """
+    """Parse well-known DSPy log patterns into (event_name, metrics) tuples."""
 
     events: list[tuple[str, dict[str, Any]]] = []
     if match := _ITERATION_SCORE_RE.search(message):

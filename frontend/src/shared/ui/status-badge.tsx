@@ -7,7 +7,7 @@
  */
 
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "@/shared/constants/job-status";
+import { getStatusLabel } from "@/shared/constants/job-status";
 import type { JobStatus } from "@/shared/types/api";
 
 interface StatusBadgeProps {
@@ -25,14 +25,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
-  const label = STATUS_LABELS[status] ?? status;
+  const label = getStatusLabel(status);
   const colorClass = STATUS_COLORS[status] ?? "";
   const isRunning = status === "running";
 
   return (
     <Badge
       variant="outline"
-      className={`text-[13px] px-3 py-1 font-bold tracking-wide ${colorClass} ${isRunning ? "animate-pulse" : ""} ${className}`}
+      className={`text-[0.8125rem] px-3 py-1 font-bold tracking-wide ${colorClass} ${isRunning ? "animate-pulse" : ""} ${className}`}
     >
       {isRunning && (
         <span className="relative flex size-2 me-1">

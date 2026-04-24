@@ -6,7 +6,17 @@
  * Works even for users with zero optimizations.
  */
 
-import { resetDemoSimulation } from "./demo-data";
+import {
+  resetDemoSimulation,
+  DEMO_DASHBOARD_JOBS,
+  DEMO_DASHBOARD_ANALYTICS,
+  DEMO_COMPARE_JOBS,
+  DEMO_COMPARE_IDS,
+  DEMO_COMPARE_EXAMPLES,
+  DEMO_COMPARE_DATASET,
+  DEMO_GRID_OPTIMIZATION_ID,
+} from "./demo-data";
+import { TERMS } from "@/shared/lib/terms";
 
 export type TutorialTrack = "deep-dive";
 
@@ -32,7 +42,14 @@ export interface TutorialTrackDefinition {
 
 /* ── Navigation helpers ── */
 
-import { callTutorialHook, hasTutorialHook, setTutorialNavigating } from "./bridge";
+import {
+  callTutorialHook,
+  hasTutorialHook,
+  setTutorialNavigating,
+  queryTutorialHook,
+  setPendingCompareDemo,
+  setPendingCompareExamples,
+} from "./bridge";
 
 function navigateTo(path: string) {
   // Prefer in-app client navigation via the tutorial-overlay hook.
@@ -77,6 +94,12 @@ async function ensureDashboard() {
   }
 }
 
+/** Inject demo jobs + analytics into dashboard for the tutorial */
+function injectDemoDashboardData() {
+  callTutorialHook("setDemoJobs", DEMO_DASHBOARD_JOBS);
+  callTutorialHook("setDemoAnalytics", DEMO_DASHBOARD_ANALYTICS);
+}
+
 async function ensureSubmit() {
   if (!window.location.pathname.startsWith("/submit")) {
     navigateTo("/submit");
@@ -88,6 +111,35 @@ async function ensureDemoDetail() {
   if (window.location.pathname === "/optimizations/a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b") return;
   navigateTo("/optimizations/a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b");
   await waitForElement("[data-tutorial='detail-header']");
+}
+
+async function ensureCompareDemo() {
+  const query = `?jobs=${DEMO_COMPARE_IDS.join(",")}`;
+  const alreadyThere = window.location.pathname === "/compare" && window.location.search === query;
+  if (alreadyThere) return;
+  setPendingCompareDemo(DEMO_COMPARE_JOBS);
+  setPendingCompareExamples({
+    byJobId: DEMO_COMPARE_EXAMPLES,
+    dataset: DEMO_COMPARE_DATASET,
+  });
+  navigateTo(`/compare${query}`);
+  await waitForElement("[data-tutorial='compare-verdict']");
+}
+
+async function ensureGridDemo() {
+  const path = `/optimizations/${DEMO_GRID_OPTIMIZATION_ID}`;
+  if (window.location.pathname === path && !window.location.search.includes("pair=")) return;
+  navigateTo(path);
+  await waitForElement("[data-tutorial='grid-search']");
+}
+
+async function ensureGridPairDetail() {
+  const path = `/optimizations/${DEMO_GRID_OPTIMIZATION_ID}`;
+  const wantSearch = "?pair=0";
+  const alreadyThere = window.location.pathname === path && window.location.search === wantSearch;
+  if (alreadyThere) return;
+  navigateTo(`${path}${wantSearch}`);
+  await waitForElement("[data-tutorial='pair-detail']");
 }
 
 function setTab(tab: string) {
@@ -102,8 +154,38 @@ function setDetailTab(tab: string) {
   callTutorialHook("setDetailTab", tab);
 }
 
+function setCompareTab(tab: string) {
+  callTutorialHook("setCompareTab", tab);
+}
+
 function setOptimizerName(name: string) {
   callTutorialHook("setOptimizerName", name);
+}
+
+async function ensureTagger() {
+  if (!window.location.pathname.startsWith("/tagger")) {
+    navigateTo("/tagger");
+    await waitForElement("[data-tutorial='tagger-setup']");
+  }
+}
+
+/** Inject demo data into tagger setup when empty and advance to the requested step */
+function injectDemoTaggerData(targetStep: number) {
+  if (!queryTutorialHook("hasTaggerData")) {
+    const rows = [
+      { id: 1, text: "השירות היה מעולה, ממליץ בחום!" },
+      { id: 2, text: "המוצר הגיע שבור, מאוד מאכזב" },
+      { id: 3, text: "משלוח מהיר, אריזה טובה" },
+      { id: 4, text: "לא שווה את המחיר, איכות נמוכה" },
+      { id: 5, text: "חוויית קנייה נעימה, אחזור שוב" },
+    ];
+    callTutorialHook("setTaggerDemoData", {
+      rows,
+      cols: ["text"],
+      textCol: "text",
+    });
+  }
+  callTutorialHook("setTaggerStep", targetStep);
 }
 
 /** Inject sample dataset + code into the wizard for the tutorial */
@@ -153,13 +235,14 @@ function injectSampleDataset() {
 const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-kpis",
-    title: "מדדים מרכזיים",
+    title: "נתונים מרכזיים",
     description:
-      "ארבע כרטיסיות שמסכמות את כל הפעילות: סה״כ ריצות, ריצות פעילות כרגע, אחוז הצלחה כולל, ומספר כשלונות.",
+      "ארבע כרטיסיות שמסכמות את כל הפעילות: סה״כ ריצות, ריצות פעילות כרגע, ריצות שהצליחו וריצות שנכשלו — לצד אחוז ההצלחה/כישלון מתוך הסך הכולל.",
     target: "[data-tutorial='dashboard-kpis']",
     placement: "bottom",
     beforeShow: async () => {
       await ensureDashboard();
+      injectDemoDashboardData();
       setTab("jobs");
     },
     track: "deep-dive",
@@ -167,13 +250,13 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     id: "dd-table",
-    title: "טבלת אופטימיזציות",
-    description:
-      "פירוט על כל הריצות. לחצו על כותרת עמודה למיון, על הפליטר לסינון, וגררו קצוות לשינוי רוחב. לחצו על פרטים כדי לפתוח את הפירוט על האופטמיזציה.",
+    title: `טבלת ${TERMS.optimizationPlural}`,
+    description: `פירוט על כל הריצות. לחצו על כותרת עמודה למיון, על הפילטר לסינון, וגררו קצוות לשינוי רוחב. לחצו על פרטים כדי לפתוח את הפירוט על ה${TERMS.optimization}.`,
     target: "[data-tutorial='dashboard-table']",
     placement: "top",
     beforeShow: async () => {
       await ensureDashboard();
+      injectDemoDashboardData();
       setTab("jobs");
     },
     track: "deep-dive",
@@ -182,12 +265,12 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-sidebar",
     title: "סרגל צד",
-    description:
-      "למעלה: ניווט ללוח בקרה והגשת אופטימיזציה חדשה. למטה: חיפוש חופשי והיסטוריית ריצות לפי תאריך. לחצו ⋯ ליד אופטימיזציה לשינוי שם, הצמדה, שיתוף או מחיקה.",
+    description: `למעלה: ניווט ללוח בקרה, הגשת ${TERMS.optimization} חדשה ותיוג טקסטים. למטה: חיפוש חופשי והיסטוריית ריצות לפי תאריך. לחצו ⋯ ליד ${TERMS.optimization} לשיתוף, שינוי שם, שכפול, הצמדה או מחיקה.`,
     target: "[data-tutorial='sidebar-full']",
     placement: "left",
     beforeShow: async () => {
       await ensureDashboard();
+      injectDemoDashboardData();
       setTab("jobs");
     },
     track: "deep-dive",
@@ -196,12 +279,12 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-analytics",
     title: "סטטיסטיקות",
-    description:
-      "גרפים אינטראקטיביים שמציגים ציונים, יעילות, השוואת אופטימייזרים וטבלת שיאים. לחצו על עמודה בגרף כדי לסנן אופטימיזציה ספציפית.",
+    description: `גרפים אינטראקטיביים שמציגים ${TERMS.scorePlural}, יעילות, השוואת ${TERMS.optimizerPlural} וטבלת שיאים. לחצו על עמודה בגרף כדי לסנן ${TERMS.optimization} ספציפית.`,
     target: "[data-tutorial='dashboard-stats']",
     placement: "auto",
     beforeShow: async () => {
       await ensureDashboard();
+      injectDemoDashboardData();
       setTab("analytics");
       await new Promise((r) => setTimeout(r, 100));
     },
@@ -209,11 +292,97 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 5,
   },
 
+  {
+    id: "dd-compare-trigger",
+    title: `איך להשוות ${TERMS.optimizationPlural}`,
+    description:
+      "סמנו שתי ריצות או יותר שהושלמו בטבלה — סרגל פעולות יופיע בתחתית עם כפתור השוואה. לחיצה עליו פותחת את דף ההשוואה המפורט.",
+    target: "[data-tutorial='compare-button']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDashboard();
+      injectDemoDashboardData();
+      setTab("jobs");
+      callTutorialHook("setSelectedJobIds", ["demo-001", "demo-002"]);
+      await waitForElement("[data-tutorial='compare-button']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 8,
+  },
+  {
+    id: "dd-compare-verdict",
+    title: `השוואת ${TERMS.optimizationPlural}`,
+    description: `למעלה רואים את הזוכה — הריצה עם ה${TERMS.score} הגבוה ביותר, יחד עם אחוז השיפור, משך הריצה וה${TERMS.model} שבו השתמשה.`,
+    target: "[data-tutorial='compare-verdict']",
+    placement: "bottom",
+    beforeShow: async () => {
+      await ensureCompareDemo();
+      setCompareTab("overview");
+    },
+    track: "deep-dive",
+    readingTimeSec: 8,
+  },
+  {
+    id: "dd-compare-scores",
+    title: `השוואת ${TERMS.scorePlural}`,
+    description: `גרף עמודות וטבלה שמציגים את ${TERMS.baselineScore} מול ה${TERMS.finalScore} לכל ריצה.`,
+    target: "[data-tutorial='compare-scores']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureCompareDemo();
+      setCompareTab("overview");
+      await waitForElement("[data-tutorial='compare-scores']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 8,
+  },
+  {
+    id: "dd-compare-config",
+    title: "השוואת הגדרות",
+    description: `לשונית 'הגדרות' מראה איזה ${TERMS.module}, ${TERMS.optimizer}, ${TERMS.modelPlural} וגודל ${TERMS.dataset} שימשו בכל ריצה.`,
+    target: "[data-tutorial='compare-config']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureCompareDemo();
+      setCompareTab("config");
+      await waitForElement("[data-tutorial='compare-config']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 9,
+  },
+  {
+    id: "dd-compare-prompts",
+    title: "השוואת פרומפטים",
+    description: `לשונית 'פרומפטים' מראה את ההוראות המאופטמות וה${TERMS.examplePlural} שכל ריצה ייצרה, זה לצד זה. ככה אפשר להבין בדיוק איך שינוי ב${TERMS.model} או בהגדרות השפיע על הפרומפט הסופי.`,
+    target: "[data-tutorial='compare-prompts']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureCompareDemo();
+      setCompareTab("prompts");
+      await waitForElement("[data-tutorial='compare-prompts']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 9,
+  },
+  {
+    id: "dd-compare-examples",
+    title: `השוואת ${TERMS.examplePlural}`,
+    description: `לשונית '${TERMS.examplePlural}' עוברת דוגמה-דוגמה ומראה איך כל ריצה ענתה עליה ומה ה${TERMS.score} שקיבלה. אפשר לסנן רק ${TERMS.examplePlural} שבהן יש חוסר הסכמה בין הריצות — ככה קל לאתר בדיוק איפה הן נבדלות.`,
+    target: "[data-tutorial='compare-examples']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureCompareDemo();
+      setCompareTab("examples");
+      await waitForElement("[data-tutorial='compare-examples']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 9,
+  },
 
   {
     id: "dd-stepper",
     title: "טופס הגשה",
-    description: "שישה שלבים: פרטים בסיסיים, דאטאסט, מודל, קוד, פרמטרים, סיכום ושליחה.",
+    description: `שישה שלבים: פרטים בסיסיים, ${TERMS.dataset}, פרמטרים, קוד, ${TERMS.model}, סיכום ושליחה.`,
     target: "[data-tutorial='wizard-stepper']",
     placement: "bottom",
     beforeShow: async () => {
@@ -227,8 +396,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-basics",
     title: "פרטים בסיסיים",
-    description:
-      "בשלב הראשון בוחרים שם, תיאור, וסוג אופטימיזציה (ריצה בודדת או סריקה שמשווה כמה הגדרות במקביל).",
+    description: `בשלב הראשון בוחרים שם, תיאור, וסוג ${TERMS.optimization} (${TERMS.optimizationTypeRun} או ${TERMS.optimizationTypeGrid} שמשווה כמה הגדרות במקביל).`,
     target: "[data-tutorial='wizard-step-1']",
     placement: "right",
     beforeShow: async () => {
@@ -241,9 +409,8 @@ const tutorialSteps: TutorialStep[] = [
 
   {
     id: "dd-data-upload",
-    title: "העלאת דאטאסט",
-    description:
-      "גררו קובץ CSV או Excel לאזור ההעלאה. כל שורה היא דוגמה אחת שהמערכת תלמד ממנה. ככל שיש יותר דוגמאות איכותיות, האופטימיזציה תהיה טובה יותר.",
+    title: `העלאת ${TERMS.dataset}`,
+    description: `גררו קובץ CSV, JSON או Excel לאזור ההעלאה. כל שורה היא דוגמה אחת שהמערכת תלמד ממנה. ככל שיש יותר ${TERMS.examplePlural} איכותיות, ה${TERMS.optimization} תהיה טובה יותר.`,
     target: "[data-tutorial='wizard-step-2']",
     placement: "right",
     beforeShow: async () => {
@@ -257,8 +424,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-columns",
     title: "מיפוי עמודות",
-    description:
-      "סמנו כל עמודה כקלט (נשלח למודל), פלט (התשובה הרצויה שלפיה מודדים הצלחה), או התעלם. המיפוי הזה מגדיר את החתימה אוטומטית.",
+    description: `סמנו כל עמודה כקלט (נשלח ל${TERMS.model}), פלט (התשובה הרצויה שלפיה מודדים הצלחה), או התעלם. המיפוי הזה מגדיר את הפרומפט ההתחלתי אוטומטית.`,
     target: "[data-tutorial='column-mapping']",
     placement: "top",
     beforeShow: async () => {
@@ -272,9 +438,8 @@ const tutorialSteps: TutorialStep[] = [
 
   {
     id: "dd-module",
-    title: "מודול",
-    description:
-      "Predict שולח את הקלט ישירות למודל ומקבל תשובה. Chain of Thought מוסיף שדה reasoning לפני הפלט, שמאלץ את המודל לנמק את התשובה צעד אחר צעד לפני שהוא מחזיר תוצאה.",
+    title: TERMS.module,
+    description: `Predict שולח את הקלט ישירות ל${TERMS.model} ומקבל תשובה. Chain of Thought מוסיף שדה reasoning לפני הפלט, שמאלץ את ה${TERMS.model} לנמק את התשובה צעד אחר צעד לפני שהוא מחזיר תוצאה.`,
     target: "[data-tutorial='module-selector']",
     placement: "auto",
     beforeShow: async () => {
@@ -285,39 +450,51 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 9,
   },
   {
-    id: "dd-optimizer",
-    title: "אופטימייזר",
-    description:
-      "MIPROv2: מייצר הנחיות ודוגמאות, ומחפש את השילוב הטוב ביותר ביניהם. GEPA: מנתח שגיאות בריצות קודמות ומשכתב את הפרומפט צעד אחר צעד בעזרת רפלקציה.",
-    target: "[data-tutorial='optimizer-selector']",
-    placement: "auto",
-    beforeShow: async () => {
-      await ensureSubmit();
-      setWizardStep(2);
-    },
-    track: "deep-dive",
-    readingTimeSec: 9,
-  },
-  {
-    id: "dd-models",
-    title: "בחירת מודלים",
-    description:
-      "מודל יצירה מייצר את התשובות. מודל רפלקציה מנתח שגיאות ומציע שיפורים לפרומפט. אפשר לבחור מודלים שונים לכל תפקיד.",
-    target: "[data-tutorial='model-catalog']",
+    id: "dd-splits",
+    title: "חלוקת נתונים",
+    description: `${TERMS.splitTrain}: ה${TERMS.optimizer} לומד מה${TERMS.examplePlural} האלו. ${TERMS.splitVal}: בדיקה שהשיפור מתקיים גם על ${TERMS.examplePlural} שלא שימשו לאימון. ${TERMS.splitTest}: הערכה סופית על ${TERMS.examplePlural} שה${TERMS.optimizer} מעולם לא ראה.`,
+    target: "[data-tutorial='data-splits']",
     placement: "top",
     beforeShow: async () => {
       await ensureSubmit();
       setWizardStep(2);
     },
     track: "deep-dive",
-    readingTimeSec: 7,
+    readingTimeSec: 10,
+  },
+  {
+    id: "dd-auto-level",
+    title: "רמת חיפוש",
+    description:
+      "קלה: מהירה, מעט ניסיונות. בינונית: מאוזנת בין מהירות לאיכות. מעמיקה: יסודית, הרבה ניסיונות. ככל שרמת החיפוש גבוהה יותר, הריצה לוקחת יותר זמן אבל הסיכוי לשיפור משמעותי גדל.",
+    target: "[data-tutorial='auto-level']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureSubmit();
+      setWizardStep(2);
+    },
+    track: "deep-dive",
+    readingTimeSec: 8,
+  },
+  {
+    id: "dd-gepa",
+    title: "פרמטרי GEPA",
+    description: `גודל מדגם לרפלקציה: כמה ${TERMS.examplePlural} ה${TERMS.model} מנתח בכל סבב כדי לזהות שגיאות. מקסימום סבבי הערכה: נקבע לפי רמת החיפוש, אפשר לכבות את הרמה באמצעות לחיצה על הרמה הנוכחית ולהגדיר ידנית. מיזוג מועמדים: משלב הוראות מכמה מועמדים טובים לפרומפט אחד משופר.`,
+    target: "[data-tutorial='gepa-params']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureSubmit();
+      setOptimizerName("gepa");
+      setWizardStep(2);
+    },
+    track: "deep-dive",
+    readingTimeSec: 16,
   },
 
   {
     id: "dd-signature",
-    title: "חתימה",
-    description:
-      "החתימה מגדירה מה המודל מקבל ומה הוא צריך להחזיר. היא נוצרת אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותה ולהוסיף תיאורים מדויקים לכל שדה כדי שהפרומפט ההתחלתי יהיה איכותי.",
+    title: "פרומפט התחלתי",
+    description: `הפרומפט ההתחלתי מגדיר מה ה${TERMS.model} מקבל ומה הוא צריך להחזיר. הוא נוצר אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותו ולהוסיף תיאורים מדויקים לכל שדה כדי שהוא יהיה איכותי.`,
     target: "[data-tutorial='signature-editor']",
     placement: "top",
     beforeShow: async () => {
@@ -329,9 +506,8 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     id: "dd-metric",
-    title: "מטריקה",
-    description:
-      "פונקציה שמחזירה ציון בין 0 ל-1 לכל תשובה. זו ההגדרה של מה נחשב ״תשובה טובה״, והאופטימייזר ינסה למקסם את הציון הזה לאורך כל הריצה.",
+    title: TERMS.metric,
+    description: `פונקציה שמחזירה ${TERMS.score} בין 0 ל-1 לכל תשובה. זו ההגדרה של מה נחשב ״תשובה טובה״, וה${TERMS.optimizer} ינסה למקסם את ה${TERMS.score} הזה לאורך כל הריצה.`,
     target: "[data-tutorial='metric-editor']",
     placement: "top",
     beforeShow: async () => {
@@ -343,74 +519,28 @@ const tutorialSteps: TutorialStep[] = [
   },
 
   {
-    id: "dd-splits",
-    title: "חלוקת נתונים",
-    description:
-      "אימון: האופטימייזר לומד מהדוגמאות האלו. אימות: בדיקה שהשיפור מתקיים גם על דוגמאות שלא שימשו לאימון. בדיקה: הערכה סופית על דוגמאות שהאופטימייזר מעולם לא ראה.",
-    target: "[data-tutorial='data-splits']",
+    id: "dd-models",
+    title: `בחירת ${TERMS.modelPlural}`,
+    description: `${TERMS.generationModel} מייצר את התשובות. ${TERMS.reflectionModel} מנתח שגיאות ומציע שיפורים לפרומפט. אפשר לבחור ${TERMS.modelPlural} שונים לכל תפקיד.`,
+    target: "[data-tutorial='model-catalog']",
     placement: "top",
     beforeShow: async () => {
       await ensureSubmit();
       setWizardStep(4);
     },
     track: "deep-dive",
-    readingTimeSec: 10,
-  },
-  {
-    id: "dd-auto-level",
-    title: "רמת חיפוש",
-    description:
-      "קלה: מהיר, מעט ניסיונות. בינונית: מאוזן בין מהירות לאיכות. מעמיקה: יסודי, הרבה ניסיונות. ככל שרמת החיפוש גבוהה יותר, הריצה לוקחת יותר זמן אבל הסיכוי לשיפור משמעותי גדל.",
-    target: "[data-tutorial='auto-level']",
-    placement: "top",
-    beforeShow: async () => {
-      await ensureSubmit();
-      setWizardStep(4);
-    },
-    track: "deep-dive",
-    readingTimeSec: 8,
-  },
-  {
-    id: "dd-mipro",
-    title: "פרמטרי MIPROv2",
-    description:
-      "דוגמאות אוטומטיות: דוגמאות שהמערכת מייצרת מהנתונים. דוגמאות מהנתונים: דוגמאות קלט/פלט מהדאטאסט שמוצגות למודל. מספר ניסיונות: נקבע לפי רמת החיפוש, אפשר לכבות את הרמה באמצעות לחיצה על הרמה הנוכחית ולהגדיר ידנית. גודל מדגם: כמה דוגמאות נבדקות בכל סבב הערכה. בדיקה חלקית: כשפעיל, ההערכה רצה על מדגם קטן במקום הדאטאסט המלא.",
-    target: "[data-tutorial='mipro-params']",
-    placement: "top",
-    beforeShow: async () => {
-      await ensureSubmit();
-      setOptimizerName("miprov2");
-      setWizardStep(4);
-    },
-    track: "deep-dive",
-    readingTimeSec: 25,
-  },
-  {
-    id: "dd-gepa",
-    title: "פרמטרי GEPA",
-    description:
-      "גודל מדגם לרפלקציה: כמה דוגמאות המודל מנתח בכל סבב כדי לזהות שגיאות. מקסימום סבבי הערכה: נקבע לפי רמת החיפוש, אפשר לכבות את הרמה באמצעות לחיצה על הרמה הנוכחית ולהגדיר ידנית. מיזוג מועמדים: משלב הוראות מכמה מועמדים טובים לפרומפט אחד משופר.",
-    target: "[data-tutorial='gepa-params']",
-    placement: "top",
-    beforeShow: async () => {
-      await ensureSubmit();
-      setOptimizerName("gepa");
-      setWizardStep(4);
-    },
-    track: "deep-dive",
-    readingTimeSec: 16,
+    readingTimeSec: 7,
   },
 
   {
     id: "dd-review",
     title: "סקירה",
-    description:
-      "סיכום כל ההגדרות בחמש לשוניות: כללי, דאטאסט, מודלים, אופטימייזר וקוד. בדקו שהכל נכון לפני שליחה.",
+    description: `סיכום כל ההגדרות בחמש לשוניות: כללי, ${TERMS.dataset}, ${TERMS.modelPlural}, ${TERMS.optimizer} וקוד. בדקו שהכל נכון לפני שליחה.`,
     target: "[data-tutorial='wizard-step-6']",
     placement: "right",
     beforeShow: async () => {
       await ensureSubmit();
-      setOptimizerName("miprov2");
+      setOptimizerName("gepa");
       setWizardStep(5);
     },
     track: "deep-dive",
@@ -418,9 +548,8 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     id: "dd-submit",
-    title: "שליחת אופטימיזציה",
-    description:
-      "הכפתור שמפעיל את הכל. ברגע שלוחצים, המערכת מתחילה: מאמתת את הקלט, מחלקת את הנתונים, מריצה ציון בסיס, ואז מפעילה את האופטימייזר. אפשר לעקוב אחרי ההתקדמות בזמן אמת מדף התוצאות.",
+    title: `שליחת ${TERMS.optimization}`,
+    description: `הכפתור שמפעיל את הכל. ברגע שלוחצים, המערכת מתחילה: מאמתת את הקלט, מחלקת את הנתונים, מריצה ${TERMS.baselineScore}, ואז מפעילה את ה${TERMS.optimizer}. אפשר לעקוב אחרי ההתקדמות בזמן אמת מדף התוצאות.`,
     target: "[data-tutorial='submit-button']",
     placement: "top",
     beforeShow: async () => {
@@ -434,8 +563,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-detail-header",
     title: "דף תוצאות",
-    description:
-      "אחרי שליחת אופטימיזציה מגיעים לדף התוצאות. בראש הדף: שם האופטימיזציה, תיאור, סטטוס הריצה וזמן שעבר. כפתור שכפול יוצר אופטימיזציה חדשה עם אותן הגדרות, וכפתור מחיקה מוחק את הריצה.",
+    description: `אחרי שליחת ${TERMS.optimization} מגיעים לדף התוצאות. בראש הדף: שם ה${TERMS.optimization}, תיאור, סטטוס הריצה וזמן שעבר. כפתור שכפול יוצר ${TERMS.optimization} חדשה עם אותן הגדרות. בזמן ריצה פעילה מוצג כפתור ביטול, ולאחר סיום או כישלון — כפתור מחיקה.`,
     target: "[data-tutorial='detail-header']",
     placement: "bottom",
     beforeShow: async () => {
@@ -453,8 +581,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-pipeline",
     title: "שלבי התהליך",
-    description:
-      "כל אופטימיזציה עוברת חמישה שלבים: אימות הקלט, חלוקת הנתונים, ריצת ציון בסיס (לפני אופטימיזציה), האופטימיזציה עצמה, והערכה סופית. כל שלב מתעדכן בזמן אמת.",
+    description: `כל ${TERMS.optimization} עוברת חמישה שלבים: אימות הקלט, חלוקת הנתונים, ריצת ${TERMS.baselineScore} (לפני ${TERMS.optimization}), ה${TERMS.optimization} עצמה, והערכה סופית. כל שלב מתעדכן בזמן אמת.`,
     target: "[data-tutorial='pipeline-stages']",
     placement: "top",
     beforeShow: async () => {
@@ -466,9 +593,8 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     id: "dd-scores",
-    title: "כרטיסי ציונים",
-    description:
-      "שלושה כרטיסים: ציון התחלתי (לפני אופטימיזציה), ציון משופר (אחרי), ואחוז השיפור ביניהם.",
+    title: `כרטיסי ${TERMS.scorePlural}`,
+    description: `שלושה כרטיסים: ${TERMS.baselineScore} (לפני ${TERMS.optimization}), ${TERMS.optimizedScore} (אחרי), ואחוז השיפור ביניהם.`,
     target: "[data-tutorial='score-cards']",
     placement: "top",
     beforeShow: async () => {
@@ -480,9 +606,8 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     id: "dd-score-chart",
-    title: "גרף ציונים",
-    description:
-      "עוקב אחרי הציון לאורך כל הניסיונות של האופטימייזר. רואים בדיוק מתי נמצא שילוב טוב יותר ואיך הציון השתנה לאורך הריצה.",
+    title: `גרף ${TERMS.scorePlural}`,
+    description: `עוקב אחרי ה${TERMS.score} לאורך כל הניסיונות של ה${TERMS.optimizer}. רואים בדיוק מתי נמצא שילוב טוב יותר ואיך ה${TERMS.score} השתנה לאורך הריצה.`,
     target: "[data-tutorial='score-chart']",
     placement: "top",
     beforeShow: async () => {
@@ -495,8 +620,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-data-tab",
     title: "לשונית נתונים",
-    description:
-      "כל דוגמה מהדאטאסט עם ציון בצבע (ירוק = גבוה, אדום = נמוך), תחזית המודל, והחלוקה לאימון, אימות ובדיקה. אפשר למיין לפי ציון כדי לזהות דפוסים.",
+    description: `כל דוגמה מה${TERMS.dataset} עם ${TERMS.score} בצבע (ירוק = גבוה, אדום = נמוך), תחזית ה${TERMS.model}, והחלוקה ל${TERMS.splitTrain}, ${TERMS.splitVal} ו${TERMS.splitTest}. אפשר למיין לפי ${TERMS.score} כדי לזהות דפוסים.`,
     target: "[data-tutorial='data-tab-trigger']",
     placement: "bottom",
     beforeShow: async () => {
@@ -509,8 +633,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-playground",
     title: "שימוש",
-    description:
-      "אחרי שהריצה מסתיימת, אפשר לבדוק את הפרומפט המאופטם בזמן אמת. הזינו קלט חדש וקבלו תשובה מיידית מהמודל עם הפרומפט המשופר.",
+    description: `אחרי שהריצה מסתיימת, אפשר לבדוק את הפרומפט המאופטם בזמן אמת. הזינו קלט חדש וקבלו תשובה מיידית מה${TERMS.model} עם הפרומפט המשופר.`,
     target: "[data-tutorial='playground-tab']",
     placement: "bottom",
     beforeShow: async () => {
@@ -523,8 +646,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-logs",
     title: "לוגים",
-    description:
-      "לוגים בזמן אמת מהאופטימייזר. מתעדכנים אוטומטית בזמן שהריצה פעילה. אפשר לסנן לפי רמה (error, warning), לחפש בטקסט חופשי ולמיין לפי זמן.",
+    description: `לוגים בזמן אמת מה${TERMS.optimizer}. מתעדכנים אוטומטית בזמן שהריצה פעילה. אפשר לסנן לפי רמה (info, warning, error ועוד), לפי שם ה-logger או pair_index, לחפש בטקסט חופשי ולמיין לפי זמן.`,
     target: "[data-tutorial='logs-tab-trigger']",
     placement: "bottom",
     beforeShow: async () => {
@@ -537,8 +659,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-config",
     title: "הגדרות הריצה",
-    description:
-      "כל ההגדרות של הריצה במקום אחד: מודלים, פרמטרים וחלוקת נתונים. שימושי כשרוצים להשוות הגדרות בין ריצות שונות כדי להבין מה עבד הכי טוב.",
+    description: `כל ההגדרות של הריצה במקום אחד: ${TERMS.modelPlural}, פרמטרים וחלוקת נתונים.`,
     target: "[data-tutorial='config-tab-trigger']",
     placement: "bottom",
     beforeShow: async () => {
@@ -550,10 +671,77 @@ const tutorialSteps: TutorialStep[] = [
   },
 
   {
+    id: "dd-grid-overview",
+    title: `סריקת ${TERMS.modelPlural} (Grid Search)`,
+    description: `במקום ריצה של ${TERMS.model} יחיד, סריקה משווה כמה ${TERMS.pairPlural} של ${TERMS.generationModel} × ${TERMS.reflectionModel} על אותה ${TERMS.task}. כל שורה היא ${TERMS.pair}: מימין ${TERMS.score} האיכות, באמצע זמן התגובה הממוצע, ומשמאל ה${TERMS.score} המשולב (ממוצע הרמוני של איכות ומהירות). הזוכה הכללי מסומן בכתר.`,
+    target: "[data-tutorial='grid-pair-list']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureGridDemo();
+      setDetailTab("overview");
+      await waitForElement("[data-tutorial='grid-pair-list']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 14,
+  },
+  {
+    id: "dd-grid-pair",
+    title: `פרטי ${TERMS.pair} ${TERMS.modelPlural}`,
+    description: `לחיצה על ${TERMS.pair} פותחת תצוגה מפורטת: ${TERMS.scorePlural} לפני/אחרי, ה${TERMS.modelPlural} ב${TERMS.pair}, משך הריצה, מספר הקריאות ל${TERMS.model} וגרף התקדמות.`,
+    target: "[data-tutorial='pair-detail']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureGridPairDetail();
+    },
+    track: "deep-dive",
+    readingTimeSec: 11,
+  },
+
+  {
+    id: "dd-tagger-intro",
+    title: "תיוג טקסטים",
+    description: `כלי לתיוג ${TERMS.dataset}ים ישירות באפליקציה. העלו קובץ CSV, JSON או Excel, בחרו מצב תיוג, ותייגו שורה אחרי שורה. בסיום אפשר לייצא את התוצאות בכל הפורמטים.`,
+    target: "[data-tutorial='sidebar-tagger']",
+    placement: "left",
+    beforeShow: async () => {
+      await ensureDashboard();
+    },
+    track: "deep-dive",
+    readingTimeSec: 7,
+  },
+  {
+    id: "dd-tagger-setup",
+    title: "טופס הגדרת תיוג",
+    description:
+      "שלושה שלבים: בחירת קובץ ועמודת טקסט, בחירת מצב תיוג, והגדרת השאלה או הקטגוריות. אחרי ההגדרה מתחיל התיוג עם ניווט בחיצי מקלדת, קיצורי מקשים, וייצוא בלחיצה.",
+    target: "[data-tutorial='tagger-setup']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureTagger();
+      injectDemoTaggerData(0);
+    },
+    track: "deep-dive",
+    readingTimeSec: 8,
+  },
+  {
+    id: "dd-tagger-modes",
+    title: "מצבי תיוג",
+    description:
+      "סיווג בינארי: שאלה עם כן/לא — מתאים לסינון או זיהוי סנטימנט. קטגוריות: בחירה מרשימה שתגדירו — אפשר לבחור יותר מאחת. טקסט חופשי: כתיבת תגובה לכל שורה — מתאים לחילוץ מידע או תרגום.",
+    target: "[data-tutorial='tagger-modes']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureTagger();
+      injectDemoTaggerData(1);
+      await waitForElement("[data-tutorial='tagger-modes']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 9,
+  },
+  {
     id: "dd-done",
     title: "זהו!",
-    description:
-      "עכשיו אתם מכירים את כל מה ש-Skynet מציע. הגישו אופטימיזציה ראשונה, עקבו אחרי הציונים בזמן אמת, ובדקו את הפרומפט המשופר בלשונית שימוש.",
+    description: `עכשיו אתם מכירים את כל מה ש-Skynet מציע. הגישו ${TERMS.optimization} ראשונה, עקבו אחרי ה${TERMS.scorePlural} בזמן אמת, ובדקו את הפרומפט המשופר בלשונית שימוש.`,
     target: "[data-tutorial='sidebar-full']",
     placement: "left",
     beforeShow: async () => {

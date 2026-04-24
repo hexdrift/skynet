@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import { TERMS } from "@/shared/lib/terms";
 
 export const metadata: Metadata = {
   title: "Compare",
-  description: "השוואת תוצאות בין שתי אופטימיזציות",
+  description: `השוואת תוצאות בין שתי ${TERMS.optimizationPlural}`,
 };
 
 export default function CompareLayout({ children }: { children: React.ReactNode }) {

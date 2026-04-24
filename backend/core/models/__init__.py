@@ -27,8 +27,20 @@ from .common import (
     SplitCounts,
     SplitFractions,
 )
+from .dataset import (
+    DatasetProfile,
+    ProfileDatasetRequest,
+    ProfileDatasetResponse,
+    ProfileWarning,
+    ProfileWarningCode,
+    SplitPlan,
+    TargetColumnProfile,
+)
 from .infra import HealthResponse, QueueStatusResponse
 from .optimizations import (
+    BulkCancelRequest,
+    BulkCancelResponse,
+    BulkCancelSkipped,
     BulkDeleteRequest,
     BulkDeleteResponse,
     BulkDeleteSkipped,
@@ -57,6 +69,9 @@ from .validation import ValidateCodeRequest, ValidateCodeResponse
 __all__ = [
     "HEALTH_STATUS_OK",
     "AnalyticsSummaryResponse",
+    "BulkCancelRequest",
+    "BulkCancelResponse",
+    "BulkCancelSkipped",
     "BulkDeleteRequest",
     "BulkDeleteResponse",
     "BulkDeleteSkipped",
@@ -66,6 +81,7 @@ __all__ = [
     "DashboardAnalyticsOptimizerAverage",
     "DashboardAnalyticsResponse",
     "DashboardAnalyticsTimelineBucket",
+    "DatasetProfile",
     "GridSearchRequest",
     "GridSearchResponse",
     "HealthResponse",
@@ -87,6 +103,10 @@ __all__ = [
     "OptimizerStatsResponse",
     "PaginatedJobsResponse",
     "PairResult",
+    "ProfileDatasetRequest",
+    "ProfileDatasetResponse",
+    "ProfileWarning",
+    "ProfileWarningCode",
     "ProgramArtifact",
     "ProgramArtifactResponse",
     "ProgressEvent",
@@ -98,6 +118,8 @@ __all__ = [
     "ServeResponse",
     "SplitCounts",
     "SplitFractions",
+    "SplitPlan",
+    "TargetColumnProfile",
     "TemplateCreateRequest",
     "TemplateResponse",
     "ValidateCodeRequest",

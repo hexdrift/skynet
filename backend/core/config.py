@@ -6,10 +6,11 @@ validates environment variables at startup and provides typed access.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env file relative to backend/ directory (parent of core/)
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     remote_db_url: SecretStr | None = Field(default=None, description="PostgreSQL connection string for remote storage")
@@ -73,15 +75,140 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
 
+    code_agent_model: str = Field(
+        default="openai/gpt-4o-mini",
+        description="LiteLLM model id used by the submit-wizard code agent (default: openai/gpt-4o-mini)",
+    )
+    code_agent_base_url: str = Field(
+        default="",
+        description="Optional custom base URL for the code agent LM (e.g. internal OpenAI-compatible gateway)",
+    )
+
+    generalist_agent_mcp_url: str = Field(
+        default="http://localhost:8000/mcp/",
+        description="URL of the MCP server the generalist agent connects to (usually the same app's /mcp mount)",
+    )
+    generalist_agent_model: str = Field(
+        default="fireworks_ai/accounts/fireworks/models/minimax-m2p7",
+        description="LiteLLM model id used by the generalist agent (default: Fireworks-hosted MiniMax M2p7 — exposes <think> reasoning for streaming)",
+    )
+    generalist_agent_base_url: str = Field(
+        default="",
+        description="Optional custom base URL for the generalist agent LM (e.g. internal OpenAI-compatible gateway)",
+    )
+
+    recommendations_embedding_model: str = Field(
+        default="jinaai/jina-code-embeddings-0.5b",
+        description=(
+            "Hugging Face model id used by the recommendation embedder. "
+            "Must support MRL / head-truncated dimensions. Loaded via "
+            "sentence-transformers when the 'recommendations' extra is installed."
+        ),
+    )
+    recommendations_embedding_dim: int = Field(
+        default=512,
+        ge=64,
+        le=2048,
+        description=(
+            "MRL-truncated dimension stored in job_embeddings.embedding_*. "
+            "Must match the schema; changing requires a migration."
+        ),
+    )
+    recommendations_summary_model: str = Field(
+        default="",
+        description=(
+            "LiteLLM model id used to summarise a finished job for the "
+            "'summary' embedding aspect. Falls back to code_agent_model when empty."
+        ),
+    )
+    recommendations_enabled: bool = Field(
+        default=True,
+        description=(
+            "Master switch for the recommendation ingest + search pipeline. "
+            "Off = the endpoint still returns [] and no embeddings are written."
+        ),
+    )
+    recommendations_quality_min_absolute: float = Field(
+        default=50.0,
+        ge=0.0,
+        description=(
+            "Minimum optimized_test_metric required for a job to be "
+            "flagged is_recommendable. Metrics live on a 0-100 scale in "
+            "this codebase, so 50.0 is 'beats random for a two-class task.'"
+        ),
+    )
+    recommendations_quality_min_gain_absolute: float = Field(
+        default=5.0,
+        ge=0.0,
+        description=(
+            "Minimum absolute lift (optimized - baseline) in percentage "
+            "points for a job to be flagged is_recommendable."
+        ),
+    )
+    recommendations_quality_min_gain_relative: float = Field(
+        default=0.10,
+        ge=0.0,
+        description=(
+            "Minimum relative lift (optimized - baseline) / baseline for a "
+            "job to be flagged is_recommendable. Used in tandem with the "
+            "absolute gain threshold via max(); whichever is larger applies."
+        ),
+    )
+
+    max_jobs_per_user: int = Field(default=100, ge=1, description="Default per-user job cap")
+    admin_usernames: str = Field(
+        default="",
+        description="Comma-separated usernames that bypass job quota entirely",
+    )
+    quota_overrides_json: str = Field(
+        default="{}",
+        description='Per-user quota overrides as JSON, e.g. \'{"power_user": 500, "researcher": null}\'',
+        alias="QUOTA_OVERRIDES",
+    )
+
+    @field_validator("quota_overrides_json")
+    @classmethod
+    def _validate_quota_overrides_json(cls, v: str) -> str:
+        """Reject QUOTA_OVERRIDES values that are not valid JSON."""
+        if not v.strip():
+            return "{}"
+        try:
+            json.loads(v)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"QUOTA_OVERRIDES is not valid JSON: {exc}") from exc
+        return v
+
     @property
     def cors_origins_list(self) -> list[str]:
-        """Parse CORS origins from the comma-separated settings string.
+        """Return CORS origins as a stripped, non-empty list of strings."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def admin_usernames_set(self) -> frozenset[str]:
+        """Return admin usernames as a lowercase frozenset for O(1) membership tests."""
+        return frozenset(
+            s.strip().lower() for s in self.admin_usernames.split(",") if s.strip()
+        )
+
+    def get_user_quota(self, username: str) -> int | None:
+        """Return the effective job quota for a user.
+
+        Admin users and users with a ``null`` override receive ``None`` (unlimited).
+        Per-user overrides in ``quota_overrides_json`` take precedence over
+        ``max_jobs_per_user`` for non-admin users.
+
+        Args:
+            username: The username to look up.
 
         Returns:
-            List of origin strings with surrounding whitespace stripped
-            and empty entries removed.
+            Maximum number of allowed jobs, or ``None`` for unlimited access.
         """
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if username and username.lower() in self.admin_usernames_set:
+            return None
+        overrides: dict[str, int | None] = json.loads(self.quota_overrides_json)
+        if username in overrides:
+            return overrides[username]
+        return self.max_jobs_per_user
 
 
 settings = Settings()

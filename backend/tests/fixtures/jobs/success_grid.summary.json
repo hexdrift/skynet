@@ -1,0 +1,97 @@
+{
+  "archived": false,
+  "baseline_test_metric": 100.0,
+  "best_pair_label": "openai/gpt-4o-mini + openai/gpt-4o-mini",
+  "column_mapping": {
+    "inputs": {
+      "question": "question"
+    },
+    "outputs": {
+      "answer": "answer"
+    }
+  },
+  "compile_kwargs": {},
+  "completed_at": "2026-04-14T19:11:36.134742",
+  "completed_pairs": 2,
+  "created_at": "2026-04-14T19:07:44.059609",
+  "dataset_rows": 12,
+  "description": null,
+  "elapsed": "00:03:51",
+  "elapsed_seconds": 231.72,
+  "estimated_remaining": null,
+  "failed_pairs": 0,
+  "generation_models": [
+    {
+      "base_url": null,
+      "extra": {},
+      "max_tokens": 16000,
+      "name": "openai/gpt-4o-mini",
+      "temperature": 1.0,
+      "top_p": null
+    }
+  ],
+  "latest_metrics": {
+    "baseline_test_metric": 100.0,
+    "completed_so_far": 2,
+    "failed_so_far": 0,
+    "generation_model": "openai/gpt-4o-mini",
+    "metric_improvement": 0.0,
+    "optimized_test_metric": 100.0,
+    "pair_index": 0,
+    "reflection_model": "openai/gpt-4o-mini",
+    "runtime_seconds": 230.19,
+    "test_examples": 3,
+    "total_pairs": 2,
+    "train_examples": 6,
+    "val_examples": 3
+  },
+  "log_count": 1012,
+  "message": "Optimization completed successfully",
+  "metric_improvement": 0.0,
+  "model_name": null,
+  "model_settings": null,
+  "module_kwargs": {},
+  "module_name": "dspy.ChainOfThought",
+  "name": "grid-search fixture",
+  "optimization_id": "645fe4f8-ad6b-47a9-83b8-929d8f73d981",
+  "optimization_type": "grid_search",
+  "optimized_test_metric": 100.0,
+  "optimizer_kwargs": {
+    "auto": "light",
+    "num_threads": 2
+  },
+  "optimizer_name": "gepa",
+  "pinned": false,
+  "progress_count": 9,
+  "reflection_model_name": null,
+  "reflection_models": [
+    {
+      "base_url": null,
+      "extra": {},
+      "max_tokens": 16000,
+      "name": "openai/gpt-4o-mini",
+      "temperature": 1.0,
+      "top_p": null
+    },
+    {
+      "base_url": null,
+      "extra": {},
+      "max_tokens": 16000,
+      "name": "openai/gpt-4o-mini",
+      "temperature": 1.0,
+      "top_p": null
+    }
+  ],
+  "seed": 42,
+  "shuffle": true,
+  "split_fractions": {
+    "test": 0.25,
+    "train": 0.5,
+    "val": 0.25
+  },
+  "started_at": "2026-04-14T19:07:44.416675",
+  "status": "success",
+  "task_model_name": null,
+  "total_pairs": 2,
+  "username": "fixture-grid"
+}

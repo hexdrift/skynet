@@ -1,4 +1,4 @@
-"""Telemetry models emitted while a job runs (progress events + log lines)."""
+"""Telemetry models emitted while an optimization runs (progress events + log lines)."""
 
 from datetime import datetime
 from typing import Any
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ProgressEvent(BaseModel):
-    """Structured telemetry emitted while an optimization job runs."""
+    """Structured telemetry emitted while an optimization runs."""
 
     timestamp: datetime
     event: str | None = None

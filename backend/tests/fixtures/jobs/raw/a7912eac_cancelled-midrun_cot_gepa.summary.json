@@ -1,0 +1,65 @@
+{
+  "archived": false,
+  "baseline_test_metric": null,
+  "best_pair_label": null,
+  "column_mapping": {
+    "inputs": {
+      "question": "question"
+    },
+    "outputs": {
+      "answer": "answer"
+    }
+  },
+  "compile_kwargs": {},
+  "completed_at": "2026-04-14T19:04:03.645944",
+  "completed_pairs": null,
+  "created_at": "2026-04-14T19:04:02.274315",
+  "dataset_rows": 20,
+  "description": null,
+  "elapsed": "00:00:01",
+  "elapsed_seconds": 1.32,
+  "estimated_remaining": null,
+  "failed_pairs": null,
+  "generation_models": null,
+  "latest_metrics": {},
+  "log_count": 1,
+  "message": "GEPA requires a reflection language model, or custom instruction proposer to be provided. Typically, you can use `dspy.LM(model='gpt-5', temperature=1.0, max_tokens=32000)` to get a good reflection model. Reflection LM is used by GEPA to reflect on the behavior of the program and propose new instructions, and will benefit from a strong model. ",
+  "metric_improvement": null,
+  "model_name": "openai/gpt-4o-mini",
+  "model_settings": {
+    "base_url": null,
+    "extra": {},
+    "max_tokens": 16000,
+    "name": "openai/gpt-4o-mini",
+    "temperature": 1.0,
+    "top_p": null
+  },
+  "module_kwargs": {},
+  "module_name": "dspy.ChainOfThought",
+  "name": "cancelled-mid-run fixture",
+  "optimization_id": "a7912eac-d638-4d0f-aaea-2254c808295a",
+  "optimization_type": "run",
+  "optimized_test_metric": null,
+  "optimizer_kwargs": {
+    "auto": "light",
+    "num_threads": 4
+  },
+  "optimizer_name": "dspy.GEPA",
+  "pinned": false,
+  "progress_count": 0,
+  "prompt_model_name": null,
+  "reflection_model_name": "openai/gpt-4o-mini",
+  "reflection_models": null,
+  "seed": 42,
+  "shuffle": true,
+  "split_fractions": {
+    "test": 0.25,
+    "train": 0.5,
+    "val": 0.25
+  },
+  "started_at": "2026-04-14T19:04:02.327102",
+  "status": "failed",
+  "task_model_name": null,
+  "total_pairs": null,
+  "username": "fixture-cancelled-midrun"
+}

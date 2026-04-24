@@ -8,6 +8,8 @@ router. Kept under a leading underscore to signal "package-internal".
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import logging
 import pickle
 from datetime import datetime, timezone
@@ -15,19 +17,20 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from ...config import settings
 from ...constants import (
-    MAX_JOBS_PER_USER,
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_COMPILE_KWARGS,
-    PAYLOAD_OVERVIEW_JOB_TYPE,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS,
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
+    PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
 )
-from ...job_quota_overrides import get_user_quota
+from ...i18n import t
 from ...models import (
     GridSearchResponse,
     OptimizationStatus,
@@ -46,10 +49,10 @@ from ..converters import (
 
 logger = logging.getLogger(__name__)
 
-_TERMINAL_STATUSES = {OptimizationStatus.success, OptimizationStatus.failed, OptimizationStatus.cancelled}
+TERMINAL_STATUSES = {OptimizationStatus.success, OptimizationStatus.failed, OptimizationStatus.cancelled}
 
-_VALID_STATUSES = {s.value for s in OptimizationStatus}
-_VALID_JOB_TYPES = {OPTIMIZATION_TYPE_RUN, OPTIMIZATION_TYPE_GRID_SEARCH}
+VALID_STATUSES = {s.value for s in OptimizationStatus}
+VALID_OPTIMIZATION_TYPES = {OPTIMIZATION_TYPE_RUN, OPTIMIZATION_TYPE_GRID_SEARCH}
 
 # Cache deserialized programs to avoid repeated pickle loads.
 # Keyed by optimization_id (for single runs + grid-search best pair) or
@@ -57,14 +60,22 @@ _VALID_JOB_TYPES = {OPTIMIZATION_TYPE_RUN, OPTIMIZATION_TYPE_GRID_SEARCH}
 _program_cache: dict[str, Any] = {}
 
 
+def clear_program_cache() -> None:
+    """Clear the module-level deserialized-program cache.
+
+    Intended for test teardown; production code should not call this.
+    """
+    _program_cache.clear()
+
+
 def strip_api_key(d: dict) -> dict:
-    """Remove api_key from a model settings dict before persisting.
+    """Return a shallow copy of *d* with ``extra.api_key`` removed.
 
     Args:
-        d: Model settings dictionary possibly containing an ``extra.api_key`` field.
+        d: Model-settings dict that may contain an ``extra`` sub-dict with an ``api_key``.
 
     Returns:
-        A shallow copy of ``d`` with any ``api_key`` removed from ``extra``.
+        A new dict identical to *d* except that ``api_key`` is absent from ``extra``.
     """
     result = dict(d)
     extra = result.get("extra")
@@ -73,53 +84,63 @@ def strip_api_key(d: dict) -> dict:
     return result
 
 
+def compute_task_fingerprint(
+    signature_code: str,
+    metric_code: str,
+    dataset: list[dict[str, Any]],
+) -> str:
+    """Return a stable SHA256 fingerprint identifying the ML task.
+
+    Two jobs share a fingerprint iff their signature source, metric source,
+    and dataset content are byte-identical. Used by the frontend to gate
+    apples-to-apples run comparisons.
+    """
+    dataset_blob = json.dumps(
+        dataset, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
+    )
+    dataset_hash = hashlib.sha256(dataset_blob.encode("utf-8")).hexdigest()
+    task_blob = f"{signature_code}\x00{metric_code}\x00{dataset_hash}"
+    return hashlib.sha256(task_blob.encode("utf-8")).hexdigest()
+
+
 def enforce_user_quota(job_store, username: str) -> None:
     """Raise HTTP 409 if ``username`` is at or over their job quota.
 
-    Admins and users with an explicit ``None`` override in
-    ``job_quota_overrides`` bypass the check entirely. The count
-    includes every job owned by the user across all statuses.
-
-    Args:
-        job_store: Job store instance used to count existing jobs.
-        username: Identifier of the user whose quota is being checked.
-
-    Returns:
-        None.
-
-    Raises:
-        HTTPException: 409 when the user is at or over their allowed quota.
+    Admins and users with an explicit ``None`` override bypass the check entirely.
     """
-    quota = get_user_quota(username, MAX_JOBS_PER_USER)
+    quota = settings.get_user_quota(username)
     if quota is None:
         return
     current = job_store.count_jobs(username=username)
     if current >= quota:
         raise HTTPException(
             status_code=409,
-            detail=f"הגעת למגבלת {quota} אופטימיזציות לכל משתמש. מחק אופטימיזציות ישנות כדי ליצור חדשות.",
+            detail=t("quota.reached", quota=quota),
         )
 
 
 def build_summary(job_data: dict) -> OptimizationSummaryResponse:
-    """Build a OptimizationSummaryResponse from a raw job store dict.
+    """Build a compact dashboard-card summary from a raw job dict.
+
+    Handles both single-run and grid-search jobs. For grid search the best pair
+    is used as the representative result. Live pair counters fall back to
+    ``latest_metrics`` while the sweep is still in progress.
 
     Args:
-        job_data: Raw job record as returned by the job store.
+        job_data: Raw job dict from the job store.
 
     Returns:
-        OptimizationSummaryResponse populated from the job record.
+        Populated OptimizationSummaryResponse ready for serialization.
     """
     created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(timezone.utc)
     started_at = parse_timestamp(job_data.get("started_at"))
     completed_at = parse_timestamp(job_data.get("completed_at"))
     overview = parse_overview(job_data)
     job_status = status_to_job_status(job_data.get("status", "pending"))
-    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
-    # Only show estimated_remaining for active jobs
     est_remaining = None
-    if job_status not in _TERMINAL_STATUSES:
+    if job_status not in TERMINAL_STATUSES:
         est_remaining = extract_estimated_remaining(job_data)
 
     result_data = job_data.get("result")
@@ -185,6 +206,7 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
         completed_pairs=completed_pairs,
         failed_pairs=failed_pairs,
         best_pair_label=best_pair_label,
+        task_fingerprint=overview.get(PAYLOAD_OVERVIEW_TASK_FINGERPRINT),
     )
 
 
@@ -192,43 +214,33 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
     """Load and cache an optimized program from a completed job.
 
     For grid search jobs, loads the best pair's program automatically.
-
-    Args:
-        optimization_id: The optimization identifier.
-
-    Returns:
-        Tuple of (compiled_program, run_response, payload_overview).
-
-    Raises:
-        HTTPException: If job not found, not finished, or has no artifact.
     """
     try:
         job_data = job_store.get_job(optimization_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
+        raise HTTPException(status_code=404, detail=t("optimization.not_found", optimization_id=optimization_id)) from None
 
     overview = parse_overview(job_data)
-    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
     status = status_to_job_status(job_data.get("status", "pending"))
     if status != OptimizationStatus.success:
         raise HTTPException(
             status_code=409,
-            detail=f"Optimization is '{status.value}' — only successful optimizations can be served.",
+            detail=t("optimization.not_success_status_for_serve", status=status.value),
         )
 
     result_data = job_data.get("result")
     if not result_data or not isinstance(result_data, dict):
-        raise HTTPException(status_code=409, detail="Optimization has no result data.")
+        raise HTTPException(status_code=409, detail=t("optimization.no_result"))
 
     if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
         grid_result = GridSearchResponse.model_validate(result_data)
         if not grid_result.best_pair:
-            raise HTTPException(status_code=409, detail="Grid search has no successful pair.")
+            raise HTTPException(status_code=409, detail=t("grid_search.no_best_pair"))
         artifact = grid_result.best_pair.program_artifact
         if not artifact or not artifact.program_pickle_base64:
-            raise HTTPException(status_code=409, detail="Best pair has no program artifact.")
-        # Build a synthetic RunResponse so callers get consistent data
+            raise HTTPException(status_code=409, detail=t("grid_search.no_best_program_artifact"))
         result = RunResponse(
             module_name=grid_result.module_name,
             optimizer_name=grid_result.optimizer_name,
@@ -239,13 +251,12 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
             metric_improvement=grid_result.best_pair.metric_improvement,
             program_artifact=artifact,
         )
-        # Use the best pair's generation model as the default model name
         overview[PAYLOAD_OVERVIEW_MODEL_NAME] = grid_result.best_pair.generation_model
     else:
         result = RunResponse.model_validate(result_data)
         artifact = result.program_artifact
         if not artifact or not artifact.program_pickle_base64:
-            raise HTTPException(status_code=409, detail="Optimization has no program artifact.")
+            raise HTTPException(status_code=409, detail=t("optimization.no_program_artifact_scoped"))
 
     if optimization_id not in _program_cache:
         program_bytes = base64.b64decode(artifact.program_pickle_base64)
@@ -255,42 +266,43 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
 
 
 def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple[Any, PairResult, dict]:
-    """Load and cache an optimized program from a specific grid search pair.
+    """Load and cache the compiled program for a specific grid-search pair.
 
     Args:
-        optimization_id: The optimization identifier.
-        pair_index: Index of the pair within the grid search results.
+        job_store: Job store used to retrieve the grid-search job.
+        optimization_id: ID of the parent grid-search job.
+        pair_index: Zero-based index of the pair within the grid result.
 
     Returns:
-        Tuple of (compiled_program, pair_result, payload_overview).
+        A ``(program, PairResult, overview)`` triple.
 
     Raises:
-        HTTPException: If job not found, not grid_search, or pair invalid.
+        HTTPException: 404 if the job or pair is unknown, 409 if not successful or pair failed.
     """
     try:
         job_data = job_store.get_job(optimization_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown job '{optimization_id}'.") from None
+        raise HTTPException(status_code=404, detail=t("optimization.not_found", optimization_id=optimization_id)) from None
 
     overview = parse_overview(job_data)
-    optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
     if optimization_type != OPTIMIZATION_TYPE_GRID_SEARCH:
         raise HTTPException(
             status_code=409,
-            detail="Per-pair serving is only available for grid search jobs.",
+            detail=t("grid_search.pair_submission_grid_only"),
         )
 
     status = status_to_job_status(job_data.get("status", "pending"))
     if status != OptimizationStatus.success:
         raise HTTPException(
             status_code=409,
-            detail=f"Optimization is '{status.value}' — only successful optimizations can be served.",
+            detail=t("optimization.not_success_status_for_serve", status=status.value),
         )
 
     result_data = job_data.get("result")
     if not result_data or not isinstance(result_data, dict):
-        raise HTTPException(status_code=409, detail="Optimization has no result data.")
+        raise HTTPException(status_code=409, detail=t("optimization.no_result"))
 
     grid_result = GridSearchResponse.model_validate(result_data)
 
@@ -302,20 +314,20 @@ def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple
     if pair is None:
         raise HTTPException(
             status_code=404,
-            detail=f"No pair with index {pair_index} in grid search results.",
+            detail=t("grid_search.pair_position_missing", pair_index=pair_index),
         )
 
     if pair.error:
         raise HTTPException(
             status_code=409,
-            detail=f"Pair {pair_index} failed: {pair.error}",
+            detail=t("grid_search.pair_failed_error", pair_index=pair_index, error=pair.error),
         )
 
     artifact = pair.program_artifact
     if not artifact or not artifact.program_pickle_base64:
         raise HTTPException(
             status_code=409,
-            detail=f"Pair {pair_index} has no program artifact.",
+            detail=t("grid_search.pair_no_artifact", pair_index=pair_index),
         )
 
     cache_key = f"{optimization_id}_pair_{pair_index}"

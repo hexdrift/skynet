@@ -23,6 +23,7 @@ import signal  # [WORKER-FIX] for SIGTERM graceful shutdown
 import threading
 from collections.abc import Iterable
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -34,19 +35,28 @@ from fastapi.staticfiles import StaticFiles
 from scalar_fastapi import AgentScalarConfig, DocumentDownloadType, get_scalar_api_reference
 
 from ..exceptions import AppError
+from ..i18n import t
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
 from ..storage import get_job_store
 from ..worker import BackgroundWorker, get_worker
+from .mcp_mount import mount_mcp_on_app
 from .routers.analytics import create_analytics_router
+from .routers.code_agent import create_code_agent_router
 from .routers.code_validation import create_code_validation_router
+from .routers.datasets import create_datasets_router
+from .routers.generalist_agent import create_generalist_agent_router
 from .routers.models import create_models_router
 from .routers.optimizations import create_optimizations_router
 from .routers.optimizations_meta import create_optimizations_meta_router
+from .routers.dashboard import create_dashboard_router
+from .routers.recommendations import create_recommendations_router
+from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
 from .routers.submissions import create_submissions_router
 from .routers.templates import create_templates_router
+from .routers.wizard import create_wizard_router
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +86,14 @@ _SCALAR_HIDDEN_PATHS = frozenset(
         "/optimizations/{optimization_id}/payload",
         "/optimizations/{optimization_id}/evaluate-examples",
         "/optimizations/{optimization_id}/dataset",
+        "/optimizations/{optimization_id}/pair/{pair_index}",
         "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
         # SSE streams (frontend real-time updates)
         "/optimizations/stream",
         "/optimizations/{optimization_id}/stream",
+        "/optimizations/ai-generate-code",
+        "/optimizations/generalist-agent",
+        "/optimizations/generalist-agent/confirm",
         "/serve/{optimization_id}/stream",
         "/serve/{optimization_id}/pair/{pair_index}/stream",
         # Grid-pair-level serve (too granular for public docs)
@@ -95,6 +109,7 @@ _SCALAR_HIDDEN_PATHS = frozenset(
         "/format-code",
         "/templates",
         "/templates/{template_id}",
+        "/wizard/update",
     }
 )
 
@@ -386,6 +401,33 @@ html[data-skynet-sidebar="hidden"] .skynet-sidebar-header {
     padding-inline: 8px !important;
   }
 }
+
+/* ── Cross-platform viewport adaptation ──────────────────────────
+   Reserve scrollbar width on Windows (classic scrollbars) to prevent
+   layout shift. On macOS overlay scrollbars this is a no-op. */
+.scalar-api-reference {
+  scrollbar-gutter: stable;
+}
+
+/* Fluid padding for narrow desktop windows (split-screen, snapped) */
+@media (max-width: 600px) {
+  .section-container,
+  .endpoint-container {
+    padding-inline: 8px !important;
+  }
+  /* Prevent code blocks from overflowing */
+  pre, code {
+    font-size: 12px !important;
+    word-break: break-all;
+  }
+}
+
+/* Sensible content width on ultrawides so lines stay readable */
+@media (min-width: 1800px) {
+  .scalar-api-reference {
+    --refs-content-max-width: 1600px !important;
+  }
+}
 """
 
 _OPENAPI_TAGS = [
@@ -393,6 +435,7 @@ _OPENAPI_TAGS = [
     {"name": "Inference", "description": "Run inference against an optimized program."},
     {"name": "Analytics", "description": "Aggregate stats across jobs, optimizers, and models."},
     {"name": "Models", "description": "Model catalog and provider discovery."},
+    {"name": "Datasets", "description": "Profile uploaded datasets and recommend split plans."},
     {"name": "Templates", "description": "Save and reuse job configuration templates."},
     {"name": "Code Validation", "description": "Format and validate user-supplied Python code."},
     {"name": "System", "description": "Health and queue status for readiness probes."},
@@ -405,18 +448,18 @@ def create_app(
     service: DspyService | None = None,
     service_kwargs: dict | None = None,
 ) -> FastAPI:
-    """Create a FastAPI app wired up with the supplied registry.
+    """Assemble and return the fully-configured FastAPI application.
 
     Args:
-        registry: Registry instance containing user-registered assets.
-        service: Optional preconstructed ``DspyService``.
-        service_kwargs: Keyword arguments forwarded to ``DspyService`` when
-            ``service_gateway`` is not supplied.
+        registry: Pre-built ServiceRegistry; a new one is created if omitted.
+        service: Pre-built DspyService; constructed from *registry* if omitted.
+        service_kwargs: Extra kwargs forwarded to the DspyService constructor
+            when *service* is not supplied.
 
     Returns:
-        FastAPI: Configured application instance.
+        A FastAPI instance with all middleware, exception handlers, and routers
+        mounted and ready to serve.
     """
-
     registry = registry or ServiceRegistry()
     service = service or DspyService(
         registry,
@@ -429,16 +472,6 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        """Manage application lifecycle - start/stop worker.
-
-        Args:
-            app: The FastAPI application instance being managed.
-
-        Yields:
-            Control back to FastAPI while the server handles requests;
-            the background worker is started before the yield and
-            stopped after it.
-        """
         nonlocal worker
         job_store.recover_orphaned_jobs()  # [WORKER-FIX] mark crashed jobs from previous run as failed
         pending_ids = job_store.recover_pending_jobs()
@@ -453,15 +486,6 @@ def create_app(
         original_handler = signal.getsignal(signal.SIGTERM) if can_register_signal else None
 
         def _graceful_shutdown(signum, frame):
-            """Stop the background worker when SIGTERM is received.
-
-            Args:
-                signum: Signal number delivered to the handler.
-                frame: Current stack frame at the time the signal was caught.
-
-            Returns:
-                None.
-            """
             logger.info("SIGTERM received, stopping worker gracefully")
             if worker:
                 worker.stop()
@@ -510,19 +534,7 @@ def create_app(
 
     @app.get("/openapi.public.json", include_in_schema=False)
     async def public_openapi() -> JSONResponse:
-        """Filtered copy of /openapi.json for the public API reference.
-
-        Strips routes listed in ``_SCALAR_HIDDEN_PATHS`` (frontend plumbing,
-        SSE streams, dashboard mutations, etc.) and prunes any OpenAPI
-        tag groups that become empty after filtering. The underlying
-        ``/openapi.json`` remains unchanged so FastAPI's own /docs and
-        any existing consumers that rely on the full schema keep working.
-
-        Returns:
-            JSONResponse containing the filtered OpenAPI spec.
-        """
-        from copy import deepcopy
-
+        """Filtered copy of /openapi.json with hidden paths and empty tags pruned."""
         base = app.openapi()
         spec = deepcopy(base)
         paths = spec.get("paths", {})
@@ -543,11 +555,6 @@ def create_app(
 
     @app.get("/scalar", include_in_schema=False)
     async def scalar_docs() -> HTMLResponse:
-        """Render the Scalar API reference HTML with the animated wordmark injected.
-
-        Returns:
-            HTMLResponse containing the Scalar documentation page.
-        """
         base = get_scalar_api_reference(
             openapi_url="/openapi.public.json",
             title=f"{app.title} API",
@@ -590,18 +597,6 @@ def create_app(
 
     @app.exception_handler(AppError)
     async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-        """Handle domain exceptions raised by services.
-
-        Converts AppError instances into consistent JSON responses that match
-        the existing error envelope format used throughout the API.
-
-        Args:
-            request: Incoming HTTP request that raised the error.
-            exc: Domain exception instance to convert into a JSON response.
-
-        Returns:
-            JSONResponse with the standard error envelope.
-        """
         return JSONResponse(
             status_code=exc.status_code,
             content={"error": exc.error_code.lower(), "detail": exc.message},
@@ -609,15 +604,6 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def _http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
-        """Convert FastAPI HTTPException instances into the standard error envelope.
-
-        Args:
-            request: Incoming HTTP request that raised the exception.
-            exc: The HTTPException instance being handled.
-
-        Returns:
-            JSONResponse with the shared ``{"error", "detail"}`` shape.
-        """
         error_type = _STATUS_TO_ERROR_TYPE.get(exc.status_code, "error")
         return JSONResponse(
             status_code=exc.status_code,
@@ -627,25 +613,7 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        """Transform Pydantic validation errors into a consistent response payload.
-
-        Args:
-            request: Incoming HTTP request that triggered the validation error.
-            exc: Pydantic ``RequestValidationError`` raised by FastAPI.
-
-        Returns:
-            JSONResponse: Structured error response consumed by API clients.
-        """
-
         def _format_field(loc: Iterable[Any]) -> str:
-            """Join validation error location parts into a dotted field path.
-
-            Args:
-                loc: Location tuple from Pydantic validation error.
-
-            Returns:
-                str: Dotted field path like "dataset[0].question".
-            """
             parts: list[str] = []
             for entry in loc:
                 if entry in {"body", "__root__"}:
@@ -678,19 +646,6 @@ def create_app(
 
     @app.exception_handler(Exception)
     async def _generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
-        """Catch-all handler for unhandled exceptions to prevent info disclosure.
-
-        Logs the full exception with stack trace while returning a safe generic
-        error response to the client. Prevents leaking DB credentials, file paths,
-        API keys, or internal implementation details.
-
-        Args:
-            request: Incoming HTTP request that triggered the exception.
-            exc: Unhandled exception instance.
-
-        Returns:
-            JSONResponse: Generic 500 error response with no sensitive details.
-        """
         logger.error(
             "Unhandled exception in %s %s: %s",
             request.method,
@@ -716,31 +671,14 @@ def create_app(
         summary="Liveness and readiness probe",
     )
     def healthcheck() -> HealthResponse:
-        """Return a snapshot of registered assets and background-worker health.
+        """Return registered-asset inventory and worker health for liveness/readiness probes.
 
-        Used by OpenShift / Kubernetes liveness + readiness probes and by the
-        frontend's connection indicator. Returns HTTP 200 with a snapshot of
-        every asset the ``ServiceRegistry`` knows about when the worker pool
-        is healthy.
-
-        Behavior:
-            - Returns 503 if no worker exists or if all worker threads have died.
-            - Returns 503 if worker threads are alive but idle for longer than
-              ``WORKER_STALE_THRESHOLD`` seconds (default 600), which indicates
-              the pool is stuck (e.g. a thread deadlocked inside a subprocess).
-            - The response body is never cached by the frontend — stale data
-              would defeat the point of the probe.
-
-        Returns:
-            HealthResponse snapshot with the registered-asset inventory.
-
-        Raises:
-            HTTPException: 503 when workers are dead or stuck past the stale threshold.
+        503 if workers are dead or stuck longer than ``WORKER_STALE_THRESHOLD`` seconds (default 600).
         """
         # [WORKER-FIX] return 503 if workers died so OpenShift probe detects it
         if worker is None or not worker.threads_alive():
             logger.error("Health check failed: worker threads are not alive")
-            raise HTTPException(status_code=503, detail="Worker threads are not running")
+            raise HTTPException(status_code=503, detail=t("health.workers_dead"))
 
         # [WORKER-FIX] detect threads that are alive but stuck (no activity for too long)
         stale_seconds = worker.seconds_since_last_activity()
@@ -753,7 +691,7 @@ def create_app(
             )
             raise HTTPException(
                 status_code=503,
-                detail=f"Worker threads stuck for {stale_seconds:.0f}s",
+                detail=t("health.workers_stuck", seconds=f"{stale_seconds:.0f}"),
             )
 
         snapshot = registry.snapshot()
@@ -762,15 +700,6 @@ def create_app(
 
     @app.middleware("http")
     async def add_cache_headers(request: Request, call_next):
-        """Add Cache-Control headers to cacheable GET endpoints.
-
-        Args:
-            request: Incoming HTTP request being processed.
-            call_next: Downstream middleware/handler that produces the response.
-
-        Returns:
-            The response with appropriate Cache-Control headers applied.
-        """
         response = await call_next(request)
         path = request.url.path
         if request.method == "GET":
@@ -794,23 +723,12 @@ def create_app(
         summary="Current worker queue depth and health",
     )
     def get_queue_status() -> QueueStatusResponse:
-        """Return a point-in-time snapshot of the background-job queue.
+        """Return pending/active job counts and worker-thread health.
 
-        Reports how many optimization jobs are pending (waiting to run), how
-        many are actively executing, how many worker threads are configured,
-        and whether those threads are alive. Used by the frontend's queue
-        chip/header and by `/analytics/summary` callers who want to detect
-        backlog buildup.
-
-        If no worker has been started yet (e.g. the lifespan hook hasn't run),
-        the response contains all zeros with ``workers_alive=False`` instead
-        of an error — callers polling at startup get a stable shape.
-
-        Response is cached for 5 seconds to keep this endpoint cheap under
-        aggressive polling from the UI.
+        All counts are zero before the lifespan context starts.
 
         Returns:
-            QueueStatusResponse describing pending/active jobs and worker health.
+            QueueStatusResponse with current queue depth and worker state.
         """
         if worker is None:
             return QueueStatusResponse(
@@ -827,13 +745,13 @@ def create_app(
             workers_alive=worker.threads_alive(),
         )
 
-    # Every route except /health and /queue lives in a sub-module under
-    # routers/. Each exposes a create_<domain>_router factory returning an
-    # APIRouter wired up with the dependencies it needs. Tags are applied
-    # here so the OpenAPI spec (and Scalar) groups routes consistently
-    # without touching the router files themselves.
     app.include_router(create_models_router(), tags=["Models"])
+    app.include_router(create_registry_router(registry=registry), tags=["Registry"])
     app.include_router(create_code_validation_router(), tags=["Code Validation"])
+    app.include_router(create_code_agent_router(), tags=["Code Validation"])
+    app.include_router(create_generalist_agent_router(), tags=["Optimizations"])
+    app.include_router(create_datasets_router(), tags=["Datasets"])
+    app.include_router(create_wizard_router(), tags=["Wizard"])
     app.include_router(
         create_submissions_router(service=service, job_store=job_store),
         tags=["Optimizations"],
@@ -846,8 +764,26 @@ def create_app(
     app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
     app.include_router(create_templates_router(job_store=job_store), tags=["Templates"])
     app.include_router(
+        create_recommendations_router(job_store=job_store),
+        tags=["Recommendations"],
+    )
+    app.include_router(
+        create_dashboard_router(job_store=job_store),
+        tags=["Dashboard"],
+    )
+    app.include_router(
         create_optimizations_meta_router(job_store=job_store),
         tags=["Optimizations"],
     )
+
+    # Mount FastMCP AFTER routers so from_fastapi() sees the full route
+    # table. Only endpoints tagged "agent" are projected into tools; every
+    # other REST route is unaffected. The sub-app handles Streamable HTTP
+    # at POST /mcp. Tolerated import error so the backend still boots in
+    # environments where the dep hasn't been reinstalled yet.
+    try:
+        mount_mcp_on_app(app)
+    except ImportError as exc:
+        logger.warning("FastMCP not available, skipping /mcp mount: %s", exc)
 
     return app

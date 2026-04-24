@@ -4,7 +4,7 @@ import importlib
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cache, wraps
+from functools import wraps
 from typing import Any
 
 from ..constants import RESOLUTION_HINT
@@ -32,7 +32,6 @@ MODULE_ALIASES: dict[str, ModuleAlias] = {
 }
 
 OPTIMIZER_ALIASES: dict[str, str] = {
-    "miprov2": "dspy.teleprompt.MIPROv2",
     "gepa": "dspy.teleprompt.GEPA",
 }
 
@@ -47,15 +46,15 @@ def resolve_module_factory(name: str) -> tuple[Callable[..., Any], bool]:
     """Resolve a module factory from aliases or dotted paths.
 
     Args:
-        name: Alias or dotted path identifying a DSPy module class.
+        name: Short alias (e.g. ``"predict"``) or dotted dspy path (e.g. ``"dspy.Predict"``).
 
     Returns:
-        Tuple[Callable[..., Any], bool]: Factory callable and flag indicating
-        whether the service_gateway should auto-generate a signature when none is
-        supplied via ``module_kwargs``.
+        A ``(factory, auto_signature)`` tuple where ``auto_signature`` is True
+        when the service gateway should auto-inject a compiled DSPy signature
+        rather than requiring one in ``module_kwargs``.
 
     Raises:
-        ResolverError: If the name cannot be resolved.
+        ResolverError: If ``name`` cannot be resolved to a callable.
     """
 
     spec = _match_module_alias(name)
@@ -80,13 +79,13 @@ def resolve_optimizer_factory(name: str) -> Callable[..., Any]:
     """Resolve an optimizer factory from aliases or dotted paths.
 
     Args:
-        name: Alias or dotted path identifying a DSPy optimizer class.
+        name: Short alias (e.g. ``"gepa"``) or dotted dspy path.
 
     Returns:
-        Callable[..., Any]: Factory callable that instantiates the optimizer.
+        A wrapped callable that instantiates the optimizer when called.
 
     Raises:
-        ResolverError: If the name cannot be resolved.
+        ResolverError: If ``name`` cannot be resolved to a callable.
     """
 
     path = _match_optimizer_alias(name)
@@ -100,45 +99,41 @@ def resolve_optimizer_factory(name: str) -> Callable[..., Any]:
 
 
 def _match_module_alias(name: str) -> ModuleAlias | None:
-    """Return the module alias specification when available.
+    """Return the ModuleAlias for ``name`` (case-insensitive), or None if unknown.
 
     Args:
-        name: Requested alias.
+        name: Alias name to look up (e.g. ``"predict"`` or ``"cot"``).
 
     Returns:
-        Optional[ModuleAlias]: Alias specification if defined.
+        The matching ``ModuleAlias``, or ``None`` when the name is not registered.
     """
-
     return MODULE_ALIASES.get(name.lower())
 
 
 def _match_optimizer_alias(name: str) -> str | None:
-    """Return the optimizer dotted path when alias is provided.
+    """Return the dotted-path string for ``name`` (case-insensitive), or None if unknown.
 
     Args:
-        name: Requested alias.
+        name: Alias name to look up (e.g. ``"gepa"``).
 
     Returns:
-        Optional[str]: Dotted path of the optimizer class.
+        Dotted import path string, or ``None`` when the name is not registered.
     """
-
     return OPTIMIZER_ALIASES.get(name.lower())
 
 
-@cache
 def _load_callable(path: str) -> Callable[..., Any]:
-    """Import a callable attribute specified by dotted path.
+    """Import a callable attribute specified by dotted path (e.g. ``dspy.Predict``).
 
     Args:
-        path: Dotted path such as ``dspy.Predict``.
+        path: Dotted import path in ``module.attribute`` form.
 
     Returns:
-        Callable[..., Any]: Imported class or factory.
+        The callable attribute resolved from ``path``.
 
     Raises:
-        ResolverError: If the attribute does not exist or is not callable.
+        ResolverError: If the module cannot be imported or the attribute is missing or not callable.
     """
-
     module_path, attribute = path.rsplit(".", 1)
     try:
         module = importlib.import_module(module_path)
@@ -154,15 +149,14 @@ def _load_callable(path: str) -> Callable[..., Any]:
 
 
 def _wrap_callable(target: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap a target so it behaves like a module or optimizer factory.
+    """Wrap ``target`` in a thin factory that preserves its call signature.
 
     Args:
-        target: Callable class or function to wrap.
+        target: The callable to wrap.
 
     Returns:
-        Callable[..., Any]: Wrapper that forwards keyword arguments.
+        A new callable that forwards all positional and keyword arguments to ``target``.
     """
-
     try:
         signature = inspect.signature(target)
     except (ValueError, TypeError):
@@ -170,16 +164,6 @@ def _wrap_callable(target: Callable[..., Any]) -> Callable[..., Any]:
 
     @wraps(target)
     def factory(*args: Any, **kwargs: Any) -> Any:
-        """Invoke the wrapped callable with keyword arguments.
-
-        Args:
-            args: Positional arguments forwarded to the callable.
-            kwargs: Keyword arguments forwarded to the callable.
-
-        Returns:
-            Any: Result from invoking the callable.
-        """
-
         return target(*args, **kwargs)
 
     if signature is not None:

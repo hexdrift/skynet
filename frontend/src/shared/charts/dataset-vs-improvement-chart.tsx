@@ -16,6 +16,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { TERMS } from "@/shared/lib/terms";
 
 interface DatasetVsImprovementChartProps {
   data: Array<{ שורות: number; שיפור: number; name: string }>;
@@ -23,9 +24,13 @@ interface DatasetVsImprovementChartProps {
   onDotClick?: (optimizationId: string) => void;
 }
 
-export function DatasetVsImprovementChart({ data, optimizationIds, onDotClick }: DatasetVsImprovementChartProps) {
+export function DatasetVsImprovementChart({
+  data,
+  optimizationIds,
+  onDotClick,
+}: DatasetVsImprovementChartProps) {
   if (data.length === 0) return null;
-  
+
   return (
     <div className="h-[250px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -38,7 +43,12 @@ export function DatasetVsImprovementChart({ data, optimizationIds, onDotClick }:
             axisLine={false}
             tick={{ fontSize: 10 }}
             className="fill-muted-foreground"
-            label={{ value: "שורות בדאטאסט", position: "insideBottom", offset: -10, fontSize: 10 }}
+            label={{
+              value: `שורות ב${TERMS.dataset}`,
+              position: "insideBottom",
+              offset: -10,
+              fontSize: 10,
+            }}
           />
           <YAxis
             type="number"

@@ -5,23 +5,26 @@ from ..models import ModelConfig
 
 
 def build_language_model(config: ModelConfig) -> dspy.LM:
-    """Construct a DSPy language model.
+    """Construct a DSPy language model from a ModelConfig.
+
+    Only non-None optional fields (temperature, base_url, max_tokens, top_p) are
+    forwarded to ``dspy.LM`` to avoid LiteLLM rejecting unexpected None values.
+    Extra kwargs from ``config.extra`` are merged in last.
 
     Args:
-        config: Declarative language-model configuration.
+        config: Model configuration including name and optional sampling parameters.
 
     Returns:
-        dspy.LM: Configured language model ready for use with dspy.context().
+        An instantiated DSPy LM ready for use in a ``dspy.context``.
 
     Raises:
-        ServiceError: If DSPy refuses the settings (e.g., unsupported provider).
+        ServiceError: If ``dspy.LM`` raises a ValueError (e.g. unsupported model).
     """
 
     model_name = config.name.strip("/")
-    lm_kwargs: dict[str, object] = {
-        "model": model_name,
-        "temperature": config.temperature,
-    }
+    lm_kwargs: dict[str, object] = {"model": model_name}
+    if config.temperature is not None:
+        lm_kwargs["temperature"] = config.temperature
     if config.base_url:
         lm_kwargs["base_url"] = config.base_url
     if config.max_tokens is not None:

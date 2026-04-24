@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    import dspy
+import dspy
 
 ModuleFactory = Callable[..., "dspy.Module"]
 MetricFn = Callable[..., float]
@@ -33,82 +32,89 @@ class ServiceRegistry:
     optimizers: MutableMapping[str, OptimizerFactory] = field(default_factory=dict)
 
     def register_module(self, name: str, factory: ModuleFactory) -> None:
-        """Register a module factory under a name.
+        """Register a DSPy module factory under a short name.
 
         Args:
-            name: Unique identifier for the DSPy module.
-            factory: Callable that returns a configured ``dspy.Module``.
+            name: Short identifier used in RunRequest.module_name.
+            factory: Callable returning a dspy.Module instance.
 
-        Returns:
-            None
+        Raises:
+            DuplicateRegistrationError: If ``name`` is already registered.
         """
         self._register(self.modules, name, factory)
 
     def register_metric(self, name: str, metric: MetricFn) -> None:
-        """Register a metric function under a name.
+        """Register a metric function under a short name.
 
         Args:
-            name: Unique identifier for the metric.
-            metric: Callable that computes a scalar metric.
+            name: Short identifier for the metric.
+            metric: Callable accepting (gold, pred[, trace]) and returning a float.
 
-        Returns:
-            None
+        Raises:
+            DuplicateRegistrationError: If ``name`` is already registered.
         """
         self._register(self.metrics, name, metric)
 
     def register_optimizer(self, name: str, factory: OptimizerFactory) -> None:
-        """Register an optimizer factory under a name.
+        """Register an optimizer factory under a short name.
 
         Args:
-            name: Unique identifier for the optimizer.
-            factory: Callable that returns a DSPy optimizer instance.
+            name: Short identifier used in RunRequest.optimizer_name.
+            factory: Callable returning a DSPy teleprompt optimizer instance.
 
-        Returns:
-            None
+        Raises:
+            DuplicateRegistrationError: If ``name`` is already registered.
         """
         self._register(self.optimizers, name, factory)
 
     def get_module(self, name: str) -> ModuleFactory:
-        """Retrieve a module factory by name.
+        """Return the module factory registered under ``name``.
 
         Args:
-            name: Registered module identifier.
+            name: Identifier passed to register_module.
 
         Returns:
-            ModuleFactory: The stored factory callable.
+            The registered ModuleFactory callable.
+
+        Raises:
+            UnknownRegistrationError: If no module is registered under ``name``.
         """
         return self._get(self.modules, name, kind="module")
 
     def get_metric(self, name: str) -> MetricFn:
-        """Retrieve a metric function by name.
+        """Return the metric function registered under ``name``.
 
         Args:
-            name: Registered metric identifier.
+            name: Identifier passed to register_metric.
 
         Returns:
-            MetricFn: The stored metric callable.
+            The registered MetricFn callable.
+
+        Raises:
+            UnknownRegistrationError: If no metric is registered under ``name``.
         """
         return self._get(self.metrics, name, kind="metric")
 
     def get_optimizer(self, name: str) -> OptimizerFactory:
-        """Retrieve an optimizer factory by name.
+        """Return the optimizer factory registered under ``name``.
 
         Args:
-            name: Registered optimizer identifier.
+            name: Identifier passed to register_optimizer.
 
         Returns:
-            OptimizerFactory: The stored optimizer callable.
+            The registered OptimizerFactory callable.
+
+        Raises:
+            UnknownRegistrationError: If no optimizer is registered under ``name``.
         """
         return self._get(self.optimizers, name, kind="optimizer")
 
     def snapshot(self) -> dict[str, list[str]]:
-        """Return summary information about registered assets.
-
-        Args:
-            None.
+        """Return sorted registered names keyed by asset type.
 
         Returns:
-            Dict[str, list[str]]: Mapping from asset type to sorted names.
+            Dict with keys ``"modules"``, ``"metrics"``, and ``"optimizers"``,
+            each mapping to a sorted list of registered names.
         """
         return {
             "modules": sorted(self.modules.keys()),
@@ -118,18 +124,15 @@ class ServiceRegistry:
 
     @staticmethod
     def _register(store: MutableMapping[str, Any], name: str, value: Any) -> None:
-        """Store a callable while preventing duplicate names.
+        """Insert ``value`` into ``store`` under ``name``, raising on duplicates.
 
         Args:
-            store: Internal dictionary for a registry category.
-            name: Registration key.
-            value: Callable or object being registered.
-
-        Returns:
-            None
+            store: The mutable mapping to insert into.
+            name: Key to register under.
+            value: Factory or callable to store.
 
         Raises:
-            DuplicateRegistrationError: If the name already exists.
+            DuplicateRegistrationError: If ``name`` already exists in ``store``.
         """
         if name in store:
             raise DuplicateRegistrationError(f"Entry '{name}' already registered.")
@@ -137,18 +140,18 @@ class ServiceRegistry:
 
     @staticmethod
     def _get(store: Mapping[str, Any], name: str, *, kind: str) -> Any:
-        """Fetch a stored callable or object.
+        """Look up ``name`` in ``store``, raising a typed error when missing.
 
         Args:
-            store: Internal dictionary for a registry category.
-            name: Registration key to retrieve.
-            kind: Human-readable descriptor used in error messages.
+            store: The mapping to search.
+            name: Key to look up.
+            kind: Human-readable asset type used in the error message.
 
         Returns:
-            Any: Stored callable or object.
+            The value stored under ``name``.
 
         Raises:
-            UnknownRegistrationError: If the key is not present.
+            UnknownRegistrationError: If ``name`` is not present in ``store``.
         """
         try:
             return store[name]

@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { OptimizationStatusResponse } from "@/shared/types/api";
+import { TERMS } from "@/shared/lib/terms";
 import { PIPELINE_STAGES, STAGE_INFO, type PipelineStage } from "../constants";
 
 export function StageInfoModal({
@@ -48,7 +49,7 @@ export function StageInfoModal({
                     </div>
                     <div>
                       <DialogTitle className="text-base">{info.title}</DialogTitle>
-                      <DialogDescription className="text-[13px] mt-0.5">
+                      <DialogDescription className="text-[0.8125rem] mt-0.5">
                         {info.description}
                       </DialogDescription>
                     </div>
@@ -59,13 +60,15 @@ export function StageInfoModal({
 
                   {stage === "baseline" && job?.baseline_test_metric != null && (
                     <div className="rounded-xl bg-muted/40 p-3">
-                      <div className="text-[11px] font-semibold text-[#3D2E22] mb-1">תוצאה</div>
+                      <div className="text-[0.6875rem] font-semibold text-[#3D2E22] mb-1">
+                        תוצאה
+                      </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-bold tabular-nums">
                           {(job.baseline_test_metric * 100).toFixed(1)}%
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          ציון בסיס על סט הבדיקה
+                          {TERMS.baselineScore} על סט הבדיקה
                         </span>
                       </div>
                     </div>
@@ -73,21 +76,21 @@ export function StageInfoModal({
 
                   {stage === "evaluating" && job?.optimized_test_metric != null && (
                     <div className="rounded-xl bg-muted/40 p-3">
-                      <div className="text-[11px] font-semibold text-[#3D2E22] mb-1">
+                      <div className="text-[0.6875rem] font-semibold text-[#3D2E22] mb-1">
                         תוצאה סופית
                       </div>
                       <div className="flex items-baseline gap-3">
                         <div>
-                          <span className="text-2xl font-bold tabular-nums text-[#5C7A52]">
+                          <span className="text-2xl font-bold tabular-nums text-[#3D2E22]">
                             {(job.optimized_test_metric * 100).toFixed(1)}%
                           </span>
-                          <span className="text-[10px] text-muted-foreground ms-1">מאומנת</span>
+                          <span className="text-[0.625rem] text-muted-foreground ms-1">מאומנת</span>
                         </div>
                         {job.baseline_test_metric != null && (
                           <div className="text-xs text-muted-foreground">
                             מ-{(job.baseline_test_metric * 100).toFixed(1)}%
                             <span
-                              className={`ms-1 font-semibold ${(job.metric_improvement ?? 0) >= 0 ? "text-[#5C7A52]" : "text-[#B04030]"}`}
+                              className={`ms-1 font-semibold ${(job.metric_improvement ?? 0) >= 0 ? "text-[#3D2E22]" : "text-[#B04030]"}`}
                             >
                               ({(job.metric_improvement ?? 0) >= 0 ? "+" : ""}
                               {((job.metric_improvement ?? 0) * 100).toFixed(1)}%)

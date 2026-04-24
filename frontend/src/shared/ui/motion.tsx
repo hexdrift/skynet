@@ -114,9 +114,11 @@ export function HoverScale({
 export function TiltCard({
   children,
   className,
+  onClick,
 }: {
   children: React.ReactNode;
   className?: string;
+  onClick?: () => void;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -135,12 +137,28 @@ export function TiltCard({
     el.style.transform = "perspective(800px) rotateY(0deg) rotateX(0deg) translateY(0)";
   }, []);
 
+  const interactive = onClick != null;
+  const handleKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!onClick) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onClick();
+      }
+    },
+    [onClick],
+  );
+
   return (
     <div
       ref={ref}
-      className={className}
+      className={`${className ?? ""}${interactive ? " cursor-pointer" : ""}`}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onClick={onClick}
+      onKeyDown={interactive ? handleKeyDown : undefined}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
       style={{
         transition: "transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1)",
         willChange: "transform",

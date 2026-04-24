@@ -10,7 +10,6 @@
 
 import type { ReactNode } from "react";
 import {
-  Brain,
   Coins,
   Component,
   Cpu,
@@ -30,36 +29,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationPayloadResponse, OptimizationStatusResponse } from "@/shared/types/api";
-import { InfoCard } from "./ui-primitives";
+import { tip } from "@/shared/lib/tooltips";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
+import { InfoCard, ReasoningPill } from "./ui-primitives";
 
 const OPT_PARAM_LABELS: Record<string, string> = {
   auto: "רמת חיפוש",
   max_bootstrapped_demos: "דוגמאות אוטומטיות",
   max_labeled_demos: "דוגמאות מהנתונים",
-  num_trials: "מספר ניסיונות",
   minibatch: "בדיקה חלקית",
   minibatch_size: "גודל מדגם",
   reflection_minibatch_size: "מדגם לרפלקציה",
   max_full_evals: "סבבי הערכה",
   use_merge: "מיזוג מועמדים",
-  metric: "מטריקה",
+  metric: TERMS.metric,
 };
 const OPT_PARAM_TIPS: Record<string, string> = {
   auto: "עומק החיפוש — קלה מהירה, מעמיקה בודקת יותר שילובים",
   max_bootstrapped_demos: "דוגמאות שהמערכת מייצרת אוטומטית מתוך הנתונים",
-  max_labeled_demos: "דוגמאות קלט-פלט מהדאטאסט שמוצגות למודל כהדגמה",
-  num_trials: "כמה שילובים שונים של הוראות ודוגמאות האופטימייזר ינסה",
-  minibatch: "כשפעיל, הערכה רצה על מדגם קטן במקום הדאטאסט המלא",
+  max_labeled_demos: `דוגמאות קלט-פלט מה${TERMS.dataset} שמוצגות ל${TERMS.model} כהדגמה`,
+  minibatch: `כשפעיל, הערכה רצה על מדגם קטן במקום ה${TERMS.dataset} המלא`,
   minibatch_size: "מספר הדוגמאות שנבדקות בכל סבב הערכה",
-  reflection_minibatch_size: "כמה דוגמאות המודל מנתח בכל סבב רפלקציה",
+  reflection_minibatch_size: `כמה דוגמאות ה${TERMS.model} מנתח בכל סבב רפלקציה`,
   max_full_evals: "מספר הפעמים שהמערכת מריצה הערכה מלאה על כל הנתונים",
   use_merge: "כשפעיל, המערכת משלבת הוראות מכמה מועמדים טובים לפרומפט אחד",
 };
 
 function labelWithTip(key: string): ReactNode {
   const label = OPT_PARAM_LABELS[key] || key;
-  const tip = OPT_PARAM_TIPS[key];
-  return tip ? <HelpTip text={tip}>{label}</HelpTip> : label;
+  const tipText = OPT_PARAM_TIPS[key];
+  return tipText ? <HelpTip text={tipText}>{label}</HelpTip> : label;
 }
 
 function formatParamValue(_k: string, v: unknown): string {
@@ -78,13 +78,13 @@ function ModelCard({ label, cfg }: { label: string; cfg: Record<string, unknown>
   return (
     <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/80 px-3 py-2">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
         <span className="truncate text-sm text-foreground font-mono font-medium" dir="ltr">
           {shortName}
         </span>
-        <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground" dir="ltr">
+        <div className="flex items-center gap-2.5 text-[0.625rem] text-muted-foreground" dir="ltr">
           {temp != null && (
             <span className="inline-flex items-center gap-0.5">
               <Thermometer className="size-2.5" />
@@ -97,12 +97,7 @@ function ModelCard({ label, cfg }: { label: string; cfg: Record<string, unknown>
               {maxTok}
             </span>
           )}
-          {reasoning && (
-            <span className="inline-flex items-center gap-0.5 text-primary/70">
-              <Brain className="size-2.5" />
-              {reasoning}
-            </span>
-          )}
+          {reasoning && <ReasoningPill value={reasoning} />}
         </div>
       </div>
     </div>
@@ -131,21 +126,16 @@ export function ConfigTab({
   const compKw = (p.compile_kwargs ?? job.compile_kwargs ?? {}) as Record<string, unknown>;
   const modelCfg = (p.model_config ?? job.model_settings ?? null) as Record<string, unknown> | null;
   const reflCfg = (p.reflection_model_config ?? null) as Record<string, unknown> | null;
-  const promptCfg = (p.prompt_model_config ?? null) as Record<string, unknown> | null;
   const taskCfg = (p.task_model_config ?? null) as Record<string, unknown> | null;
 
   const items: { label: ReactNode; value: string; icon: ReactNode }[] = [
     {
-      label: (
-        <HelpTip text="אופן עיבוד הפרומפט — Predict שולח ישירות, CoT מוסיף שלב חשיבה">
-          מודול
-        </HelpTip>
-      ),
+      label: <HelpTip text={tip("module.choice")}>מודול</HelpTip>,
       value: job.module_name ?? "—",
       icon: <Component className="size-3.5" />,
     },
     {
-      label: <HelpTip text="אלגוריתם האופטימיזציה שמשפר את הפרומפט">אופטימייזר</HelpTip>,
+      label: <HelpTip text={tip("optimizer.choice")}>{TERMS.optimizer}</HelpTip>,
       value: job.optimizer_name ?? "—",
       icon: <Target className="size-3.5" />,
     },
@@ -167,7 +157,7 @@ export function ConfigTab({
     <>
       <FadeIn>
         <p className="text-sm text-muted-foreground mb-4">
-          פרטי ההגדרות שנבחרו לאופטימיזציה זו — מודל, אופטימייזר, ופרמטרים.
+          פרטי ההגדרות שנבחרו ל{TERMS.optimization} זו — {TERMS.model}, {TERMS.optimizer}, ופרמטרים.
         </p>
         {job.description && (
           <p className="text-sm text-foreground/70 leading-relaxed mb-4 border-s-2 border-[#C8A882]/40 ps-3">
@@ -185,8 +175,8 @@ export function ConfigTab({
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Settings className="size-4 text-[#7C6350]" aria-hidden="true" />
-              <HelpTip text="המודול, האופטימייזר, והפרמטרים שנבחרו להרצה זו">
-                <span className="font-bold tracking-tight">הגדרות אופטימיזציה</span>
+              <HelpTip text={tip("config.section.summary")}>
+                <span className="font-bold tracking-tight">הגדרות {TERMS.optimization}</span>
               </HelpTip>
             </CardTitle>
           </CardHeader>
@@ -219,7 +209,7 @@ export function ConfigTab({
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Cpu className="size-4 text-[#7C6350]" aria-hidden="true" />
-              <HelpTip text="מודלי השפה שהוגדרו — יצירה לייצור תשובות, רפלקציה לניתוח שגיאות">
+              <HelpTip text={tip("config.section.models")}>
                 <span className="font-bold tracking-tight">מודלים</span>
               </HelpTip>
             </CardTitle>
@@ -227,18 +217,20 @@ export function ConfigTab({
           <CardContent>
             {job.optimization_type !== "grid_search" ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {modelCfg && <ModelCard label="מודל יצירה" cfg={modelCfg} />}
-                {reflCfg && <ModelCard label="מודל רפלקציה" cfg={reflCfg} />}
-                {promptCfg && <ModelCard label="מודל Prompt" cfg={promptCfg} />}
-                {taskCfg && <ModelCard label="מודל Task" cfg={taskCfg} />}
-                {!modelCfg && !reflCfg && !promptCfg && !taskCfg && job.model_name && (
+                {modelCfg && <ModelCard label={msg("model.generation.label")} cfg={modelCfg} />}
+                {reflCfg && <ModelCard label={TERMS.reflectionModel} cfg={reflCfg} />}
+                {taskCfg && <ModelCard label={msg("model.generation.label")} cfg={taskCfg} />}
+                {!modelCfg && !reflCfg && !taskCfg && job.model_name && (
                   <>
                     <ModelCard
-                      label="מודל יצירה"
+                      label={msg("model.generation.label")}
                       cfg={{ name: job.model_name, ...(job.model_settings || {}) }}
                     />
                     {job.reflection_model_name && (
-                      <ModelCard label="מודל רפלקציה" cfg={{ name: job.reflection_model_name }} />
+                      <ModelCard
+                        label={TERMS.reflectionModel}
+                        cfg={{ name: job.reflection_model_name }}
+                      />
                     )}
                   </>
                 )}
@@ -246,24 +238,22 @@ export function ConfigTab({
             ) : job.generation_models && job.reflection_models ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-[#A89680] mb-1">
-                    <HelpTip text="המודלים שמייצרים את התשובות — כל זוג נבדק עם מודל יצירה שונה">
-                      מודלי יצירה
+                  <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680] mb-1">
+                    <HelpTip text={tip("grid.generation_models")}>
+                      {msg("model.generation.label_plural")}
                     </HelpTip>
                   </p>
                   {job.generation_models.map((m, i) => (
                     <ModelCard
                       key={i}
-                      label={`יצירה ${i + 1}`}
+                      label={`${msg("model.generation.label_short")} ${i + 1}`}
                       cfg={m as unknown as Record<string, unknown>}
                     />
                   ))}
                 </div>
                 <div className="space-y-2">
-                  <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-[#A89680] mb-1">
-                    <HelpTip text="המודלים שמנתחים שגיאות ומציעים שיפורים — כל זוג נבדק עם מודל רפלקציה שונה">
-                      מודלי רפלקציה
-                    </HelpTip>
+                  <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680] mb-1">
+                    <HelpTip text={tip("grid.reflection_models")}>מודלי רפלקציה</HelpTip>
                   </p>
                   {job.reflection_models.map((m, i) => (
                     <ModelCard
@@ -287,7 +277,7 @@ export function ConfigTab({
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Database className="size-4 text-[#7C6350]" aria-hidden="true" />
-              <HelpTip text="חלוקת הדאטאסט לאימון, אימות ובדיקה, והגדרות ערבוב">
+              <HelpTip text={tip("config.section.data")}>
                 <span className="font-bold tracking-tight">נתונים</span>
               </HelpTip>
             </CardTitle>
@@ -295,10 +285,8 @@ export function ConfigTab({
           <CardContent className="space-y-4">
             {/* Split bar */}
             <div className="space-y-2">
-              <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-[#A89680]">
-                <HelpTip text="הנתונים מחולקים לשלוש קבוצות — אימון ללמידה, אימות לכיוונון, ובדיקה למדידת ביצועים סופיים">
-                  חלוקת דאטאסט
-                </HelpTip>
+              <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680]">
+                <HelpTip text={tip("data.split_explanation")}>חלוקת {TERMS.dataset}</HelpTip>
               </p>
               <div className="flex h-2.5 rounded-full overflow-hidden">
                 <div
@@ -314,26 +302,37 @@ export function ConfigTab({
                   style={{ width: `${splitFractions.test * 100}%` }}
                 />
               </div>
-              <div className="flex gap-4 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]" />
-                  אימון{" "}
-                  <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
-                    {splitFractions.train}
+              <div
+                className="grid gap-1 text-xs"
+                style={{
+                  gridTemplateColumns: `${splitFractions.train}fr ${splitFractions.val}fr ${splitFractions.test}fr`,
+                }}
+              >
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22] shrink-0" />
+                  <span className="truncate">
+                    אימון{" "}
+                    <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
+                      {splitFractions.train}
+                    </span>
                   </span>
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]" />
-                  אימות{" "}
-                  <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
-                    {splitFractions.val}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882] shrink-0" />
+                  <span className="truncate">
+                    אימות{" "}
+                    <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
+                      {splitFractions.val}
+                    </span>
                   </span>
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]" />
-                  בדיקה{" "}
-                  <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
-                    {splitFractions.test}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B] shrink-0" />
+                  <span className="truncate">
+                    בדיקה{" "}
+                    <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
+                      {splitFractions.test}
+                    </span>
                   </span>
                 </span>
               </div>
@@ -341,21 +340,13 @@ export function ConfigTab({
             {/* Shuffle + Seed */}
             <div className="grid grid-cols-2 gap-2.5">
               <InfoCard
-                label={
-                  <HelpTip text="ערבוב סדר השורות בדאטאסט לפני החלוקה — מונע הטיה מסדר הנתונים">
-                    ערבוב
-                  </HelpTip>
-                }
+                label={<HelpTip text={tip("data.shuffle_explanation")}>ערבוב</HelpTip>}
                 value={shuffleVal ? "כן" : "לא"}
                 icon={<Shuffle className="size-3.5" />}
               />
               {seedVal != null && (
                 <InfoCard
-                  label={
-                    <HelpTip text="מספר קבוע שמבטיח שהערבוב והחלוקה יהיו זהים בכל הרצה חוזרת">
-                      מספר התחלתי
-                    </HelpTip>
-                  }
+                  label={<HelpTip text={tip("data.seed")}>מספר התחלתי</HelpTip>}
                   value={seedVal}
                   icon={<Dices className="size-3.5" />}
                 />

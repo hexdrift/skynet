@@ -23,13 +23,20 @@ const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m
 export function ServeCodeSnippets({
   serveInfo,
   optimizationId,
+  pairIndex,
 }: {
   serveInfo: ServeInfoResponse;
   optimizationId: string;
+  pairIndex?: number;
 }) {
   const [codeTab, setCodeTab] = useState<"curl" | "python" | "javascript" | "go" | "dspy">("curl");
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-  const url = `${apiBase}/serve/${optimizationId}`;
+  const url =
+    pairIndex != null
+      ? `${apiBase}/serve/${optimizationId}/pair/${pairIndex}`
+      : `${apiBase}/serve/${optimizationId}`;
+  const artifactUrl = `${apiBase}/optimizations/${optimizationId}/artifact`;
+  const gridResultUrl = `${apiBase}/optimizations/${optimizationId}/grid-result`;
   const inputsObj = serveInfo.input_fields.map((f) => `"${f}": "<${f}>"`).join(", ");
   const inputsJson = JSON.stringify({
     inputs: Object.fromEntries(serveInfo.input_fields.map((f) => [f, `<${f}>`])),
@@ -96,26 +103,49 @@ export function ServeCodeSnippets({
       ...serveInfo.output_fields.map((f) => `\tfmt.Println(outputs["${f}"])`),
       `}`,
     ].join("\n"),
-    dspy: [
-      `import dspy`,
-      `import base64, pickle, requests`,
-      ``,
-      `# Download the optimized program artifact`,
-      `artifact = requests.get(`,
-      `    "${apiBase}/optimizations/${optimizationId}/artifact"`,
-      `).json()`,
-      ``,
-      `# Deserialize the compiled program from the artifact`,
-      `program = pickle.loads(`,
-      `    base64.b64decode(artifact["program_artifact"]["program_pickle_base64"])`,
-      `)`,
-      ``,
-      `# Configure your language model and run the program`,
-      `lm = dspy.LM("gpt-4o-mini")`,
-      `with dspy.context(lm=lm):`,
-      `    result = program(${serveInfo.input_fields.map((f) => `${f}="<${f}>"`).join(", ")})`,
-      ...serveInfo.output_fields.map((f) => `    print(result.${f})`),
-    ].join("\n"),
+    dspy:
+      pairIndex != null
+        ? [
+            `import dspy`,
+            `import base64, pickle, requests`,
+            ``,
+            `# Fetch the grid result and pick the target pair's artifact`,
+            `grid = requests.get(`,
+            `    "${gridResultUrl}"`,
+            `).json()`,
+            `pair = next(p for p in grid["pair_results"] if p["pair_index"] == ${pairIndex})`,
+            ``,
+            `# Deserialize the compiled program from the pair artifact`,
+            `program = pickle.loads(`,
+            `    base64.b64decode(pair["program_artifact"]["program_pickle_base64"])`,
+            `)`,
+            ``,
+            `# Configure your language model and run the program`,
+            `lm = dspy.LM("gpt-4o-mini")`,
+            `with dspy.context(lm=lm):`,
+            `    result = program(${serveInfo.input_fields.map((f) => `${f}="<${f}>"`).join(", ")})`,
+            ...serveInfo.output_fields.map((f) => `    print(result.${f})`),
+          ].join("\n")
+        : [
+            `import dspy`,
+            `import base64, pickle, requests`,
+            ``,
+            `# Download the optimized program artifact`,
+            `artifact = requests.get(`,
+            `    "${artifactUrl}"`,
+            `).json()`,
+            ``,
+            `# Deserialize the compiled program from the artifact`,
+            `program = pickle.loads(`,
+            `    base64.b64decode(artifact["program_artifact"]["program_pickle_base64"])`,
+            `)`,
+            ``,
+            `# Configure your language model and run the program`,
+            `lm = dspy.LM("gpt-4o-mini")`,
+            `with dspy.context(lm=lm):`,
+            `    result = program(${serveInfo.input_fields.map((f) => `${f}="<${f}>"`).join(", ")})`,
+            ...serveInfo.output_fields.map((f) => `    print(result.${f})`),
+          ].join("\n"),
   };
   const labels = {
     curl: "cURL",

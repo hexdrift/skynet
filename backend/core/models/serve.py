@@ -20,21 +20,21 @@ class ServeRequest(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_inputs(self) -> "ServeRequest":
-        """Reject requests whose ``inputs`` mapping is empty.
-
-        Returns:
-            The validated ``ServeRequest`` instance.
-
-        Raises:
-            ValueError: If no input field values were supplied.
-        """
+        """Reject inference requests with no input fields."""
         if not self.inputs:
             raise ValueError("At least one input field is required.")
         return self
 
 
 class ServeResponse(BaseModel):
-    """Response payload from program inference."""
+    """Response payload from program inference.
+
+    ``input_fields`` / ``output_fields`` are lists of signature field *names*.
+    They are NOT the same shape as ``ColumnMapping.inputs`` / ``outputs``, which
+    are ``{field_name: column_name}`` dicts used at the submission layer. The
+    naming differs on purpose: here we are echoing the servable program's
+    signature, not binding dataset columns.
+    """
 
     optimization_id: str
     outputs: dict[str, Any]

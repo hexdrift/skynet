@@ -94,7 +94,7 @@ export function ServeChat({
                     className="text-right p-3 rounded-xl border border-[#DDD4C8]/60 hover:border-[#C8A882]/60 bg-muted/10 hover:bg-muted/20 transition-all group"
                     dir="auto"
                   >
-                    <div className="text-[10px] font-medium text-[#3D2E22]/50 mb-1">
+                    <div className="text-[0.625rem] font-medium text-[#3D2E22]/50 mb-1">
                       דוגמה {i + 1}
                     </div>
                     <div className="text-xs text-foreground/70 line-clamp-2 font-mono" dir="ltr">
@@ -125,7 +125,7 @@ export function ServeChat({
                       <div key={field}>
                         {serveInfo.input_fields.length > 1 && (
                           <label
-                            className="text-[10px] text-muted-foreground/50 font-mono px-1 mb-0.5 block"
+                            className="text-[0.625rem] text-muted-foreground/50 font-mono px-1 mb-0.5 block"
                             dir="ltr"
                           >
                             {field}
@@ -154,13 +154,13 @@ export function ServeChat({
                     <div className="flex justify-start gap-1.5">
                       <button
                         onClick={() => setEditingRunTs(null)}
-                        className="text-[11px] text-muted-foreground hover:text-foreground px-3 py-1 rounded-lg hover:bg-muted transition-colors"
+                        className="text-[0.6875rem] text-muted-foreground hover:text-foreground px-3 py-1 rounded-lg hover:bg-muted transition-colors"
                       >
                         ביטול
                       </button>
                       <button
                         onClick={() => handleEditAndResend(run.ts)}
-                        className="text-[11px] text-white bg-[#3D2E22] hover:bg-[#3D2E22]/90 disabled:opacity-40 px-3 py-1 rounded-lg transition-colors"
+                        className="text-[0.6875rem] text-white bg-[#3D2E22] hover:bg-[#3D2E22]/90 disabled:opacity-40 px-3 py-1 rounded-lg transition-colors"
                       >
                         שלח
                       </button>
@@ -332,7 +332,7 @@ export function ServeChat({
                   {serveInfo.input_fields.length > 1 && (
                     <label
                       htmlFor={`serve-${field}`}
-                      className="text-[10px] text-muted-foreground/50 font-mono px-3 mb-0.5 block"
+                      className="text-[0.625rem] text-muted-foreground/50 font-mono px-3 mb-0.5 block"
                       dir="ltr"
                     >
                       {field}

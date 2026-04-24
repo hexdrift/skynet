@@ -2,19 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-# Domain exceptions that map to HTTP status codes.
-# Services raise these instead of HTTPException for clean separation of concerns.
-
 
 class AppError(Exception):
-    """Base exception for all application errors.
-
-    Attributes:
-        message: Human-readable error message
-        status_code: HTTP status code (default 500)
-        error_code: Machine-readable error code
-        details: Additional context (optional)
-    """
+    """Base exception for all application errors."""
 
     def __init__(
         self,
@@ -24,6 +14,14 @@ class AppError(Exception):
         error_code: str = "INTERNAL_ERROR",
         details: dict[str, Any] | None = None,
     ):
+        """Initialize the application error with HTTP metadata.
+
+        Args:
+            message: Human-readable description of the error.
+            status_code: HTTP status code to return (default 500).
+            error_code: Machine-readable error code string (default ``"INTERNAL_ERROR"``).
+            details: Optional dict with additional context about the error.
+        """
         super().__init__(message)
         self.message = message
         self.status_code = status_code
@@ -35,6 +33,7 @@ class ServiceError(AppError):
     """Raised when the service_gateway cannot fulfill a request."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 500 and error code ``SERVICE_ERROR``."""
         super().__init__(
             message,
             status_code=500,
@@ -47,6 +46,7 @@ class NotFoundError(AppError):
     """Resource not found (HTTP 404)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 404 and error code ``NOT_FOUND``."""
         super().__init__(
             message,
             status_code=404,
@@ -59,6 +59,7 @@ class ValidationError(AppError):
     """Request validation failed (HTTP 400)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 400 and error code ``VALIDATION_ERROR``."""
         super().__init__(
             message,
             status_code=400,
@@ -71,6 +72,7 @@ class UnauthorizedError(AppError):
     """Authentication required (HTTP 401)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 401 and error code ``UNAUTHORIZED``."""
         super().__init__(
             message,
             status_code=401,
@@ -83,6 +85,7 @@ class ForbiddenError(AppError):
     """Access forbidden (HTTP 403)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 403 and error code ``FORBIDDEN``."""
         super().__init__(
             message,
             status_code=403,
@@ -95,6 +98,7 @@ class ConflictError(AppError):
     """Resource conflict (HTTP 409)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 409 and error code ``CONFLICT``."""
         super().__init__(
             message,
             status_code=409,
@@ -107,6 +111,7 @@ class RateLimitError(AppError):
     """Rate limit exceeded (HTTP 429)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize with status 429 and error code ``RATE_LIMIT``."""
         super().__init__(
             message,
             status_code=429,

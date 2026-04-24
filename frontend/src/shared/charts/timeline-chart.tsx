@@ -18,18 +18,19 @@ import {
   Cell,
 } from "recharts";
 import { ChartTooltip } from "./chart-utils";
+import { TERMS } from "@/shared/lib/terms";
 
 interface TimelineChartProps {
-  data: Array<{ name: string; אופטימיזציות: number }>;
+  data: Array<{ name: string; [valueKey: string]: string | number }>;
   dates?: string[];
   onBarClick?: (date: string) => void;
 }
 
 export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  
+
   if (data.length === 0) return null;
-  
+
   return (
     <div className="h-[160px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -50,7 +51,7 @@ export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
             className="fill-muted-foreground"
             allowDecimals={false}
             label={{
-              value: "מספר אופטימיזציות",
+              value: `מספר ${TERMS.optimizationPlural}`,
               angle: -90,
               position: "center",
               dx: -10,
@@ -59,8 +60,8 @@ export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
           />
           <Tooltip content={<ChartTooltip />} />
           <Bar
-            dataKey="אופטימיזציות"
-            name="אופטימיזציות"
+            dataKey={TERMS.optimizationPlural}
+            name={TERMS.optimizationPlural}
             fill="var(--color-chart-5)"
             radius={[3, 3, 0, 0]}
             barSize={16}

@@ -1,11 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
-import { EditorView } from "@codemirror/view";
-import { Extension } from "@codemirror/state";
+import {
+  EditorView,
+  ViewPlugin,
+  Decoration,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
+import { Extension, type Range } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches } from "@codemirror/search";
@@ -39,10 +45,12 @@ const beigeEditorTheme = EditorView.theme(
     "&": {
       backgroundColor: "#FAF6F0",
       color: "#3D2E22",
+      fontSize: "12.5px",
     },
     ".cm-content": {
       caretColor: "#7C6350",
       fontFamily: "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace",
+      fontSize: "12.5px",
     },
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "#7C6350",
@@ -73,6 +81,7 @@ const beigeEditorTheme = EditorView.theme(
       color: "#B09878",
       border: "none",
       borderRight: "1px solid #E5DDD4",
+      fontSize: "12px",
     },
     ".cm-activeLineGutter": {
       backgroundColor: "#EDE4D8",
@@ -195,6 +204,75 @@ const pyExtensions = [
   }),
 ];
 
+/* ── Streaming line-fade decoration ─────────────────────────────────────
+   Applies a fade-in class to lines that appear during a streaming session.
+   The class's CSS animation is only active when prefers-reduced-motion
+   is "no-preference" (see .cm-line-fresh style below). */
+const lineFadeDecoration = Decoration.line({ class: "cm-line-fresh" });
+
+function streamingLineFadeExtension(): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      prev: number;
+      constructor(view: EditorView) {
+        this.prev = view.state.doc.lines;
+        this.decorations = Decoration.none;
+      }
+      update(u: ViewUpdate) {
+        if (!u.docChanged) return;
+        const now = u.state.doc.lines;
+        if (now > this.prev) {
+          const ranges: Range<Decoration>[] = [];
+          for (let i = this.prev + 1; i <= now; i++) {
+            ranges.push(lineFadeDecoration.range(u.state.doc.line(i).from));
+          }
+          this.decorations = Decoration.set(ranges);
+          this.prev = now;
+        } else if (now < this.prev) {
+          this.decorations = Decoration.none;
+          this.prev = now;
+        }
+      }
+    },
+    { decorations: (v) => v.decorations },
+  );
+}
+
+/* ── Changed-line flash decoration ──────────────────────────────────────
+   Highlights a static set of line numbers (1-based) with a brief yellow
+   flash after a refinement. The caller is expected to clear the set after
+   the CSS animation completes so decorations don't linger. */
+const flashLineDecoration = Decoration.line({ class: "cm-line-flash" });
+
+function flashLinesExtension(lines: readonly number[]): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(view: EditorView) {
+        this.decorations = this.build(view);
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.viewportChanged) {
+          this.decorations = this.build(u.view);
+        }
+      }
+      build(view: EditorView): DecorationSet {
+        const total = view.state.doc.lines;
+        const ranges: Range<Decoration>[] = [];
+        for (const lineNum of lines) {
+          if (lineNum >= 1 && lineNum <= total) {
+            ranges.push(flashLineDecoration.range(view.state.doc.line(lineNum).from));
+          }
+        }
+        return Decoration.set(ranges);
+      }
+    },
+    { decorations: (v) => v.decorations },
+  );
+}
+
+
 /* ── Types ── */
 
 export interface ValidationResult {
@@ -217,6 +295,10 @@ interface CodeEditorProps {
    *  (e.g. the Next button) can trigger the inline error panel without
    *  going through the editor's own Run button. */
   validationResult?: ValidationResult | null;
+  /** When true, new lines fade in as they appear. */
+  streaming?: boolean;
+  /** 1-based line numbers to flash briefly (post-refinement highlight). */
+  flashLines?: readonly number[];
 }
 
 /* ── Component ── */
@@ -231,7 +313,16 @@ export function CodeEditor({
   runningLabel = "בודק...",
   label = "Python",
   validationResult,
+  streaming = false,
+  flashLines,
 }: CodeEditorProps) {
+  const extensions = useMemo(() => {
+    const base = streaming ? [...pyExtensions, streamingLineFadeExtension()] : pyExtensions;
+    if (flashLines && flashLines.length > 0) {
+      return [...base, flashLinesExtension(flashLines)];
+    }
+    return base;
+  }, [streaming, flashLines]);
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [running, setRunning] = useState(false);
@@ -304,7 +395,7 @@ export function CodeEditor({
       dir="ltr"
     >
       {/* ── Toolbar ── */}
-      <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F3ECE3] text-[11px] text-[#8C7A6B] border-b border-[#E5DDD4] rounded-t-xl">
+      <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F3ECE3] text-[0.6875rem] text-[#8C7A6B] border-b border-[#E5DDD4] rounded-t-xl">
         <span className="flex-1 font-semibold text-[#7C6350] tracking-wide flex items-center gap-1.5">
           {label}
         </span>
@@ -369,7 +460,7 @@ export function CodeEditor({
                 value={value}
                 height={height}
                 theme={beigeTheme}
-                extensions={pyExtensions}
+                extensions={extensions}
                 onChange={handleChange}
                 readOnly={readOnly}
                 basicSetup={{
@@ -399,7 +490,7 @@ export function CodeEditor({
       {hasOutput && (
         <div className="bg-[#F5EDE4] border-t border-[#E5DDD4] px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-[#8C7A6B] uppercase tracking-wider font-semibold">
+            <span className="text-[0.625rem] text-[#8C7A6B] uppercase tracking-wider font-semibold">
               Validation
             </span>
             {!running && result && (
@@ -425,7 +516,7 @@ export function CodeEditor({
               <div className="space-y-1">
                 <span className="font-medium text-[#5A7247]">Valid</span>
                 {result.signature_fields && (
-                  <div className="text-[#7C6350] font-mono text-[11px] space-y-0.5" dir="ltr">
+                  <div className="text-[#7C6350] font-mono text-[0.6875rem] space-y-0.5" dir="ltr">
                     <div>
                       <span className="text-[#8C7A6B]">Inputs:</span>{" "}
                       {result.signature_fields.inputs.join(", ")}

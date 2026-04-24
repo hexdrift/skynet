@@ -125,7 +125,7 @@ export function ColumnHeader<K extends string>({
   return (
     <th
       ref={thRef}
-      className={`relative select-none ps-2 pe-4 py-3 text-center text-[12px] font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}
+      className={`relative select-none ps-2 pe-4 py-3 text-center text-[0.75rem] font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}
       style={width ? { width, minWidth: width, maxWidth: width } : undefined}
     >
       <div className="flex items-center justify-center gap-0.5 overflow-hidden">
@@ -311,14 +311,14 @@ function FilterDropdown({
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-7 text-[11px] py-1.5 pe-7 ps-2 text-right"
+          className="h-7 text-[0.6875rem] py-1.5 pe-7 ps-2 text-right"
           placeholder="חיפוש..."
           dir="rtl"
         />
       </div>
 
       {/* Select all */}
-      <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted/70">
+      <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[0.75rem] font-semibold text-muted-foreground hover:bg-muted/70">
         <input
           type="checkbox"
           className="accent-[#3D2E22]"
@@ -336,12 +336,12 @@ function FilterDropdown({
         style={{ maxHeight: Math.min(200, (pos?.availH ?? 200) - 120) }}
       >
         {visibleOptions.length === 0 ? (
-          <p className="text-[11px] text-center py-2 text-muted-foreground">אין תוצאות</p>
+          <p className="text-[0.6875rem] text-center py-2 text-muted-foreground">אין תוצאות</p>
         ) : (
           visibleOptions.map((opt) => (
             <label
               key={opt.value}
-              className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted/70"
+              className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[0.75rem] text-muted-foreground hover:bg-muted/70"
               title={opt.value}
             >
               <input
@@ -365,7 +365,7 @@ function FilterDropdown({
           type="button"
           variant="ghost"
           size="sm"
-          className="flex-1 text-[11px] font-semibold"
+          className="flex-1 text-[0.6875rem] font-semibold"
           onClick={() => {
             onApply(new Set());
             onClose();
@@ -377,7 +377,7 @@ function FilterDropdown({
           type="button"
           variant="default"
           size="sm"
-          className="flex-1 text-[11px] font-semibold"
+          className="flex-1 text-[0.6875rem] font-semibold"
           onClick={() => {
             // If all options are selected, apply empty set (= no filter)
             const allVals = new Set(options.map((o) => o.value));
@@ -449,7 +449,7 @@ export function ResetColumnsButton({
     <button
       type="button"
       onClick={resize.resetAll}
-      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground/40"
+      className="inline-flex items-center gap-1 text-[0.625rem] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground/40"
       title="איפוס רוחב עמודות"
     >
       <RotateCcw className="size-3" />

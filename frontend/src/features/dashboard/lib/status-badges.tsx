@@ -58,7 +58,7 @@ export function typeBadge(jobType: string) {
       </Badge>
     );
   }
-  return <Badge variant="secondary">ריצה בודדת</Badge>;
+  return <Badge variant="secondary">ריצה</Badge>;
 }
 
 /**
@@ -81,24 +81,14 @@ export function formatScore(job: OptimizationSummaryResponse): React.ReactNode {
           : "text-muted-foreground";
     const sign = improvement > 0 ? "+" : "";
     return (
-      <span className="flex flex-col gap-0.5">
-        <span className="flex items-center gap-1 text-xs">
-          <span className="text-muted-foreground">{formatPercent(baseline)}</span>
-          <span className="text-muted-foreground/50">&larr;</span>
-          <span className="font-medium">{formatPercent(optimized)}</span>
-          <span className={`${color} font-medium`}>
-            ({sign}
-            {(Math.abs(improvement) > 1 ? improvement : improvement * 100).toFixed(1)}%)
-          </span>
+      <span className="flex items-center gap-1 text-xs">
+        <span className="text-muted-foreground">{formatPercent(baseline)}</span>
+        <span className="text-muted-foreground/50">&larr;</span>
+        <span className="font-medium">{formatPercent(optimized)}</span>
+        <span className={`${color} font-medium`}>
+          ({sign}
+          {(Math.abs(improvement) > 1 ? improvement : improvement * 100).toFixed(1)}%)
         </span>
-        {job.best_pair_label && (
-          <span
-            className="text-[10px] text-muted-foreground truncate max-w-[160px]"
-            title={job.best_pair_label}
-          >
-            {job.best_pair_label}
-          </span>
-        )}
       </span>
     );
   }

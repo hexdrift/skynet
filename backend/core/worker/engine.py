@@ -5,6 +5,7 @@ and processes them sequentially or with configurable concurrency.
 """
 
 import contextlib
+import json
 import logging
 import multiprocessing as mp
 import queue
@@ -19,9 +20,10 @@ from ..config import settings
 from ..constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
-    PAYLOAD_OVERVIEW_JOB_TYPE,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_USERNAME,
 )
+from ..i18n import CANCELLATION_REASON
 from ..models import GridSearchRequest, RunRequest
 from ..notifications import notify_job_completed
 from ..registry import ServiceRegistry
@@ -44,15 +46,15 @@ class CancellationError(Exception):
 
 
 class BackgroundWorker:
-    """Background worker that processes optimization jobs.
+    """Multi-threaded worker that polls a job store and runs optimization jobs.
 
-    Uses threading to run jobs in the background while the API
-    continues to accept requests.
-
-    Args:
-        job_store: Job store instance for tracking job state.
-        num_workers: Number of concurrent worker threads.
-        poll_interval: Seconds between polling for new jobs.
+    Each worker thread calls ``_worker_loop``, which polls ``_pending_jobs`` and
+    dispatches work to ``_process_job``.  Jobs run inside a child process created
+    with the configured multiprocessing start method (fork or spawn); events
+    (progress, logs, result, error) are streamed back through a ``mp.Queue``
+    and persisted by ``_drain_subprocess_events``.  Cancellation is cooperative:
+    each job has a ``threading.Event``; ``_check_cancel`` polls it between subprocess
+    join timeouts so the child can be terminated promptly on request.
     """
 
     def __init__(
@@ -62,6 +64,14 @@ class BackgroundWorker:
         poll_interval: float = 2.0,
         service: DspyService | None = None,
     ) -> None:
+        """Initialize the worker with a job store and concurrency settings.
+
+        Args:
+            job_store: Storage backend used to read and update job state.
+            num_workers: Number of worker threads to start.
+            poll_interval: Seconds between idle polls for new work.
+            service: Optional pre-built DspyService; created lazily if None.
+        """
         self._job_store = job_store
         self._num_workers = num_workers
         self._poll_interval = poll_interval
@@ -88,11 +98,10 @@ class BackgroundWorker:
 
     @staticmethod
     def _resolve_mp_context() -> mp.context.BaseContext:
-        """Resolve multiprocessing start method for per-job subprocess execution.
+        """Resolve multiprocessing start method from JOB_RUN_START_METHOD, falling back to system default.
 
         Returns:
-            Multiprocessing context configured from the JOB_RUN_START_METHOD
-            environment variable, falling back to the system default.
+            Multiprocessing context configured from settings, or the system default on invalid input.
         """
         requested = settings.job_run_start_method
         try:
@@ -112,10 +121,10 @@ class BackgroundWorker:
         return ctx
 
     def _get_service(self) -> DspyService:
-        """Get or create the DspyService instance.
+        """Get or create the shared DspyService instance.
 
         Returns:
-            DspyService: Shared service instance for this worker.
+            The cached DspyService, constructing one from ServiceRegistry if not yet set.
         """
         if self._service is None:
             self._service = DspyService(ServiceRegistry())
@@ -127,10 +136,7 @@ class BackgroundWorker:
         Used for both new job submissions and jobs recovered from DB on startup.
 
         Args:
-            optimization_id: Unique optimization identifier.
-
-        Returns:
-            None.
+            optimization_id: Unique identifier of the job to enqueue.
         """
         with self._queue_lock:
             self._cancel_events[optimization_id] = threading.Event()
@@ -139,14 +145,11 @@ class BackgroundWorker:
                 logger.info("Optimization %s enqueued", optimization_id)
 
     def submit_job(self, optimization_id: str, payload) -> None:
-        """Submit a job for background processing.
+        """Persist payload to the job store and enqueue the job for processing.
 
         Args:
-            optimization_id: Unique optimization identifier.
-            payload: The optimization request payload.
-
-        Returns:
-            None.
+            optimization_id: Unique identifier of the job.
+            payload: Pydantic model whose ``model_dump`` is stored as the job payload.
         """
         self._job_store.update_job(
             optimization_id,
@@ -155,10 +158,10 @@ class BackgroundWorker:
         self.enqueue_job(optimization_id)
 
     def _get_next_job(self) -> str | None:
-        """Get the next pending job from the queue.
+        """Pop the next pending job and move it to the processing set.
 
         Returns:
-            Optional[str]: Optimization ID if available, None otherwise.
+            The next job's optimization_id, or None if the queue is empty.
         """
         with self._queue_lock:
             if self._pending_jobs:
@@ -168,26 +171,20 @@ class BackgroundWorker:
         return None
 
     def _mark_job_done(self, optimization_id: str) -> None:
-        """Mark a job as no longer processing.
+        """Remove job from the processing set and clean up its cancel event.
 
         Args:
-            optimization_id: The optimization identifier to mark as done.
-
-        Returns:
-            None.
+            optimization_id: Identifier of the job that has finished processing.
         """
         with self._queue_lock:
             self._processing_jobs.discard(optimization_id)
             self._cancel_events.pop(optimization_id, None)
 
     def _worker_loop(self, worker_id: int) -> None:
-        """Main worker loop that processes jobs.
+        """Poll for jobs and process them until stopped.
 
         Args:
-            worker_id: Identifier for this worker thread.
-
-        Returns:
-            None.
+            worker_id: Integer index of this worker thread, used for logging and activity tracking.
         """
         logger.info("Worker %d started", worker_id)
 
@@ -219,32 +216,28 @@ class BackgroundWorker:
         logger.info("Worker %d stopped", worker_id)
 
     def _process_job(self, optimization_id: str, worker_id: int) -> None:
-        """Process a single optimization job.
+        """Run one optimization job to completion, handling all error and cancel paths.
+
+        Loads the payload from the job store, validates it, spawns a child process
+        via ``run_service_in_subprocess``, and drains the event queue until the child
+        exits.  The ``BaseException`` handler at the bottom covers cancellation,
+        shutdown signals (``SystemExit``/``KeyboardInterrupt``), and ordinary errors —
+        each path writes the correct terminal status and fires a notification.  If a
+        shutdown signal is caught it is re-raised after cleanup so the process can exit.
 
         Args:
-            optimization_id: The optimization identifier to process.
-            worker_id: Owning worker thread id for activity tracking.
-
-        Returns:
-            None.
-
-        Raises:
-            ValueError: If job has no payload.
+            optimization_id: ID of the job to process.
+            worker_id: Index of the calling worker thread (for logging).
         """
         logger.info("Processing job %s", optimization_id)
+
+        overview: dict = {}  # pre-init so BaseException handler has a defined value even if early error
 
         with self._queue_lock:
             cancel_event = self._cancel_events.get(optimization_id)
 
         def _check_cancel() -> None:
-            """Raise CancellationError if the job's cancel event has been set.
-
-            Returns:
-                None.
-
-            Raises:
-                CancellationError: If the user has requested cancellation.
-            """
+            """Raise CancellationError if the job has been cancelled."""
             if cancel_event and cancel_event.is_set():
                 raise CancellationError(f"Optimization {optimization_id} cancelled by user")
 
@@ -259,13 +252,11 @@ class BackgroundWorker:
 
             overview = job_data.get("payload_overview", {})
             if isinstance(overview, str):
-                import json
-
                 try:
                     overview = json.loads(overview)
                 except (json.JSONDecodeError, TypeError):
                     overview = {}
-            optimization_type = overview.get(PAYLOAD_OVERVIEW_JOB_TYPE, OPTIMIZATION_TYPE_RUN)
+            optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
             if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                 payload = GridSearchRequest.model_validate(payload_dict)
@@ -366,7 +357,6 @@ class BackgroundWorker:
                     if completed == 0 and total > 0:
                         final_status = "failed"
                         final_message = f"All {total} model pairs failed"
-                        # Append the first pair error for visibility
                         pair_results = result_dict.get("pair_results") or []
                         first_error = next(
                             (p["error"] for p in pair_results if isinstance(p, dict) and p.get("error")),
@@ -376,6 +366,11 @@ class BackgroundWorker:
                             final_message = f"{final_message}: {first_error}"
 
                 try:
+                    current = self._job_store.get_job(optimization_id)
+                    if current.get("status") == "cancelled":
+                        # Cancel endpoint raced us past the last _check_cancel() and
+                        # already wrote "cancelled" to the DB. Treat it as a cancellation.
+                        raise CancellationError()
                     self._job_store.update_job(
                         optimization_id,
                         status=final_status,
@@ -395,6 +390,8 @@ class BackgroundWorker:
                         baseline_score=_baseline,
                         optimized_score=_optimized,
                     )
+                    if final_status == "success":
+                        self._schedule_recommendation_indexing(optimization_id)
                 except KeyError:
                     logger.info(
                         "Optimization %s was deleted during execution (likely cancelled), skipping result",
@@ -415,7 +412,7 @@ class BackgroundWorker:
             is_shutdown = isinstance(exc, (SystemExit, KeyboardInterrupt))
             is_cancelled = isinstance(exc, CancellationError)
             if is_cancelled:
-                final_status, error_message = "cancelled", "בוטל על ידי המשתמש"
+                final_status, error_message = "cancelled", CANCELLATION_REASON
                 logger.info("Optimization %s cancelled", optimization_id)
             elif is_shutdown:
                 final_status = "failed"
@@ -448,11 +445,7 @@ class BackgroundWorker:
                 raise
 
     def start(self) -> None:
-        """Start the background worker threads.
-
-        Returns:
-            None.
-        """
+        """Start the background worker threads and begin polling."""
         if self._running:
             return
 
@@ -469,14 +462,7 @@ class BackgroundWorker:
         logger.info("Started %d background workers", self._num_workers)
 
     def stop(self, timeout: float = 30.0) -> None:
-        """Stop the background worker threads.
-
-        Args:
-            timeout: Maximum seconds to wait for threads to finish.
-
-        Returns:
-            None.
-        """
+        """Signal all workers to stop and wait for them to finish."""
         if not self._running:
             return
 
@@ -499,34 +485,47 @@ class BackgroundWorker:
         logger.info("Stopped background workers")
 
     def is_running(self) -> bool:
-        """Check if the worker is running.
-
-        Returns:
-            bool: True if worker threads are active.
-        """
+        """Return True if the worker has been started."""
         return self._running
 
     def _touch_activity(self, worker_id: int) -> None:  # [WORKER-FIX] update activity timestamp
-        """Record that a worker thread is actively making progress.
+        """Record the current time as the latest activity for this worker.
 
         Args:
-            worker_id: Identifier of the worker thread.
-
-        Returns:
-            None.
+            worker_id: Index of the worker thread recording activity.
         """
         with self._activity_lock:
             self._last_activity[worker_id] = time.monotonic()
 
+    def _schedule_recommendation_indexing(self, optimization_id: str) -> None:
+        """Fire-and-forget embed the finished job for the recommendation service.
+
+        Runs on a daemon thread so a slow LLM call or a missing pgvector
+        extension can never block the worker's hot path. Failures are
+        swallowed — the job itself is already marked success; the index
+        is best-effort.
+        """
+
+        def _run() -> None:
+            try:
+                from ..service_gateway.recommendations import embed_finished_job
+
+                embed_finished_job(optimization_id, job_store=self._job_store)
+            except Exception as exc:
+                logger.debug("Recommendation indexing for %s failed: %s", optimization_id, exc)
+
+        threading.Thread(target=_run, name=f"recs-{optimization_id[:8]}", daemon=True).start()
+
     def _terminate_run_process(self, run_process: mp.process.BaseProcess, optimization_id: str) -> None:
-        """Force-stop a still-running job subprocess.
+        """Terminate a still-running job subprocess, escalating to SIGKILL after a 3-second grace period.
+
+        Sends SIGTERM, waits up to 3 s, then calls ``kill()`` if the process is
+        still alive and the platform supports it.  A final 2-second join follows
+        before logging the outcome.  Never raises regardless of process state.
 
         Args:
-            run_process: The subprocess to terminate.
-            optimization_id: Optimization identifier for logging.
-
-        Returns:
-            None.
+            run_process: The child process to terminate.
+            optimization_id: Used only for log context.
         """
         run_process.terminate()
         run_process.join(timeout=3.0)
@@ -543,14 +542,21 @@ class BackgroundWorker:
         optimization_id: str,
         event_queue: Any,
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-        """Persist queued child-process events and return latest result/error payloads.
+        """Drain all pending events from the subprocess queue, routing each by type.
+
+        Handles four event types emitted by ``run_service_in_subprocess``:
+        ``EVENT_PROGRESS`` → ``job_store.record_progress``; ``EVENT_LOG`` →
+        ``job_store.append_log``; ``EVENT_RESULT`` → captured as the return value;
+        ``EVENT_ERROR`` → captured as the error return value.  Store errors are
+        swallowed so a DB hiccup cannot abort an otherwise-healthy optimization.
 
         Args:
-            optimization_id: Identifier of the job owning these events.
-            event_queue: Multiprocessing queue to drain.
+            optimization_id: Job whose events are being drained.
+            event_queue: Multiprocessing queue filled by the child process.
 
         Returns:
-            Tuple of (result_payload, error_payload), each None if not found.
+            A ``(result_dict, error_dict)`` tuple.  Either or both may be ``None``
+            if the corresponding event was not found in the queue.
         """
         result_payload: dict[str, Any] | None = None
         error_payload: dict[str, Any] | None = None
@@ -560,6 +566,9 @@ class BackgroundWorker:
             except queue.Empty:
                 break
             except Exception:
+                logger.exception(
+                    "Optimization %s: event queue read failed; stopping drain", optimization_id
+                )
                 break
 
             event_type = event.get("type")
@@ -580,6 +589,10 @@ class BackgroundWorker:
                         timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
                     except ValueError:
                         timestamp = None
+                pair_index_raw = event.get("pair_index")
+                pair_index = (
+                    int(pair_index_raw) if isinstance(pair_index_raw, int) else None
+                )
                 try:
                     self._job_store.append_log(
                         optimization_id,
@@ -587,6 +600,7 @@ class BackgroundWorker:
                         logger_name=str(event.get("logger", "dspy")),
                         message=str(event.get("message", "")),
                         timestamp=timestamp,
+                        pair_index=pair_index,
                     )
                 except Exception:
                     logger.exception("Optimization %s: failed to persist subprocess log entry", optimization_id)
@@ -604,12 +618,7 @@ class BackgroundWorker:
         return result_payload, error_payload
 
     def seconds_since_last_activity(self) -> float | None:  # [WORKER-FIX] detect stuck threads
-        """Return seconds since any worker was last active, or None if no activity yet.
-
-        Returns:
-            Elapsed seconds since the most recent worker activity, or None
-            if no activity has been recorded.
-        """
+        """Return seconds since the most recent worker activity, or None if no activity recorded yet."""
         with self._activity_lock:
             if not self._last_activity:
                 return None
@@ -617,11 +626,7 @@ class BackgroundWorker:
         return time.monotonic() - latest
 
     def dump_thread_stacks(self) -> str:  # [WORKER-FIX] capture where threads are stuck for debugging
-        """Return stack traces of all worker threads for debugging.
-
-        Returns:
-            Formatted string containing stack traces for each worker thread.
-        """
+        """Return formatted stack traces of all worker threads."""
         frames = sys._current_frames()
         lines = []
         for thread in self._threads:
@@ -634,23 +639,19 @@ class BackgroundWorker:
         return "\n".join(lines)
 
     def threads_alive(self) -> bool:  # [WORKER-FIX] new method for health check liveness
-        """Check if all worker threads are still alive.
-
-        Returns:
-            bool: True if all worker threads are alive.
-        """
+        """Return True if all worker threads are still alive."""
         if not self._threads:
             return False
         return all(t.is_alive() for t in self._threads)
 
     def cancel_job(self, optimization_id: str) -> bool:
-        """Signal a job to stop, removing it from the queue or interrupting it if running.
+        """Signal a job to stop.
 
         Args:
-            optimization_id: Optimization identifier to cancel.
+            optimization_id: Identifier of the job to cancel.
 
         Returns:
-            bool: True if the job was found (pending or running).
+            True if the job was found (pending or currently running), False otherwise.
         """
         with self._queue_lock:
             event = self._cancel_events.get(optimization_id)
@@ -664,29 +665,25 @@ class BackgroundWorker:
         return event is not None  # True if was running
 
     def queue_size(self) -> int:
-        """Get the number of pending jobs.
+        """Return the number of jobs waiting to be processed.
 
         Returns:
-            int: Count of jobs waiting to be processed.
+            Count of jobs in the pending queue.
         """
         with self._queue_lock:
             return len(self._pending_jobs)
 
     def active_jobs(self) -> int:
-        """Get the number of jobs currently being processed.
+        """Return the number of jobs currently being processed.
 
         Returns:
-            int: Count of jobs actively running.
+            Count of jobs in the processing set.
         """
         with self._queue_lock:
             return len(self._processing_jobs)
 
     def thread_count(self) -> int:
-        """Get the number of worker threads.
-
-        Returns:
-            int: Number of worker threads.
-        """
+        """Return the number of worker threads."""
         return len(self._threads)
 
 
@@ -699,15 +696,7 @@ def get_worker(
     service: DspyService | None = None,
     pending_optimization_ids: list | None = None,
 ) -> BackgroundWorker:
-    """Get or create the global background worker.
-
-    Args:
-        job_store: Job store for the worker to use.
-        service: Optional DspyService instance to share with the worker.
-
-    Returns:
-        BackgroundWorker: The global worker instance.
-    """
+    """Return the module-level singleton BackgroundWorker, creating it if needed."""
     global _worker
 
     with _worker_lock:
@@ -728,16 +717,7 @@ def get_worker(
 
 
 def reset_worker_for_tests(timeout: float = 5.0) -> None:
-    """Reset module-global worker state.
-
-    Test-only helper to avoid leaked global worker state between tests.
-
-    Args:
-        timeout: Maximum seconds to wait for the worker to stop. Defaults to 5.0.
-
-    Returns:
-        None.
-    """
+    """Stop and clear the module-level worker singleton (test-only helper)."""
     global _worker
     with _worker_lock:
         if _worker is not None:

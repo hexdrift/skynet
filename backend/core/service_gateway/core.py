@@ -1,5 +1,7 @@
 import logging
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -42,6 +44,7 @@ from ..registry import (
 from .artifacts import persist_program
 from .data import (
     extract_signature_fields,
+    extract_stratify_values,
     load_metric_from_code,
     load_signature_from_code,
     rows_to_examples,
@@ -56,6 +59,7 @@ from .optimizers import (
     validate_optimizer_signature,
 )
 from .progress import capture_tqdm
+from .timing import GenLMTimingCallback
 from .validators import (
     require_mapping_columns_in_dataset,
     require_mapping_matches_signature,
@@ -72,11 +76,11 @@ class DspyService:
         registry: ServiceRegistry,
         default_seed: int | None = None,
     ):
-        """Create a new DspyService instance.
+        """Initialize DspyService with a module/optimizer registry and optional default seed.
 
         Args:
-            registry: ServiceRegistry containing registered modules and optimizers.
-            default_seed: Default random seed for reproducibility.
+            registry: Registry for looking up custom modules and optimizers.
+            default_seed: Fallback RNG seed used when a request omits its own seed.
         """
         self.registry = registry
         self.default_seed = default_seed
@@ -88,18 +92,25 @@ class DspyService:
         artifact_id: str | None = None,
         progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> RunResponse:
-        """Execute an optimization workflow for a single request.
+        """Execute a single DSPy optimization run and return a structured response.
+
+        Loads the signature, module, metric, and optimizer from the payload,
+        splits the dataset, runs baseline evaluation, compiles the program, then
+        evaluates the optimized result.  If the optimized program scores lower than
+        the baseline on the test set, the baseline program is returned instead and
+        the reported optimized metric is swapped to the baseline value.
 
         Args:
-            payload: RunRequest containing module, optimizer, dataset, and config.
-            artifact_id: Optional identifier for the saved artifact.
-            progress_callback: Optional callback invoked with progress events.
+            payload: All parameters for the optimization run.
+            artifact_id: Optional identifier used when persisting the program artifact.
+            progress_callback: Optional callable invoked with (event_name, data_dict)
+                at key milestones during the run.
 
         Returns:
-            RunResponse: Results including metrics and the optimized program artifact.
+            A RunResponse with metrics, artifact, and runtime statistics.
 
         Raises:
-            ServiceError: If validation fails or optimization errors occur.
+            ServiceError: If any stage of loading, splitting, or compiling fails.
         """
         run_start = datetime.now(timezone.utc)
         logger.info(
@@ -136,24 +147,33 @@ class DspyService:
             metric,
             payload.model_settings,
             payload.reflection_model_settings,
-            payload.prompt_model_settings,
-            payload.task_model_settings,
         )
 
         examples = rows_to_examples(payload.dataset, payload.column_mapping)
         logger.info("Converted dataset to %d DSPy examples", len(examples))
 
+        stratify_values = (
+            extract_stratify_values(
+                examples,
+                payload.column_mapping,
+                column=payload.stratify_column,
+            )
+            if payload.stratify
+            else None
+        )
         splits = split_examples(
             examples,
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            stratify_values=stratify_values,
         )
         logger.info(
-            "Split dataset -> train=%d val=%d test=%d",
+            "Split dataset -> train=%d val=%d test=%d (stratify=%s)",
             len(splits.train),
             len(splits.val),
             len(splits.test),
+            payload.stratify,
         )
         if progress_callback:
             progress_callback(
@@ -165,7 +185,8 @@ class DspyService:
                 },
             )
 
-        with dspy.context(lm=language_model):
+        gen_timing = GenLMTimingCallback(language_model)
+        with dspy.context(lm=language_model, callbacks=[gen_timing]):
             baseline_test_metric = None
             baseline_test_results: list[dict] = []
             if splits.test:
@@ -209,8 +230,6 @@ class DspyService:
                         {DETAIL_OPTIMIZED: optimized_test_metric},
                     )
 
-            # Return the better program: if optimized is not better than baseline,
-            # keep the original unoptimized program.
             best_program = compiled_program
             if (
                 baseline_test_metric is not None
@@ -253,8 +272,10 @@ class DspyService:
             metric_improvement = optimized_test_metric - baseline_test_metric
 
         runtime_seconds = (datetime.now(timezone.utc) - run_start).total_seconds()
+        # num_lm_calls comes from LM history (preserves counting for mocked LMs);
+        # avg is wall-clock time spent inside the generation LM only, via the callback.
         num_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
-        avg_response_time_ms = round((runtime_seconds * 1000) / num_lm_calls, 1) if num_lm_calls else None
+        _, avg_response_time_ms = gen_timing.summary()
         response = RunResponse(
             module_name=payload.module_name,
             optimizer_name=payload.optimizer_name,
@@ -288,18 +309,24 @@ class DspyService:
         artifact_id: str | None = None,
         progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> GridSearchResponse:
-        """Run GEPA optimization for every (generation, reflection) model pair.
+        """Run one optimization per (generation_model, reflection_model) pair and return all results.
 
-        Iterates over the cartesian product of generation and reflection model
-        configs, running a full optimize-and-evaluate cycle for each pair.
+        Pairs are executed concurrently (up to 4 threads).  Each pair follows the
+        same baseline-vs-optimized fallback logic as ``run()``.  Failed pairs are
+        recorded with their error message rather than aborting the whole search.
 
         Args:
-            payload: GridSearchRequest containing models, module, optimizer, and dataset.
-            artifact_id: Optional base identifier for saved artifacts (suffixed per pair).
-            progress_callback: Optional callback invoked with per-pair progress events.
+            payload: Grid-search parameters including the model Cartesian product.
+            artifact_id: Optional base identifier; each pair artifact is suffixed with
+                ``_pair_<index>``.
+            progress_callback: Optional callable invoked at each pair start, completion,
+                and failure.
 
         Returns:
-            GridSearchResponse with per-pair results and the best-performing pair.
+            A GridSearchResponse summarising all pairs and the overall best pair.
+
+        Raises:
+            ServiceError: If shared setup (signature, metric, module) fails.
         """
         grid_start = datetime.now(timezone.utc)
         pairs = [(gen_cfg, ref_cfg) for gen_cfg in payload.generation_models for ref_cfg in payload.reflection_models]
@@ -328,11 +355,21 @@ class DspyService:
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
 
         examples = rows_to_examples(payload.dataset, payload.column_mapping)
+        stratify_values = (
+            extract_stratify_values(
+                examples,
+                payload.column_mapping,
+                column=payload.stratify_column,
+            )
+            if payload.stratify
+            else None
+        )
         splits = split_examples(
             examples,
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            stratify_values=stratify_values,
         )
         split_counts = SplitCounts(
             train=len(splits.train),
@@ -350,28 +387,14 @@ class DspyService:
                 },
             )
 
-        import threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
         pair_results: list[PairResult] = [None] * total_pairs  # type: ignore[list-item]
         results_lock = threading.Lock()
         completed_count_ref = [0]
         failed_count_ref = [0]
 
         def _run_pair(i: int, gen_cfg, ref_cfg) -> PairResult:
-            """Execute one grid-search pair end-to-end and return its result.
-
-            Args:
-                i: 0-based index of this pair within the sweep.
-                gen_cfg: Generation model config for the pair.
-                ref_cfg: Reflection model config for the pair.
-
-            Returns:
-                PairResult with metrics, runtime, and artifact — or error details
-                if the pair failed.
-            """
-            from ..worker.log_handler import set_current_pair_index
-
+            """Execute one grid-search pair and return its PairResult."""
+            from ..worker.log_handler import set_current_pair_index  # local: circular import with core.worker.engine
             set_current_pair_index(i)
             pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
             logger.info("Grid pair %d/%d: %s", i + 1, total_pairs, pair_label)
@@ -388,20 +411,19 @@ class DspyService:
 
             pair_start = datetime.now(timezone.utc)
             try:
-                program = module_factory(**module_kwargs)
+                program = module_factory(**dict(module_kwargs))
                 language_model = build_language_model(gen_cfg)
-                optimizer = instantiate_optimizer(
-                    optimizer_factory,
-                    payload.optimizer_name,
-                    payload.optimizer_kwargs,
-                    metric,
-                    gen_cfg,
-                    ref_cfg,
-                    None,
-                    None,
-                )
+                gen_timing = GenLMTimingCallback(language_model)
 
-                with dspy.context(lm=language_model):
+                with dspy.context(lm=language_model, callbacks=[gen_timing]):
+                    optimizer = instantiate_optimizer(
+                        optimizer_factory,
+                        payload.optimizer_name,
+                        payload.optimizer_kwargs,
+                        metric,
+                        gen_cfg,
+                        ref_cfg,
+                    )
                     baseline = None
                     baseline_test_results: list[dict] = []
                     if splits.test:
@@ -467,11 +489,13 @@ class DspyService:
 
                 pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
                 pair_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
-                pair_avg_ms = round((pair_runtime * 1000) / pair_lm_calls, 1) if pair_lm_calls else None
+                _, pair_avg_ms = gen_timing.summary()
                 result = PairResult(
                     pair_index=i,
                     generation_model=gen_cfg.name,
                     reflection_model=ref_cfg.name,
+                    generation_reasoning_effort=gen_cfg.extra.get("reasoning_effort"),
+                    reflection_reasoning_effort=ref_cfg.extra.get("reasoning_effort"),
                     baseline_test_metric=baseline,
                     optimized_test_metric=optimized,
                     metric_improvement=improvement,
@@ -520,6 +544,8 @@ class DspyService:
                     pair_index=i,
                     generation_model=gen_cfg.name,
                     reflection_model=ref_cfg.name,
+                    generation_reasoning_effort=gen_cfg.extra.get("reasoning_effort"),
+                    reflection_reasoning_effort=ref_cfg.extra.get("reasoning_effort"),
                     error=error_msg,
                     runtime_seconds=round(pair_runtime, 2),
                 )
@@ -587,16 +613,10 @@ class DspyService:
         )
 
     def validate_grid_search_payload(self, payload: GridSearchRequest) -> None:
-        """Validate a grid search request before job submission.
-
-        Args:
-            payload: GridSearchRequest to validate.
-
-        Returns:
-            None.
+        """Validate a GridSearchRequest without executing any optimization.
 
         Raises:
-            ServiceError: If signature, metric, module, or optimizer validation fails.
+            ServiceError: If any component of the payload is invalid.
         """
         signature_cls = load_signature_from_code(payload.signature_code)
         inputs, outputs = extract_signature_fields(signature_cls)
@@ -613,16 +633,10 @@ class DspyService:
         )
 
     def validate_payload(self, payload: RunRequest) -> None:
-        """Run additional validations prior to job submission.
-
-        Args:
-            payload: RunRequest to validate before execution.
-
-        Returns:
-            None.
+        """Validate a RunRequest without executing any optimization.
 
         Raises:
-            ServiceError: If validation fails for signature, metric, module, or optimizer.
+            ServiceError: If any component of the payload is invalid.
         """
         logger.info(
             "Validating payload for module=%s optimizer=%s dataset_rows=%d",
@@ -643,17 +657,17 @@ class DspyService:
         logger.info("Payload validation succeeded for module=%s", payload.module_name)
 
     def _get_module_factory(self, name: str) -> tuple[Callable[..., Any], bool]:
-        """Resolve the requested module factory from registry or DSPy.
+        """Resolve a module factory by name from registry or built-in resolver.
 
         Args:
-            name: Module name, either registered or a dotted path like 'dspy.ChainOfThought'.
+            name: Module name (e.g. ``"cot"`` or a registry key).
 
         Returns:
-            tuple: (factory_callable, auto_signature_flag) where auto_signature_flag
-                indicates whether the signature should be auto-injected.
+            A ``(factory, auto_signature)`` tuple; ``auto_signature`` is False
+            for registry entries and True for resolver-provided ones.
 
         Raises:
-            ServiceError: If the module cannot be resolved.
+            ServiceError: If the name cannot be resolved.
         """
         try:
             return self.registry.get_module(name), False
@@ -664,16 +678,16 @@ class DspyService:
                 raise ServiceError(str(exc)) from exc
 
     def _get_optimizer_factory(self, name: str) -> Callable[..., Any]:
-        """Resolve the requested optimizer factory from registry or DSPy.
+        """Resolve an optimizer factory by name from registry or built-in resolver.
 
         Args:
-            name: Optimizer name, either registered or a dotted path like 'dspy.BootstrapFewShot'.
+            name: Optimizer name (e.g. ``"dspy.BootstrapFewShot"``).
 
         Returns:
-            Callable: Factory callable that creates the optimizer instance.
+            A callable that instantiates the optimizer.
 
         Raises:
-            ServiceError: If the optimizer cannot be resolved.
+            ServiceError: If the name cannot be resolved.
         """
         try:
             return self.registry.get_optimizer(name)

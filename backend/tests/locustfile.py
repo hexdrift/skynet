@@ -1,65 +1,83 @@
 """Locust load test for Skynet API.
 
-Run:
+User persona: a data-scientist who periodically submits optimization jobs,
+monitors their progress, and queries the job list between submissions.
+The task weights reflect realistic usage: reads are far more frequent than writes.
+
+Task tag summary:
+    read  — GET-only, no side effects (health, queue, jobs listing, 404 probe)
+    write — mutating requests (job submit + cancel, invalid submit)
+
+Run (interactive):
     cd backend && ../.venv/bin/locust -f tests/locustfile.py --host=http://localhost:8000
 
-Then open http://localhost:8089 for the dashboard.
+Then open http://localhost:8089 for the Locust dashboard.
 
 Headless mode (CI):
-    locust -f tests/locustfile.py --host=http://localhost:8000 \
+    locust -f tests/locustfile.py --host=http://localhost:8000 \\
         --headless -u 50 -r 10 --run-time 60s
+
+Expected shape at 50 users, 10 rps spawn rate (local single-worker dev server):
+    - /health p99 < 200 ms
+    - /optimizations    p99 < 1 s
+    - POST /run p99 < 3 s (accepted synchronously, LLM runs async)
 """
 
 from locust import HttpUser, between, tag, task
 
 
 class SkynetAPIUser(HttpUser):
-    """Simulates a typical Skynet API user."""
+    """Simulates a data-scientist using the Skynet API.
+
+    Read tasks run ~28x more often than write tasks. The single "submit and
+    track" write task cancels the job immediately to avoid burning LLM credits
+    during load testing.
+    """
 
     wait_time = between(0.5, 2.0)
 
     @tag("read")
     @task(10)
     def health_check(self):
-        """High-frequency health check."""
+        """High-frequency health probe — baseline latency canary."""
         self.client.get("/health")
 
     @tag("read")
     @task(5)
     def queue_status(self):
-        """Check queue status."""
+        """Check how many jobs are pending / active."""
         self.client.get("/queue")
 
     @tag("read")
     @task(8)
     def list_jobs(self):
-        """List jobs with various filters."""
-        self.client.get("/jobs?limit=10")
+        """List the most recent 10 jobs (default view)."""
+        self.client.get("/optimizations?limit=10")
 
     @tag("read")
     @task(3)
-    def list_jobs_filtered(self):
-        """List jobs with status filter."""
-        self.client.get("/jobs?status=success&limit=5")
+    def list_jobs_filtered_by_status(self):
+        """List only successful jobs — common dashboard query."""
+        self.client.get("/optimizations?status=success&limit=5")
 
     @tag("read")
     @task(2)
     def list_jobs_by_user(self):
-        """List jobs filtered by username."""
-        self.client.get("/jobs?username=locust-test&limit=10")
+        """List jobs for a specific user — common per-user view."""
+        self.client.get("/optimizations?username=locust-test&limit=10")
 
     @tag("read")
     @task(1)
-    def get_nonexistent_job(self):
-        """404 lookup — tests error path performance."""
-        with self.client.get("/jobs/nonexistent-locust-id", catch_response=True) as r:
+    def probe_nonexistent_job(self):
+        """404 lookup — exercises the not-found fast path under load."""
+        with self.client.get("/optimizations/nonexistent-locust-id", catch_response=True) as r:
             if r.status_code == 404:
                 r.success()
 
     @tag("write")
     @task(1)
-    def submit_and_track_job(self):
-        """Submit a real job, poll once, then clean up."""
+    def submit_job_then_cancel(self):
+        """Submit a real job, peek at its summary once, then cancel to avoid LLM cost."""
         payload = {
             "username": "locust-test",
             "module_name": "predict",
@@ -70,25 +88,27 @@ class SkynetAPIUser(HttpUser):
                 "    a: str = dspy.OutputField()\n"
             ),
             "metric_code": "def metric(e, p, t=None): return 1.0\n",
-            "optimizer_name": "miprov2",
+            "optimizer_name": "gepa",
             "dataset": [{"q": "test", "a": "test"}],
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
-            "model_config": {"name": "gpt-4o-mini"},
+            "model_config": {"name": "openai/gpt-5.4-nano"},
         }
         with self.client.post("/run", json=payload, catch_response=True) as r:
             if r.status_code == 201:
                 r.success()
-                job_id = r.json()["job_id"]
-                self.client.get(f"/jobs/{job_id}/summary")
-                # Cancel to avoid burning API credits
-                self.client.post(f"/jobs/{job_id}/cancel")
+                job_id = r.json()["optimization_id"]
+                self.client.get(f"/optimizations/{job_id}/summary")
+                # Cancel immediately — avoids burning API credits during load runs
+                self.client.post(f"/optimizations/{job_id}/cancel")
             else:
-                r.failure(f"Submit failed: {r.status_code}")
+                r.failure(f"Submit failed: {r.status_code} {r.text[:200]}")
 
     @tag("write")
     @task(2)
-    def submit_invalid(self):
-        """Submit invalid payload — tests validation path."""
+    def submit_invalid_payload(self):
+        """Submit a deliberately invalid payload — exercises the validation fast path."""
         with self.client.post("/run", json={"username": "bad"}, catch_response=True) as r:
             if r.status_code == 422:
                 r.success()
+            else:
+                r.failure(f"Expected 422, got {r.status_code}")

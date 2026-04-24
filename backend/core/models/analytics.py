@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field
 
+from .common import OptimizationType
+
 
 class AnalyticsSummaryResponse(BaseModel):
     """Pre-computed KPIs across all filtered jobs."""
@@ -58,14 +60,7 @@ class ModelStatsResponse(BaseModel):
 
 
 class DashboardAnalyticsJob(BaseModel):
-    """Compact job reference used in dashboard top-N lists.
-
-    Holds only the fields the dashboard charts and ranked tables
-    need to render a row — identifier, name, status, the two test
-    metrics, timing, dataset size and job type. The full
-    ``OptimizationSummaryResponse`` is avoided deliberately so the
-    /analytics/dashboard payload stays small.
-    """
+    """Compact optimization reference used in dashboard top-N lists."""
 
     optimization_id: str
     name: str | None = None
@@ -77,7 +72,7 @@ class DashboardAnalyticsJob(BaseModel):
     metric_improvement: float | None = None
     elapsed_seconds: float | None = None
     dataset_rows: int | None = None
-    optimization_type: str | None = None
+    optimization_type: OptimizationType | None = None
     best_pair_label: str | None = None
     created_at: str | None = None
 
@@ -105,27 +100,13 @@ class DashboardAnalyticsTimelineBucket(BaseModel):
 
 
 class DashboardAnalyticsResponse(BaseModel):
-    """Pre-shaped payload powering the whole analytics dashboard tab.
-
-    One GET replaces the old client-side "fetch every page then
-    aggregate in the browser" loop. Every field corresponds to a
-    chart, KPI or table on the analytics tab.
-
-    Status distribution, optimizer distribution and job-type
-    distribution come back as ``{name: count}`` dictionaries. All the
-    top-N ranked lists (``top_improvement``, ``runtime_distribution``,
-    ``dataset_vs_improvement``, ``efficiency``,
-    ``top_jobs_by_improvement``) are already sorted and trimmed by
-    the backend. The frontend only has to re-shape them into the
-    Hebrew-keyed objects the chart components expect.
-    """
+    """Pre-shaped payload powering the whole analytics dashboard tab."""
 
     # Matches the `filtered_total` the frontend uses for the
     # "no results" check and the stats-card denominators when a
     # filter is active.
     filtered_total: int = 0
 
-    # Status / optimizer / job-type distributions — {name: count}.
     status_counts: dict[str, int] = Field(default_factory=dict)
     optimizer_counts: dict[str, int] = Field(default_factory=dict)
     job_type_counts: dict[str, int] = Field(default_factory=dict)
@@ -158,7 +139,6 @@ class DashboardAnalyticsResponse(BaseModel):
     efficiency: list[DashboardAnalyticsJob] = Field(default_factory=list)
     top_jobs_by_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
 
-    # Timeline bucket series, last 14 days with a job count each.
     timeline: list[DashboardAnalyticsTimelineBucket] = Field(default_factory=list)
 
     # Filter dropdown option lists (every unique optimizer/model

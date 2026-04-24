@@ -1,48 +1,150 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ChevronLeft,
-  Loader2,
+  ChevronDown,
   XCircle,
-  ArrowLeftRight,
   Trophy,
-  Clock,
   Cpu,
   Database,
   Layers,
+  ListChecks,
   Sparkles,
   Clipboard,
   Check,
+  X,
+  BarChart3,
+  Clock,
+  TrendingUp,
+  GitCompareArrows,
 } from "lucide-react";
+import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { motion } from "framer-motion";
-import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
-import { getJob } from "@/shared/lib/api";
-import { STATUS_LABELS } from "@/shared/constants/job-status";
-import type { OptimizationStatusResponse, OptimizedPredictor } from "@/shared/types/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { ChartTooltip } from "@/shared/charts/chart-utils";
+import { AnimatePresence, motion } from "framer-motion";
+import { FadeIn } from "@/shared/ui/motion";
+import {
+  getJob,
+  getTestResults,
+  getPairTestResults,
+  getOptimizationDataset,
+} from "@/shared/lib/api";
+import type {
+  EvalExampleResult,
+  OptimizationDatasetResponse,
+  OptimizationStatusResponse,
+  OptimizedPredictor,
+} from "@/shared/types/api";
 import { Skeleton } from "boneyard-js/react";
 import { compareBones } from "@/features/compare/lib/bones";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { tip } from "@/shared/lib/tooltips";
+import { computePairScores } from "@/features/optimizations/lib/pair-scores";
+import {
+  consumePendingCompareDemo,
+  consumePendingCompareExamples,
+  registerTutorialHook,
+} from "@/features/tutorial/lib/bridge";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
 
-function fmt(v: number | undefined | null): string {
+type MetricFamily = "quality" | "harmonic";
+
+type RunInfo = {
+  job: OptimizationStatusResponse;
+  label: string;
+  baseline: number | null;
+  optimized: number | null;
+  improvement: number | null;
+  runtime: number | null;
+  avgResponseMs: number | null;
+  prompt: OptimizedPredictor | null;
+  isGrid: boolean;
+  pairLabel: string | null;
+  winnerPairIndex: number | null;
+  moduleName: string | null;
+  optimizerName: string | null;
+  modelName: string | null;
+  datasetRows: number | null;
+  metricFamily: MetricFamily;
+};
+
+// 8 warm-brown values (one per run up to COMPARE_MAX in DashboardView).
+// Ordered so each neighbor alternates dark/light for high adjacent contrast
+// at small N (2-4, the common case); later slots fill in remaining L gaps.
+const COL_HUES = [
+  "#2B1E14", // A · deep espresso   (L≈22)
+  "#D8BC9A", // B · light cream     (L≈78)
+  "#6B4F38", // C · coffee          (L≈40)
+  "#B5A08A", // D · warm mushroom   (L≈65)
+  "#3D2E22", // E · cocoa           (L≈28)
+  "#C8A882", // F · warm tan        (L≈72)
+  "#8C7A6B", // G · dove            (L≈52)
+  "#A48B75", // H · sandy           (L≈60)
+];
+const colorFor = (i: number) => COL_HUES[i % COL_HUES.length];
+const runToken = (i: number) => String.fromCharCode(65 + i); // A, B, C …
+
+function RunChip({
+  index,
+  label,
+  winner,
+  size = "sm",
+}: {
+  index: number;
+  label: string;
+  winner?: boolean;
+  size?: "sm" | "md";
+}) {
+  const fontSize = size === "md" ? "text-sm" : "text-xs";
+  const tokenSize = size === "md" ? "size-6 text-[0.6875rem]" : "size-5 text-[0.625rem]";
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${fontSize}`}>
+      <span
+        className={`${tokenSize} rounded-md flex items-center justify-center font-bold text-white tabular-nums shrink-0`}
+        style={{ background: colorFor(index) }}
+      >
+        {runToken(index)}
+      </span>
+      <span
+        className={`font-mono tabular-nums ${winner ? "text-primary font-bold" : ""}`}
+        dir="ltr"
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function fmt(v: number | null | undefined): string {
   if (v == null) return "—";
   const pct = Math.abs(v) > 1 ? v : v * 100;
   return `${pct.toFixed(1)}%`;
 }
 
-function fmtImprovement(v: number | undefined | null): string {
+function fmtImprovement(v: number | null | undefined): string {
   if (v == null) return "—";
   const pct = Math.abs(v) > 1 ? v : v * 100;
   return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
 }
 
-function fmtElapsed(s?: number | null): string {
+function fmtElapsed(s: number | null | undefined): string {
   if (s == null) return "—";
   const hrs = Math.floor(s / 3600);
   const mins = Math.floor((s % 3600) / 60);
@@ -52,83 +154,249 @@ function fmtElapsed(s?: number | null): string {
   return `${mins}:${pad(secs)}`;
 }
 
-function ScoreCard({
-  label,
-  valueA,
-  valueB,
-  winner,
-  delay,
-}: {
-  label: React.ReactNode;
-  valueA: string;
-  valueB: string;
-  winner?: "a" | "b" | null;
-  delay: number;
-}) {
-  return (
-    <StaggerItem>
-      <div className="rounded-xl border border-border/50 bg-gradient-to-b from-white/95 to-[#F8F4EF] p-4 shadow-[0_1px_3px_rgba(28,22,18,0.03),0_4px_16px_rgba(28,22,18,0.025)]">
-        <p className="text-[11px] text-muted-foreground font-medium tracking-wide text-center mb-3">
-          {label}
-        </p>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div
-            className={`text-center rounded-lg py-2 px-3 transition-colors ${winner === "a" ? "bg-emerald-50 border border-emerald-200/60" : "bg-muted/30"}`}
-          >
-            <span
-              className={`text-base font-mono font-bold tabular-nums ${winner === "a" ? "text-emerald-700" : "text-foreground"}`}
-            >
-              {valueA}
-            </span>
-            {winner === "a" && (
-              <Trophy className="size-3 text-emerald-500 inline-block ms-1.5 -mt-0.5" />
-            )}
-          </div>
-          <span className="text-[10px] text-muted-foreground/50 font-bold">VS</span>
-          <div
-            className={`text-center rounded-lg py-2 px-3 transition-colors ${winner === "b" ? "bg-emerald-50 border border-emerald-200/60" : "bg-muted/30"}`}
-          >
-            <span
-              className={`text-base font-mono font-bold tabular-nums ${winner === "b" ? "text-emerald-700" : "text-foreground"}`}
-            >
-              {valueB}
-            </span>
-            {winner === "b" && (
-              <Trophy className="size-3 text-emerald-500 inline-block ms-1.5 -mt-0.5" />
-            )}
-          </div>
-        </div>
-      </div>
-    </StaggerItem>
+function fmtLatency(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function deriveRunInfo(job: OptimizationStatusResponse): RunInfo {
+  const label = job.optimization_id.slice(0, 8);
+  if (job.grid_result) {
+    const scoring = computePairScores(job.grid_result.pair_results);
+    const winnerIdx = scoring.overallWinner;
+    const winnerPair =
+      winnerIdx != null
+        ? job.grid_result.pair_results.find((p) => p.pair_index === winnerIdx)
+        : undefined;
+    const winnerScore = winnerIdx != null ? scoring.byIndex[winnerIdx] : null;
+    const baseline = winnerPair?.baseline_test_metric ?? null;
+    const hasHarmonic = winnerScore?.harmonic != null;
+    const optimized = winnerScore?.harmonic ?? winnerScore?.quality ?? null;
+    const improvement =
+      baseline != null && optimized != null
+        ? optimized - (baseline > 1 ? baseline / 100 : baseline)
+        : null;
+    return {
+      job,
+      label,
+      baseline,
+      optimized,
+      improvement,
+      runtime: job.grid_result.runtime_seconds ?? winnerPair?.runtime_seconds ?? null,
+      avgResponseMs: winnerPair?.avg_response_time_ms ?? null,
+      prompt: winnerPair?.program_artifact?.optimized_prompt ?? null,
+      isGrid: true,
+      pairLabel: winnerPair
+        ? `${winnerPair.generation_model} × ${winnerPair.reflection_model}`
+        : null,
+      winnerPairIndex: winnerIdx ?? null,
+      moduleName: job.module_name ?? null,
+      optimizerName: job.optimizer_name ?? null,
+      modelName: winnerPair?.generation_model ?? null,
+      datasetRows: job.dataset_rows ?? null,
+      metricFamily: hasHarmonic ? "harmonic" : "quality",
+    };
+  }
+  return {
+    job,
+    label,
+    baseline: job.result?.baseline_test_metric ?? null,
+    optimized: job.result?.optimized_test_metric ?? null,
+    improvement: job.result?.metric_improvement ?? null,
+    runtime: job.result?.runtime_seconds ?? null,
+    avgResponseMs: job.result?.avg_response_time_ms ?? null,
+    prompt: job.result?.program_artifact?.optimized_prompt ?? null,
+    isGrid: false,
+    pairLabel: null,
+    winnerPairIndex: null,
+    moduleName: job.module_name ?? null,
+    optimizerName: job.optimizer_name ?? null,
+    modelName: job.model_name ?? null,
+    datasetRows: job.dataset_rows ?? null,
+    metricFamily: "quality",
+  };
+}
+
+const METRIC_FAMILY_LABEL: Record<MetricFamily, string> = {
+  quality: "איכות",
+  harmonic: "משולב",
+};
+
+function bestIndexOf(values: (number | null)[], prefer: "max" | "min"): number | null {
+  let bestIdx: number | null = null;
+  let bestVal: number | null = null;
+  values.forEach((v, i) => {
+    if (v == null) return;
+    if (bestVal == null || (prefer === "max" ? v > bestVal : v < bestVal)) {
+      bestVal = v;
+      bestIdx = i;
+    }
+  });
+  return bestIdx;
+}
+
+function isRowTie(values: (number | null)[]): boolean {
+  const nonNull = values.filter((v): v is number => v != null);
+  if (nonNull.length < 2) return false;
+  return nonNull.every((v) => v === nonNull[0]);
+}
+
+function winnerIndexOf(runs: RunInfo[]): number | null {
+  return bestIndexOf(
+    runs.map((r) => r.optimized),
+    "max",
   );
 }
 
-function ConfigRow({
-  icon: Icon,
-  label,
-  a,
-  b,
-}: {
-  icon: React.ElementType;
-  label: string;
-  a: string;
-  b: string;
-}) {
+/* ── Verdict block ─────────────────────────────────────────────── */
+
+function VerdictBlock({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
+  const winner = winnerIdx != null ? runs[winnerIdx] : null;
+  const families = new Set(runs.map((r) => r.metricFamily));
+  const mixedFamilies = families.size > 1;
+
+  if (!winner) {
+    return (
+      <FadeIn>
+        <Card>
+          <CardContent className="py-5">
+            <p className="text-sm text-muted-foreground">אין מספיק נתונים כדי לקבוע ריצה זוכה.</p>
+          </CardContent>
+        </Card>
+      </FadeIn>
+    );
+  }
+
+  const stats: Array<{
+    key: string;
+    label: string;
+    tooltip: string;
+    icon: React.ReactNode;
+    value: React.ReactNode;
+    tone?: "primary";
+  }> = [];
+  if (winner.improvement != null) {
+    stats.push({
+      key: "improvement",
+      label: "שיפור",
+      tooltip: tip("compare.winner_improvement"),
+      icon: <TrendingUp className="size-3 text-primary/70 shrink-0" />,
+      value: fmtImprovement(winner.improvement),
+      tone: "primary",
+    });
+  }
+  if (winner.runtime != null) {
+    stats.push({
+      key: "runtime",
+      label: "זמן ריצה",
+      tooltip: tip("compare.winner_runtime"),
+      icon: <Clock className="size-3 text-muted-foreground/70 shrink-0" />,
+      value: fmtElapsed(winner.runtime),
+    });
+  }
+  const modelDisplay = winner.pairLabel ?? winner.modelName;
+  if (modelDisplay) {
+    stats.push({
+      key: "models",
+      label: winner.pairLabel ? "מודלים" : "מודל",
+      tooltip: tip("compare.winner_models"),
+      icon: <Cpu className="size-3 text-muted-foreground/70 shrink-0" />,
+      value: (
+        <span
+          className="block truncate font-mono text-sm text-foreground/90"
+          dir="ltr"
+          title={modelDisplay}
+        >
+          {modelDisplay}
+        </span>
+      ),
+    });
+  }
+  if (mixedFamilies) {
+    stats.push({
+      key: "family",
+      label: "משפחת המדידה",
+      tooltip: tip("compare.winner_metric_family"),
+      icon: <Layers className="size-3 text-muted-foreground/70 shrink-0" />,
+      value: METRIC_FAMILY_LABEL[winner.metricFamily],
+    });
+  }
+
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 py-2.5">
-      <span className="text-xs sm:text-sm font-mono text-end tabular-nums text-foreground truncate">
-        {a}
-      </span>
-      <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground min-w-[60px] sm:min-w-[100px] justify-center">
-        <Icon className="size-3 opacity-50 shrink-0" />
-        <span className="truncate">{label}</span>
-      </span>
-      <span className="text-xs sm:text-sm font-mono tabular-nums text-foreground truncate">
-        {b}
-      </span>
-    </div>
+    <FadeIn>
+      <div className="space-y-3" data-tutorial="compare-verdict">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5 rounded-xl border border-border/50 bg-card px-4 sm:px-5 py-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <Trophy className="size-4 text-primary shrink-0" />
+            <span className="text-[0.625rem] font-semibold text-muted-foreground uppercase tracking-[0.14em] shrink-0">
+              זוכה
+            </span>
+            <RunChip index={winnerIdx!} label={winner.label} winner size="md" />
+          </div>
+          <UiTooltip>
+            <TooltipTrigger asChild>
+              <Button
+                asChild
+                size="icon-sm"
+                variant="default"
+                className="shrink-0 self-start sm:self-auto"
+              >
+                <Link
+                  href={`/optimizations/${winner.job.optimization_id}`}
+                  aria-label={`פתח ${TERMS.optimization}`}
+                >
+                  <ChevronLeft className="size-3.5" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6}>
+              פתח {TERMS.optimization}
+            </TooltipContent>
+          </UiTooltip>
+        </div>
+
+        {stats.length > 0 && (
+          <div
+            className="grid gap-3"
+            style={{
+              gridTemplateColumns: `repeat(auto-fit, minmax(${stats.length > 2 ? 160 : 200}px, 1fr))`,
+            }}
+          >
+            {stats.map((stat) => (
+              <div
+                key={stat.key}
+                className={`rounded-xl border px-4 py-3 ${
+                  stat.tone === "primary"
+                    ? "border-primary/25 bg-primary/[0.04]"
+                    : "border-border/50 bg-card"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  {stat.icon}
+                  <HelpTip text={stat.tooltip}>
+                    <span className="text-[0.625rem] font-semibold text-muted-foreground uppercase tracking-[0.14em]">
+                      {stat.label}
+                    </span>
+                  </HelpTip>
+                </div>
+                <div
+                  className={`mt-1 font-mono tabular-nums text-lg ${
+                    stat.tone === "primary" ? "font-bold text-primary" : "text-foreground"
+                  }`}
+                >
+                  {stat.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </FadeIn>
   );
 }
+
+/* ── Prompts ───────────────────────────────────────────────────── */
 
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -141,11 +409,11 @@ function CopyBtn({ text }: { text: string }) {
     <button
       type="button"
       onClick={copy}
-      className="absolute top-2 end-2 p-1.5 rounded cursor-pointer opacity-0 group-hover/ins:opacity-100 transition-opacity duration-200 hover:bg-black/5"
+      className="absolute top-2 right-2 p-1.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/5"
       aria-label="העתק"
     >
       {copied ? (
-        <Check className="size-3.5 text-emerald-600" />
+        <Check className="size-3.5 text-[var(--success)]" />
       ) : (
         <Clipboard className="size-3.5 text-muted-foreground" />
       )}
@@ -153,13 +421,7 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
-function PromptBlock({
-  prompt,
-  label,
-}: {
-  prompt: OptimizedPredictor | null | undefined;
-  label: string;
-}) {
+function PromptBlock({ prompt }: { prompt: OptimizedPredictor | null | undefined }) {
   if (!prompt) {
     return (
       <div className="flex items-center justify-center h-32 rounded-xl border border-dashed border-border/60 bg-muted/20">
@@ -168,54 +430,33 @@ function PromptBlock({
     );
   }
   return (
-    <div className="space-y-4">
-      <h4 className="text-sm font-semibold truncate" dir="auto">
-        {label}
-      </h4>
-
-      <div className="space-y-1.5">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-          <HelpTip text="ההנחיות שהאופטימייזר יצר למודל — מתארות את המשימה ואיך לבצע אותה">
-            הנחיות (Instructions)
-          </HelpTip>
-        </p>
-        <div className="relative group/ins rounded-lg border border-border/40 bg-muted/20 p-3 pr-9">
-          <pre
-            className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed text-foreground/80"
-            dir="ltr"
-          >
-            {prompt.instructions}
-          </pre>
-          <CopyBtn text={prompt.instructions} />
-        </div>
+    <div>
+      <div className="relative group">
+        <pre
+          className="text-sm font-mono bg-muted/50 rounded-lg p-4 pe-10 overflow-x-auto whitespace-pre-wrap leading-relaxed"
+          dir="ltr"
+        >
+          {prompt.formatted_prompt}
+        </pre>
+        <CopyBtn text={prompt.formatted_prompt} />
       </div>
-
-      {prompt.demos.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            {prompt.demos.length} דוגמאות (Demos)
+      {prompt.demos && prompt.demos.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <p className="text-xs text-muted-foreground mb-2">
+            {prompt.demos.length}{" "}
+            <HelpTip text={tip("prompt.demonstrations")}>דוגמאות מובנות</HelpTip>
           </p>
           <div className="space-y-2">
             {prompt.demos.map((demo, i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-border/40 bg-gradient-to-br from-muted/20 to-transparent p-3 text-xs space-y-1.5 hover:border-border/60 transition-colors"
-              >
+              <div key={i} className="text-xs font-mono bg-muted/50 rounded-lg p-3" dir="ltr">
                 {Object.entries(demo.inputs).map(([k, v]) => (
-                  <div key={k} className="flex gap-1.5">
-                    <span className="text-muted-foreground shrink-0 font-medium">{k}:</span>
-                    <span className="font-mono break-all" dir="ltr">
-                      {String(v)}
-                    </span>
+                  <div key={k}>
+                    <span className="text-muted-foreground">{k}:</span> {String(v)}
                   </div>
                 ))}
-                <Separator className="my-1.5" />
                 {Object.entries(demo.outputs).map(([k, v]) => (
-                  <div key={k} className="flex gap-1.5">
-                    <span className="text-primary shrink-0 font-semibold">{k}:</span>
-                    <span className="font-mono break-all" dir="ltr">
-                      {String(v)}
-                    </span>
+                  <div key={k}>
+                    <span className="text-stone-600">{k}:</span> {String(v)}
                   </div>
                 ))}
               </div>
@@ -227,30 +468,973 @@ function PromptBlock({
   );
 }
 
-export default function ComparePage() {
-  const searchParams = useSearchParams();
-  const optimizationIds = (searchParams.get("jobs") ?? "").split(",").filter(Boolean);
+/* ── Shared table helpers ──────────────────────────────────────── */
 
-  const [jobs, setJobs] = useState<(OptimizationStatusResponse | null)[]>([null, null]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type MetricRow = {
+  key: string;
+  label: React.ReactNode;
+  values: (number | null)[];
+  format: (v: number | null) => string;
+  prefer: "max" | "min" | "none";
+};
+
+function MetricCell({
+  value,
+  format,
+  isBest,
+}: {
+  value: number | null;
+  format: (v: number | null) => string;
+  isBest: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs sm:text-sm font-mono tabular-nums transition-colors ${
+        isBest
+          ? "bg-primary/[0.08] border border-primary/20 text-primary font-bold"
+          : value == null
+            ? "text-muted-foreground"
+            : "text-foreground"
+      }`}
+    >
+      <span>{format(value)}</span>
+      {isBest && <Trophy className="size-3 text-primary/70 shrink-0" />}
+    </div>
+  );
+}
+
+function RunsHeaderRow({
+  runs,
+  winnerIdx,
+  mixedFamilies,
+  stickyFirst,
+  firstLabel,
+}: {
+  runs: RunInfo[];
+  winnerIdx: number | null;
+  mixedFamilies: boolean;
+  stickyFirst: string;
+  firstLabel: string;
+}) {
+  const WINNER_TINT = "rgba(61, 46, 34, 0.085)";
+  const winnerBg = (i: number) => (i === winnerIdx ? WINNER_TINT : undefined);
+  return (
+    <tr>
+      <th
+        className={`py-2.5 text-center text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground w-[180px] border-b border-border/40 ${stickyFirst}`}
+      >
+        {firstLabel}
+      </th>
+      {runs.map((run, i) => (
+        <th
+          key={run.job.optimization_id}
+          className="py-2.5 px-2 border-b border-border/40"
+          style={{ background: winnerBg(i) }}
+        >
+          <div className="flex flex-col items-center gap-1">
+            <RunChip index={i} label={run.label} winner={i === winnerIdx} />
+            {mixedFamilies && (
+              <span className="inline-flex items-center rounded-full bg-muted/60 px-1.5 py-0.5 text-[0.5625rem] font-medium text-muted-foreground">
+                {METRIC_FAMILY_LABEL[run.metricFamily]}
+              </span>
+            )}
+          </div>
+        </th>
+      ))}
+    </tr>
+  );
+}
+
+/* ── Overview (performance chart) ──────────────────────────────── */
+
+type ChartRow = {
+  metric: string;
+  [runKey: string]: string | number | null;
+};
+
+function PerformanceChart({ runs }: { runs: RunInfo[] }) {
+  const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
+  const toggleRun = useCallback(
+    (id: string) => {
+      setHiddenRuns((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        // Prevent hiding every single run — always keep at least one visible.
+        if (next.size >= prev.size + 1 && next.size === runs.length) {
+          return prev;
+        }
+        return next;
+      });
+    },
+    [runs.length],
+  );
+  const chartData = useMemo(() => {
+    const latencies = runs
+      .map((r) => r.avgResponseMs)
+      .filter((v): v is number => v != null && v > 0);
+    const minLatency = latencies.length ? Math.min(...latencies) : null;
+    const hasSpeed = minLatency != null;
+
+    const quality = (r: RunInfo) => {
+      const v = r.optimized;
+      if (v == null) return null;
+      return v > 1 ? v / 100 : v;
+    };
+    const speed = (r: RunInfo) => {
+      if (!hasSpeed || r.avgResponseMs == null || r.avgResponseMs <= 0) return null;
+      return minLatency! / r.avgResponseMs;
+    };
+    const harmonic = (r: RunInfo) => {
+      const q = quality(r);
+      const s = speed(r);
+      if (q == null || s == null || q <= 0 || s <= 0) return null;
+      return (2 * q * s) / (q + s);
+    };
+
+    const toPct = (v: number | null) => (v == null ? null : Math.round(v * 1000) / 10);
+
+    const qualityRow: ChartRow = { metric: "איכות" };
+    const speedRow: ChartRow = { metric: "מהירות" };
+    const harmonicRow: ChartRow = { metric: "משולב" };
+    runs.forEach((r, i) => {
+      const key = runToken(i);
+      qualityRow[key] = toPct(quality(r));
+      speedRow[key] = toPct(speed(r));
+      harmonicRow[key] = toPct(harmonic(r));
+    });
+
+    const rows: ChartRow[] = [qualityRow];
+    if (hasSpeed) {
+      rows.push(speedRow, harmonicRow);
+    }
+    return { rows, hasSpeed };
+  }, [runs]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <BarChart3 className="size-4" />
+          <HelpTip text="השוואה חזותית של איכות, מהירות והציון המשולב בין הריצות. איכות = הציון הסופי. מהירות = יחס הלטנסי לריצה המהירה ביותר. משולב = הממוצע ההרמוני של השניים.">
+            השוואת ביצועים
+          </HelpTip>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[280px]" dir="ltr">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData.rows}
+              margin={{ top: 16, right: 16, bottom: 8, left: 0 }}
+              barCategoryGap="20%"
+              barGap={4}
+            >
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis
+                dataKey="metric"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 12 }}
+                className="fill-muted-foreground"
+                reversed
+              />
+              <YAxis
+                domain={[0, 100]}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11 }}
+                className="fill-muted-foreground"
+                ticks={[0, 25, 50, 75, 100]}
+                tickFormatter={(v) => `${v}%`}
+                orientation="right"
+                width={40}
+              />
+              <RechartsTooltip
+                content={<ChartTooltip />}
+                cursor={{ fill: "var(--muted)", opacity: 0.3 }}
+              />
+              {runs.map((run, i) => {
+                if (hiddenRuns.has(run.job.optimization_id)) return null;
+                return (
+                  <Bar
+                    key={run.job.optimization_id}
+                    dataKey={runToken(i)}
+                    name={`${runToken(i)} · ${run.label}`}
+                    radius={[4, 4, 0, 0]}
+                    animationDuration={400}
+                  >
+                    {chartData.rows.map((_, idx) => (
+                      <Cell key={idx} fill={colorFor(i)} />
+                    ))}
+                  </Bar>
+                );
+              })}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex flex-wrap justify-center gap-4 mt-3" dir="rtl">
+          {runs.map((run, i) => {
+            const isHidden = hiddenRuns.has(run.job.optimization_id);
+            const color = colorFor(i);
+            return (
+              <button
+                key={run.job.optimization_id}
+                type="button"
+                onClick={() => toggleRun(run.job.optimization_id)}
+                aria-pressed={!isHidden}
+                className={`flex items-center gap-1.5 text-xs cursor-pointer transition-opacity ${
+                  isHidden ? "opacity-45 hover:opacity-75" : "hover:opacity-80"
+                }`}
+              >
+                <span
+                  className="size-2.5 rounded-full shrink-0 transition-all"
+                  style={
+                    isHidden
+                      ? { backgroundColor: "transparent", boxShadow: `inset 0 0 0 1.5px ${color}` }
+                      : { backgroundColor: color }
+                  }
+                />
+                <RunChip index={i} label={run.label} />
+              </button>
+            );
+          })}
+        </div>
+        {!chartData.hasSpeed && (
+          <p className="text-[0.6875rem] text-muted-foreground text-center mt-2">
+            אין נתוני מהירות מספקים להשוואת מהירות וציון משולב
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Overview (scores) ─────────────────────────────────────────── */
+
+function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
+  const mixedFamilies = new Set(runs.map((r) => r.metricFamily)).size > 1;
+  const metricRows: MetricRow[] = [
+    {
+      key: "baseline",
+      label: <HelpTip text={tip("score.baseline")}>{TERMS.baselineScore}</HelpTip>,
+      values: runs.map((r) => r.baseline),
+      format: fmt,
+      prefer: "none",
+    },
+    {
+      key: "optimized",
+      label: <HelpTip text={tip("score.optimized")}>{TERMS.optimizedScore}</HelpTip>,
+      values: runs.map((r) => r.optimized),
+      format: fmt,
+      prefer: "max",
+    },
+    {
+      key: "improvement",
+      label: <HelpTip text={tip("score.improvement")}>שיפור</HelpTip>,
+      values: runs.map((r) => r.improvement),
+      format: fmtImprovement,
+      prefer: "max",
+    },
+    {
+      key: "runtime",
+      label: "זמן ריצה",
+      values: runs.map((r) => r.runtime),
+      format: fmtElapsed,
+      prefer: "min",
+    },
+    {
+      key: "latency",
+      label: <HelpTip text={tip("lm.avg_response_time")}>זמן תגובה לקריאה</HelpTip>,
+      values: runs.map((r) => r.avgResponseMs),
+      format: fmtLatency,
+      prefer: "min",
+    },
+  ];
+
+  const WINNER_TINT = "rgba(61, 46, 34, 0.085)";
+  const winnerBg = (i: number) => (i === winnerIdx ? WINNER_TINT : undefined);
+  const stickyFirst = "sticky start-0 bg-card z-10 border-e border-border/30";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[500px] text-sm border-separate border-spacing-0">
+            <thead>
+              <RunsHeaderRow
+                runs={runs}
+                winnerIdx={winnerIdx}
+                mixedFamilies={mixedFamilies}
+                stickyFirst={stickyFirst}
+                firstLabel={TERMS.metric}
+              />
+            </thead>
+            <tbody>
+              {metricRows.map((row, rowIdx) => {
+                const tie = row.prefer !== "none" && isRowTie(row.values);
+                const bestIdx =
+                  row.prefer === "none" || tie ? null : bestIndexOf(row.values, row.prefer);
+                const borderTop = rowIdx > 0 ? "border-t border-border/30" : "";
+                return (
+                  <tr key={row.key}>
+                    <td
+                      className={`py-2.5 px-3 text-xs text-muted-foreground ${borderTop} ${stickyFirst}`}
+                    >
+                      {row.label}
+                    </td>
+                    {row.values.map((v, i) => (
+                      <td
+                        key={i}
+                        className={`py-2.5 px-2 ${borderTop}`}
+                        style={{ background: winnerBg(i) }}
+                      >
+                        <MetricCell value={v} format={row.format} isBest={bestIdx === i} />
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Config ────────────────────────────────────────────────────── */
+
+function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
+  type ConfigRowDef = {
+    key: string;
+    icon: React.ElementType;
+    label: string;
+    values: string[];
+  };
+  const configRows: ConfigRowDef[] = [
+    {
+      key: "module",
+      icon: Layers,
+      label: "מודול",
+      values: runs.map((r) => r.moduleName ?? "—"),
+    },
+    {
+      key: "optimizer",
+      icon: Cpu,
+      label: TERMS.optimizer,
+      values: runs.map((r) => r.optimizerName ?? "—"),
+    },
+    {
+      key: "model",
+      icon: Sparkles,
+      label: "מודל",
+      values: runs.map((r) => r.modelName ?? "—"),
+    },
+    {
+      key: "dataset",
+      icon: Database,
+      label: `שורות ב${TERMS.dataset}`,
+      values: runs.map((r) => String(r.datasetRows ?? "—")),
+    },
+  ];
+
+  const stickyFirst = "sticky start-0 bg-card z-10 border-e border-border/30";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[500px] text-sm border-separate border-spacing-0">
+            <thead>
+              <RunsHeaderRow
+                runs={runs}
+                winnerIdx={winnerIdx}
+                mixedFamilies={false}
+                stickyFirst={stickyFirst}
+                firstLabel="שדה"
+              />
+            </thead>
+            <tbody>
+              {configRows.map((row, rowIdx) => {
+                const first = row.values[0];
+                const allSame = first !== undefined && row.values.every((v) => v === first);
+                const borderTop = rowIdx > 0 ? "border-t border-border/30" : "";
+                return (
+                  <tr key={row.key}>
+                    <td
+                      className={`py-2.5 px-3 text-xs text-muted-foreground ${borderTop} ${stickyFirst}`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <row.icon className="size-3 opacity-50" />
+                        {row.label}
+                      </span>
+                    </td>
+                    {allSame ? (
+                      <td colSpan={runs.length} className={`py-2.5 px-2 text-center ${borderTop}`}>
+                        <span className="font-mono text-xs tabular-nums text-foreground">
+                          {first}
+                        </span>
+                        <span className="mx-2 text-muted-foreground/40">·</span>
+                        <span className="text-[0.6875rem] text-muted-foreground">
+                          זהה בכל הריצות
+                        </span>
+                      </td>
+                    ) : (
+                      row.values.map((v, i) => (
+                        <td
+                          key={i}
+                          className={`py-2.5 px-2 text-center font-mono text-xs tabular-nums truncate ${borderTop}`}
+                          title={v}
+                        >
+                          {v}
+                        </td>
+                      ))
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Prompts section ───────────────────────────────────────────── */
+
+function PromptsSection({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
+  const initial = (winnerIdx != null ? runs[winnerIdx] : runs[0])!.job.optimization_id;
+  const [activeValue, setActiveValue] = useState(initial);
+  const activeIdx = Math.max(
+    0,
+    runs.findIndex((r) => r.job.optimization_id === activeValue),
+  );
+  const n = runs.length;
+  const pad = 4;
+  const gap = 4;
+  const segmentWidth = `calc((100% - ${2 * pad + (n - 1) * gap}px) / ${n})`;
+  const segmentOffset = `calc(${activeIdx} * ((100% - ${2 * pad + (n - 1) * gap}px) / ${n}) + ${pad + activeIdx * gap}px)`;
+
+  return (
+    <Card>
+      <CardContent className="p-5 sm:p-6">
+        <Tabs value={activeValue} onValueChange={setActiveValue} dir="rtl">
+          <TabsList className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto">
+            {n >= 2 && (
+              <div
+                className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
+                style={{ width: segmentWidth, insetInlineStart: segmentOffset }}
+              />
+            )}
+            {runs.map((run, i) => (
+              <TabsTrigger
+                key={run.job.optimization_id}
+                value={run.job.optimization_id}
+                className="flex-1 min-w-0 relative z-10 rounded-md px-3 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
+              >
+                <span
+                  className="size-5 rounded-md flex items-center justify-center text-[0.625rem] font-bold text-white tabular-nums shrink-0"
+                  style={{ background: colorFor(i) }}
+                >
+                  {runToken(i)}
+                </span>
+                <span className="font-mono tabular-nums truncate" dir="ltr">
+                  {run.label}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {runs.map((run) => (
+            <TabsContent
+              key={run.job.optimization_id}
+              value={run.job.optimization_id}
+              className="mt-5"
+            >
+              <PromptBlock prompt={run.prompt} />
+            </TabsContent>
+          ))}
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Per-example ───────────────────────────────────────────────── */
+
+async function fetchPerExample(run: RunInfo): Promise<EvalExampleResult[] | null> {
+  try {
+    const id = run.job.optimization_id;
+    if (run.isGrid && run.winnerPairIndex != null) {
+      const res = await getPairTestResults(id, run.winnerPairIndex);
+      return res.optimized;
+    }
+    const res = await getTestResults(id);
+    return res.optimized;
+  } catch {
+    return null;
+  }
+}
+
+function PassBadge({ result }: { result: EvalExampleResult | undefined }) {
+  if (!result) {
+    return <span className="text-muted-foreground/50 text-xs">—</span>;
+  }
+  const scoreStr = fmt(result.score);
+  if (result.pass) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-[var(--success-dim)] border border-[var(--success-border)] text-[var(--success)] px-2 py-0.5 text-xs font-mono tabular-nums">
+        <Check className="size-3 shrink-0" aria-hidden="true" />
+        {scoreStr}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--danger-dim)] border border-[var(--danger-border)] text-[var(--danger)] px-2 py-0.5 text-xs font-mono tabular-nums">
+      <X className="size-3 shrink-0" aria-hidden="true" />
+      {scoreStr}
+    </span>
+  );
+}
+
+function renderValue(v: unknown): string {
+  if (v == null) return "—";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+function KVBlock({
+  title,
+  entries,
+  accent,
+}: {
+  title: string;
+  entries: Array<[string, unknown]>;
+  accent?: "muted" | "primary";
+}) {
+  if (entries.length === 0) return null;
+  const titleCls =
+    accent === "primary" ? "text-primary font-semibold" : "text-muted-foreground font-medium";
+  return (
+    <div className="space-y-1.5">
+      <p className={`text-[0.625rem] uppercase tracking-wider ${titleCls}`}>{title}</p>
+      <div className="space-y-1">
+        {entries.map(([k, v]) => (
+          <div key={k} className="rounded-md border border-border/40 bg-muted/20 px-2.5 py-1.5">
+            <div className="text-[0.625rem] text-muted-foreground/80 font-medium mb-0.5" dir="ltr">
+              {k}
+            </div>
+            <pre
+              className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed text-foreground/90"
+              dir="auto"
+            >
+              {renderValue(v)}
+            </pre>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExampleDetailRow({
+  runs,
+  inputs,
+  expected,
+  outputsPerRun,
+  colSpan,
+}: {
+  runs: RunInfo[];
+  inputs: Array<[string, unknown]>;
+  expected: Array<[string, unknown]>;
+  outputsPerRun: Array<EvalExampleResult | undefined>;
+  colSpan: number;
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="p-0 bg-muted/10 border-t border-border/30">
+        <div className="p-4 sm:p-5 space-y-5">
+          {inputs.length > 0 && <KVBlock title="קלט" entries={inputs} accent="muted" />}
+          {expected.length > 0 && <KVBlock title="פלט צפוי" entries={expected} accent="primary" />}
+          <div className="space-y-2">
+            <p className="text-[0.625rem] uppercase tracking-wider text-muted-foreground font-medium">
+              פלטים מהמודלים
+            </p>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+              {runs.map((run, i) => {
+                const res = outputsPerRun[i];
+                const tint = colorFor(i);
+                return (
+                  <div
+                    key={run.job.optimization_id}
+                    className="rounded-md border border-border/50 bg-card overflow-hidden flex flex-col"
+                  >
+                    <div
+                      className="flex items-center justify-between px-2.5 py-1.5 gap-2 border-b border-border/40"
+                      style={{ background: `color-mix(in oklch, ${tint} 10%, transparent)` }}
+                    >
+                      <RunChip index={i} label={run.label} />
+                      <PassBadge result={res} />
+                    </div>
+                    <div className="px-2.5 py-2 flex-1">
+                      {res ? (
+                        <div className="space-y-1.5">
+                          {Object.entries(res.outputs).map(([k, v]) => (
+                            <div key={k}>
+                              <div
+                                className="text-[0.625rem] text-muted-foreground/80 mb-0.5"
+                                dir="ltr"
+                              >
+                                {k}
+                              </div>
+                              <pre
+                                className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed text-foreground/90"
+                                dir="auto"
+                              >
+                                {renderValue(v)}
+                              </pre>
+                            </div>
+                          ))}
+                          {res.error && (
+                            <p className="text-[0.6875rem] text-[var(--danger)] mt-1" dir="auto">
+                              שגיאה: {res.error}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">אין פלט זמין</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function PerExampleSection({ runs }: { runs: RunInfo[] }) {
+  const [injectedDemo] = useState(() => consumePendingCompareExamples());
+  const [byRun, setByRun] = useState<Record<string, Map<number, EvalExampleResult>> | null>(() => {
+    if (!injectedDemo) return null;
+    const next: Record<string, Map<number, EvalExampleResult>> = {};
+    for (const run of runs) {
+      const arr = injectedDemo.byJobId[run.job.optimization_id];
+      if (!arr) continue;
+      const m = new Map<number, EvalExampleResult>();
+      arr.forEach((r) => m.set(r.index, r));
+      next[run.job.optimization_id] = m;
+    }
+    return next;
+  });
+  const [dataset, setDataset] = useState<OptimizationDatasetResponse | null>(
+    () => injectedDemo?.dataset ?? null,
+  );
+  const [loading, setLoading] = useState(() => !injectedDemo);
+  const [onlyDisagreements, setOnlyDisagreements] = useState(false);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    const [idA, idB] = optimizationIds;
-    if (!idA || !idB) {
-      setError("בחר שתי אופטימיזציות מלוח הבקרה כדי להשוות ביניהן");
+    if (injectedDemo) return;
+    let alive = true;
+    setLoading(true);
+
+    const resultsPromise = Promise.all(runs.map(fetchPerExample));
+    // Datasets are shared across compared runs (same task_fingerprint). Try each
+    // run in order and use the first successful response.
+    const datasetPromise = (async () => {
+      for (const r of runs) {
+        try {
+          return await getOptimizationDataset(r.job.optimization_id);
+        } catch {
+          continue;
+        }
+      }
+      return null;
+    })();
+
+    Promise.all([resultsPromise, datasetPromise]).then(([list, ds]) => {
+      if (!alive) return;
+      const next: Record<string, Map<number, EvalExampleResult>> = {};
+      list.forEach((arr, i) => {
+        const id = runs[i]!.job.optimization_id;
+        if (!arr) return;
+        const m = new Map<number, EvalExampleResult>();
+        arr.forEach((r) => m.set(r.index, r));
+        next[id] = m;
+      });
+      setByRun(next);
+      setDataset(ds);
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [runs, injectedDemo]);
+
+  const rowByIndex = useMemo(() => {
+    const m = new Map<number, Record<string, unknown>>();
+    if (!dataset) return m;
+    const all = [...dataset.splits.test, ...dataset.splits.val, ...dataset.splits.train];
+    all.forEach((r) => m.set(r.index, r.row));
+    return m;
+  }, [dataset]);
+
+  const indices = useMemo(() => {
+    if (!byRun) return [] as number[];
+    const set = new Set<number>();
+    Object.values(byRun).forEach((m) => m.forEach((_, idx) => set.add(idx)));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [byRun]);
+
+  const disagreementSet = useMemo(() => {
+    if (!byRun) return new Set<number>();
+    const s = new Set<number>();
+    indices.forEach((idx) => {
+      const passes: boolean[] = [];
+      runs.forEach((r) => {
+        const hit = byRun[r.job.optimization_id]?.get(idx);
+        if (hit) passes.push(hit.pass);
+      });
+      if (passes.length < 2) return;
+      if (passes.some((p) => p !== passes[0])) s.add(idx);
+    });
+    return s;
+  }, [byRun, indices, runs]);
+
+  const toggleRow = useCallback((idx: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }, []);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <p className="text-xs text-muted-foreground">טוען תוצאות לפי דוגמה...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!byRun || indices.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <p className="text-sm text-muted-foreground">אין תוצאות ברמת הדוגמה.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const rows = onlyDisagreements ? indices.filter((i) => disagreementSet.has(i)) : indices;
+  const inputFields = dataset ? Object.entries(dataset.column_mapping.inputs) : [];
+  const outputFields = dataset ? Object.entries(dataset.column_mapping.outputs) : [];
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border/40">
+          <div className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground tabular-nums">
+            <span>{indices.length === 1 ? "דוגמה אחת" : `${indices.length} דוגמאות`}</span>
+          </div>
+          <UiTooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setOnlyDisagreements((v) => !v)}
+                disabled={disagreementSet.size === 0}
+                aria-pressed={onlyDisagreements}
+                aria-label={onlyDisagreements ? "הצג את כל הדוגמאות" : "סנן לאי-הסכמות בלבד"}
+                className={`flex size-8 items-center justify-center rounded-md transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                  onlyDisagreements
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                <GitCompareArrows className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" dir="rtl">
+              {disagreementSet.size === 0
+                ? "אין אי-הסכמות"
+                : onlyDisagreements
+                  ? "הצג את כל הדוגמאות"
+                  : disagreementSet.size === 1
+                    ? "הצג רק אי-הסכמה אחת"
+                    : `הצג רק אי-הסכמות (${disagreementSet.size})`}
+            </TooltipContent>
+          </UiTooltip>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">כל הריצות הסכימו על כל הדוגמאות.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-separate border-spacing-0">
+              <thead>
+                <tr>
+                  <th className="py-2 w-10 border-b border-border/40 sticky start-0 bg-card z-10" />
+                  <th className="py-2 px-3 text-start text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground w-[120px] border-b border-border/40 sticky start-10 bg-card z-10 border-e border-border/30">
+                    דוגמה
+                  </th>
+                  {runs.map((run, i) => (
+                    <th
+                      key={run.job.optimization_id}
+                      className="py-2.5 px-2 border-b border-border/40 text-center"
+                    >
+                      <div className="flex items-center justify-center">
+                        <RunChip index={i} label={run.label} />
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((idx, rowIdx) => {
+                  const borderTop = rowIdx > 0 ? "border-t border-border/30" : "";
+                  const isDisagree = disagreementSet.has(idx);
+                  const isExpanded = expanded.has(idx);
+                  const row = rowByIndex.get(idx);
+                  const inputEntries: Array<[string, unknown]> = row
+                    ? inputFields.map(([field, col]) => [
+                        field,
+                        (row as Record<string, unknown>)[col],
+                      ])
+                    : [];
+                  const expectedEntries: Array<[string, unknown]> = row
+                    ? outputFields.map(([field, col]) => [
+                        field,
+                        (row as Record<string, unknown>)[col],
+                      ])
+                    : [];
+                  const outputsPerRun = runs.map((r) => byRun[r.job.optimization_id]?.get(idx));
+
+                  return (
+                    <Fragment key={idx}>
+                      <tr
+                        className="hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => toggleRow(idx)}
+                      >
+                        <td className={`py-2 px-2 ${borderTop} sticky start-0 z-10 bg-card`}>
+                          <div className="flex items-center gap-1.5">
+                            <ChevronDown
+                              className={`size-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            />
+                            {isDisagree && (
+                              <span
+                                className="size-1.5 rounded-full bg-primary shrink-0"
+                                aria-label="הריצות לא הסכימו בדוגמה זו"
+                                title="הריצות לא הסכימו בדוגמה זו"
+                              />
+                            )}
+                          </div>
+                        </td>
+                        <td
+                          className={`py-2 px-3 ${borderTop} sticky start-10 z-10 bg-card border-e border-border/30`}
+                        >
+                          <span
+                            className="text-xs font-mono tabular-nums text-muted-foreground"
+                            dir="ltr"
+                          >
+                            #{idx}
+                          </span>
+                        </td>
+                        {runs.map((run, i) => (
+                          <td key={i} className={`py-2 px-2 ${borderTop} text-center`}>
+                            <PassBadge result={outputsPerRun[i]} />
+                          </td>
+                        ))}
+                      </tr>
+                      {isExpanded && (
+                        <ExampleDetailRow
+                          runs={runs}
+                          inputs={inputEntries}
+                          expected={expectedEntries}
+                          outputsPerRun={outputsPerRun}
+                          colSpan={runs.length + 2}
+                        />
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────────────────── */
+
+export default function ComparePage() {
+  const searchParams = useSearchParams();
+  const optimizationIds = useMemo(
+    () => (searchParams.get("jobs") ?? "").split(",").filter(Boolean),
+    [searchParams],
+  );
+
+  // Consume the tutorial's one-shot demo in a useState initializer (runs once
+  // per mount-lifecycle, so React strict-mode's double-invoked effects don't
+  // cause the second run to see a null and fall through to the real API).
+  const [injectedDemo] = useState(() => consumePendingCompareDemo());
+  const [jobs, setJobs] = useState<OptimizationStatusResponse[] | null>(() =>
+    injectedDemo && injectedDemo.length >= 2 ? injectedDemo : null,
+  );
+  const [loading, setLoading] = useState(() => !(injectedDemo && injectedDemo.length >= 2));
+  const [error, setError] = useState<string | null>(null);
+  const [failedIds, setFailedIds] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState("overview");
+
+  useEffect(() => registerTutorialHook("setCompareTab", setActiveTab), []);
+
+  useEffect(() => {
+    if (injectedDemo && injectedDemo.length >= 2) return;
+    if (optimizationIds.length < 2) {
+      setError(`בחר לפחות שתי ${TERMS.optimizationPlural} מלוח הבקרה כדי להשוות ביניהן`);
       setLoading(false);
       return;
     }
-    Promise.all([getJob(idA), getJob(idB)])
-      .then(([a, b]) => {
-        setJobs([a, b]);
-        setError(null);
+    Promise.allSettled(optimizationIds.map((id) => getJob(id)))
+      .then((results) => {
+        const ok: OptimizationStatusResponse[] = [];
+        const failed: string[] = [];
+        results.forEach((r, i) => {
+          if (r.status === "fulfilled") ok.push(r.value);
+          else failed.push(optimizationIds[i]!);
+        });
+        if (ok.length < 2) {
+          setError(msg("compare.load_error"));
+          setJobs(null);
+        } else {
+          setJobs(ok);
+          setError(null);
+        }
+        setFailedIds(failed);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "שגיאה בטעינת האופטימיזציות"))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const runs = useMemo(() => (jobs ? jobs.map(deriveRunInfo) : []), [jobs]);
+  const winnerIdx = useMemo(() => winnerIndexOf(runs), [runs]);
 
   if (loading) {
     return (
@@ -266,11 +1450,13 @@ export default function ComparePage() {
     );
   }
 
-  if (error || !jobs[0] || !jobs[1]) {
+  if (error || !jobs || runs.length < 2) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <XCircle className="size-12 text-destructive" />
-        <p className="text-lg text-muted-foreground">{error ?? "לא ניתן לטעון את האופטימיזציות"}</p>
+        <p className="text-lg text-muted-foreground">
+          {error ?? `לא ניתן לטעון את ה${TERMS.optimizationPlural}`}
+        </p>
         <Button variant="outline" asChild>
           <Link href="/">חזרה</Link>
         </Button>
@@ -278,59 +1464,19 @@ export default function ComparePage() {
     );
   }
 
-  const [a, b] = jobs as [OptimizationStatusResponse, OptimizationStatusResponse];
+  const tabCls =
+    "relative flex-1 min-w-0 justify-center py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
 
-  const aBaseline =
-    a.result?.baseline_test_metric ?? a.grid_result?.best_pair?.baseline_test_metric;
-  const bBaseline =
-    b.result?.baseline_test_metric ?? b.grid_result?.best_pair?.baseline_test_metric;
-  const aOptimized =
-    a.result?.optimized_test_metric ?? a.grid_result?.best_pair?.optimized_test_metric;
-  const bOptimized =
-    b.result?.optimized_test_metric ?? b.grid_result?.best_pair?.optimized_test_metric;
-  const aImprovement =
-    a.result?.metric_improvement ??
-    (a.grid_result?.best_pair
-      ? (a.grid_result.best_pair.optimized_test_metric ?? 0) -
-        (a.grid_result.best_pair.baseline_test_metric ?? 0)
-      : undefined);
-  const bImprovement =
-    b.result?.metric_improvement ??
-    (b.grid_result?.best_pair
-      ? (b.grid_result.best_pair.optimized_test_metric ?? 0) -
-        (b.grid_result.best_pair.baseline_test_metric ?? 0)
-      : undefined);
-
-  const betterOptimized =
-    aOptimized != null && bOptimized != null
-      ? aOptimized > bOptimized
-        ? "a"
-        : aOptimized < bOptimized
-          ? "b"
-          : null
-      : null;
-  const betterImprovement =
-    aImprovement != null && bImprovement != null
-      ? aImprovement > bImprovement
-        ? "a"
-        : aImprovement < bImprovement
-          ? "b"
-          : null
-      : null;
-
-  const aPrompt =
-    a.result?.program_artifact?.optimized_prompt ??
-    a.grid_result?.best_pair?.program_artifact?.optimized_prompt;
-  const bPrompt =
-    b.result?.program_artifact?.optimized_prompt ??
-    b.grid_result?.best_pair?.program_artifact?.optimized_prompt;
-
-  const nameA = a.name || a.optimization_id.slice(0, 8);
-  const nameB = b.name || b.optimization_id.slice(0, 8);
+  const panelMotion = {
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -8 },
+    transition: { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] as const },
+  };
 
   return (
     <motion.div
-      className="space-y-8 pb-16"
+      className="space-y-6 pb-16"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
@@ -341,173 +1487,79 @@ export default function ComparePage() {
             לוח בקרה
           </Link>
           <ChevronLeft className="h-3 w-3" />
-          <span className="text-foreground font-medium">השוואת אופטימיזציות</span>
+          <span className="text-foreground font-medium">השוואת {TERMS.optimizationPlural}</span>
         </div>
       </FadeIn>
 
-      {/* Header with job cards */}
-      <FadeIn delay={0.05}>
-        <div className="rounded-2xl border border-border/40 bg-gradient-to-b from-white/95 to-[#F8F4EF] p-6 shadow-[0_1px_3px_rgba(28,22,18,0.03),0_4px_16px_rgba(28,22,18,0.025)]">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="size-9 rounded-lg bg-gradient-to-br from-[#3D2E22] to-[#5A4232] flex items-center justify-center shadow-sm">
-              <ArrowLeftRight className="size-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold" data-tutorial="compare-button">
-                <HelpTip text="השוואה מפורטת בין שתי הרצות — ציונים, הגדרות, ופרומפטים">
-                  השוואת אופטימיזציות
-                </HelpTip>
-              </h1>
-              <p className="text-[11px] text-muted-foreground">השוואה מפורטת בין שתי הרצות</p>
-            </div>
-          </div>
-
-          {/* Optimization identity cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { job: a, label: "A", name: nameA },
-              { job: b, label: "B", name: nameB },
-            ].map(({ job, label, name }) => (
-              <Link
-                key={job.optimization_id}
-                href={`/optimizations/${job.optimization_id}`}
-                className="group relative rounded-lg border border-border/50 bg-white/80 px-4 py-2.5 pe-5 hover:border-primary/30 transition-all duration-300 overflow-hidden flex items-center justify-between gap-3"
-              >
-                <div
-                  className={`absolute inset-y-0 end-0 w-1 ${label === "A" ? "bg-[#3D2E22]" : "bg-[#7C6350]"}`}
-                />
-                <p
-                  className="text-sm font-semibold truncate group-hover:text-primary transition-colors"
-                  dir="auto"
-                >
-                  {name}
-                </p>
-                <Badge variant="outline" className="text-[10px] shrink-0">
-                  {STATUS_LABELS[job.status] ?? job.status}
-                </Badge>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </FadeIn>
-
-      {/* Scores — card grid */}
-      <FadeIn delay={0.15}>
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-            <Trophy className="size-3.5" />
-            <HelpTip text="ציוני המדידה לפני ואחרי האופטימיזציה לכל הרצה">ציונים</HelpTip>
-          </h2>
-          <StaggerContainer
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
-            staggerDelay={0.06}
+      {failedIds.length > 0 && (
+        <FadeIn>
+          <div
+            className="flex items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            role="status"
           >
-            <ScoreCard
-              label={<HelpTip text="ציון המדידה לפני אופטימיזציה">ציון התחלתי</HelpTip>}
-              valueA={fmt(aBaseline)}
-              valueB={fmt(bBaseline)}
-              delay={0}
-            />
-            <ScoreCard
-              label={<HelpTip text="ציון המדידה אחרי אופטימיזציה">ציון מאופטם</HelpTip>}
-              valueA={fmt(aOptimized)}
-              valueB={fmt(bOptimized)}
-              winner={betterOptimized}
-              delay={0.05}
-            />
-            <ScoreCard
-              label={<HelpTip text="ההפרש בין הציון המשופר לציון ההתחלתי">שיפור</HelpTip>}
-              valueA={fmtImprovement(aImprovement)}
-              valueB={fmtImprovement(bImprovement)}
-              winner={betterImprovement}
-              delay={0.1}
-            />
-            <ScoreCard
-              label="זמן ריצה"
-              valueA={fmtElapsed(a.result?.runtime_seconds)}
-              valueB={fmtElapsed(b.result?.runtime_seconds)}
-              delay={0.15}
-            />
-          </StaggerContainer>
-        </div>
-      </FadeIn>
+            <AlertTriangle className="size-4 mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{msg("compare.partial_load")}</p>
+              <p className="mt-0.5 text-xs text-amber-900/75 break-all" dir="ltr">
+                {failedIds.join(", ")}
+              </p>
+            </div>
+          </div>
+        </FadeIn>
+      )}
 
-      {/* Config comparison */}
-      <FadeIn delay={0.25}>
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold">
-              <Cpu className="size-3.5" />
-              <HelpTip text="השוואת ההגדרות שנבחרו לכל הרצה — מודל, אופטימייזר, ונתונים">
-                הגדרות
-              </HelpTip>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {/* Column headers */}
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 pb-2 mb-1 border-b border-border/40">
-              <span className="text-[10px] font-bold text-end uppercase tracking-wider text-muted-foreground truncate">
-                {nameA}
-              </span>
-              <span className="min-w-[60px] sm:min-w-[100px]" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
-                {nameB}
-              </span>
-            </div>
-            <div className="divide-y divide-border/30">
-              <ConfigRow
-                icon={Layers}
-                label="מודול"
-                a={a.module_name ?? "—"}
-                b={b.module_name ?? "—"}
-              />
-              <ConfigRow
-                icon={Cpu}
-                label="אופטימייזר"
-                a={a.optimizer_name ?? "—"}
-                b={b.optimizer_name ?? "—"}
-              />
-              <ConfigRow
-                icon={Sparkles}
-                label="מודל"
-                a={a.model_name ?? "—"}
-                b={b.model_name ?? "—"}
-              />
-              <ConfigRow
-                icon={Database}
-                label="שורות בדאטאסט"
-                a={String(a.dataset_rows ?? "—")}
-                b={String(b.dataset_rows ?? "—")}
-              />
-              <ConfigRow
-                icon={Clock}
-                label="זמן ריצה"
-                a={fmtElapsed(a.result?.runtime_seconds)}
-                b={fmtElapsed(b.result?.runtime_seconds)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </FadeIn>
+      <VerdictBlock runs={runs} winnerIdx={winnerIdx} />
 
-      {/* Prompts comparison — side by side */}
-      <FadeIn delay={0.35}>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold">
-              <Sparkles className="size-3.5" />
-              <HelpTip text="הפרומפט שנבנה אוטומטית ע״י האופטימייזר — כולל הנחיות ודוגמאות שנבחרו">
-                פרומפט מאופטם
-              </HelpTip>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <PromptBlock prompt={aPrompt} label={nameA} />
-              <PromptBlock prompt={bPrompt} label={nameB} />
-            </div>
-          </CardContent>
-        </Card>
+      <FadeIn delay={0.15}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
+          <TabsList variant="line" className="w-full border-b border-border/50 pb-0 gap-0">
+            <TabsTrigger value="overview" className={tabCls}>
+              <BarChart3 className="size-3.5" /> סקירה
+            </TabsTrigger>
+            <TabsTrigger value="config" className={tabCls}>
+              <Cpu className="size-3.5" /> הגדרות
+            </TabsTrigger>
+            <TabsTrigger value="prompts" className={tabCls}>
+              <Sparkles className="size-3.5" /> פרומפטים
+            </TabsTrigger>
+            <TabsTrigger value="examples" className={tabCls}>
+              <ListChecks className="size-3.5" /> דוגמאות
+            </TabsTrigger>
+          </TabsList>
+
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeTab}
+              initial={panelMotion.initial}
+              animate={panelMotion.animate}
+              exit={panelMotion.exit}
+              transition={panelMotion.transition}
+              className="space-y-4 mt-4"
+            >
+              {activeTab === "overview" && (
+                <div data-tutorial="compare-scores" className="space-y-4">
+                  <PerformanceChart runs={runs} />
+                  <ScoresTable runs={runs} winnerIdx={winnerIdx} />
+                </div>
+              )}
+              {activeTab === "config" && (
+                <div data-tutorial="compare-config">
+                  <ConfigTable runs={runs} winnerIdx={winnerIdx} />
+                </div>
+              )}
+              {activeTab === "prompts" && (
+                <div data-tutorial="compare-prompts">
+                  <PromptsSection runs={runs} winnerIdx={winnerIdx} />
+                </div>
+              )}
+              {activeTab === "examples" && (
+                <div data-tutorial="compare-examples">
+                  <PerExampleSection runs={runs} />
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </Tabs>
       </FadeIn>
     </motion.div>
   );

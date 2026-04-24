@@ -6,12 +6,7 @@ from .common import HEALTH_STATUS_OK
 
 
 class HealthResponse(BaseModel):
-    """Response payload for the health check endpoint.
-
-    Attributes:
-        status: Health status string, typically "ok".
-        registered_assets: Dictionary of registered modules, metrics, and optimizers.
-    """
+    """Response payload for the health check endpoint."""
 
     status: str = Field(default=HEALTH_STATUS_OK)
     registered_assets: dict[str, list[str]]

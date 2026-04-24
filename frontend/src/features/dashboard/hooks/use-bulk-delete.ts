@@ -2,17 +2,21 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { cancelJob, deleteJob, bulkDeleteJobs } from "@/shared/lib/api";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
-import { msg } from "@/features/shared/messages";
-import type {
-  JobStatus,
-  PaginatedJobsResponse,
-} from "@/shared/types/api";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
+import type { JobStatus, PaginatedJobsResponse } from "@/shared/types/api";
 
 type UseBulkDeleteArgs = {
   data: PaginatedJobsResponse | null;
   setData: React.Dispatch<React.SetStateAction<PaginatedJobsResponse | null>>;
   setPageOffset: React.Dispatch<React.SetStateAction<number>>;
   fetchJobs: () => Promise<void> | void;
+  /**
+   * Items visible to the user. When the dashboard is overlaid with demo
+   * data during the tutorial, this is the merged view — passing real
+   * `data` alone would incorrectly prune demo IDs from the selection.
+   */
+  visibleData?: PaginatedJobsResponse | null;
 };
 
 export type DeleteTarget = { id: string; status: string } | null;
@@ -37,6 +41,7 @@ export function useBulkDelete({
   setData,
   setPageOffset,
   fetchJobs,
+  visibleData,
 }: UseBulkDeleteArgs): UseBulkDeleteReturn {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deleting, setDeleting] = useState(false);
@@ -57,9 +62,10 @@ export function useBulkDelete({
 
   // Drop selected IDs that no longer exist in the current dataset
   // (e.g. after another user deleted them or a status change removed them).
+  const pruneSource = visibleData ?? data;
   useEffect(() => {
-    if (!data || selectedIds.size === 0) return;
-    const present = new Set(data.items.map((j) => j.optimization_id));
+    if (!pruneSource || selectedIds.size === 0) return;
+    const present = new Set(pruneSource.items.map((j) => j.optimization_id));
     let changed = false;
     const next = new Set<string>();
     for (const id of selectedIds) {
@@ -67,7 +73,7 @@ export function useBulkDelete({
       else changed = true;
     }
     if (changed) setSelectedIds(next);
-  }, [data, selectedIds]);
+  }, [pruneSource, selectedIds]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -93,9 +99,7 @@ export function useBulkDelete({
       await deleteJob(targetId);
       window.dispatchEvent(new Event("optimizations-changed"));
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : msg("dashboard.delete_failed"),
-      );
+      toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
       fetchJobs();
     } finally {
       setDeleting(false);
@@ -114,9 +118,7 @@ export function useBulkDelete({
     // parallel, then bulk-delete.
     const activeIds = data
       ? data.items
-          .filter(
-            (j) => idSet.has(j.optimization_id) && ACTIVE_STATUSES.has(j.status),
-          )
+          .filter((j) => idSet.has(j.optimization_id) && ACTIVE_STATUSES.has(j.status))
           .map((j) => j.optimization_id)
       : [];
 
@@ -145,36 +147,32 @@ export function useBulkDelete({
       // server — from the user's perspective that's identical to a
       // successful delete. Only real failures are surfaced.
       const realSkips = res.skipped.filter((s) => s.reason !== "not_found");
-      const effectivelyDeleted =
-        res.deleted.length + (res.skipped.length - realSkips.length);
+      const effectivelyDeleted = res.deleted.length + (res.skipped.length - realSkips.length);
       if (effectivelyDeleted > 0 && realSkips.length === 0) {
         toast.success(
           effectivelyDeleted === 1
-            ? "נמחקה אופטימיזציה אחת"
-            : `נמחקו ${effectivelyDeleted} אופטימיזציות`,
+            ? `נמחקה ${TERMS.optimization} אחת`
+            : `נמחקו ${effectivelyDeleted} ${TERMS.optimizationPlural}`,
         );
       } else if (effectivelyDeleted > 0 && realSkips.length > 0) {
         const delPart =
           effectivelyDeleted === 1
-            ? "נמחקה אופטימיזציה אחת"
-            : `נמחקו ${effectivelyDeleted} אופטימיזציות`;
-        const skipPart =
-          realSkips.length === 1 ? "אחת לא נמחקה" : `${realSkips.length} לא נמחקו`;
+            ? `נמחקה ${TERMS.optimization} אחת`
+            : `נמחקו ${effectivelyDeleted} ${TERMS.optimizationPlural}`;
+        const skipPart = realSkips.length === 1 ? "אחת לא נמחקה" : `${realSkips.length} לא נמחקו`;
         toast.warning(`${delPart}, ${skipPart}`);
       } else {
         toast.error(
           realSkips.length === 1
-            ? "לא ניתן היה למחוק את האופטימיזציה"
-            : `לא ניתן היה למחוק ${realSkips.length} אופטימיזציות`,
+            ? `לא ניתן היה למחוק את ה${TERMS.optimization}`
+            : `לא ניתן היה למחוק ${realSkips.length} ${TERMS.optimizationPlural}`,
         );
       }
       // Always re-fetch after delete to reconcile with server truth.
       await fetchJobs();
       window.dispatchEvent(new Event("optimizations-changed"));
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : msg("dashboard.delete_failed"),
-      );
+      toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
       fetchJobs();
     } finally {
       setBulkDeleting(false);

@@ -18,6 +18,7 @@ import {
   Cell,
 } from "recharts";
 import { ChartTooltip } from "./chart-utils";
+import { TERMS } from "@/shared/lib/terms";
 
 interface RuntimeDistributionChartProps {
   data: Array<{ name: string; זמן_דקות: number }>;
@@ -25,11 +26,15 @@ interface RuntimeDistributionChartProps {
   onBarClick?: (optimizationId: string) => void;
 }
 
-export function RuntimeDistributionChart({ data, optimizationIds, onBarClick }: RuntimeDistributionChartProps) {
+export function RuntimeDistributionChart({
+  data,
+  optimizationIds,
+  onBarClick,
+}: RuntimeDistributionChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  
+
   if (data.length === 0) return null;
-  
+
   return (
     <div className="h-[250px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -41,7 +46,7 @@ export function RuntimeDistributionChart({ data, optimizationIds, onBarClick }: 
             axisLine={false}
             tick={{ fontSize: 9, fill: "#A69585", fontFamily: "var(--font-mono, monospace)" }}
             label={{
-              value: "מזהה אופטימיזציה",
+              value: `מזהה ${TERMS.optimization}`,
               position: "insideBottom",
               offset: -10,
               fontSize: 10,

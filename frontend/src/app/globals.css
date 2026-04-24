@@ -497,21 +497,21 @@ table tbody tr {
   }
 }
 
-/* Better focus rings for RTL — skip plain inputs/textareas */
-:focus-visible:not(input):not(textarea) {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-/* Inputs get focus via border/ring utilities, not global outline */
-input:focus-visible,
-textarea:focus-visible {
+/* Focus indicators are handled per-component (shadcn/Radix already paint
+   their own focus-visible rings). The previous global 2px outline was
+   too loud and lingered on trigger buttons after popover/dialog close,
+   because Radix returns focus programmatically and Chrome treats that
+   as keyboard focus. */
+:focus-visible {
   outline: none;
 }
 
 /* Smooth page transitions */
 main {
   animation: fadeIn var(--duration-base) ease-out;
+  /* Reserve scrollbar width on platforms with classic scrollbars (Windows).
+     On macOS overlay scrollbars this is a no-op. */
+  scrollbar-gutter: stable;
 }
 
 @keyframes fadeIn {
@@ -857,27 +857,19 @@ header {
   }
 }
 
-/* Standard mobile */
+/* Standard mobile & narrow desktop windows (split-screen, quarter-snap) */
 @media (max-width: 767px) {
-  /* Stack grid layouts */
-  .grid-cols-2 {
+  /* Stack grid layouts — scoped to main so portaled dialogs aren't affected */
+  main .grid-cols-2 {
     grid-template-columns: 1fr !important;
   }
-  .grid-cols-3 {
+  main .grid-cols-3 {
     grid-template-columns: 1fr !important;
   }
 
   /* Tighter heading */
   h1 {
     font-size: 1.5rem !important;
-  }
-
-  /* Touch-friendly tap targets */
-  button,
-  a,
-  [role="button"] {
-    min-height: 44px;
-    min-width: 44px;
   }
 
   /* Better mobile card spacing */
@@ -925,23 +917,30 @@ header {
 
 /* Tablet adjustments */
 @media (min-width: 768px) and (max-width: 1023px) {
-  .grid-cols-3 {
+  main .grid-cols-3 {
     grid-template-columns: repeat(2, 1fr) !important;
   }
-
-  /* Tablet grid adjustments handled by Tailwind responsive classes */
 }
 
-/* Large screens — more breathing room */
+/* Large screens & ultrawides — fluid max-width */
 @media (min-width: 1440px) {
   .mx-auto.max-w-7xl {
-    max-width: 90rem;
-    padding-inline: 3rem;
+    max-width: clamp(80rem, 85vw, 120rem);
+    padding-inline: clamp(2rem, 3vw, 4rem);
   }
 }
 
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
+  /* Touch-friendly tap targets — only on actual touch devices,
+     not desktop users in narrow split-screen windows */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   /* No hover effects on touch */
   [data-slot="card"]:hover {
     transform: none;
@@ -1051,12 +1050,6 @@ header {
    FLUID LAYOUT SYSTEM — Desktop window resizing
    ════════════════════════════════════════════ */
 
-/* Dialog/modal fluid width */
-[role="dialog"] {
-  max-width: min(90%, 600px);
-  width: 100%;
-}
-
 /* Responsive breakpoints for desktop fluid layouts */
 @media (max-width: 1200px) {
   /* Wider spacing for medium-large viewports */
@@ -1078,58 +1071,48 @@ header {
 }
 
 @media (max-width: 960px) {
-  /* Compact layouts for medium viewports */
-  h1 {
-    font-size: clamp(1.5rem, 3vw, 2rem) !important;
-  }
-
-  .grid-cols-2 {
+  /* Compact layouts for medium viewports — let the fluid h1 clamp handle sizing */
+  main .grid-cols-2 {
     grid-template-columns: 1fr !important;
   }
-  .grid-cols-3 {
+  main .grid-cols-3 {
     grid-template-columns: repeat(2, 1fr) !important;
   }
-  .grid-cols-4 {
+  main .grid-cols-4 {
     grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
 @media (max-width: 800px) {
-  /* Minimum comfortable width for split-screen */
-  h1 {
-    font-size: clamp(1.25rem, 3.5vw, 1.75rem) !important;
-  }
-
-  .grid-cols-3 {
+  main .grid-cols-3 {
     grid-template-columns: 1fr !important;
   }
-  .grid-cols-4 {
+  main .grid-cols-4 {
     grid-template-columns: 1fr !important;
   }
 
-  /* Stack stat cards vertically */
-  .stats-grid {
-    grid-template-columns: 1fr !important;
-  }
+  /* Stats cards use auto-fit — no override needed */
 }
 
-/* Fluid typography scale */
+/* Fluid typography scale — 14.4px floor on mobile, 16.2px ceiling on wide
+   desktops (0.9× of the original 16–18px range). Every rem-based Tailwind
+   text-* utility scales off this. */
 html {
-  font-size: clamp(14px, 1.2vw, 16px);
+  font-size: clamp(14.4px, 13.05px + 0.225vw, 16.2px);
 }
 
 h1 {
-  font-size: clamp(1.75rem, 3.5vw, 2.25rem);
-  line-height: 1.2;
+  font-size: clamp(2rem, 1.5rem + 1.75vw, 2.75rem);
+  line-height: 1.22;
 }
 
 h2 {
-  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-size: clamp(1.5rem, 1.25rem + 1vw, 1.875rem);
   line-height: 1.3;
 }
 
 h3 {
-  font-size: clamp(1.125rem, 2vw, 1.25rem);
+  font-size: clamp(1.25rem, 1.125rem + 0.5vw, 1.5rem);
   line-height: 1.4;
 }
 
@@ -1148,13 +1131,55 @@ table {
 }
 
 @media (max-width: 960px) {
-  table {
+  main table {
     min-width: 700px; /* Force horizontal scroll below this width */
   }
 }
 
 @media (max-width: 800px) {
-  table {
+  main table {
     min-width: 600px;
+  }
+}
+
+/* Streaming line-fade — applied to newly-appended CodeMirror lines while
+   the code agent streams generated content. Respects reduced motion. */
+@keyframes cm-line-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cm-line-fresh {
+  animation: cm-line-fade-in 180ms ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-line-fresh {
+    animation: none;
+  }
+}
+
+/* Changed-line flash — briefly tints lines that differ from the prior
+   version after the agent refines the code. Warm amber matching the palette. */
+@keyframes cm-line-flash {
+  0% {
+    background-color: rgba(245, 195, 100, 0.55);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.cm-line-flash {
+  animation: cm-line-flash 700ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-line-flash {
+    animation: none;
   }
 }

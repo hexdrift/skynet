@@ -17,19 +17,7 @@ def require_mapping_matches_signature(
     signature_inputs: list[str],
     signature_outputs: list[str],
 ) -> None:
-    """Ensure the column mapping covers every signature field exactly once.
-
-    Args:
-        mapping: ColumnMapping specifying input/output column mappings.
-        signature_inputs: List of input field names from the DSPy signature.
-        signature_outputs: List of output field names from the DSPy signature.
-
-    Returns:
-        None.
-
-    Raises:
-        ServiceError: If any signature fields are missing from the mapping.
-    """
+    """Raise ServiceError if any signature field is not covered by the column mapping."""
     missing_inputs = set(signature_inputs) - set(mapping.inputs.keys())
     missing_outputs = set(signature_outputs) - set(mapping.outputs.keys())
     if missing_inputs or missing_outputs:
@@ -44,18 +32,7 @@ def require_mapping_columns_in_dataset(
     mapping: ColumnMapping,
     dataset: list[dict[str, Any]],
 ) -> None:
-    """Ensure every mapped column name exists in the dataset rows.
-
-    Args:
-        mapping: ColumnMapping specifying input/output column mappings.
-        dataset: Non-empty list of row dicts from the request.
-
-    Returns:
-        None.
-
-    Raises:
-        ServiceError: If mapped columns are not found in dataset keys.
-    """
+    """Raise ServiceError if any mapped column name is absent from the dataset rows."""
     dataset_columns: set[str] = set()
     for row in dataset:
         dataset_columns.update(row.keys())

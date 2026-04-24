@@ -16,7 +16,8 @@ import { Skeleton } from "boneyard-js/react";
 import { dataTabBones } from "@/features/optimizations/lib/data-tab-bones";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
+import { tip } from "@/shared/lib/tooltips";
 import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/shared/lib/api";
 import type {
   OptimizationDatasetResponse,
@@ -287,11 +288,11 @@ export function DataTab({
             <div className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-[#3D2E22]">
-                  <HelpTip text="תוצאות הרצת התוכנית על דוגמאות הבדיקה — ציון לכל דוגמה וסיכום כולל">
+                  <HelpTip text={tip("code.predictions_table")}>
                     הערכת סט הבדיקה
                   </HelpTip>
                 </div>
-                <div className="text-[11px] text-[#8C7A6B] mt-0.5">
+                <div className="text-[0.6875rem] text-[#8C7A6B] mt-0.5">
                   {testResultsLoading
                     ? "טוען תוצאות..."
                     : evalCount > 0
@@ -299,7 +300,7 @@ export function DataTab({
                       : ""}
                 </div>
               </div>
-              <div className="relative inline-flex rounded-lg bg-[#F0EBE4] p-1 gap-1 text-[11px] shrink-0">
+              <div className="relative inline-flex rounded-lg bg-[#F0EBE4] p-1 gap-1 text-[0.6875rem] shrink-0">
                 <div
                   className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-150 ease-out"
                   style={{
@@ -349,7 +350,7 @@ export function DataTab({
             const count = splits.length;
             return (
               <div
-                className="relative flex w-full rounded-lg bg-muted p-1 gap-1 text-[11px]"
+                className="relative flex w-full rounded-lg bg-muted p-1 gap-1 text-[0.6875rem]"
                 data-tutorial="split-selector"
               >
                 <div
@@ -372,7 +373,7 @@ export function DataTab({
             );
           })()}
           <ResetColumnsButton resize={colResize} />
-          <div className="text-[10px] text-muted-foreground tabular-nums ms-auto">
+          <div className="text-[0.625rem] text-muted-foreground tabular-nums ms-auto">
             {filtered.length} שורות
           </div>
         </div>
@@ -481,7 +482,7 @@ export function DataTab({
                               {ev ? (
                                 <div className="flex flex-col items-center gap-0.5">
                                   <span
-                                    className="text-[10px] font-mono tabular-nums font-medium"
+                                    className="text-[0.625rem] font-mono tabular-nums font-medium"
                                     style={{ color: scoreColor(ev.score) }}
                                   >
                                     {ev.score.toFixed(2)}
@@ -497,7 +498,7 @@ export function DataTab({
                                   </div>
                                 </div>
                               ) : (
-                                <span className="text-[10px] text-[#E5DDD4] flex justify-center">
+                                <span className="text-[0.625rem] text-[#E5DDD4] flex justify-center">
                                   —
                                 </span>
                               )}
@@ -567,7 +568,7 @@ export function DataTab({
                       <tr>
                         <td
                           colSpan={99}
-                          className="text-center py-3 text-[10px] text-muted-foreground"
+                          className="text-center py-3 text-[0.625rem] text-muted-foreground"
                         >
                           מוצגות 200 מתוך {filtered.length} שורות
                         </td>

@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import create_engine, func, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..constants import STRUCTURAL_PROGRESS_EVENTS
 from .models import Base, JobModel, LogEntryModel, ProgressEventModel
 
 logger = logging.getLogger(__name__)
@@ -29,12 +30,6 @@ class RemoteDBJobStore:
     """
 
     def __init__(self, db_url: str) -> None:
-        """Initialize the PostgreSQL job store.
-
-        Args:
-            db_url: PostgreSQL connection string
-                (e.g. "postgresql://user:pass@host:5432/db").
-        """
         self._engine = create_engine(
             db_url,
             echo=False,
@@ -44,7 +39,9 @@ class RemoteDBJobStore:
             pool_recycle=3600,
             pool_timeout=30,
         )
+        self._bootstrap_pgvector()
         Base.metadata.create_all(self._engine)
+        self._bootstrap_vector_indexes()
         self._session_factory = sessionmaker(bind=self._engine)
         logger.info("Initialized PostgreSQL database at %s", db_url.split("@")[-1] if "@" in db_url else db_url)
 
@@ -60,32 +57,100 @@ class RemoteDBJobStore:
                 conn.commit()
                 logger.info("Migration: added 'pair_index' column to job_logs table")
 
+        self._migrate_job_embeddings_columns()
+
+    def _bootstrap_pgvector(self) -> None:
+        """Ensure the pgvector extension exists before creating Vector columns.
+
+        Safe to call repeatedly. If the database role lacks the privilege
+        to install the extension, the log line below is the operator's
+        hint to run ``CREATE EXTENSION vector`` once out-of-band.
+        """
+        try:
+            with self._engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.commit()
+        except Exception as exc:
+            logger.warning(
+                "pgvector extension bootstrap failed (%s). "
+                "Recommendation service will be unavailable until an admin runs "
+                "'CREATE EXTENSION vector' on the database.",
+                exc,
+            )
+
+    def _migrate_job_embeddings_columns(self) -> None:
+        """Add Phase 2 columns (quality gate + dashboard projection) on warm databases.
+
+        ``create_all`` adds columns for fresh installs; this fills the gap for
+        anyone who has an older ``job_embeddings`` table from Phase 1. Each
+        ADD COLUMN is IF NOT EXISTS so the migration is idempotent.
+        """
+        migrations = [
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS is_recommendable BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS baseline_metric DOUBLE PRECISION",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS optimized_metric DOUBLE PRECISION",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS summary_text TEXT",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS signature_code TEXT",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS metric_name VARCHAR(255)",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS optimizer_name VARCHAR(64)",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS optimizer_kwargs JSON",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS module_name VARCHAR(128)",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS task_name VARCHAR(255)",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS projection_x DOUBLE PRECISION",
+            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS projection_y DOUBLE PRECISION",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_job_embeddings_recommendable "
+                "ON job_embeddings (is_recommendable) WHERE is_recommendable = TRUE"
+            ),
+        ]
+        try:
+            with self._engine.connect() as conn:
+                for stmt in migrations:
+                    conn.execute(text(stmt))
+                conn.commit()
+        except Exception as exc:
+            logger.warning("job_embeddings Phase-2 migration skipped: %s", exc)
+
+    def _bootstrap_vector_indexes(self) -> None:
+        """Create HNSW cosine indexes on the job_embeddings vector columns.
+
+        SQLAlchemy's create_all can't express HNSW, and we don't want to
+        pay for a reindex on every restart — the IF NOT EXISTS guard
+        makes the call free on warm databases.
+        """
+        statements = [
+            (
+                "CREATE INDEX IF NOT EXISTS idx_job_embeddings_summary_hnsw "
+                "ON job_embeddings USING hnsw (embedding_summary vector_cosine_ops)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_job_embeddings_code_hnsw "
+                "ON job_embeddings USING hnsw (embedding_code vector_cosine_ops)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_job_embeddings_schema_hnsw "
+                "ON job_embeddings USING hnsw (embedding_schema vector_cosine_ops)"
+            ),
+        ]
+        try:
+            with self._engine.connect() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+                conn.commit()
+        except Exception as exc:
+            logger.warning("HNSW index bootstrap skipped: %s", exc)
+
     @property
     def engine(self):
-        """Expose the SQLAlchemy engine for shared table operations.
-
-        Returns:
-            The SQLAlchemy engine backing this job store.
-        """
+        """The SQLAlchemy engine backing this store (for shared table operations)."""
         return self._engine
 
     def _get_session(self) -> Session:
-        """Create a new SQLAlchemy session.
-
-        Returns:
-            A new database session.
-        """
+        """Create and return a new SQLAlchemy session."""
         return self._session_factory()
 
     def _job_to_dict(self, job: JobModel) -> dict[str, Any]:
-        """Convert a JobModel ORM instance to a plain dictionary.
-
-        Args:
-            job: SQLAlchemy job model instance.
-
-        Returns:
-            Dictionary representation of the job with ISO-formatted timestamps.
-        """
+        """Convert a JobModel ORM instance to a plain dict with ISO-formatted timestamps."""
         return {
             "optimization_id": job.optimization_id,
             "status": job.status,
@@ -101,15 +166,7 @@ class RemoteDBJobStore:
         }
 
     def create_job(self, optimization_id: str, estimated_remaining_seconds: float | None = None) -> dict[str, Any]:
-        """Create a new job record in the PostgreSQL database.
-
-        Args:
-            optimization_id: Unique identifier for the job.
-            estimated_remaining_seconds: Optional initial time estimate.
-
-        Returns:
-            Dictionary representation of the newly created job.
-        """
+        """Create a new job record in the database and return its dict representation."""
         now = datetime.now(timezone.utc)
         job = JobModel(
             optimization_id=optimization_id,
@@ -123,63 +180,39 @@ class RemoteDBJobStore:
         try:
             session.add(job)
             session.commit()
+            session.refresh(job)
+            return self._job_to_dict(job)
         finally:
             session.close()
-        return {
-            "optimization_id": optimization_id,
-            "status": "pending",
-            "created_at": now.isoformat(),
-            "started_at": None,
-            "completed_at": None,
-            "estimated_remaining_seconds": estimated_remaining_seconds,
-            "message": None,
-            "latest_metrics": {},
-            "result": None,
-            "payload_overview": {},
-        }
 
     def update_job(self, optimization_id: str, **kwargs: Any) -> None:
-        """Update fields on an existing job.
+        """Update fields on an existing job; raises KeyError if not found.
 
-        Args:
-            optimization_id: Identifier of the job to update.
-            **kwargs: Field names and values to set. Datetime string values
-                are automatically parsed, and latest_metrics is merged.
-
-        Returns:
-            None.
+        Datetime string values are automatically parsed; latest_metrics is merged instead of replaced.
         """
         datetime_fields = {"created_at", "started_at", "completed_at"}
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
-            if job:
-                for key, value in kwargs.items():
-                    if hasattr(job, key):
-                        if key in datetime_fields and isinstance(value, str):
-                            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                        if key == "latest_metrics" and job.latest_metrics:
-                            merged = dict(job.latest_metrics)
-                            merged.update(value)
-                            setattr(job, key, merged)
-                        else:
-                            setattr(job, key, value)
-                session.commit()
+            if not job:
+                raise KeyError(f"Job '{optimization_id}' not found")
+            for key, value in kwargs.items():
+                if not hasattr(job, key):
+                    raise ValueError(f"Unknown field '{key}' on JobModel")
+                if key in datetime_fields and isinstance(value, str):
+                    value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                if key == "latest_metrics" and job.latest_metrics:
+                    merged = dict(job.latest_metrics)
+                    merged.update(value)
+                    setattr(job, key, merged)
+                else:
+                    setattr(job, key, value)
+            session.commit()
         finally:
             session.close()
 
     def get_job(self, optimization_id: str) -> dict[str, Any]:
-        """Retrieve a single job by its identifier.
-
-        Args:
-            optimization_id: Identifier of the job to retrieve.
-
-        Returns:
-            Dictionary representation of the job.
-
-        Raises:
-            KeyError: If the job does not exist.
-        """
+        """Retrieve a job by its ID; raises KeyError if not found."""
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
@@ -190,14 +223,7 @@ class RemoteDBJobStore:
             session.close()
 
     def job_exists(self, optimization_id: str) -> bool:
-        """Check whether a job exists in the store.
-
-        Args:
-            optimization_id: Identifier of the job to check.
-
-        Returns:
-            True if the job exists, False otherwise.
-        """
+        """Return True if the job exists in the database."""
         session = self._get_session()
         try:
             return session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first() is not None
@@ -205,14 +231,7 @@ class RemoteDBJobStore:
             session.close()
 
     def delete_job(self, optimization_id: str) -> None:
-        """Delete a job and all its associated logs and progress events.
-
-        Args:
-            optimization_id: Identifier of the job to delete.
-
-        Returns:
-            None.
-        """
+        """Delete a job and all its associated logs and progress events."""
         session = self._get_session()
         try:
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
@@ -285,11 +304,7 @@ class RemoteDBJobStore:
             session.close()
 
     def recover_orphaned_jobs(self) -> int:
-        """Mark running/validating jobs as failed after a service restart.
-
-        Returns:
-            Number of orphaned jobs recovered.
-        """
+        """Mark running/validating jobs as failed after a service restart; returns count recovered."""
         session = self._get_session()
         try:
             now = datetime.now(timezone.utc)
@@ -307,11 +322,7 @@ class RemoteDBJobStore:
             session.close()
 
     def recover_pending_jobs(self) -> list[str]:
-        """Retrieve optimization IDs that are still pending, ordered by creation time.
-
-        Returns:
-            List of pending optimization IDs.
-        """
+        """Return IDs of still-pending jobs ordered by creation time."""
         session = self._get_session()
         try:
             jobs = (
@@ -322,15 +333,7 @@ class RemoteDBJobStore:
             session.close()
 
     def set_payload_overview(self, optimization_id: str, overview: dict[str, Any]) -> None:
-        """Store a summary overview of the job payload.
-
-        Args:
-            optimization_id: Identifier of the job.
-            overview: Dictionary of overview fields to persist.
-
-        Returns:
-            None.
-        """
+        """Store a summary overview of the job payload."""
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
@@ -342,22 +345,38 @@ class RemoteDBJobStore:
             session.close()
 
     def record_progress(self, optimization_id: str, message: str | None, metrics: dict[str, Any]) -> None:
-        """Record a progress event and merge metrics into the job's latest_metrics.
-
-        Args:
-            optimization_id: Identifier of the job.
-            message: Optional human-readable progress description.
-            metrics: Dictionary of metric key-value pairs to merge.
-
-        Returns:
-            None.
-        """
+        """Record a progress event and merge metrics into the job's latest_metrics."""
         now = datetime.now(timezone.utc)
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
             if not job:
                 return
+
+            event_count = (
+                session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
+            )
+            if event_count >= MAX_PROGRESS_EVENTS:
+                # Evict the oldest non-structural event first — keep phase
+                # markers (grid_pair_started, baseline_evaluated, etc.) so
+                # the UI can still determine pipeline stage on long runs.
+                # Only touch structural rows if nothing else is left.
+                oldest = (
+                    session.query(ProgressEventModel)
+                    .filter(ProgressEventModel.optimization_id == optimization_id)
+                    .filter(ProgressEventModel.event.notin_(STRUCTURAL_PROGRESS_EVENTS))
+                    .order_by(ProgressEventModel.timestamp.asc())
+                    .first()
+                )
+                if oldest is None:
+                    oldest = (
+                        session.query(ProgressEventModel)
+                        .filter(ProgressEventModel.optimization_id == optimization_id)
+                        .order_by(ProgressEventModel.timestamp.asc())
+                        .first()
+                    )
+                if oldest:
+                    session.delete(oldest)
 
             event = ProgressEventModel(
                 optimization_id=optimization_id, timestamp=now, event=message, metrics=metrics or {}
@@ -369,32 +388,12 @@ class RemoteDBJobStore:
                 merged.update(metrics)
                 job.latest_metrics = merged
 
-            event_count = (
-                session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
-            )
-            if event_count > MAX_PROGRESS_EVENTS:
-                oldest = (
-                    session.query(ProgressEventModel)
-                    .filter(ProgressEventModel.optimization_id == optimization_id)
-                    .order_by(ProgressEventModel.timestamp.asc())
-                    .first()
-                )
-                if oldest:
-                    session.delete(oldest)
-
             session.commit()
         finally:
             session.close()
 
     def get_progress_events(self, optimization_id: str) -> list[dict[str, Any]]:
-        """Retrieve all progress events for a job in chronological order.
-
-        Args:
-            optimization_id: Identifier of the job.
-
-        Returns:
-            List of progress event dictionaries.
-        """
+        """Retrieve all progress events for a job in chronological order."""
         session = self._get_session()
         try:
             events = (
@@ -415,14 +414,7 @@ class RemoteDBJobStore:
             session.close()
 
     def get_progress_count(self, optimization_id: str) -> int:
-        """Return the number of progress events recorded for a job.
-
-        Args:
-            optimization_id: Identifier of the job.
-
-        Returns:
-            Count of progress events.
-        """
+        """Return the number of progress events recorded for a job."""
         session = self._get_session()
         try:
             return (
@@ -441,22 +433,7 @@ class RemoteDBJobStore:
         timestamp: datetime | None = None,
         pair_index: int | None = None,
     ) -> None:
-        """Append a log entry to a job's log history.
-
-        Silently discards entries if the job has been deleted. Enforces a
-        maximum of MAX_LOG_ENTRIES per job by removing the oldest entry.
-
-        Args:
-            optimization_id: Identifier of the job.
-            level: Log level (e.g. "INFO", "ERROR").
-            logger_name: Name of the logger that produced the entry.
-            message: Log message text.
-            timestamp: Optional explicit timestamp; defaults to now (UTC).
-            pair_index: Optional grid-search pair index the log belongs to.
-
-        Returns:
-            None.
-        """
+        """Append a log entry; silently discards if job is gone; evicts oldest when at cap."""
         ts = timestamp or datetime.now(timezone.utc)
         session = self._get_session()
         try:
@@ -467,6 +444,17 @@ class RemoteDBJobStore:
             if not exists:
                 return
 
+            log_count = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).count()
+            if log_count >= MAX_LOG_ENTRIES:
+                oldest = (
+                    session.query(LogEntryModel)
+                    .filter(LogEntryModel.optimization_id == optimization_id)
+                    .order_by(LogEntryModel.timestamp.asc())
+                    .first()
+                )
+                if oldest:
+                    session.delete(oldest)
+
             entry = LogEntryModel(
                 optimization_id=optimization_id,
                 timestamp=ts,
@@ -476,17 +464,6 @@ class RemoteDBJobStore:
                 pair_index=pair_index,
             )
             session.add(entry)
-
-            log_count = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).count()
-            if log_count > MAX_LOG_ENTRIES:
-                oldest = (
-                    session.query(LogEntryModel)
-                    .filter(LogEntryModel.optimization_id == optimization_id)
-                    .order_by(LogEntryModel.timestamp.asc())
-                    .first()
-                )
-                if oldest:
-                    session.delete(oldest)
 
             session.commit()
         finally:
@@ -500,17 +477,7 @@ class RemoteDBJobStore:
         offset: int = 0,
         level: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve log entries for a job with optional filtering and pagination.
-
-        Args:
-            optimization_id: Identifier of the job.
-            limit: Maximum number of entries to return.
-            offset: Number of entries to skip. Defaults to 0.
-            level: Optional log level filter.
-
-        Returns:
-            List of log entry dictionaries ordered by timestamp ascending.
-        """
+        """Retrieve log entries for a job, ordered ascending, with optional level filter and pagination."""
         session = self._get_session()
         try:
             q = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id)
@@ -536,15 +503,7 @@ class RemoteDBJobStore:
             session.close()
 
     def get_log_count(self, optimization_id: str, *, level: str | None = None) -> int:
-        """Return the number of log entries for a job.
-
-        Args:
-            optimization_id: Identifier of the job.
-            level: Optional log level filter.
-
-        Returns:
-            Count of matching log entries.
-        """
+        """Return the number of log entries for a job, optionally filtered by level."""
         session = self._get_session()
         try:
             q = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id)
@@ -563,19 +522,7 @@ class RemoteDBJobStore:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """List jobs with optional filtering and pagination.
-
-        Args:
-            status: Filter by job status.
-            username: Filter by username.
-            optimization_type: Filter by job type.
-            limit: Maximum number of jobs to return. Defaults to 50.
-            offset: Number of jobs to skip. Defaults to 0.
-
-        Returns:
-            List of job dictionaries with progress and log counts, ordered
-            by creation time descending.
-        """
+        """List jobs with optional filtering and pagination, ordered by creation time descending."""
         session = self._get_session()
         try:
             q = session.query(JobModel).order_by(JobModel.created_at.desc())
@@ -622,16 +569,7 @@ class RemoteDBJobStore:
     def count_jobs(
         self, *, status: str | None = None, username: str | None = None, optimization_type: str | None = None
     ) -> int:
-        """Count jobs matching the given filters.
-
-        Args:
-            status: Filter by job status.
-            username: Filter by username.
-            optimization_type: Filter by job type.
-
-        Returns:
-            Number of matching jobs.
-        """
+        """Count jobs matching the given filters."""
         session = self._get_session()
         try:
             q = session.query(func.count(JobModel.optimization_id))

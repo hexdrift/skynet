@@ -17,8 +17,11 @@ import {
   Search,
   Database,
   Cpu,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
 import { ModelChip } from "@/shared/ui/model-chip";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -32,11 +35,32 @@ const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m
 
 const SUMMARY_TABS = [
   { id: "general", label: "כללי", icon: <User className="size-3.5" /> },
-  { id: "dataset", label: "דאטאסט", icon: <Database className="size-3.5" /> },
+  { id: "dataset", label: TERMS.dataset, icon: <Database className="size-3.5" /> },
   { id: "models", label: "מודלים", icon: <Cpu className="size-3.5" /> },
-  { id: "optimizer", label: "אופטימייזר", icon: <Target className="size-3.5" /> },
+  { id: "optimizer", label: TERMS.optimizer, icon: <Target className="size-3.5" /> },
   { id: "code", label: "קוד", icon: <Code className="size-3.5" /> },
 ];
+
+/**
+ * Read-only row shown when a grid side is set to "all available models".
+ *
+ * Mirrors the sentinel chip in ModelStep but without interactions — the
+ * summary tab is always pointer-events-none so this just has to carry the
+ * same visual language (Boxes icon, primary tint, catalog count).
+ */
+function SummaryAllAvailableRow({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Boxes className="size-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="text-sm font-medium text-foreground">כל המודלים הזמינים</span>
+        <span className="text-[0.6875rem] text-muted-foreground">{count} מודלים בקטלוג</span>
+      </div>
+    </div>
+  );
+}
 
 export function SummaryStep({ w }: { w: SubmitWizardContext }) {
   const {
@@ -47,7 +71,6 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
     jobName,
     jobType,
     moduleName,
-    optimizerName,
     datasetFileName,
     parsedDataset,
     columnRoles,
@@ -57,12 +80,10 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
     secondModelConfig,
     generationModels,
     reflectionModels,
+    useAllGenerationModels,
+    useAllReflectionModels,
+    catalog,
     autoLevel,
-    maxBootstrappedDemos,
-    maxLabeledDemos,
-    numTrials,
-    minibatch,
-    minibatchSize,
     reflectionMinibatchSize,
     maxFullEvals,
     useMerge,
@@ -118,17 +139,17 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Tag className="size-3.5" />
-                      שם האופטימיזציה
+                      שם ה{TERMS.optimization}
                     </span>
                     <span className="text-sm font-medium">{jobName || "—"}</span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Layers className="size-3.5" />
-                      סוג אופטימיזציה
+                      סוג {TERMS.optimization}
                     </span>
                     <span className="text-sm font-medium">
-                      {jobType === "run" ? "ריצה בודדת" : "סריקה"}
+                      {jobType === "run" ? "ריצה" : "סריקה"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
@@ -143,10 +164,10 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Target className="size-3.5" />
-                      אופטימייזר
+                      {TERMS.optimizer}
                     </span>
                     <span className="text-sm font-medium font-mono" dir="ltr">
-                      {optimizerName === "miprov2" ? "MIPROv2" : "GEPA"}
+                      GEPA
                     </span>
                   </div>
                 </div>
@@ -202,7 +223,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                               </span>
                               <span
                                 className={cn(
-                                  "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                                  "text-[0.625rem] font-semibold px-2 py-0.5 rounded-full",
                                   roleColor,
                                 )}
                               >
@@ -218,7 +239,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="space-y-3">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Layers className="size-3.5" />
-                      חלוקת דאטאסט
+                      חלוקת {TERMS.dataset}
                     </span>
                     <div className="flex h-3 rounded-full overflow-hidden">
                       <div className="bg-[#3D2E22]" style={{ width: `${split.train * 100}%` }} />
@@ -254,38 +275,67 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                 <div className="space-y-2 pointer-events-none">
                   {jobType === "run" ? (
                     <div className="space-y-2">
-                      <ModelChip config={modelConfig} roleLabel="מודל יצירה" onClick={() => {}} />
+                      <ModelChip
+                        config={modelConfig}
+                        roleLabel={msg("model.generation.label")}
+                        onClick={() => {}}
+                      />
                       {secondModelConfig?.name && (
                         <ModelChip
                           config={secondModelConfig}
-                          roleLabel="מודל רפלקציה"
+                          roleLabel={TERMS.reflectionModel}
                           onClick={() => {}}
                         />
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        מודלי יצירה
-                      </span>
-                      <div className="space-y-1.5">
-                        {generationModels
-                          .filter((m) => m.name)
-                          .map((m, i) => (
-                            <ModelChip key={i} config={m} onClick={() => {}} />
-                          ))}
-                      </div>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        מודלי רפלקציה
-                      </span>
-                      <div className="space-y-1.5">
-                        {reflectionModels
-                          .filter((m) => m.name)
-                          .map((m, i) => (
-                            <ModelChip key={i} config={m} onClick={() => {}} />
-                          ))}
-                      </div>
-                    </div>
+                    (() => {
+                      const availableCount = catalog?.models.length ?? 0;
+                      const genCount = useAllGenerationModels
+                        ? availableCount
+                        : generationModels.filter((m) => m.name).length;
+                      const refCount = useAllReflectionModels
+                        ? availableCount
+                        : reflectionModels.filter((m) => m.name).length;
+                      const totalPairs = genCount * refCount;
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/20 px-3 py-2">
+                            <span className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
+                              סה״כ זוגות
+                            </span>
+                            <span className="font-mono text-sm text-foreground" dir="ltr">
+                              {genCount} × {refCount} ={" "}
+                              <span className="font-medium">{totalPairs}</span>
+                            </span>
+                          </div>
+                          <span className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
+                            {msg("model.generation.label_plural")}
+                          </span>
+                          <div className="space-y-1.5">
+                            {useAllGenerationModels ? (
+                              <SummaryAllAvailableRow count={availableCount} />
+                            ) : (
+                              generationModels
+                                .filter((m) => m.name)
+                                .map((m, i) => <ModelChip key={i} config={m} onClick={() => {}} />)
+                            )}
+                          </div>
+                          <span className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
+                            מודלי רפלקציה
+                          </span>
+                          <div className="space-y-1.5">
+                            {useAllReflectionModels ? (
+                              <SummaryAllAvailableRow count={availableCount} />
+                            ) : (
+                              reflectionModels
+                                .filter((m) => m.name)
+                                .map((m, i) => <ModelChip key={i} config={m} onClick={() => {}} />)
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               )}
@@ -305,70 +355,29 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                           : "מעמיקה"}
                     </span>
                   </div>
-                  {optimizerName === "miprov2" ? (
-                    <>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Cpu className="size-3.5" />
-                          דוגמאות אוטומטיות
-                        </span>
-                        <span className="text-sm font-medium font-mono">
-                          {maxBootstrappedDemos || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Database className="size-3.5" />
-                          דוגמאות מהנתונים
-                        </span>
-                        <span className="text-sm font-medium font-mono">
-                          {maxLabeledDemos || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Layers className="size-3.5" />
-                          מספר ניסיונות
-                        </span>
-                        <span className="text-sm font-medium font-mono">{numTrials || "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Layers className="size-3.5" />
-                          בדיקה חלקית
-                        </span>
-                        <span className="text-sm font-medium">
-                          {minibatch ? `כן (${minibatchSize})` : "לא"}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Database className="size-3.5" />
-                          גודל מדגם לרפלקציה
-                        </span>
-                        <span className="text-sm font-medium font-mono">
-                          {reflectionMinibatchSize || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Layers className="size-3.5" />
-                          מקסימום סבבי הערכה
-                        </span>
-                        <span className="text-sm font-medium font-mono">{maxFullEvals || "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Shuffle className="size-3.5" />
-                          מיזוג מועמדים
-                        </span>
-                        <span className="text-sm font-medium">{useMerge ? "כן" : "לא"}</span>
-                      </div>
-                    </>
-                  )}
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Database className="size-3.5" />
+                      גודל מדגם לרפלקציה
+                    </span>
+                    <span className="text-sm font-medium font-mono">
+                      {reflectionMinibatchSize || "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Layers className="size-3.5" />
+                      מקסימום סבבי הערכה
+                    </span>
+                    <span className="text-sm font-medium font-mono">{maxFullEvals || "—"}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Shuffle className="size-3.5" />
+                      מיזוג מועמדים
+                    </span>
+                    <span className="text-sm font-medium">{useMerge ? "כן" : "לא"}</span>
+                  </div>
                 </div>
               )}
 
@@ -392,7 +401,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                         value="signature"
                         className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                       >
-                        חתימה (Signature)
+                        Signature
                       </TabsTrigger>
                     )}
                     {metricCode && (
@@ -400,7 +409,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                         value="metric"
                         className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                       >
-                        מטריקה (Metric)
+                        Metric
                       </TabsTrigger>
                     )}
                   </TabsList>

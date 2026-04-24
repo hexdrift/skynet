@@ -10,16 +10,16 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, Clipboard } from "lucide-react";
+import { Brain, Check, ChevronDown, Clipboard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "@/shared/constants/job-status";
+import { getStatusLabel } from "@/shared/constants/job-status";
 import { STATUS_COLORS } from "../constants";
 
 export function StatusBadge({ status }: { status: string }) {
   return (
     <Badge
       variant="outline"
-      className={`text-[13px] px-3 py-1 font-bold tracking-wide ${STATUS_COLORS[status] ?? ""}`}
+      className={`text-[0.8125rem] px-3 py-1 font-bold tracking-wide ${STATUS_COLORS[status] ?? ""}`}
     >
       {status === "running" && (
         <span className="relative flex size-2 me-1">
@@ -27,7 +27,7 @@ export function StatusBadge({ status }: { status: string }) {
           <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
         </span>
       )}
-      {STATUS_LABELS[status] ?? status}
+      {getStatusLabel(status)}
     </Badge>
   );
 }
@@ -56,7 +56,7 @@ export function InfoCard({
             {icon}
           </span>
         )}
-        <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-[#A89680] truncate">
+        <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680] truncate">
           {label}
         </p>
       </div>
@@ -126,7 +126,7 @@ export function LangPicker<T extends string>({
                     onChange(k);
                     setOpen(false);
                   }}
-                  className={`w-full text-start px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer flex items-center justify-between ${k === value ? "bg-[#3D2E22]/8 text-[#3D2E22]" : "text-[#7C6350] hover:bg-black/5"}`}
+                  className={`w-full text-start px-3 py-1.5 text-[0.6875rem] font-semibold tracking-wide transition-colors cursor-pointer flex items-center justify-between ${k === value ? "bg-[#3D2E22]/8 text-[#3D2E22]" : "text-[#7C6350] hover:bg-black/5"}`}
                   role="option"
                   aria-selected={k === value}
                 >
@@ -139,6 +139,41 @@ export function LangPicker<T extends string>({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+const REASONING_EFFORT_LABELS: Record<string, string> = {
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+export function reasoningEffortLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return REASONING_EFFORT_LABELS[value.toLowerCase()] ?? value;
+}
+
+export function ReasoningPill({
+  value,
+  size = "xs",
+}: {
+  value: string | null | undefined;
+  size?: "xs" | "sm";
+}) {
+  const label = reasoningEffortLabel(value);
+  if (!label) return null;
+  const sizing =
+    size === "sm" ? "gap-1 px-1.5 py-0.5 text-[10px]" : "gap-0.5 px-1 py-0.5 text-[9px]";
+  const iconSize = size === "sm" ? "size-3" : "size-2.5";
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center rounded bg-muted/50 font-semibold text-muted-foreground/80 ${sizing}`}
+      title={`Reasoning effort: ${label}`}
+    >
+      <Brain className={iconSize} />
+      {label}
+    </span>
   );
 }
 

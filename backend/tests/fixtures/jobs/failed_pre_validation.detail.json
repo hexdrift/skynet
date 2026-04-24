@@ -1,0 +1,57 @@
+{
+  "archived": false,
+  "column_mapping": {
+    "inputs": {
+      "question": "question"
+    },
+    "outputs": {
+      "answer": "answer"
+    }
+  },
+  "completed_at": "2026-04-14T16:55:53.740538",
+  "completed_pairs": null,
+  "created_at": "2026-04-14T16:55:51.722641",
+  "dataset_rows": 5,
+  "description": null,
+  "elapsed": "00:00:01",
+  "elapsed_seconds": 1.38,
+  "estimated_remaining": null,
+  "failed_pairs": null,
+  "generation_models": null,
+  "grid_result": null,
+  "latest_metrics": {},
+  "logs": [
+    {
+      "level": "ERROR",
+      "logger": "dspy.subprocess",
+      "message": "Traceback (most recent call last):\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/service_gateway/language_models.py\", line 33, in build_language_model\n    language_model = dspy.LM(**lm_kwargs)\n                     ^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/.venv/lib/python3.11/site-packages/dspy/clients/lm.py\", line 93, in __init__\n    raise ValueError(\nValueError: OpenAI's reasoning models require passing temperature=1.0 or None and max_tokens >= 16000 or None to `dspy.LM(...)`, e.g., dspy.LM('openai/gpt-5', temperature=1.0, max_tokens=16000)\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/worker/subprocess_runner.py\", line 143, in run_service_in_subprocess\n    result = service.run(\n             ^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/service_gateway/core.py\", line 130, in run\n    language_model = build_language_model(payload.model_settings)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/giladmorad/PycharmProjects/dspy_as_a_service/backend/core/service_gateway/language_models.py\", line 35, in build_language_model\n    raise ServiceError(f\"Failed to build language model '{config.name}': {exc}\") from exc\ncore.exceptions.ServiceError: Failed to build language model 'gpt-5.4-nano': OpenAI's reasoning models require passing temperature=1.0 or None and max_tokens >= 16000 or None to `dspy.LM(...)`, e.g., dspy.LM('openai/gpt-5', temperature=1.0, max_tokens=16000)\n",
+      "timestamp": "2026-04-14T16:55:53.734817"
+    }
+  ],
+  "message": "Failed to build language model 'gpt-5.4-nano': OpenAI's reasoning models require passing temperature=1.0 or None and max_tokens >= 16000 or None to `dspy.LM(...)`, e.g., dspy.LM('openai/gpt-5', temperature=1.0, max_tokens=16000)",
+  "model_name": "gpt-5.4-nano",
+  "model_settings": {
+    "base_url": null,
+    "extra": {},
+    "max_tokens": null,
+    "name": "gpt-5.4-nano",
+    "temperature": 0.1,
+    "top_p": null
+  },
+  "module_kwargs": {},
+  "module_name": "predict",
+  "name": null,
+  "optimization_id": "7ece2395-b0fb-45e2-8e52-e6f1765f30c8",
+  "optimization_type": "run",
+  "optimizer_name": "gepa",
+  "pinned": false,
+  "progress_events": [],
+  "reflection_model_name": null,
+  "reflection_models": null,
+  "result": null,
+  "started_at": "2026-04-14T16:55:52.358471",
+  "status": "failed",
+  "task_model_name": null,
+  "total_pairs": null,
+  "username": "serve-test"
+}

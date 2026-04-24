@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from core import ServiceRegistry, create_app
 
-# Load .env file if it exists (won't override existing env vars)
 load_dotenv(Path(__file__).parent / ".env")
 
 # [WORKER-FIX] configure logging so worker thread logs actually appear in OpenShift
@@ -24,11 +23,7 @@ app = create_app(registry=registry)
 
 
 def run_server() -> None:
-    """Start the FastAPI server via Uvicorn.
-
-    Returns:
-        None.
-    """
+    """Start the FastAPI server via Uvicorn."""
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
 
 

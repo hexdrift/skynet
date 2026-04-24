@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   Send,
+  Tags,
   Play,
   Trash2,
   Search,
@@ -21,6 +22,7 @@ import {
   Loader2,
   Grid2x2,
   ChevronLeft,
+  CopyPlus,
 } from "lucide-react";
 import { Skeleton } from "boneyard-js/react";
 import { sidebarMoreBones } from "@/features/sidebar/lib/bones";
@@ -48,11 +50,13 @@ import type { OptimizationSummaryResponse } from "@/shared/types/api";
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
 import { groupJobsByRecency, matchesJobSearch } from "@/features/sidebar";
-import { msg } from "@/features/shared/messages";
+import { msg } from "@/shared/lib/messages";
+import { TERMS } from "@/shared/lib/terms";
 
 const NAV_ITEMS = [
   { href: "/", label: "לוח בקרה", icon: LayoutDashboard },
-  { href: "/submit", label: "אופטימיזציה חדשה", icon: Send },
+  { href: "/submit", label: TERMS.notificationNewOpt, icon: Send },
+  { href: "/tagger", label: "תיוג טקסטים", icon: Tags },
 ] as const;
 
 const PAGE_SIZE = 20;
@@ -75,6 +79,18 @@ export function Sidebar() {
     return () => window.removeEventListener("sidebar:collapse", handler);
   }, []);
 
+  // Auto-collapse when viewport is narrow (< 1024px) — fires on threshold
+  // crossing only. Never auto-expands so manual expand is respected.
+  React.useEffect(() => {
+    const mql = window.matchMedia("(max-width: 1023px)");
+    if (mql.matches) setCollapsed(true);
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) setCollapsed(true);
+    };
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
   const [jobs, setJobs] = React.useState<SidebarJobItem[]>([]);
   const [totalJobs, setTotalJobs] = React.useState(0);
   const [activeCount, setActiveCount] = React.useState(0);
@@ -93,10 +109,7 @@ export function Sidebar() {
 
   const fetchData = React.useCallback(async () => {
     try {
-      const limit = Math.min(
-        200,
-        Math.max(PAGE_SIZE, loadedItemsRef.current),
-      );
+      const limit = Math.min(200, Math.max(PAGE_SIZE, loadedItemsRef.current));
       const res = await listJobsSidebar({
         username: isAdmin ? undefined : sessionUser || undefined,
         limit,
@@ -267,7 +280,7 @@ export function Sidebar() {
         <div className="flex items-center justify-between px-3 py-3 border-b border-sidebar-border/60">
           <div className="flex items-center gap-2">
             <div
-              className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80 px-2"
+              className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80 px-2"
               data-tutorial="sidebar-logo"
             >
               Skynet
@@ -298,6 +311,7 @@ export function Sidebar() {
               <Link
                 key={href}
                 href={href}
+                {...(href === "/tagger" ? { "data-tutorial": "sidebar-tagger" } : {})}
                 className={cn(
                   "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                   active
@@ -322,7 +336,7 @@ export function Sidebar() {
                   />
                   {label}
                   {showBadge && (
-                    <span className="mr-auto text-[10px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full tabular-nums">
+                    <span className="mr-auto text-[0.625rem] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full tabular-nums">
                       {activeCount}
                     </span>
                   )}
@@ -344,9 +358,9 @@ export function Sidebar() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="חיפוש..."
-                aria-label="חיפוש אופטימיזציות"
+                aria-label={`חיפוש ${TERMS.optimizationPlural}`}
                 dir="rtl"
-                className="w-full text-[11px] bg-sidebar-accent/30 border border-border/30 rounded-lg pe-7 ps-7 py-1.5 outline-none focus:border-primary/30 transition-colors placeholder:text-muted-foreground/40"
+                className="w-full text-[0.6875rem] bg-sidebar-accent/30 border border-border/30 rounded-lg pe-7 ps-7 py-1.5 outline-none focus:border-primary/30 transition-colors placeholder:text-muted-foreground/40"
               />
               {searchQuery && (
                 <button
@@ -360,18 +374,15 @@ export function Sidebar() {
               )}
             </div>
           </div>
-          <div
-            ref={listRef}
-            className="flex-1 overflow-y-auto px-3 pb-2 no-scrollbar"
-          >
+          <div ref={listRef} className="flex-1 overflow-y-auto px-3 pb-2 no-scrollbar">
             {groupedJobs.length === 0 && searchQuery && (
-              <p className="text-[10px] text-muted-foreground/50 text-center py-4">
+              <p className="text-[0.625rem] text-muted-foreground/50 text-center py-4">
                 לא נמצאו תוצאות
               </p>
             )}
             {groupedJobs.map((group) => (
               <div key={group.label} className="mb-2">
-                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
+                <p className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
                   <span>{group.label}</span>
                   <span className="tabular-nums text-muted-foreground/40 font-normal">
                     {group.jobs.length}
@@ -425,9 +436,9 @@ export function Sidebar() {
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>מחיקת אופטימיזציה</DialogTitle>
+            <DialogTitle>מחיקת {TERMS.optimization}</DialogTitle>
             <DialogDescription>
-              האם למחוק את האופטימיזציה{" "}
+              האם למחוק את ה{TERMS.optimization}{" "}
               <span className="font-mono font-medium text-foreground break-all">
                 {deleteConfirm}
               </span>
@@ -473,6 +484,7 @@ function JobRow({
   onUse: (e: React.MouseEvent, id: string) => void;
   onRefresh: () => void;
 }) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [renaming, setRenaming] = React.useState(false);
   const [renameValue, setRenameValue] = React.useState("");
@@ -512,6 +524,11 @@ function JobRow({
     navigator.clipboard.writeText(url);
     toast.success(msg("sidebar.link.copied"));
     setMenuOpen(false);
+  };
+
+  const handleClone = () => {
+    setMenuOpen(false);
+    router.push(`/submit?clone=${job.optimization_id}`);
   };
 
   const handleRename = async () => {
@@ -566,7 +583,7 @@ function JobRow({
             if (e.key === "Escape") setRenaming(false);
           }}
           onBlur={handleRename}
-          className="w-full text-[11px] bg-sidebar-accent/30 border border-primary/30 rounded-md px-2 py-1 outline-none font-medium"
+          className="w-full text-[0.6875rem] bg-sidebar-accent/30 border border-primary/30 rounded-md px-2 py-1 outline-none font-medium"
           dir="auto"
         />
       </div>
@@ -577,7 +594,7 @@ function JobRow({
     <div className="relative" ref={menuRef}>
       <div
         className={cn(
-          "flex items-center gap-1.5 rounded-lg px-2 py-2 text-[11px] transition-all duration-150",
+          "flex items-center gap-1.5 rounded-lg px-2 py-2 text-[0.6875rem] transition-all duration-150",
           isActive
             ? "bg-primary/[0.07] text-foreground"
             : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-foreground",
@@ -664,7 +681,7 @@ function JobRow({
                     key={i}
                     href={`/optimizations/${job.optimization_id}?pair=${i}`}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-[10px] transition-all duration-150",
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-[0.625rem] transition-all duration-150",
                       isPairActive
                         ? "bg-primary/[0.07] text-foreground font-semibold"
                         : "text-muted-foreground/70 hover:bg-sidebar-accent/30 hover:text-foreground",
@@ -699,7 +716,7 @@ function JobRow({
               type="button"
               role="menuitem"
               onClick={handleShare}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[11px] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
             >
               <Share2 className="size-3.5 text-muted-foreground" />
               שיתוף
@@ -714,10 +731,21 @@ function JobRow({
                 setRenameValue(job.name ?? displayName);
                 setRenaming(true);
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[11px] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
             >
               <Pencil className="size-3.5 text-muted-foreground" />
               שינוי שם
+            </button>
+
+            {/* Clone */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleClone}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+            >
+              <CopyPlus className="size-3.5 text-muted-foreground" />
+              שכפול
             </button>
 
             <div className="h-px bg-border/20 mx-2 my-1" />
@@ -727,7 +755,7 @@ function JobRow({
               type="button"
               role="menuitem"
               onClick={handlePin}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[11px] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
             >
               <Pin
                 className={cn("size-3.5", job.pinned ? "text-foreground" : "text-muted-foreground")}
@@ -743,7 +771,7 @@ function JobRow({
                 setMenuOpen(false);
                 onDelete(e, job.optimization_id);
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[11px] text-red-500 hover:bg-red-500/5 cursor-pointer transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-red-500 hover:bg-red-500/5 cursor-pointer transition-colors"
             >
               <Trash2 className="size-3.5" />
               מחיקה

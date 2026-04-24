@@ -1,6 +1,6 @@
 # Skynet
 
-DSPy prompt optimization as a service. Submit datasets + signature/metric code, run MIPROv2 or GEPA optimizations, serve optimized programs — all through a web UI or REST API.
+DSPy prompt optimization as a service. Submit datasets + signature/metric code, run GEPA optimizations, serve optimized programs — all through a web UI or REST API.
 
 ## Quick Start
 
@@ -220,10 +220,10 @@ After a successful optimization, you can run inference on the optimized program:
 
 ```bash
 # Check what fields the program expects
-curl http://localhost:8000/serve/{job_id}/info
+curl http://localhost:8000/serve/{optimization_id}/info
 
 # Run inference
-curl -X POST http://localhost:8000/serve/{job_id} \
+curl -X POST http://localhost:8000/serve/{optimization_id} \
   -H 'Content-Type: application/json' \
   -d '{"inputs": {"question": "What is 7+3?"}}'
 ```
@@ -236,14 +236,10 @@ The frontend provides a built-in playground on the job detail page — fill in t
 
 | Module | Optimizer | Job Type | Notes |
 |--------|-----------|----------|-------|
-| predict | miprov2 | run | Standard prompt optimization |
-| cot | miprov2 | run | Chain-of-thought optimization |
 | predict | gepa | run | Requires `reflection_model_config` and 5-arg metric |
 | cot | gepa | run | Same as above with CoT |
-| predict | miprov2 | grid_search | Sweep over model pairs |
-| cot | miprov2 | grid_search | Sweep with CoT |
-| predict | gepa | grid_search | GEPA sweep |
-| cot | gepa | grid_search | GEPA sweep with CoT |
+| predict | gepa | grid_search | GEPA grid search over model pairs |
+| cot | gepa | grid_search | GEPA grid search with CoT |
 
 ### Model Config Options
 
@@ -305,18 +301,20 @@ npm run build    # Type check + build
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/run` | Submit optimization job |
-| `POST` | `/grid-search` | Submit grid search job |
-| `GET` | `/jobs` | List jobs (filterable, paginated) |
-| `GET` | `/jobs/{id}` | Full job detail |
-| `GET` | `/jobs/{id}/summary` | Dashboard-friendly summary |
-| `GET` | `/jobs/{id}/logs` | Job logs (filterable by level) |
-| `GET` | `/jobs/{id}/payload` | Original submission payload |
-| `GET` | `/jobs/{id}/artifact` | Download optimized program |
-| `GET` | `/jobs/{id}/grid-result` | Grid search results |
-| `GET` | `/jobs/{id}/stream` | SSE real-time updates |
-| `POST` | `/jobs/{id}/cancel` | Cancel active job |
-| `DELETE` | `/jobs/{id}` | Delete terminal job |
+| `POST` | `/run` | Submit optimization run |
+| `POST` | `/grid-search` | Submit grid search |
+| `GET` | `/optimizations` | List optimizations (filterable, paginated) |
+| `GET` | `/optimizations/{id}` | Full optimization detail |
+| `GET` | `/optimizations/{id}/summary` | Dashboard-friendly summary |
+| `GET` | `/optimizations/{id}/logs` | Optimization logs (filterable by level) |
+| `GET` | `/optimizations/{id}/payload` | Original submission payload |
+| `GET` | `/optimizations/{id}/artifact` | Download optimized program |
+| `GET` | `/optimizations/{id}/grid-result` | Grid search results |
+| `GET` | `/optimizations/{id}/stream` | SSE real-time updates |
+| `POST` | `/optimizations/{id}/cancel` | Cancel active optimization |
+| `DELETE` | `/optimizations/{id}` | Delete terminal optimization |
+| `POST` | `/optimizations/{id}/clone` | Clone an optimization |
+| `POST` | `/optimizations/{id}/retry` | Retry a failed or cancelled optimization |
 | `GET` | `/serve/{id}/info` | Program signature info |
 | `POST` | `/serve/{id}` | Run inference on optimized program |
 | `GET` | `/health` | Health check |

@@ -1,0 +1,1202 @@
+[
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 12.164444444444445 / 23 (52.9%)",
+    "timestamp": "2026-04-13T15:15:03.007887"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Running GEPA for approx 1189 metric calls of the program. This amounts to 9.36 full evals on the train+val set.",
+    "timestamp": "2026-04-13T15:15:03.012609"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Using 22 examples for tracking Pareto scores. You can consider using a smaller sample of the valset to allow GEPA to explore more diverse solutions within the same budget. GEPA requires you to provide the smallest valset that is just large enough to match your downstream task distribution, while providing as large trainset as possible.",
+    "timestamp": "2026-04-13T15:15:03.012908"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 11.282222222222222 / 22 (51.3%)",
+    "timestamp": "2026-04-13T15:15:09.553431"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 0: Base program full valset score: 0.5128282828282829",
+    "timestamp": "2026-04-13T15:15:09.553956"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Selected program 0 score: 0.5128282828282829",
+    "timestamp": "2026-04-13T15:15:09.554547"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.2333333333333334 / 3 (74.4%)",
+    "timestamp": "2026-04-13T15:15:13.444782"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres.\n- Common useful genre labels include:\n  Action, Adventure, Thriller, Science Fiction, Disaster, Mystery, Historical Fiction, Fantasy, Mythology/Fantasy\n- Only include genres that are clearly supported by the input.\n- Do not over-label. Usually 3 to 5 genres is enough.\n- If the story is an artifact hunt, globe-trotting quest, or race-against-time mission, Adventure is usually important.\n- If there is pursuit, danger, suspense, or high-stakes conflict, Thriller and/or Action may fit.\n- If the story involves advanced technology, space travel, AI, aliens, or futuristic science, Science Fiction may fit.\n- If the story centers on cataclysmic destruction or a world-ending event, Disaster may fit.\n- If the story is set in a recognizable past era or uses historical events/figures heavily, Historical Fiction may fit.\n- If the story draws on ancient legends, sacred objects, or religious/mythic lore, Fantasy/Mythology may fit.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:15:20.208774"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.5888888888888886 / 3 (86.3%)",
+    "timestamp": "2026-04-13T15:15:22.395875"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: New subsample score 2.5888888888888886 is better than old score 2.2333333333333334. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:15:22.396132"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 16.89666666666666 / 22 (76.8%)",
+    "timestamp": "2026-04-13T15:15:30.911150"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: New program is on the linear pareto front",
+    "timestamp": "2026-04-13T15:15:30.911907"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Full valset score for new program: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.912098"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Full train_val score for new program: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.912254"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Individual valset scores for new program: [0.8999999999999999, 0.6499999999999999, 0.5, 0.7666666666666666, 0.825, 0.5333333333333333, 0.825, 0.8599999999999999, 0.8599999999999999, 1.0, 0.6499999999999999, 0.7, 0.8599999999999999, 0.8599999999999999, 0.8999999999999999, 0.7, 1.0, 0.6499999999999999, 0.8599999999999999, 0.7666666666666666, 0.6499999999999999, 0.58]",
+    "timestamp": "2026-04-13T15:15:30.912404"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: New valset pareto front scores: [0.8999999999999999, 0.6499999999999999, 0.5, 0.7666666666666666, 0.825, 0.5333333333333333, 0.825, 0.8599999999999999, 0.8599999999999999, 1.0, 0.6499999999999999, 0.7, 0.8599999999999999, 0.8599999999999999, 0.8999999999999999, 0.7, 1.0, 0.6499999999999999, 0.8599999999999999, 0.7666666666666666, 0.6499999999999999, 0.58]",
+    "timestamp": "2026-04-13T15:15:30.912525"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Full valset pareto front score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.912628"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Updated valset pareto front programs: [{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {0, 1}, {1}]",
+    "timestamp": "2026-04-13T15:15:30.912794"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Best valset aggregate score so far: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.912938"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Best program as per aggregate score on train_val: 1",
+    "timestamp": "2026-04-13T15:15:30.913006"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Best program as per aggregate score on valset: 1",
+    "timestamp": "2026-04-13T15:15:30.913053"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Best score on valset: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.913137"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Best score on train_val: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.913209"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: Linear pareto front program index: 1",
+    "timestamp": "2026-04-13T15:15:30.913285"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 1: New program candidate index: 1",
+    "timestamp": "2026-04-13T15:15:30.913343"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 2: No merge candidates found",
+    "timestamp": "2026-04-13T15:15:30.913746"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 2: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:30.913928"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.3666666666666663 / 3 (78.9%)",
+    "timestamp": "2026-04-13T15:15:33.077839"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 2: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres.\n- Usually 3 to 5 genres is enough.\n- Only include genres that are clearly supported by the input.\n- Do not over-label.\n\nCommon useful genre labels include:\n- Action\n- Adventure\n- Thriller\n- Horror\n- Science Fiction\n- Disaster\n- Mystery\n- Historical Fiction\n- Fantasy\n- Mythology/Fantasy\n- Romance\n- Drama\n- Animation\n\nGenre-selection guidance:\n- If the story is an artifact hunt, globe-trotting quest, journey, or race-against-time mission, Adventure is usually important.\n- If there is pursuit, danger, suspense, survival pressure, or high-stakes conflict, Thriller and/or Action may fit.\n- If the story involves advanced technology, space travel, AI, aliens, futuristic science, or a man-made scientific outbreak, Science Fiction may fit.\n- If the story centers on a deadly contagion, outbreak, or infected people turning violent, Horror is often appropriate; add Thriller if there is strong survival suspense, and Action if there is heavy combat or chase energy.\n- If the story involves cataclysmic destruction or a world-ending event, Disaster may fit.\n- If the story is set in a recognizable past era or uses historical events/figures heavily, Historical Fiction may fit.\n- If the story draws on ancient legends, sacred objects, curses, mythic creatures, or religious/mythic lore, Fantasy or Mythology/Fantasy may fit.\n- If the story clearly includes an animated film/series style, include Animation as a genre label.\n- Use Romance only if a love story is central.\n- Use Drama only when emotional, interpersonal, or character conflict is a major part of the story, not just as a default filler genre.\n- Avoid niche labels like \u201cpsychological thriller\u201d; use the broader label Thriller unless a more specific genre is clearly needed.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:15:43.141064"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.326666666666666 / 3 (77.6%)",
+    "timestamp": "2026-04-13T15:15:45.672901"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 2: New subsample score 2.326666666666666 is not better than old score 2.3666666666666663, skipping",
+    "timestamp": "2026-04-13T15:15:45.673327"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:15:45.673829"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.046666666666667 / 3 (68.2%)",
+    "timestamp": "2026-04-13T15:15:47.852977"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or format labels.\n- Usually 2 to 4 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n\nUseful broad genre labels include:\n- Drama\n- Crime\n- Action\n- Adventure\n- Thriller\n- Mystery\n- Science Fiction\n- Disaster\n- Historical Fiction\n- Fantasy\n- Mythology/Fantasy\n\nGenre guidance\n- If the story centers on prisons, wrongful conviction, corruption, or escape from incarceration, Drama and Crime are usually the safest core genres.\n- Add Thriller only if there is sustained suspense, pursuit, danger, or high-stakes tension.\n- Do not use a niche label like Prison Fiction.\n- If the story is a heist, stolen-item chase, gangster conflict, or fast-moving criminal caper, Crime is usually central.\n- Add Thriller for danger, pressure, and violent criminal conflict.\n- Do not assume Comedy just because the tone is witty, slangy, or energetic; only include Comedy if humor is clearly a major part of the story.\n- If the story involves alien invasion, dystopia, futuristic threats, advanced technology, or other speculative elements, Science Fiction may fit.\n- If the story also involves a perilous journey, survival mission, or race to protect someone / escape danger, Adventure can be important.\n- Use Disaster only when the main focus is large-scale destruction or a cataclysmic event.\n- Use Historical Fiction only if the setting is clearly a recognizable past era or historical events/figures are central.\n- Use Fantasy or Mythology/Fantasy when the story draws on legends, sacred objects, divine forces, or mythic lore.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:16:01.366616"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.42 / 3 (80.7%)",
+    "timestamp": "2026-04-13T15:16:03.982360"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: New subsample score 2.42 is better than old score 2.046666666666667. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:16:03.982847"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 16.80833333333333 / 22 (76.4%)",
+    "timestamp": "2026-04-13T15:16:11.197114"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Full valset score for new program: 0.7640151515151513",
+    "timestamp": "2026-04-13T15:16:11.197686"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Full train_val score for new program: 0.7640151515151513",
+    "timestamp": "2026-04-13T15:16:11.197882"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Individual valset scores for new program: [0.58, 0.6499999999999999, 0.58, 1.0, 0.7666666666666666, 0.7, 0.825, 0.7666666666666666, 0.8599999999999999, 1.0, 1.0, 0.5333333333333333, 0.6499999999999999, 0.8599999999999999, 0.5333333333333333, 0.6499999999999999, 0.8999999999999999, 0.7666666666666666, 0.7666666666666666, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:16:11.198108"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: New valset pareto front scores: [0.8999999999999999, 0.6499999999999999, 0.58, 1.0, 0.825, 0.7, 0.825, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.7, 0.8599999999999999, 0.8599999999999999, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:16:11.198324"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Full valset pareto front score: 0.8303030303030301",
+    "timestamp": "2026-04-13T15:16:11.198484"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Updated valset pareto front programs: [{1}, {1, 2}, {2}, {2}, {1}, {2}, {1, 2}, {1}, {1, 2}, {1, 2}, {2}, {1}, {1}, {1, 2}, {1}, {1}, {1}, {2}, {1}, {2}, {2}, {2}]",
+    "timestamp": "2026-04-13T15:16:11.198670"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Best valset aggregate score so far: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:11.198794"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Best program as per aggregate score on train_val: 1",
+    "timestamp": "2026-04-13T15:16:11.198896"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Best program as per aggregate score on valset: 1",
+    "timestamp": "2026-04-13T15:16:11.198989"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Best score on valset: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:11.199083"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Best score on train_val: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:11.199175"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: Linear pareto front program index: 1",
+    "timestamp": "2026-04-13T15:16:11.199265"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 3: New program candidate index: 2",
+    "timestamp": "2026-04-13T15:16:11.199365"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: No merge candidates found",
+    "timestamp": "2026-04-13T15:16:11.200529"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:11.200723"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.3116666666666665 / 3 (77.1%)",
+    "timestamp": "2026-04-13T15:16:13.963241"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres.\n- Usually 3 to 5 genres is enough.\n- List genres from most relevant to least relevant.\n- Only include genres that are clearly supported by the input.\n- Do not over-label.\n\nUseful genre labels include:\n- Action\n- Adventure\n- Thriller\n- Science Fiction\n- Disaster\n- Mystery\n- Crime\n- Drama\n- Comedy\n- Romance\n- Family\n- War\n- Historical Fiction\n- Fantasy\n- Mythology/Fantasy\n\nGenre guidance\n- If the story involves time travel, advanced technology, AI, aliens, space travel, or futuristic science, use Science Fiction.\n- If the story is an artifact hunt, globe-trotting quest, or race-against-time mission, Adventure is usually important.\n- If there is pursuit, danger, suspense, conspiracy, or high-stakes conflict, Thriller may fit.\n- If there are murders, thefts, corruption, black markets, thieves, or other unlawful schemes, Crime may fit.\n- If the plot centers on solving a death, disappearance, secret, or hidden truth, Mystery may fit.\n- If the story has sustained physical conflict, fights, or chases as a central element, Action may fit.\n- If the story is humorous, playful, or wacky in tone, Comedy may fit.\n- If the story centers on a love story or romance as a major plotline, Romance may fit.\n- If family relationships, family conflict, or family protection are central, include Family.\n- If the story focuses on serious emotional, relational, or character-driven stakes, include Drama.\n- If the story is set during wartime or in the immediate postwar military/political context, include War when that context materially matters.\n- If the story is set in a recognizable past era and historical events/figures are central, Historical Fiction may fit.\n- If the story draws on ancient legends, sacred objects, or religious/mythic lore, Fantasy or Mythology/Fantasy may fit.\n- If the story involves large-scale catastrophe or world-ending destruction, Disaster may fit.\n- Do not use Heist as a genre label; classify heist stories under Crime, Thriller, and/or Adventure instead.\n- Do not add Historical Fiction just because the story is set in the past; only use it when the historical setting itself is a core part of the narrative.\n- Do not add Action just because there is a chase or caper; use it only when physical conflict is a major feature.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:16:31.469367"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.5913131313131315 / 3 (86.4%)",
+    "timestamp": "2026-04-13T15:16:34.343254"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: New subsample score 2.5913131313131315 is better than old score 2.3116666666666665. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:16:34.343808"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 16.207777777777775 / 22 (73.7%)",
+    "timestamp": "2026-04-13T15:16:41.320582"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Full valset score for new program: 0.7367171717171715",
+    "timestamp": "2026-04-13T15:16:41.321080"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Full train_val score for new program: 0.7367171717171715",
+    "timestamp": "2026-04-13T15:16:41.321192"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Individual valset scores for new program: [1.0, 0.3, 0.5333333333333333, 0.8599999999999999, 0.7, 0.6499999999999999, 0.6499999999999999, 0.7, 0.8599999999999999, 0.8999999999999999, 0.7666666666666666, 0.7666666666666666, 0.6499999999999999, 0.8599999999999999, 0.7, 0.7, 1.0, 0.7666666666666666, 0.7666666666666666, 0.7, 0.6111111111111112, 0.7666666666666666]",
+    "timestamp": "2026-04-13T15:16:41.321411"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: New valset pareto front scores: [1.0, 0.6499999999999999, 0.58, 1.0, 0.825, 0.7, 0.825, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:16:41.321562"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Full valset pareto front score: 0.8378787878787878",
+    "timestamp": "2026-04-13T15:16:41.321726"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Updated valset pareto front programs: [{3}, {1, 2}, {2}, {2}, {1}, {2}, {1, 2}, {1}, {1, 2, 3}, {1, 2}, {2}, {3}, {1}, {1, 2, 3}, {1}, {1, 3}, {1, 3}, {2, 3}, {1}, {2}, {2}, {2}]",
+    "timestamp": "2026-04-13T15:16:41.321841"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Best valset aggregate score so far: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:41.321947"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Best program as per aggregate score on train_val: 1",
+    "timestamp": "2026-04-13T15:16:41.322028"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Best program as per aggregate score on valset: 1",
+    "timestamp": "2026-04-13T15:16:41.322101"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Best score on valset: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:41.322172"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Best score on train_val: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:41.322242"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: Linear pareto front program index: 1",
+    "timestamp": "2026-04-13T15:16:41.322311"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 4: New program candidate index: 3",
+    "timestamp": "2026-04-13T15:16:41.322379"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: No merge candidates found",
+    "timestamp": "2026-04-13T15:16:41.323323"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:16:41.323655"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.133333333333333 / 3 (71.1%)",
+    "timestamp": "2026-04-13T15:16:44.379209"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or tone labels.\n- Usually 2 to 5 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n\nUse these genre rules:\n- Comedy: include when the story is primarily humorous or light in tone.\n- Romance: include when a central love story, relationship arc, or attraction is important. If the story is a romantic comedy, use Comedy and Romance rather than \u201cRomantic Comedy.\u201d\n- Crime: include for police work, murder investigations, smuggling, theft, undercover schemes, or criminal networks.\n- Mystery: use only when solving a puzzle, secret, or unknown is the main engine of the plot; do not use it for every investigation.\n- Action: include when there is frequent danger, conflict, chases, fights, or physical confrontation.\n- Adventure: include for quests, globe-trotting journeys, rescue missions, travel to unusual places, or race-against-time missions.\n- Thriller: include only when sustained suspense, pursuit, cat-and-mouse danger, or high-stakes paranoia is a major element. Do not add it just because the plot has danger or an investigation.\n- Science Fiction: include for advanced technology, space travel, aliens, AI, time travel, futuristic settings, or cosmic threats. Space opera should generally be represented with Science Fiction, often alongside Adventure.\n- Disaster: include only when the story is centrally about a major catastrophe or world-ending destruction. Do not use it merely because the world is threatened.\n- Historical Fiction: include when the story is set in a recognizable past era or heavily uses historical events/figures.\n- Fantasy / Mythology-Fantasy: include when the story draws on magic, ancient legends, sacred objects, gods, or mythic lore.\n- Family: use only if family relationships are a primary focus, not just because family members appear.\n- Coming-of-age: avoid unless the story is primarily about growing up and personal maturation.\n\nImportant genre-selection guidance from the task examples:\n- Do not use subgenres like \u201cspace opera,\u201d \u201cromantic comedy,\u201d or \u201ccoming-of-age\u201d as genre labels; break them into broader base genres instead.\n- A fish-out-of-water setup can support Comedy, but it is not a genre by itself.\n- A murder investigation can be Crime without being Thriller.\n- A planet in danger does not automatically mean Disaster.\n- If the story is a time-travel or alien-contact quest, Science Fiction and Adventure are usually more important than Disaster or Thriller.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, relationship, or quest.\n- Match the tone of the story.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:17:02.305182"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.7199999999999998 / 3 (90.7%)",
+    "timestamp": "2026-04-13T15:17:04.852867"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: New subsample score 2.7199999999999998 is better than old score 2.133333333333333. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:17:04.853170"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 17.249999999999996 / 22 (78.4%)",
+    "timestamp": "2026-04-13T15:17:13.882860"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: New program is on the linear pareto front",
+    "timestamp": "2026-04-13T15:17:13.883376"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Full valset score for new program: 0.784090909090909",
+    "timestamp": "2026-04-13T15:17:13.883497"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Full train_val score for new program: 0.784090909090909",
+    "timestamp": "2026-04-13T15:17:13.883671"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Individual valset scores for new program: [1.0, 0.6499999999999999, 0.5333333333333333, 0.8599999999999999, 0.7666666666666666, 0.7666666666666666, 1.0, 0.8599999999999999, 0.8599999999999999, 1.0, 0.7666666666666666, 0.8599999999999999, 1.0, 0.58, 0.7666666666666666, 0.7, 0.8999999999999999, 0.7666666666666666, 0.7666666666666666, 0.7666666666666666, 0.5, 0.58]",
+    "timestamp": "2026-04-13T15:17:13.883842"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: New valset pareto front scores: [1.0, 0.6499999999999999, 0.58, 1.0, 0.825, 0.7666666666666666, 1.0, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.8599999999999999, 1.0, 0.8599999999999999, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:17:13.883924"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Full valset pareto front score: 0.8594696969696968",
+    "timestamp": "2026-04-13T15:17:13.884005"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Updated valset pareto front programs: [{3, 4}, {1, 2, 4}, {2}, {2}, {1}, {4}, {4}, {1, 4}, {1, 2, 3, 4}, {1, 2, 4}, {2}, {4}, {4}, {1, 2, 3}, {1}, {1, 3, 4}, {1, 3}, {2, 3, 4}, {1}, {2}, {2}, {2}]",
+    "timestamp": "2026-04-13T15:17:13.884133"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Best valset aggregate score so far: 0.784090909090909",
+    "timestamp": "2026-04-13T15:17:13.884234"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Best program as per aggregate score on train_val: 4",
+    "timestamp": "2026-04-13T15:17:13.884338"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Best program as per aggregate score on valset: 4",
+    "timestamp": "2026-04-13T15:17:13.884436"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Best score on valset: 0.784090909090909",
+    "timestamp": "2026-04-13T15:17:13.884533"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Best score on train_val: 0.784090909090909",
+    "timestamp": "2026-04-13T15:17:13.884651"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: Linear pareto front program index: 4",
+    "timestamp": "2026-04-13T15:17:13.884759"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 5: New program candidate index: 4",
+    "timestamp": "2026-04-13T15:17:13.884870"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 6: No merge candidates found",
+    "timestamp": "2026-04-13T15:17:13.885918"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 6: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:17:13.886079"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.1133333333333333 / 3 (70.4%)",
+    "timestamp": "2026-04-13T15:17:17.453671"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 6: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story machinery, not just mood words or isolated details.\n- Prefer broad, canonical genres over niche subgenres.\n- Usually 1 to 3 genres is enough. Do not pad the answer with weakly supported labels.\n- Only include genres that are clearly supported by the input.\n- If one genre is overwhelmingly central, output just that one.\n- Common useful genre labels include:\n  Action, Adventure, Crime, Drama, Fantasy, Historical Fiction, Horror, Mystery, Romance, Science Fiction, Thriller, Western, War, Comedy, Musical, Animation, Documentary, Family, Biography\n\nGenre-selection guidance\n- Adventure: use for quests, globe-trotting missions, artifact hunts, or race-against-time journeys.\n- Action: use when physical conflict, fights, chases, or combat are a major part of the plot.\n- Thriller: use when suspense, pursuit, danger, blackmail, or high-stakes tension drive the story.\n- Crime: use when the story centers on criminals, lawbreaking, investigations, blackmail, bounty hunters, heists, corruption, or the criminal underworld.\n- Western: use for frontier settings, railroads, ranches, outlaws, sheriffs, gunfights, bounty hunters, and classic Old West tropes. If the story is clearly a Western, do not add extra labels unless they are strongly central.\n- Romance: use when a love relationship is a central plot line.\n- Drama: use when character conflict and emotional stakes are central, especially if no more specific genre dominates.\n- Science Fiction: use for advanced technology, AI, aliens, space travel, futuristic science, or speculative tech.\n- Fantasy: use for magic, mythical creatures, enchanted objects, or invented worlds.\n- Historical Fiction: use when a specific past era, historical figures, or real historical events are central.\n- Do not use niche or overly specific labels such as Psychological Thriller, Erotic, or similar subgenres unless they are explicitly required by the task.\n- Tone words such as \u201camusing,\u201d \u201csad,\u201d \u201cpsychological,\u201d \u201cerotic,\u201d \u201canti-hero,\u201d or \u201cfairytale\u201d should not be treated as genres unless the plot clearly supports a broad genre label.\n- If a broad genre is obvious from the setting and tropes, trust that over generic suspense labels.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, quest, or relationship.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:17:32.608382"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.0666666666666664 / 3 (68.9%)",
+    "timestamp": "2026-04-13T15:17:35.061192"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 6: New subsample score 2.0666666666666664 is not better than old score 2.1133333333333333, skipping",
+    "timestamp": "2026-04-13T15:17:35.061509"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Selected program 4 score: 0.784090909090909",
+    "timestamp": "2026-04-13T15:17:35.061864"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 1.8466666666666667 / 3 (61.6%)",
+    "timestamp": "2026-04-13T15:17:37.674139"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, themes, and sometimes era/cultural hints\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nOutput format:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation.\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story and emotional engine rather than minor details or decorative keywords.\n- Prefer broad, canonical genres over niche subgenres or tone labels.\n- Usually 2 to 5 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n- If a story is primarily character-driven, emotionally tense, or relationship-centered, consider Drama even if the plot is light or comedic.\n- If music, performance, records, bands, singers, composers, or the music industry are central to the plot, include Music.\n- If the premise is whimsical, fairy-tale-like, magical, surreal, mythic, or involves an impossible being/event treated non-realistically, use Fantasy or Mythology-Fantasy rather than Science Fiction unless the story is clearly grounded in advanced technology or futurism.\n- Historical Fiction should be used only when the past era is an important part of the story\u2019s identity, not merely because the setting is in a previous decade or includes period details.\n- Romance should be included when a love story or relationship arc is a central part of the narrative, but do not force it into every story with romantic elements.\n- Comedy should be used when the story is meaningfully humorous, witty, or light in tone.\n- Crime should be used for theft, smuggling, burglaries, criminal schemes, undercover crime, or police/murder investigation stories when crime is a major element.\n- Mystery should be used only when solving a secret, puzzle, or unknown is a main plot engine.\n- Action should be used when there is frequent danger, fights, chases, or physical conflict.\n- Adventure should be used for quests, travel, rescue missions, or a journey-oriented plot.\n- Thriller should be used only for sustained suspense, pursuit, paranoia, or cat-and-mouse tension.\n- Science Fiction should be used for advanced technology, AI, aliens, space travel, time travel, futuristic settings, or other clearly sci-fi concepts.\n- Disaster should be used only when a catastrophe or large-scale destruction is the central premise.\n- Family should be used only when family relationships are a primary focus.\n- Coming-of-age should generally be avoided unless the story is mainly about growing up and personal maturation.\n\nImportant genre-selection guidance\n- A fish-out-of-water setup is not a genre by itself, though it may support Comedy or Drama.\n- A murder investigation can be Crime without being Thriller.\n- A romantic subplot does not automatically mean Romance unless it is central.\n- A past-time-period setting does not automatically mean Historical Fiction.\n- A fantastical or fairy-tale tone should usually be Fantasy, not Science Fiction.\n- If the story is emotionally grounded and relationship-heavy, Drama is often one of the best-fit genres even when other genres also apply.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, relationship, or quest.\n- Match the tone of the story.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nRemember:\n- Choose only the genres that are strongest and most clearly supported.\n- Do not invent labels that are not broad genres.\n- The tagline should be concise and evocative.",
+    "timestamp": "2026-04-13T15:17:51.958419"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.5599999999999996 / 3 (85.3%)",
+    "timestamp": "2026-04-13T15:17:55.951915"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: New subsample score 2.5599999999999996 is better than old score 1.8466666666666667. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:17:55.952337"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 17.111666666666665 / 22 (77.8%)",
+    "timestamp": "2026-04-13T15:18:03.018006"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Full valset score for new program: 0.7778030303030302",
+    "timestamp": "2026-04-13T15:18:03.018507"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Full train_val score for new program: 0.7778030303030302",
+    "timestamp": "2026-04-13T15:18:03.018694"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Individual valset scores for new program: [0.8599999999999999, 0.6499999999999999, 0.58, 0.8599999999999999, 0.7666666666666666, 0.5333333333333333, 0.825, 0.7666666666666666, 0.8599999999999999, 1.0, 0.7666666666666666, 0.7666666666666666, 0.8599999999999999, 1.0, 0.58, 0.6499999999999999, 0.8999999999999999, 0.7, 0.8599999999999999, 0.7666666666666666, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:18:03.018876"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: New valset pareto front scores: [1.0, 0.6499999999999999, 0.58, 1.0, 0.825, 0.7666666666666666, 1.0, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.8599999999999999, 1.0, 1.0, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:18:03.019062"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Full valset pareto front score: 0.8658333333333331",
+    "timestamp": "2026-04-13T15:18:03.019257"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Updated valset pareto front programs: [{3, 4}, {1, 2, 4, 5}, {2, 5}, {2}, {1}, {4}, {4}, {1, 4}, {1, 2, 3, 4, 5}, {1, 2, 4, 5}, {2}, {4}, {4}, {5}, {1}, {1, 3, 4}, {1, 3}, {2, 3, 4}, {1, 5}, {2}, {2, 5}, {2, 5}]",
+    "timestamp": "2026-04-13T15:18:03.019406"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Best valset aggregate score so far: 0.784090909090909",
+    "timestamp": "2026-04-13T15:18:03.019472"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Best program as per aggregate score on train_val: 4",
+    "timestamp": "2026-04-13T15:18:03.019534"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Best program as per aggregate score on valset: 4",
+    "timestamp": "2026-04-13T15:18:03.019587"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Best score on valset: 0.784090909090909",
+    "timestamp": "2026-04-13T15:18:03.019640"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Best score on train_val: 0.784090909090909",
+    "timestamp": "2026-04-13T15:18:03.019713"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: Linear pareto front program index: 4",
+    "timestamp": "2026-04-13T15:18:03.019785"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 7: New program candidate index: 5",
+    "timestamp": "2026-04-13T15:18:03.019852"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: No merge candidates found",
+    "timestamp": "2026-04-13T15:18:03.020698"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Selected program 2 score: 0.7640151515151513",
+    "timestamp": "2026-04-13T15:18:03.020856"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.46 / 3 (82.0%)",
+    "timestamp": "2026-04-13T15:18:05.224905"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nOutput format:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or format labels.\n- Usually 2 to 4 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n\nUseful broad genre labels include:\n- Drama\n- Crime\n- Action\n- Adventure\n- Thriller\n- Mystery\n- Science Fiction\n- Disaster\n- Historical Fiction\n- Fantasy\n- Mythology/Fantasy\n- Romance\n- Comedy\n\nGenre guidance\n- Drama is a safe default when the story is character-driven, emotionally intense, or centered on personal conflict.\n- Crime should be used when the story focuses on illegal acts, murder, corruption, fraud, cons, heists, gangsters, investigation of wrongdoing, or consequences of criminal behavior.\n- Do NOT add Crime just because the story has espionage, political intrigue, or a conspiracy unless criminal activity is a central part of the plot.\n- Thriller should be used when there is sustained suspense, pursuit, danger, conspiracy, assassination, violence, or high-stakes tension.\n- Action should be used when the plot includes escapes, chases, combat, rescue missions, physical danger, or fast-moving conflict.\n- Adventure should be used when there is a journey, mission, escape, or race against time involving travel or pursuit.\n- Science Fiction fits alien invasion, dystopia, futuristic settings, advanced technology, spacefaring, or other speculative elements.\n- Disaster is only for large-scale destruction or cataclysmic events as the main focus.\n- Historical Fiction should only be used when the setting is clearly a recognizable past era or historical events/figures are central.\n- Fantasy or Mythology/Fantasy should be used when the story draws on legends, sacred objects, divine forces, magic, or mythic lore.\n- Romance should be included only when a love story or romantic relationship is a central part of the plot.\n- Comedy should only be included when humor is a major part of the story; do not add it just because the tone is witty, satirical, or ironic.\n\nImportant pattern guidance\n- Prison, wrongful conviction, corruption, court cases, or escape from incarceration usually point to Drama and Crime, often with Thriller if there is danger or suspense, and Action/Adventure if there is an escape or rescue.\n- Heists, stolen-item chases, gangster conflicts, or criminal capers usually point to Crime; add Thriller and Action if the story is tense, dangerous, or fast-moving.\n- Psychological tension around adultery, betrayal, obsession, deception, or social ambition can still be Crime and Thriller if there is wrongdoing or dangerous escalation.\n- Political or corporate intrigue may be Drama and Thriller; add Crime only if the scheme involves clear criminal acts.\n- If the keywords suggest a peace conference, assassination plot, conspiracy, prison escape, or urgent rescue in a futuristic or space setting, Science Fiction is likely central, with Thriller, Action, and Adventure if the story is tense and mission-driven.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nReturn only the genres line and the tagline line.",
+    "timestamp": "2026-04-13T15:18:12.953446"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.5599999999999996 / 3 (85.3%)",
+    "timestamp": "2026-04-13T15:18:15.592044"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: New subsample score 2.5599999999999996 is better than old score 2.46. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:18:15.592606"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 17.581666666666663 / 22 (79.9%)",
+    "timestamp": "2026-04-13T15:18:24.112736"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: New program is on the linear pareto front",
+    "timestamp": "2026-04-13T15:18:24.113336"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Full valset score for new program: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:18:24.113554"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Full train_val score for new program: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:18:24.113691"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Individual valset scores for new program: [1.0, 0.6499999999999999, 0.58, 1.0, 0.7666666666666666, 0.5333333333333333, 0.825, 0.7666666666666666, 0.8599999999999999, 1.0, 0.7666666666666666, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.8599999999999999, 0.5333333333333333, 1.0, 0.7666666666666666, 0.7666666666666666, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:18:24.113846"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: New valset pareto front scores: [1.0, 0.6499999999999999, 0.58, 1.0, 0.825, 0.7666666666666666, 1.0, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.8599999999999999, 1.0, 1.0, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:18:24.114031"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Full valset pareto front score: 0.8658333333333331",
+    "timestamp": "2026-04-13T15:18:24.114136"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Updated valset pareto front programs: [{3, 4, 6}, {1, 2, 4, 5, 6}, {2, 5, 6}, {2, 6}, {1}, {4}, {4}, {1, 4}, {1, 2, 3, 4, 5, 6}, {1, 2, 4, 5, 6}, {2}, {4}, {4}, {5}, {1}, {1, 3, 4}, {1, 3, 6}, {2, 3, 4, 6}, {1, 5}, {2, 6}, {2, 5, 6}, {2, 5, 6}]",
+    "timestamp": "2026-04-13T15:18:24.114236"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Best valset aggregate score so far: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:18:24.114303"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Best program as per aggregate score on train_val: 6",
+    "timestamp": "2026-04-13T15:18:24.114364"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Best program as per aggregate score on valset: 6",
+    "timestamp": "2026-04-13T15:18:24.114422"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Best score on valset: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:18:24.114481"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Best score on train_val: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:18:24.114539"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: Linear pareto front program index: 6",
+    "timestamp": "2026-04-13T15:18:24.114595"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 8: New program candidate index: 6",
+    "timestamp": "2026-04-13T15:18:24.114651"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 9: No merge candidates found",
+    "timestamp": "2026-04-13T15:18:24.115730"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 9: Selected program 4 score: 0.784090909090909",
+    "timestamp": "2026-04-13T15:18:24.115874"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.525 / 3 (84.2%)",
+    "timestamp": "2026-04-13T15:18:27.903257"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 9: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nOutput format:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation.\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or tone labels.\n- Usually 2 to 5 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n- Put the most important genres first.\n\nUse these genre rules:\n\n- Comedy: include when the story is primarily humorous, playful, or light in tone.\n- Romance: include when a central love story, relationship arc, or attraction is important.\n- Drama: include when the story is primarily serious, emotional, tense, or character-driven, especially if it is not mainly comedic.\n- Crime: include when criminal activity, law-enforcement pursuit, heists, murder cases, criminal networks, or similar crime-centered plots are core to the story. Do not include it for every cop, detective, or investigation premise if the main hook is something else.\n- Mystery: use only when solving a puzzle, secret, hidden identity, or unknown truth is a main engine of the plot.\n- Action: include only when frequent physical danger, chases, fights, escapes, assaults, gunfights, or other direct confrontations are central. Do not add it just because there is tension, an assassin, or a criminal plot.\n- Adventure: include for quests, journeys, rescue missions, globe-trotting travel, unusual destinations, or race-against-time missions.\n- Thriller: include only when sustained suspense, pursuit, cat-and-mouse danger, paranoia, or high-stakes threat is a major element.\n- Science Fiction: include for advanced technology, space travel, aliens, AI, time travel, futuristic settings, predictive tech, holograms, dystopias, or cosmic threats.\n- Disaster: include only when the story is centrally about a major catastrophe or world-ending destruction.\n- Historical Fiction: include when the story is set in a recognizable past era or heavily uses historical events/figures.\n- Fantasy / Mythology-Fantasy: include when the story draws on magic, ancient legends, sacred objects, gods, monsters, or mythic lore.\n- Family: use only if family relationships are a primary focus.\n- Coming-of-age: avoid unless the story is primarily about growing up and personal maturation.\n\nImportant guidance:\n- Do not use subgenres like \u201cspace opera,\u201d \u201cromantic comedy,\u201d or \u201ccoming-of-age\u201d as labels; break them into broader base genres instead.\n- A fish-out-of-water setup can support Comedy, but it is not a genre by itself.\n- A murder investigation does not automatically mean Thriller.\n- A planet in danger does not automatically mean Disaster.\n- A futuristic cop or detective story may be Science Fiction, Mystery, Action, Thriller, and/or Drama; do not force Crime unless crime is truly central.\n- A twisty criminal standoff may be Crime, Drama, Mystery, and Thriller without needing Action unless there is sustained physical confrontation.\n- If the story is a time-travel or alien-contact quest, Science Fiction and Adventure are usually more important than Disaster or Thriller.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, relationship, or quest.\n- Match the tone of the story.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.",
+    "timestamp": "2026-04-13T15:18:47.467715"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.125 / 3 (70.8%)",
+    "timestamp": "2026-04-13T15:20:50.446900"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 9: New subsample score 2.125 is not better than old score 2.525, skipping",
+    "timestamp": "2026-04-13T15:20:50.447696"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 10: Selected program 2 score: 0.7640151515151513",
+    "timestamp": "2026-04-13T15:20:50.448656"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.55 / 3 (85.0%)",
+    "timestamp": "2026-04-13T15:20:52.590513"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 10: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or format labels.\n- Usually 2 to 4 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the inputs.\n\nAllowed broad genre labels:\n- Drama\n- Crime\n- Action\n- Adventure\n- Thriller\n- Mystery\n- Science Fiction\n- History\n- Disaster\n- Fantasy\n- Mythology/Fantasy\n\nGenre guidance\n- Use Action when combat, duels, fights, chases, explosions, or physical confrontations are central.\n- Use Adventure when the story is a quest, journey, rescue mission, swashbuckling caper, or \u201cprotect/escape\u201d mission.\n- Use Thriller only when there is sustained suspense, pursuit, danger, or high-stakes tension; do not add it for action alone.\n- Use Crime for heists, gang conflict, corruption, wrongful conviction, prison/escape, or criminal pursuit.\n- Use Drama when emotional, moral, or interpersonal conflict is central; do not add it just because the story is serious.\n- Use Mystery when the plot centers on solving a puzzle, uncovering a hidden truth, or investigating an unknown.\n- Use Science Fiction for aliens, spacecraft, futuristic technology, or speculative worldbuilding.\n- Use Fantasy for curses, ghosts, monsters, magical or supernatural forces, or enchanted objects.\n- Use Mythology/Fantasy when the story draws on legends, gods, sacred relics, or mythic lore.\n- Use History when the setting is a clearly identifiable past era or historical figures/events are central.\n- Use Disaster only when the main focus is large-scale catastrophe, destruction, or a cataclysmic event.\n\nTagline guidance\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:21:16.189737"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.4916666666666663 / 3 (83.1%)",
+    "timestamp": "2026-04-13T15:21:19.165052"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 10: New subsample score 2.4916666666666663 is not better than old score 2.55, skipping",
+    "timestamp": "2026-04-13T15:21:19.165422"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:21:19.165902"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.1666666666666665 / 3 (72.2%)",
+    "timestamp": "2026-04-13T15:21:21.581878"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or setting labels.\n- Usually 3 to 5 genres is enough.\n- Only include genres that are clearly supported by the input.\n- Do not over-label.\n\nImportant genre guidance\n- Use Action when there is combat, chases, explosions, or high-intensity physical conflict.\n- Use Adventure when the story is a quest, mission, journey, artifact hunt, globe-trotting, or race against time.\n- Use Thriller when there is strong suspense, pursuit, danger, or escalating high-stakes tension.\n- Use Science Fiction when the story involves advanced technology, AI, robots/cyborgs, aliens, space travel, time travel, or a futuristic setting.\n- Use Disaster only for major catastrophe or world-ending destruction.\n- Use Fantasy/Mythology when magic, gods, legends, sacred objects, or mythic/religious lore are central.\n- Use Mystery when the central story is about solving a crime, secret, disappearance, or puzzle.\n- Use Drama when the story is character-focused, emotional, or serious in tone.\n- Use Comedy when the story is primarily humorous, satirical, or farcical.\n- Use Romance when love, relationships, affairs, or romantic conflict are central.\n- Use History for stories based on real historical people, events, periods, artists, or biographical material.\n- Use Music for stories centered on musicians, composers, singers, performances, or the music world.\n- If the story is a fictional tale set in a past era, Historical Fiction can fit; if it is mainly about real people or real events from the past, prefer History instead.\n- Do not treat setting descriptors like post-apocalyptic, dystopia, noir, or \u201cmental institution\u201d as genres by themselves. Use them only if they support a broader genre such as Science Fiction, Thriller, Drama, or History.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, relationship, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation or reasoning unless explicitly requested.",
+    "timestamp": "2026-04-13T15:21:36.318771"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.3666666666666663 / 3 (78.9%)",
+    "timestamp": "2026-04-13T15:21:38.556410"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: New subsample score 2.3666666666666663 is better than old score 2.1666666666666665. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:21:38.556817"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 16.18333333333333 / 22 (73.6%)",
+    "timestamp": "2026-04-13T15:21:45.036208"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Full valset score for new program: 0.7356060606060605",
+    "timestamp": "2026-04-13T15:21:45.036789"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Full train_val score for new program: 0.7356060606060605",
+    "timestamp": "2026-04-13T15:21:45.036986"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Individual valset scores for new program: [0.8999999999999999, 0.58, 0.7, 0.8599999999999999, 0.7, 0.6499999999999999, 0.825, 0.7666666666666666, 0.58, 0.7, 0.7666666666666666, 0.7666666666666666, 0.5333333333333333, 0.58, 0.8999999999999999, 0.475, 1.0, 0.7, 0.7666666666666666, 0.7666666666666666, 0.8999999999999999, 0.7666666666666666]",
+    "timestamp": "2026-04-13T15:21:45.037099"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: New valset pareto front scores: [1.0, 0.6499999999999999, 0.7, 1.0, 0.825, 0.7666666666666666, 1.0, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.8599999999999999, 1.0, 1.0, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.8999999999999999, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:21:45.037253"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Full valset pareto front score: 0.8803787878787876",
+    "timestamp": "2026-04-13T15:21:45.037336"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Updated valset pareto front programs: [{3, 4, 6}, {1, 2, 4, 5, 6}, {7}, {2, 6}, {1}, {4}, {4}, {1, 4}, {1, 2, 3, 4, 5, 6}, {1, 2, 4, 5, 6}, {2}, {4}, {4}, {5}, {1, 7}, {1, 3, 4}, {1, 3, 6, 7}, {2, 3, 4, 6}, {1, 5}, {2, 6}, {7}, {2, 5, 6}]",
+    "timestamp": "2026-04-13T15:21:45.037431"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Best valset aggregate score so far: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:21:45.037497"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Best program as per aggregate score on train_val: 6",
+    "timestamp": "2026-04-13T15:21:45.037560"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Best program as per aggregate score on valset: 6",
+    "timestamp": "2026-04-13T15:21:45.037621"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Best score on valset: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:21:45.037683"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Best score on train_val: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:21:45.037745"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: Linear pareto front program index: 6",
+    "timestamp": "2026-04-13T15:21:45.037805"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 11: New program candidate index: 7",
+    "timestamp": "2026-04-13T15:21:45.037864"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: No merge candidates found",
+    "timestamp": "2026-04-13T15:21:45.038818"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Selected program 1 score: 0.7680303030303027",
+    "timestamp": "2026-04-13T15:21:45.038966"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.433333333333333 / 3 (81.1%)",
+    "timestamp": "2026-04-13T15:21:47.280948"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords together.\n- Focus on the core story rather than minor details or decorative elements.\n- Prefer broad, canonical genres over niche subgenres.\n- Usually 2 to 5 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n\nUseful genre guidance:\n- Crime: criminal activity, murder, mobsters, investigations into crimes, fugitives, law enforcement, serial killers.\n- Drama: strong interpersonal conflict, moral dilemmas, emotional struggle, redemption, family or relationship tension.\n- Action: chases, shootouts, fights, weapons, physical danger, rescue missions.\n- Adventure: quests, journeys, globe-trotting, artifact hunts, missions, survival travel, race-against-time expeditions.\n- Horror: serial killers, sadistic violence, captivity, slasher elements, monstrous or animal attacks, gore, survival terror, \u201cgame of death\u201d scenarios.\n- Mystery: whodunits, hidden identities, clues, puzzles, traps, investigations with unknown motives, elaborate schemes where the truth must be uncovered.\n- Thriller: use sparingly. Only include if suspense is the primary framing and no more specific genre fits. Do not use it as a default label for any tense story.\n- Science Fiction: advanced technology, AI, aliens, space travel, futuristic science.\n- Fantasy / Mythology: magic, ancient legends, sacred objects, mythic lore, supernatural quest elements.\n- Historical Fiction: recognizable past eras, historical events, or real historical figures.\n- Disaster: large-scale catastrophe, collapse, mass destruction, end-of-the-world events.\n- Romance: only if a love story is central to the plot, not just a side relationship or secret affair.\n\nImportant genre-selection rules:\n- If the story is about criminals, murder, or mob life, Crime is usually important.\n- If the story is about a murderer, sadist, creature attack, or survival nightmare, Horror is often a better fit than Thriller.\n- If the story involves an investigation, hidden culprit, traps, or a puzzle-like setup, include Mystery.\n- If the story is mainly about emotional choices, loyalty, guilt, or redemption, include Drama.\n- If the story has an attack, pursuit, or weapons-driven danger, Action may fit alongside Crime or Horror.\n- Do not include Romance unless the love story is a major driver of the plot.\n- Do not include Thriller unless suspense itself is the main genre and it is not already better covered by Crime, Horror, Mystery, or Action.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n- Focus on stakes and tone rather than listing details.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:22:02.244531"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.7666666666666666 / 3 (92.2%)",
+    "timestamp": "2026-04-13T15:22:06.117160"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: New subsample score 2.7666666666666666 is better than old score 2.433333333333333. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:22:06.120410"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 17.051666666666662 / 22 (77.5%)",
+    "timestamp": "2026-04-13T15:22:13.428806"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Full valset score for new program: 0.7750757575757574",
+    "timestamp": "2026-04-13T15:22:13.429384"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Full train_val score for new program: 0.7750757575757574",
+    "timestamp": "2026-04-13T15:22:13.429747"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Individual valset scores for new program: [1.0, 0.58, 0.5333333333333333, 1.0, 0.7, 0.7666666666666666, 0.6499999999999999, 0.7666666666666666, 0.8599999999999999, 1.0, 0.7666666666666666, 0.7, 0.7666666666666666, 0.8599999999999999, 0.7666666666666666, 0.6499999999999999, 0.825, 0.7666666666666666, 0.7666666666666666, 0.7666666666666666, 0.7, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:22:13.429939"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: New valset pareto front scores: [1.0, 0.6499999999999999, 0.7, 1.0, 0.825, 0.7666666666666666, 1.0, 0.8599999999999999, 0.8599999999999999, 1.0, 1.0, 0.8599999999999999, 1.0, 1.0, 0.8999999999999999, 0.7, 1.0, 0.7666666666666666, 0.8599999999999999, 0.8599999999999999, 0.8999999999999999, 0.8599999999999999]",
+    "timestamp": "2026-04-13T15:22:13.430089"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Full valset pareto front score: 0.8803787878787876",
+    "timestamp": "2026-04-13T15:22:13.430354"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Updated valset pareto front programs: [{8, 3, 4, 6}, {1, 2, 4, 5, 6}, {7}, {8, 2, 6}, {1}, {8, 4}, {4}, {1, 4}, {1, 2, 3, 4, 5, 6, 8}, {1, 2, 4, 5, 6, 8}, {2}, {4}, {4}, {5}, {1, 7}, {1, 3, 4}, {1, 3, 6, 7}, {2, 3, 4, 6, 8}, {1, 5}, {2, 6}, {7}, {8, 2, 5, 6}]",
+    "timestamp": "2026-04-13T15:22:13.430538"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Best valset aggregate score so far: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:22:13.430676"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Best program as per aggregate score on train_val: 6",
+    "timestamp": "2026-04-13T15:22:13.430790"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Best program as per aggregate score on valset: 6",
+    "timestamp": "2026-04-13T15:22:13.431014"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Best score on valset: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:22:13.431152"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Best score on train_val: 0.7991666666666665",
+    "timestamp": "2026-04-13T15:22:13.431263"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: Linear pareto front program index: 6",
+    "timestamp": "2026-04-13T15:22:13.431370"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 12: New program candidate index: 8",
+    "timestamp": "2026-04-13T15:22:13.431486"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 13: No merge candidates found",
+    "timestamp": "2026-04-13T15:22:13.432854"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 13: Selected program 2 score: 0.7640151515151513",
+    "timestamp": "2026-04-13T15:22:13.433183"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.1599999999999997 / 3 (72.0%)",
+    "timestamp": "2026-04-13T15:22:17.178307"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 13: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or format labels.\n- Usually 2 to 4 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n\nUseful broad genre labels include:\n- Drama\n- Comedy\n- Romance\n- Crime\n- Action\n- Adventure\n- Thriller\n- Mystery\n- Horror\n- Science Fiction\n- Disaster\n- Historical Fiction\n- Fantasy\n- Mythology/Fantasy\n\nGenre guidance\n- If the story centers on prisons, wrongful conviction, corruption, or escape from incarceration, Drama and Crime are usually the safest core genres.\n- Add Thriller only if there is sustained suspense, pursuit, danger, or high-stakes tension.\n- Do not use a niche label like Prison Fiction.\n- If the story is a heist, stolen-item chase, gangster conflict, or fast-moving criminal caper, Crime is usually central.\n- Add Thriller for danger, pressure, and violent criminal conflict.\n- Do not assume Comedy just because the tone is witty, slangy, or energetic; only include Comedy if humor is clearly a major part of the story.\n- Include Romance when love, marriage, breakup, reunion, romantic pursuit, or relationship stakes are a meaningful part of the core story, even if the plot is also comedic or dramatic.\n- If the story involves serial killers, gruesome murders, deadly games, haunting terror, monsters, or other deliberately frightening material, Horror may be a core genre.\n- In horror/slasher stories, prefer Horror over Crime/Mystery/Thriller unless those elements are equally central.\n- Do not label a serial-killer story as Crime or Mystery just because there is an investigation; if the main experience is fear and survival, Horror should be included.\n- If the story involves alien invasion, dystopia, futuristic threats, advanced technology, or other speculative elements, Science Fiction may fit.\n- If the story also involves a perilous journey, survival mission, or race to protect someone / escape danger, Adventure can be important.\n- Use Disaster only when the main focus is large-scale destruction or a cataclysmic event.\n- Use Historical Fiction only if the setting is clearly a recognizable past era or historical events/figures are central.\n- Use Fantasy or Mythology/Fantasy when the story draws on legends, sacred objects, divine forces, or mythic lore.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:22:34.175215"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.0666666666666664 / 3 (68.9%)",
+    "timestamp": "2026-04-13T15:22:36.283236"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 13: New subsample score 2.0666666666666664 is not better than old score 2.1599999999999997, skipping",
+    "timestamp": "2026-04-13T15:22:36.283452"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 14: Selected program 2 score: 0.7640151515151513",
+    "timestamp": "2026-04-13T15:22:36.283732"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.13 / 3 (71.0%)",
+    "timestamp": "2026-04-13T15:22:38.677468"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 14: Proposed new text for predict: text\nYou will be given two inputs:\n\n1) overview: a short plot/content summary\n2) keywords: a list of descriptive terms, settings, motifs, and themes\n\nYour task is to:\n- Predict the most relevant broad genres for the content\n- Write one short tagline that captures the hook, stakes, and tone\n\nHow to infer genres\n- Use both the overview and the keywords.\n- Focus on the core story rather than minor details.\n- Prefer broad, canonical genres over niche subgenres or format labels.\n- Usually 1 to 3 genres is enough; do not over-label.\n- Only include genres that are clearly supported by the input.\n- Use only the genre labels from the allowed set; do not invent new labels.\n\nAllowed broad genre labels:\n- Drama\n- Crime\n- Action\n- Adventure\n- Thriller\n- Mystery\n- Science Fiction\n- Disaster\n- Historical Fiction\n- Fantasy\n- Mythology/Fantasy\n\nGenre guidance\n- If the story centers on prisons, wrongful conviction, corruption, escape, or incarceration, Drama and Crime are usually the safest core genres.\n- Add Thriller only if there is sustained suspense, pursuit, danger, or high-stakes tension throughout the story.\n- Do not use a niche label like Prison Fiction.\n- If the story is a heist, stolen-item chase, gangster conflict, or fast-moving criminal caper, Crime is usually central.\n- Add Thriller for danger, pressure, and violent criminal conflict.\n- Do not assume Comedy just because the tone is witty, slangy, or energetic; only include Comedy if humor is clearly a major part of the story.\n- Do not use Romance unless it is explicitly part of the allowed label set. If the story is mainly about relationships, loneliness, longing, or emotional connection, Drama is usually the safer label.\n- If the story involves alien invasion, dystopia, futuristic threats, advanced technology, space travel, androids/robots, galactic empires, or other speculative elements, Science Fiction may fit.\n- Interstellar rescue missions, galaxies, death stars, droids, lasers, and futuristic militaries are strong Science Fiction signals.\n- If the story also involves a perilous journey, rescue mission, survival quest, or race to protect someone / escape danger, Adventure can be important.\n- Use Action when combat, chases, showdowns, or physical conflict are central.\n- Use Disaster only when the main focus is large-scale destruction or a cataclysmic event.\n- Use Historical Fiction only if the setting is clearly a recognizable past era or historical events/figures are central.\n- Use Fantasy or Mythology/Fantasy when the story draws on legends, sacred objects, divine forces, mythic lore, supernatural powers, or comic-book/superhero logic.\n- Superhero, masked-vigilante, comic-book, dual-identity, and supervillain stories often belong in Fantasy and/or Action, even if crime elements are present. Do not default to Crime or Thriller unless criminal investigation or suspense is truly central.\n- If a superhero story has futuristic gadgets or a sci-fi setting, Science Fiction may also apply, but do not force Crime/Thriller just because there are criminals.\n- For rescue-and-quest stories, prioritize Adventure over Thriller unless the tension is persistent and dominant.\n\nHow to write the tagline\n- Keep it short, punchy, and promotional.\n- Make it sound like a movie or book blurb.\n- Highlight the central conflict, danger, or quest.\n- Avoid copying the overview verbatim.\n- Aim for one sentence.\n\nOutput format\nProvide:\n- genres: a comma-separated list of genres\n- tagline: one sentence\n\nDo not include extra explanation unless explicitly requested.",
+    "timestamp": "2026-04-13T15:22:52.918857"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 2.58 / 3 (86.0%)",
+    "timestamp": "2026-04-13T15:22:54.758814"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 14: New subsample score 2.58 is better than old score 2.13. Continue to full eval and add to candidate pool.",
+    "timestamp": "2026-04-13T15:22:54.759194"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.evaluate.evaluate",
+    "message": "Average Metric: 16.33333333333333 / 22 (74.2%)",
+    "timestamp": "2026-04-13T15:23:03.979186"
+  },
+  {
+    "level": "INFO",
+    "logger": "dspy.teleprompt.gepa.gepa",
+    "message": "Iteration 14: Full valset score for new program: 0.7424242424242422",
+    "timestamp": "2026-04-13T15:23:03.979691"
+  }
+]

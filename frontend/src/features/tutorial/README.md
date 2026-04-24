@@ -80,7 +80,7 @@ src/
 
 - Prompt optimization explanation
 - Modules (Predict/CoT)
-- Optimizers (MIPROv2/GEPA)
+- Optimizer (GEPA)
 - Scoring/metrics
 
 **Part 2: Submit Wizard (13 steps)**

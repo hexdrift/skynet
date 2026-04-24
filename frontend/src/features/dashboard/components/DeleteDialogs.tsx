@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TERMS } from "@/shared/lib/terms";
 import type { DeleteTarget } from "../hooks/use-bulk-delete";
 
 type DeleteDialogsProps = {
@@ -45,17 +46,16 @@ export function DeleteDialogs({
           <DialogHeader>
             <DialogTitle>
               {selectedCount === 1
-                ? "מחיקת אופטימיזציה"
-                : "מחיקת מספר אופטימיזציות"}
+                ? `מחיקת ${TERMS.optimization}`
+                : `מחיקת מספר ${TERMS.optimizationPlural}`}
             </DialogTitle>
             <DialogDescription>
               {selectedCount === 1 ? (
-                <>האם למחוק אופטימיזציה אחת? פעולה זו אינה הפיכה.</>
+                <>האם למחוק {TERMS.optimization} אחת? פעולה זו אינה הפיכה.</>
               ) : (
                 <>
-                  האם למחוק{" "}
-                  <span className="font-semibold">{selectedCount}</span>{" "}
-                  אופטימיזציות? פעולה זו אינה הפיכה.
+                  האם למחוק <span className="font-semibold">{selectedCount}</span>{" "}
+                  {TERMS.optimizationPlural}? פעולה זו אינה הפיכה.
                 </>
               )}
             </DialogDescription>
@@ -75,11 +75,7 @@ export function DeleteDialogs({
               disabled={bulkDeleting}
               className="w-full justify-center"
             >
-              {bulkDeleting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                "מחק הכל"
-              )}
+              {bulkDeleting ? <Loader2 className="size-4 animate-spin" /> : "מחק הכל"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -93,9 +89,9 @@ export function DeleteDialogs({
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>מחיקת אופטימיזציה</DialogTitle>
+            <DialogTitle>מחיקת {TERMS.optimization}</DialogTitle>
             <DialogDescription>
-              האם למחוק את האופטימיזציה{" "}
+              האם למחוק את ה{TERMS.optimization}{" "}
               <span className="font-mono font-medium text-foreground break-all">
                 {deleteTarget?.id}
               </span>
@@ -117,11 +113,7 @@ export function DeleteDialogs({
               disabled={deleting}
               className="w-full justify-center"
             >
-              {deleting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                "מחיקה"
-              )}
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : "מחיקה"}
             </Button>
           </DialogFooter>
         </DialogContent>

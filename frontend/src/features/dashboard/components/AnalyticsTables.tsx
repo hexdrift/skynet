@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { tip } from "@/shared/lib/tooltips";
+import { TERMS } from "@/shared/lib/terms";
 
 interface OptimizerComparisonData {
   name: string;
@@ -58,8 +60,8 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
     <Card className="border-border/60">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold">
-          <HelpTip text="השוואה מפורטת בין האופטימייזרים: שיפור ממוצע, מספר הרצות, וזמן ריצה">
-            השוואת אופטימייזרים
+          <HelpTip text={tip("analytics.optimizer_comparison_table")}>
+            השוואת {TERMS.optimizer}ים
           </HelpTip>
         </CardTitle>
       </CardHeader>
@@ -72,7 +74,7 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
                   className="text-start cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("name")}
                 >
-                  אופטימייזר {sortKey === "name" && (sortDir === "asc" ? "↑" : "↓")}
+                  {TERMS.optimizer} {sortKey === "name" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
@@ -84,7 +86,7 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("runs")}
                 >
-                  הרצות {sortKey === "runs" && (sortDir === "asc" ? "↑" : "↓")}
+                  ריצות {sortKey === "runs" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
@@ -160,7 +162,7 @@ export function ModelPerformanceTable({ data }: { data: ModelPerformanceData[] }
     <Card className="border-border/60">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold">
-          <HelpTip text="ביצועי המודלים השונים: תדירות שימוש ושיפור ממוצע">ביצועי מודלים</HelpTip>
+          <HelpTip text={tip("analytics.model_performance_table")}>ביצועי מודלים</HelpTip>
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
