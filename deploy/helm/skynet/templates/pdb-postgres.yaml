@@ -1,0 +1,21 @@
+{{- /*
+Optional PDB for the bundled single-replica Postgres. Default OFF: a PDB
+with minAvailable=1 against a 1-replica StatefulSet blocks all voluntary
+node drains, which usually does more harm than good. Enable it only on
+clusters where you'd rather refuse a drain than risk a brief DB blip.
+*/ -}}
+{{- if and .Values.postgres.enabled .Values.postgres.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "skynet.postgres.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  minAvailable: {{ .Values.postgres.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "skynet.postgres.selectorLabels" . | nindent 6 }}
+{{- end }}

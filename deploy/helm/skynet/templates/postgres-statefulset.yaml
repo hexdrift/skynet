@@ -1,0 +1,157 @@
+{{- if .Values.postgres.enabled }}
+{{- /*
+Bundled pgvector Postgres for self-contained installs / dev. Production
+deployments should disable this and point at a managed pgvector cluster
+via externalDatabase.
+*/ -}}
+{{- $secretName := include "skynet.postgres.secretName" . -}}
+{{- if not .Values.postgres.auth.existingSecret }}
+{{- /*
+  Stable password handling — without this, every `helm upgrade` would
+  re-generate randAlphaNum and rotate the password out of sync with the
+  StatefulSet's existing PGDATA, which would lock the database out.
+  We look up the live Secret first and reuse its password if present.
+*/ -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName -}}
+{{- $password := "" -}}
+{{- if .Values.postgres.auth.password -}}
+  {{- $password = .Values.postgres.auth.password -}}
+{{- else if and $existing $existing.data (index $existing.data "password") -}}
+  {{- $password = index $existing.data "password" | b64dec -}}
+{{- else -}}
+  {{- $password = randAlphaNum 24 -}}
+{{- end -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  username: {{ .Values.postgres.auth.username | quote }}
+  database: {{ .Values.postgres.auth.database | quote }}
+  password: {{ $password | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "skynet.postgres.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    {{- include "skynet.postgres.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "skynet.postgres.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: {{ include "skynet.postgres.fullname" . }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "skynet.postgres.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "skynet.postgres.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.postgres.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.postgres.podSecurityContext | nindent 8 }}
+      containers:
+        - name: postgres
+          image: {{ include "skynet.postgres.image" . }}
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.postgres.service.port }}
+              protocol: TCP
+          securityContext:
+            {{- toYaml .Values.postgres.securityContext | nindent 12 }}
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: database
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      {{- if not .Values.postgres.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.postgres.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "skynet.labels" . | nindent 10 }}
+          app.kubernetes.io/component: postgres
+      spec:
+        accessModes:
+          - {{ .Values.postgres.persistence.accessMode }}
+        {{- with .Values.postgres.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.persistence.size }}
+  {{- end }}
+{{- end }}

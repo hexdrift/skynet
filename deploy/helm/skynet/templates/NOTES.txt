@@ -1,0 +1,76 @@
+{{- $fullName := include "skynet.fullname" . -}}
+Skynet has been installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+1. Frontend URL
+{{- if .Values.openshift.routes.enabled }}
+   {{- $scheme := "http" -}}
+   {{- if .Values.openshift.routes.frontend.tls.enabled -}}{{- $scheme = "https" -}}{{- end }}
+   {{- if .Values.openshift.routes.frontend.host }}
+   {{ $scheme }}://{{ .Values.openshift.routes.frontend.host }}
+   {{- else }}
+   Run: oc get route {{ include "skynet.frontend.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.host}'
+   {{- end }}
+{{- else }}
+   No Route created. Port-forward instead:
+     kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "skynet.frontend.fullname" . }} 3001:3001
+   Then open http://localhost:3001
+{{- end }}
+
+2. Backend URL
+{{- if .Values.openshift.routes.enabled }}
+   {{- $scheme := "http" -}}
+   {{- if .Values.openshift.routes.backend.tls.enabled -}}{{- $scheme = "https" -}}{{- end }}
+   {{- if .Values.openshift.routes.backend.host }}
+   {{ $scheme }}://{{ .Values.openshift.routes.backend.host }}
+   {{- else }}
+   Run: oc get route {{ include "skynet.backend.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.host}'
+   {{- end }}
+{{- else }}
+   In-cluster: http://{{ include "skynet.backend.fullname" . }}:{{ .Values.backend.service.port }}
+{{- end }}
+
+3. Tail logs
+   oc logs -f -l app.kubernetes.io/component=backend -n {{ .Release.Namespace }}
+   oc logs -f -l app.kubernetes.io/component=frontend -n {{ .Release.Namespace }}
+
+4. Migration job (runs as a pre-install/upgrade hook)
+   oc logs job/{{ $fullName }}-migrate -n {{ .Release.Namespace }}
+
+5. Verify health
+   oc exec -n {{ .Release.Namespace }} deploy/{{ include "skynet.backend.fullname" . }} -- curl -sf http://localhost:{{ .Values.backend.containerPort }}/health
+
+{{- if and (not .Values.externalDatabase.enabled) .Values.postgres.enabled }}
+
+6. Postgres (bundled, single-replica)
+   The bundled pgvector StatefulSet runs ONE pod backed by a {{ .Values.postgres.persistence.size }} PVC.
+   Trade-offs to plan for before going to prod:
+
+   - Node drains cause a brief outage. The PDB is OFF by default — a
+     minAvailable=1 PDB on a single-replica StatefulSet would block every
+     voluntary drain, which is usually worse than the ~30s eviction blip.
+     Flip postgres.podDisruptionBudget.enabled=true if your operations
+     prefer "refuse the drain" over "tolerate a blip".
+
+   - PVC backups are your responsibility. Snapshot the
+     {{ include "skynet.postgres.fullname" . }}-data-* PVC on a schedule
+     (Velero, CSI VolumeSnapshot, or a cluster-wide backup operator).
+     The chart does NOT take backups for you.
+
+   - Vertical scale only. Bump postgres.resources.{requests,limits} when
+     query load grows; horizontal scale is not supported by this chart.
+
+   For real production loads, set externalDatabase.enabled=true and point
+   at a managed pgvector cluster (Crunchy, CloudNativePG, RDS, etc.), then
+   redeploy with postgres.enabled=false to remove the bundled StatefulSet.
+{{- end }}
+
+{{- if not .Values.backend.secrets.data.OPENAI_API_KEY }}
+{{- if not .Values.backend.secrets.existingSecret }}
+
+WARNING: OPENAI_API_KEY is not set. Set it via:
+  helm upgrade {{ .Release.Name }} . --set backend.secrets.data.OPENAI_API_KEY=sk-... \
+    {{- if .Values.openshift.routes.enabled }} --reuse-values{{- end }}
+or wire CODE_AGENT_BASE_URL / GENERALIST_AGENT_BASE_URL to your internal LLM gateway
+and unset OPENAI_API_KEY entirely.
+{{- end }}
+{{- end }}

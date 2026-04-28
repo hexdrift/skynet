@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "skynet.backend.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+data:
+  {{- range $key, $val := .Values.backend.env }}
+  {{- if and (ne $key "ALLOWED_ORIGINS") (or (kindIs "string" $val) (kindIs "int" $val) (kindIs "float64" $val) (kindIs "bool" $val)) }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+  {{- end }}
+  ALLOWED_ORIGINS: {{ default "" .Values.backend.env.ALLOWED_ORIGINS | quote }}

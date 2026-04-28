@@ -1,0 +1,26 @@
+{{- if .Values.openshift.routes.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "skynet.frontend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+  annotations:
+    {{- with .Values.openshift.routes.frontend.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.openshift.routes.frontend.host }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "skynet.frontend.fullname" . }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- include "skynet.route.tls" .Values.openshift.routes.frontend.tls | nindent 2 }}
+  wildcardPolicy: None
+{{- end }}
