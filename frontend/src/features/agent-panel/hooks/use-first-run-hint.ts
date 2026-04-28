@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-const STORAGE_KEY = "skynet.generalist-panel.first-run-dismissed";
+import { STORAGE_KEY_FIRST_RUN_DISMISSED } from "../constants";
 
 /**
  * Tracks whether the first-run hint tooltip should show. The hint is
@@ -18,7 +18,7 @@ export function useFirstRunHint(): {
 
   React.useEffect(() => {
     try {
-      const done = window.localStorage.getItem(STORAGE_KEY) === "true";
+      const done = window.localStorage.getItem(STORAGE_KEY_FIRST_RUN_DISMISSED) === "true";
       if (!done) setVisible(true);
     } catch {
       /* localStorage unavailable — skip hint */
@@ -28,7 +28,7 @@ export function useFirstRunHint(): {
   const dismiss = React.useCallback(() => {
     setVisible(false);
     try {
-      window.localStorage.setItem(STORAGE_KEY, "true");
+      window.localStorage.setItem(STORAGE_KEY_FIRST_RUN_DISMISSED, "true");
     } catch {
       /* noop */
     }

@@ -1,13 +1,15 @@
 "use client";
 
 import * as React from "react";
+import { matchShortcut, useUserPrefs } from "@/features/settings";
 
-const DEFAULT_WIDTH = 420;
-const MIN_WIDTH = 360;
-const MAX_WIDTH = 720;
-
-const STORAGE_KEY_OPEN = "skynet.generalist-panel.open";
-const STORAGE_KEY_WIDTH = "skynet.generalist-panel.width";
+import {
+  DEFAULT_WIDTH,
+  MAX_WIDTH,
+  MIN_WIDTH,
+  STORAGE_KEY_OPEN,
+  STORAGE_KEY_WIDTH,
+} from "../constants";
 
 interface PanelState {
   open: boolean;
@@ -32,6 +34,7 @@ function clampWidth(n: number): number {
  * SSR mismatches.
  */
 export function GeneralistPanelProvider({ children }: { children: React.ReactNode }) {
+  const { prefs } = useUserPrefs();
   const [open, setOpenState] = React.useState(false);
   const [width, setWidthState] = React.useState(DEFAULT_WIDTH);
 
@@ -77,17 +80,17 @@ export function GeneralistPanelProvider({ children }: { children: React.ReactNod
     }
   }, []);
 
+  const shortcut = prefs.agentShortcut;
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.metaKey) return;
-      if (e.key === "j" || e.key === "J") {
+      if (matchShortcut(e, shortcut)) {
         e.preventDefault();
         toggle();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [toggle]);
+  }, [toggle, shortcut]);
 
   const value = React.useMemo<PanelState>(
     () => ({ open, setOpen, toggle, width, setWidth }),

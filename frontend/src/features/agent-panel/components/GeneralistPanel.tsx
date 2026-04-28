@@ -3,35 +3,30 @@
 import * as React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { PanelLeftClose, RotateCcw, Sparkles, Wand2 } from "lucide-react";
+import { msg } from "@/shared/lib/messages";
 
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/primitives/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 
 import { AgentThread } from "@/shared/ui/agent/agent-thread";
-import { AssistantBubble } from "@/shared/ui/agent/assistant-bubble";
+import { AgentBubble } from "@/shared/ui/agent/agent-bubble";
 import { Composer } from "@/shared/ui/agent/composer";
 import { UserBubble } from "@/shared/ui/agent/user-bubble";
 import type { AgentThinking, AgentToolCall } from "@/shared/ui/agent/types";
 import { cn } from "@/shared/lib/utils";
 
+import { formatShortcut, useUserPrefs } from "@/features/settings";
+
 import { useFirstRunHint } from "../hooks/use-first-run-hint";
 import { useGeneralistAgent } from "../hooks/use-generalist-agent";
 import { useGeneralistPanelState } from "../hooks/use-panel-state";
 import { TRUST_MODE_HUE, useTrustMode } from "../hooks/use-trust-mode";
-import {
-  extractWizardPatch,
-  useWizardStateOptional,
-} from "../hooks/use-wizard-state";
+import { extractWizardPatch, useWizardStateOptional } from "../hooks/use-wizard-state";
 import { getToolRenderer } from "../lib/tool-renderers";
 import type { WizardState } from "../lib/types";
+import { registerTutorialHook } from "@/features/tutorial";
+
+import { MAX_WIDTH, MIN_WIDTH, NARROW_VIEWPORT_QUERY } from "../constants";
 
 import { ApprovalCard } from "./ApprovalCard";
 import { FirstRunHint } from "./FirstRunHint";
@@ -41,11 +36,14 @@ import { ToolCallRow } from "./ToolCallRow";
 import { ToolsCarousel } from "./ToolsCarousel";
 import { TrustToggle } from "./TrustToggle";
 
-const MIN_WIDTH = 360;
-const MAX_WIDTH = 720;
+function getEffectiveMinWidth(): number {
+  if (typeof window === "undefined") return MIN_WIDTH;
+  return Math.max(MIN_WIDTH, Math.min(360, window.innerWidth - 200));
+}
 
 function clampWidth(n: number): number {
-  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(n)));
+  const min = getEffectiveMinWidth();
+  return Math.max(min, Math.min(MAX_WIDTH, Math.round(n)));
 }
 
 interface GeneralistPanelProps {
@@ -61,6 +59,8 @@ interface GeneralistPanelProps {
 export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   const { open, setOpen, width, setWidth } = useGeneralistPanelState();
   const { mode: trustMode, next: cycleTrust } = useTrustMode();
+  const { prefs } = useUserPrefs();
+  const shortcutLabel = formatShortcut(prefs.agentShortcut);
   const hint = useFirstRunHint();
   const reduceMotion = useReducedMotion();
   const hue = TRUST_MODE_HUE[trustMode];
@@ -79,14 +79,38 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     if (open && hint.visible) hint.dismiss();
   }, [open, hint]);
 
+  React.useEffect(
+    () => registerTutorialHook("setGeneralistPanelOpen", (next) => setOpen(next)),
+    [setOpen],
+  );
+
+  // Auto-minimize when the viewport becomes too narrow to comfortably show
+  // panel + sidebar + main content. Only flip on the wider→narrower edge so
+  // we don't fight a user who explicitly opens at narrow sizes.
+  const prevNarrowRef = React.useRef<boolean | null>(null);
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia(NARROW_VIEWPORT_QUERY);
+    prevNarrowRef.current = mql.matches;
+    const handleChange = (e: MediaQueryListEvent) => {
+      const wasNarrow = prevNarrowRef.current;
+      prevNarrowRef.current = e.matches;
+      if (e.matches && wasNarrow === false && open) {
+        setOpen(false);
+      }
+    };
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, [open, setOpen]);
+
   const wizardCtx = useWizardStateOptional();
-  const effectiveWizard = React.useMemo<WizardState>(() => {
+  const effectiveWizard: WizardState = (() => {
     const base = wizardCtx?.state ?? {};
     const merged = wizardState ? { ...base, ...wizardState } : base;
     return wizardCtx?.overriddenFields?.length
       ? { ...merged, overridden_fields: wizardCtx.overriddenFields }
       : merged;
-  }, [wizardCtx?.state, wizardCtx?.overriddenFields, wizardState]);
+  })();
 
   const handleToolEnd = React.useCallback(
     (ev: { result?: unknown }) => {
@@ -103,7 +127,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     onToolEnd: handleToolEnd,
   });
   const streaming = agent.status === "streaming";
-  const lastAssistantIdx = React.useMemo(() => {
+  const lastAgentIdx = React.useMemo(() => {
     for (let i = agent.messages.length - 1; i >= 0; i--) {
       if (agent.messages[i]?.role === "assistant") return i;
     }
@@ -142,26 +166,25 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     window.addEventListener("mouseup", onUp);
   };
 
-  const renderToolCall = React.useCallback(
-    (call: AgentToolCall, ctx: { isRetry: boolean }) => {
-      const renderer = getToolRenderer(call.tool);
-      if (renderer?.card && call.status !== "running") {
-        return renderer.card(call);
-      }
-      const summary = renderer?.summary?.(call) ?? null;
-      return <ToolCallRow call={call} isRetry={ctx.isRetry} summary={summary} />;
-    },
-    [],
-  );
+  const renderToolCall = React.useCallback((call: AgentToolCall, ctx: { isRetry: boolean }) => {
+    const renderer = getToolRenderer(call.tool);
+    if (renderer?.card && call.status !== "running") {
+      return renderer.card(call);
+    }
+    const summary = renderer?.summary?.(call) ?? null;
+    return <ToolCallRow call={call} isRetry={ctx.isRetry} summary={summary} />;
+  }, []);
 
   const emptyState = (
     <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
       <span className="inline-flex size-10 items-center justify-center rounded-full bg-[#3D2E22]/10 text-[#3D2E22]">
         <Sparkles className="size-5" />
       </span>
-      <p className="mt-3 text-sm text-foreground">שלום, איך אפשר לעזור?</p>
+      <p className="mt-3 text-sm text-foreground">
+        {msg("auto.features.agent.panel.components.generalistpanel.1")}
+      </p>
       <p className="mt-1 text-[0.75rem] text-muted-foreground leading-relaxed max-w-[28ch]">
-        עוזר שיודע לקרוא את המערכת ולפעול בשמך. כתוב מה אתה מחפש.
+        {msg("auto.features.agent.panel.components.generalistpanel.2")}
       </p>
     </div>
   );
@@ -173,6 +196,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
           <motion.aside
             key="generalist-panel"
             dir="ltr"
+            data-tutorial="agent-panel"
             initial={reduceMotion ? false : { x: -24, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { x: -24, opacity: 0 }}
@@ -183,13 +207,9 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
               "bg-background/95 backdrop-blur-xl border-e border-border/60",
               "shadow-[8px_0_32px_rgba(61,46,34,0.06)]",
             )}
-            aria-label="סוכן גנרליסט"
+            aria-label={msg("auto.features.agent.panel.components.generalistpanel.literal.1")}
           >
-            <div
-              dir="rtl"
-              className="relative flex min-w-0 flex-1 flex-col"
-            >
-              {/* Header */}
+            <div dir="rtl" className="relative flex min-w-0 flex-1 flex-col">
               <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2.5 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <span
@@ -200,7 +220,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   </span>
                   <div className="min-w-0">
                     <div className="text-[0.8125rem] font-medium leading-tight">
-                      עוזר
+                      {msg("auto.features.agent.panel.components.generalistpanel.3")}
                     </div>
                     {agent.statusLabel && (
                       <div className="text-[0.6875rem] text-muted-foreground truncate">
@@ -217,22 +237,19 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors cursor-pointer"
-                            aria-label="מה אני יודע לעשות"
+                            aria-label={msg(
+                              "auto.features.agent.panel.components.generalistpanel.literal.2",
+                            )}
                           >
                             <Wand2 className="size-3.5" />
                           </button>
                         </PopoverTrigger>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" dir="rtl">
-                        מה אני יודע לעשות
+                        {msg("auto.features.agent.panel.components.generalistpanel.4")}
                       </TooltipContent>
                     </Tooltip>
-                    <PopoverContent
-                      side="bottom"
-                      align="center"
-                      sideOffset={8}
-                      className="p-0"
-                    >
+                    <PopoverContent side="bottom" align="center" sideOffset={8} className="p-0">
                       <ToolsCarousel />
                     </PopoverContent>
                   </Popover>
@@ -244,13 +261,15 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                           type="button"
                           onClick={agent.reset}
                           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors cursor-pointer"
-                          aria-label="איפוס שיחה"
+                          aria-label={msg(
+                            "auto.features.agent.panel.components.generalistpanel.literal.3",
+                          )}
                         >
                           <RotateCcw className="size-3.5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" dir="rtl">
-                        איפוס שיחה
+                        {msg("auto.features.agent.panel.components.generalistpanel.5")}
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -260,22 +279,21 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                         type="button"
                         onClick={closePanel}
                         className="rounded-md p-1.5 text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors cursor-pointer"
-                        aria-label="כווץ את הפאנל"
+                        aria-label={msg(
+                          "auto.features.agent.panel.components.generalistpanel.literal.4",
+                        )}
                       >
                         <PanelLeftClose className="size-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" dir="rtl">
-                      כווץ את הפאנל{" "}
-                      <span className="opacity-70 font-mono">
-                        (Ctrl+J)
-                      </span>
+                      {msg("auto.features.agent.panel.components.generalistpanel.6")}{" "}
+                      <span className="opacity-70 font-mono">({shortcutLabel})</span>
                     </TooltipContent>
                   </Tooltip>
                 </div>
               </div>
 
-              {/* Messages */}
               <AgentThread
                 isEmpty={agent.messages.length === 0}
                 emptyState={emptyState}
@@ -294,9 +312,9 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   }
                   return (
                     <div key={i} className="flex justify-end">
-                      <AssistantBubble
+                      <AgentBubble
                         msg={m}
-                        thinking={i === lastAssistantIdx ? thinking : undefined}
+                        thinking={i === lastAgentIdx ? thinking : undefined}
                         renderToolCall={renderToolCall}
                       />
                     </div>
@@ -304,10 +322,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                 })}
 
                 {agent.pendingApproval && (
-                  <ApprovalCard
-                    payload={agent.pendingApproval}
-                    onResolve={agent.confirmApproval}
-                  />
+                  <ApprovalCard payload={agent.pendingApproval} onResolve={agent.confirmApproval} />
                 )}
 
                 {agent.error && (
@@ -317,16 +332,19 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                 )}
               </AgentThread>
 
-              {/* Composer */}
               <Composer
                 value={draft}
                 onChange={setDraft}
                 onSubmit={handleSubmit}
                 onStop={agent.stop}
-                placeholder="כתוב הודעה…"
+                placeholder={msg("auto.features.agent.panel.components.generalistpanel.literal.5")}
                 streaming={streaming}
-                sendAriaLabel="שלח הודעה"
-                stopAriaLabel="עצור"
+                sendAriaLabel={msg(
+                  "auto.features.agent.panel.components.generalistpanel.literal.6",
+                )}
+                stopAriaLabel={msg(
+                  "auto.features.agent.panel.components.generalistpanel.literal.7",
+                )}
               />
 
               <PresenceStrip active={streaming} hue={hue} />
@@ -336,7 +354,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             <button
               type="button"
               onMouseDown={startResize}
-              aria-label="שנה רוחב"
+              aria-label={msg("auto.features.agent.panel.components.generalistpanel.literal.8")}
               tabIndex={-1}
               className={cn(
                 "absolute top-0 end-0 h-full w-1 cursor-col-resize",
