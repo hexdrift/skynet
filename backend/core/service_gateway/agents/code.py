@@ -26,29 +26,38 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from functools import partial
+from typing import Any
 
 import dspy
 
-from ..config import settings
-from ..exceptions import ServiceError
-from ..models import ModelConfig
-from .data import load_metric_from_code, load_signature_from_code
-from .language_models import build_language_model
+from ...config import settings
+from ...exceptions import ServiceError
+from ...models import ModelConfig
+from ..language_models import build_language_model
+from ..safe_exec import validate_metric_code, validate_signature_code
+from .constants import REASONING_FIELD
 
 logger = logging.getLogger(__name__)
 
 
-def _unwrap_exception(exc: BaseException) -> BaseException:
-    """Walk through ExceptionGroups to find the first concrete cause."""
-    while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
-        exc = exc.exceptions[0]
-    return exc
-
-
 def _format_agent_error(exc: BaseException) -> str:
-    """Produce a short, user-facing message from an agent failure."""
-    leaf = _unwrap_exception(exc)
+    """Produce a short, user-facing message from an agent failure.
+
+    Walks through ``BaseExceptionGroup`` to the first leaf exception so
+    structured-concurrency groups resolve to their underlying cause.
+    Network-level failures are rewritten to a friendlier message.
+
+    Args:
+        exc: The exception (possibly a ``BaseExceptionGroup``) raised by the agent.
+
+    Returns:
+        A short string suitable for surfacing to the end user.
+    """
+    leaf = exc
+    while isinstance(leaf, BaseExceptionGroup) and leaf.exceptions:
+        leaf = leaf.exceptions[0]
     text = str(leaf).strip()
     name = type(leaf).__name__
     if not text:
@@ -59,9 +68,16 @@ def _format_agent_error(exc: BaseException) -> str:
 
 
 def _validate_signature_code(code: str) -> str:
-    """Smoke-test a signature snippet; return '' if clean, else a short error."""
+    """Smoke-test a signature snippet.
+
+    Args:
+        code: User-authored signature source code.
+
+    Returns:
+        An empty string when the snippet validates, otherwise a short error message.
+    """
     try:
-        load_signature_from_code(code)
+        validate_signature_code(code)
     except ServiceError as exc:
         return str(exc)
     except Exception as exc:
@@ -70,9 +86,16 @@ def _validate_signature_code(code: str) -> str:
 
 
 def _validate_metric_code(code: str) -> str:
-    """Smoke-test a metric snippet; return '' if clean, else a short error."""
+    """Smoke-test a metric snippet.
+
+    Args:
+        code: User-authored metric source code.
+
+    Returns:
+        An empty string when the snippet validates, otherwise a short error message.
+    """
     try:
-        load_metric_from_code(code)
+        validate_metric_code(code)
     except ServiceError as exc:
         return str(exc)
     except Exception as exc:
@@ -135,11 +158,24 @@ class GenerateSignatureCode(dspy.Signature):
     Types constrain the parser and reduce failures — prefer them over
     ``str`` whenever the samples support it.
 
+    ## Image inputs (``dspy.Image``)
+
+    ``column_kinds`` flags the detected modality of every input column.
+    For any input column whose kind is ``"image"`` you MUST type the
+    InputField as ``dspy.Image`` — never ``str`` — and write the
+    ``desc=`` to describe what the image depicts (the model sees the
+    image directly, the desc tells it how to interpret it). Image
+    columns hold URLs or base64 data URIs at the row level; the runtime
+    wraps them into ``dspy.Image`` instances before the model is called.
+
     ## Hard rules
 
     * EXACTLY one InputField per column marked ``input`` and EXACTLY
       one OutputField per column marked ``output`` — no more, no fewer.
     * Field identifiers MUST match the dataset column names verbatim.
+    * Image input columns (``column_kinds[name] == "image"``) MUST be
+      typed ``dspy.Image``; text input columns follow the type rules
+      above.
     * Do NOT invent auxiliary fields (``rationale``, ``explanation``,
       ``confidence``, ``reasoning``, ...). Modules that wrap the
       signature at runtime (``dspy.ChainOfThought``, ``dspy.ReAct``,
@@ -155,11 +191,19 @@ class GenerateSignatureCode(dspy.Signature):
     column_roles: str = dspy.InputField(
         desc="JSON object mapping column name → 'input' | 'output' | 'ignore'.",
     )
+    column_kinds: str = dspy.InputField(
+        desc=(
+            "JSON object mapping input-column name → 'text' | 'image'. "
+            "Image columns MUST be typed ``dspy.Image`` in the generated "
+            "InputField; text columns follow the standard type rules."
+        ),
+    )
     sample_rows: str = dspy.InputField(
         desc=(
             "JSON array of up to 5 representative rows — read them "
             "carefully to infer types, vocabulary, formatting, and "
-            "length for your docstring and field descs."
+            "length for your docstring and field descs. Image cells "
+            "appear as URLs or base64 data URIs."
         ),
     )
 
@@ -273,11 +317,19 @@ class GenerateMetricCode(dspy.Signature):
     column_roles: str = dspy.InputField(
         desc="JSON object mapping column name → 'input' | 'output' | 'ignore'.",
     )
+    column_kinds: str = dspy.InputField(
+        desc=(
+            "JSON object mapping input-column name → 'text' | 'image'. "
+            "Image inputs are ``dspy.Image`` instances at runtime — never "
+            "compare them as strings in your metric."
+        ),
+    )
     sample_rows: str = dspy.InputField(
         desc=(
             "JSON array of up to 5 representative rows — read them "
             "carefully to pick the right comparison per output column "
-            "(string normalize, numeric tolerance, list overlap, ...)."
+            "(string normalize, numeric tolerance, list overlap, ...). "
+            "Image cells appear as URLs or base64 data URIs."
         ),
     )
 
@@ -307,6 +359,9 @@ class GenerateSeedMessage(dspy.Signature):
     dataset_columns: list[str] = dspy.InputField(desc="Every column name in the dataset.")
     column_roles: str = dspy.InputField(
         desc="JSON object mapping column name → 'input' | 'output' | 'ignore'.",
+    )
+    column_kinds: str = dspy.InputField(
+        desc="JSON object mapping input-column name → 'text' | 'image'.",
     )
     sample_rows: str = dspy.InputField(
         desc="JSON array of up to 5 representative rows from the dataset.",
@@ -406,19 +461,22 @@ class CodeAssistant(dspy.Signature):
     column_roles: str = dspy.InputField(
         desc="JSON object mapping column name → 'input' | 'output' | 'ignore'.",
     )
+    column_kinds: str = dspy.InputField(
+        desc=(
+            "JSON object mapping input-column name → 'text' | 'image'. "
+            "Image columns are typed ``dspy.Image`` in the Signature; "
+            "reference this when explaining why a field is typed that way."
+        ),
+    )
     sample_rows: str = dspy.InputField(
         desc="JSON array of up to 5 representative rows from the dataset.",
     )
     current_signature: str = dspy.InputField(
-        desc=(
-            "The Signature class currently shown in the editor. "
-            "Reference its fields by name in your reply."
-        ),
+        desc=("The Signature class currently shown in the editor. Reference its fields by name in your reply."),
     )
     current_metric: str = dspy.InputField(
         desc=(
-            "The metric function currently shown in the editor. "
-            "Quote its comparison and return values in your reply."
+            "The metric function currently shown in the editor. Quote its comparison and return values in your reply."
         ),
     )
     current_signature_validation: str = dspy.InputField(
@@ -430,10 +488,7 @@ class CodeAssistant(dspy.Signature):
         ),
     )
     current_metric_validation: str = dspy.InputField(
-        desc=(
-            "Latest validator output for current_metric. Same rules as "
-            "current_signature_validation."
-        ),
+        desc=("Latest validator output for current_metric. Same rules as current_signature_validation."),
     )
     initial_signature: str = dspy.InputField(
         desc=(
@@ -474,9 +529,6 @@ class CodeAssistant(dspy.Signature):
 # ─────────────────────────── Reasoning streaming ─────────────────────────────
 
 
-REASONING_FIELD = "_provider_reasoning"
-
-
 def _extract_reasoning_token(chunk: object) -> str | None:
     """Pull a thinking/reasoning token from a raw LiteLLM streaming chunk.
 
@@ -486,7 +538,11 @@ def _extract_reasoning_token(chunk: object) -> str | None:
       - MiniMax M2 native with ``reasoning_split=true``: ``delta.reasoning_details``
         (list of ``{"text": "..."}`` blocks).
 
-    Returns ``None`` when the chunk carries no reasoning token.
+    Args:
+        chunk: A streaming chunk object from LiteLLM.
+
+    Returns:
+        The reasoning token text, or ``None`` when the chunk has no reasoning content.
     """
     choices = getattr(chunk, "choices", None)
     if not choices:
@@ -527,6 +583,13 @@ class ReasoningStreamListener(dspy.streaming.StreamListener):
     """
 
     def __init__(self, predict: dspy.Predict, allow_reuse: bool = False):
+        """Bind the listener to a specific Predict and mark the synthetic reasoning field.
+
+        Args:
+            predict: The :class:`dspy.Predict` whose reasoning chunks should be intercepted.
+            allow_reuse: Whether the listener can fire more than once (required for
+                ReAct's inner predict, which fires per loop iteration).
+        """
         super().__init__(
             signature_field_name=REASONING_FIELD,
             predict=predict,
@@ -534,7 +597,16 @@ class ReasoningStreamListener(dspy.streaming.StreamListener):
         )
         self.predict_name = REASONING_FIELD
 
-    def receive(self, chunk):
+    def receive(self, chunk: object) -> dspy.streaming.StreamResponse | None:
+        """Extract a reasoning token from a LiteLLM chunk and re-emit it as a stream response.
+
+        Args:
+            chunk: A raw LiteLLM streaming chunk.
+
+        Returns:
+            A synthetic :class:`dspy.streaming.StreamResponse` carrying the
+            reasoning token, or ``None`` when no token is present.
+        """
         token = _extract_reasoning_token(chunk)
         if not token:
             return None
@@ -545,8 +617,13 @@ class ReasoningStreamListener(dspy.streaming.StreamListener):
             is_last_chunk=False,
         )
 
-    def finalize(self):
-        return None
+    def finalize(self) -> None:
+        """No-op — reasoning has no terminal aggregate event.
+
+        Kept as an explicit method so the listener satisfies the streamer's
+        aggregator protocol alongside peers that do emit a final summary.
+        """
+        return
 
 
 # ─────────────────────────── LM construction ─────────────────────────────────
@@ -565,6 +642,9 @@ def _build_agent_lm() -> dspy.LM:
       reasoning arrives inline in the assistant content as ``<think>…</think>``
       blocks. Fireworks rejects ``reasoning_split``, so we send nothing.
     - **Everything else** (``openai/gpt-4o-mini`` etc.): no reasoning knob.
+
+    Returns:
+        A configured :class:`dspy.LM` instance for the code agent.
     """
     model_name = settings.code_agent_model
     lower = model_name.lower()
@@ -586,11 +666,46 @@ def _build_agent_lm() -> dspy.LM:
 # ─────────────────────────── Seed path ───────────────────────────────────────
 
 
+async def _pump_seed_stream(
+    program: Any,
+    inputs: dict[str, Any],
+    field: str,
+    event_name: str,
+    *,
+    queue: asyncio.Queue[dict | None],
+    results: dict[str, str],
+) -> None:
+    """Drive one streamify program and fan its tokens out to the shared SSE queue.
+
+    Forwards provider reasoning tokens as ``reasoning_patch`` events and the
+    target field's own tokens as ``event_name`` (``signature_patch`` or
+    ``metric_patch``). On the final ``dspy.Prediction`` the completed text
+    is written to ``results[field]`` for the orchestrator to consume.
+
+    Args:
+        program: The streamify-wrapped predictor to invoke.
+        inputs: Keyword arguments forwarded to the program.
+        field: Signature field name whose tokens are forwarded as ``event_name``.
+        event_name: Outbound SSE event name for ``field`` tokens.
+        queue: Shared SSE queue receiving the events.
+        results: Mutable result map; the final value of ``field`` is written here.
+    """
+    async for chunk in program(**inputs):
+        if isinstance(chunk, dspy.streaming.StreamResponse):
+            if chunk.signature_field_name == REASONING_FIELD:
+                await queue.put({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
+            elif chunk.signature_field_name == field:
+                await queue.put({"event": event_name, "data": {"chunk": chunk.chunk}})
+        elif isinstance(chunk, dspy.Prediction):
+            results[field] = getattr(chunk, field, "") or ""
+
+
 async def _run_seed(
     *,
     lm: dspy.LM,
     dataset_columns: list[str],
     column_roles_json: str,
+    column_kinds_json: str,
     sample_rows_json: str,
     queue: asyncio.Queue[dict | None],
 ) -> dict[str, str]:
@@ -601,6 +716,18 @@ async def _run_seed(
     complete, an intro message is generated from the finished code (which
     gives the message model real context to talk about) and returned as
     ``assistant_message`` on the final ``done`` payload.
+
+    Args:
+        lm: The language model to drive the seed predictors.
+        dataset_columns: All dataset column names.
+        column_roles_json: JSON string mapping column → role.
+        column_kinds_json: JSON string mapping input column → kind (text/image).
+        sample_rows_json: JSON-encoded list of representative sample rows.
+        queue: SSE event queue to push token events onto.
+
+    Returns:
+        Mapping with keys ``signature_code``, ``metric_code``, and
+        ``assistant_message`` carrying the seed output.
     """
     sig_predict = dspy.Predict(GenerateSignatureCode)
     met_predict = dspy.Predict(GenerateMetricCode)
@@ -624,19 +751,10 @@ async def _run_seed(
     shared_inputs = {
         "dataset_columns": dataset_columns,
         "column_roles": column_roles_json,
+        "column_kinds": column_kinds_json,
         "sample_rows": sample_rows_json,
     }
     results: dict[str, str] = {"signature_code": "", "metric_code": "", "assistant_message": ""}
-
-    async def pump(program, inputs, field, event_name):
-        async for chunk in program(**inputs):
-            if isinstance(chunk, dspy.streaming.StreamResponse):
-                if chunk.signature_field_name == REASONING_FIELD:
-                    await queue.put({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                elif chunk.signature_field_name == field:
-                    await queue.put({"event": event_name, "data": {"chunk": chunk.chunk}})
-            elif isinstance(chunk, dspy.Prediction):
-                results[field] = getattr(chunk, field, "") or ""
 
     msg_predict = dspy.Predict(GenerateSeedMessage)
     msg_program = dspy.streamify(
@@ -649,12 +767,27 @@ async def _run_seed(
 
     with dspy.context(lm=lm):
         await asyncio.gather(
-            pump(sig_program, shared_inputs, "signature_code", "signature_patch"),
-            pump(met_program, shared_inputs, "metric_code", "metric_patch"),
+            _pump_seed_stream(
+                sig_program,
+                shared_inputs,
+                "signature_code",
+                "signature_patch",
+                queue=queue,
+                results=results,
+            ),
+            _pump_seed_stream(
+                met_program,
+                shared_inputs,
+                "metric_code",
+                "metric_patch",
+                queue=queue,
+                results=results,
+            ),
         )
         async for chunk in msg_program(
             dataset_columns=dataset_columns,
             column_roles=column_roles_json,
+            column_kinds=column_kinds_json,
             sample_rows=sample_rows_json,
             signature_code=results["signature_code"],
             metric_code=results["metric_code"],
@@ -671,11 +804,243 @@ async def _run_seed(
 # ─────────────────────────── Chat (ReAct) path ───────────────────────────────
 
 
+def _emit_to_code_queue(
+    loop: asyncio.AbstractEventLoop,
+    queue: asyncio.Queue[dict | None],
+    ev: dict,
+) -> None:
+    """Hand ``ev`` to ``queue`` from any thread by scheduling ``put_nowait`` on ``loop``.
+
+    DSPy may invoke ReAct tools on a worker thread; ``asyncio.Queue`` is not
+    thread-safe, so SSE events must be enqueued via the owning loop. Binding
+    ``loop`` and ``queue`` with :func:`functools.partial` turns this helper
+    into a closure-free drop-in emit callback.
+
+    Args:
+        loop: The event loop owning ``queue``.
+        queue: The destination SSE queue.
+        ev: The event payload to enqueue.
+    """
+    loop.call_soon_threadsafe(queue.put_nowait, ev)
+
+
+class _CodeEditSession:
+    """Per-turn state for the ReAct ``edit_signature`` / ``edit_metric`` tools.
+
+    Holds the current signature and metric source, a guardrail counter that
+    rejects duplicate edits within a single turn, and the thread-safe emit
+    callback used to publish SSE events from worker threads.
+
+    ``edit_signature`` and ``edit_metric`` are exposed as bound methods so
+    :class:`dspy.ReAct` can register them as tools; bound methods preserve
+    the per-method Google-style docstring and the ``(reason, new_code)``
+    signature that the ReAct prompt builder introspects.
+    """
+
+    def __init__(
+        self,
+        *,
+        signature_code: str,
+        metric_code: str,
+        emit: Callable[[dict], None],
+    ) -> None:
+        """Initialize the session with the starting code and a thread-safe emitter.
+
+        Args:
+            signature_code: Initial Signature class source.
+            metric_code: Initial metric function source.
+            emit: Callback used to publish SSE events thread-safely.
+        """
+        # Per-turn guardrail: once an artifact has been successfully replaced,
+        # subsequent calls for it are rejected so ReAct can't loop on the same
+        # edit (which we've seen happen — four identical rewrites in one turn,
+        # burning tokens and cluttering the UI). A failed validation does NOT
+        # count as a successful edit, so the agent can still retry after a fix.
+        self._slots = {"signature_code": signature_code, "metric_code": metric_code}
+        self._successful_edits = {"signature": 0, "metric": 0}
+        self._emit = emit
+
+    @property
+    def signature_code(self) -> str:
+        """Return the live Signature source (updated after each successful edit).
+
+        Returns:
+            The current Signature class source as a string.
+        """
+        return self._slots["signature_code"]
+
+    @property
+    def metric_code(self) -> str:
+        """Return the live metric source (updated after each successful edit).
+
+        Returns:
+            The current metric function source as a string.
+        """
+        return self._slots["metric_code"]
+
+    def edit_signature(self, reason: str, new_code: str) -> str:
+        """Replace the current Signature class in the editor.
+
+        Call ONLY when the user asks for a change to the Signature and the
+        artifact has NOT yet been edited this turn. For questions,
+        explanations, or after any successful edit, call ``finish`` and
+        answer in ``reply`` instead.
+
+        The new code is validated before it's applied. If validation fails,
+        the edit is rejected and the observation returns the error message
+        so you can fix the code and try again in the next iteration.
+
+        ``reason`` must be HEBREW prose (≤10 words); product terms like
+        Signature/Metric may stay in English.
+
+        Args:
+            reason: Short Hebrew rationale for the edit.
+            new_code: Complete replacement Signature class body.
+
+        Returns:
+            An observation string the ReAct agent reads back: a confirmation
+            on success or a rejection message on validation/policy failure.
+        """
+        call_id = uuid.uuid4().hex[:8]
+        self._emit(
+            {
+                "event": "tool_start",
+                "data": {"id": call_id, "tool": "edit_signature", "reason": reason or ""},
+            }
+        )
+        if self._successful_edits["signature"] >= 1:
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {"id": call_id, "tool": "edit_signature", "status": "error"},
+                }
+            )
+            return (
+                "Edit rejected — signature was already replaced in this "
+                "turn. STOP editing; call finish and summarize the change "
+                "in reply."
+            )
+        if new_code.strip() == self._slots["signature_code"].strip():
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {"id": call_id, "tool": "edit_signature", "status": "error"},
+                }
+            )
+            return "Edit rejected — new_code is identical to the current signature. Call finish."
+        err = _validate_signature_code(new_code)
+        if err:
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {"id": call_id, "tool": "edit_signature", "status": "error"},
+                }
+            )
+            return (
+                f"Edit rejected — new_code is invalid: {err}. "
+                "Fix the error and call edit_signature again with the "
+                "corrected full class body."
+            )
+        self._slots["signature_code"] = new_code
+        self._successful_edits["signature"] += 1
+        self._emit({"event": "signature_replace", "data": {"code": new_code}})
+        self._emit(
+            {
+                "event": "tool_end",
+                "data": {"id": call_id, "tool": "edit_signature", "status": "ok"},
+            }
+        )
+        return (
+            "Signature replaced and validated. Do NOT edit the signature "
+            "again this turn — call finish and summarize the change in "
+            "reply."
+        )
+
+    def edit_metric(self, reason: str, new_code: str) -> str:
+        """Replace the current metric function in the editor.
+
+        Call ONLY when the user asks for a change to the metric and the
+        artifact has NOT yet been edited this turn. For questions,
+        explanations, or after any successful edit, call ``finish`` and
+        answer in ``reply`` instead.
+
+        The new code is validated before it's applied. If validation fails,
+        the edit is rejected and the observation returns the error message
+        so you can fix the code and try again in the next iteration.
+
+        ``reason`` must be HEBREW prose (≤10 words); product terms like
+        Signature/Metric may stay in English. ``new_code`` must return
+        ``dspy.Prediction(score=..., feedback=...)``.
+
+        Args:
+            reason: Short Hebrew rationale for the edit.
+            new_code: Complete replacement metric function body.
+
+        Returns:
+            An observation string the ReAct agent reads back: a confirmation
+            on success or a rejection message on validation/policy failure.
+        """
+        call_id = uuid.uuid4().hex[:8]
+        self._emit(
+            {
+                "event": "tool_start",
+                "data": {"id": call_id, "tool": "edit_metric", "reason": reason or ""},
+            }
+        )
+        if self._successful_edits["metric"] >= 1:
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {"id": call_id, "tool": "edit_metric", "status": "error"},
+                }
+            )
+            return (
+                "Edit rejected — metric was already replaced in this "
+                "turn. STOP editing; call finish and summarize the change "
+                "in reply."
+            )
+        if new_code.strip() == self._slots["metric_code"].strip():
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {"id": call_id, "tool": "edit_metric", "status": "error"},
+                }
+            )
+            return "Edit rejected — new_code is identical to the current metric. Call finish."
+        err = _validate_metric_code(new_code)
+        if err:
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {"id": call_id, "tool": "edit_metric", "status": "error"},
+                }
+            )
+            return (
+                f"Edit rejected — new_code is invalid: {err}. "
+                "Fix the error and call edit_metric again with the corrected "
+                "full function body."
+            )
+        self._slots["metric_code"] = new_code
+        self._successful_edits["metric"] += 1
+        self._emit({"event": "metric_replace", "data": {"code": new_code}})
+        self._emit(
+            {
+                "event": "tool_end",
+                "data": {"id": call_id, "tool": "edit_metric", "status": "ok"},
+            }
+        )
+        return (
+            "Metric replaced and validated. Do NOT edit the metric again "
+            "this turn — call finish and summarize the change in reply."
+        )
+
+
 async def _run_agent(
     *,
     lm: dspy.LM,
     dataset_columns: list[str],
     column_roles_json: str,
+    column_kinds_json: str,
     sample_rows_json: str,
     user_message: str,
     chat_history_json: str,
@@ -689,170 +1054,55 @@ async def _run_agent(
 ) -> dict[str, str]:
     """Run a ReAct agent with ``edit_signature`` + ``edit_metric`` tools.
 
-    Tools are plain Python callables that mutate a local slot dict and emit
-    SSE events (``tool_start``, ``signature_replace`` / ``metric_replace``,
-    ``tool_end``) via ``loop.call_soon_threadsafe`` — DSPy may invoke tools
-    from a worker thread, so we can't touch the asyncio queue directly.
+    Tools are bound methods on a :class:`_CodeEditSession` that mutate the
+    session's slot dict and emit SSE events (``tool_start``,
+    ``signature_replace`` / ``metric_replace``, ``tool_end``) via
+    ``loop.call_soon_threadsafe`` — DSPy may invoke tools from a worker
+    thread, so we can't touch the asyncio queue directly.
 
     The final ``reply`` field is streamed as ``message_patch`` tokens and
     returned as ``assistant_message``. For reasoning-capable providers, the
     ReAct loop's inner ``next_thought`` predict emits ``reasoning_patch``
     tokens (with ``allow_reuse=True`` so the listener survives the loop).
+
+    Args:
+        lm: Language model bound to the ReAct loop.
+        dataset_columns: All dataset column names.
+        column_roles_json: JSON string mapping column → role.
+        column_kinds_json: JSON string mapping input column → kind (text/image).
+        sample_rows_json: JSON-encoded list of representative sample rows.
+        user_message: The user's latest message driving the turn.
+        chat_history_json: JSON-encoded prior chat turns.
+        prior_signature: Signature source as currently shown in the editor.
+        prior_metric: Metric source as currently shown in the editor.
+        prior_signature_validation: Latest validator output for the signature.
+        prior_metric_validation: Latest validator output for the metric.
+        initial_signature: Original signature source before any edits this conversation.
+        initial_metric: Original metric source before any edits this conversation.
+        queue: SSE event queue receiving lifecycle and token events.
+
+    Returns:
+        Mapping with keys ``signature_code``, ``metric_code``, and
+        ``assistant_message`` reflecting post-turn state.
     """
-    slots = {"signature_code": prior_signature, "metric_code": prior_metric}
-    # Per-turn guardrail: once an artifact has been successfully replaced,
-    # subsequent calls for it are rejected so ReAct can't loop on the same
-    # edit (which we've seen happen — four identical rewrites in one turn,
-    # burning tokens and cluttering the UI). A failed validation does NOT
-    # count as a successful edit, so the agent can still retry after a fix.
-    successful_edits = {"signature": 0, "metric": 0}
     loop = asyncio.get_running_loop()
-
-    def emit(ev: dict) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, ev)
-
-    def edit_signature(reason: str, new_code: str) -> str:
-        """Replace the current Signature class in the editor.
-
-        Call ONLY when the user asks for a change to the Signature and the
-        artifact has NOT yet been edited this turn. For questions,
-        explanations, or after any successful edit, call ``finish`` and
-        answer in ``reply`` instead.
-
-        The new code is validated before it's applied. If validation fails,
-        the edit is rejected and the observation returns the error message
-        so you can fix the code and try again in the next iteration.
-
-        Args:
-            reason: One short sentence (≤10 words) in HEBREW describing
-                what the edit accomplishes. Shown to the user in the
-                tool-call card — must be Hebrew prose (product terms like
-                Signature/Metric may stay in English).
-            new_code: The complete new ``class MySignature(dspy.Signature):``
-                Python source. No markdown fences.
-        """
-        call_id = uuid.uuid4().hex[:8]
-        emit({
-            "event": "tool_start",
-            "data": {"id": call_id, "tool": "edit_signature", "reason": reason or ""},
-        })
-        if successful_edits["signature"] >= 1:
-            emit({
-                "event": "tool_end",
-                "data": {"id": call_id, "tool": "edit_signature", "status": "error"},
-            })
-            return (
-                "Edit rejected — signature was already replaced in this "
-                "turn. STOP editing; call finish and summarize the change "
-                "in reply."
-            )
-        if new_code.strip() == slots["signature_code"].strip():
-            emit({
-                "event": "tool_end",
-                "data": {"id": call_id, "tool": "edit_signature", "status": "error"},
-            })
-            return (
-                "Edit rejected — new_code is identical to the current "
-                "signature. Call finish."
-            )
-        err = _validate_signature_code(new_code)
-        if err:
-            emit({
-                "event": "tool_end",
-                "data": {"id": call_id, "tool": "edit_signature", "status": "error"},
-            })
-            return (
-                f"Edit rejected — new_code is invalid: {err}. "
-                "Fix the error and call edit_signature again with the "
-                "corrected full class body."
-            )
-        slots["signature_code"] = new_code
-        successful_edits["signature"] += 1
-        emit({"event": "signature_replace", "data": {"code": new_code}})
-        emit({
-            "event": "tool_end",
-            "data": {"id": call_id, "tool": "edit_signature", "status": "ok"},
-        })
-        return (
-            "Signature replaced and validated. Do NOT edit the signature "
-            "again this turn — call finish and summarize the change in "
-            "reply."
-        )
-
-    def edit_metric(reason: str, new_code: str) -> str:
-        """Replace the current metric function in the editor.
-
-        Call ONLY when the user asks for a change to the metric and the
-        artifact has NOT yet been edited this turn. For questions,
-        explanations, or after any successful edit, call ``finish`` and
-        answer in ``reply`` instead.
-
-        The new code is validated before it's applied. If validation fails,
-        the edit is rejected and the observation returns the error message
-        so you can fix the code and try again in the next iteration.
-
-        Args:
-            reason: One short sentence (≤10 words) in HEBREW describing
-                what the edit accomplishes. Shown to the user in the
-                tool-call card — must be Hebrew prose (product terms like
-                Signature/Metric may stay in English).
-            new_code: The complete new ``def metric(...)`` Python source.
-                Must return ``dspy.Prediction(score=..., feedback=...)``. No
-                markdown fences.
-        """
-        call_id = uuid.uuid4().hex[:8]
-        emit({
-            "event": "tool_start",
-            "data": {"id": call_id, "tool": "edit_metric", "reason": reason or ""},
-        })
-        if successful_edits["metric"] >= 1:
-            emit({
-                "event": "tool_end",
-                "data": {"id": call_id, "tool": "edit_metric", "status": "error"},
-            })
-            return (
-                "Edit rejected — metric was already replaced in this "
-                "turn. STOP editing; call finish and summarize the change "
-                "in reply."
-            )
-        if new_code.strip() == slots["metric_code"].strip():
-            emit({
-                "event": "tool_end",
-                "data": {"id": call_id, "tool": "edit_metric", "status": "error"},
-            })
-            return (
-                "Edit rejected — new_code is identical to the current "
-                "metric. Call finish."
-            )
-        err = _validate_metric_code(new_code)
-        if err:
-            emit({
-                "event": "tool_end",
-                "data": {"id": call_id, "tool": "edit_metric", "status": "error"},
-            })
-            return (
-                f"Edit rejected — new_code is invalid: {err}. "
-                "Fix the error and call edit_metric again with the corrected "
-                "full function body."
-            )
-        slots["metric_code"] = new_code
-        successful_edits["metric"] += 1
-        emit({"event": "metric_replace", "data": {"code": new_code}})
-        emit({
-            "event": "tool_end",
-            "data": {"id": call_id, "tool": "edit_metric", "status": "ok"},
-        })
-        return (
-            "Metric replaced and validated. Do NOT edit the metric again "
-            "this turn — call finish and summarize the change in reply."
-        )
+    emit: Callable[[dict], None] = partial(_emit_to_code_queue, loop, queue)
+    session = _CodeEditSession(
+        signature_code=prior_signature,
+        metric_code=prior_metric,
+        emit=emit,
+    )
 
     # Keep max_iters tight. A normal turn is: (1) think → (2) edit_* OR
     # finish. A validator-driven retry may need one more iteration if the
     # first edit fails validation: (1) edit fails → (2) edit succeeds →
     # extract produces reply. max_iters=3 covers the worst case without
     # room to run away.
-    react = dspy.ReAct(CodeAssistant, tools=[edit_signature, edit_metric], max_iters=3)
+    react = dspy.ReAct(
+        CodeAssistant,
+        tools=[session.edit_signature, session.edit_metric],
+        max_iters=3,
+    )
     # Two reasoning listeners: one for the iterative ReAct predict (fires
     # once per loop step; allow_reuse=True is required), and one for the
     # final extract CoT (fires once). Reasoning tokens from reasoning-capable
@@ -871,6 +1121,7 @@ async def _run_agent(
     inputs = {
         "dataset_columns": dataset_columns,
         "column_roles": column_roles_json,
+        "column_kinds": column_kinds_json,
         "sample_rows": sample_rows_json,
         "current_signature": prior_signature,
         "current_metric": prior_metric,
@@ -897,8 +1148,8 @@ async def _run_agent(
                     reply_text = final
 
     return {
-        "signature_code": slots["signature_code"],
-        "metric_code": slots["metric_code"],
+        "signature_code": session.signature_code,
+        "metric_code": session.metric_code,
         "assistant_message": reply_text,
     }
 
@@ -906,10 +1157,89 @@ async def _run_agent(
 # ─────────────────────────── Public entrypoint ───────────────────────────────
 
 
+async def _run_code_agent_orchestration(
+    *,
+    is_seed: bool,
+    lm: dspy.LM,
+    queue: asyncio.Queue[dict | None],
+    dataset_columns: list[str],
+    column_roles_json: str,
+    column_kinds_json: str,
+    sample_rows_json: str,
+    user_message: str,
+    chat_history_json: str,
+    prior_signature: str,
+    prior_metric: str,
+    prior_signature_validation: str,
+    prior_metric_validation: str,
+    initial_signature: str,
+    initial_metric: str,
+) -> None:
+    """Run the seed or chat path and push the terminal envelope into ``queue``.
+
+    Dispatches to :func:`_run_seed` when ``is_seed`` is true (the user sent
+    no message and we need to generate the initial Signature + metric) and
+    to :func:`_run_agent` otherwise. Emits exactly one terminal event
+    (``done`` on success, ``error`` on failure) followed by the ``None``
+    sentinel that unblocks the outer consumer.
+
+    Args:
+        is_seed: True to run the seed path; False to run the chat agent.
+        lm: Language model bound to the chosen runner.
+        queue: SSE event queue.
+        dataset_columns: All dataset column names.
+        column_roles_json: JSON string mapping column → role.
+        column_kinds_json: JSON string mapping input column → kind.
+        sample_rows_json: JSON-encoded list of sample rows.
+        user_message: User's latest message (empty in seed mode).
+        chat_history_json: JSON-encoded prior chat turns.
+        prior_signature: Current Signature source in the editor.
+        prior_metric: Current metric source in the editor.
+        prior_signature_validation: Latest signature validator output.
+        prior_metric_validation: Latest metric validator output.
+        initial_signature: Original signature source for revert support.
+        initial_metric: Original metric source for revert support.
+    """
+    try:
+        if is_seed:
+            results = await _run_seed(
+                lm=lm,
+                dataset_columns=dataset_columns,
+                column_roles_json=column_roles_json,
+                column_kinds_json=column_kinds_json,
+                sample_rows_json=sample_rows_json,
+                queue=queue,
+            )
+        else:
+            results = await _run_agent(
+                lm=lm,
+                dataset_columns=dataset_columns,
+                column_roles_json=column_roles_json,
+                column_kinds_json=column_kinds_json,
+                sample_rows_json=sample_rows_json,
+                user_message=user_message,
+                chat_history_json=chat_history_json,
+                prior_signature=prior_signature,
+                prior_metric=prior_metric,
+                prior_signature_validation=prior_signature_validation,
+                prior_metric_validation=prior_metric_validation,
+                initial_signature=initial_signature,
+                initial_metric=initial_metric,
+                queue=queue,
+            )
+        await queue.put({"event": "done", "data": dict(results)})
+    except Exception as exc:
+        logger.exception("Code agent failed")
+        await queue.put({"event": "error", "data": {"error": _format_agent_error(exc)}})
+    finally:
+        await queue.put(None)
+
+
 async def run_code_agent(
     *,
     dataset_columns: list[str],
     column_roles: dict[str, str],
+    column_kinds: dict[str, str] | None = None,
     sample_rows: list[dict],
     user_message: str,
     chat_history: list[dict] | None = None,
@@ -938,49 +1268,52 @@ async def run_code_agent(
     * ``message_patch`` — chat-mode reply token stream.
     * ``done`` — ``{signature_code, metric_code, assistant_message}``.
     * ``error`` — ``{error}``.
+
+    Args:
+        dataset_columns: All dataset column names.
+        column_roles: Mapping of column name to role (input/output/ignore).
+        column_kinds: Optional mapping of input column to kind (text/image).
+        sample_rows: Up to 5 representative dataset rows.
+        user_message: User's latest message; empty triggers seed mode.
+        chat_history: Prior {role, content} chat turns.
+        prior_signature: Signature source currently shown in the editor.
+        prior_metric: Metric source currently shown in the editor.
+        prior_signature_validation: Latest signature validator output.
+        prior_metric_validation: Latest metric validator output.
+        initial_signature: Original signature source for revert support.
+        initial_metric: Original metric source for revert support.
+
+    Yields:
+        SSE event dicts of shape ``{"event": str, "data": dict}``.
     """
     lm = _build_agent_lm()
     column_roles_json = json.dumps(column_roles, ensure_ascii=False)
+    column_kinds_json = json.dumps(column_kinds or {}, ensure_ascii=False)
     sample_rows_json = json.dumps(sample_rows[:5], ensure_ascii=False, default=str)
     chat_history_json = json.dumps(chat_history or [], ensure_ascii=False)
     is_seed = not user_message.strip()
 
     queue: asyncio.Queue[dict | None] = asyncio.Queue()
 
-    async def orchestrator():
-        try:
-            if is_seed:
-                results = await _run_seed(
-                    lm=lm,
-                    dataset_columns=dataset_columns,
-                    column_roles_json=column_roles_json,
-                    sample_rows_json=sample_rows_json,
-                    queue=queue,
-                )
-            else:
-                results = await _run_agent(
-                    lm=lm,
-                    dataset_columns=dataset_columns,
-                    column_roles_json=column_roles_json,
-                    sample_rows_json=sample_rows_json,
-                    user_message=user_message,
-                    chat_history_json=chat_history_json,
-                    prior_signature=prior_signature,
-                    prior_metric=prior_metric,
-                    prior_signature_validation=prior_signature_validation,
-                    prior_metric_validation=prior_metric_validation,
-                    initial_signature=initial_signature,
-                    initial_metric=initial_metric,
-                    queue=queue,
-                )
-            await queue.put({"event": "done", "data": dict(results)})
-        except Exception as exc:
-            logger.exception("Code agent failed")
-            await queue.put({"event": "error", "data": {"error": _format_agent_error(exc)}})
-        finally:
-            await queue.put(None)
-
-    task = asyncio.create_task(orchestrator())
+    task = asyncio.create_task(
+        _run_code_agent_orchestration(
+            is_seed=is_seed,
+            lm=lm,
+            queue=queue,
+            dataset_columns=dataset_columns,
+            column_roles_json=column_roles_json,
+            column_kinds_json=column_kinds_json,
+            sample_rows_json=sample_rows_json,
+            user_message=user_message,
+            chat_history_json=chat_history_json,
+            prior_signature=prior_signature,
+            prior_metric=prior_metric,
+            prior_signature_validation=prior_signature_validation,
+            prior_metric_validation=prior_metric_validation,
+            initial_signature=initial_signature,
+            initial_metric=initial_metric,
+        )
+    )
     try:
         while True:
             item = await queue.get()

@@ -1,18 +1,18 @@
-"""Tests for ``core.dataset.planner.recommend_split``."""
+"""Tests for ``core.service_gateway.datasets.planner.recommend_split``."""
 
 from __future__ import annotations
 
-from core.dataset.planner import MIN_TEST_COUNT, recommend_split
 from core.models import DatasetProfile
 from core.models.dataset import (
     ProfileWarning,
     ProfileWarningCode,
     TargetColumnProfile,
 )
+from core.service_gateway.datasets.planner import MIN_TEST_COUNT, recommend_split
 
 
 def _profile(row_count: int) -> DatasetProfile:
-    """Build a bare DatasetProfile with only the row count set."""
+    """Build a minimal ``DatasetProfile`` with no target column."""
     return DatasetProfile(row_count=row_count, column_count=2)
 
 
@@ -22,7 +22,7 @@ def _categorical_profile(
     *,
     warnings: list[ProfileWarning] | None = None,
 ) -> DatasetProfile:
-    """Build a DatasetProfile with a categorical target and optional warnings."""
+    """Build a ``DatasetProfile`` with a categorical target and optional warnings."""
     return DatasetProfile(
         row_count=row_count,
         column_count=2,
@@ -73,14 +73,14 @@ def test_recommend_split_huge_tier_caps_held_out_absolute_size() -> None:
 
 
 def test_recommend_split_counts_sum_to_total() -> None:
-    """Train/val/test counts always sum to the profile row count."""
+    """Split counts sum exactly to the row count for several dataset sizes."""
     for total in (37, 150, 999, 4_321, 25_000):
         plan = recommend_split(_profile(total), seed=7)
         assert plan.counts.train + plan.counts.val + plan.counts.test == total
 
 
 def test_recommend_split_fractions_sum_to_one() -> None:
-    """Recommended fractions always sum to exactly 1.0 (SplitFractions invariant)."""
+    """Plan fractions sum to 1.0 for every tier."""
     for total in (50, 500, 5_000, 50_000):
         plan = recommend_split(_profile(total), seed=0)
         total_frac = plan.fractions.train + plan.fractions.val + plan.fractions.test
@@ -88,21 +88,21 @@ def test_recommend_split_fractions_sum_to_one() -> None:
 
 
 def test_recommend_split_honors_provided_seed() -> None:
-    """When a seed is provided it is returned verbatim in the plan."""
+    """A caller-supplied seed is propagated to the plan."""
     plan = recommend_split(_profile(500), seed=12345)
 
     assert plan.seed == 12345
 
 
 def test_recommend_split_generates_seed_when_none() -> None:
-    """An omitted seed is replaced with a non-negative integer."""
+    """Without an explicit seed, the planner generates a non-negative one."""
     plan = recommend_split(_profile(500))
 
     assert plan.seed >= 0
 
 
 def test_recommend_split_rationale_mentions_counts() -> None:
-    """The rationale always includes a split-counts bullet."""
+    """The Hebrew rationale mentions train/val/test wording explicitly."""
     plan = recommend_split(_profile(1_000), seed=42)
 
     combined = " ".join(plan.rationale)
@@ -119,7 +119,7 @@ def test_recommend_split_micro_dataset_flags_noise_in_rationale() -> None:
 
 
 def test_recommend_split_shuffle_is_true_by_default() -> None:
-    """The v1 planner always recommends shuffling before the slice."""
+    """The default plan enables shuffling."""
     plan = recommend_split(_profile(500), seed=42)
 
     assert plan.shuffle is True
@@ -172,7 +172,6 @@ def test_recommend_split_recommends_stratify_for_class_imbalance() -> None:
 
 
 def test_recommend_split_recommends_stratify_for_rare_class() -> None:
-    """A categorical target with rare_class warning gets stratify=True."""
     profile = _categorical_profile(
         row_count=500,
         histogram={"a": 250, "b": 247, "c": 3},
@@ -191,7 +190,6 @@ def test_recommend_split_recommends_stratify_for_rare_class() -> None:
 
 
 def test_recommend_split_skips_stratify_for_balanced_categorical() -> None:
-    """A balanced categorical target with no warnings does not request stratify."""
     profile = _categorical_profile(
         row_count=500,
         histogram={"a": 250, "b": 250},
@@ -203,7 +201,6 @@ def test_recommend_split_skips_stratify_for_balanced_categorical() -> None:
 
 
 def test_recommend_split_skips_stratify_when_no_warnings() -> None:
-    """No warnings means stratify=False and stratify_column=None."""
     profile = _categorical_profile(
         row_count=500,
         histogram={"a": 250, "b": 250},
@@ -249,7 +246,6 @@ def test_recommend_split_picks_imbalanced_column_among_multiple_targets() -> Non
 
 
 def test_recommend_split_rationale_names_stratify_column() -> None:
-    """Rationale bullet for stratification mentions the chosen column name."""
     profile = _categorical_profile(
         row_count=500,
         histogram={"a": 450, "b": 50},

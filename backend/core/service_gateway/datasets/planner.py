@@ -20,9 +20,9 @@ from __future__ import annotations
 
 import random
 
-from ..i18n import t
-from ..models.common import SplitCounts, SplitFractions
-from ..models.dataset import (
+from ...i18n import t
+from ...models.common import SplitCounts, SplitFractions
+from ...models.dataset import (
     DatasetProfile,
     ProfileWarningCode,
     SplitPlan,
@@ -46,14 +46,16 @@ MIN_REMAINDER_AFTER_FLOOR = 30
 def recommend_split(profile: DatasetProfile, *, seed: int | None = None) -> SplitPlan:
     """Return a recommended ``SplitPlan`` for the profiled dataset.
 
+    When ``seed`` is omitted a fresh random seed is chosen so the plan is
+    still fully specified.
+
     Args:
-        profile: The dataset profile produced by ``profile_dataset``.
-        seed: Optional RNG seed to pin into the plan for reproducibility.
-            When omitted, a fresh random seed is chosen so the plan is
-            still fully specified.
+        profile: The dataset profile produced by the profiler.
+        seed: Optional deterministic seed; when ``None`` a random seed is chosen.
 
     Returns:
-        A fully-populated ``SplitPlan`` the wizard can render immediately.
+        A fully-populated :class:`SplitPlan` describing fractions, counts,
+        stratification, seed, and rationale.
     """
     total = profile.row_count
     fractions = _recommend_fractions(total)
@@ -86,6 +88,12 @@ def _recommend_fractions(total: int) -> SplitFractions:
     data; medium and large datasets shift gradually toward train as the
     demo pool starts to matter more; very large datasets cap val and
     test at fixed absolute counts so optimizer compute stays bounded.
+
+    Args:
+        total: Total number of rows in the dataset.
+
+    Returns:
+        Recommended train/val/test fractions summing to 1.0.
     """
     if total < TIER_SMALL:
         return SplitFractions(train=0.30, val=0.50, test=0.20)
@@ -110,11 +118,16 @@ def _compute_counts(total: int, fractions: SplitFractions) -> tuple[SplitCounts,
     counts always sum to ``total``. When the resulting test slice would
     fall below ``MIN_TEST_COUNT`` (and the dataset is large enough to
     spare them), promote the test slice to the floor by reducing train
-    and val proportionally to their original ratio.
+    and val proportionally to their original ratio. The returned
+    ``floor_applied`` flag is True when the floor was applied.
+
+    Args:
+        total: Total number of rows in the dataset.
+        fractions: Recommended train/val/test fractions.
 
     Returns:
-        A tuple of ``(counts, floor_applied)`` where ``floor_applied`` is
-        True when the test slice was promoted to the minimum floor.
+        A tuple ``(SplitCounts, floor_applied)`` where ``floor_applied``
+        indicates whether the test floor was enforced.
     """
     train = int(total * fractions.train)
     val = int(total * fractions.val)
@@ -145,9 +158,13 @@ def _should_stratify(profile: DatasetProfile) -> tuple[bool, str | None]:
     from val or test; stratified sampling preserves the per-class ratio
     across all three slices.
 
+    Args:
+        profile: The dataset profile to inspect.
+
     Returns:
-        ``(True, column_name)`` when a categorical target needs
-        stratification; ``(False, None)`` otherwise.
+        A tuple ``(stratify, column_name)`` where ``stratify`` is True when
+        a stratification column was found and ``column_name`` names it
+        (or ``None`` when stratification is unnecessary).
     """
     relevant_codes = {
         ProfileWarningCode.class_imbalance,
@@ -174,7 +191,19 @@ def _build_rationale(
     stratify_column: str | None,
     floor_applied: bool,
 ) -> list[str]:
-    """Build short Hebrew rationale bullets explaining each decision."""
+    """Build short Hebrew rationale bullets explaining each decision.
+
+    Args:
+        profile: The dataset profile being summarised.
+        counts: Per-split row counts produced by ``_compute_counts``.
+        total: Total dataset size.
+        stratify: Whether stratified splitting was applied.
+        stratify_column: Column name used for stratification, if any.
+        floor_applied: Whether the minimum-test floor was enforced.
+
+    Returns:
+        A list of short Hebrew bullet strings describing the plan.
+    """
     lines: list[str] = []
 
     if total < TIER_SMALL:
@@ -198,8 +227,6 @@ def _build_rationale(
 
     if floor_applied:
         lines.append(t("dataset.split.rationale.test_floor", minimum=MIN_TEST_COUNT))
-
-    lines.append(t("dataset.split.rationale.shuffle"))
 
     if stratify and stratify_column:
         lines.append(t("dataset.split.rationale.stratify", stratify_column=stratify_column))

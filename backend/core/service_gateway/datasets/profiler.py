@@ -9,14 +9,16 @@ handlers.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Any
 
-from ..exceptions import ValidationError
-from ..i18n import t
-from ..models.common import ColumnMapping
-from ..models.dataset import (
+from ...exceptions import ValidationError
+from ...i18n import t
+from ...models.common import ColumnMapping
+from ...models.dataset import (
     DatasetProfile,
+    InputColumnProfile,
     ProfileWarning,
     ProfileWarningCode,
     TargetColumnProfile,
@@ -38,16 +40,23 @@ IMBALANCE_RATIO_THRESHOLD = 10.0
 MIN_RECOMMENDED_ROWS = 30
 FREEFORM_AVG_LENGTH = 40
 
+# Cell-level image detection. A column is classified ``image`` only when EVERY
+# non-empty cell matches one of these patterns — mixed text/image columns stay
+# ``text`` so we don't silently drop the textual rows on the runtime side.
+_IMAGE_URL_RE = re.compile(r"^https?://\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?$", re.IGNORECASE)
+_IMAGE_DATA_URI_RE = re.compile(r"^data:image/[a-zA-Z0-9.+-]+;base64,", re.IGNORECASE)
+
 
 def profile_dataset(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> DatasetProfile:
     """Return a structural summary and warning list for a raw dataset.
 
     Args:
-        dataset: List of row dicts as uploaded by the user.
-        mapping: Column mapping whose output columns are all profiled.
+        dataset: Raw dataset rows.
+        mapping: Column mapping declaring inputs and outputs.
 
     Returns:
-        A fully-populated ``DatasetProfile``.
+        A populated :class:`DatasetProfile` describing shape, targets,
+        inputs, duplicates, and warnings.
 
     Raises:
         ValidationError: When ``dataset`` is empty.
@@ -62,6 +71,7 @@ def profile_dataset(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> Da
 
     warnings: list[ProfileWarning] = []
     targets = _profile_all_targets(dataset, mapping, warnings)
+    inputs = _profile_all_inputs(dataset, mapping)
     primary_target = _select_primary_target(targets)
 
     if row_count < MIN_RECOMMENDED_ROWS:
@@ -88,6 +98,7 @@ def profile_dataset(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> Da
         column_count=len(columns),
         target=primary_target,
         targets=targets,
+        inputs=inputs,
         duplicate_count=duplicate_count,
         warnings=warnings,
     )
@@ -103,7 +114,16 @@ def _profile_all_targets(
     Each output gets its own categorical/numeric/freeform classification,
     histogram, and per-column warnings. Warning details always include
     the originating ``target_column`` so downstream consumers (the
-    planner) can attribute findings back to a specific column.
+    planner) can attribute findings back to a specific column. Profile-level
+    warnings are appended to ``warnings`` in-place.
+
+    Args:
+        dataset: Raw dataset rows.
+        mapping: Column mapping whose ``outputs`` are profiled.
+        warnings: Mutable warning list extended with target-level findings.
+
+    Returns:
+        A list of :class:`TargetColumnProfile` instances, one per output column.
     """
     profiles: list[TargetColumnProfile] = []
     for column_name in mapping.outputs.values():
@@ -113,12 +133,98 @@ def _profile_all_targets(
     return profiles
 
 
+def _profile_all_inputs(
+    dataset: list[dict[str, Any]],
+    mapping: ColumnMapping,
+) -> list[InputColumnProfile]:
+    """Profile every input column declared in ``mapping``.
+
+    Each input gets a single ``kind`` — ``image`` when every non-empty
+    cell parses as an image URL or ``data:image/...`` URI, otherwise
+    ``text``. The wizard renders an image badge on ``image`` columns;
+    the signature generator emits ``dspy.Image`` typed ``InputField``
+    for them.
+
+    Args:
+        dataset: Raw dataset rows.
+        mapping: Column mapping whose ``inputs`` are profiled.
+
+    Returns:
+        A list of :class:`InputColumnProfile` instances, one per input column.
+    """
+    profiles: list[InputColumnProfile] = []
+    for column_name in mapping.inputs.values():
+        kind = _infer_input_kind(_collect_values(dataset, column_name))
+        profiles.append(InputColumnProfile(name=column_name, kind=kind))
+    return profiles
+
+
+def _collect_values(dataset: list[dict[str, Any]], column_name: str) -> list[Any]:
+    """Return the non-empty values of ``column_name`` across ``dataset``.
+
+    Skips ``None`` and whitespace-only strings.
+
+    Args:
+        dataset: Raw dataset rows.
+        column_name: Column whose values are collected.
+
+    Returns:
+        The list of non-empty values for ``column_name``.
+    """
+    out: list[Any] = []
+    for row in dataset:
+        value = row.get(column_name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        out.append(value)
+    return out
+
+
+def _infer_input_kind(values: list[Any]) -> str:
+    """Classify an input column as ``image`` or ``text``.
+
+    Returns ``image`` only when every non-empty cell is a string that
+    matches an HTTPS image URL (``.png``/``.jpg``/``.jpeg``/``.gif``/
+    ``.webp``) or a base64 ``data:image/...`` URI. Empty columns and
+    mixed columns fall back to ``text`` so we never silently coerce
+    non-image rows into ``dspy.Image`` at runtime.
+
+    Args:
+        values: Non-empty cell values for the column.
+
+    Returns:
+        ``"image"`` when every value parses as an image reference, else ``"text"``.
+    """
+    if not values:
+        return "text"
+    for value in values:
+        if not isinstance(value, str):
+            return "text"
+        candidate = value.strip()
+        if not (_IMAGE_URL_RE.match(candidate) or _IMAGE_DATA_URI_RE.match(candidate)):
+            return "text"
+    return "image"
+
+
 def _profile_single_target(
     dataset: list[dict[str, Any]],
     column_name: str,
     warnings: list[ProfileWarning],
 ) -> TargetColumnProfile | None:
-    """Summarize a single output column and append its warnings."""
+    """Summarize a single output column and append its warnings.
+
+    Missing-value, rare-class, and class-imbalance warnings are appended
+    to ``warnings`` in-place. Returns ``None`` when the column had no
+    usable data.
+
+    Args:
+        dataset: Raw dataset rows.
+        column_name: The output column to profile.
+        warnings: Mutable warning list extended with column-level findings.
+
+    Returns:
+        A :class:`TargetColumnProfile` describing the column.
+    """
     values: list[Any] = []
     missing = 0
     for row in dataset:
@@ -198,6 +304,12 @@ def _select_primary_target(
     categoricals, picks the one with the fewest unique values, since a
     smaller class set typically indicates a cleaner label space. Falls
     back to the first declared output when no categoricals are present.
+
+    Args:
+        targets: Per-output target profiles.
+
+    Returns:
+        The chosen primary target profile, or ``None`` when ``targets`` is empty.
     """
     if not targets:
         return None
@@ -218,6 +330,12 @@ def _infer_target_kind(values: list[Any]) -> str:
       are at most ``CATEGORICAL_MAX_UNIQUE`` distinct values AND the
       unique-to-total ratio is at most ``CATEGORICAL_UNIQUE_RATIO`` (each
       "class" repeats often enough to mean something).
+
+    Args:
+        values: Non-empty cell values for the target column.
+
+    Returns:
+        One of ``"categorical"``, ``"numeric"``, or ``"freeform"``.
     """
     if not values:
         return "freeform"
@@ -240,7 +358,14 @@ def _infer_target_kind(values: list[Any]) -> str:
 
 
 def _stringify(value: Any) -> str:
-    """Coerce a value to a stable string key for hashing and display."""
+    """Coerce a value to a stable string key for hashing and display.
+
+    Args:
+        value: Any cell value.
+
+    Returns:
+        The trimmed string form of ``value`` (empty string when ``value`` is None).
+    """
     if value is None:
         return ""
     if isinstance(value, str):
@@ -253,6 +378,13 @@ def _count_duplicates(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> 
 
     Returns 0 when the mapping declares no input columns, which should
     never happen in practice (``ColumnMapping`` rejects that at construction).
+
+    Args:
+        dataset: Raw dataset rows.
+        mapping: Column mapping whose ``inputs`` define duplicate identity.
+
+    Returns:
+        The number of rows whose input tuple already appeared earlier.
     """
     columns = list(mapping.inputs.values())
     if not columns:

@@ -25,7 +25,7 @@ from typing import Any
 
 import dspy
 
-from ..config import settings
+from ...config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +33,10 @@ logger = logging.getLogger(__name__)
 class _TaskSummary(dspy.Signature):
     """Describe a DSPy optimization task in 2-3 sentences."""
 
-    signature_code: str = dspy.InputField(
-        desc="The DSPy Signature source code being optimised."
-    )
-    metric_code: str = dspy.InputField(
-        desc="The metric function source code (scoring rule)."
-    )
-    column_mapping: str = dspy.InputField(
-        desc="JSON column → role map (which columns feed inputs vs outputs)."
-    )
-    dataset_sample: str = dspy.InputField(
-        desc="A handful of sample rows from the training dataset."
-    )
+    signature_code: str = dspy.InputField(desc="The DSPy Signature source code being optimised.")
+    metric_code: str = dspy.InputField(desc="The metric function source code (scoring rule).")
+    column_mapping: str = dspy.InputField(desc="JSON column → role map (which columns feed inputs vs outputs).")
+    dataset_sample: str = dspy.InputField(desc="A handful of sample rows from the training dataset.")
     task_description: str = dspy.OutputField(
         desc=(
             "2-3 sentences describing the task in plain English: what the "
@@ -64,6 +56,16 @@ def _heuristic_summary(
 
     Used when the LLM call is unavailable. Worse than a real summary
     for semantic search, but still non-empty and deterministic.
+
+    Args:
+        signature_code: Source code of the user's DSPy signature.
+        metric_code: Source code of the user's metric function.
+        column_mapping: Optional ``{"inputs": ..., "outputs": ...}`` map.
+
+    Returns:
+        A short text summary derived from the column mapping and metric
+        first-line, or the truncated signature code when the mapping is
+        missing.
     """
     if not column_mapping:
         return (signature_code or "").strip()[:500]
@@ -73,9 +75,7 @@ def _heuristic_summary(
     out_names = list(outputs.values()) if isinstance(outputs, dict) else []
     parts: list[str] = []
     if in_names and out_names:
-        parts.append(
-            f"Task maps {', '.join(in_names)} to {', '.join(out_names)}."
-        )
+        parts.append(f"Task maps {', '.join(in_names)} to {', '.join(out_names)}.")
     elif in_names:
         parts.append(f"Task takes {', '.join(in_names)} as input.")
     if metric_code and len(metric_code) < 400:
@@ -84,7 +84,14 @@ def _heuristic_summary(
 
 
 def _build_lm() -> dspy.LM | None:
-    """Build the LM used for summarisation, preferring the dedicated setting."""
+    """Build the LM used for summarisation, preferring the dedicated setting.
+
+    Returns:
+        A :class:`dspy.LM` instance configured with
+        ``recommendations_summary_model`` (or ``code_agent_model`` as
+        fallback), or ``None`` when no model id is set or instantiation
+        fails.
+    """
     model_id = (settings.recommendations_summary_model or settings.code_agent_model).strip()
     if not model_id:
         return None
@@ -107,6 +114,17 @@ def summarize_task(
     Never raises. Returns an empty string if nothing useful can be
     produced — callers should treat empty as "skip the summary
     embedding for this job."
+
+    Args:
+        signature_code: Source code of the user's DSPy signature.
+        metric_code: Source code of the user's metric function.
+        column_mapping: Optional column → role map for the dataset.
+        dataset_sample: Optional list of sample rows; the first three
+            are forwarded to the summariser LM.
+
+    Returns:
+        A 2-3 sentence task description from the LLM, or the heuristic
+        fallback string when the LLM is unavailable or its call fails.
     """
     fallback = _heuristic_summary(signature_code, metric_code, column_mapping)
     lm = _build_lm()

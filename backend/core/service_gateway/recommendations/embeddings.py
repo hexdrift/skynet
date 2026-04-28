@@ -21,7 +21,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING
 
-from ..config import settings
+from ...config import settings
 
 if TYPE_CHECKING:
     import numpy as np
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _EMBEDDER_LOCK = threading.Lock()
-_EMBEDDER_INSTANCE: "_JinaEmbedder | None" = None
+_EMBEDDER_INSTANCE: _JinaEmbedder | None = None
 
 
 class _JinaEmbedder:
@@ -42,11 +42,20 @@ class _JinaEmbedder:
     """
 
     def __init__(self) -> None:
+        """Reset the lazy state; the model is only loaded on first :meth:`encode`."""
         self._model = None
         self._failed = False
         self._dim = settings.recommendations_embedding_dim
 
     def _load(self) -> None:
+        """Import and instantiate the SentenceTransformer model; record a failure sentinel on error.
+
+        No-ops when a previous call already loaded the model or recorded
+        a failure. ``ImportError`` (extra not installed) and any
+        instantiation error mark the embedder as failed; the next call
+        to :meth:`available` returns ``False`` and the recommendation
+        pipeline degrades gracefully.
+        """
         if self._model is not None or self._failed:
             return
         try:
@@ -78,7 +87,12 @@ class _JinaEmbedder:
             self._failed = True
 
     def available(self) -> bool:
-        """True if the encoder has loaded successfully on this process."""
+        """True if the encoder has loaded successfully on this process.
+
+        Returns:
+            True when the SentenceTransformer model is loaded; False when
+            a previous load attempt failed or the extra is not installed.
+        """
         self._load()
         return self._model is not None
 
@@ -87,6 +101,15 @@ class _JinaEmbedder:
 
         Empty/whitespace input returns ``None`` so callers don't write
         zero-vectors that would pollute the similarity search.
+
+        Args:
+            text: The input string to embed.
+
+        Returns:
+            A list of floats of length
+            ``settings.recommendations_embedding_dim``, or ``None`` when
+            the input is empty/whitespace, the encoder isn't loadable,
+            the embedding has zero norm, or encoding raises.
         """
         if not text or not text.strip():
             return None
@@ -108,7 +131,12 @@ class _JinaEmbedder:
 
 
 def get_embedder() -> _JinaEmbedder:
-    """Return the process-wide embedder singleton."""
+    """Return the process-wide embedder singleton.
+
+    Returns:
+        The cached :class:`_JinaEmbedder` instance, constructing it on
+        first call under a lock so concurrent callers share one model.
+    """
     global _EMBEDDER_INSTANCE
     if _EMBEDDER_INSTANCE is None:
         with _EMBEDDER_LOCK:

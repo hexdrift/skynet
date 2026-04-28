@@ -6,12 +6,12 @@ from core.service_gateway import dashboard
 
 
 def test_parse_pgvector_literal_string() -> None:
-    """The canonical pgvector text form parses back to floats."""
+    """A bracketed comma list parses into a list of floats."""
     assert dashboard._parse_pgvector_literal("[0.1,0.25,-0.5]") == [0.1, 0.25, -0.5]
 
 
 def test_parse_pgvector_literal_empty_and_none() -> None:
-    """None, empty string, and '[]' all degrade to None."""
+    """``None``, empty string, and ``[]`` all resolve to ``None``."""
     assert dashboard._parse_pgvector_literal(None) is None
     assert dashboard._parse_pgvector_literal("") is None
     assert dashboard._parse_pgvector_literal("[]") is None
@@ -28,7 +28,7 @@ def test_parse_pgvector_literal_bad_string_returns_none() -> None:
 
 
 def test_fit_pca_2d_empty_input() -> None:
-    """Zero vectors → empty output."""
+    """An empty input list returns an empty list."""
     assert dashboard._fit_pca_2d([]) == []
 
 
@@ -65,7 +65,7 @@ def test_fit_pca_2d_survives_degenerate_matrix() -> None:
 
 
 def test_invalidate_projection_cache_resets_timestamp() -> None:
-    """Calling invalidate forces the next fetch to recompute."""
+    """``invalidate_projection_cache`` zeros the timestamp and clears stored points."""
     dashboard._PROJECTION_CACHE["at"] = 9e18
     dashboard._PROJECTION_CACHE["points"] = [{"optimization_id": "stale"}]
     dashboard.invalidate_projection_cache()

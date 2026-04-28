@@ -25,20 +25,20 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..config import settings
-from ..constants import (
+from ...config import settings
+from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
-    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_USERNAME,
 )
-from ..storage.models import JobEmbeddingModel
+from ...storage.models import JobEmbeddingModel
 from .embeddings import get_embedder
 from .summarizer import summarize_task
 
@@ -48,7 +48,16 @@ _WEIGHTS = {"summary": 0.5, "code": 0.3, "schema": 0.2}
 
 
 def _build_code_text(signature_code: str | None, metric_code: str | None) -> str:
-    """Concatenate signature + metric into a single chunk for the 'code' embedding."""
+    """Concatenate signature + metric into a single chunk for the 'code' embedding.
+
+    Args:
+        signature_code: Source code of the user's DSPy signature.
+        metric_code: Source code of the user's metric function.
+
+    Returns:
+        A single text block prefixed with section headers, suitable for
+        passing to the embedder. May be empty when both inputs are blank.
+    """
     parts = []
     if signature_code and signature_code.strip():
         parts.append(f"# Signature\n{signature_code.strip()}")
@@ -64,6 +73,16 @@ def _build_schema_text(dataset: list[dict[str, Any]] | None, column_mapping: dic
     signal focused on structure rather than content drift. The role
     annotation (input / output) lets similar tasks match even when column
     names differ.
+
+    Args:
+        dataset: Submitted dataset rows; only the first row is sampled.
+        column_mapping: Optional ``{"inputs": ..., "outputs": ...}`` map
+            used to label each column with its role.
+
+    Returns:
+        A multi-line text block describing each column's role, type, and
+        a short value preview, or an empty string when no rows are
+        provided.
     """
     if not dataset:
         return ""
@@ -73,7 +92,7 @@ def _build_schema_text(dataset: list[dict[str, Any]] | None, column_mapping: dic
     outputs_set = set(outputs.values()) if isinstance(outputs, dict) else set()
     sample = dataset[0] if dataset else {}
     lines: list[str] = []
-    for col in sample.keys():
+    for col in sample:
         role = "input" if col in inputs_set else "output" if col in outputs_set else "ignore"
         value = sample.get(col)
         type_name = type(value).__name__ if value is not None else "null"
@@ -83,10 +102,19 @@ def _build_schema_text(dataset: list[dict[str, Any]] | None, column_mapping: dic
 
 
 def _extract_metadata(job: dict[str, Any]) -> tuple[str | None, int | None, str | None]:
-    """Return (winning_model, winning_rank, optimization_type) for a finished job.
+    """Return ``(winning_model, winning_rank, optimization_type)`` for a finished job.
 
     For a ``run`` job the winner is the single configured model (rank=1).
     For a grid search the winner is ``result.best_pair.generation_model``.
+
+    Args:
+        job: The job-store record (with ``payload_overview`` and ``result``
+            sub-dicts) for a finished optimization.
+
+    Returns:
+        A 3-tuple of ``(winning_model, winning_rank, optimization_type)``
+        where each entry may be ``None`` when the corresponding field is
+        absent from the job record.
     """
     overview = job.get("payload_overview") or {}
     result = job.get("result") or {}
@@ -100,10 +128,18 @@ def _extract_metadata(job: dict[str, Any]) -> tuple[str | None, int | None, str 
 
 
 def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
-    """Return (baseline_metric, optimized_metric) for a finished job.
+    """Return ``(baseline_metric, optimized_metric)`` for a finished job.
 
     Run jobs store the pair directly in ``latest_metrics``; grid jobs keep
     the winning pair under ``result.best_pair``. Scale is 0-100 for both.
+
+    Args:
+        job: The job-store record for a finished optimization.
+
+    Returns:
+        A 2-tuple of ``(baseline_metric, optimized_metric)`` where each
+        entry is a 0-100 float or ``None`` when the score is missing or
+        cannot be coerced to ``float``.
     """
     overview = job.get("payload_overview") or {}
     job_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE)
@@ -134,6 +170,15 @@ def _evaluate_quality(baseline: float | None, optimized: float | None) -> bool:
     absolute and a relative threshold (max of the two — whichever is
     larger — so low-baseline tasks aren't penalised for small raw lifts).
     Metrics live on the 0-100 scale the worker produces.
+
+    Args:
+        baseline: The pre-optimization score on a 0-100 scale, or ``None``.
+        optimized: The post-optimization score on a 0-100 scale, or ``None``.
+
+    Returns:
+        True when the optimized score is recommendable; False when either
+        score is missing, the optimized score is below the floor, or the
+        gain is below the absolute / relative threshold.
     """
     if baseline is None or optimized is None:
         return False
@@ -154,6 +199,15 @@ def _extract_applyable_config(job: dict[str, Any]) -> dict[str, Any]:
     The wizard stores these shapes on the submission payload; we persist
     them so the frontend can prefill the form without a second round-trip
     to the original job.
+
+    Args:
+        job: The job-store record with ``payload`` and ``payload_overview``
+            sub-dicts.
+
+    Returns:
+        A dict with ``optimizer_name``, ``optimizer_kwargs``,
+        ``module_name``, ``metric_name`` and ``task_name`` keys; values
+        may be ``None`` when the field is absent on the job payload.
     """
     payload = job.get("payload") or {}
     overview = job.get("payload_overview") or {}
@@ -172,6 +226,12 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> None:
     Called on a daemon thread from the worker — must never raise.
     Skips silently when the embedder is unavailable or when the job's
     payload is too incomplete to derive meaningful text.
+
+    Args:
+        optimization_id: ID of the finished job whose embeddings should
+            be (re)computed.
+        job_store: Job-store handle used to load the payload and to open
+            a SQLAlchemy session for the upsert.
     """
     if not settings.recommendations_enabled:
         return
@@ -225,9 +285,7 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> None:
     try:
         with Session(job_store.engine) as session:
             existing = (
-                session.query(JobEmbeddingModel)
-                .filter(JobEmbeddingModel.optimization_id == optimization_id)
-                .first()
+                session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id == optimization_id).first()
             )
             fields: dict[str, Any] = {
                 "user_id": user_id,
@@ -255,15 +313,19 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> None:
                 session.add(
                     JobEmbeddingModel(
                         optimization_id=optimization_id,
-                        created_at=datetime.now(timezone.utc),
+                        created_at=datetime.now(UTC),
                         **fields,
                     )
                 )
             session.commit()
         logger.info(
             "Recommendations: indexed %s (type=%s, winner=%s, recommendable=%s, gain=%s→%s)",
-            optimization_id, optimization_type, winning_model,
-            is_recommendable, baseline, optimized,
+            optimization_id,
+            optimization_type,
+            winning_model,
+            is_recommendable,
+            baseline,
+            optimized,
         )
     except Exception as exc:
         logger.warning("embed_finished_job upsert failed for %s: %s", optimization_id, exc)
@@ -284,20 +346,26 @@ def _weighted_fusion_sql(
     Only rows with ``is_recommendable = TRUE`` are eligible — the quality
     gate is enforced at query time so the ingest pipeline can keep
     embedding every successful job (the dashboard needs the full set).
+
+    Args:
+        has_summary: Whether the caller is supplying a summary embedding.
+        has_code: Whether the caller is supplying a code embedding.
+        has_schema: Whether the caller is supplying a schema embedding.
+        filter_type: When True, the SQL adds an ``optimization_type``
+            filter bound to the ``:filter_type`` parameter.
+
+    Returns:
+        A SQL string ready to bind named parameters (``:q_summary``,
+        ``:q_code``, ``:q_schema``, ``:filter_type``, ``:top_k``) and
+        execute against pgvector.
     """
     terms: list[str] = []
     if has_summary:
-        terms.append(
-            f"COALESCE(({_WEIGHTS['summary']} * (1 - (embedding_summary <=> CAST(:q_summary AS vector)))), 0)"
-        )
+        terms.append(f"COALESCE(({_WEIGHTS['summary']} * (1 - (embedding_summary <=> CAST(:q_summary AS vector)))), 0)")
     if has_code:
-        terms.append(
-            f"COALESCE(({_WEIGHTS['code']} * (1 - (embedding_code <=> CAST(:q_code AS vector)))), 0)"
-        )
+        terms.append(f"COALESCE(({_WEIGHTS['code']} * (1 - (embedding_code <=> CAST(:q_code AS vector)))), 0)")
     if has_schema:
-        terms.append(
-            f"COALESCE(({_WEIGHTS['schema']} * (1 - (embedding_schema <=> CAST(:q_schema AS vector)))), 0)"
-        )
+        terms.append(f"COALESCE(({_WEIGHTS['schema']} * (1 - (embedding_schema <=> CAST(:q_schema AS vector)))), 0)")
     score_expr = " + ".join(terms) if terms else "0"
     where_clauses = [
         "is_recommendable = TRUE",
@@ -319,7 +387,14 @@ def _weighted_fusion_sql(
 
 
 def _encode_vector_literal(vec: list[float] | None) -> str | None:
-    """pgvector expects ``'[0.1,0.2,...]'`` as a SQL literal for CAST to vector."""
+    """Format a numeric vector as pgvector's ``'[0.1,0.2,...]'`` SQL literal.
+
+    Args:
+        vec: The vector to encode; pass-through for ``None``.
+
+    Returns:
+        The pgvector literal string, or ``None`` when ``vec`` is ``None``.
+    """
     if vec is None:
         return None
     return "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
@@ -341,6 +416,21 @@ def search_similar(
     the same compact text form the ingest pipeline uses. ``user_id`` is
     reserved for future cross-user scoping (e.g. personalisation); today
     it's accepted but not used in the query.
+
+    Args:
+        job_store: Job-store handle used to open a SQLAlchemy session.
+        signature_code: Submitted DSPy signature source code (may be empty).
+        metric_code: Submitted metric source code (may be empty).
+        dataset_schema: Submitted column → role/dtype map (may be empty).
+        optimization_type: Optional ``run`` / ``grid_search`` filter.
+        user_id: Caller's user id (currently unused; reserved for scoping).
+        top_k: Maximum number of recommendations to return.
+
+    Returns:
+        A list of recommendation dicts ordered by descending similarity
+        score. Empty when recommendations are disabled, the embedder is
+        unavailable, no usable text could be derived, or the SQL query
+        fails.
     """
     if not settings.recommendations_enabled:
         return []
@@ -412,7 +502,15 @@ def search_similar(
 
 
 def _as_float(value: Any) -> float | None:
-    """Coerce SQL numerics (Decimal, int, float, None) to plain float or None."""
+    """Coerce SQL numerics (Decimal, int, float, None) to plain float or None.
+
+    Args:
+        value: A SQL numeric value returned from the driver.
+
+    Returns:
+        The value as a ``float``, or ``None`` when ``value`` is ``None``
+        or cannot be coerced.
+    """
     if value is None:
         return None
     try:
@@ -426,6 +524,14 @@ def _build_schema_from_query_schema(schema: dict[str, Any] | None) -> str:
 
     Frontend sends ``{"columns": [{"name": "...", "role": "...", "dtype": "..."}]}``
     or similar. We accept a permissive shape and fall back gracefully.
+
+    Args:
+        schema: A submission-time column schema dict, or ``None``.
+
+    Returns:
+        A multi-line ``name (role, dtype)`` block when ``columns`` is a
+        list, a JSON dump (truncated to 1000 chars) when not, or an
+        empty string when ``schema`` is empty or non-serialisable.
     """
     if not schema:
         return ""

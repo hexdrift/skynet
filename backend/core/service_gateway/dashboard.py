@@ -40,6 +40,12 @@ def _fit_pca_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
     either case. A fixed sign convention (flip so the first coord is
     positive in the largest-magnitude row) keeps the picture stable
     across reruns when the same inputs are provided.
+
+    Args:
+        vectors: Embedding rows, each already L2-normalised.
+
+    Returns:
+        ``(x, y)`` per input row, scaled so the largest magnitude is 1.0.
     """
     if len(vectors) < 2:
         return [(0.0, 0.0)] * len(vectors)
@@ -70,48 +76,67 @@ def _fetch_projection_rows(session: Session) -> list[dict[str, Any]]:
     parsed in Python because SQLAlchemy's pgvector binding returns
     them as numpy arrays — we convert to ``list[float]`` up front so
     the downstream code only sees one representation.
+
+    Args:
+        session: An open SQLAlchemy session bound to the job-store engine.
+
+    Returns:
+        Row dicts containing point metadata plus a ``_vector`` list.
     """
-    rows = session.execute(
-        text(
-            "SELECT optimization_id, optimization_type, winning_model, winning_rank, "
-            "is_recommendable, baseline_metric, optimized_metric, "
-            "summary_text, signature_code, metric_name, task_name, "
-            "module_name, optimizer_name, optimizer_kwargs, "
-            "created_at, embedding_summary::text AS embedding_summary_text "
-            "FROM job_embeddings "
-            "WHERE embedding_summary IS NOT NULL "
-            "ORDER BY created_at DESC "
-            "LIMIT 2000"
+    rows = (
+        session.execute(
+            text(
+                "SELECT optimization_id, optimization_type, winning_model, winning_rank, "
+                "is_recommendable, baseline_metric, optimized_metric, "
+                "summary_text, signature_code, metric_name, task_name, "
+                "module_name, optimizer_name, optimizer_kwargs, "
+                "created_at, embedding_summary::text AS embedding_summary_text "
+                "FROM job_embeddings "
+                "WHERE embedding_summary IS NOT NULL "
+                "ORDER BY created_at DESC "
+                "LIMIT 2000"
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     out = []
     for row in rows:
         vector = _parse_pgvector_literal(row.get("embedding_summary_text"))
         if vector is None:
             continue
-        out.append({
-            "optimization_id": row["optimization_id"],
-            "optimization_type": row["optimization_type"],
-            "winning_model": row["winning_model"],
-            "winning_rank": row["winning_rank"],
-            "is_recommendable": bool(row["is_recommendable"]),
-            "baseline_metric": _as_float(row["baseline_metric"]),
-            "optimized_metric": _as_float(row["optimized_metric"]),
-            "summary_text": row["summary_text"],
-            "signature_code": row["signature_code"],
-            "metric_name": row["metric_name"],
-            "task_name": row["task_name"],
-            "module_name": row["module_name"],
-            "optimizer_name": row["optimizer_name"],
-            "optimizer_kwargs": row["optimizer_kwargs"] or {},
-            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-            "_vector": vector,
-        })
+        out.append(
+            {
+                "optimization_id": row["optimization_id"],
+                "optimization_type": row["optimization_type"],
+                "winning_model": row["winning_model"],
+                "winning_rank": row["winning_rank"],
+                "is_recommendable": bool(row["is_recommendable"]),
+                "baseline_metric": _as_float(row["baseline_metric"]),
+                "optimized_metric": _as_float(row["optimized_metric"]),
+                "summary_text": row["summary_text"],
+                "signature_code": row["signature_code"],
+                "metric_name": row["metric_name"],
+                "task_name": row["task_name"],
+                "module_name": row["module_name"],
+                "optimizer_name": row["optimizer_name"],
+                "optimizer_kwargs": row["optimizer_kwargs"] or {},
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "_vector": vector,
+            }
+        )
     return out
 
 
 def _parse_pgvector_literal(value: Any) -> list[float] | None:
-    """Parse ``'[0.1,0.2,...]'`` back into a Python list of floats."""
+    """Parse ``'[0.1,0.2,...]'`` back into a Python list of floats.
+
+    Args:
+        value: The pgvector literal as a string, list, or ``None``.
+
+    Returns:
+        Floats parsed from the literal, or ``None`` if unparseable.
+    """
     if value is None:
         return None
     if isinstance(value, list):
@@ -128,6 +153,14 @@ def _parse_pgvector_literal(value: Any) -> list[float] | None:
 
 
 def _as_float(value: Any) -> float | None:
+    """Best-effort coerce ``value`` to ``float``; return ``None`` on ``None`` or parse failure.
+
+    Args:
+        value: Anything ``float()`` might accept.
+
+    Returns:
+        The parsed float, or ``None`` if conversion fails.
+    """
     if value is None:
         return None
     try:
@@ -141,6 +174,12 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
 
     The projection is cached in-process for ``_PROJECTION_TTL_SECONDS``
     because PCA on ~2000 x 512 floats is cheap but not free.
+
+    Args:
+        job_store: A store exposing a SQLAlchemy ``engine`` attribute.
+
+    Returns:
+        ``{"points": [...]}`` ready to be returned by the API layer.
     """
     engine = job_store.engine
     with Session(engine) as session:

@@ -1,21 +1,29 @@
+"""Optimizer compile/evaluate/instantiate helpers for :class:`DspyService`.
+
+Per-strategy plumbing around DSPy's optimizers: detecting whether the
+factory accepts ``valset`` / ``metric`` kwargs, validating user-supplied
+``optimizer_kwargs`` against the factory signature, evaluating compiled
+programs on the test split, and injecting reflection LMs for GEPA.
+"""
+
 import inspect
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal, overload
 
 import dspy
 
-from ..constants import (
+from ...constants import (
     COMPILE_TRAINSET_KEY,
     COMPILE_VALSET_KEY,
     OPTIMIZER_METRIC_KEY,
     OPTIMIZER_NAME_GEPA,
     OPTIMIZER_REFLECTION_LM_KEY,
 )
-from ..exceptions import ServiceError
-from ..models import ModelConfig
+from ...exceptions import ServiceError
+from ...models import ModelConfig
+from ..language_models import build_language_model
 from .data import DatasetSplits
-from .language_models import build_language_model
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +43,17 @@ def compile_program(
 
     Args:
         optimizer: An instantiated DSPy optimizer.
-        program: The DSPy module to compile.
-        splits: Train/val/test partitions; train must be non-empty.
-        metric: Optional metric callable (unused directly here; forwarded via kwargs).
-        compile_kwargs: Additional keyword arguments passed to ``optimizer.compile``.
+        program: The DSPy program to compile.
+        splits: Train/val/test partitions.
+        metric: Optional metric callable (already wired into the optimizer).
+        compile_kwargs: User-supplied kwargs forwarded to ``optimizer.compile``.
 
     Returns:
-        The compiled program returned by ``optimizer.compile``.
+        The compiled DSPy program returned by ``optimizer.compile``.
 
     Raises:
-        ServiceError: If ``splits.train`` is empty or the optimizer rejects the kwargs.
+        ServiceError: If ``splits.train`` is empty or the optimizer rejects
+            the kwargs.
     """
 
     if not splits.train:
@@ -65,7 +74,14 @@ def compile_program(
 
 
 def _compile_accepts_valset(optimizer: Any) -> bool:
-    """Return True if the optimizer's compile() method accepts a valset parameter."""
+    """Return True if the optimizer's compile() method accepts a valset parameter.
+
+    Args:
+        optimizer: An instantiated DSPy optimizer.
+
+    Returns:
+        True when ``optimizer.compile`` exposes a ``valset`` parameter.
+    """
     compile_method = getattr(optimizer, "compile", None)
     if compile_method is None:
         return False
@@ -76,26 +92,46 @@ def _compile_accepts_valset(optimizer: Any) -> bool:
         return False
 
 
+@overload
 def evaluate_on_test(
     program: Any,
     test_examples: list[Any],
-    metric,
+    metric: Any,
+    *,
+    collect_per_example: Literal[True],
+) -> tuple[float | None, list[dict]]: ...
+
+
+@overload
+def evaluate_on_test(
+    program: Any,
+    test_examples: list[Any],
+    metric: Any,
+    *,
+    collect_per_example: Literal[False] = ...,
+) -> float | None: ...
+
+
+def evaluate_on_test(
+    program: Any,
+    test_examples: list[Any],
+    metric: Any,
     *,
     collect_per_example: bool = False,
-) -> "tuple[float | None, list[dict]] | float | None":
+) -> tuple[float | None, list[dict]] | float | None:
     """Evaluate a compiled program on the test split using dspy.Evaluate.
 
     Args:
-        program: The DSPy module to evaluate.
-        test_examples: Examples to evaluate against.
-        metric: Scoring callable used by ``dspy.Evaluate``.
-        collect_per_example: When True returns ``(aggregate, per_example_list)``
-            instead of just the aggregate float.
+        program: The compiled DSPy program to evaluate.
+        test_examples: Held-out examples to score.
+        metric: The DSPy-compatible scoring callable.
+        collect_per_example: When True, also return the per-row breakdown.
 
     Returns:
-        The aggregate score as a float, or ``None`` if ``test_examples`` is empty.
-        When ``collect_per_example=True``, returns ``(score, list[dict])`` where each
-        dict contains ``index``, ``outputs``, ``score``, and ``pass``.
+        The aggregate score as a float (or ``None`` when ``test_examples``
+        is empty). When ``collect_per_example=True``, returns
+        ``(score, list[dict])`` where each dict contains ``index``,
+        ``outputs``, ``score``, and ``pass``.
 
     Raises:
         ServiceError: If the evaluator returns a non-numeric score.
@@ -111,6 +147,7 @@ def evaluate_on_test(
     )
     eval_result = evaluator(program)
 
+    raw_results: list[Any]
     if isinstance(eval_result, (int, float)):
         aggregate = float(eval_result)
         raw_results = []
@@ -145,7 +182,17 @@ def evaluate_on_test(
 
 
 def optimizer_requires_metric(factory: Callable[..., Any]) -> bool:
-    """Return True if the optimizer factory (or any wrapped target) accepts a ``metric`` parameter."""
+    """Return True if the optimizer factory (or any wrapped target) accepts a ``metric`` parameter.
+
+    Wrapped callables (``__wrapped__``) and closure cells are also inspected
+    so decorated factories report accurately.
+
+    Args:
+        factory: The optimizer factory callable.
+
+    Returns:
+        True when the factory or one of its wrapped targets accepts ``metric``.
+    """
 
     try:
         sig = inspect.signature(factory)
@@ -160,7 +207,12 @@ def optimizer_requires_metric(factory: Callable[..., Any]) -> bool:
 
 
 def validate_optimizer_signature(factory: Callable[..., Any], name: str) -> None:
-    """Warn if the optimizer factory is not introspectable."""
+    """Warn if the optimizer factory is not introspectable.
+
+    Args:
+        factory: The optimizer factory callable.
+        name: The optimizer's registered name (used in log output).
+    """
 
     try:
         inspect.signature(factory)
@@ -169,7 +221,16 @@ def validate_optimizer_signature(factory: Callable[..., Any], name: str) -> None
 
 
 def validate_optimizer_kwargs(factory: Callable[..., Any], kwargs: dict[str, Any], name: str) -> None:
-    """Raise ServiceError if user-supplied kwargs cannot be bound to the factory signature."""
+    """Validate user-supplied kwargs against the optimizer factory signature.
+
+    Args:
+        factory: The optimizer factory callable.
+        kwargs: User-supplied keyword arguments.
+        name: The optimizer's registered name (used in error messages).
+
+    Raises:
+        ServiceError: When ``kwargs`` cannot be bound to the factory signature.
+    """
 
     if not kwargs:
         return
@@ -190,8 +251,7 @@ def validate_optimizer_kwargs(factory: Callable[..., Any], kwargs: dict[str, Any
         unknown = sorted(k for k in kwargs if k not in named)
         if unknown:
             logger.warning(
-                "Optimizer '%s' received kwargs %s not in named parameters — "
-                "forwarded via **kwargs; verify spelling.",
+                "Optimizer '%s' received kwargs %s not in named parameters — forwarded via **kwargs; verify spelling.",
                 name,
                 unknown,
             )
@@ -213,19 +273,20 @@ def instantiate_optimizer(
       and defaults ``auto`` to ``"light"`` when no budget kwarg is supplied.
 
     Args:
-        factory: Callable that constructs the optimizer instance.
-        optimizer_name: Lowercase-compared name used to detect GEPA.
-        optimizer_kwargs: User-supplied keyword arguments; may be empty.
-        metric: Metric callable injected unless already in ``optimizer_kwargs``.
-        default_model: Fallback model config (currently unused; preserved for
-            forward compatibility with optimizers that may need a default LM).
-        reflection_model: Required for GEPA; optional for others.
+        factory: The optimizer factory callable to invoke.
+        optimizer_name: The optimizer's registered name.
+        optimizer_kwargs: User-supplied factory kwargs.
+        metric: The DSPy-compatible metric callable to inject when needed.
+        default_model: Configuration for the generation model (currently
+            informational; reserved for future per-optimizer wiring).
+        reflection_model: Configuration for the reflection model (required
+            when ``optimizer_name`` is GEPA).
 
     Returns:
-        An instantiated optimizer ready for ``compile()``.
+        An instantiated optimizer ready for ``compile``.
 
     Raises:
-        ServiceError: If GEPA is requested without a reflection model.
+        ServiceError: When GEPA is requested without a reflection model.
     """
 
     optimizer_key = optimizer_name.lower()
@@ -256,7 +317,14 @@ def instantiate_optimizer(
 
 
 def _callable_accepts_metric(target: Any) -> bool:
-    """Return True when the callable exposes a ``metric`` parameter."""
+    """Return True when the callable exposes a ``metric`` parameter.
+
+    Args:
+        target: A callable to introspect.
+
+    Returns:
+        True when ``target`` has a ``metric`` parameter.
+    """
 
     if target is None:
         return False
@@ -268,7 +336,15 @@ def _callable_accepts_metric(target: Any) -> bool:
 
 
 def _extract_factory_targets(factory: Callable[..., Any]) -> list[Any]:
-    """Collect potential callable targets from wrappers/closures for metric-detection."""
+    """Collect potential callable targets from wrappers/closures for metric-detection.
+
+    Args:
+        factory: The factory callable to deconstruct.
+
+    Returns:
+        A list of inner callables (``__wrapped__`` target, closure cell
+        contents, and the factory itself) suitable for metric-detection.
+    """
 
     targets: list[Any] = []
     wrapped = getattr(factory, "__wrapped__", None)
@@ -276,8 +352,7 @@ def _extract_factory_targets(factory: Callable[..., Any]) -> list[Any]:
         targets.append(wrapped)
     closure_cells = getattr(factory, "__closure__", None)
     if closure_cells:
-        for cell in closure_cells:
-            targets.append(cell.cell_contents)
+        targets.extend(cell.cell_contents for cell in closure_cells)
     if callable(factory):
         targets.append(factory)
     return targets
