@@ -1,5 +1,10 @@
 """Tests for core.config.Settings and its helpers."""
 
+# pydantic-settings BaseSettings.__init__ accepts ``_env_file`` (and other
+# leading-underscore kwargs) that mypy can't see without the dedicated plugin,
+# so disable ``call-arg`` for this file.
+# mypy: disable-error-code="call-arg"
+
 from __future__ import annotations
 
 import json
@@ -7,7 +12,6 @@ import json
 import pytest
 
 from core.config import Settings
-
 
 _SETTINGS_ENV_VARS = (
     "REMOTE_DB_URL",
@@ -48,91 +52,91 @@ def _isolate_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_settings_defaults_worker_threads() -> None:
-    """Verify Settings defaults worker_threads to 4."""
+    """Default ``worker_threads`` is 4 when no env var is set."""
     s = Settings(_env_file=None)
 
     assert s.worker_threads == 4
 
 
 def test_settings_defaults_worker_poll_interval() -> None:
-    """Verify Settings defaults worker_poll_interval to 1.0."""
+    """Default ``worker_poll_interval`` is 1.0 second."""
     s = Settings(_env_file=None)
 
     assert s.worker_poll_interval == 1.0
 
 
 def test_settings_defaults_worker_stale_threshold() -> None:
-    """Verify Settings defaults worker_stale_threshold to 600.0."""
+    """Default ``worker_stale_threshold`` is 600.0 seconds."""
     s = Settings(_env_file=None)
 
     assert s.worker_stale_threshold == 600.0
 
 
 def test_settings_defaults_cancel_poll_interval() -> None:
-    """Verify Settings defaults cancel_poll_interval to 1.0."""
+    """Default ``cancel_poll_interval`` is 1.0 second."""
     s = Settings(_env_file=None)
 
     assert s.cancel_poll_interval == 1.0
 
 
 def test_settings_defaults_job_run_start_method() -> None:
-    """Verify Settings defaults job_run_start_method to 'fork'."""
+    """Default ``job_run_start_method`` is ``"fork"``."""
     s = Settings(_env_file=None)
 
     assert s.job_run_start_method == "fork"
 
 
 def test_settings_defaults_artifacts_dir() -> None:
-    """Verify Settings defaults artifacts_dir to 'artifacts'."""
+    """Default ``artifacts_dir`` is ``"artifacts"``."""
     s = Settings(_env_file=None)
 
     assert s.artifacts_dir == "artifacts"
 
 
 def test_settings_defaults_logs_dir() -> None:
-    """Verify Settings defaults logs_dir to 'logs'."""
+    """Default ``logs_dir`` is ``"logs"``."""
     s = Settings(_env_file=None)
 
     assert s.logs_dir == "logs"
 
 
 def test_settings_defaults_host() -> None:
-    """Verify Settings defaults host to '0.0.0.0'."""
+    """Default ``host`` is ``"0.0.0.0"``."""
     s = Settings(_env_file=None)
 
     assert s.host == "0.0.0.0"
 
 
 def test_settings_defaults_port() -> None:
-    """Verify Settings defaults port to 8000."""
+    """Default ``port`` is 8000."""
     s = Settings(_env_file=None)
 
     assert s.port == 8000
 
 
 def test_settings_defaults_reload() -> None:
-    """Verify Settings defaults reload to False."""
+    """Default ``reload`` is ``False``."""
     s = Settings(_env_file=None)
 
     assert s.reload is False
 
 
 def test_settings_defaults_log_level() -> None:
-    """Verify Settings defaults log_level to 'INFO'."""
+    """Default ``log_level`` is ``"INFO"``."""
     s = Settings(_env_file=None)
 
     assert s.log_level == "INFO"
 
 
 def test_settings_defaults_max_jobs_per_user() -> None:
-    """Verify Settings defaults max_jobs_per_user to 100."""
+    """Default ``max_jobs_per_user`` is 100."""
     s = Settings(_env_file=None)
 
     assert s.max_jobs_per_user == 100
 
 
 def test_settings_defaults_api_keys_are_none() -> None:
-    """Verify Settings defaults all API key fields to None."""
+    """API key fields default to ``None`` when no env vars are exported."""
     s = Settings(_env_file=None)
 
     assert s.openai_api_key is None
@@ -140,10 +144,8 @@ def test_settings_defaults_api_keys_are_none() -> None:
     assert s.remote_db_url is None
 
 
-
-
 def test_settings_env_override_worker_threads(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify WORKER_CONCURRENCY env var overrides worker_threads."""
+    """``WORKER_CONCURRENCY`` env var overrides ``worker_threads``."""
     monkeypatch.setenv("WORKER_CONCURRENCY", "8")
 
     s = Settings(_env_file=None)
@@ -152,7 +154,7 @@ def test_settings_env_override_worker_threads(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_settings_env_override_port(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify PORT env var overrides the default port."""
+    """``PORT`` env var overrides ``port``."""
     monkeypatch.setenv("PORT", "9090")
 
     s = Settings(_env_file=None)
@@ -161,7 +163,7 @@ def test_settings_env_override_port(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_settings_env_override_reload_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify RELOAD=true env var sets reload to True."""
+    """``RELOAD=true`` parses to ``reload is True``."""
     monkeypatch.setenv("RELOAD", "true")
 
     s = Settings(_env_file=None)
@@ -170,7 +172,7 @@ def test_settings_env_override_reload_true(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_settings_env_override_reload_false(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify RELOAD=false env var sets reload to False."""
+    """``RELOAD=false`` parses to ``reload is False``."""
     monkeypatch.setenv("RELOAD", "false")
 
     s = Settings(_env_file=None)
@@ -179,7 +181,7 @@ def test_settings_env_override_reload_false(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_settings_env_override_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify LOG_LEVEL env var overrides the default log level."""
+    """``LOG_LEVEL`` env var overrides ``log_level``."""
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
     s = Settings(_env_file=None)
@@ -188,7 +190,7 @@ def test_settings_env_override_log_level(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_settings_env_override_cors_origins(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify ALLOWED_ORIGINS env var overrides cors_origins."""
+    """``ALLOWED_ORIGINS`` env var populates ``cors_origins`` verbatim."""
     monkeypatch.setenv("ALLOWED_ORIGINS", "http://example.com,http://other.com")
 
     s = Settings(_env_file=None)
@@ -197,7 +199,7 @@ def test_settings_env_override_cors_origins(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_settings_env_override_admin_usernames(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify ADMIN_USERNAMES env var sets admin_usernames."""
+    """``ADMIN_USERNAMES`` env var populates ``admin_usernames`` verbatim."""
     monkeypatch.setenv("ADMIN_USERNAMES", "alice,bob")
 
     s = Settings(_env_file=None)
@@ -206,7 +208,7 @@ def test_settings_env_override_admin_usernames(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_settings_env_override_max_jobs_per_user(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify MAX_JOBS_PER_USER env var overrides max_jobs_per_user."""
+    """``MAX_JOBS_PER_USER`` env var overrides ``max_jobs_per_user``."""
     monkeypatch.setenv("MAX_JOBS_PER_USER", "200")
 
     s = Settings(_env_file=None)
@@ -215,7 +217,7 @@ def test_settings_env_override_max_jobs_per_user(monkeypatch: pytest.MonkeyPatch
 
 
 def test_settings_env_override_quota_overrides_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify QUOTA_OVERRIDES env var sets quota_overrides_json."""
+    """``QUOTA_OVERRIDES`` env var populates ``quota_overrides_json``."""
     monkeypatch.setenv("QUOTA_OVERRIDES", '{"power_user": 500}')
 
     s = Settings(_env_file=None)
@@ -224,7 +226,7 @@ def test_settings_env_override_quota_overrides_json(monkeypatch: pytest.MonkeyPa
 
 
 def test_settings_env_override_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings loads env vars case-insensitively."""
+    """Lowercase env var names still resolve thanks to ``case_sensitive=False``."""
     monkeypatch.setenv("port", "7777")
 
     s = Settings(_env_file=None)
@@ -232,10 +234,8 @@ def test_settings_env_override_case_insensitive(monkeypatch: pytest.MonkeyPatch)
     assert s.port == 7777
 
 
-
-
 def test_cors_origins_list_parses_defaults() -> None:
-    """Verify cors_origins_list parses the default comma-separated string."""
+    """``cors_origins_list`` parses the default CSV into the two dev origins."""
     s = Settings(_env_file=None)
 
     result = s.cors_origins_list
@@ -244,7 +244,7 @@ def test_cors_origins_list_parses_defaults() -> None:
 
 
 def test_cors_origins_list_strips_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify cors_origins_list strips whitespace from each origin."""
+    """``cors_origins_list`` trims surrounding whitespace from each entry."""
     monkeypatch.setenv("ALLOWED_ORIGINS", "  http://a.com ,  http://b.com  ")
 
     s = Settings(_env_file=None)
@@ -253,7 +253,7 @@ def test_cors_origins_list_strips_whitespace(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_cors_origins_list_skips_empty_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify cors_origins_list skips empty entries from doubled commas."""
+    """``cors_origins_list`` drops empty CSV entries."""
     monkeypatch.setenv("ALLOWED_ORIGINS", "http://a.com,,http://b.com,")
 
     s = Settings(_env_file=None)
@@ -262,7 +262,7 @@ def test_cors_origins_list_skips_empty_entries(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_cors_origins_list_single_origin(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify cors_origins_list returns a single-element list for one origin."""
+    """``cors_origins_list`` correctly handles a single-origin CSV."""
     monkeypatch.setenv("ALLOWED_ORIGINS", "http://only.com")
 
     s = Settings(_env_file=None)
@@ -271,7 +271,7 @@ def test_cors_origins_list_single_origin(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_cors_origins_list_empty_string_returns_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify cors_origins_list returns an empty list when ALLOWED_ORIGINS is empty."""
+    """An empty ``ALLOWED_ORIGINS`` env var yields an empty list."""
     monkeypatch.setenv("ALLOWED_ORIGINS", "")
 
     s = Settings(_env_file=None)
@@ -279,17 +279,15 @@ def test_cors_origins_list_empty_string_returns_empty_list(monkeypatch: pytest.M
     assert s.cors_origins_list == []
 
 
-
-
 def test_admin_usernames_set_empty_by_default() -> None:
-    """Verify admin_usernames_set is empty when ADMIN_USERNAMES is not set."""
+    """``admin_usernames_set`` is empty when no env var is exported."""
     s = Settings(_env_file=None)
 
     assert s.admin_usernames_set == frozenset()
 
 
 def test_admin_usernames_set_parses_csv(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify admin_usernames_set parses a CSV list into a frozenset."""
+    """``admin_usernames_set`` parses a CSV into a frozenset."""
     monkeypatch.setenv("ADMIN_USERNAMES", "alice,bob,carol")
 
     s = Settings(_env_file=None)
@@ -298,7 +296,7 @@ def test_admin_usernames_set_parses_csv(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_admin_usernames_set_lowercases(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify admin_usernames_set normalizes usernames to lowercase."""
+    """``admin_usernames_set`` lower-cases each entry."""
     monkeypatch.setenv("ADMIN_USERNAMES", "Alice,BOB")
 
     s = Settings(_env_file=None)
@@ -307,7 +305,7 @@ def test_admin_usernames_set_lowercases(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_admin_usernames_set_strips_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify admin_usernames_set strips surrounding whitespace from each name."""
+    """``admin_usernames_set`` trims whitespace around each entry."""
     monkeypatch.setenv("ADMIN_USERNAMES", " alice , bob ")
 
     s = Settings(_env_file=None)
@@ -316,7 +314,7 @@ def test_admin_usernames_set_strips_whitespace(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_admin_usernames_set_skips_empty_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify admin_usernames_set skips empty entries in the CSV."""
+    """``admin_usernames_set`` drops empty CSV entries."""
     monkeypatch.setenv("ADMIN_USERNAMES", "alice,,bob,")
 
     s = Settings(_env_file=None)
@@ -324,10 +322,8 @@ def test_admin_usernames_set_skips_empty_entries(monkeypatch: pytest.MonkeyPatch
     assert s.admin_usernames_set == frozenset({"alice", "bob"})
 
 
-
-
 def test_get_user_quota_unknown_user_returns_default() -> None:
-    """Verify get_user_quota returns max_jobs_per_user for an unknown user."""
+    """An unknown username gets the default ``max_jobs_per_user`` quota."""
     s = Settings(_env_file=None)
 
     result = s.get_user_quota("unknown_user")
@@ -336,7 +332,7 @@ def test_get_user_quota_unknown_user_returns_default() -> None:
 
 
 def test_get_user_quota_admin_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify get_user_quota returns None (unlimited) for an admin user."""
+    """Admin usernames receive ``None`` (unlimited) quota."""
     monkeypatch.setenv("ADMIN_USERNAMES", "superadmin")
 
     s = Settings(_env_file=None)
@@ -345,7 +341,7 @@ def test_get_user_quota_admin_returns_none(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_get_user_quota_admin_case_insensitive_lower_stored(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify get_user_quota admin lookup matches stored lowercase names."""
+    """Admin matching is case-insensitive through the lower-cased frozenset."""
     # admin_usernames_set stores lowercase, so lookup must match
     monkeypatch.setenv("ADMIN_USERNAMES", "Admin")
 
@@ -357,7 +353,7 @@ def test_get_user_quota_admin_case_insensitive_lower_stored(monkeypatch: pytest.
 
 
 def test_get_user_quota_override_int_returns_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify get_user_quota returns the integer override for a configured user."""
+    """A per-user integer quota override wins over the default."""
     monkeypatch.setenv("QUOTA_OVERRIDES", json.dumps({"power_user": 500}))
 
     s = Settings(_env_file=None)
@@ -366,7 +362,7 @@ def test_get_user_quota_override_int_returns_override(monkeypatch: pytest.Monkey
 
 
 def test_get_user_quota_override_none_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify get_user_quota returns None (unlimited) when override is null."""
+    """A per-user ``null`` override means unlimited (returns ``None``)."""
     monkeypatch.setenv("QUOTA_OVERRIDES", json.dumps({"researcher": None}))
 
     s = Settings(_env_file=None)
@@ -375,7 +371,7 @@ def test_get_user_quota_override_none_returns_none(monkeypatch: pytest.MonkeyPat
 
 
 def test_get_user_quota_admin_wins_over_int_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify admin status takes precedence over a quota_overrides_json entry."""
+    """Admin status takes precedence over a per-user integer override."""
     monkeypatch.setenv("ADMIN_USERNAMES", "alice")
     monkeypatch.setenv("QUOTA_OVERRIDES", json.dumps({"alice": 50}))
 
@@ -385,7 +381,7 @@ def test_get_user_quota_admin_wins_over_int_override(monkeypatch: pytest.MonkeyP
 
 
 def test_get_user_quota_non_admin_user_with_no_override_returns_max(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify get_user_quota returns max_jobs_per_user when user has no override."""
+    """Non-admin users without an override get the configured ``max_jobs_per_user``."""
     monkeypatch.setenv("MAX_JOBS_PER_USER", "75")
     monkeypatch.setenv("QUOTA_OVERRIDES", json.dumps({"other_user": 200}))
 
@@ -395,7 +391,7 @@ def test_get_user_quota_non_admin_user_with_no_override_returns_max(monkeypatch:
 
 
 @pytest.mark.parametrize(
-    "username,quota_json,admin_csv,expected",
+    ("username", "quota_json", "admin_csv", "expected"),
     [
         ("regular", "{}", "", 100),
         ("admin1", "{}", "admin1", None),
@@ -412,7 +408,7 @@ def test_get_user_quota_parametrized(
     admin_csv: str,
     expected: int | None,
 ) -> None:
-    """Verify get_user_quota across multiple (username, overrides, admin) combinations."""
+    """Parametrized check that admin/override/default precedence holds for each scenario."""
     monkeypatch.setenv("QUOTA_OVERRIDES", quota_json)
     monkeypatch.setenv("ADMIN_USERNAMES", admin_csv)
 
@@ -421,10 +417,8 @@ def test_get_user_quota_parametrized(
     assert s.get_user_quota(username) == expected
 
 
-
-
 def test_settings_coerces_string_int_for_port(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings coerces the PORT string env var to an integer."""
+    """``PORT`` env var is coerced from string to int."""
     monkeypatch.setenv("PORT", "8080")
 
     s = Settings(_env_file=None)
@@ -434,7 +428,7 @@ def test_settings_coerces_string_int_for_port(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_settings_coerces_string_bool_reload(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings coerces the RELOAD string env var to a bool."""
+    """``RELOAD=1`` is coerced to ``bool``-typed ``True``."""
     monkeypatch.setenv("RELOAD", "1")
 
     s = Settings(_env_file=None)
@@ -444,7 +438,7 @@ def test_settings_coerces_string_bool_reload(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_settings_coerces_string_float_poll_interval(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings coerces WORKER_POLL_INTERVAL to a float."""
+    """``WORKER_POLL_INTERVAL`` is coerced from string to float."""
     monkeypatch.setenv("WORKER_POLL_INTERVAL", "2.5")
 
     s = Settings(_env_file=None)
@@ -453,10 +447,8 @@ def test_settings_coerces_string_float_poll_interval(monkeypatch: pytest.MonkeyP
     assert s.worker_poll_interval == 2.5
 
 
-
-
 def test_settings_valid_quota_overrides_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings accepts a valid QUOTA_OVERRIDES JSON with int and null values."""
+    """A valid ``QUOTA_OVERRIDES`` JSON is parsed and applied to ``get_user_quota``."""
     monkeypatch.setenv("QUOTA_OVERRIDES", '{"power_user": 500, "researcher": null}')
 
     s = Settings(_env_file=None)
@@ -466,15 +458,15 @@ def test_settings_valid_quota_overrides_json(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_settings_malformed_quota_overrides_json_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings rejects a malformed QUOTA_OVERRIDES JSON string."""
+    """Malformed ``QUOTA_OVERRIDES`` JSON raises a validation error."""
     monkeypatch.setenv("QUOTA_OVERRIDES", "{not valid json")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):  # pydantic.ValidationError inherits from ValueError
         Settings(_env_file=None)
 
 
 def test_settings_empty_quota_overrides_json_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify Settings treats an empty QUOTA_OVERRIDES as no overrides."""
+    """An empty ``QUOTA_OVERRIDES`` env var is normalised to ``"{}"``."""
     monkeypatch.setenv("QUOTA_OVERRIDES", "")
 
     s = Settings(_env_file=None)

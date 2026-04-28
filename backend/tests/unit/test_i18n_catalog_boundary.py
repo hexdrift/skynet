@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-HEBREW_CHARS = set(chr(c) for c in range(0x0590, 0x05FF + 1))
+HEBREW_CHARS = {chr(c) for c in range(0x0590, 0x05FF + 1)}
 
 
 def test_backend_hebrew_copy_is_centralized_in_i18n_catalog() -> None:
-    core_root = Path(__file__).resolve().parents[1] / "core"
+    """No backend module outside ``core/i18n.py`` contains raw Hebrew characters."""
+    core_root = Path(__file__).resolve().parents[2] / "core"
     offenders: list[str] = []
 
     for path in core_root.rglob("*.py"):
