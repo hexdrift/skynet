@@ -4,11 +4,13 @@ Captures optimizer iteration scores and average-metric snapshots from
 log lines and converts them into structured progress events.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 import threading
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..storage import JobStore
@@ -27,12 +29,20 @@ _thread_pair_index = threading.local()
 
 
 def set_current_pair_index(pair_index: int | None) -> None:
-    """Set the grid-search pair index for the calling thread (or clear with None)."""
+    """Set the grid-search pair index for the calling thread (or clear with None).
+
+    Args:
+        pair_index: The current grid-search pair index, or ``None`` to clear.
+    """
     _thread_pair_index.value = pair_index
 
 
 def get_current_pair_index() -> int | None:
-    """Return the grid-search pair index set on this thread, or None if unset."""
+    """Return the grid-search pair index set on this thread, or None if unset.
+
+    Returns:
+        The pair index previously set on this thread, or ``None``.
+    """
     return getattr(_thread_pair_index, "value", None)
 
 
@@ -40,6 +50,12 @@ class JobLogHandler(logging.Handler):
     """Route DSPy log records into the job manager for later inspection."""
 
     def __init__(self, optimization_id: str, jobs: JobStore) -> None:
+        """Bind the handler to a job + store and seed the allowed-thread set with the caller.
+
+        Args:
+            optimization_id: ID of the job whose logs this handler captures.
+            jobs: Storage backend used to persist log entries.
+        """
         super().__init__()
         self._optimization_id = optimization_id
         self._jobs = jobs
@@ -58,7 +74,7 @@ class JobLogHandler(logging.Handler):
         job handler, preventing log mixing when multiple jobs run concurrently.
 
         Args:
-            record: Log record emitted by DSPy or optimizer components.
+            record: The log record produced by the underlying logger.
         """
 
         with self._thread_lock:
@@ -68,8 +84,10 @@ class JobLogHandler(logging.Handler):
             message = self.format(record)
         except Exception:
             message = record.getMessage()
-        timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
-        try:  # [WORKER-FIX] protect emit() from DB errors that would crash the worker thread
+        timestamp = datetime.fromtimestamp(record.created, tz=UTC)
+        # A DB hiccup must not propagate out of emit() — that would crash the
+        # worker thread that produced the log line.
+        try:
             self._jobs.append_log(
                 self._optimization_id,
                 level=record.levelname,
@@ -84,12 +102,19 @@ class JobLogHandler(logging.Handler):
                     event_name,
                     metrics,
                 )
-        except Exception:  # [WORKER-FIX] swallow DB errors instead of killing the optimization
+        except Exception:
             self.handleError(record)
 
 
 def _extract_progress_from_log(message: str) -> Iterable[tuple[str, dict[str, Any]]]:
-    """Parse well-known DSPy log patterns into (event_name, metrics) tuples."""
+    """Parse well-known DSPy log patterns into (event_name, metrics) tuples.
+
+    Args:
+        message: A formatted DSPy log line.
+
+    Returns:
+        ``(event_name, metrics)`` tuples for each pattern matched.
+    """
 
     events: list[tuple[str, dict[str, Any]]] = []
     if match := _ITERATION_SCORE_RE.search(message):
