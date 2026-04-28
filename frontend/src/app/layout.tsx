@@ -1,12 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { AppShell } from "@/shared/layout/app-shell";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/shared/ui/primitives/tooltip";
 import { Providers } from "@/shared/providers/theme-provider";
 import { SessionProvider } from "@/shared/providers/session-provider";
 import { ToastContainer } from "@/shared/providers/toast-container";
 import { SplashScreen } from "@/shared/layout/splash-screen";
-import { TutorialOverlay, TutorialMenu } from "@/features/tutorial";
-import { TutorialProvider } from "@/features/tutorial/components/tutorial-provider";
+import { TutorialOverlay, TutorialMenu, TutorialProvider } from "@/features/tutorial";
+import {
+  UserPrefsProvider,
+  SettingsModalProvider,
+  SettingsModal,
+} from "@/features/settings";
+import { msg } from "@/shared/lib/messages";
+import { getServerRuntimeEnv, serializeRuntimeEnv } from "@/shared/lib/runtime-env";
 import "@fontsource-variable/heebo/index.css";
 import "@fontsource-variable/inter/index.css";
 import "react-toastify/dist/ReactToastify.css";
@@ -14,8 +21,7 @@ import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://skynet.app";
 const siteName = "Skynet";
-const siteDescription =
-  "מערכת אופטימיזציית פרומפטים מבוססת DSPy — שפרו ביצועי מודלי שפה באופן אוטומטי";
+const siteDescription = msg("app.meta.description");
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -67,7 +73,6 @@ export const metadata: Metadata = {
   },
 };
 
-/* JSON-LD structured data */
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
@@ -80,13 +85,15 @@ const jsonLd = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const runtimeEnv = getServerRuntimeEnv();
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
       <head>
+        <Script id="skynet-runtime-env" strategy="beforeInteractive">
+          {serializeRuntimeEnv(runtimeEnv)}
+        </Script>
         <link rel="preconnect" href="/" crossOrigin="" />
-        {process.env.NEXT_PUBLIC_API_URL && (
-          <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_API_URL} />
-        )}
+        <link rel="dns-prefetch" href={runtimeEnv.apiUrl} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -94,16 +101,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body suppressHydrationWarning>
         <SessionProvider>
-          <Providers>
-            <TooltipProvider>
-              <SplashScreen />
-              <TutorialProvider>
-                <AppShell>{children}</AppShell>
-                <TutorialOverlay />
-                <TutorialMenu />
-              </TutorialProvider>
-            </TooltipProvider>
-          </Providers>
+          <UserPrefsProvider>
+            <Providers>
+              <TooltipProvider>
+                <SplashScreen />
+                <TutorialProvider>
+                  <SettingsModalProvider>
+                    <AppShell>{children}</AppShell>
+                    <SettingsModal />
+                  </SettingsModalProvider>
+                  <TutorialOverlay />
+                  <TutorialMenu />
+                </TutorialProvider>
+              </TooltipProvider>
+            </Providers>
+          </UserPrefsProvider>
         </SessionProvider>
         <ToastContainer />
       </body>

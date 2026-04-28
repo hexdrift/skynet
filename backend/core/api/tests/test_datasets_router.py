@@ -15,7 +15,12 @@ from ..routers.datasets import create_datasets_router
 
 @pytest.fixture
 def datasets_client() -> TestClient:
-    """TestClient wired to a minimal FastAPI app hosting only the datasets router."""
+    """Build a ``TestClient`` exposing the datasets router with error handlers.
+
+    Returns:
+        A ``TestClient`` over a minimal FastAPI app with ``AppError`` and
+        validation handlers wired in to mirror production behaviour.
+    """
     app = FastAPI()
     app.include_router(create_datasets_router())
 
@@ -36,7 +41,7 @@ def datasets_client() -> TestClient:
 
 
 def test_profile_returns_plan_and_profile(datasets_client: TestClient) -> None:
-    """A well-formed request returns both a profile and a recommended plan."""
+    """Profiling a sized dataset returns a plan and shape profile."""
     payload = {
         "dataset": [
             {"q": "q1", "a": "yes"},
@@ -61,7 +66,7 @@ def test_profile_returns_plan_and_profile(datasets_client: TestClient) -> None:
 
 
 def test_profile_empty_dataset_returns_400(datasets_client: TestClient) -> None:
-    """An empty dataset surfaces the ValidationError as HTTP 400."""
+    """An empty dataset is rejected with a 400 and a helpful detail message."""
     payload = {
         "dataset": [],
         "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
@@ -74,14 +79,14 @@ def test_profile_empty_dataset_returns_400(datasets_client: TestClient) -> None:
 
 
 def test_profile_missing_column_mapping_returns_422(datasets_client: TestClient) -> None:
-    """Omitting column_mapping is a body validation error (422)."""
+    """``column_mapping`` is required; its absence is a 422."""
     resp = datasets_client.post("/datasets/profile", json={"dataset": [{"q": "x"}]})
 
     assert resp.status_code == 422
 
 
 def test_profile_flags_too_small_warning(datasets_client: TestClient) -> None:
-    """Tiny datasets surface a too_small warning in the profile."""
+    """Tiny datasets surface the ``too_small`` warning code."""
     payload = {
         "dataset": [{"q": f"q{i}", "a": "yes"} for i in range(5)],
         "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
@@ -96,7 +101,7 @@ def test_profile_flags_too_small_warning(datasets_client: TestClient) -> None:
 
 
 def test_profile_omitted_seed_is_still_populated(datasets_client: TestClient) -> None:
-    """Omitting seed produces a fully-specified plan with a generated seed."""
+    """A missing ``seed`` is still echoed back as a populated integer."""
     payload = {
         "dataset": [{"q": f"q{i}", "a": "yes"} for i in range(50)],
         "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},

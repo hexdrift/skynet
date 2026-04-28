@@ -2,34 +2,31 @@
 
 /**
  * Grid-level serve playground — lets the user pick any successful pair
- * from a grid search and run it interactively. Defaults to the pair that
- * won the combined (harmonic-mean) score, which we treat as the run's
- * final score.
+ * from a grid search and run it interactively. Defaults to the pair with
+ * the highest final score.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { Crown, Gauge, Trash2, Trophy } from "lucide-react";
 import { toast } from "react-toastify";
+import { msg } from "@/shared/lib/messages";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "@/shared/ui/primitives/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import { Separator } from "@/shared/ui/primitives/separator";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/shared/ui/primitives/tooltip";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { cn } from "@/shared/lib/utils";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { tip } from "@/shared/lib/tooltips";
 import { getPairServeInfo, servePairProgramStream } from "@/shared/lib/api";
-import type {
-  OptimizationStatusResponse,
-  PairResult,
-  ServeInfoResponse,
-} from "@/shared/types/api";
+import type { OptimizationStatusResponse, PairResult, ServeInfoResponse } from "@/shared/types/api";
 
 import { CopyButton } from "./ui-primitives";
 import { ServeChat } from "./ServeChat";
@@ -62,8 +59,7 @@ type RunEntry = {
 };
 
 export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
-  if (!job.grid_result) return null;
-  const pairs = job.grid_result.pair_results;
+  const pairs = job.grid_result?.pair_results ?? [];
   const scoring = computePairScores(pairs);
 
   const servable = pairs.filter(
@@ -75,7 +71,7 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
 
   // Persist the user's pair choice per-optimization so it survives SSE
   // re-renders and page reloads (browser cache). Falls back to the
-  // combined-score winner on first visit.
+  // quality winner on first visit.
   const storageKey = `grid-serve:pair:${job.optimization_id}`;
   const [selectedPair, setSelectedPair] = useState<number | null>(() => {
     if (typeof window === "undefined") return defaultPair;
@@ -112,7 +108,6 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
-  // Fetch serve info when the selected pair changes
   useEffect(() => {
     if (selectedPair == null) {
       setServeInfo(null);
@@ -131,7 +126,6 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
     };
   }, [job.optimization_id, selectedPair]);
 
-  // Reset chat state on pair switch
   useEffect(() => {
     streamAbortRef.current?.abort();
     setRunHistory([]);
@@ -140,7 +134,6 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
     setServeError(null);
   }, [selectedPair]);
 
-  // Auto-scroll
   useEffect(() => {
     if (chatScrollRef.current) {
       const el = chatScrollRef.current;
@@ -156,6 +149,8 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
     };
   }, []);
 
+  if (!job.grid_result) return null;
+
   const readInputs = () => {
     const vals: Record<string, string> = {};
     for (const f of serveInfo?.input_fields ?? []) vals[f] = textareaRefs.current[f]?.value ?? "";
@@ -169,7 +164,7 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
     if (missing.length > 0) {
       toast.error(
         <div>
-          נא למלא את כל השדות:
+          {msg("auto.features.optimizations.components.gridservetab.1")}
           <br />
           {missing.join(", ")}
         </div>,
@@ -231,31 +226,30 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
     return (
       <div className="rounded-xl border border-border/50 bg-card/80 p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          אין זוגות פעילים לשימוש — ייתכן שכולם נכשלו או שעדיין לא הסתיימו.
+          {msg("auto.features.optimizations.components.gridservetab.2")}
         </p>
       </div>
     );
   }
 
   const selected = pairs.find((p) => p.pair_index === selectedPair);
-  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const API = getRuntimeEnv().apiUrl;
   const endpoint = `${API}/serve/${job.optimization_id}/pair/${selectedPair}`;
 
   return (
     <div className="space-y-4">
       <FadeIn>
         <p className="text-sm text-muted-foreground" dir="rtl">
-          הרצת התוכנית המאומנת בזמן אמת — הזן קלט וקבל תשובה.
+          {msg("auto.features.optimizations.components.gridservetab.3")}
         </p>
       </FadeIn>
 
-      {/* Pair picker */}
       <FadeIn>
         <div className="rounded-xl border border-border/50 bg-card/80 p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-medium text-muted-foreground">
               <HelpTip text={tip("grid.best_pair_default")}>
-                בחר זוג לשימוש
+                {msg("auto.features.optimizations.components.gridservetab.4")}
               </HelpTip>
             </p>
           </div>
@@ -310,12 +304,8 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
                         isOverall && "text-[#3D2E22]",
                       )}
                     >
-                      משולב:
-                      {s?.harmonic != null
-                        ? ` ${Math.round(s.harmonic * 100)}%`
-                        : s
-                          ? ` ${Math.round(s.quality * 100)}%`
-                          : " —"}
+                      {msg("auto.features.optimizations.components.gridservetab.5")}
+                      {s ? ` ${Math.round(s.quality * 100)}%` : " —"}
                     </span>
                   </div>
                 </button>
@@ -325,7 +315,6 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
         </div>
       </FadeIn>
 
-      {/* Chat */}
       {serveInfo && (
         <>
           {runHistory.length > 0 && (
@@ -339,12 +328,16 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
                         size="icon"
                         className="size-8"
                         onClick={handleClearHistory}
-                        aria-label="נקה היסטוריה"
+                        aria-label={msg(
+                          "auto.features.optimizations.components.gridservetab.literal.1",
+                        )}
                       >
                         <Trash2 className="size-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom">נקה היסטוריה</TooltipContent>
+                    <TooltipContent side="bottom">
+                      {msg("auto.features.optimizations.components.gridservetab.6")}
+                    </TooltipContent>
                   </UiTooltip>
                 </TooltipProvider>
               </div>
@@ -368,16 +361,23 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">
-                <HelpTip text={tip("serve.section_pair")}>ריצה</HelpTip>
+                <HelpTip text={tip("serve.section_pair")}>
+                  {msg("auto.features.optimizations.components.gridservetab.7")}
+                </HelpTip>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider">
-                  <HelpTip text={tip("serve.api_url_pair")}>כתובת שירות</HelpTip>
+                  <HelpTip text={tip("serve.api_url_pair")}>
+                    {msg("auto.features.optimizations.components.gridservetab.8")}
+                  </HelpTip>
                 </p>
                 <div className="rounded-lg bg-muted/40 p-2.5 pe-8 relative group" dir="ltr">
-                  <code className="text-xs font-mono break-all">POST {endpoint}</code>
+                  <code className="text-xs font-mono break-all">
+                    {msg("auto.features.optimizations.components.gridservetab.9")}
+                    {endpoint}
+                  </code>
                   <CopyButton
                     text={endpoint}
                     className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100"
@@ -389,7 +389,9 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
 
               <div className="space-y-2">
                 <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider">
-                  <HelpTip text={tip("serve.integration_code")}>קוד לשילוב</HelpTip>
+                  <HelpTip text={tip("serve.integration_code")}>
+                    {msg("auto.features.optimizations.components.gridservetab.10")}
+                  </HelpTip>
                 </p>
                 <ServeCodeSnippets
                   serveInfo={serveInfo}

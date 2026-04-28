@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
+import { msg } from "@/shared/lib/messages";
 
 /**
  * Authentication configuration.
@@ -61,7 +62,7 @@ if (adfsConfigured) {
     Credentials({
       name: "Dev Login",
       credentials: {
-        username: { label: "שם משתמש", type: "text" },
+        username: { label: msg("auto.auth.literal.1"), type: "text" },
       },
       async authorize(credentials) {
         const username = (credentials?.username as string)?.trim();

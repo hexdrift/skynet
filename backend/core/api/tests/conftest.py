@@ -1,4 +1,8 @@
-"""Unit test fixtures — in-memory fakes, no live server, DB, or LLM key."""
+"""Unit test fixtures.
+
+In-memory fakes are used so the suite runs without a live server, database, or
+LLM key.
+"""
 
 from __future__ import annotations
 
@@ -16,14 +20,27 @@ __all__ = ["FakeJobStore"]
 
 @pytest.fixture
 def job_store() -> FakeJobStore:
+    """Provide a fresh in-memory ``FakeJobStore`` for each test.
+
+    Returns:
+        A new ``FakeJobStore`` instance with no seeded data.
+    """
     return FakeJobStore()
 
 
 @pytest.fixture
 def router_app(job_store: FakeJobStore) -> FastAPI:
-    """Build a minimal FastAPI app wired up with a subset of routers that
-    only depend on job_store. Used for fast router-level tests without the
-    full create_app() machinery (which would require Postgres + worker).
+    """Build a minimal FastAPI app wired to the in-memory job store.
+
+    The full ``create_app()`` factory would require Postgres and a worker;
+    this fixture mounts only the routers that can be exercised with the fake.
+
+    Args:
+        job_store: In-memory store injected into the analytics and meta routers.
+
+    Returns:
+        A FastAPI application with the models, analytics, and optimizations
+        meta routers mounted.
     """
     app = FastAPI()
     app.include_router(create_models_router())
@@ -37,4 +54,12 @@ def router_app(job_store: FakeJobStore) -> FastAPI:
 
 @pytest.fixture
 def client(router_app: FastAPI) -> TestClient:
+    """Wrap ``router_app`` in a FastAPI ``TestClient`` for HTTP assertions.
+
+    Args:
+        router_app: The FastAPI application to drive.
+
+    Returns:
+        A ``TestClient`` bound to ``router_app``.
+    """
     return TestClient(router_app)

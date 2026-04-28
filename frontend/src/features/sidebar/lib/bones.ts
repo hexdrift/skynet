@@ -7,14 +7,7 @@
 
 import type { Bone, ResponsiveBones } from "boneyard-js";
 
-function bone(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  container = false,
-): Bone {
+function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {
   return container ? { x, y, w, h, r, c: true } : { x, y, w, h, r };
 }
 

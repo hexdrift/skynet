@@ -3,9 +3,13 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { TERMS } from "@/shared/lib/terms";
 
+import { formatMsg } from "@/shared/lib/messages";
 export const metadata: Metadata = {
   title: "New Optimization",
-  description: `צור אופטימיזציית פרומפטים חדשה עם DSPy — בחר ${TERMS.model}, העלה ${TERMS.dataset}, ושפר ביצועים`,
+  description: formatMsg("auto.app.submit.layout.template.1", {
+    p1: TERMS.model,
+    p2: TERMS.dataset,
+  }),
 };
 
 export default function SubmitLayout({ children }: { children: React.ReactNode }) {

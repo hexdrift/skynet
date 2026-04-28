@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import type { AgentThinking } from "./types";
 
@@ -39,14 +40,16 @@ export function ThinkingSection({ thinking }: { thinking: AgentThinking }) {
   const tail = React.useMemo(() => {
     if (!reasoning) return "";
     const cleaned = reasoning.replace(/\s+/g, " ").trim();
-    return cleaned.length > 90 ? "…" + cleaned.slice(-89) : cleaned;
+    return cleaned.length > 90 ? `…${cleaned.slice(-89)}` : cleaned;
   }, [reasoning]);
 
   if (!reasoning && !isThinking) return null;
 
   const elapsedMs = startedAt ? (endedAt ?? nowTs) - startedAt : 0;
   const elapsedSec = Math.max(0, Math.round(elapsedMs / 100) / 10);
-  const label = isThinking ? "חושב" : `חשב ${elapsedSec.toFixed(1)} שניות`;
+  const label = isThinking
+    ? msg("shared.agent.thinking")
+    : formatMsg("shared.agent.thought_seconds", { seconds: elapsedSec.toFixed(1) });
 
   return (
     <div>
@@ -61,16 +64,15 @@ export function ThinkingSection({ thinking }: { thinking: AgentThinking }) {
           <span
             className={cn(
               "text-xs font-medium",
-              isThinking
-                ? "text-[#3D2E22] animate-pulse"
-                : "text-foreground/70",
+              isThinking ? "text-[#3D2E22] animate-pulse" : "text-foreground/70",
             )}
           >
             {label}
           </span>
           {isThinking && (
             <span className="font-mono tabular-nums text-[0.625rem] text-muted-foreground/55">
-              {elapsedSec.toFixed(1)}s
+              {elapsedSec.toFixed(1)}
+              {msg("shared.agent.seconds_short")}
             </span>
           )}
         </div>

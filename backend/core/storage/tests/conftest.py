@@ -8,7 +8,8 @@ omitted (create_job, record_progress, append_log, bulk helpers, recovery).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import threading
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -22,14 +23,15 @@ class FakeJobStore:
     """
 
     def __init__(self) -> None:
-        """Initialize empty in-memory stores for jobs, logs, and progress."""
+        """Initialize empty in-memory tables."""
         self._jobs: dict[str, dict] = {}
         self._logs: dict[str, list] = {}
         self._progress: dict[str, list] = {}
+        self._claim_lock = threading.Lock()
 
     def seed_job(self, optimization_id: str, **fields: Any) -> dict:
-        """Insert a pre-populated job row with sensible defaults; returns the row dict."""
-        now = datetime.now(timezone.utc).isoformat()
+        """Insert a job row with optional field overrides."""
+        now = datetime.now(UTC).isoformat()
         job = {
             "optimization_id": optimization_id,
             "status": "pending",
@@ -54,8 +56,8 @@ class FakeJobStore:
         optimization_id: str,
         estimated_remaining_seconds: float | None = None,
     ) -> dict[str, Any]:
-        """Create a pending job row and return a copy of the stored dict."""
-        now = datetime.now(timezone.utc).isoformat()
+        """Create a new pending job and return a copy of its dict row."""
+        now = datetime.now(UTC).isoformat()
         job: dict[str, Any] = {
             "optimization_id": optimization_id,
             "status": "pending",
@@ -75,35 +77,31 @@ class FakeJobStore:
         return dict(job)
 
     def update_job(self, optimization_id: str, **kwargs: Any) -> None:
-        """Merge kwargs into the stored job row."""
+        """Overwrite fields on an existing job row."""
         self._jobs[optimization_id].update(kwargs)
 
     def get_job(self, optimization_id: str) -> dict[str, Any]:
-        """Return a copy of the job dict; raises KeyError if not found."""
+        """Return a copy of the job row, raising ``KeyError`` if missing."""
         if optimization_id not in self._jobs:
             raise KeyError(optimization_id)
         return dict(self._jobs[optimization_id])
 
     def job_exists(self, optimization_id: str) -> bool:
-        """Return True if a job with the given ID exists in the store."""
+        """Return ``True`` if the job has been seeded or created."""
         return optimization_id in self._jobs
 
     def delete_job(self, optimization_id: str) -> None:
-        """Remove the job and its logs/progress; silently ignores missing IDs."""
+        """Remove the job row and any associated logs/progress events."""
         self._jobs.pop(optimization_id, None)
         self._logs.pop(optimization_id, None)
         self._progress.pop(optimization_id, None)
 
     def get_jobs_status_by_ids(self, optimization_ids: list[str]) -> dict[str, str]:
-        """Return a {id: status} map for each ID that exists in the store."""
-        return {
-            oid: self._jobs[oid]["status"]
-            for oid in optimization_ids
-            if oid in self._jobs
-        }
+        """Return a ``{id: status}`` mapping for the IDs that exist."""
+        return {oid: self._jobs[oid]["status"] for oid in optimization_ids if oid in self._jobs}
 
     def delete_jobs(self, optimization_ids: list[str]) -> int:
-        """Delete a batch of jobs; returns the count of rows actually removed."""
+        """Bulk-delete jobs and return the number of rows actually removed."""
         removed = 0
         for oid in set(optimization_ids):
             if oid in self._jobs:
@@ -119,21 +117,21 @@ class FakeJobStore:
         message: str | None,
         metrics: dict[str, Any],
     ) -> None:
-        """Append a progress event for the given job."""
+        """Append a progress event to the in-memory event list."""
         self._progress.setdefault(optimization_id, []).append(
             {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "message": message,
                 "metrics": dict(metrics),
             }
         )
 
     def get_progress_events(self, optimization_id: str) -> list[dict[str, Any]]:
-        """Return a copy of all progress events for the given job."""
+        """Return a copy of the progress event list for the job."""
         return list(self._progress.get(optimization_id, []))
 
     def get_progress_count(self, optimization_id: str) -> int:
-        """Return the number of progress events recorded for the given job."""
+        """Return the number of progress events stored for the job."""
         return len(self._progress.get(optimization_id, []))
 
     def append_log(
@@ -146,13 +144,13 @@ class FakeJobStore:
         timestamp: datetime | None = None,
         pair_index: int | None = None,
     ) -> None:
-        """Append a log entry for the given job."""
+        """Append a log entry to the in-memory log list."""
         self._logs.setdefault(optimization_id, []).append(
             {
                 "level": level,
                 "logger_name": logger_name,
                 "message": message,
-                "timestamp": (timestamp or datetime.now(timezone.utc)).isoformat(),
+                "timestamp": (timestamp or datetime.now(UTC)).isoformat(),
                 "pair_index": pair_index,
             }
         )
@@ -165,7 +163,7 @@ class FakeJobStore:
         offset: int = 0,
         level: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return log entries for the job with optional level filter and pagination."""
+        """Return log entries for the job, optionally filtered/paginated."""
         entries = list(self._logs.get(optimization_id, []))
         if level is not None:
             entries = [e for e in entries if e["level"] == level]
@@ -175,14 +173,14 @@ class FakeJobStore:
         return entries
 
     def get_log_count(self, optimization_id: str, *, level: str | None = None) -> int:
-        """Return the number of log entries for a job, optionally filtered by level."""
+        """Return the count of log entries, optionally filtered by level."""
         entries = self._logs.get(optimization_id, [])
         if level is not None:
             return sum(1 for e in entries if e["level"] == level)
         return len(entries)
 
     def set_payload_overview(self, optimization_id: str, overview: dict[str, Any]) -> None:
-        """Store the payload overview dict on the job, replacing any previous value."""
+        """Replace the payload overview for the given job."""
         self._jobs[optimization_id]["payload_overview"] = dict(overview)
 
     def list_jobs(
@@ -194,7 +192,7 @@ class FakeJobStore:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Return jobs matching the given filters with pagination applied."""
+        """List jobs with optional filtering and pagination."""
         rows = list(self._jobs.values())
         if status is not None:
             rows = [r for r in rows if r.get("status") == status]
@@ -211,7 +209,7 @@ class FakeJobStore:
         username: str | None = None,
         optimization_type: str | None = None,
     ) -> int:
-        """Return the count of jobs matching the given filters."""
+        """Return the count of jobs that match the given filters."""
         return len(
             self.list_jobs(
                 status=status,
@@ -223,27 +221,75 @@ class FakeJobStore:
         )
 
     def recover_orphaned_jobs(self) -> int:
-        """Mark running/validating jobs as failed.
-
-        In-memory semantics: any job with status 'running' or 'validating'
-        is transitioned to 'failed' and its message is updated.
-        """
+        """Reclaim in-flight jobs whose lease has expired."""
+        now = datetime.now(UTC)
         recovered = 0
         for job in self._jobs.values():
-            if job["status"] in ("running", "validating"):
+            if job["status"] not in ("running", "validating"):
+                continue
+            lease_iso = job.get("lease_expires_at")
+            lease_dt = datetime.fromisoformat(lease_iso) if isinstance(lease_iso, str) else None
+            if lease_dt is None or lease_dt < now:
                 job["status"] = "failed"
-                job["message"] = "Recovered by restart"
+                job["message"] = "Job interrupted by service restart"
+                job["claimed_by"] = None
+                job["claimed_at"] = None
+                job["lease_expires_at"] = None
                 recovered += 1
         return recovered
 
     def recover_pending_jobs(self) -> list[str]:
-        """Return IDs of pending jobs ordered by created_at ascending."""
+        """Return pending job IDs in oldest-first order."""
         pending = [j for j in self._jobs.values() if j["status"] == "pending"]
         pending.sort(key=lambda j: j["created_at"])
         return [j["optimization_id"] for j in pending]
 
+    def claim_next_job(self, worker_id: str, lease_seconds: float) -> dict[str, Any] | None:
+        """Atomically claim the oldest pending job for ``worker_id``."""
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        with self._claim_lock:
+            now = datetime.now(UTC)
+            lease_until = (now + timedelta(seconds=lease_seconds)).isoformat()
+            pending = sorted(
+                (j for j in self._jobs.values() if j["status"] == "pending"),
+                key=lambda j: j["created_at"],
+            )
+            if not pending:
+                return None
+            job = pending[0]
+            job["status"] = "validating"
+            job["claimed_by"] = worker_id
+            job["claimed_at"] = now.isoformat()
+            job["lease_expires_at"] = lease_until
+            return dict(job)
+
+    def extend_lease(self, optimization_id: str, worker_id: str, lease_seconds: float) -> bool:
+        """Extend the lease only if this worker still owns the claim."""
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        with self._claim_lock:
+            job = self._jobs.get(optimization_id)
+            if job is None or job.get("claimed_by") != worker_id:
+                return False
+            job["lease_expires_at"] = (
+                datetime.now(UTC) + timedelta(seconds=lease_seconds)
+            ).isoformat()
+            return True
+
+    def release_job(self, optimization_id: str, worker_id: str) -> bool:
+        """Clear claim metadata only if this worker still owns the claim."""
+        with self._claim_lock:
+            job = self._jobs.get(optimization_id)
+            if job is None or job.get("claimed_by") != worker_id:
+                return False
+            job["claimed_by"] = None
+            job["claimed_at"] = None
+            job["lease_expires_at"] = None
+            return True
+
 
 @pytest.fixture
 def store() -> FakeJobStore:
-    """Return a fresh FakeJobStore instance for each test function."""
+    """Yield a fresh ``FakeJobStore`` for each contract test."""
     return FakeJobStore()

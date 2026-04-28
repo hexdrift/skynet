@@ -3,7 +3,6 @@
 import { motion, type HTMLMotionProps } from "framer-motion";
 import * as React from "react";
 
-/* ── Fade-in when scrolled into view ── */
 export const FadeIn = React.memo(function FadeIn({
   children,
   delay = 0,
@@ -37,7 +36,6 @@ export const FadeIn = React.memo(function FadeIn({
   );
 });
 
-/* ── Staggered children container ── */
 export const StaggerContainer = React.memo(function StaggerContainer({
   children,
   className,
@@ -63,7 +61,6 @@ export const StaggerContainer = React.memo(function StaggerContainer({
   );
 });
 
-/* ── Individual stagger item ── */
 export const StaggerItem = React.memo(function StaggerItem({
   children,
   className,
@@ -89,7 +86,6 @@ export const StaggerItem = React.memo(function StaggerItem({
   );
 });
 
-/* ── Scale on hover wrapper ── */
 export function HoverScale({
   children,
   className,
@@ -110,7 +106,6 @@ export function HoverScale({
   );
 }
 
-/* ── 3D tilt card on hover ── */
 export function TiltCard({
   children,
   className,
@@ -169,7 +164,6 @@ export function TiltCard({
   );
 }
 
-/* ── Counter animation for numbers ── */
 export const AnimatedNumber = React.memo(function AnimatedNumber({
   value,
   duration = 0.6,

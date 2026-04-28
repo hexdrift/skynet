@@ -1,22 +1,16 @@
 "use client";
 
-/**
- * Stage-info modal shown when the user clicks a pipeline stage node.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Pure display — receives
- * the active stage and the job, and the parent owns the open/close state.
- */
-
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/shared/ui/primitives/dialog";
 import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { TERMS } from "@/shared/lib/terms";
 import { PIPELINE_STAGES, STAGE_INFO, type PipelineStage } from "../constants";
+import { msg } from "@/shared/lib/messages";
 
 export function StageInfoModal({
   stage,
@@ -61,14 +55,15 @@ export function StageInfoModal({
                   {stage === "baseline" && job?.baseline_test_metric != null && (
                     <div className="rounded-xl bg-muted/40 p-3">
                       <div className="text-[0.6875rem] font-semibold text-[#3D2E22] mb-1">
-                        תוצאה
+                        {msg("auto.features.optimizations.components.stageinfomodal.1")}
                       </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-bold tabular-nums">
                           {(job.baseline_test_metric * 100).toFixed(1)}%
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {TERMS.baselineScore} על סט הבדיקה
+                          {TERMS.baselineScore}
+                          {msg("auto.features.optimizations.components.stageinfomodal.2")}
                         </span>
                       </div>
                     </div>
@@ -77,18 +72,21 @@ export function StageInfoModal({
                   {stage === "evaluating" && job?.optimized_test_metric != null && (
                     <div className="rounded-xl bg-muted/40 p-3">
                       <div className="text-[0.6875rem] font-semibold text-[#3D2E22] mb-1">
-                        תוצאה סופית
+                        {msg("auto.features.optimizations.components.stageinfomodal.3")}
                       </div>
                       <div className="flex items-baseline gap-3">
                         <div>
                           <span className="text-2xl font-bold tabular-nums text-[#3D2E22]">
                             {(job.optimized_test_metric * 100).toFixed(1)}%
                           </span>
-                          <span className="text-[0.625rem] text-muted-foreground ms-1">מאומנת</span>
+                          <span className="text-[0.625rem] text-muted-foreground ms-1">
+                            {msg("auto.features.optimizations.components.stageinfomodal.4")}
+                          </span>
                         </div>
                         {job.baseline_test_metric != null && (
                           <div className="text-xs text-muted-foreground">
-                            מ-{(job.baseline_test_metric * 100).toFixed(1)}%
+                            {msg("auto.features.optimizations.components.stageinfomodal.5")}
+                            {(job.baseline_test_metric * 100).toFixed(1)}%
                             <span
                               className={`ms-1 font-semibold ${(job.metric_improvement ?? 0) >= 0 ? "text-[#3D2E22]" : "text-[#B04030]"}`}
                             >

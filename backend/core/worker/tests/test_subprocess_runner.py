@@ -16,22 +16,24 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import core.worker.subprocess_runner as sr
-from core.worker.subprocess_runner import (
+from core.worker.constants import (
     EVENT_ERROR,
     EVENT_LOG,
     EVENT_PROGRESS,
     EVENT_RESULT,
+)
+from core.worker.subprocess_runner import (
     SubprocessLogHandler,
     run_service_in_subprocess,
     safe_queue_put,
     set_fork_service,
 )
+
 from .mocks import REAL_GRID_PAYLOAD, REAL_RUN_PAYLOAD, fake_dspy_service, fake_service_registry
 
 
-
 def _make_queue() -> queue.Queue:
-    """Return a fresh empty in-process queue."""
+    """Build an empty stdlib ``queue.Queue`` for a test."""
     return queue.Queue()
 
 
@@ -40,7 +42,7 @@ def _make_record(
     level: int = logging.INFO,
     logger_name: str = "dspy.test",
 ) -> logging.LogRecord:
-    """Build a minimal LogRecord with the given message, level, and logger name."""
+    """Build a minimal ``logging.LogRecord`` for tests."""
     return logging.LogRecord(
         name=logger_name,
         level=level,
@@ -53,15 +55,14 @@ def _make_record(
 
 
 def _make_handler(q: queue.Queue) -> SubprocessLogHandler:
-    """Build a SubprocessLogHandler with a plain-message formatter."""
+    """Build a ``SubprocessLogHandler`` bound to ``q`` with a plain formatter."""
     handler = SubprocessLogHandler(event_queue=q)
     handler.setFormatter(logging.Formatter("%(message)s"))
     return handler
 
 
-
 def test_safe_queue_put_places_event_on_queue() -> None:
-    """safe_queue_put() delivers the event dict to a functioning queue."""
+    """``safe_queue_put`` puts the event onto a healthy queue."""
     q = _make_queue()
     event = {"type": "test", "val": 1}
 
@@ -71,8 +72,7 @@ def test_safe_queue_put_places_event_on_queue() -> None:
 
 
 def test_safe_queue_put_suppresses_exception_from_broken_queue() -> None:
-    """safe_queue_put must never propagate exceptions from a failing queue."""
-
+    """``safe_queue_put`` swallows exceptions raised by the queue."""
     class _BrokenQueue:
         def put(self, item: object) -> None:
             raise RuntimeError("queue full")
@@ -82,7 +82,7 @@ def test_safe_queue_put_suppresses_exception_from_broken_queue() -> None:
 
 
 def test_safe_queue_put_does_not_raise_on_none_event() -> None:
-    """safe_queue_put() accepts None as an event without raising."""
+    """``safe_queue_put`` accepts a ``None`` event without raising."""
     q = _make_queue()
 
     safe_queue_put(q, None)  # type: ignore[arg-type]
@@ -90,9 +90,8 @@ def test_safe_queue_put_does_not_raise_on_none_event() -> None:
     assert q.get_nowait() is None
 
 
-
 def test_set_fork_service_stores_provided_instance() -> None:
-    """set_fork_service() stores the given instance in the module-level _FORK_SERVICE."""
+    """``set_fork_service`` stores the provided service on the module global."""
     fake_service = MagicMock()
 
     set_fork_service(fake_service)
@@ -101,16 +100,15 @@ def test_set_fork_service_stores_provided_instance() -> None:
 
 
 def test_set_fork_service_clears_when_passed_none() -> None:
-    """set_fork_service(None) clears the module-level _FORK_SERVICE to None."""
+    """``set_fork_service(None)`` clears the module global."""
     set_fork_service(MagicMock())
     set_fork_service(None)
 
     assert sr._FORK_SERVICE is None
 
 
-
 def test_subprocess_log_handler_emits_log_event_type() -> None:
-    """SubprocessLogHandler.emit() puts an event with type=EVENT_LOG on the queue."""
+    """The handler emits events tagged with ``EVENT_LOG``."""
     q = _make_queue()
     handler = _make_handler(q)
 
@@ -121,7 +119,7 @@ def test_subprocess_log_handler_emits_log_event_type() -> None:
 
 
 def test_subprocess_log_handler_emits_message() -> None:
-    """SubprocessLogHandler.emit() includes the formatted message in the queued event."""
+    """The handler emits the formatted message."""
     q = _make_queue()
     handler = _make_handler(q)
 
@@ -132,7 +130,7 @@ def test_subprocess_log_handler_emits_message() -> None:
 
 
 def test_subprocess_log_handler_emits_logger_name() -> None:
-    """SubprocessLogHandler.emit() includes the logger name in the queued event."""
+    """The handler emits the originating logger name."""
     q = _make_queue()
     handler = _make_handler(q)
 
@@ -143,7 +141,7 @@ def test_subprocess_log_handler_emits_logger_name() -> None:
 
 
 @pytest.mark.parametrize(
-    "level_int, expected_name",
+    ("level_int", "expected_name"),
     [
         (logging.DEBUG, "DEBUG"),
         (logging.INFO, "INFO"),
@@ -152,10 +150,8 @@ def test_subprocess_log_handler_emits_logger_name() -> None:
         (logging.CRITICAL, "CRITICAL"),
     ],
 )
-def test_subprocess_log_handler_emits_level_name(
-    level_int: int, expected_name: str
-) -> None:
-    """SubprocessLogHandler.emit() includes the string level name in the queued event."""
+def test_subprocess_log_handler_emits_level_name(level_int: int, expected_name: str) -> None:
+    """The handler emits the log level name."""
     q = _make_queue()
     handler = _make_handler(q)
 
@@ -166,7 +162,7 @@ def test_subprocess_log_handler_emits_level_name(
 
 
 def test_subprocess_log_handler_emits_utc_iso_timestamp() -> None:
-    """SubprocessLogHandler.emit() includes a UTC ISO-format timestamp ending in +00:00."""
+    """The handler emits a UTC ISO 8601 timestamp."""
     q = _make_queue()
     handler = _make_handler(q)
 
@@ -178,7 +174,7 @@ def test_subprocess_log_handler_emits_utc_iso_timestamp() -> None:
 
 
 def test_subprocess_log_handler_emits_multiple_records_in_order() -> None:
-    """Multiple emit() calls produce events on the queue in the same order."""
+    """The handler preserves emit order across multiple records."""
     q = _make_queue()
     handler = _make_handler(q)
     messages = ["alpha", "beta", "gamma"]
@@ -188,7 +184,6 @@ def test_subprocess_log_handler_emits_multiple_records_in_order() -> None:
 
     received = [q.get_nowait()["message"] for _ in messages]
     assert received == messages
-
 
 
 def test_subprocess_log_handler_falls_back_to_get_message_on_format_error() -> None:
@@ -207,10 +202,8 @@ def test_subprocess_log_handler_falls_back_to_get_message_on_format_error() -> N
     assert event["message"] == "fallback text"
 
 
-
 def test_subprocess_log_handler_suppresses_broken_queue_errors() -> None:
-    """emit() does not propagate exceptions raised by a failing event queue."""
-
+    """The handler swallows queue ``put`` errors so logging never crashes the run."""
     class _BrokenQueue:
         def put(self, item: object) -> None:
             raise OSError("pipe broken")
@@ -222,9 +215,8 @@ def test_subprocess_log_handler_suppresses_broken_queue_errors() -> None:
     handler.emit(_make_record("msg"))
 
 
-
 def _drain_queue(q: queue.Queue) -> list[dict]:
-    """Return all events currently on the queue without blocking."""
+    """Drain all items currently on ``q`` and return them as a list."""
     events = []
     while True:
         try:
@@ -235,12 +227,14 @@ def _drain_queue(q: queue.Queue) -> list[dict]:
 
 
 def test_run_service_in_subprocess_happy_path_emits_result_event() -> None:
-    """When service.run() succeeds, an EVENT_RESULT must appear on the queue."""
-    q = queue.Queue()
+    """A successful run emits a single ``EVENT_RESULT`` carrying the payload."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service(result={"baseline_test_metric": 0.5, "optimized_test_metric": 0.8})
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-1", q, "spawn")
 
     events = _drain_queue(q)
@@ -250,24 +244,28 @@ def test_run_service_in_subprocess_happy_path_emits_result_event() -> None:
 
 
 def test_run_service_in_subprocess_happy_path_zero_exit() -> None:
-    """run_service_in_subprocess() returns without raising on a successful service call."""
-    q = queue.Queue()
+    """A successful run does not raise."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service()
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         # Must not raise.
         run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-2", q, "spawn")
 
 
 def test_run_service_in_subprocess_exception_emits_error_event() -> None:
-    """When service.run() raises, an EVENT_ERROR must appear on the queue."""
-    q = queue.Queue()
+    """A failing run emits a single ``EVENT_ERROR`` with error text and traceback."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service()
     svc.run.side_effect = RuntimeError("model exploded")
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-3", q, "spawn")
 
     events = _drain_queue(q)
@@ -278,13 +276,15 @@ def test_run_service_in_subprocess_exception_emits_error_event() -> None:
 
 
 def test_run_service_in_subprocess_exception_no_result_event() -> None:
-    """When service.run() raises, no EVENT_RESULT is placed on the queue."""
-    q = queue.Queue()
+    """A failing run does not emit an ``EVENT_RESULT``."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service()
     svc.run.side_effect = ValueError("bad payload")
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-4", q, "spawn")
 
     events = _drain_queue(q)
@@ -293,12 +293,14 @@ def test_run_service_in_subprocess_exception_no_result_event() -> None:
 
 
 def test_run_service_in_subprocess_run_type_calls_service_run() -> None:
-    """_optimization_type='run' must dispatch to service.run(), not run_grid_search."""
-    q = queue.Queue()
+    """A ``run`` payload is dispatched to ``service.run``."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service()
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-5", q, "spawn")
 
     svc.run.assert_called_once()
@@ -306,12 +308,14 @@ def test_run_service_in_subprocess_run_type_calls_service_run() -> None:
 
 
 def test_run_service_in_subprocess_grid_search_type_calls_run_grid_search() -> None:
-    """_optimization_type='grid_search' must dispatch to service.run_grid_search()."""
-    q = queue.Queue()
+    """A ``grid_search`` payload is dispatched to ``service.run_grid_search``."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service()
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         run_service_in_subprocess(REAL_GRID_PAYLOAD, "art-6", q, "spawn")
 
     svc.run_grid_search.assert_called_once()
@@ -319,13 +323,14 @@ def test_run_service_in_subprocess_grid_search_type_calls_run_grid_search() -> N
 
 
 def test_run_service_in_subprocess_progress_callback_emits_progress_events() -> None:
-    """progress_callback invocations must land as EVENT_PROGRESS on the queue."""
-    q = queue.Queue()
+    """Progress-callback invocations are forwarded to the parent as ``EVENT_PROGRESS``."""
+    q: queue.Queue[dict] = queue.Queue()
     svc = fake_dspy_service()
 
     captured_callback = {}
 
     def _fake_run(payload, *, artifact_id, progress_callback):
+        """Stand-in for ``service.run`` that emits two progress events."""
         captured_callback["cb"] = progress_callback
         progress_callback("step_a", {"score": 0.3})
         progress_callback("step_b", {"score": 0.6})
@@ -335,8 +340,10 @@ def test_run_service_in_subprocess_progress_callback_emits_progress_events() -> 
 
     svc.run.side_effect = _fake_run
 
-    with patch("core.worker.subprocess_runner.DspyService", return_value=svc), \
-         patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()):
+    with (
+        patch("core.worker.subprocess_runner.DspyService", return_value=svc),
+        patch("core.worker.subprocess_runner.ServiceRegistry", return_value=fake_service_registry()),
+    ):
         run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-7", q, "spawn")
 
     events = _drain_queue(q)
@@ -349,14 +356,16 @@ def test_run_service_in_subprocess_progress_callback_emits_progress_events() -> 
 
 
 def test_run_service_in_subprocess_uses_fork_service_when_start_method_is_fork() -> None:
-    """When start_method='fork' and _FORK_SERVICE is set, the fork service is used."""
-    q = queue.Queue()
+    """Under ``fork`` start method the prepared ``_FORK_SERVICE`` is reused."""
+    q: queue.Queue[dict] = queue.Queue()
     fork_svc = fake_dspy_service()
 
     set_fork_service(fork_svc)
     try:
-        with patch("core.worker.subprocess_runner.DspyService") as mock_dspy_svc, \
-             patch("core.worker.subprocess_runner.ServiceRegistry"):
+        with (
+            patch("core.worker.subprocess_runner.DspyService") as mock_dspy_svc,
+            patch("core.worker.subprocess_runner.ServiceRegistry"),
+        ):
             run_service_in_subprocess(REAL_RUN_PAYLOAD, "art-8", q, "fork")
 
         # DspyService constructor must NOT have been called — fork service reused

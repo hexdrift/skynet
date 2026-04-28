@@ -23,7 +23,14 @@ class RegistrySnapshotResponse(BaseModel):
 
 
 def create_registry_router(*, registry: ServiceRegistry) -> APIRouter:
-    """Build the registry snapshot router."""
+    """Build the registry snapshot router.
+
+    Args:
+        registry: The ``ServiceRegistry`` whose snapshot should be exposed.
+
+    Returns:
+        A FastAPI ``APIRouter`` with the ``/registry`` route mounted.
+    """
     router = APIRouter()
 
     @router.get(
@@ -33,7 +40,11 @@ def create_registry_router(*, registry: ServiceRegistry) -> APIRouter:
         tags=["agent"],
     )
     def get_registry_snapshot() -> RegistrySnapshotResponse:
-        """Return sorted names of every registered module, metric, and optimizer."""
+        """Return sorted names of every registered module, metric, and optimizer.
+
+        Returns:
+            A ``RegistrySnapshotResponse`` with three sorted name lists.
+        """
         snap = registry.snapshot()
         return RegistrySnapshotResponse(
             modules=snap["modules"],

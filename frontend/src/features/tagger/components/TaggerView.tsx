@@ -21,7 +21,6 @@ export function TaggerView() {
       annotations={tagger.annotations}
       currentIndex={tagger.currentIndex}
       taggedCount={tagger.taggedCount}
-      distribution={tagger.distribution}
       onNavigate={tagger.navigate}
       onGoTo={tagger.goTo}
       onJumpUntagged={tagger.jumpToUntagged}

@@ -1,29 +1,23 @@
 "use client";
 
-/**
- * Loading state component
- * Displays skeleton loaders for different content types
- * Uses boneyard-js Skeleton component under the hood
- */
-
-import { Skeleton } from "boneyard-js/react";
+import { msg } from "@/shared/lib/messages";
 
 interface LoadingStateProps {
-  variant: 'table' | 'card' | 'chart' | 'text';
+  variant: "table" | "card" | "chart" | "text";
   rows?: number;
   className?: string;
 }
 
 export function LoadingState({ variant, rows = 3, className = "" }: LoadingStateProps) {
-  if (variant === 'chart') {
+  if (variant === "chart") {
     return (
       <div className={`h-[300px] flex items-center justify-center ${className}`}>
-        <span className="text-sm text-muted-foreground">טוען גרפים...</span>
+        <span className="text-sm text-muted-foreground">{msg("shared.loading.charts")}</span>
       </div>
     );
   }
 
-  if (variant === 'text') {
+  if (variant === "text") {
     return (
       <div className={`space-y-2 ${className}`}>
         {Array.from({ length: rows }).map((_, i) => (
@@ -33,7 +27,7 @@ export function LoadingState({ variant, rows = 3, className = "" }: LoadingState
     );
   }
 
-  if (variant === 'card') {
+  if (variant === "card") {
     return (
       <div className={`space-y-3 ${className}`}>
         {Array.from({ length: rows }).map((_, i) => (

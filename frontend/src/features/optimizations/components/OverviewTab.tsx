@@ -1,18 +1,8 @@
 "use client";
 
-/**
- * Overview tab body — the live progress block, completed pipeline
- * timeline, single-run results, score progression chart, and the
- * grid-overview hand-off.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Takes the job plus
- * the derived score points and two callbacks (stage click, pair
- * select); internal state lives in the parent page.
- */
-
 import dynamic from "next/dynamic";
 import { Activity, Clock, Database, MessageSquare, Timer, TrendingUp, Zap } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationStatusResponse } from "@/shared/types/api";
@@ -26,6 +16,7 @@ import { GridOverview } from "./GridOverview";
 import { GridLiveChart } from "./GridLiveChart";
 import { InfoCard } from "./ui-primitives";
 import { PipelineStages, computeStageTimestamps } from "./PipelineStages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 const ScoreChart = dynamic(() => import("@/shared/ui/score-chart").then((m) => m.ScoreChart), {
   ssr: false,
@@ -56,12 +47,20 @@ export function OverviewTab({
       <FadeIn>
         <p className="text-sm text-muted-foreground">
           {isActive
-            ? `ה${TERMS.optimization} רצה כעת — ניתן לעקוב אחר ההתקדמות בזמן אמת.`
+            ? formatMsg("auto.features.optimizations.components.overviewtab.template.1", {
+                p1: TERMS.optimization,
+              })
             : job.status === "cancelled"
-              ? `ה${TERMS.optimization} בוטלה — זה המצב שהיה ברגע הביטול.`
+              ? formatMsg("auto.features.optimizations.components.overviewtab.template.2", {
+                  p1: TERMS.optimization,
+                })
               : job.status === "failed"
-                ? `ה${TERMS.optimization} נכשלה.`
-                : `תוצאות ה${TERMS.optimization} וציוני הביצוע.`}
+                ? formatMsg("auto.features.optimizations.components.overviewtab.template.3", {
+                    p1: TERMS.optimization,
+                  })
+                : formatMsg("auto.features.optimizations.components.overviewtab.template.4", {
+                    p1: TERMS.optimization,
+                  })}
         </p>
       </FadeIn>
 
@@ -123,29 +122,32 @@ export function OverviewTab({
             >
               {tqdmN != null && tqdmTotal != null && (
                 <InfoCard
-                  label="צעד"
+                  label={msg("auto.features.optimizations.components.overviewtab.literal.1")}
                   value={`${tqdmN}/${tqdmTotal}`}
                   icon={<Activity className="size-3.5" />}
                 />
               )}
               {tqdmElapsed != null && (
                 <InfoCard
-                  label="זמן שעבר"
+                  label={msg("auto.features.optimizations.components.overviewtab.literal.2")}
                   value={formatDuration(tqdmElapsed)}
                   icon={<Timer className="size-3.5" />}
                 />
               )}
               {tqdmRemaining != null && (
                 <InfoCard
-                  label="נותר"
+                  label={msg("auto.features.optimizations.components.overviewtab.literal.3")}
                   value={formatDuration(Number(tqdmRemaining))}
                   icon={<Clock className="size-3.5" />}
                 />
               )}
               {tqdmRate != null && (
                 <InfoCard
-                  label="קצב"
-                  value={`${tqdmRate.toFixed(2)}/שנ׳`}
+                  label={msg("auto.features.optimizations.components.overviewtab.literal.4")}
+                  value={formatMsg(
+                    "auto.features.optimizations.components.overviewtab.template.5",
+                    { p1: tqdmRate.toFixed(2) },
+                  )}
                   icon={<Zap className="size-3.5" />}
                 />
               )}
@@ -158,7 +160,7 @@ export function OverviewTab({
               )}
               {trainCount != null && (
                 <InfoCard
-                  label="נתונים"
+                  label={msg("auto.features.optimizations.components.overviewtab.literal.5")}
                   value={`${trainCount}/${valCount}/${testCount}`}
                   icon={<Database className="size-3.5" />}
                 />
@@ -192,17 +194,29 @@ export function OverviewTab({
             <div className="grid grid-cols-2 gap-2.5">
               {job.result.num_lm_calls != null && (
                 <InfoCard
-                  label={<HelpTip text={tip("lm.calls_count")}>קריאות למודל שפה</HelpTip>}
-                  value={`${job.result.num_lm_calls} קריאות`}
+                  label={
+                    <HelpTip text={tip("lm.calls_count")}>
+                      {msg("auto.features.optimizations.components.overviewtab.1")}
+                    </HelpTip>
+                  }
+                  value={formatMsg(
+                    "auto.features.optimizations.components.overviewtab.template.6",
+                    { p1: job.result.num_lm_calls },
+                  )}
                   icon={<MessageSquare className="size-3.5" />}
                 />
               )}
               {job.result.avg_response_time_ms != null && (
                 <InfoCard
                   label={
-                    <HelpTip text={tip("lm.avg_response_time")}>זמן תגובה ממוצע לקריאה</HelpTip>
+                    <HelpTip text={tip("lm.avg_response_time")}>
+                      {msg("auto.features.optimizations.components.overviewtab.2")}
+                    </HelpTip>
                   }
-                  value={`${(job.result.avg_response_time_ms / 1000).toFixed(1)} שניות לקריאה`}
+                  value={formatMsg(
+                    "auto.features.optimizations.components.overviewtab.template.7",
+                    { p1: (job.result.avg_response_time_ms / 1000).toFixed(1) },
+                  )}
                   icon={<Timer className="size-3.5" />}
                 />
               )}
@@ -212,7 +226,7 @@ export function OverviewTab({
 
       {job.status === "success" && job.optimization_type === "run" && job.result && (
         <div data-tutorial="score-cards">
-          <StaggerContainer className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StaggerContainer className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <StaggerItem>
               <TiltCard className=" rounded-xl border border-border/50 bg-card p-6 text-center">
                 <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
@@ -238,7 +252,9 @@ export function OverviewTab({
                 className={`rounded-xl border p-6 text-center ${(job.result.metric_improvement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
               >
                 <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
-                  <HelpTip text={tip("score.improvement")}>שיפור</HelpTip>
+                  <HelpTip text={tip("score.improvement")}>
+                    {msg("auto.features.optimizations.components.overviewtab.3")}
+                  </HelpTip>
                 </p>
                 <p
                   className={`text-3xl font-mono font-bold ${(job.result.metric_improvement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
@@ -265,7 +281,9 @@ export function OverviewTab({
               <CardTitle className="text-base flex items-center gap-2">
                 <TrendingUp className="size-4 text-[#7C6350]" aria-hidden="true" />
                 <HelpTip text={tip("score.progression")}>
-                  <span className="font-bold tracking-tight">מהלך הציונים</span>
+                  <span className="font-bold tracking-tight">
+                    {msg("auto.features.optimizations.components.overviewtab.4")}
+                  </span>
                 </HelpTip>
               </CardTitle>
             </CardHeader>

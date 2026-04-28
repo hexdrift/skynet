@@ -6,13 +6,11 @@ export { MinimizedPill } from "./components/MinimizedPill";
 export { OverrideDot } from "./components/OverrideDot";
 export { PresenceStrip } from "./components/PresenceStrip";
 export { SubmitSummaryCard } from "./components/SubmitSummaryCard";
+export { ToolCallRow } from "./components/ToolCallRow";
 export { TrustToggle } from "./components/TrustToggle";
 export { useFirstRunHint } from "./hooks/use-first-run-hint";
 export { useGeneralistAgent } from "./hooks/use-generalist-agent";
-export {
-  GeneralistPanelProvider,
-  useGeneralistPanelState,
-} from "./hooks/use-panel-state";
+export { GeneralistPanelProvider, useGeneralistPanelState } from "./hooks/use-panel-state";
 export {
   TRUST_MODE_DESCRIPTION,
   TRUST_MODE_HUE,

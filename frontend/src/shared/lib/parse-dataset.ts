@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 
 export interface ParsedDataset {
   columns: string[];
-  rows: Record<string, unknown>[];
+  rows: Array<Record<string, unknown>>;
   rowCount: number;
 }
 
@@ -73,7 +73,7 @@ export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
     const sheetName = workbook.SheetNames[0];
     if (!sheetName) throw new Error("Excel file has no sheets");
     const sheet = workbook.Sheets[sheetName]!;
-    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet);
+    const rows: Array<Record<string, unknown>> = XLSX.utils.sheet_to_json(sheet);
     const columns = rows.length > 0 ? Object.keys(rows[0] ?? {}) : [];
     return { columns, rows, rowCount: rows.length };
   }

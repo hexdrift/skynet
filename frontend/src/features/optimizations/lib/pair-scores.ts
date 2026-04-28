@@ -4,7 +4,6 @@ export interface PairScores {
   pair_index: number;
   quality: number;
   speed: number | null;
-  harmonic: number | null;
 }
 
 export interface GridScoring {
@@ -22,7 +21,7 @@ function normalizeQuality(v: number | undefined | null): number {
 }
 
 // Speed score: fastest pair = 1.0, others scale as min_time / their_time.
-// Pairs without latency data get speed = null so they can't win speed/overall.
+// Pairs without latency data get speed = null so they can't win speed.
 export function computePairScores(pairs: PairResult[]): GridScoring {
   const successful = pairs.filter((p) => !p.error && p.optimized_test_metric != null);
   if (successful.length === 0) {
@@ -46,12 +45,10 @@ export function computePairScores(pairs: PairResult[]): GridScoring {
     const quality = normalizeQuality(p.optimized_test_metric);
     const t = p.avg_response_time_ms;
     const speed = minTime != null && t != null && t > 0 ? minTime / t : null;
-    const harmonic =
-      speed != null && speed > 0 && quality > 0 ? (2 * quality * speed) / (quality + speed) : null;
-    byIndex[p.pair_index] = { pair_index: p.pair_index, quality, speed, harmonic };
+    byIndex[p.pair_index] = { pair_index: p.pair_index, quality, speed };
   }
 
-  const pickMax = (key: "quality" | "speed" | "harmonic"): number | null => {
+  const pickMax = (key: "quality" | "speed"): number | null => {
     let best: PairScores | null = null;
     for (const s of Object.values(byIndex)) {
       const v = s[key];
@@ -63,8 +60,12 @@ export function computePairScores(pairs: PairResult[]): GridScoring {
 
   const qualityWinner = pickMax("quality");
   const speedWinner = pickMax("speed");
-  // When speed data is missing across the board, overall falls back to quality.
-  const overallWinner = hasSpeedData ? pickMax("harmonic") : qualityWinner;
 
-  return { byIndex, qualityWinner, speedWinner, overallWinner, hasSpeedData };
+  return {
+    byIndex,
+    qualityWinner,
+    speedWinner,
+    overallWinner: qualityWinner,
+    hasSpeedData,
+  };
 }

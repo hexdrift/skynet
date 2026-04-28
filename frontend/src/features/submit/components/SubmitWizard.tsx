@@ -2,7 +2,9 @@
 
 import { ChevronLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { TERMS } from "@/shared/lib/terms";
+import { msg } from "@/shared/lib/messages";
 
 import { useSubmitWizard } from "../hooks/use-submit-wizard";
 import { slideVariants } from "../constants";
@@ -39,9 +41,9 @@ export function SubmitWizard() {
       className={`space-y-6 ${containerWidthClass} mx-auto pb-8 transition-[max-width] duration-300`}
     >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <a href="/" className="hover:text-foreground transition-colors">
-          לוח בקרה
-        </a>
+        <Link href="/" className="hover:text-foreground transition-colors">
+          {msg("auto.features.submit.components.submitwizard.1")}
+        </Link>
         <ChevronLeft className="h-3 w-3" />
         <span className="text-foreground font-medium">{TERMS.notificationNewOpt}</span>
       </div>
@@ -69,8 +71,7 @@ export function SubmitWizard() {
       {/* Submit splash overlay — portal to body so it covers sidebar + header */}
       <SubmitSplash w={w} />
 
-      {/* Floating recommendation card (PER-11 Feature A) — only appears once
-          the user has drafted a signature in the code step. */}
+      {/* Only renders once the user has drafted a signature in the code step. */}
       <WizardRecommendationCard w={w} />
     </div>
   );

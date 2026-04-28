@@ -45,10 +45,20 @@ class PublicDashboardPoint(BaseModel):
 
 
 class PublicDashboardResponse(BaseModel):
+    """Envelope for ``GET /dashboard/public`` — the cross-user cluster map."""
+
     points: list[PublicDashboardPoint]
 
 
 def create_dashboard_router(*, job_store: Any) -> APIRouter:
+    """Build the public cross-user dashboard router.
+
+    Args:
+        job_store: Backing job store used to fetch the public dashboard payload.
+
+    Returns:
+        A configured :class:`APIRouter` exposing ``/dashboard/public``.
+    """
     router = APIRouter()
 
     @router.get(
@@ -58,7 +68,11 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
         summary="Anonymous cross-user cluster map",
     )
     def public_dashboard() -> PublicDashboardResponse:
-        """PCA-projected job points for the /explore page."""
+        """PCA-projected job points for the /explore page.
+
+        Returns:
+            A :class:`PublicDashboardResponse` with one point per embedded job.
+        """
         data = fetch_public_dashboard(job_store=job_store)
         return PublicDashboardResponse(
             points=[PublicDashboardPoint(**p) for p in data["points"]],

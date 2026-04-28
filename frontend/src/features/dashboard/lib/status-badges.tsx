@@ -1,10 +1,11 @@
 "use client";
 
 import type React from "react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/shared/ui/primitives/badge";
 import { STATUS_LABELS } from "@/shared/constants/job-status";
 import type { OptimizationSummaryResponse, JobStatus } from "@/shared/types/api";
 import { formatPercent } from "@/shared/lib";
+import { msg } from "@/shared/lib/messages";
 
 export function statusBadge(status: JobStatus) {
   const label = STATUS_LABELS[status] ?? status;
@@ -54,11 +55,11 @@ export function typeBadge(jobType: string) {
   if (jobType === "grid_search") {
     return (
       <Badge variant="outline" className="border-primary/30 text-primary">
-        סריקה
+        {msg("auto.features.dashboard.lib.status.badges.1")}
       </Badge>
     );
   }
-  return <Badge variant="secondary">ריצה</Badge>;
+  return <Badge variant="secondary">{msg("auto.features.dashboard.lib.status.badges.2")}</Badge>;
 }
 
 /**

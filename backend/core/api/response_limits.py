@@ -38,7 +38,14 @@ AGENT_MAX_CODE_PREVIEW = 800
 
 
 def _size_hint(dropped_chars: int) -> str:
-    """Render a compact "…+12KB" / "…+340 chars" suffix for truncated strings."""
+    """Format a human-readable hint for the number of truncated characters.
+
+    Args:
+        dropped_chars: How many characters were dropped from the original.
+
+    Returns:
+        A short suffix telling the agent how to fetch the full payload.
+    """
     if dropped_chars >= 1024:
         return f"… +{dropped_chars // 1024}KB truncated; call with view=full to see all"
     return f"… +{dropped_chars} chars truncated; call with view=full to see all"
@@ -50,6 +57,14 @@ def truncate_text(value: str | None, limit: int = AGENT_MAX_TEXT) -> str | None:
     The hint tells the agent the exact number of dropped chars so it can
     decide whether to re-fetch with ``view=full`` or move on. ``None`` /
     empty inputs pass through untouched.
+
+    Args:
+        value: The text to clip, or ``None``.
+        limit: Maximum kept characters before clipping.
+
+    Returns:
+        ``None`` for ``None`` inputs, the original string when within ``limit``,
+        otherwise the clipped prefix with a trailing size-hint suffix.
     """
     if value is None:
         return None
@@ -64,8 +79,15 @@ def truncate_text(value: str | None, limit: int = AGENT_MAX_TEXT) -> str | None:
 def cap_list(items: list[T], limit: int = AGENT_DEFAULT_LIST) -> tuple[list[T], bool, int]:
     """Clip a list to ``limit`` items and report the full count.
 
-    Returns ``(clipped, truncated, total)``. The caller splices ``total``
-    and ``truncated`` back into the envelope so the agent can paginate.
+    The caller splices ``total`` and ``truncated`` back into the
+    envelope so the agent can paginate.
+
+    Args:
+        items: The list to clip.
+        limit: Maximum kept items.
+
+    Returns:
+        A ``(clipped_items, was_truncated, total_count)`` tuple.
     """
     total = len(items)
     if total <= limit:
@@ -83,19 +105,32 @@ def clamp_limit(
     ``None`` falls back to ``default``; anything above ``ceiling`` is
     silently clamped. Negative / zero values also snap to ``default`` —
     the agent is not expected to handle a pagination error from us.
+
+    Args:
+        requested: The caller-supplied limit, or ``None`` if unspecified.
+        default: Fallback used when ``requested`` is missing or non-positive.
+        ceiling: Hard upper bound applied to ``requested``.
+
+    Returns:
+        The resolved positive integer limit, never above ``ceiling``.
     """
     if requested is None or requested <= 0:
         return default
     return min(requested, ceiling)
 
 
-def strip_large_fields(
-    payload: dict[str, Any], drop_keys: tuple[str, ...]
-) -> dict[str, Any]:
+def strip_large_fields(payload: dict[str, Any], drop_keys: tuple[str, ...]) -> dict[str, Any]:
     """Return a shallow copy of ``payload`` with oversized fields removed.
 
     Used to drop pickle blobs, base64 artefacts, or expanded log arrays
     from a response that the agent rarely needs. The corresponding full
     field is still reachable via a dedicated artifact endpoint.
+
+    Args:
+        payload: The original response dict.
+        drop_keys: Keys to remove from the shallow copy.
+
+    Returns:
+        A new dict identical to ``payload`` minus any keys listed in ``drop_keys``.
     """
     return {k: v for k, v in payload.items() if k not in drop_keys}

@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import {
-  getPublicDashboard,
-  invalidateCache,
-  type PublicDashboardPoint,
-} from "@/shared/lib/api";
+import { getPublicDashboard, invalidateCache, type PublicDashboardPoint } from "@/shared/lib/api";
 
 const POLL_INTERVAL_MS = 30000;
 
@@ -57,7 +53,7 @@ export function usePublicDashboard(): PublicDashboardState {
       }
     };
 
-    load();
+    void load();
     timer = setInterval(tick, POLL_INTERVAL_MS);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibility);

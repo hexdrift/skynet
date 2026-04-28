@@ -1,29 +1,32 @@
+"""Application entrypoint for the Skynet backend.
+
+Loads environment variables from ``backend/.env``, configures logging, builds
+the ``ServiceRegistry`` and the FastAPI ``app`` object, and exposes
+``run_server`` as the script entrypoint that boots Uvicorn.
+"""
+
 from __future__ import annotations
 
-import logging
-import os
 from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
 
 from core import ServiceRegistry, create_app
+from core.api.observability import configure_logging
 
 load_dotenv(Path(__file__).parent / ".env")
 
-# [WORKER-FIX] configure logging so worker thread logs actually appear in OpenShift
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
+# Must run before create_app() so loggers acquired during router import
+# inherit the configured formatter, not Uvicorn's default.
+configure_logging()
 
 registry = ServiceRegistry()
 app = create_app(registry=registry)
 
 
 def run_server() -> None:
-    """Start the FastAPI server via Uvicorn."""
+    """Boot the FastAPI application using Uvicorn on ``0.0.0.0:8000``."""
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
 
 

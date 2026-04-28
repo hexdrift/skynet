@@ -1,9 +1,3 @@
-/**
- * Debounce hook
- * Delays updating a value until after a specified delay
- * Used for search inputs and other user-driven updates
- */
-
 import { useEffect, useState } from "react";
 import { ANIMATION } from "../constants";
 

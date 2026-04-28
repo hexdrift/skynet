@@ -9,7 +9,7 @@ override it on final submission.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from .common import ColumnMapping, SplitCounts, SplitFractions
 
 
-class ProfileWarningCode(str, Enum):
+class ProfileWarningCode(StrEnum):
     """Machine-readable codes for profiler warnings surfaced to the UI."""
 
     too_small = "too_small"
@@ -47,6 +47,13 @@ class TargetColumnProfile(BaseModel):
     )
 
 
+class InputColumnProfile(BaseModel):
+    """Summary of an input column, surfacing its detected modality."""
+
+    name: str
+    kind: str = Field(description="One of 'text', 'image'.")
+
+
 class DatasetProfile(BaseModel):
     """Structural summary of an uploaded dataset."""
 
@@ -64,6 +71,14 @@ class DatasetProfile(BaseModel):
         default_factory=list,
         description="Profile for every output column, in mapping order.",
     )
+    inputs: list[InputColumnProfile] = Field(
+        default_factory=list,
+        description=(
+            "Profile for every input column, in mapping order. Surfaces the "
+            "detected modality so the wizard can render an Image badge and "
+            "the signature generator can emit dspy.Image typed fields."
+        ),
+    )
     duplicate_count: int = Field(default=0, ge=0)
     warnings: list[ProfileWarning] = Field(default_factory=list)
 
@@ -77,17 +92,11 @@ class SplitPlan(BaseModel):
     counts: SplitCounts
     stratify: bool = Field(
         default=False,
-        description=(
-            "When true, the planner recommends stratified sampling so rare "
-            "classes survive in val and test."
-        ),
+        description=("When true, the planner recommends stratified sampling so rare classes survive in val and test."),
     )
     stratify_column: str | None = Field(
         default=None,
-        description=(
-            "Dataset column whose values define the strata when stratify is "
-            "true. Null otherwise."
-        ),
+        description=("Dataset column whose values define the strata when stratify is true. Null otherwise."),
     )
     rationale: list[str] = Field(
         default_factory=list,

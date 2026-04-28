@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -23,12 +24,9 @@ export function OverrideDot({ field, className }: OverrideDotProps) {
 
   return (
     <span
-      aria-label="ערך זה שונה ידנית מאחרי העוזר"
-      title="ערך זה שונה ידנית מאחרי העוזר"
-      className={cn(
-        "inline-block size-1.5 rounded-full bg-[#8C7A6B] shrink-0",
-        className,
-      )}
+      aria-label={msg("auto.features.agent.panel.components.overridedot.literal.1")}
+      title={msg("auto.features.agent.panel.components.overridedot.literal.2")}
+      className={cn("inline-block size-1.5 rounded-full bg-[#8C7A6B] shrink-0", className)}
     />
   );
 }

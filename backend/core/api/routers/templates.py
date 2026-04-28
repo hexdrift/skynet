@@ -7,18 +7,18 @@ also ensures the backing table exists by calling
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from ...i18n import t
 from ...models import TemplateCreateRequest, TemplateResponse
 from ...storage.models import Base as StorageBase
 from ...storage.models import TemplateModel
+from ..errors import DomainError
 from ..response_limits import (
     AGENT_DEFAULT_LIST,
     AGENT_MAX_CODE_PREVIEW,
@@ -36,6 +36,12 @@ def _compact_template_config(config: dict[str, Any] | None) -> dict[str, Any]:
     a truncated preview so the agent can tell "what kind of template is this"
     without pulling the full source. The REST UI calls ``GET /templates/{id}``
     with ``view=full`` to get the unabridged config.
+
+    Args:
+        config: Stored template config dict, or ``None``.
+
+    Returns:
+        A new dict with ``signature_code`` and ``metric_code`` truncated.
     """
     if not config:
         return config or {}
@@ -45,6 +51,35 @@ def _compact_template_config(config: dict[str, Any] | None) -> dict[str, Any]:
         if isinstance(value, str) and value:
             out[key] = truncate_text(value, AGENT_MAX_CODE_PREVIEW)
     return out
+
+
+def _row_to_template_response(
+    row: TemplateModel,
+    *,
+    compact: bool,
+) -> TemplateResponse:
+    """Materialise an ORM row into a ``TemplateResponse``.
+
+    ``Column[T]`` descriptors on the ``TemplateModel`` class read as the
+    underlying Python ``T`` at instance level; this helper centralises the
+    cast so each route doesn't repeat the boilerplate.
+
+    Args:
+        row: A ``TemplateModel`` instance loaded via SQLAlchemy.
+        compact: When ``True``, code blocks inside ``config`` are truncated.
+
+    Returns:
+        The response model the route returns to clients.
+    """
+    config = cast(dict[str, Any] | None, row.config)
+    return TemplateResponse(
+        template_id=cast(str, row.template_id),
+        name=cast(str, row.name),
+        description=cast("str | None", row.description),
+        username=cast(str, row.username),
+        config=_compact_template_config(config) if compact else (config or {}),
+        created_at=cast(datetime, row.created_at),
+    )
 
 
 class TemplateUpdateRequest(BaseModel):
@@ -68,8 +103,20 @@ class ApplyTemplateResponse(BaseModel):
 
 
 def create_templates_router(*, job_store) -> APIRouter:
-    """Build the templates' router."""
-    # Ensure the templates table exists before any request hits the router.
+    """Build the templates' router.
+
+    Also triggers ``StorageBase.metadata.create_all`` so the backing
+    ``templates`` table is guaranteed to exist before any request hits
+    the router — safe on repeat calls because ``create_all`` is a no-op
+    when the table is already present.
+
+    Args:
+        job_store: Job-store instance whose ``engine`` backs the templates
+            table.
+
+    Returns:
+        A FastAPI ``APIRouter`` exposing the template CRUD routes.
+    """
     StorageBase.metadata.create_all(job_store.engine)
 
     router = APIRouter()
@@ -82,9 +129,16 @@ def create_templates_router(*, job_store) -> APIRouter:
         tags=["agent"],
     )
     def create_template(req: TemplateCreateRequest) -> TemplateResponse:
-        """Save a submission config as a named template for re-use. Returns HTTP 201 with a UUID and timestamp."""
+        """Save a submission config as a named template for re-use.
+
+        Args:
+            req: New-template body validated by FastAPI.
+
+        Returns:
+            The persisted template echoed back to the caller.
+        """
         template_id = str(uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with Session(job_store.engine) as session:
             model = TemplateModel(
@@ -130,12 +184,21 @@ def create_templates_router(*, job_store) -> APIRouter:
             ),
         ),
     ) -> list[TemplateResponse]:
-        """Return templates ordered newest-first. Omit ``username`` to see all templates.
+        """Return saved templates ordered newest-first.
 
-        By default (``view=compact``) embedded ``signature_code`` / ``metric_code``
-        in each template's ``config`` is truncated to a short preview so long
-        snippets don't fill the agent context. UI callers that need the full
-        Python source pass ``view=full``.
+        By default (``view=compact``) embedded ``signature_code`` /
+        ``metric_code`` in each template's ``config`` is truncated to a
+        short preview so long snippets don't fill the agent context. UI
+        callers that need the full Python source pass ``view=full``.
+
+        Args:
+            username: Optional owner filter.
+            limit: Page size, clamped to ``AGENT_MAX_LIST``.
+            offset: Number of templates to skip.
+            view: ``compact`` or ``full`` projection.
+
+        Returns:
+            A list of ``TemplateResponse`` rows ordered ``created_at`` desc.
         """
         resolved_limit = clamp_limit(limit)
         compact = view != "full"
@@ -144,17 +207,7 @@ def create_templates_router(*, job_store) -> APIRouter:
             if username:
                 query = query.filter(TemplateModel.username == username)
             rows = query.offset(offset).limit(resolved_limit).all()
-            return [
-                TemplateResponse(
-                    template_id=r.template_id,
-                    name=r.name,
-                    description=r.description,
-                    username=r.username,
-                    config=_compact_template_config(r.config) if compact else r.config,
-                    created_at=r.created_at,
-                )
-                for r in rows
-            ]
+            return [_row_to_template_response(r, compact=compact) for r in rows]
 
     @router.get(
         "/templates/{template_id}",
@@ -172,25 +225,28 @@ def create_templates_router(*, job_store) -> APIRouter:
             ),
         ),
     ) -> TemplateResponse:
-        """Fetch a single template by UUID. 404 if not found.
+        """Fetch a single template by UUID.
 
-        Defaults to a compact projection that truncates large code fields so
-        the agent can introspect a template without burning context. Pass
-        ``view=full`` to retrieve the complete signature/metric source.
+        Defaults to a compact projection that truncates large code fields
+        so the agent can introspect a template without burning context.
+        Pass ``view=full`` to retrieve the complete signature/metric source.
+
+        Args:
+            template_id: Template UUID to fetch.
+            view: ``compact`` or ``full`` projection.
+
+        Returns:
+            The matching ``TemplateResponse``.
+
+        Raises:
+            DomainError: 404 when the template ID is unknown.
         """
         compact = view != "full"
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
-                raise HTTPException(status_code=404, detail=t("template.not_found"))
-            return TemplateResponse(
-                template_id=row.template_id,
-                name=row.name,
-                description=row.description,
-                username=row.username,
-                config=_compact_template_config(row.config) if compact else row.config,
-                created_at=row.created_at,
-            )
+                raise DomainError("template.not_found", status=404)
+            return _row_to_template_response(row, compact=compact)
 
     @router.delete(
         "/templates/{template_id}",
@@ -202,13 +258,25 @@ def create_templates_router(*, job_store) -> APIRouter:
         template_id: str,
         username: str = Query(..., description="Username of the requester — must match the template's owner"),
     ) -> dict:
-        """Delete a template. ``username`` must match the owner (403 otherwise). 404 if not found."""
+        """Delete a template owned by the requester.
+
+        Args:
+            template_id: Template UUID to delete.
+            username: Caller's username — must match the template's owner.
+
+        Returns:
+            ``{"template_id": id, "deleted": True}`` on success.
+
+        Raises:
+            DomainError: 404 when unknown, 403 when ``username`` doesn't
+                own the template.
+        """
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
-                raise HTTPException(status_code=404, detail=t("template.not_found"))
+                raise DomainError("template.not_found", status=404)
             if row.username != username:
-                raise HTTPException(status_code=403, detail=t("template.cannot_delete_others"))
+                raise DomainError("template.cannot_delete_others", status=403)
             session.delete(row)
             session.commit()
         return {"template_id": template_id, "deleted": True}
@@ -221,38 +289,39 @@ def create_templates_router(*, job_store) -> APIRouter:
         tags=["agent"],
     )
     def update_template(template_id: str, req: TemplateUpdateRequest) -> TemplateResponse:
-        """Patch a template's name/description/config. Owner-only (403 otherwise).
+        """Patch a template's name, description, and/or config.
 
         At least one of ``name``, ``description``, or ``config`` must be
-        supplied. Missing fields are left untouched. 404 if unknown.
+        supplied; missing fields are left untouched.
+
+        Args:
+            template_id: Template UUID to update.
+            req: Partial update body.
+
+        Returns:
+            The updated ``TemplateResponse``.
+
+        Raises:
+            DomainError: 422 when no updatable field is supplied, 404 if
+                unknown, 403 if the requester is not the owner.
         """
         if req.name is None and req.description is None and req.config is None:
-            raise HTTPException(
-                status_code=422,
-                detail=t("template.update_requires_field"),
-            )
+            raise DomainError("template.update_requires_field", status=422)
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
-                raise HTTPException(status_code=404, detail=t("template.not_found"))
+                raise DomainError("template.not_found", status=404)
             if row.username != req.username:
-                raise HTTPException(status_code=403, detail=t("template.cannot_update_others"))
+                raise DomainError("template.cannot_update_others", status=403)
             if req.name is not None:
-                row.name = req.name.strip()
+                row.name = cast(Any, req.name.strip())
             if req.description is not None:
-                row.description = req.description
+                row.description = cast(Any, req.description)
             if req.config is not None:
-                row.config = req.config
+                row.config = cast(Any, req.config)
             session.commit()
             session.refresh(row)
-            return TemplateResponse(
-                template_id=row.template_id,
-                name=row.name,
-                description=row.description,
-                username=row.username,
-                config=row.config,
-                created_at=row.created_at,
-            )
+            return _row_to_template_response(row, compact=False)
 
     @router.post(
         "/templates/{template_id}/apply",
@@ -262,18 +331,27 @@ def create_templates_router(*, job_store) -> APIRouter:
         tags=["agent"],
     )
     def apply_template(template_id: str) -> ApplyTemplateResponse:
-        """Return a ``wizard_state`` patch that prefills the submit wizard from a template.
+        """Return a ``wizard_state`` patch that prefills the submit wizard.
 
-        The template's stored config may include signature_code, metric_code,
-        column_mapping, model config, optimizer, and an optional job name.
-        Only keys the wizard knows about are projected. 404 if unknown.
+        The template's stored config may include signature_code,
+        metric_code, column_mapping, model config, optimizer, and an
+        optional job name. Only keys the wizard knows about are projected.
+
+        Args:
+            template_id: Template UUID to load.
+
+        Returns:
+            An ``ApplyTemplateResponse`` carrying the wizard-state patch.
+
+        Raises:
+            DomainError: 404 when the template is unknown.
         """
         with Session(job_store.engine) as session:
             row = session.query(TemplateModel).filter(TemplateModel.template_id == template_id).first()
             if not row:
-                raise HTTPException(status_code=404, detail=t("template.not_found"))
-            cfg: dict[str, Any] = dict(row.config or {})
-            template_name = row.name
+                raise DomainError("template.not_found", status=404)
+            cfg: dict[str, Any] = dict(cast(dict[str, Any] | None, row.config) or {})
+            template_name = cast(str, row.name)
 
         wizard_state: dict[str, Any] = {}
 

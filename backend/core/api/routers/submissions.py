@@ -7,10 +7,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
@@ -40,17 +41,20 @@ from ...constants import (
     PAYLOAD_OVERVIEW_USERNAME,
 )
 from ...i18n import t
+from ...i18n_keys import I18nKey
 from ...models import (
     GridSearchRequest,
     OptimizationStatus,
     OptimizationSubmissionResponse,
     RunRequest,
 )
-from ...models.common import ModelConfig
+from ...models.common import ModelConfig, OptimizationType
 from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
+from ...service_gateway.safe_exec import validate_signature_code
 from ...worker import get_worker
+from ..errors import DomainError
 from ..model_catalog import get_catalog_cached
 from ._helpers import compute_task_fingerprint, enforce_user_quota, strip_api_key
 
@@ -60,27 +64,64 @@ logger = logging.getLogger(__name__)
 def _catalog_models_as_configs() -> list[ModelConfig]:
     """Return every available catalog model wrapped as a ``ModelConfig``.
 
-    Queries the shared catalog cache and maps each entry to a minimal
-    ``ModelConfig`` whose ``name`` is the canonical LiteLLM identifier.
     Used by the grid-search route to expand ``use_all_available_*`` flags
     into concrete model lists.
 
     Returns:
-        One ``ModelConfig`` per model the catalog currently marks as
-        available, in catalog order.
+        A list of ``ModelConfig`` instances, one per available catalog model.
 
     Raises:
-        HTTPException: ``400`` when the catalog reports no available models,
-            which usually means no provider API keys are configured.
+        DomainError: 400 ``submit.no_models_available`` when the catalog
+            reports no available models (usually no provider API keys configured).
     """
     catalog = get_catalog_cached()
     configs = [ModelConfig(name=entry.value) for entry in catalog.models]
     if not configs:
-        raise HTTPException(
-            status_code=400,
-            detail=t("submit.no_models_available"),
-        )
+        raise DomainError("submit.no_models_available", status=400)
     return configs
+
+
+def _enforce_vision_capability(
+    *,
+    signature_code: str,
+    candidate_models: list[ModelConfig],
+) -> None:
+    """Reject submissions whose signature has dspy.Image inputs but a non-vision model.
+
+    Parses ``signature_code`` once via the safe-exec subprocess, then — only when
+    ``dspy.Image`` typed inputs are present — looks up every candidate model in
+    the catalog and requires ``supports_vision`` for each one.
+
+    Args:
+        signature_code: User-provided DSPy Signature source.
+        candidate_models: Models that would receive image-bearing inputs.
+
+    Raises:
+        DomainError: 400 ``submission.vision_required`` listing offending
+            models when any candidate lacks vision support.
+    """
+    intro = validate_signature_code(signature_code)
+    image_fields = list(intro.image_input_fields)
+    if not image_fields:
+        return
+
+    catalog = get_catalog_cached()
+    vision_supported: dict[str, bool] = {entry.value: entry.supports_vision for entry in catalog.models}
+
+    offenders = sorted(
+        {
+            cfg.normalized_identifier()
+            for cfg in candidate_models
+            if not vision_supported.get(cfg.normalized_identifier(), False)
+        }
+    )
+    if offenders:
+        raise DomainError(
+            I18nKey.SUBMISSION_VISION_REQUIRED,
+            status=400,
+            fields=", ".join(image_fields),
+            model=", ".join(offenders),
+        )
 
 
 def _expand_catalog_grid_payload(payload: GridSearchRequest) -> None:
@@ -95,8 +136,8 @@ def _expand_catalog_grid_payload(payload: GridSearchRequest) -> None:
         payload: The grid-search request to mutate in place.
 
     Raises:
-        HTTPException: ``400`` when expansion is requested but the catalog
-            reports no available models.
+        DomainError: 400 when expansion is requested but no models are
+            available.
     """
     if not (payload.use_all_available_generation_models or payload.use_all_available_reflection_models):
         return
@@ -108,7 +149,16 @@ def _expand_catalog_grid_payload(payload: GridSearchRequest) -> None:
 
 
 def create_submissions_router(*, service, job_store) -> APIRouter:
-    """Build the submissions router."""
+    """Build the submissions router.
+
+    Args:
+        service: Optimization service used for synchronous validation.
+        job_store: Job-store instance used to persist new submissions.
+
+    Returns:
+        A FastAPI ``APIRouter`` exposing the ``/run`` and ``/grid-search``
+        endpoints.
+    """
     router = APIRouter()
 
     @router.post(
@@ -121,18 +171,33 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
     def submit_job(payload: RunRequest) -> OptimizationSubmissionResponse:
         """Queue one end-to-end DSPy optimization for background execution.
 
-        Validates synchronously, persists a job row, and enqueues the payload.
-        Returns HTTP 201 immediately; poll ``/optimizations/{id}/summary`` or
-        stream via ``/optimizations/{id}/stream`` for progress.
-        Security: ``model_settings.api_key`` is stripped from the persisted overview.
-        Errors: 400 (validation), 409 (quota), 422 (malformed body).
+        Validates synchronously, persists a job row, and enqueues the
+        payload. Returns HTTP 201 immediately; poll
+        ``/optimizations/{id}/summary`` or stream via
+        ``/optimizations/{id}/stream`` for progress. Security:
+        ``model_settings.api_key`` is stripped from the persisted overview.
+
+        Args:
+            payload: The run-request body validated by FastAPI.
+
+        Returns:
+            An ``OptimizationSubmissionResponse`` carrying the assigned id
+            and ``pending`` status.
+
+        Raises:
+            DomainError: 400 (validation), 409 (quota), 422 (malformed body).
         """
 
         try:
             service.validate_payload(payload)
         except (ServiceError, RegistryError) as exc:
             logger.warning("Payload validation failed: %s", exc)
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise DomainError("submission.validation_failed", status=400, error=str(exc)) from exc
+
+        _enforce_vision_capability(
+            signature_code=payload.signature_code,
+            candidate_models=[payload.model_settings],
+        )
 
         enforce_user_quota(job_store, payload.username)
 
@@ -197,9 +262,9 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
 
         return OptimizationSubmissionResponse(
             optimization_id=optimization_id,
-            optimization_type=OPTIMIZATION_TYPE_RUN,
+            optimization_type=cast(OptimizationType, OPTIMIZATION_TYPE_RUN),
             status=OptimizationStatus.pending,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             name=payload.name,
             username=payload.username,
             module_name=payload.module_name,
@@ -216,13 +281,23 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
     def submit_grid_search(payload: GridSearchRequest) -> OptimizationSubmissionResponse:
         """Queue a sweep over ``(generation_model, reflection_model)`` pairs.
 
-        Runs one optimization per Cartesian pair serially inside a single job.
-        When ``use_all_available_generation_models`` or
-        ``use_all_available_reflection_models`` is set, the server replaces the
-        matching list with every model currently available in the catalog
-        before validation or enqueue.
-        Same error handling as ``POST /run``: 400 (validation), 409 (quota), 422 (malformed body).
-        Poll ``/optimizations/{id}/summary`` for per-pair progress.
+        Runs one optimization per Cartesian pair serially inside a single
+        job. When ``use_all_available_generation_models`` or
+        ``use_all_available_reflection_models`` is set, the server replaces
+        the matching list with every model currently available in the
+        catalog before validation or enqueue. Poll
+        ``/optimizations/{id}/summary`` for per-pair progress.
+
+        Args:
+            payload: The grid-search request body validated by FastAPI.
+
+        Returns:
+            An ``OptimizationSubmissionResponse`` carrying the assigned id
+            and ``pending`` status.
+
+        Raises:
+            DomainError: 400 (validation/empty catalog), 409 (quota), 422
+                (malformed).
         """
         _expand_catalog_grid_payload(payload)
 
@@ -231,7 +306,12 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 service.validate_grid_search_payload(payload)
             except (ServiceError, RegistryError) as exc:
                 logger.warning("Grid search validation failed: %s", exc)
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+                raise DomainError("submission.validation_failed", status=400, error=str(exc)) from exc
+
+        _enforce_vision_capability(
+            signature_code=payload.signature_code,
+            candidate_models=list(payload.generation_models),
+        )
 
         enforce_user_quota(job_store, payload.username)
 
@@ -290,9 +370,9 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
 
         return OptimizationSubmissionResponse(
             optimization_id=optimization_id,
-            optimization_type=OPTIMIZATION_TYPE_GRID_SEARCH,
+            optimization_type=cast(OptimizationType, OPTIMIZATION_TYPE_GRID_SEARCH),
             status=OptimizationStatus.pending,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             name=payload.name,
             username=payload.username,
             module_name=payload.module_name,

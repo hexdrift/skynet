@@ -1,5 +1,7 @@
 """Telemetry models emitted while an optimization runs (progress events + log lines)."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 

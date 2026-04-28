@@ -1,19 +1,20 @@
+"""Tests for HealthResponse and QueueStatusResponse infra models."""
+
 from __future__ import annotations
 
+from core.models.constants import HEALTH_STATUS_OK
 from core.models.infra import HealthResponse, QueueStatusResponse
-from core.models.common import HEALTH_STATUS_OK
-
 
 
 def test_health_response_default_status_is_ok() -> None:
-    """Verify HealthResponse defaults status to the HEALTH_STATUS_OK constant."""
+    """Verify HealthResponse defaults its status to HEALTH_STATUS_OK."""
     resp = HealthResponse(registered_assets={"modules": [], "metrics": [], "optimizers": []})
 
     assert resp.status == HEALTH_STATUS_OK
 
 
 def test_health_response_stores_registered_assets() -> None:
-    """Verify HealthResponse stores the registered_assets dict as-is."""
+    """Verify HealthResponse persists the registered_assets mapping."""
     assets = {"modules": ["predict"], "metrics": ["accuracy"], "optimizers": ["gepa"]}
     resp = HealthResponse(registered_assets=assets)
 
@@ -27,9 +28,8 @@ def test_health_response_custom_status_accepted() -> None:
     assert resp.status == "degraded"
 
 
-
 def test_queue_status_response_stores_counts() -> None:
-    """Verify QueueStatusResponse stores all queue count fields."""
+    """Verify QueueStatusResponse stores all queue counts and the workers_alive flag."""
     resp = QueueStatusResponse(
         pending_jobs=3,
         active_jobs=1,
@@ -44,7 +44,7 @@ def test_queue_status_response_stores_counts() -> None:
 
 
 def test_queue_status_response_workers_dead() -> None:
-    """Verify QueueStatusResponse stores workers_alive=False correctly."""
+    """Verify QueueStatusResponse accepts workers_alive=False with zero counts."""
     resp = QueueStatusResponse(
         pending_jobs=0,
         active_jobs=0,

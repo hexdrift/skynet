@@ -8,25 +8,26 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { ModelPicker, modelSupportsThinking } from "@/features/submit/components/ModelPicker";
+} from "@/shared/ui/primitives/dialog";
+import { Button } from "@/shared/ui/primitives/button";
+import { Label } from "@/shared/ui/primitives/label";
+import { Switch } from "@/shared/ui/primitives/switch";
+import { Separator } from "@/shared/ui/primitives/separator";
+import { ModelPicker, modelSupportsThinking } from "./ModelPicker";
 import { NumberInput } from "@/shared/ui/number-input";
 import { cn } from "@/shared/lib/utils";
 import type { ModelConfig, CatalogModel } from "@/shared/types/api";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface ModelConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   config: ModelConfig;
   onSave: (config: ModelConfig) => void;
-  /** Label shown in the dialog header, e.g. "מודל ראשי" or the reflection-model term. */
+  /** Label shown in the dialog header, e.g. the primary-model or reflection-model term. */
   roleLabel?: string;
   /** Catalog models for thinking detection */
   catalogModels?: CatalogModel[];
@@ -47,7 +48,7 @@ export function ModelConfigModal({
   onOpenChange,
   config,
   onSave,
-  roleLabel = "הגדרות מודל",
+  roleLabel = msg("auto.features.submit.components.modelconfigmodal.literal.1"),
   catalogModels,
   recentConfigs,
   onClearRecent,
@@ -70,7 +71,8 @@ export function ModelConfigModal({
       extra: on
         ? { ...p.extra, reasoning_effort: "medium" }
         : (() => {
-            const { reasoning_effort: _, ...rest } = p.extra ?? {};
+            const rest = { ...p.extra };
+            delete rest.reasoning_effort;
             return Object.keys(rest).length ? rest : undefined;
           })(),
     }));
@@ -125,12 +127,15 @@ export function ModelConfigModal({
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="text-sm font-medium text-foreground">
-                        כל המודלים הזמינים
+                        {msg("auto.features.submit.components.modelconfigmodal.1")}
                       </span>
                       <span className="text-[0.6875rem] text-muted-foreground">
                         {disabled
-                          ? "אין מודלים זמינים — הגדר API key"
-                          : `ירוץ ${TERMS.optimization} לכל ${TERMS.model} בקטלוג · ${availableCount} כרגע`}
+                          ? msg("auto.features.submit.components.modelconfigmodal.literal.2")
+                          : formatMsg(
+                              "auto.features.submit.components.modelconfigmodal.template.1",
+                              { p1: TERMS.optimization, p2: TERMS.model, p3: availableCount },
+                            )}
                       </span>
                     </span>
                   </button>
@@ -139,12 +144,11 @@ export function ModelConfigModal({
               );
             })()}
 
-          {/* Recent configs */}
           {recentConfigs && recentConfigs.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
-                  הגדרות אחרונות
+                  {msg("auto.features.submit.components.modelconfigmodal.2")}
                 </Label>
                 {onClearRecent && (
                   <button
@@ -152,7 +156,7 @@ export function ModelConfigModal({
                     onClick={onClearRecent}
                     className="text-[0.625rem] text-muted-foreground/60 hover:text-destructive transition-colors cursor-pointer"
                   >
-                    נקה
+                    {msg("auto.features.submit.components.modelconfigmodal.3")}
                   </button>
                 )}
               </div>
@@ -178,9 +182,8 @@ export function ModelConfigModal({
             </div>
           )}
 
-          {/* Model picker */}
           <div className="space-y-2">
-            <Label>מודל</Label>
+            <Label>{msg("auto.features.submit.components.modelconfigmodal.4")}</Label>
             <ModelPicker
               value={draft.name}
               onChange={(next) => {
@@ -188,22 +191,24 @@ export function ModelConfigModal({
                 // Reset thinking if new model doesn't support it
                 if (!modelSupportsThinking(next, catalogModels)) {
                   setDraft((p) => {
-                    const { reasoning_effort: _, ...rest } = p.extra ?? {};
+                    const rest = { ...p.extra };
+                    delete rest.reasoning_effort;
                     return { ...p, extra: Object.keys(rest).length ? rest : undefined };
                   });
                 }
               }}
-              placeholder="בחר מודל..."
+              placeholder={msg("auto.features.submit.components.modelconfigmodal.literal.3")}
             />
           </div>
 
           <Separator />
 
-          {/* Temperature */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>
-                <HelpTip text={tip("model_config.temperature")}>טמפרטורה</HelpTip>
+                <HelpTip text={tip("model_config.temperature")}>
+                  {msg("auto.features.submit.components.modelconfigmodal.5")}
+                </HelpTip>
               </Label>
               <span className="text-xs font-mono text-muted-foreground">
                 {draft.temperature?.toFixed(1) ?? "0.7"}
@@ -221,11 +226,12 @@ export function ModelConfigModal({
             />
           </div>
 
-          {/* Top P */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>
-                <HelpTip text={tip("model_config.top_p")}>Top P</HelpTip>
+                <HelpTip text={tip("model_config.top_p")}>
+                  {msg("auto.features.submit.components.modelconfigmodal.6")}
+                </HelpTip>
               </Label>
               <span className="text-xs font-mono text-muted-foreground">
                 {draft.top_p?.toFixed(2) ?? "—"}
@@ -243,10 +249,11 @@ export function ModelConfigModal({
             />
           </div>
 
-          {/* Max tokens */}
           <div className="space-y-2">
             <Label>
-              <HelpTip text={tip("model_config.max_tokens")}>מקסימום טוקנים</HelpTip>
+              <HelpTip text={tip("model_config.max_tokens")}>
+                {msg("auto.features.submit.components.modelconfigmodal.7")}
+              </HelpTip>
             </Label>
             <NumberInput
               min={1}
@@ -256,24 +263,32 @@ export function ModelConfigModal({
             />
           </div>
 
-          {/* Thinking mode — only if model supports it */}
           {canThink && (
             <>
               <Separator />
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label>מצב חשיבה (Thinking)</Label>
+                  <Label>{msg("auto.features.submit.components.modelconfigmodal.8")}</Label>
                   <Switch checked={thinkingEnabled} onCheckedChange={setThinking} />
                 </div>
                 {thinkingEnabled && (
                   <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                    <Label>רמת חשיבה</Label>
+                    <Label>{msg("auto.features.submit.components.modelconfigmodal.9")}</Label>
                     <div className="flex rounded-lg bg-muted p-0.5 w-full">
                       {(
                         [
-                          ["low", "נמוכה"],
-                          ["medium", "בינונית"],
-                          ["high", "גבוהה"],
+                          [
+                            "low",
+                            msg("auto.features.submit.components.modelconfigmodal.literal.4"),
+                          ],
+                          [
+                            "medium",
+                            msg("auto.features.submit.components.modelconfigmodal.literal.5"),
+                          ],
+                          [
+                            "high",
+                            msg("auto.features.submit.components.modelconfigmodal.literal.6"),
+                          ],
                         ] as const
                       ).map(([val, label]) => (
                         <button
@@ -300,10 +315,10 @@ export function ModelConfigModal({
 
         <DialogFooter className="grid grid-cols-2 gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
-            ביטול
+            {msg("auto.features.submit.components.modelconfigmodal.10")}
           </Button>
           <Button onClick={handleSave} disabled={!draft.name.trim()} className="w-full">
-            שמור
+            {msg("auto.features.submit.components.modelconfigmodal.11")}
           </Button>
         </DialogFooter>
       </DialogContent>

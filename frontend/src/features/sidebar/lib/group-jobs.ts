@@ -1,11 +1,6 @@
-/**
- * Pure helpers for the sidebar job list.
- *
- * Extracted from components/sidebar.tsx — these don't touch React state,
- * so they can be unit-tested in isolation.
- */
 import type { SidebarJobItem } from "@/shared/lib/api";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
+import { msg } from "@/shared/lib/messages";
 
 export interface JobGroup {
   label: string;
@@ -61,12 +56,18 @@ export function groupJobsByRecency(jobs: SidebarJobItem[], now: Date = new Date(
     else older.push(job);
   }
 
-  if (pinned.length) groups.push({ label: "מוצמדים", jobs: pinned });
-  if (active.length) groups.push({ label: "פעילים", jobs: active });
-  if (today.length) groups.push({ label: "היום", jobs: today });
-  if (yesterday.length) groups.push({ label: "אתמול", jobs: yesterday });
-  if (thisWeek.length) groups.push({ label: "השבוע", jobs: thisWeek });
-  if (older.length) groups.push({ label: "ישנים", jobs: older });
+  if (pinned.length)
+    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.1"), jobs: pinned });
+  if (active.length)
+    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.2"), jobs: active });
+  if (today.length)
+    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.3"), jobs: today });
+  if (yesterday.length)
+    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.4"), jobs: yesterday });
+  if (thisWeek.length)
+    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.5"), jobs: thisWeek });
+  if (older.length)
+    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.6"), jobs: older });
 
   return groups;
 }

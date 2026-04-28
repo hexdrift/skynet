@@ -1,3 +1,11 @@
+"""Shared protocol-level string constants.
+
+These keys cross subprocess and HTTP boundaries (worker progress events,
+payload overview keys, tqdm fields, optimization type discriminators), so
+renaming any of them is a wire-protocol change. Keep them frozen unless a
+coordinated migration is intended.
+"""
+
 RESOLUTION_HINT = "Register it via ServiceRegistry or provide a dotted path beginning with 'dspy.'."
 
 DETAIL_TRAIN = "train_examples"
@@ -79,4 +87,3 @@ OPTIMIZER_METRIC_KEY = "metric"
 OPTIMIZER_REFLECTION_LM_KEY = "reflection_lm"
 
 OPTIMIZER_NAME_GEPA = "gepa"
-

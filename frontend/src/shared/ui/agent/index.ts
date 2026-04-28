@@ -1,5 +1,5 @@
 export { AgentThread } from "./agent-thread";
-export { AssistantBubble } from "./assistant-bubble";
+export { AgentBubble } from "./agent-bubble";
 export { Composer } from "./composer";
 export { ThinkingSection } from "./thinking-section";
 export { UserBubble, UserBubbleEditor } from "./user-bubble";

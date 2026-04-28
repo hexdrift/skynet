@@ -17,17 +17,14 @@ export function useTagger() {
   const [annotations, setAnnotations] = useState<Record<string, Annotation>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const startAnnotating = useCallback(
-    (cfg: TaggerConfig, rows: DataRow[], cols: string[]) => {
-      setConfig(cfg);
-      setData(rows);
-      setColumns(cols);
-      setCurrentIndex(0);
-      setAnnotations({});
-      setPhase("annotating");
-    },
-    [],
-  );
+  const startAnnotating = useCallback((cfg: TaggerConfig, rows: DataRow[], cols: string[]) => {
+    setConfig(cfg);
+    setData(rows);
+    setColumns(cols);
+    setCurrentIndex(0);
+    setAnnotations({});
+    setPhase("annotating");
+  }, []);
 
   const backToSetup = useCallback(() => {
     setConfig(null);
@@ -68,65 +65,53 @@ export function useTagger() {
     }
   }, [data, annotations, config]);
 
-  const annotate = useCallback(
-    (id: string, value: Annotation) => {
-      setAnnotations((prev) => {
-        const next = { ...prev };
-        if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) {
-          delete next[id];
-        } else {
-          next[id] = value;
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const annotate = useCallback((id: string, value: Annotation) => {
+    setAnnotations((prev) => {
+      const next = { ...prev };
+      if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) {
+        delete next[id];
+      } else {
+        next[id] = value;
+      }
+      return next;
+    });
+  }, []);
 
-  const toggleBinary = useCallback(
-    (id: string, value: "yes" | "no") => {
-      (document.activeElement as HTMLElement)?.blur();
-      setAnnotations((prev) => {
-        const next = { ...prev };
-        if (next[id] === value) {
-          delete next[id];
-        } else {
-          next[id] = value;
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const toggleBinary = useCallback((id: string, value: "yes" | "no") => {
+    (document.activeElement as HTMLElement)?.blur();
+    setAnnotations((prev) => {
+      const next = { ...prev };
+      if (next[id] === value) {
+        delete next[id];
+      } else {
+        next[id] = value;
+      }
+      return next;
+    });
+  }, []);
 
-  const toggleCategory = useCallback(
-    (id: string, catId: string) => {
-      (document.activeElement as HTMLElement)?.blur();
-      setAnnotations((prev) => {
-        const next = { ...prev };
-        const current = Array.isArray(next[id]) ? [...(next[id] as string[])] : [];
-        const idx = current.indexOf(catId);
-        if (idx >= 0) current.splice(idx, 1);
-        else current.push(catId);
-        if (current.length === 0) delete next[id];
-        else next[id] = current;
-        return next;
-      });
-    },
-    [],
-  );
+  const toggleCategory = useCallback((id: string, catId: string) => {
+    (document.activeElement as HTMLElement)?.blur();
+    setAnnotations((prev) => {
+      const next = { ...prev };
+      const current = Array.isArray(next[id]) ? [...(next[id] as string[])] : [];
+      const idx = current.indexOf(catId);
+      if (idx >= 0) current.splice(idx, 1);
+      else current.push(catId);
+      if (current.length === 0) delete next[id];
+      else next[id] = current;
+      return next;
+    });
+  }, []);
 
-  const setFreetext = useCallback(
-    (id: string, text: string) => {
-      setAnnotations((prev) => {
-        const next = { ...prev };
-        if (text.trim()) next[id] = text.trim();
-        else delete next[id];
-        return next;
-      });
-    },
-    [],
-  );
+  const setFreetext = useCallback((id: string, text: string) => {
+    setAnnotations((prev) => {
+      const next = { ...prev };
+      if (text.trim()) next[id] = text.trim();
+      else delete next[id];
+      return next;
+    });
+  }, []);
 
   const taggedCount = config
     ? data.filter((d) => isTagged(annotations[String(d.id)], config.mode)).length

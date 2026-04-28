@@ -2,19 +2,12 @@
 
 import * as React from "react";
 import { Shield, ShieldCheck, Zap } from "lucide-react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 import { cn } from "@/shared/lib/utils";
 
-import {
-  TRUST_MODE_DESCRIPTION,
-  TRUST_MODE_HUE,
-  TRUST_MODE_LABEL,
-} from "../hooks/use-trust-mode";
+import { TRUST_MODE_DESCRIPTION, TRUST_MODE_HUE, TRUST_MODE_LABEL } from "../hooks/use-trust-mode";
 import type { TrustMode } from "../lib/types";
 
 interface TrustToggleProps {
@@ -50,7 +43,9 @@ export function TrustToggle({ mode, onCycle, className }: TrustToggleProps) {
           type="button"
           onClick={onCycle}
           onKeyDown={onKeyDown}
-          aria-label={`מצב אמון: ${label}. לחץ להחלפה`}
+          aria-label={formatMsg("auto.features.agent.panel.components.trusttoggle.template.1", {
+            p1: label,
+          })}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.6875rem]",
             "transition-all duration-150 hover:bg-accent/60 active:scale-[0.97] cursor-pointer",
@@ -66,12 +61,10 @@ export function TrustToggle({ mode, onCycle, className }: TrustToggleProps) {
           <span className="font-medium leading-none">{label}</span>
         </button>
       </TooltipTrigger>
-      <TooltipContent
-        side="bottom"
-        dir="rtl"
-        className="max-w-[240px] px-3 py-2"
-      >
-        <div className="font-medium">מצב אמון · לחץ להחלפה</div>
+      <TooltipContent side="bottom" dir="rtl" className="max-w-[240px] px-3 py-2">
+        <div className="font-medium">
+          {msg("auto.features.agent.panel.components.trusttoggle.1")}
+        </div>
         <ul className="mt-1.5 space-y-1">
           {MODE_ORDER.map((m) => {
             const ModeIcon = ICONS[m];
@@ -84,10 +77,7 @@ export function TrustToggle({ mode, onCycle, className }: TrustToggleProps) {
                   active ? "opacity-100" : "opacity-60",
                 )}
               >
-                <ModeIcon
-                  className="size-3 shrink-0 mt-[2px]"
-                  aria-hidden="true"
-                />
+                <ModeIcon className="size-3 shrink-0 mt-[2px]" aria-hidden="true" />
                 <span>
                   <span className={active ? "font-semibold" : "font-medium"}>
                     {TRUST_MODE_LABEL[m]}

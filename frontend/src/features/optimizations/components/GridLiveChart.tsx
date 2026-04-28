@@ -2,17 +2,18 @@
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
 import type { OptimizationStatusResponse } from "@/shared/types/api";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 type PairSnapshot = {
   pair_index: number;
   name: string;
-  התחלתי: number | null;
-  משופר: number | null;
+  baselineScore: number | null;
+  optimizedScore: number | null;
 };
 
 function shortName(model: unknown): string {
@@ -34,8 +35,8 @@ function buildPairs(job: OptimizationStatusResponse): PairSnapshot[] {
     const entry: PairSnapshot = {
       pair_index,
       name: `${shortName(gen)} × ${shortName(ref)}`,
-      התחלתי: null,
-      משופר: null,
+      baselineScore: null,
+      optimizedScore: null,
     };
     byIndex.set(pair_index, entry);
     return entry;
@@ -46,21 +47,21 @@ function buildPairs(job: OptimizationStatusResponse): PairSnapshot[] {
     if (typeof pi !== "number") continue;
     if (e.event === "baseline_evaluated") {
       const entry = ensure(pi);
-      entry.התחלתי = toPct(m.baseline_test_metric);
+      entry.baselineScore = toPct(m.baseline_test_metric);
     } else if (e.event === "optimized_evaluated") {
       const entry = ensure(pi);
-      entry.משופר = toPct(m.optimized_test_metric);
+      entry.optimizedScore = toPct(m.optimized_test_metric);
     } else if (e.event === "grid_pair_completed") {
       const entry = ensure(pi, m.generation_model, m.reflection_model);
-      if (entry.התחלתי == null) entry.התחלתי = toPct(m.baseline_test_metric);
-      if (entry.משופר == null) entry.משופר = toPct(m.optimized_test_metric);
+      if (entry.baselineScore == null) entry.baselineScore = toPct(m.baseline_test_metric);
+      if (entry.optimizedScore == null) entry.optimizedScore = toPct(m.optimized_test_metric);
       if (entry.name.startsWith("?")) {
         entry.name = `${shortName(m.generation_model)} × ${shortName(m.reflection_model)}`;
       }
     }
   }
   return Array.from(byIndex.values())
-    .filter((p) => p.התחלתי != null || p.משופר != null)
+    .filter((p) => p.baselineScore != null || p.optimizedScore != null)
     .sort((a, b) => a.pair_index - b.pair_index);
 }
 
@@ -77,8 +78,14 @@ function LiveTip({
 }) {
   if (!active || !payload?.length) return null;
   const nameMap: Record<string, string> = {
-    התחלתי: `${TERMS.score} לפני ${TERMS.optimization}`,
-    משופר: `${TERMS.score} אחרי ${TERMS.optimization}`,
+    baselineScore: formatMsg("auto.features.optimizations.components.gridlivechart.template.1", {
+      p1: TERMS.score,
+      p2: TERMS.optimization,
+    }),
+    optimizedScore: formatMsg("auto.features.optimizations.components.gridlivechart.template.2", {
+      p1: TERMS.score,
+      p2: TERMS.optimization,
+    }),
   };
   return (
     <div
@@ -123,10 +130,13 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold flex items-center justify-between gap-2">
-          <HelpTip text={tip("grid.score_comparison")}>ציונים לפי זוג</HelpTip>
+          <HelpTip text={tip("grid.score_comparison")}>
+            {msg("auto.features.optimizations.components.gridlivechart.1")}
+          </HelpTip>
           {totalPairs != null && (
             <span className="text-[0.6875rem] font-normal text-muted-foreground tabular-nums">
-              {pairs.length}/{totalPairs} הושלמו
+              {pairs.length}/{totalPairs}
+              {msg("auto.features.optimizations.components.gridlivechart.2")}
             </span>
           )}
         </CardTitle>
@@ -148,7 +158,7 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
                 tick={{ fontSize: 10 }}
                 className="fill-muted-foreground"
                 label={{
-                  value: "ציון באחוזים",
+                  value: msg("auto.features.optimizations.components.gridlivechart.literal.1"),
                   position: "insideBottom",
                   offset: -2,
                   fontSize: 10,
@@ -164,20 +174,24 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
                 axisLine={false}
               />
               <Tooltip content={<LiveTip />} />
-              {!hidden.has("התחלתי") && (
+              {!hidden.has(
+                msg("auto.features.optimizations.components.gridlivechart.literal.2"),
+              ) && (
                 <Bar
-                  dataKey="התחלתי"
-                  name="התחלתי"
+                  dataKey="baselineScore"
+                  name={msg("auto.features.optimizations.components.gridlivechart.literal.3")}
                   fill="var(--color-chart-4)"
                   radius={[0, 3, 3, 0]}
                   barSize={12}
                   animationDuration={400}
                 />
               )}
-              {!hidden.has("משופר") && (
+              {!hidden.has(
+                msg("auto.features.optimizations.components.gridlivechart.literal.4"),
+              ) && (
                 <Bar
-                  dataKey="משופר"
-                  name="משופר"
+                  dataKey="optimizedScore"
+                  name={msg("auto.features.optimizations.components.gridlivechart.literal.5")}
                   fill="var(--color-chart-2)"
                   radius={[0, 3, 3, 0]}
                   barSize={12}
@@ -189,8 +203,14 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
         </div>
         <div className="flex justify-center gap-4 mt-1">
           {[
-            { key: "התחלתי", color: "var(--color-chart-4)" },
-            { key: "משופר", color: "var(--color-chart-2)" },
+            {
+              key: msg("auto.features.optimizations.components.gridlivechart.literal.6"),
+              color: "var(--color-chart-4)",
+            },
+            {
+              key: msg("auto.features.optimizations.components.gridlivechart.literal.7"),
+              color: "var(--color-chart-2)",
+            },
           ].map(({ key, color }) => {
             const isHidden = hidden.has(key);
             return (

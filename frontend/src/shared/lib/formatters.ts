@@ -1,13 +1,5 @@
-/**
- * Shared formatting utilities
- * Pure functions for dates, numbers, durations, and data display
- * Consolidated from dashboard and optimizations formatters
- * All Hebrew strings and RTL-aware
- */
-
 import type { OptimizationSummaryResponse } from "@/shared/types/api";
-
-/* ── Date & Time Formatting ── */
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 /**
  * Format ISO date string to Hebrew locale
@@ -23,18 +15,18 @@ export function formatDate(iso: string): string {
 
 /**
  * Format ISO date as relative time in Hebrew
- * @example "לפני 5 דק'" / "לפני 2 שע'" / "לפני 3 ימים"
+ * @example localized relative time for minutes, hours, or days ago
  */
 export function formatRelativeTime(iso: string): string {
   try {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "עכשיו";
-    if (mins < 60) return `לפני ${mins} דק'`;
+    if (mins < 1) return msg("auto.shared.lib.formatters.literal.1");
+    if (mins < 60) return formatMsg("auto.shared.lib.formatters.template.1", { p1: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `לפני ${hours} שע'`;
+    if (hours < 24) return formatMsg("auto.shared.lib.formatters.template.2", { p1: hours });
     const days = Math.floor(hours / 24);
-    if (days < 7) return `לפני ${days} ימים`;
+    if (days < 7) return formatMsg("auto.shared.lib.formatters.template.3", { p1: days });
     return formatDate(iso);
   } catch {
     return formatDate(iso);
@@ -63,8 +55,6 @@ export function logTimeBucket(ts: string): string {
   return `${dd}/${mm} ${hh}:${mi}`;
 }
 
-/* ── Duration Formatting ── */
-
 /**
  * Format duration in seconds as HH:MM:SS or MM:SS
  * @example 3665 → "1:01:05", 125 → "2:05"
@@ -79,12 +69,7 @@ export function formatDuration(seconds: number | undefined | null): string {
   return `${mins}:${pad(secs)}`;
 }
 
-/**
- * Alias for formatDuration for backwards compatibility
- */
 export const formatElapsed = formatDuration;
-
-/* ── Number Formatting ── */
 
 /**
  * Format a number (0..1 or 0..100) as percentage
@@ -106,20 +91,12 @@ export function formatImprovement(v: number | undefined | null): string {
   return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
 }
 
-/* ── Data Formatting ── */
-
-/**
- * Format unknown value as JSON preview
- */
 export function jsonPreview(v: unknown): string {
   if (v == null) return "—";
   if (typeof v === "object") return JSON.stringify(v, null, 2);
   return String(v);
 }
 
-/**
- * Format output value (string, number, boolean, or JSON)
- */
 export function formatOutput(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -131,14 +108,9 @@ export function formatOutput(v: unknown): string {
   }
 }
 
-/**
- * Format ID (passthrough, for consistency)
- */
 export function formatId(id: string): string {
   return id;
 }
-
-/* ── Job Score Utilities ── */
 
 /**
  * Normalize improvement value to 0..100 range
@@ -148,9 +120,6 @@ export function normalizeImprovement(improvement: number): number {
   return Math.abs(improvement) > 1 ? improvement : improvement * 100;
 }
 
-/**
- * Extract score parts from job summary for charts and tables
- */
 export interface JobScoreParts {
   baseline: number | null;
   optimized: number | null;

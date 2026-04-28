@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 function ScoreChartTooltip({
   active,
@@ -22,7 +23,9 @@ function ScoreChartTooltip({
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border bg-background p-3 shadow-md text-sm" dir="rtl">
-      <p className="font-medium mb-1.5">גרסת פרומפט {label}</p>
+      <p className="font-medium mb-1.5">
+        {formatMsg("shared.score_chart.prompt_version", { label: label ?? "" })}
+      </p>
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
@@ -52,7 +55,7 @@ export function ScoreChart({
           tick={{ fontSize: 10 }}
           className="fill-muted-foreground"
           label={{
-            value: "גרסת פרומפט",
+            value: msg("shared.score_chart.prompt_version_axis"),
             position: "insideBottom",
             offset: -12,
             fontSize: 10,
@@ -65,7 +68,7 @@ export function ScoreChart({
           tick={{ fontSize: 10 }}
           className="fill-muted-foreground"
           label={{
-            value: "ציון",
+            value: msg("shared.score_chart.score_axis"),
             angle: -90,
             position: "insideLeft",
             offset: 10,
@@ -78,7 +81,7 @@ export function ScoreChart({
         <Line
           type="monotone"
           dataKey="score"
-          name="ציון הגרסה"
+          name={msg("shared.score_chart.version_score")}
           stroke="var(--color-chart-4)"
           strokeWidth={1.5}
           dot={{ r: 2 }}
@@ -87,7 +90,7 @@ export function ScoreChart({
         <Line
           type="stepAfter"
           dataKey="best"
-          name="שיא"
+          name={msg("shared.score_chart.best")}
           stroke="var(--color-chart-2)"
           strokeWidth={2}
           dot={false}

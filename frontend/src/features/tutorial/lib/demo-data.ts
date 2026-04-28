@@ -17,11 +17,10 @@ import type {
   DatasetRow,
 } from "@/shared/types/api";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 export const DEMO_OPTIMIZATION_ID = "a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b";
 export const DEMO_GRID_OPTIMIZATION_ID = "c3f9d215-8a47-4e6b-a1d3-7b2f9c58e4a1";
-
-/* ── Helpers ── */
 
 function ts(start: Date, offsetMs: number): string {
   return new Date(start.getTime() + offsetMs).toISOString();
@@ -33,20 +32,18 @@ function fmtElapsed(seconds: number): string {
   return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `0:${String(s).padStart(2, "0")}`;
 }
 
-/* ── Trial data ── */
-
 const TRIAL_SCORES = [65.0, 70.0, 68.0, 72.5, 75.0, 71.0, 80.0, 84.0];
 const NUM_TRIALS = TRIAL_SCORES.length;
-
-/* ── Phase builders ── */
 
 function baseJob(start: Date): OptimizationStatusResponse {
   return {
     optimization_id: DEMO_OPTIMIZATION_ID,
     optimization_type: "run",
     status: "validating",
-    name: "סיווג אימיילים",
-    description: `${TERMS.optimization} לסיווג אימיילים לקטגוריות: spam, important, promotional`,
+    name: msg("auto.features.tutorial.lib.demo.data.literal.1"),
+    description: formatMsg("auto.features.tutorial.lib.demo.data.template.1", {
+      p1: TERMS.optimization,
+    }),
     username: "demo",
     created_at: start.toISOString(),
     started_at: start.toISOString(),
@@ -83,7 +80,7 @@ function buildValidating(start: Date): OptimizationStatusResponse {
         timestamp: ts(start, 200),
         level: "INFO",
         logger: "skynet.worker",
-        message: "Starting optimization: סיווג אימיילים",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.2"),
         pair_index: null,
       },
       {
@@ -117,7 +114,7 @@ function buildSplitting(start: Date): OptimizationStatusResponse {
         timestamp: ts(start, 200),
         level: "INFO",
         logger: "skynet.worker",
-        message: "Starting optimization: סיווג אימיילים",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.3"),
         pair_index: null,
       },
       {
@@ -167,7 +164,7 @@ function buildBaseline(start: Date): OptimizationStatusResponse {
         timestamp: ts(start, 200),
         level: "INFO",
         logger: "skynet.worker",
-        message: "Starting optimization: סיווג אימיילים",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.4"),
         pair_index: null,
       },
       {
@@ -236,7 +233,7 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
       timestamp: ts(start, 200),
       level: "INFO",
       logger: "skynet.worker",
-      message: "Starting optimization: סיווג אימיילים",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.5"),
       pair_index: null,
     },
     {
@@ -357,7 +354,7 @@ function buildDone(start: Date): OptimizationStatusResponse {
       timestamp: ts(start, 200),
       level: "INFO",
       logger: "skynet.worker",
-      message: "Starting optimization: סיווג אימיילים",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.6"),
       pair_index: null,
     },
     {
@@ -494,10 +491,6 @@ function buildDone(start: Date): OptimizationStatusResponse {
   };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Public API — schedule demo simulation
-   ═══════════════════════════════════════════════════════════ */
-
 export interface DemoCallbacks {
   setJob: (
     updater: (prev: OptimizationStatusResponse | null) => OptimizationStatusResponse,
@@ -527,7 +520,6 @@ export function resetDemoSimulation() {
 export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
   const { setJob, setLoading } = callbacks;
 
-  // If simulation already completed, show final state immediately
   if (_cachedDoneState) {
     setLoading(false);
     setJob(() => _cachedDoneState!);
@@ -535,7 +527,7 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
   }
 
   const start = new Date();
-  const timers: ReturnType<typeof setTimeout>[] = [];
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
 
   const set = (job: OptimizationStatusResponse) => setJob(() => job);
 
@@ -550,12 +542,10 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
 
   timers.push(setTimeout(() => set(buildBaseline(start)), 1750));
 
-  // Phase 4: Optimizing — trials appear one by one
   for (let i = 0; i < NUM_TRIALS; i++) {
     timers.push(setTimeout(() => set(buildOptimizing(start, i + 1)), 2500 + i * 275));
   }
 
-  // Phase 5: Done — cache the final state
   timers.push(
     setTimeout(() => {
       const done = buildDone(start);
@@ -566,11 +556,6 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
 
   return () => timers.forEach(clearTimeout);
 }
-
-/* ═══════════════════════════════════════════════════════════
-   Demo Dashboard Data — fake jobs + analytics for the tutorial
-   when the user has zero real optimizations.
-   ═══════════════════════════════════════════════════════════ */
 
 import type { PaginatedJobsResponse, OptimizationSummaryResponse } from "@/shared/types/api";
 import type { DashboardAnalytics, DashboardAnalyticsJob } from "@/shared/lib/api";
@@ -586,8 +571,8 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     optimization_id: "demo-001",
     optimization_type: "run",
     status: "success",
-    name: "סיווג אימיילים",
-    description: "סיווג אימיילים לקטגוריות: spam, important, promotional",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.7"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.8"),
     created_at: daysAgo(5),
     completed_at: daysAgo(5),
     elapsed: "2:45",
@@ -605,8 +590,8 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     optimization_id: "demo-002",
     optimization_type: "run",
     status: "success",
-    name: "ניתוח סנטימנט",
-    description: "זיהוי טון חיובי/שלילי בביקורות מוצרים",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.9"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.10"),
     created_at: daysAgo(3),
     completed_at: daysAgo(3),
     elapsed: "4:12",
@@ -624,8 +609,14 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     optimization_id: DEMO_GRID_OPTIMIZATION_ID,
     optimization_type: "grid_search",
     status: "success",
-    name: "סיכום טקסטים",
-    description: `סריקת ${TERMS.modelPlural}: ארבעה ${TERMS.pairPlural} ${TERMS.generationModel}/${TERMS.reflectionModel} על אותה ${TERMS.task}`,
+    name: msg("auto.features.tutorial.lib.demo.data.literal.11"),
+    description: formatMsg("auto.features.tutorial.lib.demo.data.template.2", {
+      p1: TERMS.modelPlural,
+      p2: TERMS.pairPlural,
+      p3: TERMS.generationModel,
+      p4: TERMS.reflectionModel,
+      p5: TERMS.task,
+    }),
     created_at: daysAgo(2),
     completed_at: daysAgo(2),
     elapsed: "8:30",
@@ -645,8 +636,8 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     optimization_id: "demo-004",
     optimization_type: "run",
     status: "failed",
-    name: "חילוץ ישויות",
-    description: "זיהוי שמות וארגונים בטקסט חופשי",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.12"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.13"),
     created_at: daysAgo(1),
     elapsed: "0:32",
     elapsed_seconds: 32,
@@ -661,8 +652,8 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     optimization_id: "demo-005",
     optimization_type: "run",
     status: "running",
-    name: "תרגום עברית-אנגלית",
-    description: "תרגום משפטים קצרים",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.14"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.15"),
     created_at: daysAgo(0),
     elapsed: "1:15",
     elapsed_seconds: 75,
@@ -741,17 +732,14 @@ export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = {
   available_models: ["gpt-4o-mini", "gpt-4o"],
 };
 
-/* ═══════════════════════════════════════════════════════════
-   Demo Compare Data — three completed runs on the same task,
-   shown as a pre-resolved comparison in the tutorial so the
-   user can see how the /compare page lays out scores, configs
-   and prompts side-by-side. IDs are well-known so the compare
-   page can recognize and render them without a backend fetch.
-   ═══════════════════════════════════════════════════════════ */
-
+/**
+ * Demo compare data — three completed runs on the same task. IDs are
+ * well-known so the /compare page can recognize and render them
+ * without a backend fetch.
+ */
 export const DEMO_COMPARE_IDS = ["tutorial-compare-a", "tutorial-compare-b", "tutorial-compare-c"];
 
-const COMPARE_TASK_NAME = "סיווג אימיילים";
+const COMPARE_TASK_NAME = msg("auto.features.tutorial.lib.demo.data.literal.16");
 const COMPARE_FINGERPRINT = "tutorial-fingerprint-email-classifier";
 
 function compareInstructions(variant: "a" | "b" | "c"): string {
@@ -874,14 +862,7 @@ function buildCompareJob(opts: {
   };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Demo Grid Search — a completed 4-pair grid sweep shown when
-   the tutorial navigates to /optimizations/<DEMO_GRID_OPTIMIZATION_ID>.
-   Each pair has different quality/speed tradeoffs so the tutorial
-   can explain the harmonic-mean overall winner concept.
-   ═══════════════════════════════════════════════════════════ */
-
-const GRID_TASK_NAME = "סיכום טקסטים";
+const GRID_TASK_NAME = msg("auto.features.tutorial.lib.demo.data.literal.17");
 
 function gridInstructions(variant: 0 | 1 | 2 | 3): string {
   if (variant === 0) {
@@ -1057,7 +1038,13 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
     optimization_type: "grid_search",
     status: "success",
     name: GRID_TASK_NAME,
-    description: `סריקת ${TERMS.modelPlural}: ארבעה ${TERMS.pairPlural} ${TERMS.generationModel}/${TERMS.reflectionModel} על אותה ${TERMS.task}`,
+    description: formatMsg("auto.features.tutorial.lib.demo.data.template.3", {
+      p1: TERMS.modelPlural,
+      p2: TERMS.pairPlural,
+      p3: TERMS.generationModel,
+      p4: TERMS.reflectionModel,
+      p5: TERMS.task,
+    }),
     username: "demo",
     created_at: daysAgo(2),
     started_at: daysAgo(2),
@@ -1089,15 +1076,11 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
   };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Demo Compare Jobs — continues below
-   ═══════════════════════════════════════════════════════════ */
-
 export const DEMO_COMPARE_JOBS: OptimizationStatusResponse[] = [
   buildCompareJob({
     id: DEMO_COMPARE_IDS[0]!,
     name: `${COMPARE_TASK_NAME} · gpt-4o-mini`,
-    description: `GEPA עם ${TERMS.model} קל ומהיר`,
+    description: formatMsg("auto.features.tutorial.lib.demo.data.template.4", { p1: TERMS.model }),
     modelName: "gpt-4o-mini",
     moduleName: "ChainOfThought",
     baseline: 0.62,
@@ -1109,7 +1092,7 @@ export const DEMO_COMPARE_JOBS: OptimizationStatusResponse[] = [
   buildCompareJob({
     id: DEMO_COMPARE_IDS[1]!,
     name: `${COMPARE_TASK_NAME} · gpt-4o`,
-    description: `GEPA עם ${TERMS.model} מתקדם`,
+    description: formatMsg("auto.features.tutorial.lib.demo.data.template.5", { p1: TERMS.model }),
     modelName: "gpt-4o",
     moduleName: "ChainOfThought",
     baseline: 0.62,
@@ -1121,7 +1104,7 @@ export const DEMO_COMPARE_JOBS: OptimizationStatusResponse[] = [
   buildCompareJob({
     id: DEMO_COMPARE_IDS[2]!,
     name: `${COMPARE_TASK_NAME} · Predict`,
-    description: "GEPA עם מודול Predict (ללא reasoning)",
+    description: msg("auto.features.tutorial.lib.demo.data.literal.18"),
     modelName: "gpt-4o-mini",
     moduleName: "Predict",
     baseline: 0.62,
@@ -1132,15 +1115,13 @@ export const DEMO_COMPARE_JOBS: OptimizationStatusResponse[] = [
   }),
 ];
 
-/* ═══════════════════════════════════════════════════════════
-   Demo Compare Examples — per-example test-set outputs for the
-   three compare runs. Designed so A=6/8 (0.75), B=6/8 (0.75),
-   C=5/8 (0.625) — close to the overall optimized scores in
-   DEMO_COMPARE_JOBS — with a mix of agreements and principled
-   disagreements so the "hide agreements" filter has something
-   meaningful to hide.
-   ═══════════════════════════════════════════════════════════ */
-
+/**
+ * Per-example test-set outputs for the three compare runs.
+ * Designed so A=6/8 (0.75), B=6/8 (0.75), C=5/8 (0.625) — close to
+ * the overall optimized scores in DEMO_COMPARE_JOBS — with a mix of
+ * agreements and principled disagreements so the "hide agreements"
+ * filter has something meaningful to hide.
+ */
 const COMPARE_EXAMPLE_ROWS: Array<{
   email_text: string;
   category: "spam" | "important" | "promotional";

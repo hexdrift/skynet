@@ -2,16 +2,16 @@
 
 Split out of the old ``backend/core/models.py`` per AGENTS.md. Contains
 the primitive building blocks (mappings, model configs, split specs,
-status enum, and the health status constant) that every other model
-file depends on.
+status enum) that every other model file depends on. Cross-file string
+constants live in :mod:`core.models.constants`.
 """
 
-from enum import Enum
+from __future__ import annotations
+
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
-
-HEALTH_STATUS_OK = "ok"
 
 OptimizationType = Literal["run", "grid_search"]
 
@@ -30,8 +30,16 @@ class ColumnMapping(BaseModel):
     outputs: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _ensure_non_empty(self) -> "ColumnMapping":
-        """Reject empty inputs or overlapping column values between inputs and outputs."""
+    def _ensure_non_empty(self) -> ColumnMapping:
+        """Reject empty inputs or overlapping column values between inputs and outputs.
+
+        Returns:
+            The validated mapping instance.
+
+        Raises:
+            ValueError: When ``inputs`` is empty, or when ``inputs`` and
+                ``outputs`` reuse the same dataset column.
+        """
         if not self.inputs:
             raise ValueError("At least one input column must be specified.")
         shared = set(self.inputs.values()) & set(self.outputs.values())
@@ -54,7 +62,7 @@ class ModelConfig(BaseModel):
         """Return the LiteLLM identifier (deprecated: identical to ``name``).
 
         Returns:
-            The model name with leading and trailing slashes stripped.
+            ``name`` with any leading or trailing ``/`` characters stripped.
         """
         return self.name.strip("/")
 
@@ -67,8 +75,16 @@ class SplitFractions(BaseModel):
     test: float = 0.15
 
     @model_validator(mode="after")
-    def _validate(self) -> "SplitFractions":
-        """Reject negative fractions or fractions that do not sum to 1.0."""
+    def _validate(self) -> SplitFractions:
+        """Reject negative fractions or fractions that do not sum to 1.0.
+
+        Returns:
+            The validated fractions instance.
+
+        Raises:
+            ValueError: When any fraction is negative, or when ``train``,
+                ``val`` and ``test`` do not sum to 1.0.
+        """
         parts = [self.train, self.val, self.test]
         if any(part < 0 for part in parts):
             raise ValueError("Split fractions must be non-negative.")
@@ -86,7 +102,7 @@ class SplitCounts(BaseModel):
     test: int
 
 
-class OptimizationStatus(str, Enum):
+class OptimizationStatus(StrEnum):
     """Enumerate background job states."""
 
     pending = "pending"

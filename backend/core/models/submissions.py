@@ -1,5 +1,7 @@
 """Inbound payloads for POST /run and POST /grid-search plus the initial ack."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 
@@ -48,8 +50,15 @@ class _OptimizationRequestBase(BaseModel):
     dataset_filename: str | None = Field(default=None, description="Original dataset file name.")
 
     @model_validator(mode="after")
-    def _ensure_dataset(self) -> "_OptimizationRequestBase":
-        """Reject requests with an empty dataset."""
+    def _ensure_dataset(self) -> _OptimizationRequestBase:
+        """Reject requests with an empty dataset.
+
+        Returns:
+            The validated request instance.
+
+        Raises:
+            ValueError: When ``dataset`` is empty.
+        """
         if not self.dataset:
             raise ValueError("Dataset must contain at least one row.")
         return self
@@ -84,12 +93,21 @@ class GridSearchRequest(_OptimizationRequestBase):
     )
 
     @model_validator(mode="after")
-    def _validate_model_lists(self) -> "GridSearchRequest":
+    def _validate_model_lists(self) -> GridSearchRequest:
         """Reject requests missing required model lists.
 
         Each side (``generation_models``, ``reflection_models``) must either be
         non-empty or be marked for server-side expansion via its matching
         ``use_all_available_*`` flag.
+
+        Returns:
+            The validated request instance.
+
+        Raises:
+            ValueError: When ``generation_models`` is empty and
+                ``use_all_available_generation_models`` is false, or when
+                ``reflection_models`` is empty and
+                ``use_all_available_reflection_models`` is false.
         """
         if not self.use_all_available_generation_models and not self.generation_models:
             raise ValueError("At least one generation model is required.")

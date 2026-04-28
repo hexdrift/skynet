@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, ArrowDown, ArrowUpDown, Filter, Search, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/shared/ui/primitives/button";
+import { Input } from "@/shared/ui/primitives/input";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 export type SortDir = "asc" | "desc";
 export type Filters = Record<string, Set<string>>;
-
-/* ── Column header with sort + optional Excel-style filter dropdown ── */
 
 export function ColumnHeader<K extends string>({
   label,
@@ -32,7 +31,7 @@ export function ColumnHeader<K extends string>({
   sortDir: SortDir;
   onSort: (key: K) => void;
   filterCol?: string;
-  filterOptions?: { value: string; label: string }[];
+  filterOptions?: Array<{ value: string; label: string }>;
   filters?: Filters;
   onFilter?: (col: string, values: Set<string>) => void;
   openFilter?: string | null;
@@ -133,7 +132,7 @@ export function ColumnHeader<K extends string>({
           type="button"
           onClick={() => onSort(sortKey)}
           className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent/60 hover:text-foreground cursor-pointer"
-          aria-label={`מיין לפי ${label}`}
+          aria-label={formatMsg("shared.excel_filter.sort_by", { label })}
         >
           <span>{label}</span>
           {sortActive ? (
@@ -155,7 +154,7 @@ export function ColumnHeader<K extends string>({
               e.stopPropagation();
               setOpenFilter(isOpen ? null : filterCol);
             }}
-            aria-label={`סינון עמודת ${label}`}
+            aria-label={formatMsg("shared.excel_filter.filter_column", { label })}
           >
             <Filter className="size-3" />
           </button>
@@ -185,8 +184,6 @@ export function ColumnHeader<K extends string>({
   );
 }
 
-/* ── Excel-style filter dropdown: search + checkbox list + select all / clear ── */
-
 function FilterDropdown({
   options,
   selected,
@@ -195,7 +192,7 @@ function FilterDropdown({
   ignoreRef,
   anchorRef,
 }: {
-  options: { value: string; label: string }[];
+  options: Array<{ value: string; label: string }>;
   selected: Set<string>;
   onApply: (values: Set<string>) => void;
   onClose: () => void;
@@ -301,7 +298,6 @@ function FilterDropdown({
       }
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Search box */}
       <div className="relative mb-1.5">
         <div className="absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground">
           <Search className="size-3" />
@@ -312,12 +308,11 @@ function FilterDropdown({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-7 text-[0.6875rem] py-1.5 pe-7 ps-2 text-right"
-          placeholder="חיפוש..."
+          placeholder={msg("shared.excel_filter.search_placeholder")}
           dir="rtl"
         />
       </div>
 
-      {/* Select all */}
       <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[0.75rem] font-semibold text-muted-foreground hover:bg-muted/70">
         <input
           type="checkbox"
@@ -325,18 +320,19 @@ function FilterDropdown({
           checked={allSelected}
           onChange={toggleSelectAll}
         />
-        בחר הכל
+        {msg("shared.excel_filter.select_all")}
       </label>
 
       <div className="my-1 border-t border-border/70" />
 
-      {/* Checkbox list */}
       <div
         className="overflow-y-auto"
         style={{ maxHeight: Math.min(200, (pos?.availH ?? 200) - 120) }}
       >
         {visibleOptions.length === 0 ? (
-          <p className="text-[0.6875rem] text-center py-2 text-muted-foreground">אין תוצאות</p>
+          <p className="text-[0.6875rem] text-center py-2 text-muted-foreground">
+            {msg("shared.excel_filter.no_results")}
+          </p>
         ) : (
           visibleOptions.map((opt) => (
             <label
@@ -371,7 +367,7 @@ function FilterDropdown({
             onClose();
           }}
         >
-          בטל
+          {msg("shared.excel_filter.cancel")}
         </Button>
         <Button
           type="button"
@@ -387,7 +383,7 @@ function FilterDropdown({
             onApply(isAll ? new Set() : localSelected);
           }}
         >
-          החל
+          {msg("shared.excel_filter.apply")}
         </Button>
       </div>
     </div>
@@ -395,8 +391,6 @@ function FilterDropdown({
 
   return createPortal(dropdown, document.body);
 }
-
-/* ── Hook for filter state management ── */
 
 export function useColumnFilters() {
   const [filters, setFilters] = useState<Filters>({});
@@ -421,8 +415,6 @@ export function useColumnFilters() {
   return { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount };
 }
 
-/* ── Hook for column resize state ── */
-
 export function useColumnResize() {
   const [widths, setWidths] = useState<Record<string, number>>({});
 
@@ -437,8 +429,6 @@ export function useColumnResize() {
   return { widths, setColumnWidth, resetAll, hasResized };
 }
 
-/* ── Reset columns button — shown when columns have been manually resized ── */
-
 export function ResetColumnsButton({
   resize,
 }: {
@@ -450,10 +440,10 @@ export function ResetColumnsButton({
       type="button"
       onClick={resize.resetAll}
       className="inline-flex items-center gap-1 text-[0.625rem] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground/40"
-      title="איפוס רוחב עמודות"
+      title={msg("shared.excel_filter.reset_width_title")}
     >
       <RotateCcw className="size-3" />
-      <span>איפוס גודל עמודות</span>
+      <span>{msg("shared.excel_filter.reset_width_label")}</span>
     </button>
   );
 }

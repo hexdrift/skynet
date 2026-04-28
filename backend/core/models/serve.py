@@ -1,5 +1,7 @@
 """Request/response models for the /serve/* inference endpoints."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -19,8 +21,15 @@ class ServeRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     @model_validator(mode="after")
-    def _ensure_inputs(self) -> "ServeRequest":
-        """Reject inference requests with no input fields."""
+    def _ensure_inputs(self) -> ServeRequest:
+        """Reject inference requests with no input fields.
+
+        Returns:
+            The validated request instance.
+
+        Raises:
+            ValueError: When ``inputs`` is empty.
+        """
         if not self.inputs:
             raise ValueError("At least one input field is required.")
         return self

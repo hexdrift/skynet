@@ -9,24 +9,25 @@ from unittest.mock import MagicMock, patch
 
 
 def fake_service_registry() -> MagicMock:
-    """Return a MagicMock standing in for a ServiceRegistry instance."""
+    """Return a labelled ``MagicMock`` standing in for ``ServiceRegistry``."""
     return MagicMock(name="ServiceRegistry_instance")
 
 
 def fake_fastapi_app() -> MagicMock:
-    """Return a MagicMock standing in for a FastAPI application instance."""
+    """Return a labelled ``MagicMock`` standing in for the FastAPI app."""
     return MagicMock(name="FastAPI_app")
 
 
 @contextmanager
 def patch_main_dependencies(registry: Any = None, app: Any = None):
-    """Patch heavy side-effects (dotenv, DB, uvicorn) that fire at main.py import time.
+    """Patch heavy side-effects (dotenv, DB, uvicorn) that fire at ``main.py`` import time.
 
     Args:
-        registry: Optional mock to use as the ServiceRegistry; defaults to a fresh
-            :func:`fake_service_registry` mock.
-        app: Optional mock to use as the FastAPI app; defaults to a fresh
-            :func:`fake_fastapi_app` mock.
+        registry: Optional override for the patched ``ServiceRegistry`` instance.
+        app: Optional override for the patched FastAPI app instance.
+
+    Yields:
+        ``None`` while all four patches are active.
     """
     if registry is None:
         registry = fake_service_registry()
@@ -43,14 +44,14 @@ def patch_main_dependencies(registry: Any = None, app: Any = None):
 
 
 def import_main_fresh(registry: Any = None, app: Any = None):
-    """Remove main from sys.modules and re-import it with side-effects patched out.
+    """Remove ``main`` from ``sys.modules`` and re-import with side-effects patched out.
 
     Args:
-        registry: Optional mock to substitute for ServiceRegistry.
-        app: Optional mock to substitute for the FastAPI app.
+        registry: Optional override for the patched ``ServiceRegistry`` instance.
+        app: Optional override for the patched FastAPI app instance.
 
     Returns:
-        The freshly imported ``main`` module with all heavy side-effects mocked.
+        The freshly-imported ``main`` module.
     """
     sys.modules.pop("main", None)
     with patch_main_dependencies(registry=registry, app=app):

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Pencil } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
+import { msg } from "@/shared/lib/messages";
 
 interface UserBubbleProps {
   content: string;
@@ -28,8 +29,8 @@ export function UserBubble({ content, onEdit, editable = true }: UserBubbleProps
             "self-center ms-1.5 opacity-0 group-hover/user:opacity-100 transition-opacity",
             "p-1.5 rounded-lg hover:bg-muted/60 cursor-pointer",
           )}
-          title="ערוך ושלח שוב"
-          aria-label="ערוך ושלח שוב"
+          title={msg("shared.agent.edit_and_resend")}
+          aria-label={msg("shared.agent.edit_and_resend")}
         >
           <Pencil className="size-3 text-muted-foreground" />
         </button>
@@ -58,7 +59,7 @@ export function UserBubbleEditor({
   const autosize = (el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
 
   return (
@@ -93,7 +94,7 @@ export function UserBubbleEditor({
             onClick={onCancel}
             className="text-[0.6875rem] text-muted-foreground hover:text-foreground px-3 py-1 rounded-lg hover:bg-muted transition-colors cursor-pointer"
           >
-            ביטול
+            {msg("shared.agent.cancel")}
           </button>
           <button
             type="button"
@@ -101,7 +102,7 @@ export function UserBubbleEditor({
             disabled={!value.trim() || disabled}
             className="text-[0.6875rem] text-white bg-[#3D2E22] hover:bg-[#3D2E22]/90 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1 rounded-lg transition-colors cursor-pointer"
           >
-            שלח
+            {msg("shared.agent.send")}
           </button>
         </div>
       </div>

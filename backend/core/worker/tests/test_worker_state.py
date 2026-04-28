@@ -29,67 +29,66 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import cast
 
 import pytest
 
+from core.storage.base import JobStore
+
 from ..engine import BackgroundWorker
-
 from .conftest import FakeJobStore
-
 
 
 @pytest.fixture
 def store() -> FakeJobStore:
-    """Return a fresh FakeJobStore for each test."""
+    """Yield a fresh in-memory job store for a test."""
     return FakeJobStore()
 
 
 @pytest.fixture
 def worker(store: FakeJobStore) -> BackgroundWorker:
-    """A BackgroundWorker that has NOT been started — no threads, no processes."""
-    return BackgroundWorker(job_store=store, num_workers=2, poll_interval=1.0)
-
+    """Build an unstarted BackgroundWorker bound to the test store."""
+    return BackgroundWorker(job_store=cast(JobStore, store), num_workers=2, poll_interval=1.0)
 
 
 def test_worker_initial_queue_size_is_zero(worker: BackgroundWorker) -> None:
-    """A freshly created worker reports zero pending jobs."""
+    """A fresh worker reports queue size 0."""
     assert worker.queue_size() == 0
 
 
 def test_worker_initial_active_jobs_is_zero(worker: BackgroundWorker) -> None:
-    """A freshly created worker reports zero active (processing) jobs."""
+    """A fresh worker reports 0 active jobs."""
     assert worker.active_jobs() == 0
 
 
 def test_worker_initial_is_not_running(worker: BackgroundWorker) -> None:
-    """is_running() returns False before start() is called."""
+    """A fresh worker is not running."""
     assert worker.is_running() is False
 
 
 def test_worker_initial_threads_alive_is_false(worker: BackgroundWorker) -> None:
-    """threads_alive() returns False when no threads have been started."""
+    """A fresh worker has no live threads."""
     assert worker.threads_alive() is False
 
 
 def test_worker_initial_thread_count_is_zero(worker: BackgroundWorker) -> None:
-    """thread_count() returns 0 before start() is called."""
+    """A fresh worker has thread count 0."""
     assert worker.thread_count() == 0
 
 
 def test_worker_initial_no_activity_recorded(worker: BackgroundWorker) -> None:
-    """seconds_since_last_activity() returns None when no activity has been recorded."""
+    """A fresh worker has no recorded activity."""
     assert worker.seconds_since_last_activity() is None
 
 
-
 def test_enqueue_job_increments_queue_size(worker: BackgroundWorker) -> None:
-    """enqueue_job() increases queue_size() by one."""
+    """Enqueueing one job grows the queue size to 1."""
     worker.enqueue_job("opt-1")
     assert worker.queue_size() == 1
 
 
 def test_enqueue_job_multiple_increments_in_order(worker: BackgroundWorker) -> None:
-    """Enqueueing three jobs raises queue_size() to three."""
+    """Three enqueues yield queue size 3."""
     worker.enqueue_job("opt-1")
     worker.enqueue_job("opt-2")
     worker.enqueue_job("opt-3")
@@ -99,33 +98,32 @@ def test_enqueue_job_multiple_increments_in_order(worker: BackgroundWorker) -> N
 def test_enqueue_job_is_idempotent_for_duplicate_pending(
     worker: BackgroundWorker,
 ) -> None:
-    """Enqueueing the same ID twice must not add it twice to the pending list."""
+    """Enqueueing the same ID twice does not duplicate it in the queue."""
     worker.enqueue_job("opt-1")
     worker.enqueue_job("opt-1")
     assert worker.queue_size() == 1
 
 
 def test_enqueue_job_creates_cancel_event(worker: BackgroundWorker) -> None:
-    """enqueue_job() registers a threading.Event for the job in _cancel_events."""
+    """Enqueueing creates a ``threading.Event`` cancel signal for the job."""
     worker.enqueue_job("opt-1")
     assert "opt-1" in worker._cancel_events
     assert isinstance(worker._cancel_events["opt-1"], threading.Event)
 
 
 def test_enqueue_job_cancel_event_starts_unset(worker: BackgroundWorker) -> None:
-    """The cancel event created by enqueue_job() starts in the unset (not cancelled) state."""
+    """The cancel event begins life unset."""
     worker.enqueue_job("opt-1")
     assert not worker._cancel_events["opt-1"].is_set()
 
 
-
 def test_get_next_job_returns_none_when_empty(worker: BackgroundWorker) -> None:
-    """_get_next_job() returns None when the pending queue is empty."""
+    """``_get_next_job`` returns ``None`` when the queue is empty."""
     assert worker._get_next_job() is None
 
 
 def test_get_next_job_returns_first_enqueued_id(worker: BackgroundWorker) -> None:
-    """_get_next_job() returns the earliest-enqueued job ID."""
+    """``_get_next_job`` returns the first enqueued ID."""
     worker.enqueue_job("opt-1")
     worker.enqueue_job("opt-2")
     result = worker._get_next_job()
@@ -133,30 +131,29 @@ def test_get_next_job_returns_first_enqueued_id(worker: BackgroundWorker) -> Non
 
 
 def test_get_next_job_decrements_pending_queue(worker: BackgroundWorker) -> None:
-    """_get_next_job() removes the returned ID from the pending list."""
+    """Dequeueing reduces the pending queue size."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()
     assert worker.queue_size() == 0
 
 
 def test_get_next_job_moves_id_to_processing(worker: BackgroundWorker) -> None:
-    """_get_next_job() adds the returned ID to the processing set."""
+    """Dequeued jobs move into the active-jobs set."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()
     assert worker.active_jobs() == 1
 
 
 def test_get_next_job_fifo_ordering(worker: BackgroundWorker) -> None:
-    """Jobs must be dequeued in the order they were enqueued (FIFO)."""
+    """The pending queue dequeues in FIFO order."""
     for i in range(5):
         worker.enqueue_job(f"opt-{i}")
     dequeued = [worker._get_next_job() for _ in range(5)]
     assert dequeued == [f"opt-{i}" for i in range(5)]
 
 
-
 def test_mark_job_done_removes_from_processing(worker: BackgroundWorker) -> None:
-    """_mark_job_done() removes the job from the processing set."""
+    """``_mark_job_done`` removes the ID from the processing set."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()
     worker._mark_job_done("opt-1")
@@ -164,7 +161,7 @@ def test_mark_job_done_removes_from_processing(worker: BackgroundWorker) -> None
 
 
 def test_mark_job_done_removes_cancel_event(worker: BackgroundWorker) -> None:
-    """_mark_job_done() removes the job's cancel event from _cancel_events."""
+    """``_mark_job_done`` discards the per-job cancel event."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()
     worker._mark_job_done("opt-1")
@@ -172,12 +169,12 @@ def test_mark_job_done_removes_cancel_event(worker: BackgroundWorker) -> None:
 
 
 def test_mark_job_done_is_idempotent(worker: BackgroundWorker) -> None:
-    """Calling _mark_job_done on an already-done job must not raise."""
+    """``_mark_job_done`` does not raise on unknown IDs."""
     worker._mark_job_done("nonexistent")  # should not raise
 
 
-
 def test_cancel_job_sets_cancel_event_for_pending_job(worker: BackgroundWorker) -> None:
+    """Cancelling a pending job removes it from the pending queue."""
     worker.enqueue_job("opt-1")
     worker.cancel_job("opt-1")
     # After cancelling a pending job, the event should have been set before removal.
@@ -186,14 +183,14 @@ def test_cancel_job_sets_cancel_event_for_pending_job(worker: BackgroundWorker) 
 
 
 def test_cancel_job_returns_true_for_pending_job(worker: BackgroundWorker) -> None:
-    """cancel_job() returns True when the job is found in the pending queue."""
+    """``cancel_job`` returns ``True`` for a pending job."""
     worker.enqueue_job("opt-1")
     result = worker.cancel_job("opt-1")
     assert result is True
 
 
 def test_cancel_job_removes_pending_job_from_queue(worker: BackgroundWorker) -> None:
-    """cancel_job() removes the target ID from _pending_jobs and leaves others intact."""
+    """Cancelling removes only the targeted pending job."""
     worker.enqueue_job("opt-1")
     worker.enqueue_job("opt-2")
     worker.cancel_job("opt-1")
@@ -202,13 +199,13 @@ def test_cancel_job_removes_pending_job_from_queue(worker: BackgroundWorker) -> 
 
 
 def test_cancel_job_returns_false_for_unknown_job(worker: BackgroundWorker) -> None:
-    """cancel_job() returns False when the ID is not tracked by the worker."""
+    """``cancel_job`` returns ``False`` for an unknown ID."""
     result = worker.cancel_job("does-not-exist")
     assert result is False
 
 
 def test_cancel_job_sets_event_for_processing_job(worker: BackgroundWorker) -> None:
-    """cancel_job on a job already being processed sets its event (interrupt signal)."""
+    """``cancel_job`` signals the cancel event for an in-flight job."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()  # moves to _processing_jobs
     worker.cancel_job("opt-1")
@@ -218,18 +215,17 @@ def test_cancel_job_sets_event_for_processing_job(worker: BackgroundWorker) -> N
 
 
 def test_cancel_job_returns_true_for_processing_job(worker: BackgroundWorker) -> None:
-    """cancel_job() returns True when the job is currently being processed."""
+    """``cancel_job`` returns ``True`` for an in-flight job."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()
     result = worker.cancel_job("opt-1")
     assert result is True
 
 
-
 def test_touch_activity_causes_activity_to_be_recorded(
     worker: BackgroundWorker,
 ) -> None:
-    """_touch_activity() makes seconds_since_last_activity() return a non-None value."""
+    """``_touch_activity`` causes ``seconds_since_last_activity`` to be non-None."""
     worker._touch_activity(worker_id=0)
     elapsed = worker.seconds_since_last_activity()
     assert elapsed is not None
@@ -239,7 +235,7 @@ def test_touch_activity_causes_activity_to_be_recorded(
 def test_seconds_since_last_activity_is_small_immediately_after_touch(
     worker: BackgroundWorker,
 ) -> None:
-    """seconds_since_last_activity() returns a value under 1 s right after a touch."""
+    """The reported elapsed activity time is small right after touching."""
     worker._touch_activity(worker_id=0)
     elapsed = worker.seconds_since_last_activity()
     assert elapsed is not None
@@ -249,7 +245,7 @@ def test_seconds_since_last_activity_is_small_immediately_after_touch(
 def test_touch_activity_tracks_most_recent_across_workers(
     worker: BackgroundWorker,
 ) -> None:
-    """seconds_since_last_activity() returns time since the *most recent* worker touch."""
+    """The reported elapsed time reflects the most recent worker touch."""
     worker._touch_activity(worker_id=0)
     time.sleep(0.05)
     worker._touch_activity(worker_id=1)
@@ -259,19 +255,16 @@ def test_touch_activity_tracks_most_recent_across_workers(
     assert elapsed < 0.1
 
 
-
 @pytest.mark.parametrize("n_jobs", [1, 3, 5])
-def test_queue_size_reflects_enqueued_count(
-    worker: BackgroundWorker, n_jobs: int
-) -> None:
-    """queue_size() accurately reflects the number of pending jobs for various counts."""
+def test_queue_size_reflects_enqueued_count(worker: BackgroundWorker, n_jobs: int) -> None:
+    """``queue_size`` equals the number of jobs enqueued."""
     for i in range(n_jobs):
         worker.enqueue_job(f"opt-{i}")
     assert worker.queue_size() == n_jobs
 
 
 def test_active_jobs_reflects_processing_count(worker: BackgroundWorker) -> None:
-    """active_jobs() increases by one each time _get_next_job() is called."""
+    """``active_jobs`` equals the number of jobs in the processing set."""
     worker.enqueue_job("opt-1")
     worker.enqueue_job("opt-2")
     worker._get_next_job()
@@ -281,13 +274,12 @@ def test_active_jobs_reflects_processing_count(worker: BackgroundWorker) -> None
 
 
 def test_active_jobs_decrements_on_mark_done(worker: BackgroundWorker) -> None:
-    """active_jobs() decrements when _mark_job_done() is called."""
+    """``active_jobs`` decrements when a job is marked done."""
     worker.enqueue_job("opt-1")
     worker._get_next_job()
     assert worker.active_jobs() == 1
     worker._mark_job_done("opt-1")
     assert worker.active_jobs() == 0
-
 
 
 def test_get_next_job_remove_and_add_are_atomic(worker: BackgroundWorker) -> None:
@@ -308,6 +300,7 @@ def test_get_next_job_remove_and_add_are_atomic(worker: BackgroundWorker) -> Non
     snapshot_processing: list[set] = []
 
     def _observe_under_lock() -> None:
+        """Snapshot the pending and processing collections under ``_queue_lock``."""
         with worker._queue_lock:
             snapshot_pending.append(list(worker._pending_jobs))
             snapshot_processing.append(set(worker._processing_jobs))

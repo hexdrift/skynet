@@ -1,19 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  ChevronRight,
-  ChevronLeft,
-  SkipBack,
-  CircleMinus,
-  Download,
-  Keyboard,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import Link from "next/link";
+import { ChevronRight, ChevronLeft, SkipBack, CircleMinus, Download, Keyboard } from "lucide-react";
+import { Button } from "@/shared/ui/primitives/button";
+import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
+import { Badge } from "@/shared/ui/primitives/badge";
+import { Separator } from "@/shared/ui/primitives/separator";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -21,11 +15,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/shared/ui/primitives/dialog";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { cn } from "@/shared/lib/utils";
 import { exportAnnotations } from "../lib/export-csv";
 import type { DataRow, Annotation, TaggerConfig } from "../lib/types";
+import { msg } from "@/shared/lib/messages";
 
 interface Props {
   config: TaggerConfig;
@@ -34,7 +29,6 @@ interface Props {
   annotations: Record<string, Annotation>;
   currentIndex: number;
   taggedCount: number;
-  distribution: Record<string, number>;
   onNavigate: (dir: 1 | -1) => void;
   onGoTo: (idx: number) => void;
   onJumpUntagged: () => void;
@@ -51,7 +45,6 @@ export function TaggerAnnotation({
   annotations,
   currentIndex,
   taggedCount,
-  distribution,
   onNavigate,
   onGoTo,
   onJumpUntagged,
@@ -67,14 +60,9 @@ export function TaggerAnnotation({
   const freetextRef = useRef<HTMLTextAreaElement>(null);
 
   const item = data[currentIndex];
-  if (!item) return null;
-  const id = String(item.id);
+  const id = item ? String(item.id) : "";
   const pct = data.length > 0 ? (taggedCount / data.length) * 100 : 0;
   const currentAnn = annotations[id];
-  const isCurrentTagged =
-    currentAnn !== undefined &&
-    currentAnn !== "" &&
-    !(Array.isArray(currentAnn) && currentAnn.length === 0);
 
   useEffect(() => {
     if (taggedCount === data.length && data.length > 0 && !confettiFired.current) {
@@ -126,6 +114,8 @@ export function TaggerAnnotation({
         return;
       }
 
+      if (!id) return;
+
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         onNavigate(1);
@@ -174,26 +164,28 @@ export function TaggerAnnotation({
     handleExport,
   ]);
 
+  if (!item) return null;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground px-5 pt-3">
-        <a href="/" className="hover:text-foreground transition-colors">
-          לוח בקרה
-        </a>
+        <Link href="/" className="hover:text-foreground transition-colors">
+          {msg("auto.features.tagger.components.taggerannotation.1")}
+        </Link>
         <ChevronLeft className="h-3 w-3" />
         <button
           type="button"
           onClick={onBack}
           className="hover:text-foreground transition-colors cursor-pointer"
         >
-          הגדרות תיוג
+          {msg("auto.features.tagger.components.taggerannotation.2")}
         </button>
         <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">תיוג</span>
+        <span className="text-foreground font-medium">
+          {msg("auto.features.tagger.components.taggerannotation.3")}
+        </span>
       </div>
 
-      {/* Progress bar — full width with count */}
       <div className="flex items-center gap-2 px-5 py-1.5">
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
           <div
@@ -209,21 +201,25 @@ export function TaggerAnnotation({
         </span>
       </div>
 
-      {/* Main Content */}
       <div className="flex flex-1 flex-col gap-3 p-5 overflow-hidden">
-        {/* Text Card */}
         <Card className="flex flex-1 min-h-0 flex-col">
-          <CardContent className="flex-1 overflow-y-auto px-6 py-5 text-base leading-relaxed text-foreground whitespace-pre-wrap" dir="auto">
+          <CardContent
+            className="flex-1 overflow-y-auto px-6 py-5 text-base leading-relaxed text-foreground whitespace-pre-wrap"
+            dir="auto"
+          >
             {item.text}
           </CardContent>
         </Card>
 
-        {/* Annotation Card */}
         <Card className="flex flex-1 min-h-0 flex-col p-5">
           <CardTitle className="mb-3 text-center text-sm font-medium text-muted-foreground">
-            {config.mode === "binary" && (config.question ?? "סיווג")}
-            {config.mode === "multiclass" && "בחר קטגוריות"}
-            {config.mode === "freetext" && (config.prompt ?? "הקלד טקסט")}
+            {config.mode === "binary" &&
+              (config.question ??
+                msg("auto.features.tagger.components.taggerannotation.literal.1"))}
+            {config.mode === "multiclass" &&
+              msg("auto.features.tagger.components.taggerannotation.literal.2")}
+            {config.mode === "freetext" &&
+              (config.prompt ?? msg("auto.features.tagger.components.taggerannotation.literal.3"))}
           </CardTitle>
 
           {config.mode === "binary" && (
@@ -233,22 +229,28 @@ export function TaggerAnnotation({
                 onClick={() => onToggleBinary(id, "yes")}
                 className={cn(
                   "flex-1 text-base font-medium rounded-xl gap-2 focus-visible:ring-0 focus-visible:border-transparent",
-                  currentAnn === "yes" && "bg-emerald-600/15 hover:bg-emerald-600/20 border-emerald-600/40 text-emerald-700",
+                  currentAnn === "yes" &&
+                    "bg-emerald-600/15 hover:bg-emerald-600/20 border-emerald-600/40 text-emerald-700",
                 )}
               >
-                <Badge variant="ghost" size="sm" className="opacity-40 font-mono">Y</Badge>
-                כן
+                <Badge variant="ghost" size="sm" className="opacity-40 font-mono">
+                  {msg("auto.features.tagger.components.taggerannotation.4")}
+                </Badge>
+                {msg("auto.features.tagger.components.taggerannotation.5")}
               </Button>
               <Button
                 variant={currentAnn === "no" ? "default" : "outline"}
                 onClick={() => onToggleBinary(id, "no")}
                 className={cn(
                   "flex-1 text-base font-medium rounded-xl gap-2 focus-visible:ring-0 focus-visible:border-transparent",
-                  currentAnn === "no" && "bg-red-500/15 hover:bg-red-500/20 border-red-500/40 text-red-600",
+                  currentAnn === "no" &&
+                    "bg-red-500/15 hover:bg-red-500/20 border-red-500/40 text-red-600",
                 )}
               >
-                <Badge variant="ghost" size="sm" className="opacity-40 font-mono">N</Badge>
-                לא
+                <Badge variant="ghost" size="sm" className="opacity-40 font-mono">
+                  {msg("auto.features.tagger.components.taggerannotation.6")}
+                </Badge>
+                {msg("auto.features.tagger.components.taggerannotation.7")}
               </Button>
             </div>
           )}
@@ -275,7 +277,11 @@ export function TaggerAnnotation({
                     )}
                   >
                     {i < 9 && (
-                      <Badge variant="ghost" size="sm" className={cn("font-mono", selected ? "opacity-70" : "opacity-40")}>
+                      <Badge
+                        variant="ghost"
+                        size="sm"
+                        className={cn("font-mono", selected ? "opacity-70" : "opacity-40")}
+                      >
                         {i + 1}
                       </Badge>
                     )}
@@ -298,7 +304,6 @@ export function TaggerAnnotation({
           )}
         </Card>
 
-        {/* Navigation */}
         <div className="flex items-center justify-between">
           <Button
             variant="outline"
@@ -307,7 +312,7 @@ export function TaggerAnnotation({
             className="gap-2"
           >
             <ChevronRight className="size-4" />
-            הקודם
+            {msg("auto.features.tagger.components.taggerannotation.8")}
           </Button>
 
           <div className="flex items-center gap-2">
@@ -317,7 +322,9 @@ export function TaggerAnnotation({
                   <SkipBack className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>התחלה</TooltipContent>
+              <TooltipContent>
+                {msg("auto.features.tagger.components.taggerannotation.9")}
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -330,9 +337,10 @@ export function TaggerAnnotation({
                   <CircleMinus className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>קפיצה ללא מתויג</TooltipContent>
+              <TooltipContent>
+                {msg("auto.features.tagger.components.taggerannotation.10")}
+              </TooltipContent>
             </Tooltip>
-
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -340,7 +348,9 @@ export function TaggerAnnotation({
                   <Keyboard className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>קיצורי מקשים</TooltipContent>
+              <TooltipContent>
+                {msg("auto.features.tagger.components.taggerannotation.11")}
+              </TooltipContent>
             </Tooltip>
             <PopoverPrimitive.Root>
               <Tooltip>
@@ -351,7 +361,9 @@ export function TaggerAnnotation({
                     </Button>
                   </PopoverPrimitive.Trigger>
                 </TooltipTrigger>
-                <TooltipContent>ייצוא</TooltipContent>
+                <TooltipContent>
+                  {msg("auto.features.tagger.components.taggerannotation.12")}
+                </TooltipContent>
               </Tooltip>
               <PopoverPrimitive.Portal>
                 <PopoverPrimitive.Content
@@ -381,50 +393,76 @@ export function TaggerAnnotation({
             disabled={currentIndex === data.length - 1}
             className="gap-2"
           >
-            הבא
+            {msg("auto.features.tagger.components.taggerannotation.13")}
             <ChevronLeft className="size-4" />
           </Button>
         </div>
       </div>
 
-      {/* Shortcuts Dialog */}
       <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
         <DialogContent className="sm:max-w-sm" dir="rtl">
           <DialogHeader>
-            <DialogTitle>קיצורי מקשים</DialogTitle>
+            <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.14")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
             {config.mode === "binary" && (
               <>
-                <ShortcutRow keys="Y" label="כן" />
-                <ShortcutRow keys="N" label="לא" />
+                <ShortcutRow
+                  keys="Y"
+                  label={msg("auto.features.tagger.components.taggerannotation.literal.4")}
+                />
+                <ShortcutRow
+                  keys="N"
+                  label={msg("auto.features.tagger.components.taggerannotation.literal.5")}
+                />
               </>
             )}
             {config.mode === "multiclass" &&
-              (config.categories ?? []).slice(0, 9).map((cat, i) => (
-                <ShortcutRow key={cat.id} keys={String(i + 1)} label={cat.label} />
-              ))}
+              (config.categories ?? [])
+                .slice(0, 9)
+                .map((cat, i) => (
+                  <ShortcutRow key={cat.id} keys={String(i + 1)} label={cat.label} />
+                ))}
             <Separator className="my-2" />
-            <ShortcutRow keys="← / →" label="הבא / הקודם" />
-            <ShortcutRow keys="Home" label="התחלה" />
-            <ShortcutRow keys="U" label="קפיצה ללא מתויג" />
-            <ShortcutRow keys="E" label="ייצוא CSV" />
-            <ShortcutRow keys="Ctrl+H" label="קיצורי מקשים" />
+            <ShortcutRow
+              keys="← / →"
+              label={msg("auto.features.tagger.components.taggerannotation.literal.6")}
+            />
+            <ShortcutRow
+              keys="Home"
+              label={msg("auto.features.tagger.components.taggerannotation.literal.7")}
+            />
+            <ShortcutRow
+              keys="U"
+              label={msg("auto.features.tagger.components.taggerannotation.literal.8")}
+            />
+            <ShortcutRow
+              keys="E"
+              label={msg("auto.features.tagger.components.taggerannotation.literal.9")}
+            />
+            <ShortcutRow
+              keys="Ctrl+H"
+              label={msg("auto.features.tagger.components.taggerannotation.literal.10")}
+            />
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Export Confirm */}
-      <Dialog open={!!exportConfirm} onOpenChange={(open) => { if (!open) setExportConfirm(null); }}>
+      <Dialog
+        open={!!exportConfirm}
+        onOpenChange={(open) => {
+          if (!open) setExportConfirm(null);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>ייצוא תיוגים</DialogTitle>
+            <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.15")}</DialogTitle>
             <DialogDescription>
-              נותרו{" "}
+              {msg("auto.features.tagger.components.taggerannotation.16")}{" "}
               <span className="font-mono font-medium text-foreground">
                 {data.length - taggedCount}
               </span>{" "}
-              טקסטים ללא תיוג. להמשיך בייצוא?
+              {msg("auto.features.tagger.components.taggerannotation.17")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="grid grid-cols-2 gap-2">
@@ -433,7 +471,7 @@ export function TaggerAnnotation({
               onClick={() => setExportConfirm(null)}
               className="w-full justify-center"
             >
-              ביטול
+              {msg("auto.features.tagger.components.taggerannotation.18")}
             </Button>
             <Button
               onClick={() => {
@@ -442,18 +480,16 @@ export function TaggerAnnotation({
               }}
               className="w-full justify-center"
             >
-              ייצוא
+              {msg("auto.features.tagger.components.taggerannotation.19")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Confetti */}
       {showConfetti && <Confetti />}
     </div>
   );
 }
-
 
 function ShortcutRow({ keys, label }: { keys: string; label: string }) {
   return (
@@ -466,30 +502,34 @@ function ShortcutRow({ keys, label }: { keys: string; label: string }) {
   );
 }
 
+interface ConfettiPiece {
+  shape: string;
+  color: string;
+  left: number;
+  delay: number;
+  duration: number;
+  size: number;
+  elongated: boolean;
+}
+
 function Confetti() {
-  const colors = ["#3d2e22", "#5c4d40", "#8c7a6b", "#a69585", "#ddd6cc"];
-  const shapes = ["rounded-full", "rounded-sm", "rounded-sm"];
-  const pieces = Array.from({ length: 50 }, (_, i) => {
-    const shape = shapes[i % shapes.length];
-    const color = colors[i % colors.length];
-    const left = Math.random() * 100;
-    const delay = Math.random() * 0.5;
-    const duration = 2 + Math.random() * 2;
-    const size = 6 + Math.random() * 10;
-    return (
-      <div
-        key={i}
-        className={cn("absolute opacity-0", shape)}
-        style={{
-          backgroundColor: color,
-          left: `${left}%`,
-          width: `${size}px`,
-          height: i % 3 === 2 ? `${size * 1.6}px` : `${size}px`,
-          animation: `confetti-fall ${duration}s ${delay}s ease-out forwards`,
-        }}
-      />
+  const [pieces, setPieces] = useState<ConfettiPiece[]>([]);
+
+  useEffect(() => {
+    const colors = ["#3d2e22", "#5c4d40", "#8c7a6b", "#a69585", "#ddd6cc"];
+    const shapes = ["rounded-full", "rounded-sm", "rounded-sm"];
+    setPieces(
+      Array.from({ length: 50 }, (_, i) => ({
+        shape: shapes[i % shapes.length]!,
+        color: colors[i % colors.length]!,
+        left: Math.random() * 100,
+        delay: Math.random() * 0.5,
+        duration: 2 + Math.random() * 2,
+        size: 6 + Math.random() * 10,
+        elongated: i % 3 === 2,
+      })),
     );
-  });
+  }, []);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden">
@@ -499,7 +539,19 @@ function Confetti() {
           100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
         }
       `}</style>
-      {pieces}
+      {pieces.map((p, i) => (
+        <div
+          key={i}
+          className={cn("absolute opacity-0", p.shape)}
+          style={{
+            backgroundColor: p.color,
+            left: `${p.left}%`,
+            width: `${p.size}px`,
+            height: p.elongated ? `${p.size * 1.6}px` : `${p.size}px`,
+            animation: `confetti-fall ${p.duration}s ${p.delay}s ease-out forwards`,
+          }}
+        />
+      ))}
     </div>
   );
 }

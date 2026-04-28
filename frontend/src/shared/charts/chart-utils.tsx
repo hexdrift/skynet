@@ -1,12 +1,7 @@
 "use client";
 
-/**
- * Shared chart utilities
- * Common tooltip and formatting functions for Recharts components
- * Preserves exact RTL layout and Hebrew text
- */
+import { msg } from "@/shared/lib/messages";
 
-/* ── Chart colors ── */
 export const chartColors = {
   primary: "var(--color-chart-1)",
   secondary: "var(--color-chart-2)",
@@ -15,7 +10,6 @@ export const chartColors = {
   quinary: "var(--color-chart-5)",
 };
 
-/* ── Shared chart tooltip ── */
 export function ChartTooltip({
   active,
   payload,
@@ -55,18 +49,18 @@ export function ChartTooltip({
   );
 }
 
-/* ── Format axis labels ── */
 export const formatAxisLabel = {
   percent: (value: number) => `${value}%`,
   minutes: (value: number) => `${value}m`,
   count: (value: number) => value.toString(),
 };
 
-/* ── Empty state ── */
 export function ChartEmptyState({ message }: { message?: string }) {
   return (
     <div className="flex h-[300px] items-center justify-center">
-      <p className="text-sm text-muted-foreground">{message ?? "אין עדיין נתונים"}</p>
+      <p className="text-sm text-muted-foreground">
+        {message ?? msg("auto.shared.charts.chart.utils.literal.1")}
+      </p>
     </div>
   );
 }

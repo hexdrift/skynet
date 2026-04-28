@@ -1,31 +1,30 @@
-"""Centralized mock/fake builders for core/api/tests/.
+"""Centralized mock/fake builders for ``core.api.tests``.
 
-All domain fakes that were previously scattered inline across individual test
-files live here.  Test-specific values (e.g. a particular metric pair that
+Domain fakes that were previously scattered inline across individual test
+files live here. Test-specific values (e.g. a particular metric pair that
 the test is asserting against) stay inline in the test — only the generic
 "give me any valid fake X" belongs here.
 
-Usage
------
-    from core.api.tests.mocks import (
-        fake_background_worker,
-        real_run_response_dict,
-        real_grid_response_dict,
-        real_program_artifact_dict,
-        make_artifact,
-        make_run_result,
-        make_grid_job,
-        REAL_OPTIMIZATION_ID,
-        REAL_USERNAME
-    )
+Example:
+    >>> from core.api.tests.mocks import (
+    ...     fake_background_worker,
+    ...     real_run_response_dict,
+    ...     real_grid_response_dict,
+    ...     real_program_artifact_dict,
+    ...     make_artifact,
+    ...     make_run_result,
+    ...     make_grid_job,
+    ...     REAL_OPTIMIZATION_ID,
+    ...     REAL_USERNAME,
+    ... )
 """
 
 from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from functools import lru_cache
+from datetime import UTC, datetime
+from functools import cache
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -42,64 +41,78 @@ from ...models import (
 _FIXTURES_ROOT = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
 
 
-@lru_cache(maxsize=None)
+@cache
 def _read_fixture_text(name: str) -> str:
-    """Read a fixture file by name relative to ``backend/tests/fixtures/``.
+    """Read and cache the raw text of a fixture file.
 
     Args:
-        name: Path relative to the fixtures root (e.g.
-            ``"jobs/success_single_gepa.detail.json"``).
+        name: Path to the fixture relative to the fixtures root.
 
     Returns:
-        The raw text contents of the fixture file.
+        The file contents as a string.
     """
     return (_FIXTURES_ROOT / name).read_text()
 
 
 def load_fixture(name: str) -> Any:
-    """Load and parse a JSON fixture by name.
+    """Return a freshly-parsed JSON payload from a fixture file.
+
+    The result is decoded from the cached fixture text on every call so it
+    remains safe to mutate between calls.
 
     Args:
-        name: Path relative to ``backend/tests/fixtures/``.
+        name: Path to the fixture file relative to the fixtures root.
 
     Returns:
-        A freshly-parsed JSON payload (safe to mutate between calls).
+        The parsed JSON content (typically a ``dict`` or ``list``).
     """
     return json.loads(_read_fixture_text(name))
 
 
 # These come from jobs/success_single_gepa.detail.json
-REAL_OPTIMIZATION_ID: str = load_fixture("jobs/success_single_gepa.detail.json")[
-    "optimization_id"
-]
+REAL_OPTIMIZATION_ID: str = load_fixture("jobs/success_single_gepa.detail.json")["optimization_id"]
 REAL_USERNAME: str = load_fixture("jobs/success_single_gepa.detail.json")["username"]
 
 
-
 def real_run_response_dict() -> dict:
-    """Return the ``result`` block of the gepa success fixture (fresh copy)."""
+    """Return the ``result`` block from the recorded single-run fixture.
+
+    Returns:
+        A fresh dict that can be mutated by the caller.
+    """
     return load_fixture("jobs/success_single_gepa.detail.json")["result"]
 
 
 def real_grid_response_dict() -> dict:
-    """Return the ``grid_result`` block of the grid success fixture (fresh copy)."""
+    """Return the ``grid_result`` block from the recorded grid-search fixture.
+
+    Returns:
+        A fresh dict that can be mutated by the caller.
+    """
     return load_fixture("jobs/success_grid.detail.json")["grid_result"]
 
 
 def real_program_artifact_dict() -> dict:
-    """Return the ``program_artifact`` sub-dict from the gepa success fixture."""
-    return load_fixture("jobs/success_single_gepa.detail.json")["result"][
-        "program_artifact"
-    ]
+    """Return the ``program_artifact`` block from the single-run fixture.
+
+    Returns:
+        A fresh dict containing the pickled program and optimized prompt.
+    """
+    return load_fixture("jobs/success_single_gepa.detail.json")["result"]["program_artifact"]
 
 
 def real_optimization_status_dict(kind: str) -> dict:
-    """Return the full detail fixture dict for the requested scenario.
+    """Return a recorded optimization detail document.
 
-    Parameters
-    ----------
-    kind:
-        One of ``"success"``, ``"failed"``, ``"canceled"``, ``"grid"``.
+    Args:
+        kind: One of ``"success"``, ``"failed"``, ``"cancelled"``, or
+            ``"grid"`` selecting the fixture variant.
+
+    Returns:
+        The parsed fixture document.
+
+    Raises:
+        ValueError: If ``kind`` is not one of the supported values.
     """
     mapping = {
         "success": "jobs/success_single_gepa.detail.json",
@@ -112,29 +125,26 @@ def real_optimization_status_dict(kind: str) -> dict:
     return load_fixture(mapping[kind])
 
 
-
 def make_artifact(
     input_fields: list[str] | None = None,
     output_fields: list[str] | None = None,
 ) -> ProgramArtifact:
-    """Build a ProgramArtifact for serve-layer tests.
+    """Build a ``ProgramArtifact`` for serve-route tests.
+
+    Pass an empty list for ``input_fields`` to drive the 400 "missing inputs"
+    response; an empty ``output_fields`` triggers the 409 "missing outputs"
+    path. Passing ``None`` for both returns the fixture-backed artifact.
 
     Args:
-        input_fields: Explicit input field names. Pass ``[]`` to drive the
-            400 "missing inputs" response. Leave as ``None`` together with
-            ``output_fields`` to get the real fixture-backed artifact.
-        output_fields: Explicit output field names. Pass ``[]`` to drive the
-            409 "missing outputs" response.
+        input_fields: Optional override for the optimized prompt's input fields.
+        output_fields: Optional override for the optimized prompt's output fields.
 
     Returns:
-        A real ``ProgramArtifact`` from the grid fixture when both args are
-        ``None``, otherwise a hand-built one with the supplied field lists.
+        A ``ProgramArtifact`` ready to be embedded in a fake job result.
     """
     if input_fields is None and output_fields is None:
         raw = load_fixture("jobs/success_grid.detail.json")
-        return ProgramArtifact.model_validate(
-            raw["grid_result"]["pair_results"][0]["program_artifact"]
-        )
+        return ProgramArtifact.model_validate(raw["grid_result"]["pair_results"][0]["program_artifact"])
     prompt = OptimizedPredictor(
         predictor_name="predict",
         instructions="Be helpful.",
@@ -145,13 +155,14 @@ def make_artifact(
 
 
 def make_run_result(artifact: ProgramArtifact) -> RunResponse:
-    """Build a RunResponse model with the given ProgramArtifact substituted in.
+    """Build a fully-populated ``RunResponse`` wrapping the given artifact.
 
     Args:
-        artifact: The artifact to splice into the fixture-backed result.
+        artifact: The program artifact to embed in the result.
 
     Returns:
-        A validated ``RunResponse`` backed by real metric values.
+        A ``RunResponse`` parsed from the recorded single-run fixture, with
+        its ``program_artifact`` swapped for the supplied one.
     """
     raw = dict(load_fixture("jobs/success_single_gepa.detail.json")["result"])
     raw["program_artifact"] = artifact.model_dump()
@@ -165,18 +176,21 @@ def make_grid_job(
     artifact: ProgramArtifact | None = None,
     status: str = "success",
 ) -> dict:
-    """Return a raw job dict for a grid-search job with one pair.
+    """Build a fake grid-search job document.
+
+    Returns the recorded fixture when both ``artifact`` and ``pair_error`` are
+    ``None``; otherwise hand-builds a minimal one-pair grid result.
 
     Args:
-        opt_id: Optimization id to stamp on the job dict.
-        pair_index: Index of the single pair when hand-building.
-        pair_error: Optional error string to attach to the pair.
-        artifact: Optional ProgramArtifact override; built on demand otherwise.
-        status: Job status string.
+        opt_id: Optimization identifier to embed in the document.
+        pair_index: Pair index to assign to the synthesised pair result.
+        pair_error: Optional error message for the synthesised pair.
+        artifact: Optional artifact for the synthesised pair; defaults to the
+            fixture artifact when omitted.
+        status: Job-level status string.
 
     Returns:
-        A raw job dict: the real captured fixture when ``artifact`` and
-        ``pair_error`` are both ``None``, otherwise a hand-built minimal grid.
+        A dict shaped like a ``JobStore`` row for grid-search jobs.
     """
     if artifact is None and pair_error is None:
         raw = load_fixture("jobs/success_grid.detail.json")
@@ -223,26 +237,30 @@ def make_grid_job(
     }
 
 
-
 class _BaseFakeJobStore:
-    """Minimal in-memory job store shared by all variants."""
+    """In-memory stand-in for the production job store.
+
+    Implements only the methods that the routers under test reach for, with no
+    persistence and no concurrency guarantees.
+    """
 
     def __init__(self) -> None:
+        """Initialise empty job, log, and progress dictionaries."""
         self._jobs: dict[str, dict] = {}
         self._logs: dict[str, list] = {}
         self._progress: dict[str, list] = {}
 
     def seed_job(self, optimization_id: str, **fields: Any) -> dict:
-        """Seed a minimal success-state job dict for the given optimization id.
+        """Insert a job row, with sensible defaults for any fields not given.
 
         Args:
-            optimization_id: The job id to insert.
-            **fields: Extra top-level fields to merge onto the default job dict.
+            optimization_id: Identifier for the synthesised job.
+            **fields: Overrides applied on top of the default success row.
 
         Returns:
-            The freshly-inserted job dict.
+            The stored job row.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         job = {
             "optimization_id": optimization_id,
             "status": "success",
@@ -260,22 +278,61 @@ class _BaseFakeJobStore:
         return job
 
     def update_job(self, optimization_id: str, **fields: Any) -> None:
+        """Apply field overrides to an existing job.
+
+        Args:
+            optimization_id: Identifier of the job to mutate.
+            **fields: Fields to merge into the stored row.
+        """
         self._jobs[optimization_id].update(fields)
 
     def delete_job(self, optimization_id: str) -> None:
+        """Remove a job and its associated logs and progress events.
+
+        Args:
+            optimization_id: Identifier of the job to delete.
+        """
         self._jobs.pop(optimization_id, None)
         self._logs.pop(optimization_id, None)
         self._progress.pop(optimization_id, None)
 
     def get_job(self, optimization_id: str) -> dict:
+        """Return a copy of the stored job row.
+
+        Args:
+            optimization_id: Identifier of the job to fetch.
+
+        Returns:
+            A shallow copy of the job row.
+
+        Raises:
+            KeyError: If no job with the given identifier exists.
+        """
         if optimization_id not in self._jobs:
             raise KeyError(optimization_id)
         return dict(self._jobs[optimization_id])
 
     def job_exists(self, optimization_id: str) -> bool:
+        """Report whether a job with the given identifier is stored.
+
+        Args:
+            optimization_id: Identifier to look up.
+
+        Returns:
+            ``True`` if the job is present, ``False`` otherwise.
+        """
         return optimization_id in self._jobs
 
     def list_jobs(self, **kwargs: Any) -> list[dict]:
+        """Return jobs, optionally filtered and paginated.
+
+        Args:
+            **kwargs: Optional ``status``, ``username``, ``optimization_type``,
+                ``limit``, and ``offset`` filters.
+
+        Returns:
+            The matching jobs as a list of rows.
+        """
         rows = list(self._jobs.values())
         status = kwargs.get("status")
         username = kwargs.get("username")
@@ -283,28 +340,38 @@ class _BaseFakeJobStore:
         if status:
             rows = [r for r in rows if r.get("status") == status]
         if username:
-            rows = [
-                r
-                for r in rows
-                if r.get("payload_overview", {}).get("username") == username
-            ]
+            rows = [r for r in rows if r.get("payload_overview", {}).get("username") == username]
         if optimization_type:
-            rows = [
-                r
-                for r in rows
-                if r.get("payload_overview", {}).get("job_type") == optimization_type
-            ]
+            rows = [r for r in rows if r.get("payload_overview", {}).get("job_type") == optimization_type]
         limit = kwargs.get("limit", len(rows))
         offset = kwargs.get("offset", 0)
         return rows[offset : offset + limit]
 
     def count_jobs(self, **kwargs: Any) -> int:
+        """Count jobs matching the supplied filters.
+
+        Args:
+            **kwargs: Same filters accepted by ``list_jobs``; pagination
+                parameters are ignored.
+
+        Returns:
+            The number of matching jobs.
+        """
         k = dict(kwargs)
         k.pop("limit", None)
         k.pop("offset", None)
         return len(self.list_jobs(limit=10**9, offset=0, **k))
 
     def get_logs(self, optimization_id: str, **kwargs: Any) -> list:
+        """Return log rows for a job, optionally filtered and paginated.
+
+        Args:
+            optimization_id: Identifier of the job whose logs are returned.
+            **kwargs: Optional ``level``, ``limit``, and ``offset`` filters.
+
+        Returns:
+            The matching log rows.
+        """
         rows = list(self._logs.get(optimization_id, []))
         level = kwargs.get("level")
         if level:
@@ -317,20 +384,44 @@ class _BaseFakeJobStore:
         return rows
 
     def get_log_count(self, optimization_id: str) -> int:
+        """Return the number of stored log rows for a job.
+
+        Args:
+            optimization_id: Identifier of the job to inspect.
+
+        Returns:
+            The log count, ``0`` if the job has no logs.
+        """
         return len(self._logs.get(optimization_id, []))
 
     def get_progress_events(self, optimization_id: str) -> list:
+        """Return the stored progress events for a job.
+
+        Args:
+            optimization_id: Identifier of the job to inspect.
+
+        Returns:
+            A copy of the progress event list.
+        """
         return list(self._progress.get(optimization_id, []))
 
     def get_progress_count(self, optimization_id: str) -> int:
+        """Return the number of stored progress events for a job.
+
+        Args:
+            optimization_id: Identifier of the job to inspect.
+
+        Returns:
+            The progress event count, ``0`` if the job has no events.
+        """
         return len(self._progress.get(optimization_id, []))
 
     def set_payload_overview(self, optimization_id: str, overview: dict) -> None:
-        """Overwrite the ``payload_overview`` sub-dict for an existing job.
+        """Replace the payload overview stored on a job.
 
         Args:
-            optimization_id: The job to update.
-            overview: New overview dict (copied into place).
+            optimization_id: Identifier of the job to update.
+            overview: New overview to store.
         """
         self._jobs[optimization_id]["payload_overview"] = dict(overview)
 
@@ -342,41 +433,48 @@ class _BaseFakeJobStore:
         logs: list | None = None,
         progress: list | None = None,
     ) -> None:
-        """Seed a fully-formed job dict plus its logs and progress events.
+        """Seed an entire job row, plus optional logs and progress events.
 
         Args:
-            optimization_id: The job id to insert under.
-            job: The complete job dict to store.
-            logs: Optional log entry list (empty list if omitted).
-            progress: Optional progress event list (empty list if omitted).
+            optimization_id: Identifier of the synthesised job.
+            job: The full job row to store.
+            logs: Optional log rows to associate with the job.
+            progress: Optional progress events to associate with the job.
         """
         self._jobs[optimization_id] = job
         self._logs[optimization_id] = list(logs or [])
         self._progress[optimization_id] = list(progress or [])
 
     def delete_jobs(self, optimization_ids: list[str]) -> None:
+        """Delete a batch of jobs by identifier.
+
+        Args:
+            optimization_ids: Identifiers of the jobs to delete.
+        """
         for oid in optimization_ids:
             self.delete_job(oid)
 
-    def get_jobs_status_by_ids(
-        self, optimization_ids: list[str]
-    ) -> dict[str, str | None]:
-        return {
-            oid: self._jobs[oid]["status"] if oid in self._jobs else None
-            for oid in optimization_ids
-        }
+    def get_jobs_status_by_ids(self, optimization_ids: list[str]) -> dict[str, str | None]:
+        """Return the status of each requested job.
+
+        Args:
+            optimization_ids: Identifiers to look up.
+
+        Returns:
+            A mapping from identifier to status; missing jobs map to ``None``.
+        """
+        return {oid: self._jobs[oid]["status"] if oid in self._jobs else None for oid in optimization_ids}
 
 
 class FakeJobStore(_BaseFakeJobStore):
-    """Public alias of ``_BaseFakeJobStore`` for use in test type annotations."""
+    """Concrete in-memory job store used by router unit tests."""
 
 
 def fake_job_store_with_success_single() -> _BaseFakeJobStore:
-    """Return a FakeJobStore pre-seeded with the gepa success fixture.
+    """Build a fake job store seeded with a single successful run fixture.
 
     Returns:
-        A ``_BaseFakeJobStore`` seeded with the real gepa success detail
-        fixture, including logs and progress events.
+        A fake store containing one job, its logs, and its progress events.
     """
     store = _BaseFakeJobStore()
     detail = load_fixture("jobs/success_single_gepa.detail.json")
@@ -407,11 +505,10 @@ def fake_job_store_with_success_single() -> _BaseFakeJobStore:
 
 
 def fake_job_store_with_grid() -> _BaseFakeJobStore:
-    """Return a FakeJobStore pre-seeded with the grid success fixture.
+    """Build a fake job store seeded with a successful grid-search fixture.
 
     Returns:
-        A ``_BaseFakeJobStore`` seeded with the real 2-pair grid success
-        detail fixture, including logs and progress events.
+        A fake store containing the grid job, its logs, and its progress events.
     """
     store = _BaseFakeJobStore()
     detail = load_fixture("jobs/success_grid.detail.json")
@@ -444,11 +541,11 @@ def fake_job_store_with_grid() -> _BaseFakeJobStore:
 
 
 def fake_job_store_with_failed() -> _BaseFakeJobStore:
-    """Return a FakeJobStore pre-seeded with the failed_runtime fixture.
+    """Build a fake job store seeded with a failed runtime fixture.
 
     Returns:
-        A ``_BaseFakeJobStore`` seeded with the real failed-runtime detail
-        fixture, including logs and progress events.
+        A fake store containing the failed job, its logs, and its progress
+        events.
     """
     store = _BaseFakeJobStore()
     detail = load_fixture("jobs/failed_runtime.detail.json")
@@ -477,11 +574,11 @@ def fake_job_store_with_failed() -> _BaseFakeJobStore:
     return store
 
 
-
 def fake_background_worker() -> MagicMock:
-    """Return a MagicMock that quacks like BackgroundWorker.
+    """Build a ``MagicMock`` mimicking a healthy idle background worker.
 
-    Configured with realistic defaults (threads alive, small queue).
+    Returns:
+        A pre-configured ``MagicMock`` exposing the methods the API expects.
     """
     w = MagicMock()
     w.threads_alive.return_value = True
@@ -496,17 +593,16 @@ def fake_background_worker() -> MagicMock:
     return w
 
 
-
 @contextmanager
 def override_job_store(app: Any, store: Any):
-    """Temporarily replace ``core.api.app.get_job_store`` for *app*.
+    """Patch ``core.api.app.get_job_store`` to return ``store``.
 
     Args:
-        app: The FastAPI app whose lifespan would call ``get_job_store``.
-        store: The in-memory store to substitute.
+        app: The FastAPI app under test (unused, kept for symmetry).
+        store: The store implementation to inject.
 
     Yields:
-        The supplied ``store`` object, unchanged.
+        The ``store`` instance, for convenience inside ``with`` blocks.
     """
     with patch("core.api.app.get_job_store", return_value=store):
         yield store
@@ -514,14 +610,14 @@ def override_job_store(app: Any, store: Any):
 
 @contextmanager
 def override_worker(app: Any, worker: Any):
-    """Temporarily replace ``core.api.app.get_worker`` for *app*.
+    """Patch ``core.api.app.get_worker`` to return ``worker``.
 
     Args:
-        app: The FastAPI app whose lifespan would call ``get_worker``.
-        worker: The fake worker to substitute.
+        app: The FastAPI app under test (unused, kept for symmetry).
+        worker: The worker mock to inject.
 
     Yields:
-        The supplied ``worker`` object, unchanged.
+        The ``worker`` instance, for convenience inside ``with`` blocks.
     """
     with patch("core.api.app.get_worker", return_value=worker):
         yield worker
@@ -529,15 +625,14 @@ def override_worker(app: Any, worker: Any):
 
 @contextmanager
 def override_dspy_service(app: Any, service: Any = None):
-    """Temporarily replace ``core.api.app.DspyService`` constructor for *app*.
+    """Patch ``core.api.app.DspyService`` to block real DSPy initialisation.
 
     Args:
-        app: The FastAPI app whose lifespan would instantiate ``DspyService``.
-        service: Optional service stand-in; ``None`` simply blocks real
-            DSPy initialization.
+        app: The FastAPI app under test (unused, kept for symmetry).
+        service: Optional service double; ``None`` simply blocks construction.
 
     Yields:
-        The supplied ``service`` object, unchanged.
+        The ``service`` argument, for convenience inside ``with`` blocks.
     """
     with patch("core.api.app.DspyService", return_value=service):
         yield service

@@ -1,17 +1,10 @@
 "use client";
 
-/**
- * Export menu — download buttons for program pickle, prompt, and logs.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Keeps its open/close
- * state local to avoid re-rendering the heavy parent.
- */
-
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Download, FileJson, FileSpreadsheet, Package } from "lucide-react";
 import { toast } from "react-toastify";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import { msg } from "@/shared/lib/messages";
 import type {
   OptimizationLogEntry,
@@ -80,7 +73,7 @@ export function ExportMenu({
     <div className="relative" ref={ref}>
       <Button size="sm" onClick={() => setOpen((o) => !o)} className="gap-1.5">
         <Download className="size-4" />
-        הורדה
+        {msg("auto.features.optimizations.components.exportmenu.1")}
         <ChevronDown
           className={`size-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
@@ -122,8 +115,12 @@ export function ExportMenu({
                 className={itemCls}
               >
                 <Package className={iconCls} />
-                <span className="flex-1">תוכנית מאומנת</span>
-                <span className={extCls}>.pkl</span>
+                <span className="flex-1">
+                  {msg("auto.features.optimizations.components.exportmenu.2")}
+                </span>
+                <span className={extCls}>
+                  {msg("auto.features.optimizations.components.exportmenu.3")}
+                </span>
               </button>
             )}
             {optimizedPrompt && (
@@ -139,8 +136,12 @@ export function ExportMenu({
                   className={itemCls}
                 >
                   <FileJson className={iconCls} />
-                  <span className="flex-1">פרומפט</span>
-                  <span className={extCls}>.json</span>
+                  <span className="flex-1">
+                    {msg("auto.features.optimizations.components.exportmenu.4")}
+                  </span>
+                  <span className={extCls}>
+                    {msg("auto.features.optimizations.components.exportmenu.5")}
+                  </span>
                 </button>
               </>
             )}
@@ -157,8 +158,12 @@ export function ExportMenu({
                   className={itemCls}
                 >
                   <FileSpreadsheet className={iconCls} />
-                  <span className="flex-1">לוגים</span>
-                  <span className={extCls}>.csv</span>
+                  <span className="flex-1">
+                    {msg("auto.features.optimizations.components.exportmenu.6")}
+                  </span>
+                  <span className={extCls}>
+                    {msg("auto.features.optimizations.components.exportmenu.7")}
+                  </span>
                 </button>
               </>
             )}

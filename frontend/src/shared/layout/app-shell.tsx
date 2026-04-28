@@ -7,24 +7,28 @@ import { motion } from "framer-motion";
 import { Menu, LogOut, GraduationCap, BookOpen } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
-import { useTutorialContext } from "@/features/tutorial/components/tutorial-provider";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useTutorialContext } from "@/features/tutorial";
+import { useUserPrefs } from "@/features/settings";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
+import { msg } from "@/shared/lib/messages";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
 import { ParticleHero } from "@/shared/ui/particle-hero";
 import {
   GeneralistPanel,
   GeneralistPanelProvider,
+  WizardStateProvider,
+  isGeneralistAgentEnabled,
 } from "@/features/agent-panel";
-import { WizardStateProvider } from "@/features/agent-panel/hooks/use-wizard-state";
-import { isGeneralistAgentEnabled } from "@/features/agent-panel/lib/feature-flag";
-const Sidebar = dynamic(() => import("@/features/sidebar/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+const Sidebar = dynamic(() => import("@/features/sidebar").then((m) => m.Sidebar), { ssr: false });
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const { data: session } = useSession();
   const pathname = usePathname();
   const { openMenu } = useTutorialContext();
-  const scalarDocsUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/scalar`;
+  const { prefs } = useUserPrefs();
+  const scalarDocsUrl = `${getRuntimeEnv().apiUrl}/scalar`;
 
   // Close mobile sidebar on route change
   React.useEffect(() => {
@@ -96,12 +100,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
       >
         {/* Logo wordmark — pinned LEFT */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 cursor-default">
           <div className="hidden sm:block">
             <AnimatedWordmark size={16} />
           </div>
           <span
-            className="sm:hidden text-sm font-bold tracking-[0.14em] uppercase text-foreground"
+            className="sm:hidden text-sm font-bold tracking-[0.14em] uppercase text-foreground cursor-default"
             style={{ fontFamily: '"Inter Variable", system-ui, sans-serif' }}
           >
             SKYNET
@@ -112,31 +116,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={openMenu}
                 className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
-                aria-label="סיור במערכת"
+                aria-label={msg("app.shell.tour_aria")}
               >
                 <GraduationCap className="size-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" dir="rtl">
-              סיור מודרך במערכת
+              {msg("app.shell.tour_tooltip")}
             </TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <a
-                href={scalarDocsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
-                aria-label="תיעוד API"
-              >
-                <BookOpen className="size-4" />
-              </a>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" dir="rtl">
-              תיעוד API אינטראקטיבי
-            </TooltipContent>
-          </Tooltip>
+          {prefs.advancedMode && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={scalarDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
+                  aria-label={msg("app.shell.api_docs_aria")}
+                >
+                  <BookOpen className="size-4" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" dir="rtl">
+                {msg("app.shell.api_docs_tooltip")}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         {/* Right side: user + logout + mobile hamburger */}
@@ -150,8 +156,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => signOut({ callbackUrl: "/login" })}
                 className="rounded-lg p-2 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer hidden sm:block"
-                aria-label="התנתק"
-                title="התנתק"
+                aria-label={msg("app.shell.logout")}
+                title={msg("app.shell.logout")}
               >
                 <LogOut className="size-4" />
               </button>
@@ -161,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg p-2 hover:bg-accent/80 active:scale-95 transition-all duration-200 md:hidden"
-            aria-label="תפריט"
+            aria-label={msg("app.shell.menu")}
           >
             <Menu className="size-5" />
           </button>
@@ -181,7 +187,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-auto min-w-0 page-gradient grid-pattern" dir="rtl">
           <div
             className="relative z-[1] mx-auto max-w-7xl py-6 md:py-8"
-            style={{ paddingInline: 'clamp(1rem, 5vw - 0.5rem, 2rem)' }}
+            style={{ paddingInline: "clamp(1rem, 5vw - 0.5rem, 2rem)" }}
           >
             {children}
           </div>

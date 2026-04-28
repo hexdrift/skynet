@@ -1,10 +1,17 @@
+"""Resolve DSPy module and optimizer factories from short aliases or dotted paths.
+
+Used by the service gateway to translate user-facing names (``predict``,
+``cot``, ``gepa``, etc.) and arbitrary ``dspy.*`` paths into callables
+that build DSPy modules and optimizers at runtime.
+"""
+
 from __future__ import annotations
 
 import importlib
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import wraps
+from functools import partial, update_wrapper
 from typing import Any
 
 from ..constants import RESOLUTION_HINT
@@ -42,19 +49,43 @@ class ResolverError(RuntimeError):
     """Raised when a requested DSPy asset cannot be resolved."""
 
 
+def _match_module_alias(name: str) -> ModuleAlias | None:
+    """Look up a module alias by case-insensitive name.
+
+    Args:
+        name: Alias to match.
+
+    Returns:
+        The matching ``ModuleAlias`` or ``None`` if no alias is registered.
+    """
+    return MODULE_ALIASES.get(name.lower())
+
+
+def _match_optimizer_alias(name: str) -> str | None:
+    """Look up an optimizer alias's dotted target by case-insensitive name.
+
+    Args:
+        name: Alias to match.
+
+    Returns:
+        The dotted import path or ``None`` if no alias is registered.
+    """
+    return OPTIMIZER_ALIASES.get(name.lower())
+
+
 def resolve_module_factory(name: str) -> tuple[Callable[..., Any], bool]:
     """Resolve a module factory from aliases or dotted paths.
 
     Args:
-        name: Short alias (e.g. ``"predict"``) or dotted dspy path (e.g. ``"dspy.Predict"``).
+        name: Alias (e.g. ``cot``) or fully qualified ``dspy.*`` path.
 
     Returns:
-        A ``(factory, auto_signature)`` tuple where ``auto_signature`` is True
-        when the service gateway should auto-inject a compiled DSPy signature
-        rather than requiring one in ``module_kwargs``.
+        ``(factory, auto_signature)`` where ``auto_signature`` is ``True``
+        when the service gateway should auto-inject a compiled DSPy
+        signature rather than requiring one in ``module_kwargs``.
 
     Raises:
-        ResolverError: If ``name`` cannot be resolved to a callable.
+        ResolverError: When ``name`` cannot be resolved to a callable.
     """
 
     spec = _match_module_alias(name)
@@ -79,13 +110,13 @@ def resolve_optimizer_factory(name: str) -> Callable[..., Any]:
     """Resolve an optimizer factory from aliases or dotted paths.
 
     Args:
-        name: Short alias (e.g. ``"gepa"``) or dotted dspy path.
+        name: Alias (e.g. ``gepa``) or fully qualified ``dspy.*`` path.
 
     Returns:
-        A wrapped callable that instantiates the optimizer when called.
+        A wrapped callable that forwards arguments to the resolved factory.
 
     Raises:
-        ResolverError: If ``name`` cannot be resolved to a callable.
+        ResolverError: When ``name`` cannot be resolved to a callable.
     """
 
     path = _match_optimizer_alias(name)
@@ -98,41 +129,18 @@ def resolve_optimizer_factory(name: str) -> Callable[..., Any]:
     raise ResolverError(f"Unknown optimizer '{name}'. {RESOLUTION_HINT}")
 
 
-def _match_module_alias(name: str) -> ModuleAlias | None:
-    """Return the ModuleAlias for ``name`` (case-insensitive), or None if unknown.
-
-    Args:
-        name: Alias name to look up (e.g. ``"predict"`` or ``"cot"``).
-
-    Returns:
-        The matching ``ModuleAlias``, or ``None`` when the name is not registered.
-    """
-    return MODULE_ALIASES.get(name.lower())
-
-
-def _match_optimizer_alias(name: str) -> str | None:
-    """Return the dotted-path string for ``name`` (case-insensitive), or None if unknown.
-
-    Args:
-        name: Alias name to look up (e.g. ``"gepa"``).
-
-    Returns:
-        Dotted import path string, or ``None`` when the name is not registered.
-    """
-    return OPTIMIZER_ALIASES.get(name.lower())
-
-
 def _load_callable(path: str) -> Callable[..., Any]:
     """Import a callable attribute specified by dotted path (e.g. ``dspy.Predict``).
 
     Args:
-        path: Dotted import path in ``module.attribute`` form.
+        path: Dotted import path of the attribute to load.
 
     Returns:
-        The callable attribute resolved from ``path``.
+        The resolved callable.
 
     Raises:
-        ResolverError: If the module cannot be imported or the attribute is missing or not callable.
+        ResolverError: When the module is missing, the attribute is absent,
+            or the attribute is not callable.
     """
     module_path, attribute = path.rsplit(".", 1)
     try:
@@ -149,23 +157,28 @@ def _load_callable(path: str) -> Callable[..., Any]:
 
 
 def _wrap_callable(target: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap ``target`` in a thin factory that preserves its call signature.
+    """Wrap ``target`` in a thin forwarder that preserves its call signature.
+
+    Built as a ``functools.partial`` with no pre-bound arguments so the
+    returned object forwards every positional and keyword argument to
+    ``target`` unchanged. ``functools.update_wrapper`` copies metadata
+    (``__name__``, ``__doc__``, etc.) across; a captured
+    ``inspect.signature`` is pinned via ``__signature__`` so introspection
+    tools display the original parameters instead of ``(*args, **kwargs)``.
 
     Args:
-        target: The callable to wrap.
+        target: Callable to wrap.
 
     Returns:
-        A new callable that forwards all positional and keyword arguments to ``target``.
+        A forwarding wrapper that preserves ``target``'s signature.
     """
     try:
-        signature = inspect.signature(target)
+        signature: inspect.Signature | None = inspect.signature(target)
     except (ValueError, TypeError):
         signature = None
 
-    @wraps(target)
-    def factory(*args: Any, **kwargs: Any) -> Any:
-        return target(*args, **kwargs)
-
+    wrapper = partial(target)
+    update_wrapper(wrapper, target, updated=())
     if signature is not None:
-        factory.__signature__ = signature
-    return factory
+        wrapper.__signature__ = signature  # type: ignore[attr-defined]
+    return wrapper

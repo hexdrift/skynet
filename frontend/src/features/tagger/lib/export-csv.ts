@@ -8,7 +8,7 @@ function buildRows(
   columns: string[],
   annotations: Record<string, Annotation>,
   config: TaggerConfig,
-): { allCols: string[]; rows: Record<string, string>[] } {
+): { allCols: string[]; rows: Array<Record<string, string>> } {
   const annotCol =
     config.mode === "binary"
       ? "binary_label"
@@ -17,7 +17,7 @@ function buildRows(
         : "extracted_text";
 
   const allCols = [...columns, annotCol];
-  const rows: Record<string, string>[] = [];
+  const rows: Array<Record<string, string>> = [];
 
   for (const item of data) {
     const row: Record<string, string> = {};
@@ -30,9 +30,7 @@ function buildRows(
     let annStr = "";
     if (config.mode === "multiclass" && Array.isArray(ann)) {
       const cats = config.categories ?? [];
-      annStr = ann
-        .map((catId) => cats.find((c) => c.id === catId)?.label ?? catId)
-        .join("; ");
+      annStr = ann.map((catId) => cats.find((c) => c.id === catId)?.label ?? catId).join("; ");
     } else if (typeof ann === "string") {
       annStr = ann;
     }
@@ -54,28 +52,28 @@ function download(blob: Blob, filename: string) {
 
 function escapeCSV(val: string): string {
   if (val.includes(",") || val.includes('"') || val.includes("\n")) {
-    return '"' + val.replace(/"/g, '""') + '"';
+    return `"${val.replace(/"/g, '""')}"`;
   }
   return val;
 }
 
-function exportCSV(allCols: string[], rows: Record<string, string>[], filename: string) {
+function exportCSV(allCols: string[], rows: Array<Record<string, string>>, filename: string) {
   const BOM = "\ufeff";
-  let csv = BOM + allCols.map(escapeCSV).join(",") + "\n";
+  let csv = `${BOM + allCols.map(escapeCSV).join(",")}\n`;
   for (const row of rows) {
-    csv += allCols.map((col) => escapeCSV(row[col] ?? "")).join(",") + "\n";
+    csv += `${allCols.map((col) => escapeCSV(row[col] ?? "")).join(",")}\n`;
   }
   download(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
 }
 
-function exportJSON(rows: Record<string, string>[], filename: string) {
+function exportJSON(rows: Array<Record<string, string>>, filename: string) {
   const json = JSON.stringify(rows, null, 2);
   download(new Blob([json], { type: "application/json;charset=utf-8" }), filename);
 }
 
 function exportExcel(
   allCols: string[],
-  rows: Record<string, string>[],
+  rows: Array<Record<string, string>>,
   filename: string,
   bookType: "xlsx" | "xlml",
 ) {

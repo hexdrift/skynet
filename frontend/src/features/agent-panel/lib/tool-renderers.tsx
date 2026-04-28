@@ -1,4 +1,5 @@
 import * as React from "react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import type { AgentToolCall } from "@/shared/ui/agent/types";
 import { TERMS } from "@/shared/lib/terms";
@@ -55,16 +56,29 @@ function truncate(s: string, n: number): string {
 const RENDERERS: Record<string, ToolRenderer> = {
   submit_optimization: {
     card: (call) => <SubmitSummaryCard call={call} />,
-    summary: (call) => (call.status === "running" ? `מגיש ${TERMS.optimization} חדשה…` : null),
+    summary: (call) =>
+      call.status === "running"
+        ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.1", {
+            p1: TERMS.optimization,
+          })
+        : null,
   },
 
   delete_job_optimizations: {
     summary: (call) => {
       const id = pickId(getArgs(call));
       return byStatus(call, {
-        running: id ? `מוחק ${id}…` : `מוחק ${TERMS.optimization}…`,
-        done: id ? `נמחקה ${id}` : `נמחקה ${TERMS.optimization}`,
-        error: "המחיקה נכשלה",
+        running: id
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.2", { p1: id })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.3", {
+              p1: TERMS.optimization,
+            }),
+        done: id
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.4", { p1: id })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.5", {
+              p1: TERMS.optimization,
+            }),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.1"),
       });
     },
   },
@@ -73,9 +87,23 @@ const RENDERERS: Record<string, ToolRenderer> = {
     summary: (call) => {
       const n = pickIds(getArgs(call)).length;
       return byStatus(call, {
-        running: n ? `מוחק ${n} ${TERMS.optimizationPlural}…` : `מוחק ${TERMS.optimizationPlural}…`,
-        done: n ? `נמחקו ${n} ${TERMS.optimizationPlural}` : `נמחקו ${TERMS.optimizationPlural}`,
-        error: "המחיקה הקבוצתית נכשלה",
+        running: n
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.6", {
+              p1: n,
+              p2: TERMS.optimizationPlural,
+            })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.7", {
+              p1: TERMS.optimizationPlural,
+            }),
+        done: n
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.8", {
+              p1: n,
+              p2: TERMS.optimizationPlural,
+            })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.9", {
+              p1: TERMS.optimizationPlural,
+            }),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.2"),
       });
     },
   },
@@ -91,9 +119,13 @@ const RENDERERS: Record<string, ToolRenderer> = {
             : undefined;
       const name = raw ? truncate(raw, 26) : undefined;
       return byStatus(call, {
-        running: name ? `משנה שם ל־"${name}"…` : "משנה שם…",
-        done: name ? `השם שונה ל־"${name}"` : "השם שונה",
-        error: "שינוי השם נכשל",
+        running: name
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.10", { p1: name })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.3"),
+        done: name
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.11", { p1: name })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.4"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.5"),
       });
     },
   },
@@ -103,9 +135,13 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const args = getArgs(call);
       const pin = Boolean(args.pinned ?? args.value);
       return byStatus(call, {
-        running: pin ? "מצמיד…" : "מבטל הצמדה…",
-        done: pin ? "הוצמדה" : "ההצמדה בוטלה",
-        error: "עדכון ההצמדה נכשל",
+        running: pin
+          ? msg("auto.features.agent.panel.lib.tool.renderers.literal.6")
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.7"),
+        done: pin
+          ? msg("auto.features.agent.panel.lib.tool.renderers.literal.8")
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.9"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.10"),
       });
     },
   },
@@ -115,9 +151,13 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const args = getArgs(call);
       const arch = Boolean(args.archived ?? args.value);
       return byStatus(call, {
-        running: arch ? "מעביר לארכיון…" : "משחזר מהארכיון…",
-        done: arch ? "הועברה לארכיון" : "שוחזרה מהארכיון",
-        error: "עדכון הארכיון נכשל",
+        running: arch
+          ? msg("auto.features.agent.panel.lib.tool.renderers.literal.11")
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.12"),
+        done: arch
+          ? msg("auto.features.agent.panel.lib.tool.renderers.literal.13")
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.14"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.15"),
       });
     },
   },
@@ -128,9 +168,13 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const n = pickIds(args).length;
       const pin = Boolean(args.pinned ?? args.value);
       return byStatus(call, {
-        running: pin ? `מצמיד ${n}…` : `מבטל הצמדה ל־${n}…`,
-        done: pin ? `${n} הוצמדו` : `הוסרה הצמדה מ־${n}`,
-        error: "עדכון הצמדה קבוצתי נכשל",
+        running: pin
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.12", { p1: n })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.13", { p1: n }),
+        done: pin
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.14", { p1: n })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.15", { p1: n }),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.16"),
       });
     },
   },
@@ -141,9 +185,13 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const n = pickIds(args).length;
       const arch = Boolean(args.archived ?? args.value);
       return byStatus(call, {
-        running: arch ? `מעביר ${n} לארכיון…` : `משחזר ${n} מהארכיון…`,
-        done: arch ? `${n} הועברו לארכיון` : `${n} שוחזרו מהארכיון`,
-        error: "עדכון ארכיון קבוצתי נכשל",
+        running: arch
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.16", { p1: n })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.17", { p1: n }),
+        done: arch
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.18", { p1: n })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.19", { p1: n }),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.17"),
       });
     },
   },
@@ -152,9 +200,11 @@ const RENDERERS: Record<string, ToolRenderer> = {
     summary: (call) => {
       const id = pickId(getArgs(call));
       return byStatus(call, {
-        running: "עוצר את הריצה…",
-        done: id ? `הריצה נעצרה (${id})` : "הריצה נעצרה",
-        error: "העצירה נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.18"),
+        done: id
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.20", { p1: id })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.19"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.20"),
       });
     },
   },
@@ -164,9 +214,17 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const args = getArgs(call);
       const n = typeof args.count === "number" && args.count > 0 ? args.count : 1;
       return byStatus(call, {
-        running: n > 1 ? `משכפל ${n} עותקים…` : "משכפל…",
-        done: n > 1 ? `שוכפלו ${n} עותקים` : `שוכפלה ${TERMS.optimization}`,
-        error: "השכפול נכשל",
+        running:
+          n > 1
+            ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.21", { p1: n })
+            : msg("auto.features.agent.panel.lib.tool.renderers.literal.21"),
+        done:
+          n > 1
+            ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.22", { p1: n })
+            : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.23", {
+                p1: TERMS.optimization,
+              }),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.22"),
       });
     },
   },
@@ -174,9 +232,9 @@ const RENDERERS: Record<string, ToolRenderer> = {
   retry_job_optimizations: {
     summary: (call) =>
       byStatus(call, {
-        running: "מריץ מחדש…",
-        done: "הורצה מחדש",
-        error: "הריצה החוזרת נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.23"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.24"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.25"),
       }),
   },
 
@@ -186,11 +244,22 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const raw = typeof args.job_name === "string" ? args.job_name : undefined;
       const name = raw ? truncate(raw, 24) : undefined;
       return byStatus(call, {
-        running: name ? `מריץ "${name}"…` : `מתחיל ${TERMS.optimizationTypeRun}…`,
+        running: name
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.24", { p1: name })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.25", {
+              p1: TERMS.optimizationTypeRun,
+            }),
         done: name
-          ? `התחילה ${TERMS.optimizationTypeRun} "${name}"`
-          : `התחילה ${TERMS.optimizationTypeRun} חדשה`,
-        error: `ה${TERMS.optimizationTypeRun} נכשלה`,
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.26", {
+              p1: TERMS.optimizationTypeRun,
+              p2: name,
+            })
+          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.27", {
+              p1: TERMS.optimizationTypeRun,
+            }),
+        error: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.28", {
+          p1: TERMS.optimizationTypeRun,
+        }),
       });
     },
   },
@@ -198,16 +267,26 @@ const RENDERERS: Record<string, ToolRenderer> = {
   submit_grid_search_grid_search_post: {
     summary: (call) =>
       byStatus(call, {
-        running: `מתחילה ${TERMS.optimizationTypeGrid}…`,
-        done: `התחילה ${TERMS.optimizationTypeGrid}`,
-        error: `ה${TERMS.optimizationTypeGrid} נכשלה`,
+        running: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.29", {
+          p1: TERMS.optimizationTypeGrid,
+        }),
+        done: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.30", {
+          p1: TERMS.optimizationTypeGrid,
+        }),
+        error: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.31", {
+          p1: TERMS.optimizationTypeGrid,
+        }),
       }),
   },
 
   list_jobs_optimizations_get: {
     summary: (call) => {
-      if (call.status === "running") return `קורא רשימת ${TERMS.optimizationPlural}…`;
-      if (call.status === "error") return "הקריאה נכשלה";
+      if (call.status === "running")
+        return formatMsg("auto.features.agent.panel.lib.tool.renderers.template.32", {
+          p1: TERMS.optimizationPlural,
+        });
+      if (call.status === "error")
+        return msg("auto.features.agent.panel.lib.tool.renderers.literal.26");
       const result = getResult(call);
       let count: number | null = null;
       if (Array.isArray(result)) count = result.length;
@@ -216,7 +295,9 @@ const RENDERERS: Record<string, ToolRenderer> = {
         const items = r.items ?? r.jobs ?? r.optimizations;
         if (Array.isArray(items)) count = items.length;
       }
-      return count !== null ? `${count} ${TERMS.optimizationPlural}` : "הרשימה נקראה";
+      return count !== null
+        ? `${count} ${TERMS.optimizationPlural}`
+        : msg("auto.features.agent.panel.lib.tool.renderers.literal.27");
     },
   },
 
@@ -226,9 +307,11 @@ const RENDERERS: Record<string, ToolRenderer> = {
       const raw = typeof args.name === "string" ? args.name : undefined;
       const name = raw ? truncate(raw, 24) : undefined;
       return byStatus(call, {
-        running: "שומר תבנית…",
-        done: name ? `נשמרה תבנית "${name}"` : "התבנית נשמרה",
-        error: "שמירת התבנית נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.28"),
+        done: name
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.33", { p1: name })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.29"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.30"),
       });
     },
   },
@@ -236,27 +319,27 @@ const RENDERERS: Record<string, ToolRenderer> = {
   update_template_templates: {
     summary: (call) =>
       byStatus(call, {
-        running: "מעדכן תבנית…",
-        done: "התבנית עודכנה",
-        error: "עדכון התבנית נכשל",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.31"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.32"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.33"),
       }),
   },
 
   delete_template_templates: {
     summary: (call) =>
       byStatus(call, {
-        running: "מוחק תבנית…",
-        done: "התבנית נמחקה",
-        error: "מחיקת התבנית נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.34"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.35"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.36"),
       }),
   },
 
   apply_template_templates: {
     summary: (call) =>
       byStatus(call, {
-        running: "טוען תבנית…",
-        done: "התבנית נטענה",
-        error: "טעינת התבנית נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.37"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.38"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.39"),
       }),
   },
 
@@ -264,77 +347,91 @@ const RENDERERS: Record<string, ToolRenderer> = {
     summary: (call) => {
       const n = pickIds(getArgs(call)).length;
       return byStatus(call, {
-        running: n ? `משווה ${n} ריצות…` : "משווה ריצות…",
-        done: n ? `הושוו ${n} ריצות` : "ההשוואה הושלמה",
-        error: "ההשוואה נכשלה",
+        running: n
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.34", { p1: n })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.40"),
+        done: n
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.35", { p1: n })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.41"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.42"),
       });
     },
   },
 
   validate_code_validate_code_post: {
     summary: (call) => {
-      if (call.status === "running") return "בודק תקינות קוד…";
+      if (call.status === "running")
+        return msg("auto.features.agent.panel.lib.tool.renderers.literal.43");
       const result = getResult(call);
       if (result && typeof result === "object") {
         const valid = (result as Record<string, unknown>).valid;
-        if (valid === true) return "הקוד תקין";
-        if (valid === false) return "הקוד לא תקין";
+        if (valid === true) return msg("auto.features.agent.panel.lib.tool.renderers.literal.44");
+        if (valid === false) return msg("auto.features.agent.panel.lib.tool.renderers.literal.45");
       }
-      return byStatus(call, { running: "בודק…", done: "הקוד נבדק" });
+      return byStatus(call, {
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.46"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.47"),
+      });
     },
   },
 
   edit_code_optimizations_edit_code_post: {
     summary: (call) =>
       byStatus(call, {
-        running: "עורך קוד…",
-        done: "הקוד נערך",
-        error: "עריכת הקוד נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.48"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.49"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.50"),
       }),
   },
 
   profile_datasets_profile_post: {
     summary: (call) =>
       byStatus(call, {
-        running: `מנתח ${TERMS.dataset}…`,
-        done: "הניתוח הושלם",
-        error: "הניתוח נכשל",
+        running: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.36", {
+          p1: TERMS.dataset,
+        }),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.51"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.52"),
       }),
   },
 
   discover_models_models_discover_post: {
     summary: (call) =>
       byStatus(call, {
-        running: "מחפש מודלים זמינים…",
-        done: "החיפוש הושלם",
-        error: "החיפוש נכשל",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.53"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.54"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.55"),
       }),
   },
 
   stage_sample_dataset_datasets_samples: {
     summary: (call) =>
       byStatus(call, {
-        running: `טוען ${TERMS.dataset} לדוגמה…`,
-        done: `ה${TERMS.dataset} נטען`,
-        error: "הטעינה נכשלה",
+        running: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.37", {
+          p1: TERMS.dataset,
+        }),
+        done: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.38", {
+          p1: TERMS.dataset,
+        }),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.56"),
       }),
   },
 
   set_column_roles_datasets_column_roles_post: {
     summary: (call) =>
       byStatus(call, {
-        running: "מגדיר תפקידי עמודות…",
-        done: "תפקידי העמודות הוגדרו",
-        error: "ההגדרה נכשלה",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.57"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.58"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.59"),
       }),
   },
 
   serve_program_serve: {
     summary: (call) =>
       byStatus(call, {
-        running: "מפרסם תוכנית…",
-        done: "התוכנית פורסמה כשירות",
-        error: "הפרסום נכשל",
+        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.60"),
+        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.61"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.62"),
       }),
   },
 };

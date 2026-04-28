@@ -7,8 +7,10 @@ import type {
   TrustMode,
   WizardState,
 } from "./types";
+import { formatMsg, msg } from "@/shared/lib/messages";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = getRuntimeEnv().apiUrl;
 
 export interface GeneralistAgentRequest {
   user_message: string;
@@ -45,7 +47,7 @@ export async function streamGeneralistAgent(
     });
   } catch (err) {
     if ((err as Error)?.name === "AbortError") return;
-    handlers.onError("לא ניתן להתחבר לשרת. ודא שה-Backend פועל.");
+    handlers.onError(msg("auto.features.agent.panel.lib.stream.literal.1"));
     return;
   }
   if (!res.ok || !res.body) {
@@ -57,7 +59,9 @@ export async function streamGeneralistAgent(
     } catch {
       /* not json */
     }
-    handlers.onError(detail ?? `שגיאת שרת: ${res.status}`);
+    handlers.onError(
+      detail ?? formatMsg("auto.features.agent.panel.lib.stream.template.1", { p1: res.status }),
+    );
     return;
   }
   const reader = res.body.getReader();
@@ -121,7 +125,9 @@ export async function streamGeneralistAgent(
         handlers.onDone({ assistant_message: String(data.assistant_message ?? "") });
         break;
       case "error":
-        handlers.onError(String(data.error ?? "שגיאה בסוכן"));
+        handlers.onError(
+          String(data.error ?? msg("auto.features.agent.panel.lib.stream.literal.2")),
+        );
         break;
     }
   };
@@ -142,7 +148,9 @@ export async function streamGeneralistAgent(
     }
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
-      handlers.onError(err instanceof Error ? err.message : "שגיאה בסוכן");
+      handlers.onError(
+        err instanceof Error ? err.message : msg("auto.features.agent.panel.lib.stream.literal.3"),
+      );
     }
   }
 }

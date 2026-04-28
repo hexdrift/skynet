@@ -13,11 +13,9 @@ from tests.fixtures import load_fixture
 
 
 def real_job_row_dict() -> dict:
-    """Return a job-row dict seeded from the gepa/cot success fixture.
-
-    Keys mirror the ``JobModel`` columns: optimization_id, status,
-    created_at, completed_at, latest_metrics, payload_overview.
-    """
+    """Return a realistic GEPA-success job row keyed to ``JobModel`` columns."""
+    # Keys mirror JobModel columns so a row can be inserted via raw dict without going
+    # through the store interface (lets storage tests pre-seed without coupling to writes).
     detail = load_fixture("jobs/success_single_gepa.detail.json")
     return {
         "optimization_id": "fixture-gepa-success",
@@ -41,7 +39,7 @@ def real_job_row_dict() -> dict:
 
 
 def real_grid_job_row_dict() -> dict:
-    """Return a job-row dict seeded from the 2-pair grid-search success fixture."""
+    """Return a realistic grid-search job row keyed to ``JobModel`` columns."""
     detail = load_fixture("jobs/success_grid.detail.json")
     return {
         "optimization_id": "fixture-grid-success",
@@ -65,7 +63,7 @@ def real_grid_job_row_dict() -> dict:
 
 
 def real_failed_job_row_dict() -> dict:
-    """Return a job-row dict seeded from the runtime-failure fixture."""
+    """Return a realistic failed-job row keyed to ``JobModel`` columns."""
     detail = load_fixture("jobs/failed_runtime.detail.json")
     return {
         "optimization_id": "fixture-failed-runtime",

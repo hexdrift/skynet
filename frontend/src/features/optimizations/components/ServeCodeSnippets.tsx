@@ -1,16 +1,9 @@
 "use client";
 
-/**
- * Code snippet panel for the serve playground tab — renders a read-only
- * editor with language switcher (cURL/Python/JS/Go/DSPy).
- *
- * Extracted from app/optimizations/[id]/page.tsx. Isolates the language
- * tab state from the heavy parent.
- */
-
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { ServeInfoResponse } from "@/shared/types/api";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { LangPicker } from "./ui-primitives";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
@@ -30,7 +23,7 @@ export function ServeCodeSnippets({
   pairIndex?: number;
 }) {
   const [codeTab, setCodeTab] = useState<"curl" | "python" | "javascript" | "go" | "dspy">("curl");
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiBase = getRuntimeEnv().apiUrl;
   const url =
     pairIndex != null
       ? `${apiBase}/serve/${optimizationId}/pair/${pairIndex}`

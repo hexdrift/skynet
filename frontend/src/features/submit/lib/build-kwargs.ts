@@ -19,8 +19,7 @@ export function buildOptimizerKwargs(input: OptimizerKwargsInput): Record<string
   } else if (maxFullEvals) {
     kw.max_full_evals = parseInt(maxFullEvals, 10);
   }
-  if (reflectionMinibatchSize)
-    kw.reflection_minibatch_size = parseInt(reflectionMinibatchSize, 10);
+  if (reflectionMinibatchSize) kw.reflection_minibatch_size = parseInt(reflectionMinibatchSize, 10);
   kw.use_merge = useMerge;
   return Object.keys(kw).length > 0 ? kw : {};
 }

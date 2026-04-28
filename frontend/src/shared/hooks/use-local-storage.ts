@@ -1,12 +1,6 @@
-/**
- * Type-safe localStorage hook
- * Provides get, set, and remove operations with automatic JSON serialization
- */
-
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
-  // Pass initial state function to useState so logic is only executed once
   const [storedValue, setStoredValue] = useState<T>(() => {
     if (typeof window === "undefined") {
       return initialValue;
@@ -20,12 +14,9 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     }
   });
 
-  // Return a wrapped version of useState's setter function that
-  // persists the new value to localStorage.
   const setValue = useCallback(
     (value: T | ((val: T) => T)) => {
       try {
-        // Allow value to be a function so we have same API as useState
         const valueToStore = value instanceof Function ? value(storedValue) : value;
         setStoredValue(valueToStore);
         if (typeof window !== "undefined") {
@@ -35,7 +26,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         console.error(`Error setting localStorage key "${key}":`, error);
       }
     },
-    [key, storedValue]
+    [key, storedValue],
   );
 
   const removeValue = useCallback(() => {

@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Search, Loader2, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, Eye, Search, Loader2, RefreshCw } from "lucide-react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { getModelCatalog, cachedCatalog, discoverModels } from "@/shared/lib/model-catalog";
@@ -36,7 +37,7 @@ export function ModelPicker({
   value,
   onChange,
   id,
-  placeholder = "בחר מודל...",
+  placeholder = msg("auto.features.submit.components.modelpicker.literal.1"),
   discoverUrl,
   discoverApiKey,
   disabled,
@@ -50,7 +51,6 @@ export function ModelPicker({
     providers: CatalogProvider[];
     models: CatalogModel[];
   } | null>(cachedCatalog);
-  const [catalogError, setCatalogError] = React.useState<string | null>(null);
   const [discovered, setDiscovered] = React.useState<string[]>([]);
   const [discovering, setDiscovering] = React.useState(false);
   const [discoveryError, setDiscoveryError] = React.useState<string | null>(null);
@@ -85,7 +85,11 @@ export function ModelPicker({
       setDiscovered(res.models);
       if (res.error) setDiscoveryError(res.error);
     } catch (e) {
-      setDiscoveryError(e instanceof Error ? e.message : "שגיאה בגילוי מודלים");
+      setDiscoveryError(
+        e instanceof Error
+          ? e.message
+          : msg("auto.features.submit.components.modelpicker.literal.2"),
+      );
     } finally {
       setDiscovering(false);
     }
@@ -99,7 +103,7 @@ export function ModelPicker({
       return;
     }
     const t = setTimeout(() => {
-      runDiscover();
+      void runDiscover();
     }, 400);
     return () => clearTimeout(t);
   }, [discoverUrl, runDiscover]);
@@ -131,6 +135,7 @@ export function ModelPicker({
         label: id,
         provider: "discovered",
         supports_thinking: false,
+        supports_vision: false,
         available: true,
         fromDiscovery: true,
       }));
@@ -157,7 +162,10 @@ export function ModelPicker({
 
   const providerLabel = React.useCallback(
     (slug: string): string => {
-      if (slug === "discovered") return `מהשרת (${discoverUrl ?? ""})`;
+      if (slug === "discovered")
+        return formatMsg("auto.features.submit.components.modelpicker.template.1", {
+          p1: discoverUrl ?? "",
+        });
       return catalog?.providers.find((p) => p.slug === slug)?.label ?? slug;
     },
     [catalog, discoverUrl],
@@ -191,7 +199,9 @@ export function ModelPicker({
       >
         {value ? (
           <span className="flex min-w-0 flex-1 items-center gap-2" dir="ltr">
-            <span className="truncate font-mono text-[0.8125rem]">{selectedModel?.label ?? value}</span>
+            <span className="truncate font-mono text-[0.8125rem]">
+              {selectedModel?.label ?? value}
+            </span>
           </span>
         ) : (
           <span className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
@@ -214,7 +224,6 @@ export function ModelPicker({
           )}
           role="listbox"
         >
-          {/* Search */}
           <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
             <Search className="size-3.5 shrink-0 text-muted-foreground" />
             <input
@@ -236,28 +245,28 @@ export function ModelPicker({
                 onClick={runDiscover}
                 disabled={discovering}
                 className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                title="רענן מודלים מהשרת"
+                title={msg("auto.features.submit.components.modelpicker.literal.3")}
               >
                 {discovering ? (
                   <Loader2 className="size-3 animate-spin" />
                 ) : (
                   <RefreshCw className="size-3" />
                 )}
-                רענן
+                {msg("auto.features.submit.components.modelpicker.1")}
               </button>
             )}
           </div>
 
-          {/* List */}
           <div className="max-h-[120px] overflow-y-auto py-1">
             {discoveryError && discoverUrl && (
               <div className="px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                לא ניתן לגלות מודלים מ-{discoverUrl}: {discoveryError}
+                {msg("auto.features.submit.components.modelpicker.2")}
+                {discoverUrl}: {discoveryError}
               </div>
             )}
             {filtered.length === 0 && (
               <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-                לא נמצאו מודלים
+                {msg("auto.features.submit.components.modelpicker.3")}
               </div>
             )}
             {Array.from(grouped.entries()).map(([provider, items]) => (
@@ -287,6 +296,14 @@ export function ModelPicker({
                       {m.max_input_tokens && (
                         <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
                           {formatCtx(m.max_input_tokens)}
+                        </span>
+                      )}
+                      {m.supports_vision && (
+                        <span
+                          className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-primary/10 px-1 py-px text-[9px] text-primary"
+                          title={msg("shared.model_chip.vision_badge")}
+                        >
+                          <Eye className="size-2.5" />
                         </span>
                       )}
                     </span>

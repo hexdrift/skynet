@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/shared/lib/auth";
 
 export default auth;
 

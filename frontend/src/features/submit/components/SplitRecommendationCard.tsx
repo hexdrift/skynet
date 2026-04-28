@@ -1,7 +1,7 @@
 "use client";
 
 import { Sparkles, AlertTriangle, Info } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 
@@ -28,23 +28,18 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
   const hasRationale = rationale.length > 0;
 
   return (
-    <div
-      dir="rtl"
-      className="rounded-lg border border-[#C8B9A8]/50 bg-[#FAF8F5] p-3 space-y-2.5"
-    >
+    <div dir="rtl" className="rounded-lg border border-[#C8B9A8]/50 bg-[#FAF8F5] p-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[#3D2E22]">
           <Sparkles className="h-3.5 w-3.5" />
-          <span className="text-xs font-semibold">
-            {msg("submit.split.recommended_title")}
-          </span>
+          <span className="text-xs font-semibold">{msg("submit.split.recommended_title")}</span>
           {hasRationale && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   aria-label={msg("submit.split.rationale_aria")}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[#8C7A6B] hover:text-[#3D2E22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 transition-colors cursor-help"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[#8C7A6B] hover:text-[#3D2E22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 transition-colors cursor-default"
                 >
                   <Info className="h-3 w-3" />
                 </button>
@@ -116,12 +111,6 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
         </div>
       )}
 
-      {splitMode === "manual" && (
-        <p className="text-[11px] leading-relaxed text-[#8C7A6B]">
-          אפשר להיצמד להמלצה או להגדיר חלוקה משלך בשדות שלמטה.
-        </p>
-      )}
-
       {warnings.length > 0 && (
         <ul className="space-y-1">
           {warnings.map((warning) => (
@@ -166,9 +155,7 @@ function ModeToggle({
           aria-pressed={value === mode}
           className={cn(
             "relative z-[1] rounded-md px-4 py-1 text-xs font-medium leading-none text-center transition-colors cursor-pointer",
-            value === mode
-              ? "text-foreground"
-              : "text-muted-foreground hover:text-foreground",
+            value === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {label}
@@ -192,7 +179,10 @@ function PlanChip({
   return (
     <div className="rounded-md border border-[#DDD6CC]/60 bg-white/60 px-2 py-1.5">
       <div className="flex items-center gap-1.5">
-        <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+        <span
+          className="inline-block w-1.5 h-1.5 rounded-full"
+          style={{ backgroundColor: color }}
+        />
         <span className="text-[11px] text-[#8C7A6B]">{label}</span>
       </div>
       <div className="mt-0.5 flex items-baseline gap-1 text-[#3D2E22]">

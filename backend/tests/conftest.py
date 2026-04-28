@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -22,13 +22,23 @@ _BASE_URL = "http://localhost:8000"
 
 
 def has_openai_key() -> bool:
-    """Return True if OPENAI_API_KEY is set and looks valid."""
+    """Return ``True`` when ``OPENAI_API_KEY`` looks like a real key.
+
+    Returns:
+        ``True`` when the env var starts with ``sk-`` and is longer than 20
+        characters; ``False`` otherwise.
+    """
     key = os.getenv("OPENAI_API_KEY", "")
     return key.startswith("sk-") and len(key) > 20
 
 
 def is_server_available() -> bool:
-    """Return True if the backend server is reachable on localhost:8000."""
+    """Return ``True`` when the backend at ``localhost:8000`` answers ``/health``.
+
+    Returns:
+        ``True`` on a 200 response within a 2 s timeout, ``False`` for any
+        connection error or non-200 status.
+    """
     try:
         return requests.get(f"{_BASE_URL}/health", timeout=2).status_code == 200
     except Exception:
@@ -48,11 +58,14 @@ requires_server = pytest.mark.skipif(
 
 @pytest.fixture(scope="session")
 def api_base_url() -> str:
-    """Skip the entire session if the server is down, then yield base URL."""
+    """Yield the base URL of the running backend, skipping the test if unavailable.
+
+    Yields:
+        The string ``"http://localhost:8000"`` once the server is reachable.
+    """
     if not is_server_available():
         pytest.skip(
-            "Backend server not running on localhost:8000 — "
-            "start with: cd backend && ../.venv/bin/python main.py"
+            "Backend server not running on localhost:8000 — start with: cd backend && ../.venv/bin/python main.py"
         )
     return _BASE_URL
 
@@ -61,18 +74,19 @@ _TERMINAL = frozenset({"success", "failed", "cancelled"})
 
 
 def wait_for_terminal(job_id: str, base_url: str = _BASE_URL, timeout: float = 180) -> dict:
-    """Poll job until terminal status; raises TimeoutError if not reached within *timeout* s.
+    """Poll the backend until ``job_id`` reaches success/failed/cancelled.
 
     Args:
-        job_id: The optimization job ID to poll.
-        base_url: Base URL of the backend server.
-        timeout: Maximum seconds to wait before raising TimeoutError.
+        job_id: Identifier returned by ``POST /run`` or ``POST /grid-search``.
+        base_url: Base URL of the backend; defaults to ``localhost:8000``.
+        timeout: Maximum seconds to wait before raising.
 
     Returns:
-        The final job status response dict once a terminal status is reached.
+        The final ``GET /optimizations/{job_id}`` JSON payload.
 
     Raises:
-        TimeoutError: If the job does not reach a terminal status within *timeout* seconds.
+        TimeoutError: When the job does not reach a terminal status within
+            ``timeout`` seconds.
     """
     deadline = time.monotonic() + timeout
     last: dict = {}
@@ -82,10 +96,7 @@ def wait_for_terminal(job_id: str, base_url: str = _BASE_URL, timeout: float = 1
         if last.get("status") in _TERMINAL:
             return last
         time.sleep(3)
-    raise TimeoutError(
-        f"Job {job_id} did not finish within {timeout}s "
-        f"(last status: {last.get('status')!r})"
-    )
+    raise TimeoutError(f"Job {job_id} did not finish within {timeout}s (last status: {last.get('status')!r})")
 
 
 def wait_for_status(
@@ -94,19 +105,20 @@ def wait_for_status(
     base_url: str = _BASE_URL,
     timeout: float = 30,
 ) -> dict:
-    """Poll until job reaches *target* status; useful for cancellation/validation checks.
+    """Poll the backend until ``job_id`` reports any status in ``target``.
 
     Args:
-        job_id: The optimization job ID to poll.
-        target: A single status string or a set of acceptable status strings.
-        base_url: Base URL of the backend server.
-        timeout: Maximum seconds to wait before raising TimeoutError.
+        job_id: Identifier returned by ``POST /run`` or ``POST /grid-search``.
+        target: A single status string or a set of acceptable statuses.
+        base_url: Base URL of the backend; defaults to ``localhost:8000``.
+        timeout: Maximum seconds to wait before raising.
 
     Returns:
-        The job status response dict once the target status is reached.
+        The matching ``GET /optimizations/{job_id}`` JSON payload.
 
     Raises:
-        TimeoutError: If the job does not reach *target* within *timeout* seconds.
+        TimeoutError: When the job does not reach the target status within
+            ``timeout`` seconds.
     """
     targets = {target} if isinstance(target, str) else set(target)
     deadline = time.monotonic() + timeout
@@ -118,6 +130,5 @@ def wait_for_status(
             return last
         time.sleep(2)
     raise TimeoutError(
-        f"Job {job_id} did not reach status {targets!r} within {timeout}s "
-        f"(last status: {last.get('status')!r})"
+        f"Job {job_id} did not reach status {targets!r} within {timeout}s (last status: {last.get('status')!r})"
     )

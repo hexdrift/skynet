@@ -39,37 +39,37 @@ class SkynetAPIUser(HttpUser):
     @tag("read")
     @task(10)
     def health_check(self):
-        """High-frequency health probe — baseline latency canary."""
+        """Hit the ``/health`` endpoint, the cheapest read path."""
         self.client.get("/health")
 
     @tag("read")
     @task(5)
     def queue_status(self):
-        """Check how many jobs are pending / active."""
+        """Fetch the queue snapshot used by the dashboard."""
         self.client.get("/queue")
 
     @tag("read")
     @task(8)
     def list_jobs(self):
-        """List the most recent 10 jobs (default view)."""
+        """Page through recent optimizations (default sort, limit 10)."""
         self.client.get("/optimizations?limit=10")
 
     @tag("read")
     @task(3)
     def list_jobs_filtered_by_status(self):
-        """List only successful jobs — common dashboard query."""
+        """List successful jobs, exercising the indexed status filter."""
         self.client.get("/optimizations?status=success&limit=5")
 
     @tag("read")
     @task(2)
     def list_jobs_by_user(self):
-        """List jobs for a specific user — common per-user view."""
+        """List jobs for the synthetic ``locust-test`` user."""
         self.client.get("/optimizations?username=locust-test&limit=10")
 
     @tag("read")
     @task(1)
     def probe_nonexistent_job(self):
-        """404 lookup — exercises the not-found fast path under load."""
+        """Hit a known-missing id to exercise the 404 fast path under load."""
         with self.client.get("/optimizations/nonexistent-locust-id", catch_response=True) as r:
             if r.status_code == 404:
                 r.success()
@@ -77,7 +77,7 @@ class SkynetAPIUser(HttpUser):
     @tag("write")
     @task(1)
     def submit_job_then_cancel(self):
-        """Submit a real job, peek at its summary once, then cancel to avoid LLM cost."""
+        """Submit a real job and cancel it immediately to avoid burning API credits."""
         payload = {
             "username": "locust-test",
             "module_name": "predict",
@@ -106,7 +106,7 @@ class SkynetAPIUser(HttpUser):
     @tag("write")
     @task(2)
     def submit_invalid_payload(self):
-        """Submit a deliberately invalid payload — exercises the validation fast path."""
+        """Send a malformed payload to exercise the 422 validation fast path."""
         with self.client.post("/run", json={"username": "bad"}, catch_response=True) as r:
             if r.status_code == 422:
                 r.success()

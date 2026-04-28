@@ -14,6 +14,8 @@ import code
 import sys
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
@@ -23,6 +25,8 @@ from core.storage.models import Base
 from core.storage.remote import RemoteDBJobStore
 
 load_dotenv(Path(__file__).parent / ".env")
+
+ALEMBIC_INI = Path(__file__).parent / "alembic.ini"
 
 
 def _get_db_url() -> str:
@@ -52,7 +56,13 @@ def cmd_check() -> None:
 
 
 def cmd_setup() -> None:
-    """Run full first-time setup: test connection, create tables, and verify."""
+    """Run full first-time setup: test connection, run Alembic, verify tables.
+
+    The canonical schema bootstrap is ``alembic upgrade head``. After the
+    revisions apply we still instantiate :class:`RemoteDBJobStore` so the
+    idempotent in-``__init__`` ALTERs run too — that keeps SQLite tests and
+    local dev working without an explicit migrate step.
+    """
     url = _get_db_url()
     masked = url.split("@")[-1] if "@" in url else url
     print(f"\n🔧 Skynet Setup — {masked}\n")
@@ -60,35 +70,46 @@ def cmd_setup() -> None:
     cmd_check()
 
     try:
-        engine = create_engine(url, echo=False)
-        Base.metadata.create_all(engine)
+        cfg = Config(str(ALEMBIC_INI))
+        cfg.set_main_option("sqlalchemy.url", url)
+        command.upgrade(cfg, "head")
+        print("\n✓ Alembic migrations applied")
+    except Exception as e:
+        print(f"\n✗ Alembic upgrade failed: {e}")
+        sys.exit(1)
+
+    try:
+        store = RemoteDBJobStore(url)
         print("\n✓ Tables ready:")
         for name in Base.metadata.tables:
             print(f"  - {name}")
+        store.engine.dispose()
     except Exception as e:
-        print(f"\n✗ Table creation failed: {e}")
+        print(f"\n✗ Table verification failed: {e}")
         sys.exit(1)
 
     print("\n✓ Setup complete. Start the server with: python main.py")
 
 
 def cmd_shell() -> None:
-    """Open an interactive Python shell with app context loaded."""
+    """Open an interactive Python shell with ``settings``, ``store`` and ``registry`` available."""
     url = _get_db_url()
     store = RemoteDBJobStore(url)
     registry = ServiceRegistry()
 
-    banner = (
-        "Skynet shell — available objects:\n"
-        "  settings, store (JobStore), registry (ServiceRegistry)\n"
+    banner = "Skynet shell — available objects:\n  settings, store (JobStore), registry (ServiceRegistry)\n"
+    code.interact(
+        banner=banner,
+        local={
+            "settings": settings,
+            "store": store,
+            "registry": registry,
+        },
     )
-    code.interact(banner=banner, local={
-        "settings": settings, "store": store, "registry": registry,
-    })
 
 
 def main() -> None:
-    """Parse CLI arguments and dispatch to the appropriate command handler."""
+    """Parse the command-line argument and dispatch to the chosen subcommand."""
     parser = argparse.ArgumentParser(
         description="Skynet management CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,

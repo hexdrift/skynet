@@ -1,19 +1,18 @@
 import Link from "next/link";
 import { SearchX } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
+import { msg } from "@/shared/lib/messages";
 
 export default function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-5 text-center px-4">
       <SearchX className="size-14 text-muted-foreground/40" />
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">הדף לא נמצא</h1>
-        <p className="text-sm text-muted-foreground">
-          הכתובת שחיפשת לא קיימת או שהועברה למיקום אחר
-        </p>
+        <h1 className="text-2xl font-bold text-foreground">{msg("not_found.title")}</h1>
+        <p className="text-sm text-muted-foreground">{msg("not_found.description")}</p>
       </div>
       <Button asChild variant="outline">
-        <Link href="/">חזרה ללוח בקרה</Link>
+        <Link href="/">{msg("not_found.back_dashboard")}</Link>
       </Button>
     </div>
   );

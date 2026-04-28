@@ -48,7 +48,6 @@ export function SpotlightMask({ targetRect, padding = 8, borderRadius = 12 }: Sp
         mask="url(#tutorial-spotlight-mask)"
       />
 
-      {/* Border */}
       <motion.rect
         animate={{ x, y, width: w, height: h }}
         transition={spring}
@@ -58,7 +57,6 @@ export function SpotlightMask({ targetRect, padding = 8, borderRadius = 12 }: Sp
         strokeWidth="1.5"
       />
 
-      {/* Glow */}
       <motion.rect
         animate={{ x, y, width: w, height: h, opacity: [0.3, 0.5, 0.3] }}
         transition={{

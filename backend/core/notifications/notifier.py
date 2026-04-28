@@ -29,7 +29,17 @@ def notify_job_started(
     module_name: str,
     model_name: str | None = None,
 ) -> None:
-    """Send a Hebrew notification when a job is submitted."""
+    """Send a Hebrew notification when a job is submitted.
+
+    Args:
+        optimization_id: Job identifier used to render the dashboard link.
+        username: User who submitted the job.
+        optimization_type: Either ``"run"`` or ``"grid_search"``; renders the
+            corresponding Hebrew label in the message.
+        optimizer_name: Name of the DSPy optimizer (e.g. ``"GEPA"``).
+        module_name: Name of the DSPy module (e.g. ``"ChainOfThought"``).
+        model_name: Optional model identifier appended to the message when set.
+    """
     type_label = GRID_SEARCH_LABEL if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH else RUN_LABEL
     model_part = f" | {t('notifier.label.model')}: {model_name}" if model_name else ""
     link = _job_url(optimization_id)
@@ -54,7 +64,20 @@ def notify_job_completed(
     baseline_score: float | None = None,
     optimized_score: float | None = None,
 ) -> None:
-    """Send a Hebrew notification when a job finishes (success, failed, or cancelled)."""
+    """Send a Hebrew notification when a job finishes (success, failed, or cancelled).
+
+    Args:
+        optimization_id: Job identifier used to render the dashboard link.
+        username: User who submitted the job.
+        status: One of ``"success"``, ``"cancelled"`` or any other value
+            (treated as ``failed``).
+        message: Optional error/context message; only rendered for the
+            failed branch and truncated to 150 characters.
+        baseline_score: Pre-optimization score; combined with
+            ``optimized_score`` to render an improvement line.
+        optimized_score: Post-optimization score; rendered with the
+            improvement delta when both scores are present.
+    """
     link = _job_url(optimization_id)
     user_line = f"{t('notifier.label.user')}: *{username}*"
 
@@ -68,20 +91,11 @@ def notify_job_completed(
                 f"{baseline_score:.1f}% → {optimized_score:.1f}% "
                 f"({sign}{improvement:.1f}%)"
             )
-        text = (
-            f"*{t('notifier.title.completed')}*\n{user_line}{scores}\n"
-            f"[{t('notifier.link.results')}]({link})"
-        )
+        text = f"*{t('notifier.title.completed')}*\n{user_line}{scores}\n[{t('notifier.link.results')}]({link})"
     elif status == "cancelled":
-        text = (
-            f"*{t('notifier.title.cancelled')}*\n{user_line}\n"
-            f"[{t('notifier.link.details')}]({link})"
-        )
+        text = f"*{t('notifier.title.cancelled')}*\n{user_line}\n[{t('notifier.link.details')}]({link})"
     else:
         error_part = f"\n{t('notifier.label.error')}: {message[:150]}" if message else ""
-        text = (
-            f"*{t('notifier.title.failed')}*\n{user_line}{error_part}\n"
-            f"[{t('notifier.link.details')}]({link})"
-        )
+        text = f"*{t('notifier.title.failed')}*\n{user_line}{error_part}\n[{t('notifier.link.details')}]({link})"
 
     send_message(text)

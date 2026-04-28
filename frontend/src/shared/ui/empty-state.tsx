@@ -1,13 +1,6 @@
 "use client";
 
-/**
- * Empty state component
- * Displays icon, title, description, and optional action button
- * Preserves exact RTL layout and styling from existing implementations
- */
-
-import { type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import type { LucideIcon } from "lucide-react";
 
 interface EmptyStateProps {
@@ -22,16 +15,18 @@ interface EmptyStateProps {
   className?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className = "" }: EmptyStateProps) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  className = "",
+}: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center gap-3 py-16 text-center ${className}`}>
       {Icon && <Icon className="size-12 text-muted-foreground/30" />}
       <p className="text-base font-medium">{title}</p>
-      {description && (
-        <p className="text-sm text-muted-foreground max-w-xs">
-          {description}
-        </p>
-      )}
+      {description && <p className="text-sm text-muted-foreground max-w-xs">{description}</p>}
       {action && (
         <Button
           variant="outline"
@@ -40,11 +35,7 @@ export function EmptyState({ icon: Icon, title, description, action, className =
           className="mt-2"
           {...(action.href ? { asChild: true } : {})}
         >
-          {action.href ? (
-            <a href={action.href}>{action.label}</a>
-          ) : (
-            action.label
-          )}
+          {action.href ? <a href={action.href}>{action.label}</a> : action.label}
         </Button>
       )}
     </div>

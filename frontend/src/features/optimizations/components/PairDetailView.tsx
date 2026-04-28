@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * Per-pair full view shown when ?pair=N is set on a grid-search
- * optimization. Contains its own Tabs (overview/prompt/playground/
- * data/logs) scoped to the selected pair.
- *
- * Extracted from app/optimizations/[id]/page.tsx. State for the serve
- * playground lives in the parent — this component just forwards it.
- */
-
 import dynamic from "next/dynamic";
 import {
   ArrowLeft,
@@ -27,15 +18,15 @@ import {
   Trash2,
   TrendingUp,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/shared/ui/primitives/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/shared/ui/primitives/tooltip";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type {
@@ -151,7 +142,7 @@ export function PairDetailView({
               className="inline-flex items-center gap-1.5 text-sm font-medium text-[#3D2E22] hover:text-[#3D2E22]/80 transition-colors cursor-pointer"
             >
               <ChevronRight className="size-4" />
-              <span>חזרה לסקירת הסריקה</span>
+              <span>{msg("auto.features.optimizations.components.pairdetailview.1")}</span>
             </button>
             <span className="text-[0.6875rem] text-muted-foreground/60">|</span>
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -173,7 +164,7 @@ export function PairDetailView({
               disabled={activePairIndex <= 0}
               onClick={onPrev}
               className="p-1.5 rounded-lg hover:bg-[#3D2E22]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              title="זוג קודם"
+              title={msg("auto.features.optimizations.components.pairdetailview.literal.1")}
             >
               <ArrowRight className="size-4 text-[#3D2E22]" />
             </button>
@@ -185,7 +176,7 @@ export function PairDetailView({
               disabled={activePairIndex >= pairCount - 1}
               onClick={onNext}
               className="p-1.5 rounded-lg hover:bg-[#3D2E22]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              title="זוג הבא"
+              title={msg("auto.features.optimizations.components.pairdetailview.literal.2")}
             >
               <ArrowLeft className="size-4 text-[#3D2E22]" />
             </button>
@@ -197,7 +188,9 @@ export function PairDetailView({
         <FadeIn delay={0.05}>
           <div className="flex items-center gap-3 p-4 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
             <div className="flex-1">
-              <p className="text-sm font-medium">ייצוא תוצאות</p>
+              <p className="text-sm font-medium">
+                {msg("auto.features.optimizations.components.pairdetailview.2")}
+              </p>
             </div>
             <ExportMenu job={job} optimizedPrompt={pairPrompt ?? null} />
           </div>
@@ -207,7 +200,9 @@ export function PairDetailView({
       {activePair.error && (
         <FadeIn delay={0.05}>
           <div className="rounded-xl border border-[#B04030]/30 bg-[#B04030]/5 p-4">
-            <div className="text-sm font-medium text-[#B04030] mb-1">שגיאה</div>
+            <div className="text-sm font-medium text-[#B04030] mb-1">
+              {msg("auto.features.optimizations.components.pairdetailview.3")}
+            </div>
             <pre className="text-xs font-mono text-[#B04030]/80 whitespace-pre-wrap" dir="ltr">
               {activePair.error}
             </pre>
@@ -218,23 +213,28 @@ export function PairDetailView({
       <Tabs defaultValue={initialTab} dir="rtl">
         <TabsList variant="line" className="border-b border-border/50 pb-0 gap-0">
           <TabsTrigger value="overview" className={tabCls}>
-            <TrendingUp className="size-3.5" /> סקירה
+            <TrendingUp className="size-3.5" />
+            {msg("auto.features.optimizations.components.pairdetailview.4")}
           </TabsTrigger>
           {pairPrompt?.formatted_prompt && (
             <TabsTrigger value="prompt" className={tabCls}>
-              <Code2 className="size-3.5" /> פרומפט
+              <Code2 className="size-3.5" />
+              {msg("auto.features.optimizations.components.pairdetailview.5")}
             </TabsTrigger>
           )}
           {serveInfo && (
             <TabsTrigger value="playground" className={tabCls}>
-              <Send className="size-3.5" /> שימוש
+              <Send className="size-3.5" />
+              {msg("auto.features.optimizations.components.pairdetailview.6")}
             </TabsTrigger>
           )}
           <TabsTrigger value="data" className={tabCls}>
-            <Database className="size-3.5" /> נתונים
+            <Database className="size-3.5" />
+            {msg("auto.features.optimizations.components.pairdetailview.7")}
           </TabsTrigger>
           <TabsTrigger value="logs" className={tabCls}>
-            <Terminal className="size-3.5" /> לוגים
+            <Terminal className="size-3.5" />
+            {msg("auto.features.optimizations.components.pairdetailview.8")}
           </TabsTrigger>
         </TabsList>
 
@@ -276,7 +276,9 @@ export function PairDetailView({
                   className={`rounded-xl border p-6 text-center ${(pairImprovement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
                 >
                   <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
-                    <HelpTip text={tip("score.improvement")}>שיפור</HelpTip>
+                    <HelpTip text={tip("score.improvement")}>
+                      {msg("auto.features.optimizations.components.pairdetailview.9")}
+                    </HelpTip>
                   </p>
                   <p
                     className={`text-3xl font-mono font-bold tabular-nums ${(pairImprovement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
@@ -290,7 +292,7 @@ export function PairDetailView({
 
           <FadeIn delay={0.1}>
             <div className="space-y-2.5">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
                 <InfoCard
                   label={
                     <HelpTip text={tip("model.generation")}>
@@ -321,7 +323,11 @@ export function PairDetailView({
                 />
                 {activePair.runtime_seconds != null && (
                   <InfoCard
-                    label={<HelpTip text={tip("pair.runtime")}>זמן ריצה</HelpTip>}
+                    label={
+                      <HelpTip text={tip("pair.runtime")}>
+                        {msg("auto.features.optimizations.components.pairdetailview.10")}
+                      </HelpTip>
+                    }
                     value={formatDuration(activePair.runtime_seconds)}
                     icon={<Clock className="size-3.5" />}
                   />
@@ -331,14 +337,22 @@ export function PairDetailView({
                 <div className="grid grid-cols-2 gap-2.5">
                   {activePair.num_lm_calls != null && (
                     <InfoCard
-                      label={<HelpTip text={tip("lm.calls_count")}>קריאות למודל</HelpTip>}
+                      label={
+                        <HelpTip text={tip("lm.calls_count")}>
+                          {msg("auto.features.optimizations.components.pairdetailview.11")}
+                        </HelpTip>
+                      }
                       value={String(activePair.num_lm_calls)}
                       icon={<MessageSquare className="size-3.5" />}
                     />
                   )}
                   {activePair.avg_response_time_ms != null && (
                     <InfoCard
-                      label={<HelpTip text={tip("lm.avg_response_time")}>זמן תגובה ממוצע</HelpTip>}
+                      label={
+                        <HelpTip text={tip("lm.avg_response_time")}>
+                          {msg("auto.features.optimizations.components.pairdetailview.12")}
+                        </HelpTip>
+                      }
                       value={`${(activePair.avg_response_time_ms / 1000).toFixed(1)}s`}
                       icon={<Timer className="size-3.5" />}
                     />
@@ -359,7 +373,9 @@ export function PairDetailView({
                   <CardTitle className="text-base flex items-center gap-2">
                     <TrendingUp className="size-4 text-[#7C6350]" aria-hidden="true" />
                     <HelpTip text={tip("score.progression")}>
-                      <span className="font-bold tracking-tight">מהלך הציונים</span>
+                      <span className="font-bold tracking-tight">
+                        {msg("auto.features.optimizations.components.pairdetailview.13")}
+                      </span>
                     </HelpTip>
                   </CardTitle>
                 </CardHeader>
@@ -381,7 +397,8 @@ export function PairDetailView({
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base font-medium">
                       <HelpTip text={tip("prompt.demonstrations")}>
-                        {pairPrompt.demos.length} דוגמאות
+                        {pairPrompt.demos.length}
+                        {msg("auto.features.optimizations.components.pairdetailview.14")}
                       </HelpTip>
                     </CardTitle>
                   </CardHeader>
@@ -405,7 +422,9 @@ export function PairDetailView({
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-medium">
-                    <HelpTip text={tip("prompt.optimized")}>הפרומפט המאומן</HelpTip>
+                    <HelpTip text={tip("prompt.optimized")}>
+                      {msg("auto.features.optimizations.components.pairdetailview.15")}
+                    </HelpTip>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -432,7 +451,7 @@ export function PairDetailView({
             <FadeIn>
               <div className="flex items-center justify-between pb-3 border-b border-border/60">
                 <p className="text-sm text-muted-foreground">
-                  הרצת התוכנית המאומנת של זוג זה — הזן קלט וקבל תשובה.
+                  {msg("auto.features.optimizations.components.pairdetailview.16")}
                 </p>
                 {runHistory.length > 0 && (
                   <TooltipProvider>
@@ -443,12 +462,16 @@ export function PairDetailView({
                           size="icon"
                           className="size-8"
                           onClick={onClearHistory}
-                          aria-label="נקה היסטוריה"
+                          aria-label={msg(
+                            "auto.features.optimizations.components.pairdetailview.literal.3",
+                          )}
                         >
                           <Trash2 className="size-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom">נקה היסטוריה</TooltipContent>
+                      <TooltipContent side="bottom">
+                        {msg("auto.features.optimizations.components.pairdetailview.17")}
+                      </TooltipContent>
                     </UiTooltip>
                   </TooltipProvider>
                 )}

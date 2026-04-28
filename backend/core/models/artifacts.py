@@ -1,6 +1,8 @@
 """Compiled DSPy program artifact models (prompts, demos, serialized pickle)."""
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -42,7 +44,7 @@ class ProgramArtifact(BaseModel):
         default=None,
         description="metadata.json contents already parsed into a dict.",
     )
-    optimized_prompt: Optional["OptimizedPredictor"] = Field(
+    optimized_prompt: OptimizedPredictor | None = Field(
         default=None,
         description="Extracted prompt and demos from the compiled program predictor.",
     )

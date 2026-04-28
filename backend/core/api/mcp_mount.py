@@ -20,7 +20,9 @@ MCP session manager is entered / exited alongside.
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -46,13 +48,15 @@ def _strip_schema_noise(node: Any) -> Any:
     Removes keys that bloat the MCP tool spec without helping the agent
     (``examples``, ``example``, nested ``title``) while preserving type
     information, descriptions on the top node, and required fields.
+
+    Args:
+        node: A JSON-schema fragment (dict, list, or scalar).
+
+    Returns:
+        A copy of ``node`` with noisy keys recursively removed.
     """
     if isinstance(node, dict):
-        return {
-            k: _strip_schema_noise(v)
-            for k, v in node.items()
-            if k not in _SCHEMA_NOISE_KEYS
-        }
+        return {k: _strip_schema_noise(v) for k, v in node.items() if k not in _SCHEMA_NOISE_KEYS}
     if isinstance(node, list):
         return [_strip_schema_noise(item) for item in node]
     return node
@@ -70,6 +74,10 @@ def _trim_tool_spec(
     it directly buys context budget. We keep the first sentence of the
     description (capped at ~240 chars) and strip examples / nested titles
     from the argument and output schemas.
+
+    Args:
+        route: The originating FastAPI HTTP route metadata.
+        component: The MCP component (tool / resource / resource template) to trim in place.
     """
     from fastmcp.server.providers.openapi.components import OpenAPITool
 
@@ -106,8 +114,7 @@ def mount_mcp_on_app(app: FastAPI) -> None:
     every tool call would fail with ``Task group is not initialized``.
 
     Args:
-        app: The parent FastAPI application. Must have all routers already
-            attached; only tagged routes are projected into MCP.
+        app: The parent FastAPI application to mount the MCP sub-app on.
     """
     from fastmcp import FastMCP
     from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
@@ -130,12 +137,37 @@ def mount_mcp_on_app(app: FastAPI) -> None:
     app.mount("/mcp", mcp_app)
 
     parent_lifespan = app.router.lifespan_context
-
-    @asynccontextmanager
-    async def chained_lifespan(scope_app):
-        async with mcp_app.lifespan(mcp_app):
-            async with parent_lifespan(scope_app):
-                yield
-
-    app.router.lifespan_context = chained_lifespan
+    app.router.lifespan_context = partial(
+        _chained_lifespan,
+        mcp_app=mcp_app,
+        parent_lifespan=parent_lifespan,
+    )
     logger.info("FastMCP mounted at /mcp (agent-tagged endpoints only)")
+
+
+@asynccontextmanager
+async def _chained_lifespan(
+    scope_app: Any,
+    *,
+    mcp_app: Any,
+    parent_lifespan: Callable[[Any], AbstractAsyncContextManager[Any]],
+) -> AsyncIterator[None]:
+    """Run the MCP sub-app lifespan alongside the parent FastAPI lifespan.
+
+    FastMCP's session manager requires an anyio task group that only lives
+    while the MCP sub-app's lifespan is entered; without chaining, every
+    tool call would fail with ``Task group is not initialized``. Binding
+    ``mcp_app`` and ``parent_lifespan`` with :func:`functools.partial`
+    gives Starlette the expected single-positional-arg lifespan factory
+    while keeping this helper at module scope.
+
+    Args:
+        scope_app: The parent ASGI application passed by Starlette's lifespan dispatcher.
+        mcp_app: The mounted FastMCP sub-app whose lifespan we also enter.
+        parent_lifespan: The previously installed lifespan context manager factory.
+
+    Yields:
+        ``None`` once both lifespans are active; closes them on exit.
+    """
+    async with mcp_app.lifespan(mcp_app), parent_lifespan(scope_app):
+        yield

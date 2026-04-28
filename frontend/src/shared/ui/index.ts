@@ -1,7 +1,9 @@
 /**
- * Shared UI components index
- * Re-exports all shared UI primitives and shadcn/ui components
- * Single import point for UI components across features
+ * Shared UI surface — single import point for cross-feature UI.
+ *
+ * Two layers live under shared/ui:
+ *  - ./primitives/* — vendor-style shadcn building blocks
+ *  - ./*           — app-specific composites built on top of the primitives
  */
 
 export { EmptyState } from "./empty-state";
@@ -10,13 +12,19 @@ export { StatusBadge } from "./status-badge";
 export { ConfirmDialog } from "./confirm-dialog";
 export { MetricCard } from "./metric-card";
 
-// Re-export commonly used shadcn/ui components for convenience
-export { Button } from "@/components/ui/button";
-export { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-export { Badge } from "@/components/ui/badge";
-export { Input } from "@/components/ui/input";
-export { Label } from "@/components/ui/label";
-export { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+export { Button } from "./primitives/button";
+export {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "./primitives/card";
+export { Badge } from "./primitives/badge";
+export { Input } from "./primitives/input";
+export { Label } from "./primitives/label";
+export { Tabs, TabsContent, TabsList, TabsTrigger } from "./primitives/tabs";
 export {
   Dialog,
   DialogContent,
@@ -25,15 +33,8 @@ export {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-export {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+} from "./primitives/dialog";
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./primitives/table";
 export {
   Select,
   SelectContent,
@@ -42,12 +43,6 @@ export {
   SelectValue,
   SelectGroup,
   SelectLabel,
-} from "@/components/ui/select";
-// Note: Export checkbox and textarea when they are added to the UI library
-export {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "./primitives/select";
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./primitives/tooltip";
 export { Skeleton } from "boneyard-js/react";

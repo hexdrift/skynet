@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 import type { PaginatedJobsResponse } from "@/shared/types/api";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
 const POLL_FALLBACK_MS = 15_000;
 
@@ -17,17 +18,17 @@ export function useJobsRealtime({ data, fetchJobs }: UseJobsRealtimeArgs) {
     const hasActive = data?.items.some((j) => ACTIVE_STATUSES.has(j.status));
     if (!hasActive) return;
 
-    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const API = getRuntimeEnv().apiUrl;
     let eventSource: EventSource | null = null;
 
     try {
       eventSource = new EventSource(`${API}/optimizations/stream`);
       eventSource.onmessage = () => {
-        fetchJobs();
+        void fetchJobs();
       };
       eventSource.addEventListener("idle", () => {
         eventSource?.close();
-        fetchJobs();
+        void fetchJobs();
       });
       eventSource.onerror = () => {
         eventSource?.close();

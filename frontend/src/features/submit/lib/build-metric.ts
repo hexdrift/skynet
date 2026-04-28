@@ -8,9 +8,7 @@
  * String comparison is case-insensitive + whitespace-trimmed so that
  * trivial formatting differences ("Yes " vs "yes") don't tank scores.
  */
-export function buildMetricTemplate(
-  roles: Record<string, "input" | "output" | "ignore">,
-): string {
+export function buildMetricTemplate(roles: Record<string, "input" | "output" | "ignore">): string {
   const outputs = Object.entries(roles)
     .filter(([, r]) => r === "output")
     .map(([c]) => c);
@@ -19,7 +17,7 @@ export function buildMetricTemplate(
   // Fallback when no roles are set yet — mirrors buildSignatureTemplate's
   // fallback so the editor always compiles even before the user maps columns.
   const fields = outputs.length > 0 ? outputs.map(toId) : ["output_field"];
-  const fieldsLiteral = "[" + fields.map((f) => `"${f}"`).join(", ") + "]";
+  const fieldsLiteral = `[${fields.map((f) => `"${f}"`).join(", ")}]`;
 
   return `def metric(gold: dspy.Example, pred: dspy.Prediction, trace: bool = None, pred_name: str = None, pred_trace: list = None) -> dspy.Prediction:
     fields = ${fieldsLiteral}

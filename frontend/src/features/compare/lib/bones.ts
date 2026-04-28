@@ -9,7 +9,6 @@ function bone(x: number, y: number, w: number, h: number, r: number, container =
   return container ? { x, y, w, h, r, c: true } : { x, y, w, h, r };
 }
 
-/* ── Desktop ── */
 const dW = 1000;
 const halfW = (dW - 16) / 2;
 
@@ -52,7 +51,6 @@ const desktopBones: Bone[] = [
   bone(dW * 0.7, 456, 80, 14, 4),
 ];
 
-/* ── Mobile ── */
 const mW = 343;
 const mobileBones: Bone[] = [
   bone(mW - 80, 0, 40, 12, 4),
@@ -81,7 +79,6 @@ const mobileBones: Bone[] = [
   bone(150, 486, 60, 12, 4),
 ];
 
-/* ── Tablet ── */
 const tW = 700;
 const tHalf = (tW - 16) / 2;
 

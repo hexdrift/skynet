@@ -17,44 +17,40 @@ from core.storage.base import JobStore
 from core.storage.tests.conftest import FakeJobStore
 
 
-
-
 def test_create_job_returns_pending_dict(store: FakeJobStore) -> None:
-    """create_job() returns a dict with status=pending and the correct optimization_id."""
+    """``create_job`` returns a dict in pending status."""
     result = store.create_job("job-1")
     assert result["optimization_id"] == "job-1"
     assert result["status"] == "pending"
 
 
 def test_create_job_with_estimate(store: FakeJobStore) -> None:
-    """create_job() stores the estimated_remaining_seconds value."""
+    """``create_job`` stores the supplied ETA."""
     result = store.create_job("job-2", estimated_remaining_seconds=120.0)
     assert result["estimated_remaining_seconds"] == 120.0
 
 
 def test_create_job_makes_job_findable(store: FakeJobStore) -> None:
-    """After create_job(), job_exists() returns True for the new ID."""
+    """``create_job`` makes the new ID findable via ``job_exists``."""
     store.create_job("job-3")
     assert store.job_exists("job-3")
 
 
 def test_create_job_return_is_independent_copy(store: FakeJobStore) -> None:
-    """Mutating the returned dict does not affect the stored job state."""
+    """Mutating the returned dict does not affect stored state."""
     returned = store.create_job("job-4")
     returned["status"] = "mutated"
     assert store.get_job("job-4")["status"] == "pending"
 
 
-
-
 def test_get_job_raises_key_error_for_unknown_id(store: FakeJobStore) -> None:
-    """get_job() raises KeyError for an ID that does not exist."""
+    """``get_job`` raises ``KeyError`` for unknown IDs."""
     with pytest.raises(KeyError, match="nonexistent"):
         store.get_job("nonexistent")
 
 
 def test_get_job_returns_correct_job(store: FakeJobStore) -> None:
-    """get_job() returns the stored job with the correct ID and status."""
+    """``get_job`` returns the seeded record for a known ID."""
     store.seed_job("alpha", status="success")
     job = store.get_job("alpha")
     assert job["optimization_id"] == "alpha"
@@ -62,7 +58,7 @@ def test_get_job_returns_correct_job(store: FakeJobStore) -> None:
 
 
 def test_get_job_returns_independent_copy(store: FakeJobStore) -> None:
-    """Mutating the dict returned by get_job() does not affect stored state."""
+    """Mutating the returned dict from ``get_job`` does not affect stored state."""
     store.seed_job("beta")
     copy = store.get_job("beta")
     copy["status"] = "mutated"
@@ -70,27 +66,25 @@ def test_get_job_returns_independent_copy(store: FakeJobStore) -> None:
 
 
 def test_job_exists_true_for_existing(store: FakeJobStore) -> None:
-    """job_exists() returns True for a seeded job."""
+    """``job_exists`` returns ``True`` for seeded jobs."""
     store.seed_job("gamma")
     assert store.job_exists("gamma") is True
 
 
 def test_job_exists_false_for_missing(store: FakeJobStore) -> None:
-    """job_exists() returns False for an ID that was never created."""
+    """``job_exists`` returns ``False`` for missing IDs."""
     assert store.job_exists("missing") is False
 
 
-
-
 def test_update_job_changes_field(store: FakeJobStore) -> None:
-    """update_job() overwrites a single field on the stored job."""
+    """``update_job`` overwrites the targeted field."""
     store.seed_job("u1", status="pending")
     store.update_job("u1", status="running")
     assert store.get_job("u1")["status"] == "running"
 
 
 def test_update_job_multiple_fields(store: FakeJobStore) -> None:
-    """update_job() can update multiple fields in one call."""
+    """``update_job`` applies multiple field updates atomically."""
     store.seed_job("u2")
     store.update_job("u2", status="success", message="done")
     job = store.get_job("u2")
@@ -98,17 +92,15 @@ def test_update_job_multiple_fields(store: FakeJobStore) -> None:
     assert job["message"] == "done"
 
 
-
-
 def test_delete_job_removes_job(store: FakeJobStore) -> None:
-    """delete_job() removes the job so job_exists() returns False."""
+    """``delete_job`` removes the row."""
     store.seed_job("d1")
     store.delete_job("d1")
     assert not store.job_exists("d1")
 
 
 def test_delete_job_removes_logs(store: FakeJobStore) -> None:
-    """delete_job() also removes all log entries for the deleted job."""
+    """``delete_job`` cascades to log entries."""
     store.seed_job("d2")
     store.append_log("d2", level="INFO", logger_name="test", message="hi")
     store.delete_job("d2")
@@ -116,7 +108,7 @@ def test_delete_job_removes_logs(store: FakeJobStore) -> None:
 
 
 def test_delete_job_removes_progress_events(store: FakeJobStore) -> None:
-    """delete_job() also removes all progress events for the deleted job."""
+    """``delete_job`` cascades to progress events."""
     store.seed_job("d3")
     store.record_progress("d3", message="step", metrics={"x": 1})
     store.delete_job("d3")
@@ -124,15 +116,13 @@ def test_delete_job_removes_progress_events(store: FakeJobStore) -> None:
 
 
 def test_delete_job_tolerates_nonexistent_id(store: FakeJobStore) -> None:
-    """delete_job() does not raise when the ID does not exist."""
+    """``delete_job`` is a no-op for unknown IDs."""
     # Must not raise — silently ignore missing IDs.
     store.delete_job("ghost")
 
 
-
-
 def test_get_jobs_status_by_ids_returns_map(store: FakeJobStore) -> None:
-    """get_jobs_status_by_ids() returns a {id: status} mapping for all provided IDs."""
+    """``get_jobs_status_by_ids`` returns the matching ``{id: status}`` map."""
     store.seed_job("s1", status="pending")
     store.seed_job("s2", status="running")
     result = store.get_jobs_status_by_ids(["s1", "s2"])
@@ -140,7 +130,7 @@ def test_get_jobs_status_by_ids_returns_map(store: FakeJobStore) -> None:
 
 
 def test_get_jobs_status_by_ids_omits_missing(store: FakeJobStore) -> None:
-    """get_jobs_status_by_ids() omits IDs that do not exist in the store."""
+    """Missing IDs are absent from the status map."""
     store.seed_job("s3", status="success")
     result = store.get_jobs_status_by_ids(["s3", "missing-id"])
     assert "missing-id" not in result
@@ -148,14 +138,12 @@ def test_get_jobs_status_by_ids_omits_missing(store: FakeJobStore) -> None:
 
 
 def test_get_jobs_status_by_ids_empty_list(store: FakeJobStore) -> None:
-    """get_jobs_status_by_ids() returns an empty dict for an empty input list."""
+    """``get_jobs_status_by_ids`` with an empty list returns an empty dict."""
     assert store.get_jobs_status_by_ids([]) == {}
 
 
-
-
 def test_delete_jobs_returns_count_of_removed(store: FakeJobStore) -> None:
-    """delete_jobs() returns the number of rows actually deleted."""
+    """``delete_jobs`` returns the number of rows actually removed."""
     store.seed_job("b1")
     store.seed_job("b2")
     removed = store.delete_jobs(["b1", "b2"])
@@ -163,7 +151,7 @@ def test_delete_jobs_returns_count_of_removed(store: FakeJobStore) -> None:
 
 
 def test_delete_jobs_actually_removes(store: FakeJobStore) -> None:
-    """delete_jobs() removes each specified job from the store."""
+    """``delete_jobs`` removes every targeted row."""
     store.seed_job("b3")
     store.seed_job("b4")
     store.delete_jobs(["b3", "b4"])
@@ -172,23 +160,21 @@ def test_delete_jobs_actually_removes(store: FakeJobStore) -> None:
 
 
 def test_delete_jobs_tolerates_missing_ids(store: FakeJobStore) -> None:
-    """delete_jobs() ignores IDs that do not exist and counts only actual deletions."""
+    """``delete_jobs`` ignores missing IDs and counts only removals."""
     store.seed_job("b5")
     removed = store.delete_jobs(["b5", "no-such-job"])
     assert removed == 1
 
 
 def test_delete_jobs_tolerates_duplicates(store: FakeJobStore) -> None:
-    """delete_jobs() treats duplicate IDs as a single deletion."""
+    """``delete_jobs`` deduplicates IDs in the input list."""
     store.seed_job("b6")
     removed = store.delete_jobs(["b6", "b6"])
     assert removed == 1
 
 
-
-
 def test_record_progress_appends_event(store: FakeJobStore) -> None:
-    """record_progress() stores a progress event with the given message and metrics."""
+    """``record_progress`` appends a single event with the supplied payload."""
     store.seed_job("p1")
     store.record_progress("p1", message="step 1", metrics={"loss": 0.5})
     events = store.get_progress_events("p1")
@@ -198,14 +184,14 @@ def test_record_progress_appends_event(store: FakeJobStore) -> None:
 
 
 def test_record_progress_none_message_allowed(store: FakeJobStore) -> None:
-    """record_progress() accepts None as the message argument."""
+    """``record_progress`` accepts a ``None`` message."""
     store.seed_job("p2")
     store.record_progress("p2", message=None, metrics={})
     assert store.get_progress_count("p2") == 1
 
 
 def test_get_progress_events_chronological_order(store: FakeJobStore) -> None:
-    """get_progress_events() returns events in the order they were recorded."""
+    """``get_progress_events`` returns events in insertion order."""
     store.seed_job("p3")
     for i in range(3):
         store.record_progress("p3", message=f"step {i}", metrics={"i": i})
@@ -215,7 +201,7 @@ def test_get_progress_events_chronological_order(store: FakeJobStore) -> None:
 
 
 def test_get_progress_count_matches_events(store: FakeJobStore) -> None:
-    """get_progress_count() equals the number of recorded events."""
+    """``get_progress_count`` matches the number of events recorded."""
     store.seed_job("p4")
     store.record_progress("p4", message="a", metrics={})
     store.record_progress("p4", message="b", metrics={})
@@ -223,7 +209,7 @@ def test_get_progress_count_matches_events(store: FakeJobStore) -> None:
 
 
 def test_get_progress_events_returns_copy(store: FakeJobStore) -> None:
-    """Clearing the list returned by get_progress_events() does not affect stored state."""
+    """Mutating the returned events list does not affect stored state."""
     store.seed_job("p5")
     store.record_progress("p5", message="x", metrics={})
     returned = store.get_progress_events("p5")
@@ -232,14 +218,12 @@ def test_get_progress_events_returns_copy(store: FakeJobStore) -> None:
 
 
 def test_get_progress_events_empty_for_unknown_job(store: FakeJobStore) -> None:
-    """get_progress_events() returns an empty list for an ID with no recorded events."""
+    """``get_progress_events`` returns an empty list for unknown IDs."""
     assert store.get_progress_events("unknown") == []
 
 
-
-
 def test_append_log_makes_entry_retrievable(store: FakeJobStore) -> None:
-    """append_log() stores the entry so get_logs() can retrieve it."""
+    """``append_log`` writes an entry that ``get_logs`` returns."""
     store.seed_job("l1")
     store.append_log("l1", level="INFO", logger_name="mylogger", message="hello")
     logs = store.get_logs("l1")
@@ -249,14 +233,14 @@ def test_append_log_makes_entry_retrievable(store: FakeJobStore) -> None:
 
 
 def test_append_log_pair_index_stored(store: FakeJobStore) -> None:
-    """append_log() stores the pair_index when provided."""
+    """``append_log`` persists a supplied ``pair_index`` value."""
     store.seed_job("l2")
     store.append_log("l2", level="DEBUG", logger_name="lg", message="m", pair_index=7)
     assert store.get_logs("l2")[0]["pair_index"] == 7
 
 
 def test_get_logs_level_filter(store: FakeJobStore) -> None:
-    """get_logs(level=...) returns only entries matching the specified level."""
+    """``get_logs`` respects the ``level`` filter."""
     store.seed_job("l3")
     store.append_log("l3", level="INFO", logger_name="lg", message="info msg")
     store.append_log("l3", level="ERROR", logger_name="lg", message="err msg")
@@ -266,7 +250,7 @@ def test_get_logs_level_filter(store: FakeJobStore) -> None:
 
 
 def test_get_logs_offset_pagination(store: FakeJobStore) -> None:
-    """get_logs(offset=N) skips the first N entries."""
+    """``get_logs`` skips the requested offset."""
     store.seed_job("l4")
     for i in range(5):
         store.append_log("l4", level="INFO", logger_name="lg", message=f"msg {i}")
@@ -276,7 +260,7 @@ def test_get_logs_offset_pagination(store: FakeJobStore) -> None:
 
 
 def test_get_logs_limit_pagination(store: FakeJobStore) -> None:
-    """get_logs(limit=N) returns at most N entries."""
+    """``get_logs`` honors the ``limit`` parameter."""
     store.seed_job("l5")
     for i in range(5):
         store.append_log("l5", level="INFO", logger_name="lg", message=f"msg {i}")
@@ -285,7 +269,7 @@ def test_get_logs_limit_pagination(store: FakeJobStore) -> None:
 
 
 def test_get_logs_limit_and_offset(store: FakeJobStore) -> None:
-    """get_logs(limit=N, offset=M) returns N entries starting from position M."""
+    """``get_logs`` combines ``limit`` and ``offset`` correctly."""
     store.seed_job("l6")
     for i in range(10):
         store.append_log("l6", level="INFO", logger_name="lg", message=f"msg {i}")
@@ -295,7 +279,7 @@ def test_get_logs_limit_and_offset(store: FakeJobStore) -> None:
 
 
 def test_get_log_count_no_filter(store: FakeJobStore) -> None:
-    """get_log_count() returns the total number of log entries when no level filter is given."""
+    """``get_log_count`` returns the total without filters."""
     store.seed_job("l7")
     store.append_log("l7", level="INFO", logger_name="lg", message="a")
     store.append_log("l7", level="WARN", logger_name="lg", message="b")
@@ -303,7 +287,7 @@ def test_get_log_count_no_filter(store: FakeJobStore) -> None:
 
 
 def test_get_log_count_with_level_filter(store: FakeJobStore) -> None:
-    """get_log_count(level=...) counts only entries matching the specified level."""
+    """``get_log_count`` restricts the count to the requested level."""
     store.seed_job("l8")
     store.append_log("l8", level="INFO", logger_name="lg", message="a")
     store.append_log("l8", level="ERROR", logger_name="lg", message="b")
@@ -312,14 +296,12 @@ def test_get_log_count_with_level_filter(store: FakeJobStore) -> None:
 
 
 def test_get_logs_returns_empty_for_unknown_job(store: FakeJobStore) -> None:
-    """get_logs() returns an empty list for an unknown job ID."""
+    """``get_logs`` returns an empty list for unknown IDs."""
     assert store.get_logs("unknown") == []
 
 
-
-
 def test_set_payload_overview_stores_data(store: FakeJobStore) -> None:
-    """set_payload_overview() stores the overview dict and makes it retrievable."""
+    """``set_payload_overview`` persists the supplied summary."""
     store.seed_job("o1")
     store.set_payload_overview("o1", {"username": "alice", "job_type": "opt_a"})
     job = store.get_job("o1")
@@ -327,16 +309,14 @@ def test_set_payload_overview_stores_data(store: FakeJobStore) -> None:
 
 
 def test_set_payload_overview_overwrites_previous(store: FakeJobStore) -> None:
-    """set_payload_overview() replaces any previously stored overview."""
+    """``set_payload_overview`` overwrites a prior value."""
     store.seed_job("o2", payload_overview={"username": "old"})
     store.set_payload_overview("o2", {"username": "new"})
     assert store.get_job("o2")["payload_overview"]["username"] == "new"
 
 
-
-
 @pytest.mark.parametrize(
-    "filter_kwargs, expected_ids",
+    ("filter_kwargs", "expected_ids"),
     [
         ({"status": "pending"}, {"j-pending-1", "j-pending-2"}),
         ({"status": "running"}, {"j-running-1"}),
@@ -353,7 +333,7 @@ def test_list_jobs_filters(
     filter_kwargs: dict,
     expected_ids: set,
 ) -> None:
-    """list_jobs() returns only the expected job IDs for each filter combination."""
+    """``list_jobs`` returns the rows matching the supplied filters."""
     store.seed_job(
         "j-pending-1",
         status="pending",
@@ -374,14 +354,14 @@ def test_list_jobs_filters(
 
 
 def test_list_jobs_limit(store: FakeJobStore) -> None:
-    """list_jobs(limit=N) returns at most N jobs."""
+    """``list_jobs`` honors the ``limit`` parameter."""
     for i in range(5):
         store.seed_job(f"lim-{i}")
     assert len(store.list_jobs(limit=3)) == 3
 
 
 def test_list_jobs_offset(store: FakeJobStore) -> None:
-    """list_jobs(offset=N) skips the first N jobs."""
+    """``list_jobs`` skips the requested offset."""
     for i in range(5):
         store.seed_job(f"off-{i}")
     all_jobs = store.list_jobs()
@@ -390,16 +370,14 @@ def test_list_jobs_offset(store: FakeJobStore) -> None:
 
 
 def test_list_jobs_no_filter_returns_all(store: FakeJobStore) -> None:
-    """list_jobs() with no filters returns all stored jobs."""
+    """``list_jobs`` without filters returns every row."""
     store.seed_job("all-1")
     store.seed_job("all-2")
     assert len(store.list_jobs()) == 2
 
 
-
-
 @pytest.mark.parametrize(
-    "filter_kwargs, expected_count",
+    ("filter_kwargs", "expected_count"),
     [
         ({}, 3),
         ({"status": "pending"}, 2),
@@ -415,7 +393,7 @@ def test_count_jobs_filters(
     filter_kwargs: dict,
     expected_count: int,
 ) -> None:
-    """count_jobs() returns the correct count for each filter combination."""
+    """``count_jobs`` returns the count matching the supplied filters."""
     store.seed_job(
         "cj-1",
         status="pending",
@@ -434,24 +412,22 @@ def test_count_jobs_filters(
     assert store.count_jobs(**filter_kwargs) == expected_count
 
 
-
-
 def test_recover_orphaned_jobs_marks_running_as_failed(store: FakeJobStore) -> None:
-    """recover_orphaned_jobs() transitions running jobs to failed."""
+    """``recover_orphaned_jobs`` transitions ``running`` to ``failed``."""
     store.seed_job("r1", status="running")
     store.recover_orphaned_jobs()
     assert store.get_job("r1")["status"] == "failed"
 
 
 def test_recover_orphaned_jobs_marks_validating_as_failed(store: FakeJobStore) -> None:
-    """recover_orphaned_jobs() transitions validating jobs to failed."""
+    """``recover_orphaned_jobs`` transitions ``validating`` to ``failed``."""
     store.seed_job("r2", status="validating")
     store.recover_orphaned_jobs()
     assert store.get_job("r2")["status"] == "failed"
 
 
 def test_recover_orphaned_jobs_leaves_terminal_jobs_intact(store: FakeJobStore) -> None:
-    """recover_orphaned_jobs() does not modify jobs that are already in a terminal state."""
+    """``recover_orphaned_jobs`` leaves terminal-status jobs untouched."""
     store.seed_job("r3", status="success")
     store.seed_job("r4", status="failed")
     store.recover_orphaned_jobs()
@@ -460,7 +436,7 @@ def test_recover_orphaned_jobs_leaves_terminal_jobs_intact(store: FakeJobStore) 
 
 
 def test_recover_orphaned_jobs_returns_count(store: FakeJobStore) -> None:
-    """recover_orphaned_jobs() returns the number of jobs it transitioned."""
+    """``recover_orphaned_jobs`` returns the number of recovered rows."""
     store.seed_job("r5", status="running")
     store.seed_job("r6", status="validating")
     store.seed_job("r7", status="success")
@@ -468,15 +444,13 @@ def test_recover_orphaned_jobs_returns_count(store: FakeJobStore) -> None:
 
 
 def test_recover_orphaned_jobs_returns_zero_when_nothing_to_recover(store: FakeJobStore) -> None:
-    """recover_orphaned_jobs() returns 0 when there are no running/validating jobs."""
+    """``recover_orphaned_jobs`` returns zero when no rows need recovery."""
     store.seed_job("r8", status="success")
     assert store.recover_orphaned_jobs() == 0
 
 
-
-
 def test_recover_pending_jobs_returns_pending_ids(store: FakeJobStore) -> None:
-    """recover_pending_jobs() returns IDs of pending jobs, excluding other statuses."""
+    """``recover_pending_jobs`` returns IDs of currently-pending jobs."""
     store.seed_job("rp1", status="pending")
     store.seed_job("rp2", status="success")
     pending = store.recover_pending_jobs()
@@ -485,7 +459,7 @@ def test_recover_pending_jobs_returns_pending_ids(store: FakeJobStore) -> None:
 
 
 def test_recover_pending_jobs_returns_list_of_strings(store: FakeJobStore) -> None:
-    """recover_pending_jobs() returns a list of string IDs."""
+    """``recover_pending_jobs`` returns a plain ``list[str]``."""
     store.seed_job("rp3", status="pending")
     result = store.recover_pending_jobs()
     assert isinstance(result, list)
@@ -493,22 +467,19 @@ def test_recover_pending_jobs_returns_list_of_strings(store: FakeJobStore) -> No
 
 
 def test_recover_pending_jobs_empty_when_none_pending(store: FakeJobStore) -> None:
-    """recover_pending_jobs() returns an empty list when no pending jobs exist."""
+    """``recover_pending_jobs`` returns an empty list when no rows pend."""
     store.seed_job("rp4", status="success")
     assert store.recover_pending_jobs() == []
 
 
-
-
 def test_fake_job_store_satisfies_protocol() -> None:
-    """FakeJobStore is a valid instance of the JobStore protocol."""
+    """``FakeJobStore`` satisfies the ``JobStore`` runtime protocol."""
     assert isinstance(FakeJobStore(), JobStore)
 
 
-
-
 def test_protocol_rejects_instance_missing_all_methods() -> None:
-    """An object with none of the required protocol methods fails isinstance() check."""
+    """Protocol check rejects classes lacking every required method."""
+
     class Empty:
         pass
 
@@ -516,42 +487,36 @@ def test_protocol_rejects_instance_missing_all_methods() -> None:
 
 
 def test_protocol_rejects_instance_missing_one_method() -> None:
-    """Removing even a single required method from an otherwise-complete
-    implementation breaks protocol conformance at isinstance() time.
+    """Removing any single required method breaks protocol conformance.
 
-    JobStore is a runtime_checkable Protocol; Python only checks that the
-    named attributes exist (not their signatures), so we verify by removing
-    each method name one by one.
+    ``JobStore`` is a runtime-checkable Protocol; Python only checks that
+    the named attributes exist (not their signatures), so we verify by
+    removing each method name one by one.
     """
     # Collect the public method names from the protocol.
     protocol_methods = [
-        name
-        for name in dir(JobStore)
-        if not name.startswith("_") and callable(getattr(JobStore, name, None))
+        name for name in dir(JobStore) if not name.startswith("_") and callable(getattr(JobStore, name, None))
     ]
     assert protocol_methods, "Protocol has no public methods — test setup is wrong"
 
     for missing_method in protocol_methods:
         # Build a class that has all methods EXCEPT the one being tested.
         attrs = {m: lambda self, *a, **kw: None for m in protocol_methods if m != missing_method}
-        IncompleteClass = type("IncompleteClass", (), attrs)
+        IncompleteClass = type("IncompleteClass", (), attrs)  # noqa: N806 — runtime-built class
 
         obj = IncompleteClass()
         assert not isinstance(obj, JobStore), (
-            f"Expected isinstance() to return False when '{missing_method}' is missing, "
-            f"but it returned True"
+            f"Expected isinstance() to return False when '{missing_method}' is missing, but it returned True"
         )
 
 
 def test_protocol_accepts_minimal_conforming_class() -> None:
-    """A class implementing all required protocol methods passes the isinstance() check."""
+    """Protocol check accepts any class declaring all required methods."""
     protocol_methods = [
-        name
-        for name in dir(JobStore)
-        if not name.startswith("_") and callable(getattr(JobStore, name, None))
+        name for name in dir(JobStore) if not name.startswith("_") and callable(getattr(JobStore, name, None))
     ]
 
     attrs = {m: lambda self, *a, **kw: None for m in protocol_methods}
-    MinimalClass = type("MinimalClass", (), attrs)
+    MinimalClass = type("MinimalClass", (), attrs)  # noqa: N806 — runtime-built class
 
     assert isinstance(MinimalClass(), JobStore)

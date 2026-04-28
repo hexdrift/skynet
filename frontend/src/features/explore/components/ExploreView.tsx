@@ -42,7 +42,8 @@ function FilterTabs({
 
   const handleKeyDown = (e: React.KeyboardEvent, currentIdx: number) => {
     let delta = 0;
-    if (e.key === "ArrowLeft" || e.key === "ArrowDown") delta = 1; // RTL: left = next
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown")
+      delta = 1; // RTL: left = next
     else if (e.key === "ArrowRight" || e.key === "ArrowUp") delta = -1;
     else if (e.key === "Home") {
       e.preventDefault();
@@ -114,16 +115,10 @@ function FilterTabs({
               }`}
             >
               <span className="flex items-baseline gap-2">
-                <span className="text-[12px] font-medium tracking-tight">
-                  {msg(f.labelKey)}
-                </span>
+                <span className="text-[12px] font-medium tracking-tight">{msg(f.labelKey)}</span>
                 <span
                   className={`tabular-nums text-[10px] ${
-                    active
-                      ? "text-[#3D2E22]/55"
-                      : empty
-                        ? "text-[#C8BFB1]"
-                        : "text-[#8C7A6B]"
+                    active ? "text-[#3D2E22]/55" : empty ? "text-[#C8BFB1]" : "text-[#8C7A6B]"
                   }`}
                   dir="ltr"
                 >
@@ -239,7 +234,7 @@ export function ExploreView() {
   const isColdCorpus = !loading && !error && corpusTotal > 0 && corpusTotal < COLD_CUTOFF;
 
   return (
-    <div dir="rtl" className="space-y-10 pb-16">
+    <div dir="rtl" className="space-y-10 pb-16" data-tutorial="explore-canvas">
       {error && (
         <div
           className="flex items-start gap-3 rounded-lg border border-[#DDD6CC] bg-[#EDE7DD]/50 px-4 py-3 text-xs text-[#3D2E22]"
@@ -250,7 +245,6 @@ export function ExploreView() {
         </div>
       )}
 
-      {/* Band 2: The field */}
       {isTrulyEmpty ? (
         <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-[#DDD6CC] bg-[#FAF8F5] px-6 py-10 text-center">
           <p className="max-w-[40ch] text-sm text-[#3D2E22]/80">{msg("explore.empty.title")}</p>
@@ -295,10 +289,7 @@ export function ExploreView() {
               {selected && (
                 <div className="pointer-events-none absolute inset-y-3 start-3 z-10 w-[min(340px,calc(100%-1.5rem))]">
                   <div className="pointer-events-auto h-full">
-                    <ExploreDetailPanel
-                      point={selected}
-                      onClose={() => setSelected(null)}
-                    />
+                    <ExploreDetailPanel point={selected} onClose={() => setSelected(null)} />
                   </div>
                 </div>
               )}

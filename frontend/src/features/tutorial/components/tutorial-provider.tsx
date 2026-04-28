@@ -2,12 +2,8 @@
 
 import * as React from "react";
 import { useReducer, useEffect, useCallback, useRef, createContext, useContext } from "react";
-import type { TutorialTrack } from "@/features/tutorial/lib/steps";
-import { getTrack } from "@/features/tutorial/lib/steps";
-
-/* ═══════════════════════════════════════════════════════════
-   State Shape
-   ═══════════════════════════════════════════════════════════ */
+import type { TutorialTrack } from "../lib/steps";
+import { getTrack, resetTutorialOneShotState } from "../lib/steps";
 
 export interface TutorialState {
   activeTrack: TutorialTrack | null;
@@ -16,6 +12,10 @@ export interface TutorialState {
   isMenuOpen: boolean;
   isAutoPlaying: boolean;
   completedTracks: Set<TutorialTrack>;
+  /** Direction of the last navigation. Used by the auto-skip path so a
+   * missing target while walking backward calls prevStep(), not nextStep()
+   * — otherwise Backspace can race past the last step into completeTrack(). */
+  lastDirection: "forward" | "backward";
 }
 
 type TutorialAction =
@@ -41,6 +41,7 @@ function tutorialReducer(state: TutorialState, action: TutorialAction): Tutorial
         currentStepIndex: 0,
         isVisible: true,
         isMenuOpen: false,
+        lastDirection: "forward",
       };
     case "NEXT_STEP": {
       if (!state.activeTrack) return state;
@@ -52,13 +53,18 @@ function tutorialReducer(state: TutorialState, action: TutorialAction): Tutorial
           ...state,
           isVisible: false,
           completedTracks: new Set([...state.completedTracks, state.activeTrack]),
+          lastDirection: "forward",
         };
       }
-      return { ...state, currentStepIndex: nextIndex };
+      return { ...state, currentStepIndex: nextIndex, lastDirection: "forward" };
     }
     case "PREV_STEP":
       return state.activeTrack
-        ? { ...state, currentStepIndex: Math.max(0, state.currentStepIndex - 1) }
+        ? {
+            ...state,
+            currentStepIndex: Math.max(0, state.currentStepIndex - 1),
+            lastDirection: "backward",
+          }
         : state;
     case "GO_TO_STEP": {
       if (!state.activeTrack) return state;
@@ -95,6 +101,7 @@ function tutorialReducer(state: TutorialState, action: TutorialAction): Tutorial
         isMenuOpen: false,
         isAutoPlaying: false,
         completedTracks: new Set(),
+        lastDirection: "forward",
       };
     case "LOAD_STATE":
       return {
@@ -114,17 +121,14 @@ const initialState: TutorialState = {
   isMenuOpen: false,
   isAutoPlaying: false,
   completedTracks: new Set(),
+  lastDirection: "forward",
 };
 
 const STORAGE_KEY = "skynet-tutorial-state";
 
-/* ═══════════════════════════════════════════════════════════
-   Context
-   ═══════════════════════════════════════════════════════════ */
-
 interface TutorialContextValue {
   state: TutorialState;
-  currentStep: ReturnType<typeof getTrack> extends { steps: (infer S)[] } | undefined
+  currentStep: ReturnType<typeof getTrack> extends { steps: Array<infer S> } | undefined
     ? S | undefined
     : never;
   startTrack: (track: TutorialTrack) => void;
@@ -150,13 +154,19 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+        const wasVisible = !!parsed.isVisible;
+        const completed = new Set<TutorialTrack>(parsed.completedTracks || []);
+        // Only restore the active track if the tour was visible at unload —
+        // that handles HMR / parent re-renders where the spotlight should
+        // stay put. Otherwise drop the active track so closed tours don't
+        // silently re-open on next load.
         dispatch({
           type: "LOAD_STATE",
           state: {
-            completedTracks: new Set(parsed.completedTracks || []),
-            activeTrack: parsed.activeTrack || null,
-            currentStepIndex: parsed.currentStepIndex || 0,
-            isVisible: parsed.isVisible || false,
+            completedTracks: completed,
+            activeTrack: wasVisible ? parsed.activeTrack || null : null,
+            currentStepIndex: wasVisible ? parsed.currentStepIndex || 0 : 0,
+            isVisible: wasVisible,
           },
         });
       }
@@ -191,38 +201,27 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.completedTracks, state.activeTrack, state.currentStepIndex, state.isVisible]);
 
-  const startTrack = useCallback(
-    (track: TutorialTrack) => dispatch({ type: "START_TRACK", track }),
-    [],
-  );
+  const startTrack = useCallback((track: TutorialTrack) => {
+    // Clear per-tour ephemeral flags (e.g. dd-detail-header splash one-shot)
+    // so a fresh tour run gets a fresh splash, not the leftover state from
+    // the previous run.
+    resetTutorialOneShotState();
+    dispatch({ type: "START_TRACK", track });
+  }, []);
   const nextStep = useCallback(() => dispatch({ type: "NEXT_STEP" }), []);
   const prevStep = useCallback(() => dispatch({ type: "PREV_STEP" }), []);
   const goToStep = useCallback((index: number) => dispatch({ type: "GO_TO_STEP", index }), []);
   const exitTutorial = useCallback(() => dispatch({ type: "EXIT_TUTORIAL" }), []);
   const completeTrack = useCallback(() => dispatch({ type: "COMPLETE_TRACK" }), []);
   const openMenu = useCallback(() => {
-    if (window.location.pathname !== "/") {
-      // Pre-save tutorial state so it starts after navigation
-      try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            completedTracks: Array.from(state.completedTracks),
-            activeTrack: "deep-dive",
-            currentStepIndex: 0,
-            isVisible: true,
-          }),
-        );
-      } catch {
-        /* ignore */
-      }
-      window.location.href = "/";
-    } else {
-      dispatch({ type: "START_TRACK", track: "deep-dive" as TutorialTrack });
-    }
-  }, [state.completedTracks]);
+    // The first step's beforeShow (ensureDashboard) handles client-side
+    // navigation to "/" via the routerPush bridge hook, so no hard reload
+    // and no pre-save into localStorage is needed.
+    startTrack("deep-dive" as TutorialTrack);
+  }, [startTrack]);
   const closeMenu = useCallback(() => dispatch({ type: "CLOSE_MENU" }), []);
   const resetAll = useCallback(() => {
+    resetTutorialOneShotState();
     dispatch({ type: "RESET_ALL" });
     localStorage.removeItem(STORAGE_KEY);
   }, []);

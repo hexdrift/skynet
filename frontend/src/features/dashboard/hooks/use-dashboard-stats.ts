@@ -1,8 +1,5 @@
 import type { DashboardAnalytics, OptimizationCounts } from "@/shared/lib/api";
-import type {
-  OptimizationSummaryResponse,
-  PaginatedJobsResponse,
-} from "@/shared/types/api";
+import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 
 export type DashboardStats = {

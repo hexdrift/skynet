@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { Sparkles } from "lucide-react";
+import { msg } from "@/shared/lib/messages";
+import { formatShortcut, useUserPrefs } from "@/features/settings";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -13,11 +15,6 @@ interface MinimizedPillProps {
   className?: string;
 }
 
-/**
- * Fixed pill at the bottom-inline-start corner. Replaces the full panel
- * when minimized. Shows the current status label while the agent is
- * streaming and a pinging ring to attract attention.
- */
 export function MinimizedPill({
   onOpen,
   active,
@@ -25,6 +22,9 @@ export function MinimizedPill({
   hue = "#3D2E22",
   className,
 }: MinimizedPillProps) {
+  const { prefs } = useUserPrefs();
+  const shortcutLabel = formatShortcut(prefs.agentShortcut);
+  const ariaLabel = `${msg("auto.features.agent.panel.components.minimizedpill.literal.1")} (${shortcutLabel})`;
   const showLabel = active && Boolean(statusLabel);
 
   return (
@@ -32,8 +32,9 @@ export function MinimizedPill({
       type="button"
       onClick={onOpen}
       dir="rtl"
-      aria-label="פתח סוכן (Ctrl+J)"
-      title="פתח סוכן (Ctrl+J)"
+      data-tutorial="agent-pill"
+      aria-label={ariaLabel}
+      title={ariaLabel}
       className={cn(
         "fixed bottom-4 left-4 z-40 inline-flex items-center gap-2 rounded-full",
         "border border-border/60 bg-background/90 backdrop-blur-md",
@@ -58,10 +59,12 @@ export function MinimizedPill({
         </span>
       </span>
       <span className="truncate max-w-[18ch] leading-none">
-        {showLabel ? statusLabel : "עוזר"}
+        {showLabel
+          ? statusLabel
+          : msg("auto.features.agent.panel.components.minimizedpill.literal.3")}
       </span>
       <span className="text-muted-foreground/70 font-mono text-[0.625rem] tracking-tight">
-        Ctrl+J
+        {shortcutLabel}
       </span>
     </button>
   );

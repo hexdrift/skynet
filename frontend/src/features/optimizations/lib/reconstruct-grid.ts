@@ -1,8 +1,4 @@
-import type {
-  GridSearchResult,
-  OptimizationStatusResponse,
-  PairResult,
-} from "@/shared/types/api";
+import type { GridSearchResult, OptimizationStatusResponse, PairResult } from "@/shared/types/api";
 
 /**
  * Rebuild a partial `GridSearchResult` from `progress_events` when the backend
@@ -16,9 +12,7 @@ import type {
  * are not servable. The Serve tab is separately gated on
  * `job.status === "success"`, so this is fine.
  */
-export function reconstructGridResult(
-  job: OptimizationStatusResponse,
-): GridSearchResult | null {
+export function reconstructGridResult(job: OptimizationStatusResponse): GridSearchResult | null {
   if (job.optimization_type !== "grid_search") return null;
   const events = job.progress_events ?? [];
   const byIndex = new Map<number, PairResult>();
@@ -62,12 +56,8 @@ export function reconstructGridResult(
 
   if (byIndex.size === 0) return null;
 
-  const pair_results = [...byIndex.values()].sort(
-    (a, b) => a.pair_index - b.pair_index,
-  );
-  const successful = pair_results.filter(
-    (p) => !p.error && p.optimized_test_metric != null,
-  );
+  const pair_results = [...byIndex.values()].sort((a, b) => a.pair_index - b.pair_index);
+  const successful = pair_results.filter((p) => !p.error && p.optimized_test_metric != null);
   const best_pair =
     successful.length > 0
       ? successful.reduce((a, b) =>

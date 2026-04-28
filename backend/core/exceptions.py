@@ -1,3 +1,11 @@
+"""Custom application exception hierarchy.
+
+Each subclass pins a default HTTP status code and a stable ``error_code``
+string used by the API exception handlers to render structured error
+responses. Domain code raises these instead of bare HTTPException so the
+rest of the stack stays framework-agnostic.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -14,13 +22,13 @@ class AppError(Exception):
         error_code: str = "INTERNAL_ERROR",
         details: dict[str, Any] | None = None,
     ):
-        """Initialize the application error with HTTP metadata.
+        """Store the human-readable message plus structured error metadata.
 
         Args:
-            message: Human-readable description of the error.
-            status_code: HTTP status code to return (default 500).
-            error_code: Machine-readable error code string (default ``"INTERNAL_ERROR"``).
-            details: Optional dict with additional context about the error.
+            message: Human-readable error description shown to the caller.
+            status_code: HTTP status code the API layer should return.
+            error_code: Stable machine-readable error identifier.
+            details: Optional structured context to attach to the response body.
         """
         super().__init__(message)
         self.message = message
@@ -33,7 +41,12 @@ class ServiceError(AppError):
     """Raised when the service_gateway cannot fulfill a request."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 500 and error code ``SERVICE_ERROR``."""
+        """Initialise with HTTP 500 / ``SERVICE_ERROR`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=500,
@@ -46,7 +59,12 @@ class NotFoundError(AppError):
     """Resource not found (HTTP 404)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 404 and error code ``NOT_FOUND``."""
+        """Initialise with HTTP 404 / ``NOT_FOUND`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=404,
@@ -59,7 +77,12 @@ class ValidationError(AppError):
     """Request validation failed (HTTP 400)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 400 and error code ``VALIDATION_ERROR``."""
+        """Initialise with HTTP 400 / ``VALIDATION_ERROR`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=400,
@@ -72,7 +95,12 @@ class UnauthorizedError(AppError):
     """Authentication required (HTTP 401)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 401 and error code ``UNAUTHORIZED``."""
+        """Initialise with HTTP 401 / ``UNAUTHORIZED`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=401,
@@ -85,7 +113,12 @@ class ForbiddenError(AppError):
     """Access forbidden (HTTP 403)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 403 and error code ``FORBIDDEN``."""
+        """Initialise with HTTP 403 / ``FORBIDDEN`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=403,
@@ -98,7 +131,12 @@ class ConflictError(AppError):
     """Resource conflict (HTTP 409)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 409 and error code ``CONFLICT``."""
+        """Initialise with HTTP 409 / ``CONFLICT`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=409,
@@ -111,7 +149,12 @@ class RateLimitError(AppError):
     """Rate limit exceeded (HTTP 429)."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        """Initialize with status 429 and error code ``RATE_LIMIT``."""
+        """Initialise with HTTP 429 / ``RATE_LIMIT`` defaults.
+
+        Args:
+            message: Human-readable error description.
+            details: Optional structured context.
+        """
         super().__init__(
             message,
             status_code=429,

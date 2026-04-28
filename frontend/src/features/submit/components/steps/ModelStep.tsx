@@ -2,16 +2,22 @@
 
 import * as React from "react";
 import { AlertTriangle, Boxes, Check, Loader2, Sparkles, Trash2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/shared/ui/primitives/card";
+import { Input } from "@/shared/ui/primitives/input";
+import { Label } from "@/shared/ui/primitives/label";
+import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip, AddModelButton } from "@/shared/ui/model-chip";
-import { ModelConfigModal } from "@/features/submit/components/ModelConfigModal";
-import { ModelProbeDialog } from "@/features/submit/components/ModelProbeDialog";
+import { ModelConfigModal } from "../ModelConfigModal";
+import { ModelProbeDialog } from "../ModelProbeDialog";
 
 import { emptyModelConfig } from "../../constants";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -40,16 +46,24 @@ function AllAvailableChip({ availableCount, onReset }: AllAvailableChipProps) {
         <Boxes className="size-4" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-sm font-medium text-foreground">כל המודלים הזמינים</span>
+        <span className="text-sm font-medium text-foreground">
+          {msg("auto.features.submit.components.steps.modelstep.1")}
+        </span>
         <span className="text-[0.6875rem] text-muted-foreground">
-          ירוץ {TERMS.optimization} לכל {TERMS.model} בקטלוג · {availableCount} כרגע
+          {msg("auto.features.submit.components.steps.modelstep.2")}
+          {TERMS.optimization}
+          {msg("auto.features.submit.components.steps.modelstep.3")}
+          {TERMS.model}
+          {msg("auto.features.submit.components.steps.modelstep.4")}
+          {availableCount}
+          {msg("auto.features.submit.components.steps.modelstep.5")}
         </span>
       </div>
       <button
         type="button"
         onClick={onReset}
         className="cursor-pointer rounded-md p-1 text-muted-foreground opacity-60 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-        title="הסר"
+        title={msg("auto.features.submit.components.steps.modelstep.literal.1")}
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -97,13 +111,20 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
       data-tutorial="wizard-step-3"
     >
       <CardHeader>
-        <CardTitle className="text-lg">מודלי שפה</CardTitle>
-        <CardDescription>בחר את המודלים שיריצו את ה{TERMS.optimization}</CardDescription>
+        <CardTitle className="text-lg">
+          {msg("auto.features.submit.components.steps.modelstep.6")}
+        </CardTitle>
+        <CardDescription>
+          {msg("auto.features.submit.components.steps.modelstep.7")}
+          {TERMS.optimization}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="baseUrl">כתובת שרת (Base URL)</Label>
+            <Label htmlFor="baseUrl">
+              {msg("auto.features.submit.components.steps.modelstep.8")}
+            </Label>
             <Input
               id="baseUrl"
               dir="ltr"
@@ -111,11 +132,13 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
               onChange={(e) => setGlobalBaseUrl(e.target.value)}
             />
             <p className="text-[0.625rem] text-muted-foreground">
-              ניתן להשאיר ריק — יוגדר אוטומטית לפי הספק
+              {msg("auto.features.submit.components.steps.modelstep.9")}
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API key</Label>
+            <Label htmlFor="apiKey">
+              {msg("auto.features.submit.components.steps.modelstep.10")}
+            </Label>
             <Input
               id="apiKey"
               dir="ltr"
@@ -126,7 +149,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
             />
             {anyProviderHasEnvKey && (
               <p className="text-[0.625rem] text-muted-foreground">
-                אופציונאלי- API key ילקח ממשתנה סביבה
+                {msg("auto.features.submit.components.steps.modelstep.11")}
               </p>
             )}
             {globalApiKey &&
@@ -135,7 +158,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
               process.env.NODE_ENV === "production" && (
                 <p className="text-[0.625rem] text-amber-600 dark:text-amber-400 flex items-center gap-1">
                   <AlertTriangle className="size-3 shrink-0" />
-                  חיבור לא מוצפן — API key יישלח ללא הצפנה. השתמשו ב-HTTPS בסביבת ייצור.
+                  {msg("auto.features.submit.components.steps.modelstep.12")}
                 </p>
               )}
           </div>
@@ -145,7 +168,9 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
 
         {jobType === "run" ? (
           <div className="space-y-3" data-tutorial="model-catalog">
-            <Label className="text-sm font-semibold">מודלים</Label>
+            <Label className="text-sm font-semibold">
+              {msg("auto.features.submit.components.steps.modelstep.13")}
+            </Label>
             <button
               type="button"
               onClick={() => setProbeOpen(true)}
@@ -180,17 +205,20 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="text-sm font-medium text-foreground">
                   {probeRunning
-                    ? "בדיקת מודלים רצה…"
+                    ? msg("auto.features.submit.components.steps.modelstep.literal.2")
                     : probeHasResults
-                      ? "צפה בתוצאות הבדיקה"
-                      : "לא בטוח איזה מודל לבחור?"}
+                      ? msg("auto.features.submit.components.steps.modelstep.literal.3")
+                      : msg("auto.features.submit.components.steps.modelstep.literal.4")}
                 </span>
                 <span className="text-[0.6875rem] text-muted-foreground">
                   {probeRunning
-                    ? "לחץ כדי לראות את ההתקדמות"
+                    ? msg("auto.features.submit.components.steps.modelstep.literal.5")
                     : probeHasResults
-                      ? "לחץ כדי לצפות או לבחור מודל מהתוצאות"
-                      : `מצא את ה${TERMS.model} האופטימלי ל${TERMS.dataset} ולהגדרות שלך`}
+                      ? msg("auto.features.submit.components.steps.modelstep.literal.6")
+                      : formatMsg("auto.features.submit.components.steps.modelstep.template.1", {
+                          p1: TERMS.model,
+                          p2: TERMS.dataset,
+                        })}
                 </span>
               </span>
             </button>
@@ -199,6 +227,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                 config={modelConfig}
                 roleLabel={msg("model.generation.label")}
                 required
+                catalogModels={catalog?.models}
                 onClick={() =>
                   setEditingModel({
                     config: modelConfig,
@@ -212,6 +241,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                 config={secondModelConfig ?? emptyModelConfig()}
                 roleLabel={TERMS.reflectionModel}
                 required
+                catalogModels={catalog?.models}
                 onClick={() =>
                   setEditingModel({
                     config: secondModelConfig ?? emptyModelConfig(),
@@ -228,7 +258,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
             {catalogEmpty && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[0.75rem] text-amber-700 dark:text-amber-400">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                <span>אין מודלים זמינים בקטלוג — הגדר API key של ספק כדי להפעיל סריקה.</span>
+                <span>{msg("auto.features.submit.components.steps.modelstep.14")}</span>
               </div>
             )}
             <div className="space-y-2">
@@ -246,6 +276,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                     <ModelChip
                       key={i}
                       config={m}
+                      catalogModels={catalog?.models}
                       onClick={() =>
                         setEditingModel({
                           config: m,
@@ -266,7 +297,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                   ))}
                   {generationModels.every((m) => m.name.trim()) && (
                     <AddModelButton
-                      label="הוסף"
+                      label={msg("auto.features.submit.components.steps.modelstep.literal.7")}
                       onClick={() =>
                         setEditingModel({
                           config: generationModels.length
@@ -288,7 +319,9 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
             </div>
             <Separator />
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">מודלי רפלקציה</Label>
+              <Label className="text-sm font-semibold">
+                {msg("auto.features.submit.components.steps.modelstep.15")}
+              </Label>
               {useAllReflectionModels ? (
                 <AllAvailableChip
                   availableCount={availableCount}
@@ -300,6 +333,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                     <ModelChip
                       key={i}
                       config={m}
+                      catalogModels={catalog?.models}
                       onClick={() =>
                         setEditingModel({
                           config: m,
@@ -320,7 +354,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                   ))}
                   {reflectionModels.every((m) => m.name.trim()) && (
                     <AddModelButton
-                      label="הוסף"
+                      label={msg("auto.features.submit.components.steps.modelstep.literal.8")}
                       onClick={() =>
                         setEditingModel({
                           config: reflectionModels.length
@@ -331,7 +365,10 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
                               ...reflectionModels.filter((m) => m.name.trim()),
                               c,
                             ]),
-                          label: `${TERMS.reflectionModel} חדש`,
+                          label: formatMsg(
+                            "auto.features.submit.components.steps.modelstep.template.2",
+                            { p1: TERMS.reflectionModel },
+                          ),
                           onSelectAllAvailable: () => setUseAllReflectionModels(true),
                         })
                       }
@@ -354,7 +391,9 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
             saveToRecent(c);
             setEditingModel(null);
           }}
-          roleLabel={editingModel?.label ?? "הגדרות מודל"}
+          roleLabel={
+            editingModel?.label ?? msg("auto.features.submit.components.steps.modelstep.literal.9")
+          }
           catalogModels={catalog?.models}
           recentConfigs={recentConfigs}
           onClearRecent={clearRecentConfigs}

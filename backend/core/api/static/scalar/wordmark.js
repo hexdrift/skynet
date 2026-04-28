@@ -1,22 +1,13 @@
 /*
- * Skynet animated wordmark, ported from
+ * Skynet wordmark, ported from
  * frontend/src/components/animated-wordmark.tsx to vanilla JS so it can
  * be mounted inside Scalar's static HTML without React.
- *
- * Each of the six letters (S K Y N E T) has four variants (default,
- * glyph, serif, sans). On hover over the wordmark, a 250ms interval
- * randomly picks 2–3 letters and switches each to a different variant,
- * fading between them via opacity. Leaving the wordmark resets
- * everything to the default variant.
- *
- * Respects `prefers-reduced-motion` by skipping the morph entirely.
  */
 (function () {
   "use strict";
 
   var SVG_NS = "http://www.w3.org/2000/svg";
   var TOTAL_WIDTH = 475;
-  var VARIANT_NAMES = ["default", "glyph", "serif", "sans"];
 
   var LETTERS = [
     // S
@@ -112,62 +103,14 @@
     },
   ];
 
-  var TRANSITION = "opacity 300ms cubic-bezier(0.215, 0.610, 0.355, 1.000)";
-
-  function pickRandom(total, count) {
-    var pool = [];
-    for (var i = 0; i < total; i++) pool.push(i);
-    var out = [];
-    var n = Math.min(count, total);
-    for (var j = 0; j < n; j++) {
-      var r = Math.floor(Math.random() * pool.length);
-      out.push(pool[r]);
-      pool.splice(r, 1);
-    }
-    return out;
-  }
-
-  function randomOtherVariant(current) {
-    var others = VARIANT_NAMES.filter(function (v) {
-      return v !== current;
-    });
-    return others[Math.floor(Math.random() * others.length)];
-  }
-
   function buildLetterGroup(letter) {
     var g = document.createElementNS(SVG_NS, "g");
     g.setAttribute("transform", "translate(" + letter.offset + ", 0)");
-
-    VARIANT_NAMES.forEach(function (name) {
-      var el;
-      if (name === "glyph") {
-        el = document.createElementNS(SVG_NS, "g");
-        letter.variants.glyph.forEach(function (r) {
-          var rect = document.createElementNS(SVG_NS, "rect");
-          rect.setAttribute("x", r.x);
-          rect.setAttribute("y", r.y);
-          rect.setAttribute("width", r.w);
-          rect.setAttribute("height", r.h);
-          el.appendChild(rect);
-        });
-      } else {
-        el = document.createElementNS(SVG_NS, "path");
-        el.setAttribute("d", letter.variants[name]);
-        el.setAttribute("fill-rule", "nonzero");
-      }
-      el.dataset.variant = name;
-      el.style.opacity = name === "default" ? "1" : "0";
-      el.style.transition = TRANSITION;
-      g.appendChild(el);
-    });
+    var path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", letter.variants.default);
+    path.setAttribute("fill-rule", "nonzero");
+    g.appendChild(path);
     return g;
-  }
-
-  function setActive(letterG, variantName) {
-    var children = letterG.children;
-    for (var i = 0; i < children.length; i++) {
-      children[i].style.opacity = children[i].dataset.variant === variantName ? "1" : "0";
-    }
   }
 
   function createWordmark() {
@@ -191,49 +134,11 @@
     svg.setAttribute("xmlns", SVG_NS);
     svg.style.overflow = "visible";
 
-    var letterGroups = LETTERS.map(function (letter) {
-      var g = buildLetterGroup(letter);
-      svg.appendChild(g);
-      return g;
+    LETTERS.forEach(function (letter) {
+      svg.appendChild(buildLetterGroup(letter));
     });
 
     wrap.appendChild(svg);
-
-    var activeVariants = LETTERS.map(function () {
-      return "default";
-    });
-    var interval = null;
-
-    function startMorph() {
-      if (interval) return;
-      interval = setInterval(function () {
-        var count = 2 + Math.floor(Math.random() * 2);
-        var indices = pickRandom(LETTERS.length, count);
-        indices.forEach(function (idx) {
-          activeVariants[idx] = randomOtherVariant(activeVariants[idx]);
-          setActive(letterGroups[idx], activeVariants[idx]);
-        });
-      }, 250);
-    }
-
-    function stopMorph() {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
-      }
-      for (var k = 0; k < LETTERS.length; k++) {
-        activeVariants[k] = "default";
-        setActive(letterGroups[k], "default");
-      }
-    }
-
-    wrap.addEventListener("mouseenter", function () {
-      var prefersReduced =
-        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!prefersReduced) startMorph();
-    });
-    wrap.addEventListener("mouseleave", stopMorph);
-
     return wrap;
   }
 
@@ -310,6 +215,15 @@
     return svg;
   }
 
+  function createBrandLogo() {
+    var img = document.createElement("img");
+    img.className = "skynet-brand-logo";
+    img.src = "/scalar-static/skynet_logo.svg";
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    return img;
+  }
+
   function createToolbarBrand() {
     var btn = document.createElement("button");
     btn.type = "button";
@@ -317,11 +231,11 @@
     btn.setAttribute("aria-label", "Open sidebar");
     btn.title = "Open sidebar";
 
-    btn.appendChild(createWordmark());
-
     var icon = createSidebarIcon();
     icon.classList.add("skynet-toolbar-icon");
     btn.appendChild(icon);
+    btn.appendChild(createBrandLogo());
+    btn.appendChild(createWordmark());
 
     btn.addEventListener("click", toggleSidebar);
     return btn;
@@ -335,6 +249,7 @@
     home.className = "skynet-sidebar-home";
     home.href = "#";
     home.setAttribute("aria-label", "Scroll to top");
+    home.appendChild(createBrandLogo());
     home.appendChild(createWordmark());
     home.addEventListener("click", function (e) {
       e.preventDefault();
