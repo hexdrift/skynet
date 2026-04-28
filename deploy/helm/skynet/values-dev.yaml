@@ -1,0 +1,64 @@
+# Dev overrides — single-replica, looser probes, skip HPA/PDB, expose dev creds.
+# Use: helm install skynet . --values values-dev.yaml
+
+backend:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1000m"
+      memory: 2Gi
+  env:
+    LOG_LEVEL: DEBUG
+    WORKER_CONCURRENCY: "1"
+    ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001"
+    RECOMMENDATIONS_ENABLED: "false"  # skip embedder warm-up in dev
+  secrets:
+    data:
+      OPENAI_API_KEY: ""  # supply via --set or external secret
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+  affinity: {}
+
+frontend:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    DEV_AUTH: "false"
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+  affinity: {}
+
+postgres:
+  enabled: true
+  persistence:
+    size: 5Gi
+
+openshift:
+  routes:
+    backend:
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Allow
+    frontend:
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Allow
+
+networkPolicy:
+  enabled: false
+
+migration:
+  enabled: true

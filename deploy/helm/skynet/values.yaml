@@ -1,0 +1,411 @@
+# Default values for skynet — production-sane defaults.
+# Override with `--values values-dev.yaml` or `--set key=value` for env-specific tweaks.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Global cluster-wide settings
+# ─────────────────────────────────────────────────────────────────────────────
+global:
+  # If set, prepended to every image (e.g. "artifactory.your-company.com/skynet").
+  imageRegistry: ""
+  # Pull secrets applied to every deployment (and the migration job).
+  imagePullSecrets: []
+  # Optional name suffix; useful when running parallel installs in the same namespace.
+  nameOverride: ""
+  fullnameOverride: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ServiceAccount — one per service, OpenShift annotations supported
+# ─────────────────────────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  annotations: {}
+  # Suffix appended to the chart fullname for backend/frontend SAs.
+  # Final names: <release>-skynet-backend, <release>-skynet-frontend.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Backend (FastAPI + embedded worker)
+# ─────────────────────────────────────────────────────────────────────────────
+backend:
+  image:
+    repository: skynet/backend
+    tag: "" # defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+  replicas: 2
+  containerPort: 8000
+
+  # Resources tuned for medium load. The 947 MB embedder bumps RSS to ~1.5 GB
+  # under hot inference, hence the generous memory headroom.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2000m"
+      memory: 6Gi
+
+  # Non-secret env (rendered into ConfigMap). Secrets go in `secrets` below.
+  env:
+    LOG_LEVEL: INFO
+    # `json` ships structured logs that Loki / Splunk / Elastic ingest
+    # without a parser. Set to `text` for human-readable local debugging.
+    LOG_FORMAT: json
+    API_HOST: 0.0.0.0
+    API_PORT: "8000"
+    WORKER_CONCURRENCY: "2"
+    WORKER_POLL_INTERVAL: "2.0"
+    WORKER_STALE_THRESHOLD: "600"
+    # SQLAlchemy pool budget per pod. Total connections = replicas ×
+    # (DB_POOL_SIZE + DB_POOL_MAX_OVERFLOW). Keep total well below
+    # postgres.maxConnections (default 100) to leave room for migrations
+    # and admin sessions.
+    DB_POOL_SIZE: "10"
+    DB_POOL_MAX_OVERFLOW: "20"
+    DB_POOL_TIMEOUT: "30"
+    DB_POOL_RECYCLE: "3600"
+    ALLOWED_ORIGINS: ""
+    RECOMMENDATIONS_ENABLED: "true"
+    # Internal LLM gateway URLs — leave empty to use OpenAI/Fireworks public endpoints.
+    CODE_AGENT_BASE_URL: ""
+    CODE_AGENT_MODEL: ""
+    GENERALIST_AGENT_BASE_URL: ""
+    GENERALIST_AGENT_MODEL: ""
+    # Notifications
+    COMMS_WEBHOOK_URL: ""
+    COMMS_CHANNEL: ""
+    FRONTEND_URL: ""
+
+  # Extra envFrom entries (existing ConfigMaps/Secrets) — appended verbatim.
+  envFrom: []
+
+  # Prometheus scrape annotations on each backend pod. Toggle off when the
+  # cluster uses ServiceMonitor / PodMonitor CRDs instead of annotation-based
+  # discovery.
+  metrics:
+    enabled: true
+    path: /metrics
+
+  # Secrets rendered into a chart-managed Secret. Set existingSecret to reuse one.
+  secrets:
+    existingSecret: ""
+    # Used only when existingSecret is empty.
+    data:
+      OPENAI_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      FIREWORKS_AI_API_KEY: ""
+      # REMOTE_DB_URL is composed below — see externalDatabase / postgres stanzas.
+      # Override here only if you want to bypass the composer.
+      REMOTE_DB_URL: ""
+
+  # OpenShift assigns runAsUser/fsGroup from the project UID range — do NOT pin them.
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 0  # 0 = disabled
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Spread replicas across nodes (preferred, not required — single-node clusters still work).
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: backend
+  nodeSelector: {}
+  tolerations: []
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  # Graceful shutdown — backend handles SIGTERM and drains the worker queue.
+  terminationGracePeriodSeconds: 60
+
+  probes:
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Frontend (Next.js standalone)
+# ─────────────────────────────────────────────────────────────────────────────
+frontend:
+  image:
+    repository: skynet/frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicas: 2
+  containerPort: 3001
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  env:
+    NODE_ENV: production
+    PORT: "3001"
+    # API_URL is the runtime backend address (replacing build-time NEXT_PUBLIC_API_URL).
+    # Default points at the in-cluster backend Service.
+    API_URL: ""  # auto-defaults to http://<release>-skynet-backend:8000 if empty
+    AUTH_SSO_ISSUER: ""
+    AUTH_SSO_CLIENT_ID: ""
+    AUTH_SSO_SCOPE: "openid profile email"
+    AUTH_ADMINS: ""
+    NODE_EXTRA_CA_CERTS: ""
+    # DEV_AUTH=false to disable login in non-prod previews. Leave empty otherwise.
+    DEV_AUTH: ""
+
+  envFrom: []
+
+  secrets:
+    existingSecret: ""
+    data:
+      AUTH_SECRET: ""
+      AUTH_SSO_CLIENT_SECRET: ""
+
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 0
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: frontend
+  nodeSelector: {}
+  tolerations: []
+
+  service:
+    type: ClusterIP
+    port: 3001
+
+  terminationGracePeriodSeconds: 30
+
+  probes:
+    liveness:
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# External database (preferred for prod) — bring your own pgvector-enabled Postgres.
+# ─────────────────────────────────────────────────────────────────────────────
+externalDatabase:
+  enabled: false
+  host: ""
+  port: 5432
+  database: skynet
+  user: skynet
+  # Either supply password directly (renders into chart-managed Secret) ...
+  password: ""
+  # ... or reference an existing Secret with the password key.
+  existingSecret: ""
+  existingSecretKey: password
+  # If true, the chart composes REMOTE_DB_URL from host/port/db/user/password.
+  # If false, REMOTE_DB_URL must be set explicitly via backend.secrets.data.REMOTE_DB_URL.
+  composeUrl: true
+  sslmode: require
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bundled Postgres (StatefulSet) — convenient for self-contained installs / dev.
+# Default ON when externalDatabase.enabled is false; set to false to skip.
+# ─────────────────────────────────────────────────────────────────────────────
+postgres:
+  enabled: true
+  image:
+    repository: pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  auth:
+    database: skynet
+    username: skynet
+    password: ""  # auto-generated random if left empty
+    existingSecret: ""
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1000m"
+      memory: 2Gi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  # Give postgres time to flush WAL and shut down cleanly on SIGTERM.
+  terminationGracePeriodSeconds: 60
+  # Postgres is a single replica by design (resource constraint). A PDB
+  # with minAvailable=1 would block every node drain — usually worse than
+  # the brief outage caused by an eviction. Enable this only if your
+  # operations prefer "refuse the drain" over "tolerate a blip".
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OpenShift Routes — preferred over Ingress on OCP.
+# ─────────────────────────────────────────────────────────────────────────────
+# TLS notes:
+#   - termination: edge | reencrypt | passthrough
+#   - When certificate/key are empty, the router serves its default wildcard
+#     cert (typical for *.apps.<cluster>.example.com). Provide custom PEM via
+#     `--set-file openshift.routes.backend.tls.certificate=./tls.crt`.
+#   - reencrypt also needs destinationCACertificate (the CA that signs the
+#     backend pod's cert) — required by OpenShift, the route controller will
+#     reject the Route otherwise.
+#   - passthrough ignores certificate/key/caCertificate (TLS terminates inside
+#     the pod), so leave them empty.
+openshift:
+  routes:
+    enabled: true
+    backend:
+      host: ""    # leave empty to let the router pick <name>-<ns>.<app-domain>
+      annotations:
+        # Long timeout for optimization runs that stream over a single TCP connection.
+        haproxy.router.openshift.io/timeout: 5m
+      tls:
+        enabled: true
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+        certificate: ""
+        key: ""
+        caCertificate: ""
+        destinationCACertificate: ""
+    frontend:
+      host: ""
+      annotations: {}
+      tls:
+        enabled: true
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+        certificate: ""
+        key: ""
+        caCertificate: ""
+        destinationCACertificate: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NetworkPolicy
+# ─────────────────────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+  # Extra egress CIDRs applied to BOTH backend and frontend pods (e.g. SSO /
+  # OIDC issuer, internal artifactory). All ports allowed within these CIDRs.
+  egressCidrs: []
+  # Backend-only LLM egress allowlist. Each entry pins a destination to a
+  # specific port set, which is what a strict cluster policy actually wants
+  # ("backend may reach api.openai.com on 443 only"). Use this when the
+  # cluster default-denies egress; otherwise leave empty.
+  #
+  # If BOTH egressCidrs AND llmEgress are empty, the chart falls back to
+  # wide-open egress (0.0.0.0/0 except link-local). The moment EITHER is
+  # set, the chart treats it as the explicit allowlist and removes the
+  # wide-open fallback — anything you forget here will be denied.
+  #
+  # Example:
+  #   llmEgress:
+  #     - cidr: 104.18.0.0/16    # api.openai.com (Cloudflare)
+  #       ports: [443]
+  #     - cidr: 10.0.5.0/24      # internal LLM gateway
+  #       ports: [443, 8443]
+  llmEgress: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration job — runs `alembic upgrade head` as a Helm pre-install/upgrade hook.
+# The runner reads REMOTE_DB_URL from the same envFrom as the backend pods so
+# both move forward in lockstep. To bootstrap a database that already has the
+# Wave-1 schema applied out-of-band, override to:
+#   command: ["alembic", "stamp", "0001"]
+# on the first deploy, then revert to "upgrade head" so subsequent revisions
+# (0002, 0003, …) apply normally.
+# ─────────────────────────────────────────────────────────────────────────────
+migration:
+  enabled: true
+  command: ["alembic", "upgrade", "head"]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+
+# Extra labels/annotations applied to every resource in the chart.
+commonLabels: {}
+commonAnnotations: {}

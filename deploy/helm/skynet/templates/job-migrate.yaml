@@ -1,0 +1,79 @@
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "skynet.fullname" . }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "skynet.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "skynet.backend.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "skynet.backend.image" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          # ``alembic upgrade head`` walks the revisions in
+          # ``backend/alembic/versions/`` against the database pointed at by
+          # ``REMOTE_DB_URL``. The pre-install/upgrade hook annotation above
+          # makes Helm wait for this Job to succeed before any backend pod
+          # starts, so schema is always at HEAD before the app boots.
+          command:
+            {{- toYaml .Values.migration.command | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- /* See deployment-backend.yaml — same DB URL composition. */}}
+            {{- if and (not .Values.backend.secrets.data.REMOTE_DB_URL) (or (and .Values.postgres.enabled (not .Values.externalDatabase.enabled)) (and .Values.externalDatabase.enabled .Values.externalDatabase.existingSecret)) }}
+            - name: SKYNET_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if and .Values.externalDatabase.enabled .Values.externalDatabase.existingSecret }}
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "skynet.postgres.secretName" . }}
+                  key: password
+                  {{- end }}
+            - name: REMOTE_DB_URL
+              value: "postgresql://{{ include "skynet.dbUser" . }}:$(SKYNET_DB_PASSWORD)@{{ include "skynet.dbHost" . }}:{{ include "skynet.dbPort" . }}/{{ include "skynet.dbName" . }}{{ if .Values.externalDatabase.enabled }}?sslmode={{ .Values.externalDatabase.sslmode }}{{ end }}"
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "skynet.backend.fullname" . }}-config
+            - secretRef:
+                name: {{ include "skynet.backend.secretName" . }}
+            {{- with .Values.backend.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.migration.resources | nindent 12 }}
+{{- end }}

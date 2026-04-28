@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "skynet.backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  # Horizontal scaling is safe: each pod's worker claims jobs via
+  # ``SELECT … FOR UPDATE SKIP LOCKED`` against the ``jobs`` table and holds
+  # the row with a renewable lease. A crashed pod's lease expires and a peer
+  # reclaims the work on its next poll; no duplicate execution.
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicas }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "skynet.backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "skynet.backend.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll pods when configmap/secret changes (forces re-read of env).
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-backend.yaml") . | sha256sum }}
+        {{- if not .Values.backend.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret-backend.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.backend.metrics.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.backend.containerPort | quote }}
+        prometheus.io/path: {{ .Values.backend.metrics.path | quote }}
+        {{- end }}
+        {{- with .Values.commonAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "skynet.backend.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.backend.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "skynet.backend.image" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.containerPort }}
+              protocol: TCP
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- /*
+              When the bundled postgres is in use OR an external DB is
+              referenced via existingSecret, compose REMOTE_DB_URL at runtime.
+              k8s substitutes $(VAR) from earlier env entries on the same container.
+            */}}
+            {{- if and (not .Values.backend.secrets.data.REMOTE_DB_URL) (or (and .Values.postgres.enabled (not .Values.externalDatabase.enabled)) (and .Values.externalDatabase.enabled .Values.externalDatabase.existingSecret)) }}
+            - name: SKYNET_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if and .Values.externalDatabase.enabled .Values.externalDatabase.existingSecret }}
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "skynet.postgres.secretName" . }}
+                  key: password
+                  {{- end }}
+            - name: REMOTE_DB_URL
+              value: "postgresql://{{ include "skynet.dbUser" . }}:$(SKYNET_DB_PASSWORD)@{{ include "skynet.dbHost" . }}:{{ include "skynet.dbPort" . }}/{{ include "skynet.dbName" . }}{{ if .Values.externalDatabase.enabled }}?sslmode={{ .Values.externalDatabase.sslmode }}{{ end }}"
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "skynet.backend.fullname" . }}-config
+            - secretRef:
+                name: {{ include "skynet.backend.secretName" . }}
+            {{- with .Values.backend.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.backend.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.backend.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "skynet.frontend.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+data:
+  {{- range $key, $val := .Values.frontend.env }}
+  {{- if and (ne $key "API_URL") (or (kindIs "string" $val) (kindIs "int" $val) (kindIs "float64" $val) (kindIs "bool" $val)) }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+  {{- end }}
+  # API_URL is computed from the backend Service when not explicitly set.
+  API_URL: {{ include "skynet.frontend.apiUrl" . | quote }}
