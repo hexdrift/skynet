@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 from collections.abc import Iterator
@@ -10,10 +11,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.api import observability
 from core.api.observability import (
     REQUEST_ID_HEADER,
     _ContextFilter,
-    configure_logging,
     install_metrics,
     install_request_id_middleware,
 )
@@ -51,10 +52,6 @@ def test_configure_logging_text_format_emits_pod_name(
     monkeypatch.setenv("LOG_FORMAT", "text")
     monkeypatch.setenv("POD_NAME", "skynet-api-7c9d4-abcde")
 
-    import importlib
-
-    from core.api import observability
-
     importlib.reload(observability)
     observability.configure_logging()
 
@@ -77,10 +74,6 @@ def test_configure_logging_json_format_emits_structured_payload(
     """
     monkeypatch.setenv("LOG_FORMAT", "json")
     monkeypatch.setenv("POD_NAME", "skynet-api-pod-1")
-
-    import importlib
-
-    from core.api import observability
 
     importlib.reload(observability)
     observability.configure_logging()

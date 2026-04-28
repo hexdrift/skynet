@@ -24,6 +24,12 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+# numpy is an optional dependency for the projection — degrade gracefully when absent.
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,9 +55,7 @@ def _fit_pca_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
     """
     if len(vectors) < 2:
         return [(0.0, 0.0)] * len(vectors)
-    try:
-        import numpy as np
-    except ImportError:
+    if np is None:
         logger.debug("numpy unavailable — projection returns 0,0 for every point")
         return [(0.0, 0.0)] * len(vectors)
 

@@ -16,12 +16,6 @@ from ...models import OptimizationStatus
 # noinspection PyProtectedMember
 from ..routers import _helpers as _helpers_mod
 
-from ..routers.constants import (
-    TERMINAL_STATUSES,
-    VALID_OPTIMIZATION_TYPES,
-    VALID_STATUSES,
-)
-
 # noinspection PyProtectedMember
 from ..routers._helpers import (
     build_summary,
@@ -29,6 +23,11 @@ from ..routers._helpers import (
     enforce_user_quota,
     load_program,
     strip_api_key,
+)
+from ..routers.constants import (
+    TERMINAL_STATUSES,
+    VALID_OPTIMIZATION_TYPES,
+    VALID_STATUSES,
 )
 from .mocks import load_fixture
 

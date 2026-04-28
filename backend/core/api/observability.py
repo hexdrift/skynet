@@ -36,6 +36,25 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+# python-json-logger ships its formatter under two different names depending
+# on the wheel version available in the local artifactory. Prefer the new
+# location, fall back to the old one, and degrade to text logging when neither
+# import resolves so the backend still boots.
+try:
+    from pythonjsonlogger.json import JsonFormatter as _JsonFormatter
+except ImportError:
+    try:
+        from pythonjsonlogger.jsonlogger import JsonFormatter as _JsonFormatter  # type: ignore[no-redef]
+    except ImportError:
+        _JsonFormatter = None  # type: ignore[assignment]
+
+# prometheus-fastapi-instrumentator is optional in environments where the wheel
+# hasn't been mirrored — degrade ``/metrics`` to a no-op there.
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator as _Instrumentator
+except ImportError:
+    _Instrumentator = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -111,18 +130,13 @@ def _build_json_handler() -> logging.Handler:
         as a JSON object with stable ``timestamp``, ``level``, ``logger``,
         ``pod``, ``request_id`` and ``message`` keys.
     """
-    try:
-        from pythonjsonlogger.json import JsonFormatter
-    except ImportError:
-        try:
-            from pythonjsonlogger.jsonlogger import JsonFormatter
-        except ImportError:
-            logger.warning("python-json-logger not installed; falling back to text logs")
-            return _build_text_handler()
+    if _JsonFormatter is None:
+        logger.warning("python-json-logger not installed; falling back to text logs")
+        return _build_text_handler()
     handler = logging.StreamHandler()
     handler.addFilter(_ContextFilter())
     handler.setFormatter(
-        JsonFormatter(
+        _JsonFormatter(
             "%(asctime)s %(levelname)s %(name)s %(pod)s %(request_id)s %(message)s",
             datefmt="%Y-%m-%dT%H:%M:%S%z",
             rename_fields={
@@ -170,15 +184,10 @@ def install_metrics(app: FastAPI) -> None:
         app: The FastAPI application to instrument. The ``/metrics`` route
             is registered in-place.
     """
-    try:
-        from prometheus_fastapi_instrumentator import Instrumentator
-    except ImportError as exc:
-        logger.warning(
-            "prometheus-fastapi-instrumentator not installed; /metrics disabled: %s",
-            exc,
-        )
+    if _Instrumentator is None:
+        logger.warning("prometheus-fastapi-instrumentator not installed; /metrics disabled")
         return
-    Instrumentator(
+    _Instrumentator(
         should_group_status_codes=False,
         should_ignore_untemplated=True,
         excluded_handlers=["/health", "/metrics"],
@@ -210,7 +219,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             request id stamped on the configured response header.
         """
         incoming = request.headers.get(self._header_name)
-        request_id = incoming if incoming else uuid.uuid4().hex
+        request_id = incoming or uuid.uuid4().hex
         token = _request_id_ctx.set(request_id)
         try:
             response: Response = await call_next(request)

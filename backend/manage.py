@@ -14,11 +14,11 @@ import code
 import sys
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
+from alembic import command
 from core import ServiceRegistry
 from core.config import settings
 from core.storage.models import Base

@@ -25,7 +25,6 @@ from sqlalchemy import text
 
 from core.storage.remote import RemoteDBJobStore
 
-
 REMOTE_DB_URL = os.environ.get("REMOTE_DB_URL")
 
 pytestmark = pytest.mark.skipif(

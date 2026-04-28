@@ -25,13 +25,16 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
+from fastmcp import FastMCP
+from fastmcp.server.providers.openapi.components import (
+    OpenAPIResource,
+    OpenAPIResourceTemplate,
+    OpenAPITool,
+)
+from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
+
 if TYPE_CHECKING:
     from fastapi import FastAPI
-    from fastmcp.server.providers.openapi.components import (
-        OpenAPIResource,
-        OpenAPIResourceTemplate,
-        OpenAPITool,
-    )
     from fastmcp.utilities.openapi.models import HTTPRoute
 
 logger = logging.getLogger(__name__)
@@ -79,8 +82,6 @@ def _trim_tool_spec(
         route: The originating FastAPI HTTP route metadata.
         component: The MCP component (tool / resource / resource template) to trim in place.
     """
-    from fastmcp.server.providers.openapi.components import OpenAPITool
-
     if component.description:
         desc = component.description.strip()
         head, sep, _ = desc.partition("\n")
@@ -116,9 +117,6 @@ def mount_mcp_on_app(app: FastAPI) -> None:
     Args:
         app: The parent FastAPI application to mount the MCP sub-app on.
     """
-    from fastmcp import FastMCP
-    from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
-
     # FastMCP's ``tags`` kwarg on ``from_fastapi`` only *annotates* MCP
     # components with extra tags — it does not filter. To actually hide
     # non-agent endpoints we configure route maps: the first picks up

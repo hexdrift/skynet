@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
 
+from ...constants import TQDM_REMAINING_KEY
 from ...models import OptimizationStatus
 from ..converters import (
     compute_elapsed,
@@ -166,8 +168,6 @@ def test_parse_overview_returns_dict_when_already_dict() -> None:
 
 def test_parse_overview_parses_json_string() -> None:
     """An overview stored as a JSON string is parsed into a dict."""
-    import json
-
     job = {"payload_overview": json.dumps({"job_type": "grid_search", "username": "alice"})}
     result = parse_overview(job)
     assert result["job_type"] == "grid_search"
@@ -187,24 +187,18 @@ def test_parse_overview_missing_key_returns_empty_dict() -> None:
 
 def test_extract_estimated_remaining_returns_formatted_seconds() -> None:
     """Integer seconds remaining are formatted as ``HH:MM:SS``."""
-    from ...constants import TQDM_REMAINING_KEY
-
     job = {"latest_metrics": {TQDM_REMAINING_KEY: 125}}  # 2m 5s
     assert extract_estimated_remaining(job) == "00:02:05"
 
 
 def test_extract_estimated_remaining_float_input() -> None:
     """Float seconds remaining are also formatted as ``HH:MM:SS``."""
-    from ...constants import TQDM_REMAINING_KEY
-
     job = {"latest_metrics": {TQDM_REMAINING_KEY: 3661.9}}  # 1h 1m 1s
     assert extract_estimated_remaining(job) == "01:01:01"
 
 
 def test_extract_estimated_remaining_zero_returns_formatted_zero() -> None:
     """Zero seconds remaining renders as ``00:00:00`` rather than ``None``."""
-    from ...constants import TQDM_REMAINING_KEY
-
     job = {"latest_metrics": {TQDM_REMAINING_KEY: 0}}
     assert extract_estimated_remaining(job) == "00:00:00"
 
@@ -221,8 +215,6 @@ def test_extract_estimated_remaining_none_metrics_returns_none() -> None:
 
 def test_extract_estimated_remaining_negative_value_returns_none() -> None:
     """Negative remaining values are treated as missing data."""
-    from ...constants import TQDM_REMAINING_KEY
-
     job = {"latest_metrics": {TQDM_REMAINING_KEY: -5}}
     assert extract_estimated_remaining(job) is None
 

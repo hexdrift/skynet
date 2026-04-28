@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import litellm
 import pytest
 
+from .. import model_catalog as mc
 from ..model_catalog import (  # type: ignore[attr-defined]
     CatalogModel,
     CatalogProvider,
@@ -107,10 +109,6 @@ def test_get_catalog_returns_correct_types(monkeypatch: pytest.MonkeyPatch) -> N
     results deterministic. Asserts only structural invariants -- specific
     models change as LiteLLM updates its registry.
     """
-    import litellm
-
-    from .. import model_catalog as mc
-
     fake_cost: dict = dict(litellm.model_cost)
     fake_cost["fakeprovider-model-a"] = {
         "mode": "chat",
@@ -137,10 +135,6 @@ def test_get_catalog_returns_correct_types(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_get_catalog_only_returns_available_models(monkeypatch: pytest.MonkeyPatch) -> None:
     """Models that aren't reported by ``get_valid_models`` are filtered out."""
-    import litellm
-
-    from .. import model_catalog as mc
-
     fake_cost: dict = {
         "only-in-registry": {
             "mode": "chat",
@@ -166,10 +160,6 @@ def test_get_catalog_deduplicates_dated_variants(monkeypatch: pytest.MonkeyPatch
     A dated variant (``gpt-4o-2024-08-06``) is excluded when the base name
     (``gpt-4o``) exists in the cost table.
     """
-    import litellm
-
-    from .. import model_catalog as mc
-
     fake_cost: dict = {
         "gpt-4o": {
             "mode": "chat",
@@ -203,10 +193,6 @@ def test_get_catalog_deduplicates_dated_variants(monkeypatch: pytest.MonkeyPatch
 
 def test_get_catalog_filters_out_non_chat_modes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Only chat-mode entries are relevant for DSPy LMs; others are filtered."""
-    import litellm
-
-    from .. import model_catalog as mc
-
     fake_cost: dict = {
         "text-embedding-ada-002": {
             "mode": "embedding",
@@ -227,10 +213,6 @@ def test_get_catalog_filters_out_non_chat_modes(monkeypatch: pytest.MonkeyPatch)
 
 def test_get_catalog_propagates_supports_vision_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     """``supports_vision`` is propagated from the cost table to the catalog."""
-    import litellm
-
-    from .. import model_catalog as mc
-
     fake_cost: dict = {
         "vision-model": {
             "mode": "chat",
@@ -267,11 +249,6 @@ def test_get_catalog_handles_valid_models_failure(monkeypatch: pytest.MonkeyPatc
     If ``get_valid_models`` raises, the catalog returns an empty models list
     rather than propagating the exception.
     """
-    import litellm
-
-    from .. import model_catalog as mc
-    from ..model_catalog import get_catalog
-
     fake_cost: dict = {
         "gpt-4o": {
             "mode": "chat",

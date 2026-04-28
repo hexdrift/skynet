@@ -20,6 +20,15 @@ from core.service_gateway.optimization.progress import (
     capture_tqdm,
 )
 
+# tqdm is a transitive dep of dspy and effectively always installed; the guards
+# below are kept so the test still runs in stripped-down envs.
+try:
+    import tqdm
+    import tqdm.auto as tqdm_auto
+except ImportError:
+    tqdm = None  # type: ignore[assignment]
+    tqdm_auto = None  # type: ignore[assignment]
+
 
 class _FakeBar:
     """Stand-in for a ``tqdm`` progress bar with a stable, observable shape."""
@@ -323,10 +332,7 @@ def test_capture_tqdm_none_callback_is_noop() -> None:
 
 def test_capture_tqdm_patches_and_restores_tqdm() -> None:
     """``capture_tqdm`` swaps tqdm.tqdm in and back out."""
-    try:
-        import tqdm
-        import tqdm.auto as tqdm_auto
-    except ImportError:
+    if tqdm is None or tqdm_auto is None:
         pytest.skip("tqdm not installed")
 
     original_tqdm = tqdm.tqdm
@@ -346,9 +352,7 @@ def test_capture_tqdm_patches_and_restores_tqdm() -> None:
 def test_capture_tqdm_reference_count_nests_correctly() -> None:
     """Nested ``capture_tqdm`` contexts share a refcount and restore correctly."""
     # Refcount invariant: nested contexts must not double-patch (would corrupt restore order).
-    try:
-        import tqdm
-    except ImportError:
+    if tqdm is None:
         pytest.skip("tqdm not installed")
 
     original_tqdm = tqdm.tqdm

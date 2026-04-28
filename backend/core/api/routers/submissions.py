@@ -53,7 +53,7 @@ from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ...service_gateway.safe_exec import validate_signature_code
-from ...worker import get_worker
+from ...worker.engine import get_worker
 from ..errors import DomainError
 from ..model_catalog import get_catalog_cached
 from ._helpers import compute_task_fingerprint, enforce_user_quota, strip_api_key

@@ -22,13 +22,22 @@ run inside their own subprocess and exec directly (see
 
 from __future__ import annotations
 
+import inspect
 import multiprocessing as mp
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import dspy
+
 from ..exceptions import ServiceError
+from .optimization.data import (
+    extract_signature_fields,
+    image_input_field_names,
+    load_metric_from_code,
+    load_signature_from_code,
+)
 
 _DEFAULT_PARSE_TIMEOUT_SECONDS = 10.0
 _DEFAULT_PROBE_TIMEOUT_SECONDS = 15.0
@@ -168,12 +177,6 @@ def _signature_worker(code: str, queue: Any) -> None:
         queue: Multiprocessing queue used to return a result dict.
     """
     try:
-        from .optimization.data import (
-            extract_signature_fields,
-            image_input_field_names,
-            load_signature_from_code,
-        )
-
         cls = load_signature_from_code(code)
         inputs, outputs = extract_signature_fields(cls)
         queue.put(
@@ -229,10 +232,6 @@ def _metric_worker(code: str, queue: Any) -> None:
         queue: Multiprocessing queue used to return a result dict.
     """
     try:
-        import inspect
-
-        from .optimization.data import load_metric_from_code
-
         metric = load_metric_from_code(code)
         sig = inspect.signature(metric)
         param_names = [p.name for p in sig.parameters.values()]
@@ -296,10 +295,6 @@ def _probe_worker(
         queue: Multiprocessing queue used to return a result dict.
     """
     try:
-        import dspy
-
-        from .optimization.data import load_metric_from_code
-
         metric = load_metric_from_code(metric_code)
         prepared_payload = dict(example_payload)
         image_type = getattr(dspy, "Image", None)

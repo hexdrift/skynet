@@ -7,6 +7,7 @@ branches) is covered without a live pgvector instance.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -749,8 +750,6 @@ def test_extract_applyable_config_defaults_to_empty() -> None:
 
 def test_as_float_coercion() -> None:
     """``_as_float`` coerces ints, decimals, and numeric strings; rejects others."""
-    from decimal import Decimal
-
     assert recs._as_float(None) is None
     assert recs._as_float(5) == 5.0
     assert recs._as_float(Decimal("3.14")) == 3.14

@@ -51,6 +51,7 @@ from ...registry import (
     resolve_module_factory,
     resolve_optimizer_factory,
 )
+from ...worker.log_handler import set_current_pair_index
 from ..language_models import build_language_model
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .artifacts import persist_program
@@ -130,8 +131,6 @@ def _run_grid_pair(
         The :class:`PairResult` for this pair (carrying an ``error`` string
         when execution failed).
     """
-    from ...worker.log_handler import set_current_pair_index  # local: circular import with core.worker.engine
-
     set_current_pair_index(i)
     pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
     logger.info("Grid pair %d/%d: %s", i + 1, ctx.total_pairs, pair_label)

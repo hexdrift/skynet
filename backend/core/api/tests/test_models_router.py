@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.error
 from email.message import Message
 from unittest.mock import patch
 
@@ -122,8 +123,6 @@ def test_discover_models_invalid_body_returns_422(models_client: TestClient) -> 
 
 def test_discover_models_url_error_returns_200_with_error(models_client: TestClient) -> None:
     """Connection errors surface as a 200 with an error message and no models."""
-    import urllib.error
-
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("connection refused")):
         resp = models_client.post("/models/discover", json={"base_url": "http://nowhere.invalid"})
 
@@ -135,8 +134,6 @@ def test_discover_models_url_error_returns_200_with_error(models_client: TestCli
 
 def test_discover_models_404_fallback_exhausted_returns_error(models_client: TestClient) -> None:
     """A 404 from every fallback path returns a 200 with an error message."""
-    import urllib.error
-
     http_error = urllib.error.HTTPError(
         url="http://localhost:8080",
         code=404,

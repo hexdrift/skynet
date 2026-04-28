@@ -428,9 +428,6 @@ def _wrap_tool_with_approval(
     return tool
 
 
-# ─────────────────────────────── Types ───────────────────────────────
-
-
 class WizardState(TypedDict, total=False):
     """Snapshot of the wizard the agent is driving.
 
@@ -529,9 +526,6 @@ def tools_for(state: WizardState) -> set[str]:
     return allowed
 
 
-# ───────────────────────────── Signature ─────────────────────────────
-
-
 class GeneralistSig(dspy.Signature):
     """You are the Skynet assistant driving a DSPy optimization wizard.
 
@@ -583,9 +577,6 @@ class GeneralistSig(dspy.Signature):
     assistant_message: str = dspy.OutputField(desc="Hebrew reply to the user summarizing what you did and what's next.")
 
 
-# ───────────────────────────── Status hook ─────────────────────────────
-
-
 class GeneralistStatusProvider(StatusMessageProvider):
     """Emit short Hebrew status messages around each tool call.
 
@@ -617,9 +608,6 @@ class GeneralistStatusProvider(StatusMessageProvider):
         return t("agent.status.tool_end")
 
 
-# ───────────────────────── MCP client factory ──────────────────────────
-
-
 @asynccontextmanager
 async def _mcp_session(mcp_url: str) -> AsyncGenerator[ClientSession, None]:
     """Open a Streamable-HTTP MCP client session bound to ``mcp_url``.
@@ -638,9 +626,6 @@ async def _mcp_session(mcp_url: str) -> AsyncGenerator[ClientSession, None]:
     async with streamablehttp_client(mcp_url) as (read, write, _), ClientSession(read, write) as session:
         await session.initialize()
         yield session
-
-
-# ───────────────────────────── Runner ─────────────────────────────
 
 
 def _emit_to_queue_threadsafe(loop: asyncio.AbstractEventLoop, out_queue: asyncio.Queue[dict], ev: dict) -> None:
@@ -690,8 +675,6 @@ async def _drive_generalist_agent(
     Returns:
         The full assistant reply text after the loop completes.
     """
-    import json
-
     async with _mcp_session(mcp_url) as session:
         listing = await session.list_tools()
         allowed_names = tools_for(wizard_state)

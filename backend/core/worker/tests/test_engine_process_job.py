@@ -14,11 +14,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.i18n import CANCELLATION_REASON
 from core.storage.base import JobStore
 
 from .. import engine as engine_module
-from ..engine import BackgroundWorker, reset_worker_for_tests
 from ..constants import EVENT_RESULT
+from ..engine import BackgroundWorker, reset_worker_for_tests
 from .conftest import FakeJobStore
 from .mocks import REAL_GRID_PAYLOAD, REAL_RUN_PAYLOAD, make_mp_context
 
@@ -306,8 +307,6 @@ def test_process_job_cancellation_error_uses_hebrew_message(
     store: FakeJobStore,
 ) -> None:
     """The Hebrew cancellation message must appear in the engine code path."""
-    from core.i18n import CANCELLATION_REASON
-
     source = inspect.getsource(engine_module)
     assert "CANCELLATION_REASON" in source
     assert CANCELLATION_REASON == "בוטלה על ידי המשתמש"

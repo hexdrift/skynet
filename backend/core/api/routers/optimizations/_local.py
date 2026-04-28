@@ -31,7 +31,7 @@ from ....models import (
 )
 from ....models.common import OptimizationType
 from ....notifications import notify_job_started
-from ....worker import get_worker
+from ....worker.engine import get_worker
 from ...converters import parse_overview
 from ...errors import DomainError
 from .._helpers import compute_task_fingerprint, strip_api_key
