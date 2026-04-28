@@ -11,16 +11,13 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
-import { Extension, type Range } from "@codemirror/state";
+import type { Extension } from "@codemirror/state";
+import { type Range } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches } from "@codemirror/search";
-import {
-  autocompletion,
-  acceptCompletion,
-  CompletionContext,
-  type CompletionResult,
-} from "@codemirror/autocomplete";
+import type { CompletionContext } from "@codemirror/autocomplete";
+import { autocompletion, acceptCompletion, type CompletionResult } from "@codemirror/autocomplete";
 import { indentWithTab } from "@codemirror/commands";
 import { Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
@@ -37,8 +34,8 @@ import {
   X,
   Eraser,
 } from "lucide-react";
-
-/* ── Light beige theme matching the app's warm palette ── */
+import { formatMsg, msg } from "@/shared/lib/messages";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
 const beigeEditorTheme = EditorView.theme(
   {
@@ -159,8 +156,6 @@ const beigeHighlightStyle = HighlightStyle.define([
 
 const beigeTheme: Extension = [beigeEditorTheme, syntaxHighlighting(beigeHighlightStyle)];
 
-/* ── Python/DSPy autocomplete ── */
-
 const dspyCompletions = [
   { label: "dspy.Signature", type: "class", detail: "Base signature class" },
   { label: "dspy.InputField", type: "function", detail: "Declare an input field" },
@@ -189,8 +184,6 @@ function dspyCompletion(context: CompletionContext): CompletionResult | null {
     validFor: /^[\w.]*$/,
   };
 }
-
-/* ── Extensions ── */
 
 const pyExtensions = [
   python(),
@@ -223,7 +216,7 @@ function streamingLineFadeExtension(): Extension {
         if (!u.docChanged) return;
         const now = u.state.doc.lines;
         if (now > this.prev) {
-          const ranges: Range<Decoration>[] = [];
+          const ranges: Array<Range<Decoration>> = [];
           for (let i = this.prev + 1; i <= now; i++) {
             ranges.push(lineFadeDecoration.range(u.state.doc.line(i).from));
           }
@@ -259,7 +252,7 @@ function flashLinesExtension(lines: readonly number[]): Extension {
       }
       build(view: EditorView): DecorationSet {
         const total = view.state.doc.lines;
-        const ranges: Range<Decoration>[] = [];
+        const ranges: Array<Range<Decoration>> = [];
         for (const lineNum of lines) {
           if (lineNum >= 1 && lineNum <= total) {
             ranges.push(flashLineDecoration.range(view.state.doc.line(lineNum).from));
@@ -271,9 +264,6 @@ function flashLinesExtension(lines: readonly number[]): Extension {
     { decorations: (v) => v.decorations },
   );
 }
-
-
-/* ── Types ── */
 
 export interface ValidationResult {
   valid: boolean;
@@ -301,16 +291,14 @@ interface CodeEditorProps {
   flashLines?: readonly number[];
 }
 
-/* ── Component ── */
-
 export function CodeEditor({
   value,
   onChange,
   height = "200px",
   readOnly = false,
   onRun,
-  runLabel = "בדוק",
-  runningLabel = "בודק...",
+  runLabel = msg("shared.code_editor.run"),
+  runningLabel = msg("shared.code_editor.running"),
   label = "Python",
   validationResult,
   streaming = false,
@@ -329,7 +317,6 @@ export function CodeEditor({
   const [formatting, setFormatting] = useState(false);
   const [result, setResult] = useState<ValidationResult | null>(null);
 
-  // Sync externally-provided validation result into internal state
   useEffect(() => {
     if (validationResult !== undefined) setResult(validationResult);
   }, [validationResult]);
@@ -360,7 +347,7 @@ export function CodeEditor({
     if (formatting || !value.trim()) return;
     setFormatting(true);
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const API = getRuntimeEnv().apiUrl;
       const res = await fetch(`${API}/format-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -377,7 +364,6 @@ export function CodeEditor({
     }
   }, [value, formatting, onChange]);
 
-  // Clear result when code changes
   const handleChange = useCallback(
     (v: string) => {
       onChange(v);
@@ -394,7 +380,6 @@ export function CodeEditor({
       style={readOnly ? undefined : { maxHeight: "60vh" }}
       dir="ltr"
     >
-      {/* ── Toolbar ── */}
       <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F3ECE3] text-[0.6875rem] text-[#8C7A6B] border-b border-[#E5DDD4] rounded-t-xl">
         <span className="flex-1 font-semibold text-[#7C6350] tracking-wide flex items-center gap-1.5">
           {label}
@@ -406,7 +391,9 @@ export function CodeEditor({
           className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer"
         >
           {collapsed ? <ChevronDown className="size-3" /> : <ChevronUp className="size-3" />}
-          {collapsed ? `${lineCount} שורות` : "כווץ"}
+          {collapsed
+            ? formatMsg("shared.code_editor.lines_count", { count: lineCount })
+            : msg("shared.code_editor.collapse")}
         </button>
 
         {onRun && (
@@ -428,7 +415,7 @@ export function CodeEditor({
           className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {formatting ? <Loader2 className="size-3 animate-spin" /> : <Eraser className="size-3" />}
-          סדר
+          {msg("shared.code_editor.format")}
         </button>
 
         <button
@@ -437,11 +424,10 @@ export function CodeEditor({
           className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer"
         >
           {copied ? <Check className="size-3 text-[#5A7247]" /> : <Copy className="size-3" />}
-          {copied ? "הועתק" : "העתק"}
+          {copied ? msg("shared.code_editor.copied") : msg("shared.code_editor.copy")}
         </button>
       </div>
 
-      {/* ── Editor ── */}
       <AnimatePresence initial={false}>
         {!collapsed && (
           <motion.div
@@ -482,23 +468,22 @@ export function CodeEditor({
       </AnimatePresence>
       {collapsed && (
         <div className="bg-[#FAF6F0] text-[#B09878] text-xs italic px-4 py-2">
-          {lineCount} lines hidden
+          {formatMsg("shared.code_editor.lines_hidden", { count: lineCount })}
         </div>
       )}
 
-      {/* ── Output panel (validation results) ── */}
       {hasOutput && (
         <div className="bg-[#F5EDE4] border-t border-[#E5DDD4] px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[0.625rem] text-[#8C7A6B] uppercase tracking-wider font-semibold">
-              Validation
+              {msg("shared.code_editor.validation")}
             </span>
             {!running && result && (
               <button
                 type="button"
                 onClick={() => setResult(null)}
                 className="p-0.5 rounded hover:bg-black/5 text-[#8C7A6B] cursor-pointer"
-                aria-label="סגור"
+                aria-label={msg("shared.dialog.close")}
               >
                 <X className="size-3" />
               </button>
@@ -507,22 +492,24 @@ export function CodeEditor({
           {running && (
             <div className="flex items-center gap-2 text-xs text-[#8C7A6B]">
               <Loader2 className="size-3.5 animate-spin" />
-              Validating code against dataset...
+              {msg("shared.code_editor.validating")}
             </div>
           )}
           {result && result.valid && result.errors.length === 0 && (
             <div className="flex items-start gap-2 text-xs">
               <CheckCircle2 className="size-3.5 text-[#5A7247] shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <span className="font-medium text-[#5A7247]">Valid</span>
+                <span className="font-medium text-[#5A7247]">
+                  {msg("shared.code_editor.valid")}
+                </span>
                 {result.signature_fields && (
                   <div className="text-[#7C6350] font-mono text-[0.6875rem] space-y-0.5" dir="ltr">
                     <div>
-                      <span className="text-[#8C7A6B]">Inputs:</span>{" "}
+                      <span className="text-[#8C7A6B]">{msg("shared.code_editor.inputs")}</span>{" "}
                       {result.signature_fields.inputs.join(", ")}
                     </div>
                     <div>
-                      <span className="text-[#8C7A6B]">Outputs:</span>{" "}
+                      <span className="text-[#8C7A6B]">{msg("shared.code_editor.outputs")}</span>{" "}
                       {result.signature_fields.outputs.join(", ")}
                     </div>
                   </div>

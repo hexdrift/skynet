@@ -8,25 +8,23 @@ import { MessageMarkdown } from "./message-markdown";
 import { ThinkingSection } from "./thinking-section";
 import type { AgentMessage, AgentThinking, AgentToolCall } from "./types";
 
-interface AssistantBubbleProps {
+interface AgentBubbleProps {
   msg: AgentMessage;
   thinking?: AgentThinking;
   renderToolCall?: (call: AgentToolCall, ctx: { isRetry: boolean }) => React.ReactNode;
   className?: string;
 }
 
-export function AssistantBubble({
+export function AgentBubble({
   msg,
   thinking,
   renderToolCall,
   className,
-}: AssistantBubbleProps) {
-  const visibleToolCalls = React.useMemo<
-    { call: AgentToolCall; isRetry: boolean }[]
-  >(() => {
+}: AgentBubbleProps) {
+  const visibleToolCalls = React.useMemo<Array<{ call: AgentToolCall; isRetry: boolean }>>(() => {
     const calls = msg.toolCalls;
     if (!calls?.length) return [];
-    const result: { call: AgentToolCall; isRetry: boolean }[] = [];
+    const result: Array<{ call: AgentToolCall; isRetry: boolean }> = [];
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i];
       if (!call) continue;
@@ -35,8 +33,7 @@ export function AssistantBubble({
           .slice(i + 1)
           .some(
             (later) =>
-              later.tool === call.tool &&
-              (later.status === "done" || later.status === "running"),
+              later.tool === call.tool && (later.status === "done" || later.status === "running"),
           );
         if (superseded) continue;
       }
@@ -82,9 +79,7 @@ export function AssistantBubble({
           )}
         >
           {visibleToolCalls.map(({ call, isRetry }) => (
-            <React.Fragment key={call.id}>
-              {renderToolCall(call, { isRetry })}
-            </React.Fragment>
+            <React.Fragment key={call.id}>{renderToolCall(call, { isRetry })}</React.Fragment>
           ))}
         </div>
       )}

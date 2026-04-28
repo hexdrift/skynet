@@ -8,11 +8,7 @@ import { cn } from "@/shared/lib/utils";
 
 const COMPONENTS: Components = {
   p: ({ children, ...rest }) => (
-    <p
-      dir="auto"
-      className="whitespace-pre-wrap [&:not(:first-child)]:mt-2"
-      {...rest}
-    >
+    <p dir="auto" className="whitespace-pre-wrap [&:not(:first-child)]:mt-2" {...rest}>
       {children}
     </p>
   ),
@@ -43,20 +39,12 @@ const COMPONENTS: Components = {
     </a>
   ),
   ul: ({ children, ...rest }) => (
-    <ul
-      dir="auto"
-      className="my-2 list-disc ps-5 space-y-1 marker:text-current/60"
-      {...rest}
-    >
+    <ul dir="auto" className="my-2 list-disc ps-5 space-y-1 marker:text-current/60" {...rest}>
       {children}
     </ul>
   ),
   ol: ({ children, ...rest }) => (
-    <ol
-      dir="auto"
-      className="my-2 list-decimal ps-5 space-y-1 marker:text-current/60"
-      {...rest}
-    >
+    <ol dir="auto" className="my-2 list-decimal ps-5 space-y-1 marker:text-current/60" {...rest}>
       {children}
     </ol>
   ),
@@ -75,38 +63,22 @@ const COMPONENTS: Components = {
     </blockquote>
   ),
   h1: ({ children, ...rest }) => (
-    <h3
-      dir="auto"
-      className="text-base font-semibold [&:not(:first-child)]:mt-3 mb-1"
-      {...rest}
-    >
+    <h3 dir="auto" className="text-base font-semibold [&:not(:first-child)]:mt-3 mb-1" {...rest}>
       {children}
     </h3>
   ),
   h2: ({ children, ...rest }) => (
-    <h4
-      dir="auto"
-      className="text-sm font-semibold [&:not(:first-child)]:mt-3 mb-1"
-      {...rest}
-    >
+    <h4 dir="auto" className="text-sm font-semibold [&:not(:first-child)]:mt-3 mb-1" {...rest}>
       {children}
     </h4>
   ),
   h3: ({ children, ...rest }) => (
-    <h5
-      dir="auto"
-      className="text-sm font-semibold [&:not(:first-child)]:mt-2 mb-0.5"
-      {...rest}
-    >
+    <h5 dir="auto" className="text-sm font-semibold [&:not(:first-child)]:mt-2 mb-0.5" {...rest}>
       {children}
     </h5>
   ),
   h4: ({ children, ...rest }) => (
-    <h6
-      dir="auto"
-      className="text-sm font-medium [&:not(:first-child)]:mt-2 mb-0.5"
-      {...rest}
-    >
+    <h6 dir="auto" className="text-sm font-medium [&:not(:first-child)]:mt-2 mb-0.5" {...rest}>
       {children}
     </h6>
   ),
@@ -114,13 +86,7 @@ const COMPONENTS: Components = {
     const isBlock = /language-/.test(className ?? "");
     if (isBlock) {
       return (
-        <code
-          className={cn(
-            "font-mono text-[0.8125rem] leading-relaxed",
-            className,
-          )}
-          {...rest}
-        >
+        <code className={cn("font-mono text-[0.8125rem] leading-relaxed", className)} {...rest}>
           {children}
         </code>
       );
@@ -147,11 +113,7 @@ const COMPONENTS: Components = {
   hr: ({ ...rest }) => <hr className="my-3 border-current/15" {...rest} />,
   table: ({ children, ...rest }) => (
     <div className="my-2 overflow-x-auto">
-      <table
-        dir="auto"
-        className="w-full border-collapse text-[0.8125rem]"
-        {...rest}
-      >
+      <table dir="auto" className="w-full border-collapse text-[0.8125rem]" {...rest}>
         {children}
       </table>
     </div>
@@ -173,13 +135,7 @@ const COMPONENTS: Components = {
   ),
 };
 
-export function MessageMarkdown({
-  content,
-  className,
-}: {
-  content: string;
-  className?: string;
-}) {
+export function MessageMarkdown({ content, className }: { content: string; className?: string }) {
   return (
     <div className={cn("break-words", className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>

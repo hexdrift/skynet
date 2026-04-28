@@ -33,8 +33,8 @@ export interface WizardState {
   column_roles?: Record<string, string>;
   model_config?: Record<string, unknown>;
   reflection_model_config?: Record<string, unknown>;
-  generation_models?: Record<string, unknown>[];
-  reflection_models?: Record<string, unknown>[];
+  generation_models?: Array<Record<string, unknown>>;
+  reflection_models?: Array<Record<string, unknown>>;
   use_all_generation_models?: boolean;
   use_all_reflection_models?: boolean;
   split_fractions?: { train: number; val: number; test: number };

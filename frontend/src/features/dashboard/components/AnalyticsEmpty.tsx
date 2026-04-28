@@ -1,10 +1,11 @@
 "use client";
 
 import { BarChart3, Database, AlertCircle, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/shared/ui/primitives/button";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { FadeIn } from "@/shared/ui/motion";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface AnalyticsEmptyProps {
   variant?: "no-data" | "no-results" | "loading-error";
@@ -20,28 +21,33 @@ export function AnalyticsEmpty({
   const configs = {
     "no-data": {
       icon: Database,
-      title: "אין עדיין נתונים",
-      description: `העלה ${TERMS.dataset} והגדר ${TERMS.optimization} כדי לראות סטטיסטיקות`,
+      title: msg("auto.features.dashboard.components.analyticsempty.literal.1"),
+      description: formatMsg("auto.features.dashboard.components.analyticsempty.template.1", {
+        p1: TERMS.dataset,
+        p2: TERMS.optimization,
+      }),
       action: null,
     },
     "no-results": {
       icon: BarChart3,
-      title: "לא נמצאו תוצאות",
-      description: `הסינון שלך לא מצא ${TERMS.optimizationPlural}. אפשר להרחיב את הקריטריונים`,
+      title: msg("auto.features.dashboard.components.analyticsempty.literal.2"),
+      description: formatMsg("auto.features.dashboard.components.analyticsempty.template.2", {
+        p1: TERMS.optimizationPlural,
+      }),
       action: onClearFilters ? (
         <Button variant="outline" size="sm" onClick={onClearFilters}>
-          נקה סינונים
+          {msg("auto.features.dashboard.components.analyticsempty.1")}
         </Button>
       ) : null,
     },
     "loading-error": {
       icon: AlertCircle,
-      title: "שגיאה בטעינת נתונים",
-      description: "לא הצלחנו לטעון את הסטטיסטיקות. נסה שוב",
+      title: msg("auto.features.dashboard.components.analyticsempty.literal.3"),
+      description: msg("auto.features.dashboard.components.analyticsempty.literal.4"),
       action: onRetry ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
           <RefreshCw className="size-4" />
-          נסה שוב
+          {msg("auto.features.dashboard.components.analyticsempty.2")}
         </Button>
       ) : null,
     },

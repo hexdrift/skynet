@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class I18nKey(str, Enum):
+class I18nKey(StrEnum):
     AGENT_APPROVAL_UNKNOWN_CALL_ID = 'agent.approval.unknown_call_id'
     AGENT_STATUS_TOOL_END = 'agent.status.tool_end'
     AGENT_STATUS_TOOL_START = 'agent.status.tool_start'
     ANALYTICS_OTHER_BUCKET = 'analytics.other_bucket'
+    CODE_AGENT_UPSTREAM_FAILED = 'code_agent.upstream_failed'
     DATASET_COLUMN_ROLES_INVALID = 'dataset.column_roles_invalid'
     DATASET_COLUMN_ROLES_NEED_INPUT = 'dataset.column_roles_need_input'
     DATASET_COLUMN_ROLES_NEED_OUTPUT = 'dataset.column_roles_need_output'
@@ -93,6 +94,9 @@ class I18nKey(str, Enum):
     SERVE_MISSING_INPUTS = 'serve.missing_inputs'
     SERVE_NO_DECLARED_INPUTS = 'serve.no_declared_inputs'
     SERVE_NO_MODEL_CONFIG = 'serve.no_model_config'
+    SUBMISSION_MODULE_RESOLVE_FAILED = 'submission.module_resolve_failed'
+    SUBMISSION_VALIDATION_FAILED = 'submission.validation_failed'
+    SUBMISSION_VISION_REQUIRED = 'submission.vision_required'
     SUBMIT_NO_MODELS_AVAILABLE = 'submit.no_models_available'
     TEMPLATE_CANNOT_DELETE_OTHERS = 'template.cannot_delete_others'
     TEMPLATE_CANNOT_UPDATE_OTHERS = 'template.cannot_update_others'
@@ -115,7 +119,7 @@ class I18nKey(str, Enum):
     WIZARD_SPLIT_FRACTIONS_SUM = 'wizard.split_fractions_sum'
 
 
-class TermKey(str, Enum):
+class TermKey(StrEnum):
     API_KEY = 'apiKey'
     APPLY = 'apply'
     BASELINE = 'baseline'
@@ -163,6 +167,7 @@ class TermKey(str, Enum):
     OPTIMIZATION_PLURAL = 'optimizationPlural'
     OPTIMIZATION_TYPE_GRID = 'optimizationTypeGrid'
     OPTIMIZATION_TYPE_RUN = 'optimizationTypeRun'
+    OPTIMIZATION_TYPE_RUN_PLURAL = 'optimizationTypeRunPlural'
     OPTIMIZED_SCORE = 'optimizedScore'
     OPTIMIZER = 'optimizer'
     OPTIMIZER_PLURAL = 'optimizerPlural'

@@ -1,18 +1,10 @@
 "use client";
 
-/**
- * Logs tab — filterable/sortable table of optimization log entries.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Keeps its own filter and
- * sort state isolated from the heavy parent so re-renders stay local.
- */
-
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
+import { Badge } from "@/shared/ui/primitives/badge";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
   ColumnHeader,
   useColumnFilters,
@@ -21,7 +13,7 @@ import {
   type SortDir,
 } from "@/shared/ui/excel-filter";
 import { FadeIn } from "@/shared/ui/motion";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
@@ -38,7 +30,6 @@ export function LogsTab({
   const showPairCol = !!pairNames && Object.keys(pairNames).length > 0;
   const logFilters = useColumnFilters();
   const logResize = useColumnResize();
-  const [messageSearch, setMessageSearch] = useState("");
   const [sortKey, setSortKey] = useState<string>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const toggleSort = (key: string) => {
@@ -50,9 +41,7 @@ export function LogsTab({
   };
 
   const filtered = useMemo(() => {
-    const q = messageSearch.trim().toLowerCase();
     let result = logs.filter((l) => {
-      if (q && !l.message.toLowerCase().includes(q)) return false;
       for (const [col, allowed] of Object.entries(logFilters.filters)) {
         if (allowed.size === 0) continue;
         const val =
@@ -74,7 +63,7 @@ export function LogsTab({
       return sortDir === "asc" ? cmp : -cmp;
     });
     return result;
-  }, [logs, logFilters.filters, sortKey, sortDir, messageSearch]);
+  }, [logs, logFilters.filters, sortKey, sortDir]);
 
   const filterOptions = useMemo(() => {
     const unique = (key: string) => {
@@ -94,7 +83,13 @@ export function LogsTab({
           .sort()
           .map((v) => ({
             value: v,
-            label: v === "—" ? "כללי" : (pairNames?.[parseInt(v)] ?? `ריצה ${parseInt(v) + 1}`),
+            label:
+              v === "—"
+                ? msg("auto.features.optimizations.components.logstab.literal.1")
+                : (pairNames?.[parseInt(v)] ??
+                  formatMsg("auto.features.optimizations.components.logstab.template.1", {
+                    p1: parseInt(v) + 1,
+                  })),
           }))
       : [];
     return {
@@ -112,25 +107,23 @@ export function LogsTab({
           <p className="text-sm text-muted-foreground">
             {live
               ? ""
-              : `לוגים מפורטים מתהליך ה${TERMS.optimization} — סננו לפי עמודה או חפשו בתוכן.`}
+              : formatMsg("auto.features.optimizations.components.logstab.template.2", {
+                  p1: TERMS.optimization,
+                })}
           </p>
-          <span className="text-xs text-muted-foreground shrink-0">{filtered.length} רשומות</span>
+          <span className="text-xs text-muted-foreground shrink-0">
+            {filtered.length}
+            {msg("auto.features.optimizations.components.logstab.1")}
+          </span>
         </div>
       </FadeIn>
-      <div className="flex items-center gap-3 mb-5">
-        <Input
-          type="text"
-          value={messageSearch}
-          onChange={(e) => setMessageSearch(e.target.value)}
-          placeholder="Search log messages..."
-          aria-label="Search log messages"
-          dir="ltr"
-          className="text-left w-full"
-        />
+      <div className="flex items-center justify-end gap-3 mb-5">
         <ResetColumnsButton resize={logResize} />
       </div>
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">אין לוגים</p>
+        <p className="text-sm text-muted-foreground py-8 text-center">
+          {msg("auto.features.optimizations.components.logstab.2")}
+        </p>
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -157,7 +150,7 @@ export function LogsTab({
                   <TableRow>
                     {showPairCol && (
                       <ColumnHeader
-                        label="ריצה"
+                        label={msg("auto.features.optimizations.components.logstab.literal.2")}
                         sortKey="pair_index"
                         currentSort={sortKey}
                         sortDir={sortDir}
@@ -173,7 +166,7 @@ export function LogsTab({
                       />
                     )}
                     <ColumnHeader
-                      label="זמן"
+                      label={msg("auto.features.optimizations.components.logstab.literal.3")}
                       sortKey="timestamp"
                       currentSort={sortKey}
                       sortDir={sortDir}
@@ -188,7 +181,7 @@ export function LogsTab({
                       onResize={logResize.setColumnWidth}
                     />
                     <ColumnHeader
-                      label="רמה"
+                      label={msg("auto.features.optimizations.components.logstab.literal.4")}
                       sortKey="level"
                       currentSort={sortKey}
                       sortDir={sortDir}
@@ -203,7 +196,7 @@ export function LogsTab({
                       onResize={logResize.setColumnWidth}
                     />
                     <ColumnHeader
-                      label="לוגר"
+                      label={msg("auto.features.optimizations.components.logstab.literal.5")}
                       sortKey="logger"
                       currentSort={sortKey}
                       sortDir={sortDir}
@@ -218,7 +211,7 @@ export function LogsTab({
                       onResize={logResize.setColumnWidth}
                     />
                     <ColumnHeader
-                      label="הודעה"
+                      label={msg("auto.features.optimizations.components.logstab.literal.6")}
                       sortKey="message"
                       currentSort={sortKey}
                       sortDir={sortDir}
@@ -238,7 +231,7 @@ export function LogsTab({
                         if (!td) return;
                         const text = td.textContent?.trim();
                         if (text) {
-                          navigator.clipboard.writeText(text);
+                          void navigator.clipboard.writeText(text);
                           toast.success(msg("clipboard.copied"));
                         }
                       }}
@@ -257,7 +250,11 @@ export function LogsTab({
                         >
                           {log.pair_index != null ? (
                             <Badge variant="secondary" className="text-[9px] font-mono">
-                              {pairNames?.[log.pair_index] ?? `ריצה ${log.pair_index + 1}`}
+                              {pairNames?.[log.pair_index] ??
+                                formatMsg(
+                                  "auto.features.optimizations.components.logstab.template.3",
+                                  { p1: log.pair_index + 1 },
+                                )}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground/40">—</span>
@@ -340,7 +337,9 @@ export function LogsTab({
                         colSpan={showPairCol ? 5 : 4}
                         className="text-center py-3 text-[0.625rem] text-muted-foreground"
                       >
-                        מוצגות 300 מתוך {filtered.length} רשומות
+                        {msg("auto.features.optimizations.components.logstab.3")}
+                        {filtered.length}
+                        {msg("auto.features.optimizations.components.logstab.4")}
                       </td>
                     </tr>
                   </tfoot>

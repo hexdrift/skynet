@@ -1,5 +1,7 @@
 """Outbound result payloads for single optimization runs and grid searches."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, Field

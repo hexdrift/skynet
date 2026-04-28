@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Optimizer performance chart
- * Displays average improvement by optimizer type
- * Preserves exact styling, RTL layout, and hover interactions
- */
-
 import { useState } from "react";
 import {
   BarChart,
@@ -19,9 +13,10 @@ import {
 } from "recharts";
 import { ChartTooltip } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
+import { msg } from "@/shared/lib/messages";
 
 interface OptimizerChartProps {
-  data: Array<{ name: string; שיפור_ממוצע: number; count: number }>;
+  data: Array<{ name: string; avgImprovement: number; count: number }>;
   onBarClick?: (optimizerName: string) => void;
 }
 
@@ -49,7 +44,7 @@ export function OptimizerChart({ data, onBarClick }: OptimizerChartProps) {
             className="fill-muted-foreground"
             dx={-5}
             label={{
-              value: "שיפור ממוצע באחוזים",
+              value: msg("auto.shared.charts.optimizer.chart.literal.1"),
               angle: -90,
               position: "center",
               dx: -20,
@@ -58,8 +53,8 @@ export function OptimizerChart({ data, onBarClick }: OptimizerChartProps) {
           />
           <Tooltip content={<ChartTooltip />} />
           <Bar
-            dataKey="שיפור_ממוצע"
-            name="שיפור ממוצע באחוזים"
+            dataKey="avgImprovement"
+            name={msg("auto.shared.charts.optimizer.chart.literal.2")}
             fill="var(--color-chart-2)"
             radius={[4, 4, 0, 0]}
             barSize={36}

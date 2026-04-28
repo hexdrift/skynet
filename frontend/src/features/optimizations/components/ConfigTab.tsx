@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * Config tab — displays the optimization settings (module, optimizer,
- * kwargs, models, dataset splits).
- *
- * Extracted from app/optimizations/[id]/page.tsx. Pure display component
- * that takes the job + payload data as props. Owns no state.
- */
-
 import type { ReactNode } from "react";
 import {
   Coins,
@@ -16,44 +8,49 @@ import {
   Database,
   Dices,
   Layers,
-  Lightbulb,
-  ListTodo,
-  Quote,
   Settings,
   Settings2,
   Shuffle,
   Target,
   Thermometer,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationPayloadResponse, OptimizationStatusResponse } from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { InfoCard, ReasoningPill } from "./ui-primitives";
 
 const OPT_PARAM_LABELS: Record<string, string> = {
-  auto: "רמת חיפוש",
-  max_bootstrapped_demos: "דוגמאות אוטומטיות",
-  max_labeled_demos: "דוגמאות מהנתונים",
-  minibatch: "בדיקה חלקית",
-  minibatch_size: "גודל מדגם",
-  reflection_minibatch_size: "מדגם לרפלקציה",
-  max_full_evals: "סבבי הערכה",
-  use_merge: "מיזוג מועמדים",
+  auto: msg("auto.features.optimizations.components.configtab.literal.1"),
+  max_bootstrapped_demos: msg("auto.features.optimizations.components.configtab.literal.2"),
+  max_labeled_demos: msg("auto.features.optimizations.components.configtab.literal.3"),
+  minibatch: msg("auto.features.optimizations.components.configtab.literal.4"),
+  minibatch_size: msg("auto.features.optimizations.components.configtab.literal.5"),
+  reflection_minibatch_size: msg("auto.features.optimizations.components.configtab.literal.6"),
+  max_full_evals: msg("auto.features.optimizations.components.configtab.literal.7"),
+  use_merge: msg("auto.features.optimizations.components.configtab.literal.8"),
   metric: TERMS.metric,
 };
 const OPT_PARAM_TIPS: Record<string, string> = {
-  auto: "עומק החיפוש — קלה מהירה, מעמיקה בודקת יותר שילובים",
-  max_bootstrapped_demos: "דוגמאות שהמערכת מייצרת אוטומטית מתוך הנתונים",
-  max_labeled_demos: `דוגמאות קלט-פלט מה${TERMS.dataset} שמוצגות ל${TERMS.model} כהדגמה`,
-  minibatch: `כשפעיל, הערכה רצה על מדגם קטן במקום ה${TERMS.dataset} המלא`,
-  minibatch_size: "מספר הדוגמאות שנבדקות בכל סבב הערכה",
-  reflection_minibatch_size: `כמה דוגמאות ה${TERMS.model} מנתח בכל סבב רפלקציה`,
-  max_full_evals: "מספר הפעמים שהמערכת מריצה הערכה מלאה על כל הנתונים",
-  use_merge: "כשפעיל, המערכת משלבת הוראות מכמה מועמדים טובים לפרומפט אחד",
+  auto: msg("auto.features.optimizations.components.configtab.literal.9"),
+  max_bootstrapped_demos: msg("auto.features.optimizations.components.configtab.literal.10"),
+  max_labeled_demos: formatMsg("auto.features.optimizations.components.configtab.template.1", {
+    p1: TERMS.dataset,
+    p2: TERMS.model,
+  }),
+  minibatch: formatMsg("auto.features.optimizations.components.configtab.template.2", {
+    p1: TERMS.dataset,
+  }),
+  minibatch_size: msg("auto.features.optimizations.components.configtab.literal.11"),
+  reflection_minibatch_size: formatMsg(
+    "auto.features.optimizations.components.configtab.template.3",
+    { p1: TERMS.model },
+  ),
+  max_full_evals: msg("auto.features.optimizations.components.configtab.literal.12"),
+  use_merge: msg("auto.features.optimizations.components.configtab.literal.13"),
 };
 
 function labelWithTip(key: string): ReactNode {
@@ -63,7 +60,10 @@ function labelWithTip(key: string): ReactNode {
 }
 
 function formatParamValue(_k: string, v: unknown): string {
-  if (typeof v === "boolean") return v ? "כן" : "לא";
+  if (typeof v === "boolean")
+    return v
+      ? msg("auto.features.optimizations.components.configtab.literal.14")
+      : msg("auto.features.optimizations.components.configtab.literal.15");
   return String(v);
 }
 
@@ -128,9 +128,13 @@ export function ConfigTab({
   const reflCfg = (p.reflection_model_config ?? null) as Record<string, unknown> | null;
   const taskCfg = (p.task_model_config ?? null) as Record<string, unknown> | null;
 
-  const items: { label: ReactNode; value: string; icon: ReactNode }[] = [
+  const items: Array<{ label: ReactNode; value: string; icon: ReactNode }> = [
     {
-      label: <HelpTip text={tip("module.choice")}>מודול</HelpTip>,
+      label: (
+        <HelpTip text={tip("module.choice")}>
+          {msg("auto.features.optimizations.components.configtab.1")}
+        </HelpTip>
+      ),
       value: job.module_name ?? "—",
       icon: <Component className="size-3.5" />,
     },
@@ -157,7 +161,11 @@ export function ConfigTab({
     <>
       <FadeIn>
         <p className="text-sm text-muted-foreground mb-4">
-          פרטי ההגדרות שנבחרו ל{TERMS.optimization} זו — {TERMS.model}, {TERMS.optimizer}, ופרמטרים.
+          {msg("auto.features.optimizations.components.configtab.2")}
+          {TERMS.optimization}
+          {msg("auto.features.optimizations.components.configtab.3")}
+          {TERMS.model}, {TERMS.optimizer}
+          {msg("auto.features.optimizations.components.configtab.4")}
         </p>
         {job.description && (
           <p className="text-sm text-foreground/70 leading-relaxed mb-4 border-s-2 border-[#C8A882]/40 ps-3">
@@ -166,7 +174,6 @@ export function ConfigTab({
         )}
       </FadeIn>
       <div className="space-y-4">
-        {/* Section 1: General + Optimizer Parameters */}
         <Card className="relative overflow-hidden shadow-[0_1px_3px_rgba(28,22,18,0.04),inset_0_1px_0_rgba(255,255,255,0.5)]">
           <div
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#C8A882]/40 to-transparent"
@@ -176,7 +183,10 @@ export function ConfigTab({
             <CardTitle className="text-base flex items-center gap-2">
               <Settings className="size-4 text-[#7C6350]" aria-hidden="true" />
               <HelpTip text={tip("config.section.summary")}>
-                <span className="font-bold tracking-tight">הגדרות {TERMS.optimization}</span>
+                <span className="font-bold tracking-tight">
+                  {msg("auto.features.optimizations.components.configtab.5")}
+                  {TERMS.optimization}
+                </span>
               </HelpTip>
             </CardTitle>
           </CardHeader>
@@ -200,7 +210,6 @@ export function ConfigTab({
           </CardContent>
         </Card>
 
-        {/* Section 2: Models */}
         <Card className="relative overflow-hidden shadow-[0_1px_3px_rgba(28,22,18,0.04),inset_0_1px_0_rgba(255,255,255,0.5)]">
           <div
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#C8A882]/40 to-transparent"
@@ -210,7 +219,9 @@ export function ConfigTab({
             <CardTitle className="text-base flex items-center gap-2">
               <Cpu className="size-4 text-[#7C6350]" aria-hidden="true" />
               <HelpTip text={tip("config.section.models")}>
-                <span className="font-bold tracking-tight">מודלים</span>
+                <span className="font-bold tracking-tight">
+                  {msg("auto.features.optimizations.components.configtab.6")}
+                </span>
               </HelpTip>
             </CardTitle>
           </CardHeader>
@@ -253,12 +264,17 @@ export function ConfigTab({
                 </div>
                 <div className="space-y-2">
                   <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680] mb-1">
-                    <HelpTip text={tip("grid.reflection_models")}>מודלי רפלקציה</HelpTip>
+                    <HelpTip text={tip("grid.reflection_models")}>
+                      {msg("auto.features.optimizations.components.configtab.7")}
+                    </HelpTip>
                   </p>
                   {job.reflection_models.map((m, i) => (
                     <ModelCard
                       key={i}
-                      label={`רפלקציה ${i + 1}`}
+                      label={formatMsg(
+                        "auto.features.optimizations.components.configtab.template.4",
+                        { p1: i + 1 },
+                      )}
                       cfg={m as unknown as Record<string, unknown>}
                     />
                   ))}
@@ -268,7 +284,6 @@ export function ConfigTab({
           </CardContent>
         </Card>
 
-        {/* Section 3: Data & Splits */}
         <Card className="relative overflow-hidden shadow-[0_1px_3px_rgba(28,22,18,0.04),inset_0_1px_0_rgba(255,255,255,0.5)]">
           <div
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#C8A882]/40 to-transparent"
@@ -278,15 +293,19 @@ export function ConfigTab({
             <CardTitle className="text-base flex items-center gap-2">
               <Database className="size-4 text-[#7C6350]" aria-hidden="true" />
               <HelpTip text={tip("config.section.data")}>
-                <span className="font-bold tracking-tight">נתונים</span>
+                <span className="font-bold tracking-tight">
+                  {msg("auto.features.optimizations.components.configtab.8")}
+                </span>
               </HelpTip>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Split bar */}
             <div className="space-y-2">
               <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680]">
-                <HelpTip text={tip("data.split_explanation")}>חלוקת {TERMS.dataset}</HelpTip>
+                <HelpTip text={tip("data.split_explanation")}>
+                  {msg("auto.features.optimizations.components.configtab.9")}
+                  {TERMS.dataset}
+                </HelpTip>
               </p>
               <div className="flex h-2.5 rounded-full overflow-hidden">
                 <div
@@ -311,7 +330,7 @@ export function ConfigTab({
                 <span className="flex items-center gap-1.5 min-w-0">
                   <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22] shrink-0" />
                   <span className="truncate">
-                    אימון{" "}
+                    {msg("auto.features.optimizations.components.configtab.10")}{" "}
                     <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
                       {splitFractions.train}
                     </span>
@@ -320,7 +339,7 @@ export function ConfigTab({
                 <span className="flex items-center gap-1.5 min-w-0">
                   <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882] shrink-0" />
                   <span className="truncate">
-                    אימות{" "}
+                    {msg("auto.features.optimizations.components.configtab.11")}{" "}
                     <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
                       {splitFractions.val}
                     </span>
@@ -329,7 +348,7 @@ export function ConfigTab({
                 <span className="flex items-center gap-1.5 min-w-0">
                   <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B] shrink-0" />
                   <span className="truncate">
-                    בדיקה{" "}
+                    {msg("auto.features.optimizations.components.configtab.12")}{" "}
                     <span className="font-mono tabular-nums text-muted-foreground" dir="ltr">
                       {splitFractions.test}
                     </span>
@@ -337,16 +356,27 @@ export function ConfigTab({
                 </span>
               </div>
             </div>
-            {/* Shuffle + Seed */}
             <div className="grid grid-cols-2 gap-2.5">
               <InfoCard
-                label={<HelpTip text={tip("data.shuffle_explanation")}>ערבוב</HelpTip>}
-                value={shuffleVal ? "כן" : "לא"}
+                label={
+                  <HelpTip text={tip("data.shuffle_explanation")}>
+                    {msg("auto.features.optimizations.components.configtab.13")}
+                  </HelpTip>
+                }
+                value={
+                  shuffleVal
+                    ? msg("auto.features.optimizations.components.configtab.literal.16")
+                    : msg("auto.features.optimizations.components.configtab.literal.17")
+                }
                 icon={<Shuffle className="size-3.5" />}
               />
               {seedVal != null && (
                 <InfoCard
-                  label={<HelpTip text={tip("data.seed")}>מספר התחלתי</HelpTip>}
+                  label={
+                    <HelpTip text={tip("data.seed")}>
+                      {msg("auto.features.optimizations.components.configtab.14")}
+                    </HelpTip>
+                  }
                   value={seedVal}
                   icon={<Dices className="size-3.5" />}
                 />

@@ -19,7 +19,7 @@
  * in the browser — identical behavior to the old window globals, but with
  * full type checking at both ends.
  */
-import type { ParsedDataset } from "@/features/submit/lib/parse-dataset";
+import type { ParsedDataset } from "@/shared/lib/parse-dataset";
 import type {
   PaginatedJobsResponse,
   OptimizationStatusResponse,
@@ -68,6 +68,8 @@ export interface TutorialHooks {
   setTaggerStep: (step: number) => void;
   /** Inject demo rows into the tagger setup. */
   setTaggerDemoData: (data: { rows: unknown[]; cols: string[]; textCol: string }) => void;
+  /** Open or close the generalist agent panel (left-anchored aside). */
+  setGeneralistPanelOpen: (open: boolean) => void;
 }
 
 /**
@@ -123,6 +125,37 @@ export function hasTutorialHook<K extends keyof TutorialHooks>(key: K): boolean 
   return key in registry;
 }
 
+/**
+ * Wait up to timeoutMs for a producer to register the given hook.
+ * Resolves when the hook becomes available, or after the timeout.
+ *
+ * Used by tutorial steps that navigate to a route and then immediately
+ * need to drive the new page via a hook: the host component's
+ * registerTutorialHook lives in a useEffect that runs AFTER the JSX
+ * commits, so waitForElement (which only checks the DOM) can resolve
+ * before the hook is actually available.
+ */
+export function waitForHook<K extends keyof TutorialHooks>(
+  key: K,
+  timeoutMs = 2000,
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (key in registry) {
+      resolve();
+      return;
+    }
+    const start = Date.now();
+    const check = () => {
+      if (key in registry || Date.now() - start > timeoutMs) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+}
+
 /** Register a query hook that returns a value. */
 export function registerTutorialQuery<K extends keyof TutorialQueries>(
   key: K,
@@ -140,7 +173,10 @@ export function queryTutorialHook<K extends keyof TutorialQueries>(
   ...args: Parameters<TutorialQueries[K]>
 ): ReturnType<TutorialQueries[K]> | undefined {
   const fn = queryRegistry[key];
-  if (fn) return (fn as (...a: Parameters<TutorialQueries[K]>) => ReturnType<TutorialQueries[K]>)(...args);
+  if (fn)
+    return (fn as (...a: Parameters<TutorialQueries[K]>) => ReturnType<TutorialQueries[K]>)(
+      ...args,
+    );
   return undefined;
 }
 
@@ -160,21 +196,48 @@ export function isTutorialNavigating(): boolean {
 }
 
 /**
+ * Defer clearing a one-shot payload so React Strict Mode's double-mount
+ * sees the same value on both initializer runs. Without this, the second
+ * `useState(() => consume…())` call gets `null` and the page falls through
+ * to the real backend fetch — which 404s on tutorial-only demo IDs.
+ */
+function makeOneShot<T>() {
+  let value: T | null = null;
+  let clearHandle: ReturnType<typeof setTimeout> | null = null;
+  return {
+    set(v: T): void {
+      if (clearHandle) {
+        clearTimeout(clearHandle);
+        clearHandle = null;
+      }
+      value = v;
+    },
+    consume(): T | null {
+      const v = value;
+      if (clearHandle) clearTimeout(clearHandle);
+      clearHandle = setTimeout(() => {
+        value = null;
+        clearHandle = null;
+      }, 1000);
+      return v;
+    },
+  };
+}
+
+/**
  * One-shot payload for the /compare page. The tutorial seeds this
  * BEFORE navigating, and the compare page consumes it on mount in
- * place of the normal backend fetch. Cleared after consumption so a
+ * place of the normal backend fetch. Cleared on a 1s delay so a
  * subsequent non-tutorial visit falls back to the live API.
  */
-let pendingCompareDemo: OptimizationStatusResponse[] | null = null;
+const compareDemoSlot = makeOneShot<OptimizationStatusResponse[]>();
 
 export function setPendingCompareDemo(jobs: OptimizationStatusResponse[]): void {
-  pendingCompareDemo = jobs;
+  compareDemoSlot.set(jobs);
 }
 
 export function consumePendingCompareDemo(): OptimizationStatusResponse[] | null {
-  const jobs = pendingCompareDemo;
-  pendingCompareDemo = null;
-  return jobs;
+  return compareDemoSlot.consume();
 }
 
 /**
@@ -183,16 +246,14 @@ export function consumePendingCompareDemo(): OptimizationStatusResponse[] | null
  * through phases via startDemoSimulation), the grid demo is pre-completed:
  * the detail page just renders the job directly.
  */
-let pendingGridDemo: OptimizationStatusResponse | null = null;
+const gridDemoSlot = makeOneShot<OptimizationStatusResponse>();
 
 export function setPendingGridDemo(job: OptimizationStatusResponse): void {
-  pendingGridDemo = job;
+  gridDemoSlot.set(job);
 }
 
 export function consumePendingGridDemo(): OptimizationStatusResponse | null {
-  const job = pendingGridDemo;
-  pendingGridDemo = null;
-  return job;
+  return gridDemoSlot.consume();
 }
 
 /**
@@ -206,14 +267,12 @@ export interface PendingCompareExamples {
   dataset: OptimizationDatasetResponse;
 }
 
-let pendingCompareExamples: PendingCompareExamples | null = null;
+const compareExamplesSlot = makeOneShot<PendingCompareExamples>();
 
 export function setPendingCompareExamples(value: PendingCompareExamples): void {
-  pendingCompareExamples = value;
+  compareExamplesSlot.set(value);
 }
 
 export function consumePendingCompareExamples(): PendingCompareExamples | null {
-  const v = pendingCompareExamples;
-  pendingCompareExamples = null;
-  return v;
+  return compareExamplesSlot.consume();
 }

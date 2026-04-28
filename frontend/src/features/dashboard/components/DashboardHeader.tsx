@@ -1,8 +1,9 @@
 import { Activity, CheckCircle2, Layers, XCircle } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { AnimatedNumber, FadeIn, TiltCard } from "@/shared/ui/motion";
 import { TERMS } from "@/shared/lib/terms";
 import type { DashboardStats } from "../hooks/use-dashboard-stats";
+import { msg } from "@/shared/lib/messages";
 
 type DashboardHeaderProps = {
   stats: DashboardStats;
@@ -14,14 +15,17 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
       <FadeIn>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">לוח בקרה</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {msg("auto.features.dashboard.components.dashboardheader.1")}
+            </h1>
             {stats && (
               <p className="text-sm text-muted-foreground mt-1">
                 {stats.total} {TERMS.optimizationPlural}
                 {stats.running > 0 && (
                   <span className="text-[var(--warning)] font-medium">
                     {" "}
-                    &middot; {stats.running} פעילות
+                    &middot; {stats.running}
+                    {msg("auto.features.dashboard.components.dashboardheader.2")}
                   </span>
                 )}
               </p>
@@ -44,7 +48,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
                     <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                      סה״כ
+                      {msg("auto.features.dashboard.components.dashboardheader.3")}
                     </p>
                     <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums">
                       <AnimatedNumber value={stats.total} />
@@ -69,7 +73,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
                     <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                      פעילות
+                      {msg("auto.features.dashboard.components.dashboardheader.4")}
                     </p>
                     <p
                       className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.running > 0 ? "text-[var(--warning)]" : "text-muted-foreground"}`}
@@ -85,7 +89,9 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                     />
                   </div>
                 </div>
-                <p className="mt-3 text-[0.625rem] text-muted-foreground/50">כרגע רצות</p>
+                <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
+                  {msg("auto.features.dashboard.components.dashboardheader.5")}
+                </p>
               </CardContent>
             </Card>
           </TiltCard>
@@ -96,7 +102,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
                     <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                      הצליחו
+                      {msg("auto.features.dashboard.components.dashboardheader.6")}
                     </p>
                     <p
                       className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.success > 0 ? "text-emerald-700" : "text-muted-foreground"}`}
@@ -137,7 +143,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
                     <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                      נכשלו
+                      {msg("auto.features.dashboard.components.dashboardheader.7")}
                     </p>
                     <p
                       className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.failed > 0 ? "text-red-600" : "text-muted-foreground"}`}

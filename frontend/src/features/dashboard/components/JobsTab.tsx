@@ -1,26 +1,22 @@
 import Link from "next/link";
 import { toast } from "react-toastify";
 import { ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Badge } from "@/shared/ui/primitives/badge";
+import { Button } from "@/shared/ui/primitives/button";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
+import { Table, TableBody, TableCell, TableRow } from "@/shared/ui/primitives/table";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  ColumnHeader,
-  ResetColumnsButton,
-  useColumnResize,
-  type SortDir,
-} from "@/shared/ui/excel-filter";
+} from "@/shared/ui/primitives/tooltip";
+import type { useColumnResize } from "@/shared/ui/excel-filter";
+import { ColumnHeader, ResetColumnsButton, type SortDir } from "@/shared/ui/excel-filter";
 import { formatDate, formatElapsed, formatId, formatRelativeTime } from "@/shared/lib";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { FETCH_PAGE_SIZE } from "../constants";
 import { formatScore, statusBadge, typeBadge } from "../lib/status-badges";
@@ -43,7 +39,7 @@ type JobsTabProps = {
   setColumnFilter: (col: string, values: Set<string>) => void;
   openFilter: string | null;
   setOpenFilter: (col: string | null) => void;
-  filterOptions: Record<string, { value: string; label: string }[]>;
+  filterOptions: Record<string, Array<{ value: string; label: string }>>;
   isAdmin: boolean;
   selectedIds: Set<string>;
   toggleRowSelected: (id: string) => void;
@@ -92,21 +88,23 @@ export function JobsTab({
           {activeCount > 0 && (
             <>
               <Badge variant="secondary" className="text-xs">
-                {activeCount} סינונים פעילים
+                {activeCount}
+                {msg("auto.features.dashboard.components.jobstab.1")}
               </Badge>
               <button
                 type="button"
                 onClick={clearAllFilters}
                 className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                נקה הכל
+                {msg("auto.features.dashboard.components.jobstab.2")}
               </button>
             </>
           )}
           <ResetColumnsButton resize={colResize} />
           {filteredItems.length > 0 && (
             <span className="text-[0.6875rem] text-muted-foreground tabular-nums ms-auto">
-              {filteredItems.length} תוצאות
+              {filteredItems.length}
+              {msg("auto.features.dashboard.components.jobstab.3")}
             </span>
           )}
         </div>
@@ -119,10 +117,18 @@ export function JobsTab({
 
         {!loading && data && filteredItems.length === 0 && data.total === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <p className="text-base font-medium">לא נמצאו {TERMS.optimizationPlural}</p>
+            <p className="text-base font-medium">
+              {msg("auto.features.dashboard.components.jobstab.4")}
+              {TERMS.optimizationPlural}
+            </p>
             <p className="text-sm text-muted-foreground max-w-xs">
-              העלה {TERMS.dataset}, הגדר {TERMS.signature} ו{TERMS.metric}, והמערכת תשפר אותו
-              אוטומטית
+              {msg("auto.features.dashboard.components.jobstab.5")}
+              {TERMS.dataset}
+              {msg("auto.features.dashboard.components.jobstab.6")}
+              {TERMS.signature}
+              {msg("auto.features.dashboard.components.jobstab.7")}
+              {TERMS.metric}
+              {msg("auto.features.dashboard.components.jobstab.8")}
             </p>
             <Button asChild className="group mt-2 gap-2">
               <Link href="/submit">
@@ -141,7 +147,7 @@ export function JobsTab({
                   <th className="w-10 px-3">
                     <input
                       type="checkbox"
-                      aria-label="בחר הכל בעמוד"
+                      aria-label={msg("auto.features.dashboard.components.jobstab.literal.1")}
                       className="size-4 cursor-pointer accent-primary"
                       checked={pageAllSelected}
                       ref={(el) => {
@@ -153,7 +159,9 @@ export function JobsTab({
                     />
                   </th>
                   <ColumnHeader
-                    label={`מזהה ${TERMS.optimization}`}
+                    label={formatMsg("auto.features.dashboard.components.jobstab.template.1", {
+                      p1: TERMS.optimization,
+                    })}
                     sortKey="optimization_id"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -168,7 +176,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="סוג"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.2")}
                     sortKey="optimization_type"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -183,7 +191,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="סטטוס"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.3")}
                     sortKey="status"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -198,7 +206,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="מודול"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.4")}
                     sortKey="module_name"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -228,7 +236,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="שורות"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.5")}
                     sortKey="dataset_rows"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -237,7 +245,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="נוצר"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.6")}
                     sortKey="created_at"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -246,7 +254,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="זמן"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.7")}
                     sortKey="elapsed_seconds"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -255,7 +263,7 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label="ציון"
+                    label={msg("auto.features.dashboard.components.jobstab.literal.8")}
                     sortKey="optimized_test_metric"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -285,7 +293,7 @@ export function JobsTab({
                         if (td === parent?.firstElementChild) return;
                         const text = td.textContent?.trim();
                         if (text) {
-                          navigator.clipboard.writeText(text);
+                          void navigator.clipboard.writeText(text);
                           toast.success(msg("clipboard.copied"));
                         }
                       }}
@@ -294,7 +302,10 @@ export function JobsTab({
                       <TableCell className="w-10 px-3">
                         <input
                           type="checkbox"
-                          aria-label={`בחר ${TERMS.optimization} ${job.optimization_id}`}
+                          aria-label={formatMsg(
+                            "auto.features.dashboard.components.jobstab.template.2",
+                            { p1: TERMS.optimization, p2: job.optimization_id },
+                          )}
                           className="size-4 cursor-pointer accent-primary"
                           checked={isSelected}
                           onClick={(e) => e.stopPropagation()}
@@ -363,12 +374,17 @@ export function JobsTab({
                                   type="button"
                                   onClick={() => onOpenJob(job.optimization_id)}
                                   className="p-1 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-                                  aria-label={`פרטי ${TERMS.optimization}`}
+                                  aria-label={formatMsg(
+                                    "auto.features.dashboard.components.jobstab.template.3",
+                                    { p1: TERMS.optimization },
+                                  )}
                                 >
                                   <ExternalLink className="size-3.5" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="bottom">פרטים</TooltipContent>
+                              <TooltipContent side="bottom">
+                                {msg("auto.features.dashboard.components.jobstab.9")}
+                              </TooltipContent>
                             </UiTooltip>
                           </TooltipProvider>
                           {isAdmin && (
@@ -385,12 +401,17 @@ export function JobsTab({
                                       });
                                     }}
                                     className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all cursor-pointer"
-                                    aria-label={`מחק ${TERMS.optimization}`}
+                                    aria-label={formatMsg(
+                                      "auto.features.dashboard.components.jobstab.template.4",
+                                      { p1: TERMS.optimization },
+                                    )}
                                   >
                                     <Trash2 className="size-3.5" />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent side="bottom">מחיקה</TooltipContent>
+                                <TooltipContent side="bottom">
+                                  {msg("auto.features.dashboard.components.jobstab.10")}
+                                </TooltipContent>
                               </UiTooltip>
                             </TooltipProvider>
                           )}
@@ -414,7 +435,7 @@ export function JobsTab({
               className="gap-1"
             >
               <ChevronRight className="size-3.5" />
-              הקודם
+              {msg("auto.features.dashboard.components.jobstab.11")}
             </Button>
             <span className="text-sm text-muted-foreground tabular-nums px-3 py-1 rounded-md bg-muted/50">
               {Math.floor(pageOffset / FETCH_PAGE_SIZE) + 1} /{" "}
@@ -427,7 +448,7 @@ export function JobsTab({
               onClick={() => setPageOffset(pageOffset + FETCH_PAGE_SIZE)}
               className="gap-1"
             >
-              הבא
+              {msg("auto.features.dashboard.components.jobstab.12")}
               <ChevronLeft className="size-3.5" />
             </Button>
           </div>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
@@ -45,32 +46,78 @@ const FEATURED_TOOLS: readonly string[] = [
 // Tour-oriented descriptions (capabilities, not approval warnings). Fallback
 // to TOOL_META.description when a key is missing.
 const TOUR_DESCRIPTIONS: Record<string, string> = {
-  submit_job_run_post: `מתחיל ריצת ${TERMS.optimization} חדשה מההגדרות הנוכחיות בטופס.`,
-  submit_grid_search_grid_search_post: "מריץ סדרת ניסויים שבודקת שילובי פרמטרים שונים במקביל.",
-  rename_job_optimizations: `משנה את השם המוצג של ${TERMS.optimization} ברשימה.`,
-  clone_job_optimizations: "יוצר עותק אחד או יותר של ריצה קיימת כדי לנסות שוב.",
-  retry_job_optimizations: "מריץ מחדש ריצה שנכשלה או בוטלה עם אותה תצורה.",
-  cancel_job_optimizations: "עוצר ריצה פעילה ושומר את מה שהושג עד הרגע הזה.",
-  delete_job_optimizations: `מסיר ${TERMS.optimization} מהמערכת לצמיתות.`,
-  toggle_pin_job_optimizations: `מצמיד ${TERMS.optimization} לראש הרשימה או משחרר את ההצמדה.`,
-  toggle_archive_job_optimizations: `מעביר ${TERMS.optimization} לארכיון או משחזר ממנו בלי למחוק.`,
-  compare_jobs_optimizations_compare_post: "משווה ציונים של כמה ריצות זו לצד זו בטבלה אחת.",
-  list_jobs_optimizations_get: `שולף את רשימת ה${TERMS.optimizationPlural} כדי להבין את מצב המערכת.`,
-  create_template_templates_post: "שומר את הגדרות הטופס הנוכחיות כתבנית לשימוש חוזר.",
-  apply_template_templates: "טוען תבנית שמורה לטופס כבסיס לריצה חדשה.",
-  edit_code_optimizations_edit_code_post: `עורך קוד של ${TERMS.signature} או ${TERMS.metric} לאחר בדיקת תקינות.`,
-  validate_code_validate_code_post: "בודק תחביר של קוד Python בלי להריץ אותו בפועל.",
-  profile_datasets_profile_post: `מנתח ${TERMS.dataset} כדי לזהות עמודות, סוגים ודוגמאות.`,
-  stage_sample_dataset_datasets_samples: `טוען ${TERMS.dataset} דוגמה ישירות לטופס, בלי העלאת קובץ.`,
-  set_column_roles_datasets_column_roles_post: "מגדיר אילו עמודות הן קלט ואילו פלט לפי ההקשר.",
-  discover_models_models_discover_post: "מחפש מודלי LLM זמינים מהספקים שחיברת למערכת.",
-  serve_program_serve: `מעלה ${TERMS.optimization} מוצלחת כ־API חי זמין לקריאות חיצוניות.`,
+  submit_job_run_post: formatMsg("auto.features.agent.panel.components.toolscarousel.template.1", {
+    p1: TERMS.optimization,
+  }),
+  submit_grid_search_grid_search_post: msg(
+    "auto.features.agent.panel.components.toolscarousel.literal.1",
+  ),
+  rename_job_optimizations: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.2",
+    { p1: TERMS.optimization },
+  ),
+  clone_job_optimizations: msg("auto.features.agent.panel.components.toolscarousel.literal.2"),
+  retry_job_optimizations: msg("auto.features.agent.panel.components.toolscarousel.literal.3"),
+  cancel_job_optimizations: msg("auto.features.agent.panel.components.toolscarousel.literal.4"),
+  delete_job_optimizations: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.3",
+    { p1: TERMS.optimization },
+  ),
+  toggle_pin_job_optimizations: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.4",
+    { p1: TERMS.optimization },
+  ),
+  toggle_archive_job_optimizations: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.5",
+    { p1: TERMS.optimization },
+  ),
+  compare_jobs_optimizations_compare_post: msg(
+    "auto.features.agent.panel.components.toolscarousel.literal.5",
+  ),
+  list_jobs_optimizations_get: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.6",
+    { p1: TERMS.optimizationPlural },
+  ),
+  create_template_templates_post: msg(
+    "auto.features.agent.panel.components.toolscarousel.literal.6",
+  ),
+  apply_template_templates: msg("auto.features.agent.panel.components.toolscarousel.literal.7"),
+  edit_code_optimizations_edit_code_post: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.7",
+    { p1: TERMS.signature, p2: TERMS.metric },
+  ),
+  validate_code_validate_code_post: msg(
+    "auto.features.agent.panel.components.toolscarousel.literal.8",
+  ),
+  profile_datasets_profile_post: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.8",
+    { p1: TERMS.dataset },
+  ),
+  stage_sample_dataset_datasets_samples: formatMsg(
+    "auto.features.agent.panel.components.toolscarousel.template.9",
+    { p1: TERMS.dataset },
+  ),
+  set_column_roles_datasets_column_roles_post: msg(
+    "auto.features.agent.panel.components.toolscarousel.literal.9",
+  ),
+  discover_models_models_discover_post: msg(
+    "auto.features.agent.panel.components.toolscarousel.literal.10",
+  ),
+  serve_program_serve: formatMsg("auto.features.agent.panel.components.toolscarousel.template.10", {
+    p1: TERMS.optimization,
+  }),
 };
 
 const SEVERITY: Record<ApprovalSeverity, { color: string; label: string | null }> = {
-  destructive: { color: "#9B2C1F", label: "בלתי הפיך" },
+  destructive: {
+    color: "#9B2C1F",
+    label: msg("auto.features.agent.panel.components.toolscarousel.literal.11"),
+  },
   warning: { color: "#A85A1A", label: null },
-  info: { color: "#3D2E22", label: "בטוח" },
+  info: {
+    color: "#3D2E22",
+    label: msg("auto.features.agent.panel.components.toolscarousel.literal.12"),
+  },
 };
 
 export function ToolsCarousel() {
@@ -120,15 +167,17 @@ export function ToolsCarousel() {
 
   return (
     <div
-      className="w-[300px] p-3 select-none outline-none focus:outline-none focus-visible:outline-none"
+      className="w-[min(300px,calc(100vw-2rem))] p-3 select-none outline-none focus:outline-none focus-visible:outline-none"
       dir="rtl"
       role="region"
-      aria-label="הכלים של הסוכן"
+      aria-label={msg("auto.features.agent.panel.components.toolscarousel.literal.13")}
       tabIndex={0}
       onKeyDown={onKey}
     >
       <div className="mb-2.5 flex items-baseline justify-between gap-2">
-        <span className="text-[0.8125rem] font-medium text-foreground">מה אני יודע לעשות</span>
+        <span className="text-[0.8125rem] font-medium text-foreground">
+          {msg("auto.features.agent.panel.components.toolscarousel.1")}
+        </span>
         <span className="font-mono tabular-nums text-[0.625rem] text-muted-foreground/70">
           {idx + 1} / {tools.length}
         </span>
@@ -167,7 +216,10 @@ export function ToolsCarousel() {
             key={t.key}
             type="button"
             onClick={() => go(i)}
-            aria-label={`${i + 1} מתוך ${tools.length}`}
+            aria-label={formatMsg(
+              "auto.features.agent.panel.components.toolscarousel.template.11",
+              { p1: i + 1, p2: tools.length },
+            )}
             aria-current={i === idx ? "true" : undefined}
             className={cn(
               "h-1.5 rounded-full transition-all duration-200 cursor-pointer",
@@ -239,7 +291,10 @@ function NavButton({
   // In RTL reading flow: "prev" = step backwards = rightward chevron;
   // "next" = step forwards = leftward chevron.
   const Icon = direction === "prev" ? ChevronRight : ChevronLeft;
-  const label = direction === "prev" ? "הקודם" : "הבא";
+  const label =
+    direction === "prev"
+      ? msg("auto.features.agent.panel.components.toolscarousel.literal.14")
+      : msg("auto.features.agent.panel.components.toolscarousel.literal.15");
   return (
     <button
       type="button"

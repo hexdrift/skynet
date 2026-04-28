@@ -3,9 +3,10 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { TERMS } from "@/shared/lib/terms";
 
+import { formatMsg } from "@/shared/lib/messages";
 export const metadata: Metadata = {
   title: "Compare",
-  description: `השוואת תוצאות בין שתי ${TERMS.optimizationPlural}`,
+  description: formatMsg("auto.app.compare.layout.template.1", { p1: TERMS.optimizationPlural }),
 };
 
 export default function CompareLayout({ children }: { children: React.ReactNode }) {

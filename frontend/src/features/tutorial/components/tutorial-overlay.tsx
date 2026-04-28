@@ -2,18 +2,26 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTutorialContext } from "./tutorial-provider";
-import { getTrack } from "@/features/tutorial/lib/steps";
+import { getTrack } from "../lib/steps";
 import { SpotlightMask } from "./spotlight-mask";
 import { TutorialPopover } from "./tutorial-popover";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
-import { isTutorialNavigating, registerTutorialHook } from "@/features/tutorial/lib/bridge";
+import { isTutorialNavigating, registerTutorialHook } from "../lib/bridge";
 
 export function TutorialOverlay() {
-  const { state, currentStep, nextStep, prevStep, exitTutorial, completeTrack, toggleAutoPlay } =
-    useTutorialContext();
+  const {
+    state,
+    currentStep,
+    nextStep,
+    prevStep,
+    exitTutorial,
+    completeTrack,
+    toggleAutoPlay,
+  } = useTutorialContext();
+  const pathname = usePathname();
 
   const [targetRect, setTargetRect] = React.useState<DOMRect | null>(null);
   const [popoverPosition, setPopoverPosition] = React.useState<{
@@ -23,6 +31,7 @@ export function TutorialOverlay() {
   } | null>(null);
   const [showSplash, setShowSplash] = React.useState(false);
   const [stepReady, setStepReady] = React.useState(false);
+  const stepPathRef = React.useRef<string | null>(null);
   const router = useRouter();
 
   // Register splash trigger + client-side navigation with the typed
@@ -43,14 +52,15 @@ export function TutorialOverlay() {
   const targetRef = React.useRef<Element | null>(null);
   const rafRef = React.useRef<number>(0);
   const lastRectRef = React.useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const autoPlayTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const calculatePosition = React.useCallback(
     (rect: DOMRect, placement: "top" | "bottom" | "left" | "right" | "auto") => {
-      const pw = 360;
-      const ph = 260;
-      const gap = 16;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      const pw = Math.min(360, vw * 0.9 - 16);
+      const ph = 260;
+      const gap = 16;
 
       let p = placement;
       if (p === "auto") {
@@ -132,6 +142,7 @@ export function TutorialOverlay() {
     if (!state.isVisible || !currentStep) return;
     setStepReady(false);
     lastRectRef.current = null;
+    stepPathRef.current = null;
 
     let cancelled = false;
     const init = async () => {
@@ -140,33 +151,100 @@ export function TutorialOverlay() {
       }
       if (cancelled) return;
 
-      // Scroll target into view only if off-screen
-      const el = document.querySelector(currentStep.target);
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const offScreen = rect.top < 0 || rect.bottom > window.innerHeight;
-        if (offScreen) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-          await new Promise((r) => setTimeout(r, 250));
+      // Wait for the target to mount (handles route transitions and
+      // late-mounting React subtrees). If still missing, skip the step so a
+      // broken anchor never stalls the tour. Window must exceed the longest
+      // beforeShow waitForElement so steps that navigate to a slow-mounting
+      // route (e.g. /compare with demo data, /optimizations/[id]) aren't
+      // auto-skipped while their anchor is still hydrating.
+      let el = document.querySelector(currentStep.target);
+      if (!el) {
+        const start = Date.now();
+        while (!el && Date.now() - start < 5000) {
+          await new Promise((r) => requestAnimationFrame(r));
           if (cancelled) return;
+          el = document.querySelector(currentStep.target);
         }
+      }
+      if (!el) {
+        // Skip in the SAME direction the user was navigating. Without this,
+        // Backspace on a step whose anchor is gone (e.g. wizard remounted)
+        // calls nextStep() and races toward COMPLETE_TRACK at the last step,
+        // closing the tutorial instead of stepping back to a working anchor.
+        const goingBack = state.lastDirection === "backward";
+        console.warn(
+          `[tutorial] step "${currentStep.id}" target not found: ${currentStep.target} — skipping ${goingBack ? "backward" : "forward"}`,
+        );
+        if (goingBack) prevStep();
+        else nextStep();
+        return;
+      }
+
+      // Scroll target into view only if off-screen
+      const rect = el.getBoundingClientRect();
+      const offScreen = rect.top < 0 || rect.bottom > window.innerHeight;
+      if (offScreen) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        await new Promise((r) => setTimeout(r, 250));
+        if (cancelled) return;
       }
       // Seed positions immediately so the popover mounts at the right spot.
       updatePositions();
       // Start rAF tracking — handles resize, scroll, layout shifts
       rafRef.current = requestAnimationFrame(trackPosition);
+      stepPathRef.current = window.location.pathname;
       setStepReady(true);
     };
 
-    init();
+    void init();
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafRef.current);
+      // Best-effort per-step cleanup. Closure captures the OLD step, which
+      // is what we want — clean up the step we're leaving before the next
+      // one's beforeShow runs. Fire-and-forget; UI undo doesn't need await.
+      if (currentStep.afterHide) {
+        void currentStep.afterHide();
+      }
     };
-  }, [state.isVisible, currentStep, trackPosition, updatePositions]);
+  }, [
+    state.isVisible,
+    state.lastDirection,
+    currentStep,
+    trackPosition,
+    updatePositions,
+    nextStep,
+    prevStep,
+  ]);
+
+  // Detect manual navigation away from the active step's expected route
+  // and exit the tour — the spotlight would otherwise point at a missing
+  // element. The user's intentional navigation stands; we don't bounce
+  // them back.
+  React.useEffect(() => {
+    if (!state.isVisible || !stepReady) return;
+    if (!stepPathRef.current) return;
+    // Compare against window.location.pathname (truth) instead of pathname
+    // (React state from usePathname). The React value can lag behind during
+    // route transitions, causing a transient mismatch with stepPathRef
+    // (which init() sets from window.location.pathname). pathname stays in
+    // deps so the effect still re-runs on every navigation.
+    if (window.location.pathname !== stepPathRef.current) {
+      exitTutorial();
+    }
+  }, [pathname, state.isVisible, stepReady, exitTutorial]);
 
   React.useEffect(() => {
+    // Clear any pending timer before deciding whether to arm a new one.
+    // The ref makes the "at most one autoplay timer alive" invariant
+    // explicit and survives PREV/NEXT/pause races where two effect runs
+    // could otherwise overlap if beforeShow resolves slowly.
+    if (autoPlayTimerRef.current) {
+      clearTimeout(autoPlayTimerRef.current);
+      autoPlayTimerRef.current = null;
+    }
+
     if (!stepReady || !state.isAutoPlaying || !currentStep) return;
     const track = state.activeTrack ? getTrack(state.activeTrack) : null;
     if (!track) return;
@@ -174,12 +252,18 @@ export function TutorialOverlay() {
     const isLast = state.currentStepIndex >= track.steps.length - 1;
     const duration = (currentStep.readingTimeSec ?? 10) * 1000;
 
-    const timer = setTimeout(() => {
+    autoPlayTimerRef.current = setTimeout(() => {
+      autoPlayTimerRef.current = null;
       if (isLast) completeTrack();
       else nextStep();
     }, duration);
 
-    return () => clearTimeout(timer);
+    return () => {
+      if (autoPlayTimerRef.current) {
+        clearTimeout(autoPlayTimerRef.current);
+        autoPlayTimerRef.current = null;
+      }
+    };
   }, [
     stepReady,
     state.isAutoPlaying,
@@ -205,6 +289,11 @@ export function TutorialOverlay() {
     if (!state.isVisible) return;
 
     const onKey = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null;
+      const tgtDesc = tgt
+        ? `${tgt.tagName}${tgt.id ? `#${tgt.id}` : ""}.${(tgt.className || "").toString().slice(0, 30)}`
+        : "?";
+      console.warn(`[tut-key] ${e.key} target=${tgtDesc} default=${e.defaultPrevented}`);
       if (e.key === "Enter" || e.key === "ArrowLeft") {
         e.preventDefault();
         nextStep();

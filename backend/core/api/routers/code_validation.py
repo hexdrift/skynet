@@ -6,42 +6,55 @@ DSPy signature and metric code before a job is enqueued.
 
 from __future__ import annotations
 
-import inspect
-import os
 import subprocess
 import tempfile
+from pathlib import Path
 
-import dspy
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ...models import ValidateCodeRequest, ValidateCodeResponse
 from ...service_gateway import ServiceError
-from ...service_gateway.data import (
-    extract_signature_fields,
-    load_metric_from_code,
-    load_signature_from_code,
+from ...service_gateway.safe_exec import (
+    probe_metric_on_sample,
+    validate_metric_code,
+    validate_signature_code,
 )
 from ..response_limits import AGENT_MAX_ERROR, truncate_text
 
 
 def _bounded_error(message: str) -> str:
-    """Truncate an exception / traceback string to a context-safe length."""
+    """Truncate an exception / traceback string to a context-safe length.
+
+    Args:
+        message: The raw error message or traceback.
+
+    Returns:
+        The truncated message, never longer than :data:`AGENT_MAX_ERROR`.
+    """
     return truncate_text(message, AGENT_MAX_ERROR) or message
 
 
 class FormatCodeRequest(BaseModel):
+    """Request body for ``POST /format-code`` — a raw Python snippet to reformat."""
+
     code: str
 
 
 class FormatCodeResponse(BaseModel):
+    """Response body for ``POST /format-code``: reformatted code plus diff / error flags."""
+
     code: str
     changed: bool
     error: str | None = None
 
 
 def create_code_validation_router() -> APIRouter:
-    """Build the code-validation router."""
+    """Build the code-validation router.
+
+    Returns:
+        A configured :class:`APIRouter` exposing ``/format-code`` and ``/validate-code``.
+    """
     router = APIRouter()
 
     @router.post(
@@ -55,11 +68,11 @@ def create_code_validation_router() -> APIRouter:
         Never raises 5xx — any formatting error is returned in the ``error`` field.
 
         Args:
-            payload: Request body containing the Python code snippet to format.
+            payload: Request body containing the raw Python snippet.
 
         Returns:
-            FormatCodeResponse with the (possibly reformatted) code, a changed
-            flag, and an optional error message.
+            A :class:`FormatCodeResponse` with the (possibly reformatted) code,
+            a ``changed`` flag, and any error message.
         """
         try:
             with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -71,18 +84,19 @@ def create_code_validation_router() -> APIRouter:
                 capture_output=True,
                 text=True,
                 timeout=5,
+                check=False,
             )
             if result.returncode != 0:
                 return FormatCodeResponse(code=payload.code, changed=False, error=result.stderr.strip())
-            with open(tmp_path) as f:
-                formatted = f.read()
-            os.unlink(tmp_path)
+            tmp = Path(tmp_path)
+            formatted = tmp.read_text()
+            tmp.unlink()
             return FormatCodeResponse(code=formatted, changed=formatted != payload.code)
         except FileNotFoundError:
             return FormatCodeResponse(code=payload.code, changed=False, error="ruff is not installed on the server")
         except subprocess.TimeoutExpired:
             return FormatCodeResponse(code=payload.code, changed=False, error="Formatting timed out")
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             return FormatCodeResponse(code=payload.code, changed=False, error=str(exc))
 
     @router.post(
@@ -100,27 +114,32 @@ def create_code_validation_router() -> APIRouter:
         submission.
 
         Args:
-            payload: Validation request containing signature code, metric code,
-                column mapping, and an optional sample row.
+            payload: Validation request containing signature/metric code,
+                column mapping, optimizer name, and an optional sample row.
 
         Returns:
-            ValidateCodeResponse indicating validity, detected signature fields,
-            any blocking errors, and non-blocking warnings.
+            A :class:`ValidateCodeResponse` with ``valid``, signature fields,
+            and the populated ``errors`` and ``warnings`` lists.
         """
         errors: list[str] = []
         warnings: list[str] = []
         sig_fields: dict[str, list[str]] | None = None
+        image_input_fields: list[str] = []
 
         if not payload.signature_code and not payload.metric_code:
             errors.append("Provide signature_code and/or metric_code to validate.")
 
         if payload.signature_code:
             try:
-                signature_cls = load_signature_from_code(payload.signature_code)
-                inputs, outputs = extract_signature_fields(signature_cls)
-                sig_fields = {"inputs": inputs, "outputs": outputs}
+                intro = validate_signature_code(payload.signature_code)
+                sig_fields = {
+                    "inputs": intro.input_fields,
+                    "outputs": intro.output_fields,
+                }
+                image_input_fields = list(intro.image_input_fields)
             except ServiceError as exc:
                 errors.append(_bounded_error(str(exc)))
+            # Catch-all: user code may raise arbitrary exceptions; surface as validation error.
             except Exception as exc:
                 errors.append(_bounded_error(f"Signature error: {exc}"))
 
@@ -144,42 +163,52 @@ def create_code_validation_router() -> APIRouter:
                 if extra_outputs:
                     warnings.append(f"Output columns not in Signature (will be ignored): {sorted(extra_outputs)}")
 
-        metric_fn = None
+        metric_ok = False
         metric_errors_before = len(errors)
         if payload.metric_code:
             try:
-                metric_fn = load_metric_from_code(payload.metric_code)
+                metric_info = validate_metric_code(payload.metric_code)
+                metric_ok = True
             except ServiceError as exc:
                 errors.append(_bounded_error(str(exc)))
+            # Catch-all: user code may raise arbitrary exceptions; surface as validation error.
             except Exception as exc:
                 errors.append(_bounded_error(f"Metric error: {exc}"))
 
-            if metric_fn and payload.optimizer_name == "gepa":
-                sig = inspect.signature(metric_fn)
-                params = list(sig.parameters.values())
-                if len(params) < 5:
-                    param_names = [p.name for p in params]
+            if metric_ok and payload.optimizer_name == "gepa":
+                param_names = metric_info.param_names
+                if len(param_names) < 5:
                     errors.append(
                         f"GEPA metric must accept 5 arguments: (gold, pred, trace, pred_name, pred_trace). "
-                        f"Found {len(params)}: ({', '.join(param_names)}). "
+                        f"Found {len(param_names)}: ({', '.join(param_names)}). "
                         f"See https://dspy.ai/api/optimizers/GEPA for details."
                     )
 
             metric_has_errors = len(errors) > metric_errors_before
-            if metric_fn and payload.sample_row and not metric_has_errors:
+            if metric_ok and payload.sample_row and not metric_has_errors:
+                mapping = payload.column_mapping
+                ex_data: dict = {}
+                for sig_field, col_name in mapping.inputs.items():
+                    ex_data[sig_field] = payload.sample_row.get(col_name, "")
+                for sig_field, col_name in mapping.outputs.items():
+                    ex_data[sig_field] = payload.sample_row.get(col_name, "")
                 try:
-                    mapping = payload.column_mapping
-                    ex_data: dict = {}
-                    for sig_field, col_name in mapping.inputs.items():
-                        ex_data[sig_field] = payload.sample_row.get(col_name, "")
-                    for sig_field, col_name in mapping.outputs.items():
-                        ex_data[sig_field] = payload.sample_row.get(col_name, "")
-                    example = dspy.Example(**ex_data).with_inputs(*mapping.inputs.keys())
-                    pred = dspy.Prediction(**ex_data)
-
-                    result = metric_fn(example, pred, trace=None)
+                    probe = probe_metric_on_sample(
+                        metric_code=payload.metric_code,
+                        example_payload=ex_data,
+                        prediction_payload=ex_data,
+                        input_field_names=list(mapping.inputs.keys()),
+                        image_input_fields=image_input_fields,
+                    )
+                except ServiceError as exc:
+                    errors.append(_bounded_error(str(exc)))
+                except Exception as exc:  # Catch-all: subprocess / dspy setup failure.
+                    errors.append(_bounded_error(f"Error running metric on sample row: {exc}"))
+                else:
                     is_gepa = payload.optimizer_name == "gepa"
-                    if result is None:
+                    if probe.error is not None:
+                        errors.append(_bounded_error(f"Error running metric on sample row: {probe.error}"))
+                    elif probe.result_kind == "none":
                         errors.append(
                             "Metric returned None. "
                             + (
@@ -188,12 +217,13 @@ def create_code_validation_router() -> APIRouter:
                                 else "Expected a numeric (float) or boolean return value."
                             )
                         )
-                    elif isinstance(result, dspy.Prediction) and hasattr(result, "score"):
+                    elif probe.result_kind == "prediction":
                         if not is_gepa:
                             errors.append(
-                                "Metric returns dspy.Prediction but the selected optimizer requires a numeric (float/bool) return value."
+                                "Metric returns dspy.Prediction but the selected optimizer "
+                                "requires a numeric (float/bool) return value."
                             )
-                    elif isinstance(result, (int, float, bool)):
+                    elif probe.result_kind == "numeric":
                         if is_gepa:
                             errors.append(
                                 "GEPA requires the metric to return dspy.Prediction(score=..., feedback=...), "
@@ -201,15 +231,13 @@ def create_code_validation_router() -> APIRouter:
                             )
                     else:
                         errors.append(
-                            f"Metric returned {type(result).__name__}. "
+                            f"Metric returned {probe.result_type_name}. "
                             + (
                                 "GEPA requires dspy.Prediction with score and feedback fields."
                                 if is_gepa
                                 else "Expected a numeric (float) or boolean return value."
                             )
                         )
-                except Exception as exc:
-                    errors.append(_bounded_error(f"Error running metric on sample row: {exc}"))
 
         return ValidateCodeResponse(
             valid=len(errors) == 0,

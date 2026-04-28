@@ -3,9 +3,10 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { Sparkles, Check } from "lucide-react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import { Label } from "@/shared/ui/primitives/label";
+import { Separator } from "@/shared/ui/primitives/separator";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import { cn } from "@/shared/lib/utils";
@@ -52,8 +53,10 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
 
   const disabledReason = !hasContext
     ? parsedDataset
-      ? "הגדר תפקידי עמודות תחילה (קלט ופלט)"
-      : `העלה ${TERMS.dataset} תחילה`
+      ? msg("auto.features.submit.components.steps.codestep.literal.1")
+      : formatMsg("auto.features.submit.components.steps.codestep.template.1", {
+          p1: TERMS.dataset,
+        })
     : undefined;
 
   return (
@@ -86,11 +89,16 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
                 <HelpTip
                   text={
                     codeAssistMode === "auto"
-                      ? `הסוכן כתב את הקוד לפי ה${TERMS.dataset} שלך. אפשר לבקש שינוי בצ'אט או לעבור למצב ידני.`
-                      : `הגדר את ה${TERMS.signature} של המשימה ו${TERMS.metric} באופן ידני.`
+                      ? formatMsg("auto.features.submit.components.steps.codestep.template.2", {
+                          p1: TERMS.dataset,
+                        })
+                      : formatMsg("auto.features.submit.components.steps.codestep.template.3", {
+                          p1: TERMS.signature,
+                          p2: TERMS.metric,
+                        })
                   }
                 >
-                  קוד
+                  {msg("auto.features.submit.components.steps.codestep.1")}
                 </HelpTip>
               </h3>
             </div>
@@ -104,7 +112,9 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <HelpTip text={tip("code.signature")}>Signature</HelpTip>
+                    <HelpTip text={tip("code.signature")}>
+                      {msg("auto.features.submit.components.steps.codestep.2")}
+                    </HelpTip>
                   </Label>
                   <div className="flex items-center gap-2">
                     {codeAssistMode === "auto" && (
@@ -139,7 +149,9 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <HelpTip text={tip("code.metric")}>Metric</HelpTip>
+                    <HelpTip text={tip("code.metric")}>
+                      {msg("auto.features.submit.components.steps.codestep.3")}
+                    </HelpTip>
                   </Label>
                   <div className="flex items-center gap-2">
                     {codeAssistMode === "auto" && (
@@ -177,7 +189,7 @@ function ArtifactStatusChip({ status }: { status: ArtifactStatus }) {
   if (status === "waiting") {
     return (
       <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium text-muted-foreground/70">
-        ממתין
+        {msg("auto.features.submit.components.steps.codestep.4")}
         <span className="size-1.5 rounded-full bg-muted-foreground/40" />
       </span>
     );
@@ -185,14 +197,14 @@ function ArtifactStatusChip({ status }: { status: ArtifactStatus }) {
   if (status === "writing") {
     return (
       <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium text-[#3D2E22]">
-        כותב…
+        {msg("auto.features.submit.components.steps.codestep.5")}
         <span className="size-1.5 rounded-full bg-[#3D2E22] animate-pulse" />
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium text-[#5A7247]">
-      הושלם
+      {msg("auto.features.submit.components.steps.codestep.6")}
       <Check className="size-3" />
     </span>
   );
@@ -212,7 +224,11 @@ function ModeToggle({ value, onChange, disabledReason }: ModeToggleProps) {
       <div className="flex items-center gap-1.5 text-xs text-[#5C4D40]">
         <Sparkles className="h-3.5 w-3.5 text-[#3D2E22]" />
         <span className="font-medium">
-          {value === "auto" ? `הסוכן יכתוב את הקוד לפי ה${TERMS.dataset} שלך` : "כתיבת הקוד ידנית"}
+          {value === "auto"
+            ? formatMsg("auto.features.submit.components.steps.codestep.template.4", {
+                p1: TERMS.dataset,
+              })
+            : msg("auto.features.submit.components.steps.codestep.literal.2")}
         </span>
       </div>
 
@@ -234,7 +250,7 @@ function ModeToggle({ value, onChange, disabledReason }: ModeToggleProps) {
             autoDisabled && "opacity-40 cursor-not-allowed hover:text-muted-foreground",
           )}
         >
-          אוטומטי
+          {msg("auto.features.submit.components.steps.codestep.7")}
         </button>
         <button
           type="button"
@@ -245,7 +261,7 @@ function ModeToggle({ value, onChange, disabledReason }: ModeToggleProps) {
             value === "manual" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          ידני
+          {msg("auto.features.submit.components.steps.codestep.8")}
         </button>
       </div>
     </div>

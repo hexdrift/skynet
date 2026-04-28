@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { Loader2, Zap, FlaskConical } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
   ColumnHeader,
   useColumnFilters,
@@ -13,19 +13,18 @@ import {
   type SortDir,
 } from "@/shared/ui/excel-filter";
 import { Skeleton } from "boneyard-js/react";
-import { dataTabBones } from "@/features/optimizations/lib/data-tab-bones";
+import { dataTabBones } from "../lib/data-tab-bones";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/shared/lib/api";
 import type {
   OptimizationDatasetResponse,
-  DatasetRow,
   OptimizationStatusResponse,
   EvalExampleResult,
 } from "@/shared/types/api";
-import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial/lib/demo-data";
+import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial";
 
 type Split = "all" | "train" | "val" | "test";
 type ProgramType = "optimized" | "baseline";
@@ -158,7 +157,7 @@ export function DataTab({
     }
     getOptimizationDataset(job.optimization_id)
       .then(setDataset)
-      .catch(() => setError("שגיאה בטעינת הנתונים"))
+      .catch(() => setError(msg("auto.features.optimizations.components.datatab.literal.1")))
       .finally(() => setLoading(false));
   }, [job.optimization_id, isDemoMode]);
 
@@ -223,20 +222,18 @@ export function DataTab({
   }, [rows, colFilters.filters, sortKey, sortDir]);
 
   const filterOptions = useMemo(() => {
-    const opts: Record<string, { value: string; label: string }[]> = {};
+    const opts: Record<string, Array<{ value: string; label: string }>> = {};
     for (const col of allColumns) {
       const vals = [...new Set(rows.map((r) => String(r.row[col] ?? "")))].filter(Boolean).sort();
       opts[col] = vals.map((v) => ({
         value: v,
-        label: v.length > 40 ? v.slice(0, 40) + "..." : v,
+        label: v.length > 40 ? `${v.slice(0, 40)}...` : v,
       }));
     }
     return opts;
   }, [rows, allColumns]);
 
   const evalCount = Object.keys(currentResults).length;
-  const passCount = Object.values(currentResults).filter((r) => r.pass).length;
-  const failCount = evalCount - passCount;
   const testTotal = dataset?.split_counts.test ?? 0;
   const scores = Object.values(currentResults).map((r) => r.score);
   const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
@@ -272,7 +269,9 @@ export function DataTab({
     );
   if (error || !dataset)
     return (
-      <div className="text-sm text-destructive text-center py-16">{error ?? "אין נתונים"}</div>
+      <div className="text-sm text-destructive text-center py-16">
+        {error ?? msg("auto.features.optimizations.components.datatab.literal.2")}
+      </div>
     );
 
   return (
@@ -289,14 +288,20 @@ export function DataTab({
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-[#3D2E22]">
                   <HelpTip text={tip("code.predictions_table")}>
-                    הערכת סט הבדיקה
+                    {msg("auto.features.optimizations.components.datatab.1")}
                   </HelpTip>
                 </div>
                 <div className="text-[0.6875rem] text-[#8C7A6B] mt-0.5">
                   {testResultsLoading
-                    ? "טוען תוצאות..."
+                    ? msg("auto.features.optimizations.components.datatab.literal.3")
                     : evalCount > 0
-                      ? `${evalCount}/${testTotal} דוגמאות · ממוצע ${avgScore.toFixed(2)} · טווח ${minScore.toFixed(2)}–${maxScore.toFixed(2)}`
+                      ? formatMsg("auto.features.optimizations.components.datatab.template.1", {
+                          p1: evalCount,
+                          p2: testTotal,
+                          p3: avgScore.toFixed(2),
+                          p4: minScore.toFixed(2),
+                          p5: maxScore.toFixed(2),
+                        })
                       : ""}
                 </div>
               </div>
@@ -312,13 +317,15 @@ export function DataTab({
                   onClick={() => setProgramType("baseline")}
                   className={`relative z-10 flex items-center gap-1.5 rounded-md px-3 py-1.5 cursor-pointer transition-colors duration-150 ${programType === "baseline" ? "text-[#FAF8F5] font-semibold" : "text-[#8C7A6B] hover:text-[#3D2E22]"}`}
                 >
-                  <FlaskConical className="size-3" /> בסיס
+                  <FlaskConical className="size-3" />
+                  {msg("auto.features.optimizations.components.datatab.2")}
                 </button>
                 <button
                   onClick={() => setProgramType("optimized")}
                   className={`relative z-10 flex items-center gap-1.5 rounded-md px-3 py-1.5 cursor-pointer transition-colors duration-150 ${programType === "optimized" ? "text-[#FAF8F5] font-semibold" : "text-[#8C7A6B] hover:text-[#3D2E22]"}`}
                 >
-                  <Zap className="size-3" /> מאומנת
+                  <Zap className="size-3" />
+                  {msg("auto.features.optimizations.components.datatab.3")}
                 </button>
               </div>
               {testResultsLoading && (
@@ -336,15 +343,14 @@ export function DataTab({
         </FadeIn>
       )}
 
-      {/* Toolbar */}
       <FadeIn delay={0.3}>
         <div className="flex items-center gap-3 flex-wrap">
           {(() => {
-            const splits: [Split, string][] = [
-              ["all", "הכל"],
-              ["train", "אימון"],
-              ["val", "אימות"],
-              ["test", "בדיקה"],
+            const splits: Array<[Split, string]> = [
+              ["all", msg("auto.features.optimizations.components.datatab.literal.4")],
+              ["train", msg("auto.features.optimizations.components.datatab.literal.5")],
+              ["val", msg("auto.features.optimizations.components.datatab.literal.6")],
+              ["test", msg("auto.features.optimizations.components.datatab.literal.7")],
             ];
             const idx = splits.findIndex(([s]) => s === split);
             const count = splits.length;
@@ -374,15 +380,17 @@ export function DataTab({
           })()}
           <ResetColumnsButton resize={colResize} />
           <div className="text-[0.625rem] text-muted-foreground tabular-nums ms-auto">
-            {filtered.length} שורות
+            {filtered.length}
+            {msg("auto.features.optimizations.components.datatab.4")}
           </div>
         </div>
       </FadeIn>
 
-      {/* Data table */}
       <FadeIn delay={0.35}>
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">אין תוצאות</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            {msg("auto.features.optimizations.components.datatab.5")}
+          </p>
         ) : (
           <Card data-tutorial="data-table">
             <CardContent className="p-0">
@@ -392,7 +400,7 @@ export function DataTab({
                     <TableRow>
                       {split === "test" && evalCount > 0 && (
                         <ColumnHeader
-                          label="ציון"
+                          label={msg("auto.features.optimizations.components.datatab.literal.8")}
                           sortKey="_score"
                           currentSort={sortKey}
                           sortDir={sortDir}
@@ -465,7 +473,7 @@ export function DataTab({
                             if (!td || td === td.parentElement?.lastElementChild) return;
                             const text = td.textContent?.trim();
                             if (text) {
-                              navigator.clipboard.writeText(text);
+                              void navigator.clipboard.writeText(text);
                               toast.success(msg("clipboard.copied"));
                             }
                           }}
@@ -570,7 +578,9 @@ export function DataTab({
                           colSpan={99}
                           className="text-center py-3 text-[0.625rem] text-muted-foreground"
                         >
-                          מוצגות 200 מתוך {filtered.length} שורות
+                          {msg("auto.features.optimizations.components.datatab.6")}
+                          {filtered.length}
+                          {msg("auto.features.optimizations.components.datatab.7")}
                         </td>
                       </tr>
                     </tfoot>

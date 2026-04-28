@@ -5,9 +5,7 @@ import type { QueueStatusResponse } from "@/shared/types/api";
 const POLL_INTERVAL_MS = 30_000;
 
 export function useQueueStatus(): QueueStatusResponse | null {
-  const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(
-    null,
-  );
+  const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(null);
 
   useEffect(() => {
     const load = () => {

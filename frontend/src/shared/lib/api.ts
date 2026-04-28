@@ -1,18 +1,28 @@
 import type {
-  RunRequest,
-  GridSearchRequest,
+  ColumnMapping,
+  EvalExampleResult,
   GridSearchResult,
+  GridSearchRequest,
+  OptimizationDatasetResponse,
+  OptimizationPayloadResponse,
   OptimizationSubmissionResponse,
   OptimizationStatusResponse,
   PaginatedJobsResponse,
-  OptimizationPayloadResponse,
+  ProfileDatasetRequest,
+  ProfileDatasetResponse,
+  QueueStatusResponse,
+  RunRequest,
   ServeInfoResponse,
   ServeResponse,
+  TemplateResponse,
+  ValidateCodeResponse,
 } from "@/shared/types/api";
+import { formatMsg, msg } from "@/shared/lib/messages";
+import { tI18n } from "@/shared/lib/i18n";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = getRuntimeEnv().apiUrl;
 
-/* ── HTTPS enforcement for production ── */
 if (
   typeof window !== "undefined" &&
   process.env.NODE_ENV === "production" &&
@@ -22,11 +32,10 @@ if (
 ) {
   console.error(
     "[Skynet] Production API URL uses HTTP — API keys and tokens will be transmitted in plaintext. " +
-      "Set NEXT_PUBLIC_API_URL to an https:// URL.",
+      "Set API_URL (or NEXT_PUBLIC_API_URL) to an https:// URL.",
   );
 }
 
-/* ── In-flight dedup + short-lived GET cache ── */
 const _inflight = new Map<string, Promise<unknown>>();
 const _cache = new Map<string, { data: unknown; ts: number }>();
 const GET_CACHE_MS = 2000;
@@ -93,23 +102,49 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
     });
   } catch {
-    throw new Error("לא ניתן להתחבר לשרת. ודא שהשרת פועל.");
+    throw new Error(msg("auto.shared.lib.api.literal.1"));
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    let detail: string | undefined;
-    try {
-      const body = JSON.parse(text);
-      detail = body.detail ?? body.error;
-    } catch {
-      /* response was not JSON (e.g. HTML error page) */
-    }
-    throw new Error(detail ?? `שגיאת שרת: ${res.status}`);
+    throw new Error(
+      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.1", { p1: res.status }),
+    );
   }
   return res.json();
 }
 
-/* ── Job Submission ── */
+/**
+ * Extract a human-readable error message from an error response body.
+ *
+ * Preference order:
+ *   1. ``body.code`` + ``body.params`` — re-rendered client-side via
+ *      :func:`tI18n` so UI copy comes from the local catalog.
+ *   2. ``body.detail`` — the rendered Hebrew string from the server.
+ *   3. ``body.error`` — legacy envelope fallback.
+ *
+ * Returns ``undefined`` when the body is not JSON (e.g. an HTML error page)
+ * so the caller can fall back to a status-code template.
+ */
+function parseErrorMessage(text: string): string | undefined {
+  try {
+    const body = JSON.parse(text) as {
+      code?: string;
+      params?: Record<string, unknown>;
+      detail?: unknown;
+      error?: unknown;
+    };
+    if (typeof body.code === "string") {
+      const translated = tI18n(body.code, body.params);
+      if (translated !== body.code) return translated;
+    }
+    const raw = body.detail ?? body.error;
+    if (typeof raw === "string") return raw;
+    if (raw != null) return JSON.stringify(raw);
+  } catch {
+    /* response was not JSON (e.g. HTML error page) */
+  }
+  return undefined;
+}
 
 export function submitRun(payload: RunRequest) {
   return request<OptimizationSubmissionResponse>("/run", {
@@ -124,8 +159,6 @@ export function submitGridSearch(payload: GridSearchRequest) {
     body: JSON.stringify(payload),
   });
 }
-
-/* ── Job Management ── */
 
 export function listJobs(params?: {
   status?: string;
@@ -182,7 +215,7 @@ export interface DashboardAnalytics {
   status_counts: Record<string, number>;
   optimizer_counts: Record<string, number>;
   job_type_counts: Record<string, number>;
-  model_usage: { name: string; value: number }[];
+  model_usage: Array<{ name: string; value: number }>;
   success_count: number;
   failed_count: number;
   running_count: number;
@@ -195,14 +228,14 @@ export interface DashboardAnalytics {
   grid_search_count: number;
   single_run_count: number;
   best_improvement: number | null;
-  improvement_by_optimizer: { name: string; average: number; count: number }[];
-  runtime_minutes_by_optimizer: { name: string; average: number; count: number }[];
+  improvement_by_optimizer: Array<{ name: string; average: number; count: number }>;
+  runtime_minutes_by_optimizer: Array<{ name: string; average: number; count: number }>;
   top_improvement: DashboardAnalyticsJob[];
   runtime_distribution: DashboardAnalyticsJob[];
   dataset_vs_improvement: DashboardAnalyticsJob[];
   efficiency: DashboardAnalyticsJob[];
   top_jobs_by_improvement: DashboardAnalyticsJob[];
-  timeline: { date: string; count: number }[];
+  timeline: Array<{ date: string; count: number }>;
   available_optimizers: string[];
   available_models: string[];
 }
@@ -235,15 +268,13 @@ export function getOptimizationPayload(optimizationId: string) {
 }
 
 export function getOptimizationDataset(optimizationId: string) {
-  return request<import("@/shared/types/api").OptimizationDatasetResponse>(
-    `/optimizations/${optimizationId}/dataset`,
-  );
+  return request<OptimizationDatasetResponse>(`/optimizations/${optimizationId}/dataset`);
 }
 
 export function getTestResults(optimizationId: string) {
   return request<{
-    baseline: import("@/shared/types/api").EvalExampleResult[];
-    optimized: import("@/shared/types/api").EvalExampleResult[];
+    baseline: EvalExampleResult[];
+    optimized: EvalExampleResult[];
   }>(`/optimizations/${optimizationId}/test-results`);
 }
 
@@ -277,7 +308,7 @@ export async function deleteGridPair(optimizationId: string, pairIndex: number) 
 export async function bulkDeleteJobs(optimizationIds: string[]) {
   const res = await request<{
     deleted: string[];
-    skipped: { optimization_id: string; reason: string }[];
+    skipped: Array<{ optimization_id: string; reason: string }>;
   }>("/optimizations/bulk-delete", {
     method: "POST",
     body: JSON.stringify({ optimization_ids: optimizationIds }),
@@ -307,41 +338,33 @@ export async function togglePinOptimization(optimizationId: string) {
   return res;
 }
 
-/* ── Dataset profiling ── */
-
-export function profileDataset(
-  payload: import("@/shared/types/api").ProfileDatasetRequest,
-) {
-  return request<import("@/shared/types/api").ProfileDatasetResponse>("/datasets/profile", {
+export function profileDataset(payload: ProfileDatasetRequest) {
+  return request<ProfileDatasetResponse>("/datasets/profile", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
-
-/* ── Code Validation ── */
 
 export function validateCode(payload: {
   signature_code?: string;
   metric_code?: string;
-  column_mapping: import("@/shared/types/api").ColumnMapping;
+  column_mapping: ColumnMapping;
   sample_row: Record<string, unknown>;
   optimizer_name?: string;
 }) {
-  return request<import("@/shared/types/api").ValidateCodeResponse>("/validate-code", {
+  return request<ValidateCodeResponse>("/validate-code", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
-
-/* ── Model Probe (NDJSON streaming) ── */
 
 export interface ModelProbeRequest {
   signature_code: string;
   metric_code: string;
   module_name: string;
   optimizer_name: string;
-  dataset: Record<string, unknown>[];
-  column_mapping: import("@/shared/types/api").ColumnMapping;
+  dataset: Array<Record<string, unknown>>;
+  column_mapping: ColumnMapping;
   train_count?: number;
   eval_count?: number;
   shuffle?: boolean;
@@ -448,19 +471,14 @@ export async function probeModels(
     });
   } catch (err) {
     if ((err as Error)?.name === "AbortError") return;
-    handlers.onError?.("לא ניתן להתחבר לשרת. ודא שהשרת פועל.");
+    handlers.onError?.(msg("auto.shared.lib.api.literal.2"));
     return;
   }
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
-    let detail: string | undefined;
-    try {
-      const raw = JSON.parse(text).detail;
-      detail = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : undefined;
-    } catch {
-      /* not json */
-    }
-    handlers.onError?.(detail ?? `שגיאת שרת: ${res.status}`);
+    handlers.onError?.(
+      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.2", { p1: res.status }),
+    );
     return;
   }
   const reader = res.body.getReader();
@@ -500,18 +518,14 @@ export async function probeModels(
     }
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
-      handlers.onError?.(err instanceof Error ? err.message : "שגיאה בבדיקת המודלים");
+      handlers.onError?.(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.3"));
     }
   }
 }
 
-/* ── System Status ── */
-
 export function getQueueStatus() {
-  return cachedGet<import("@/shared/types/api").QueueStatusResponse>("/queue", 5000);
+  return cachedGet<QueueStatusResponse>("/queue", 5000);
 }
-
-/* ── Sidebar (lightweight) ── */
 
 export interface SidebarJobItem {
   optimization_id: string;
@@ -539,8 +553,6 @@ export function listJobsSidebar(params?: { username?: string; limit?: number; of
   );
 }
 
-/* ── Serving ── */
-
 export function getServeInfo(optimizationId: string) {
   return request<ServeInfoResponse>(`/serve/${optimizationId}/info`);
 }
@@ -551,8 +563,8 @@ export function getPairServeInfo(optimizationId: string, pairIndex: number) {
 
 export function getPairTestResults(optimizationId: string, pairIndex: number) {
   return request<{
-    baseline: import("@/shared/types/api").EvalExampleResult[];
-    optimized: import("@/shared/types/api").EvalExampleResult[];
+    baseline: EvalExampleResult[];
+    optimized: EvalExampleResult[];
   }>(`/optimizations/${optimizationId}/pair/${pairIndex}/test-results`);
 }
 
@@ -591,20 +603,14 @@ export async function serveProgramStream(
     });
   } catch (err) {
     if ((err as Error)?.name === "AbortError") return;
-    handlers.onError("לא ניתן להתחבר לשרת. ודא שהשרת פועל.");
+    handlers.onError(msg("auto.shared.lib.api.literal.4"));
     return;
   }
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
-    let detail: string | undefined;
-    try {
-      const raw = JSON.parse(text).detail;
-      // 422 responses send an array of validation-error objects — coerce to string
-      detail = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : undefined;
-    } catch {
-      /* not json */
-    }
-    handlers.onError(detail ?? `שגיאת שרת: ${res.status}`);
+    handlers.onError(
+      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.3", { p1: res.status }),
+    );
     return;
   }
   const reader = res.body.getReader();
@@ -634,7 +640,7 @@ export async function serveProgramStream(
         output_fields: (data.output_fields as string[]) ?? [],
       });
     } else if (event === "error") {
-      handlers.onError(String(data.error ?? "שגיאה בהרצת התוכנית"));
+      handlers.onError(String(data.error ?? msg("auto.shared.lib.api.literal.5")));
     }
   };
   try {
@@ -655,7 +661,7 @@ export async function serveProgramStream(
     }
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
-      handlers.onError(err instanceof Error ? err.message : "שגיאה בהרצת התוכנית");
+      handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.6"));
     }
   }
 }
@@ -677,19 +683,14 @@ export async function servePairProgramStream(
     });
   } catch (err) {
     if ((err as Error)?.name === "AbortError") return;
-    handlers.onError("לא ניתן להתחבר לשרת. ודא שהשרת פועל.");
+    handlers.onError(msg("auto.shared.lib.api.literal.7"));
     return;
   }
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
-    let detail: string | undefined;
-    try {
-      const raw = JSON.parse(text).detail;
-      detail = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : undefined;
-    } catch {
-      /* not json */
-    }
-    handlers.onError(detail ?? `שגיאת שרת: ${res.status}`);
+    handlers.onError(
+      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.4", { p1: res.status }),
+    );
     return;
   }
   const reader = res.body.getReader();
@@ -719,7 +720,7 @@ export async function servePairProgramStream(
         output_fields: (data.output_fields as string[]) ?? [],
       });
     } else if (event === "error") {
-      handlers.onError(String(data.error ?? "שגיאה בהרצת התוכנית"));
+      handlers.onError(String(data.error ?? msg("auto.shared.lib.api.literal.8")));
     }
   };
   try {
@@ -739,12 +740,10 @@ export async function servePairProgramStream(
     }
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
-      handlers.onError(err instanceof Error ? err.message : "שגיאה בהרצת התוכנית");
+      handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.9"));
     }
   }
 }
-
-/* ── Submit-wizard AI code agent ── */
 
 export interface CodeAgentChatTurn {
   role: "user" | "assistant";
@@ -754,7 +753,8 @@ export interface CodeAgentChatTurn {
 export interface CodeAgentRequest {
   dataset_columns: string[];
   column_roles: Record<string, "input" | "output" | "ignore">;
-  sample_rows: Record<string, unknown>[];
+  column_kinds?: Record<string, "text" | "image">;
+  sample_rows: Array<Record<string, unknown>>;
   user_message?: string;
   chat_history?: CodeAgentChatTurn[];
   prior_signature?: string;
@@ -788,7 +788,11 @@ export interface CodeAgentHandlers {
   onMetricReplace?: (code: string) => void;
   onToolStart?: (ev: CodeAgentToolStart) => void;
   onToolEnd?: (ev: CodeAgentToolEnd) => void;
-  onDone: (result: { signature_code: string; metric_code: string; assistant_message: string }) => void;
+  onDone: (result: {
+    signature_code: string;
+    metric_code: string;
+    assistant_message: string;
+  }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
 }
@@ -808,19 +812,14 @@ export async function streamCodeAgent(
     });
   } catch (err) {
     if ((err as Error)?.name === "AbortError") return;
-    handlers.onError("Cannot reach the server. Make sure the backend is running.");
+    handlers.onError(msg("auto.shared.lib.api.literal.11"));
     return;
   }
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
-    let detail: string | undefined;
-    try {
-      const raw = JSON.parse(text).detail;
-      detail = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : undefined;
-    } catch {
-      /* not json */
-    }
-    handlers.onError(detail ?? `Server error: ${res.status}`);
+    handlers.onError(
+      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.5", { p1: res.status }),
+    );
     return;
   }
   const reader = res.body.getReader();
@@ -877,7 +876,7 @@ export async function streamCodeAgent(
         assistant_message: String(data.assistant_message ?? ""),
       });
     } else if (event === "error") {
-      handlers.onError(String(data.error ?? "Code generation failed"));
+      handlers.onError(String(data.error ?? msg("auto.shared.lib.api.literal.12")));
     }
   };
   try {
@@ -897,24 +896,20 @@ export async function streamCodeAgent(
     }
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
-      handlers.onError(err instanceof Error ? err.message : "שגיאה בהפקת הקוד");
+      handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.10"));
     }
   }
 }
 
-/* ── Templates ── */
+let _templatesCache: TemplateResponse[] | null = null;
+let _templatesFlight: Promise<TemplateResponse[]> | null = null;
 
-/* ── Templates (with prefetch cache) ── */
-
-let _templatesCache: import("@/shared/types/api").TemplateResponse[] | null = null;
-let _templatesFlight: Promise<import("@/shared/types/api").TemplateResponse[]> | null = null;
-
-export function listTemplates(username?: string): Promise<import("@/shared/types/api").TemplateResponse[]> {
+export function listTemplates(username?: string): Promise<TemplateResponse[]> {
   // Only cache the "all templates" call (no username filter)
   if (!username) {
     if (_templatesCache) return Promise.resolve(_templatesCache);
     if (_templatesFlight) return _templatesFlight;
-    _templatesFlight = request<import("@/shared/types/api").TemplateResponse[]>("/templates").then((r) => {
+    _templatesFlight = request<TemplateResponse[]>("/templates").then((r) => {
       _templatesCache = r;
       _templatesFlight = null;
       return r;
@@ -922,7 +917,7 @@ export function listTemplates(username?: string): Promise<import("@/shared/types
     return _templatesFlight;
   }
   const q = `?username=${encodeURIComponent(username)}`;
-  return request<import("@/shared/types/api").TemplateResponse[]>(`/templates${q}`);
+  return request<TemplateResponse[]>(`/templates${q}`);
 }
 
 /** Prefetch templates on module load so they're ready when submit page opens. */
@@ -945,7 +940,7 @@ export async function createTemplate(payload: {
   username: string;
   config: Record<string, unknown>;
 }) {
-  const result = await request<import("@/shared/types/api").TemplateResponse>("/templates", {
+  const result = await request<TemplateResponse>("/templates", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -962,13 +957,11 @@ export async function deleteTemplate(templateId: string, username: string) {
   return result;
 }
 
-/* ── Recommendations (PER-11) ── */
-
 export interface SimilarJobsRequest {
   signature_code?: string | null;
   metric_code?: string | null;
   dataset_schema?: {
-    columns: { name: string; role: "input" | "output" | "ignore"; dtype?: string }[];
+    columns: Array<{ name: string; role: "input" | "output" | "ignore"; dtype?: string }>;
   } | null;
   optimization_type?: string | null;
   user_id?: string | null;
@@ -1003,8 +996,6 @@ export async function fetchSimilarJobs(
   });
   return res.results;
 }
-
-/* ── Public dashboard (PER-11 Feature B) ── */
 
 export interface PublicDashboardPoint {
   optimization_id: string;

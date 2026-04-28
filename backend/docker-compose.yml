@@ -5,6 +5,8 @@ version: "3.8"
 
 services:
   db:
+    # TODO: On-premise — Pull pgvector image from internal registry.
+    # Example: image: artifactory.your-company.com/docker-remote/pgvector/pgvector:pg16
     image: pgvector/pgvector:pg16
     container_name: skynet-db
     environment:

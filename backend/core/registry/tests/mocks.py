@@ -17,15 +17,8 @@ REAL_OPTIMIZER_NAME = "gepa"
 
 
 def fake_dspy_module() -> Callable[..., Any]:
-    """Return a minimal callable that satisfies the registry module contract.
-
-    The resolver only needs the factory to be callable; it does not inspect
-    the returned object during resolution.
-
-    Returns:
-        A no-op factory callable that accepts ``**kwargs`` and returns an object.
-    """
-
+    """Return a no-op DSPy-module-shaped factory for resolver tests."""
+    # Resolver only needs the factory to be callable — it does not inspect the result.
     def _module(**kwargs: Any) -> object:
         return object()
 
@@ -33,12 +26,7 @@ def fake_dspy_module() -> Callable[..., Any]:
 
 
 def fake_optimizer_class() -> Callable[..., Any]:
-    """Return a minimal callable that satisfies the registry optimizer contract.
-
-    Returns:
-        A no-op callable that accepts ``**kwargs`` and returns an object.
-    """
-
+    """Return a no-op optimizer-shaped factory for resolver tests."""
     def _optimizer(**kwargs: Any) -> object:
         return object()
 
@@ -47,16 +35,16 @@ def fake_optimizer_class() -> Callable[..., Any]:
 
 @contextmanager
 def patch_loader(return_value: Callable[..., Any] | None = None, side_effect: Any = None):
-    """Context manager that patches ``core.registry.resolvers._load_callable``.
+    """Yield a context patching ``_load_callable`` for resolver tests.
 
     Args:
-        return_value: Value to return from _load_callable.  Defaults to
-            ``fake_dspy_module()`` when neither argument is supplied.
-        side_effect: Callable or exception to use as side_effect instead of
-            return_value.  Mirrors ``unittest.mock.patch`` semantics.
+        return_value: Default callable for the patched loader. Defaults to a
+            ``fake_dspy_module`` instance when both arguments are omitted.
+        side_effect: Optional callable invoked per call to drive dynamic
+            behaviour (raise, return, etc.).
 
     Yields:
-        The ``unittest.mock.MagicMock`` object used to patch ``_load_callable``.
+        The underlying ``unittest.mock`` object.
     """
     if return_value is None and side_effect is None:
         return_value = fake_dspy_module()

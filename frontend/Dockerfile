@@ -1,33 +1,37 @@
+# On-prem mirrors / artifactory: see deploy/ON_PREM_CHECKLIST.md (sections 1, 4).
 FROM node:22-alpine AS base
 
-# --- Dependencies ---
 FROM base AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+
+COPY package.json package-lock.json .npmrc* ./
 RUN npm ci
 
-# --- Build ---
 FROM base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-# --- Production ---
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3001
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Use UID 1001 with GID 0 — works everywhere (Docker, Podman, OpenShift restricted-v2 SCC).
+# OpenShift assigns a random UID at runtime but always with GID 0, so runtime files must be
+# group-0-owned and group-writable. Alpine uses busybox addgroup/adduser syntax.
+RUN addgroup -g 1001 appuser 2>/dev/null || true \
+    && adduser -u 1001 -G root -h /home/appuser -s /sbin/nologin -D appuser
 
-COPY --from=build /app/public ./public
-COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=build --chown=1001:0 /app/public ./public
+COPY --from=build --chown=1001:0 /app/.next/standalone ./
+COPY --from=build --chown=1001:0 /app/.next/static ./.next/static
 
-USER nextjs
+RUN chgrp -R 0 /app && chmod -R g=u /app
+
+USER 1001
 
 EXPOSE 3001
 

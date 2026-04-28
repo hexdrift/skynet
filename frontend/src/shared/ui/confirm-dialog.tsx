@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Confirm dialog component
- * Reusable confirmation modal with Hebrew RTL support
- * Preserves exact styling and behavior from existing delete/action confirmations
- */
-
 import {
   Dialog,
   DialogContent,
@@ -13,8 +7,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+} from "@/shared/ui/primitives/dialog";
+import { Button } from "@/shared/ui/primitives/button";
+import { msg } from "@/shared/lib/messages";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -24,7 +19,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
-  variant?: 'default' | 'destructive';
+  variant?: "default" | "destructive";
   loading?: boolean;
 }
 
@@ -33,10 +28,10 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "אישור",
-  cancelLabel = "ביטול",
+  confirmLabel = msg("auto.shared.ui.confirm.dialog.literal.1"),
+  cancelLabel = msg("auto.shared.ui.confirm.dialog.literal.2"),
   onConfirm,
-  variant = 'default',
+  variant = "default",
   loading = false,
 }: ConfirmDialogProps) {
   return (
@@ -47,15 +42,11 @@ export function ConfirmDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button
-            variant={variant === 'destructive' ? 'destructive' : 'default'}
+            variant={variant === "destructive" ? "destructive" : "default"}
             onClick={() => {
               onConfirm();
               onOpenChange(false);

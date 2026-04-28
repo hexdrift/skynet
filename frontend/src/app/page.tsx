@@ -1,7 +1,12 @@
 "use client";
 
-import { DashboardView } from "@/features/dashboard/components/DashboardView";
+import { Suspense } from "react";
+import { DashboardView } from "@/features/dashboard";
 
 export default function Page() {
-  return <DashboardView />;
+  return (
+    <Suspense fallback={null}>
+      <DashboardView />
+    </Suspense>
+  );
 }

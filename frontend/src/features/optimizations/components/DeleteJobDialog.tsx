@@ -1,17 +1,9 @@
 "use client";
 
-/**
- * Delete-confirmation dialog for a single optimization.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Owns its open/loading
- * state internally and dispatches `optimizations-changed` on success so
- * the sidebar + dashboard stay in sync.
- */
-
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +11,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/shared/ui/primitives/dialog";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/shared/ui/primitives/tooltip";
 import { deleteJob } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -62,20 +54,26 @@ export function DeleteJobDialog({
               size="icon"
               className="size-8 text-muted-foreground hover:text-red-600"
               onClick={() => setOpen(true)}
-              aria-label="מחיקה"
+              aria-label={msg("auto.features.optimizations.components.deletejobdialog.literal.1")}
             >
               <Trash2 className="size-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">מחיקה</TooltipContent>
+          <TooltipContent side="bottom">
+            {msg("auto.features.optimizations.components.deletejobdialog.1")}
+          </TooltipContent>
         </UiTooltip>
       </TooltipProvider>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>מחיקת {TERMS.optimization}</DialogTitle>
+            <DialogTitle>
+              {msg("auto.features.optimizations.components.deletejobdialog.2")}
+              {TERMS.optimization}
+            </DialogTitle>
             <DialogDescription>
-              האם למחוק את ה{TERMS.optimization}{" "}
+              {msg("auto.features.optimizations.components.deletejobdialog.3")}
+              {TERMS.optimization}{" "}
               <span className="font-mono font-medium text-foreground break-all">
                 {optimizationId}
               </span>
@@ -89,7 +87,7 @@ export function DeleteJobDialog({
               disabled={loading}
               className="w-full justify-center"
             >
-              ביטול
+              {msg("auto.features.optimizations.components.deletejobdialog.4")}
             </Button>
             <Button
               variant="destructive"
@@ -97,7 +95,11 @@ export function DeleteJobDialog({
               disabled={loading}
               className="w-full justify-center"
             >
-              {loading ? <Loader2 className="size-4 animate-spin" /> : "מחיקה"}
+              {loading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("auto.features.optimizations.components.deletejobdialog.literal.2")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

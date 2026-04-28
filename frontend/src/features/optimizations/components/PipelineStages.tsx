@@ -11,9 +11,12 @@
  * is a pure renderer.
  */
 
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { PIPELINE_STAGES, type PipelineStage } from "../constants";
 import type { ProgressEvent } from "@/shared/types/api";
+
+const VERTICAL_BREAKPOINT_PX = 600;
 
 interface StageTs {
   date: string;
@@ -100,19 +103,42 @@ export function PipelineStages({
       ? PIPELINE_STAGES.length
       : PIPELINE_STAGES.findIndex((s) => s.key === currentStage);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isVertical, setIsVertical] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        setIsVertical(e.contentRect.width < VERTICAL_BREAKPOINT_PX);
+      }
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div
-      className="relative flex items-start justify-between"
+      ref={containerRef}
+      className={
+        isVertical
+          ? "relative flex flex-col gap-3"
+          : "relative flex items-start justify-between"
+      }
       dir="rtl"
       data-tutorial={dataTutorial}
     >
-      <div className="absolute top-[14px] right-[14px] left-[14px] h-[2px] bg-border/50 rounded-full" />
-      <div
-        className={`absolute top-[14px] right-[14px] h-[2px] rounded-full transition-all duration-700 ease-out ${isFailed ? "bg-destructive/60" : "bg-[#3D2E22]"}`}
-        style={{
-          width: `calc(${(Math.min(completedStageIdx, PIPELINE_STAGES.length - 1) / (PIPELINE_STAGES.length - 1)) * 100}% - 28px)`,
-        }}
-      />
+      {!isVertical && (
+        <>
+          <div className="absolute top-[14px] right-[14px] left-[14px] h-[2px] bg-border/50 rounded-full" />
+          <div
+            className={`absolute top-[14px] right-[14px] h-[2px] rounded-full transition-all duration-700 ease-out ${isFailed ? "bg-destructive/60" : "bg-[#3D2E22]"}`}
+            style={{
+              width: `calc(${(Math.min(completedStageIdx, PIPELINE_STAGES.length - 1) / (PIPELINE_STAGES.length - 1)) * 100}% - 28px)`,
+            }}
+          />
+        </>
+      )}
       {PIPELINE_STAGES.map((s, i) => {
         const isDone = i < completedStageIdx;
         const isCurrent = isActive && i === completedStageIdx;
@@ -121,7 +147,11 @@ export function PipelineStages({
         return (
           <div
             key={s.key}
-            className="relative z-10 flex flex-col items-center gap-2 min-w-0 group/node cursor-pointer"
+            className={
+              isVertical
+                ? "relative z-10 flex flex-row items-center gap-3 min-w-0 group/node cursor-pointer"
+                : "relative z-10 flex flex-col items-center gap-2 min-w-0 group/node cursor-pointer"
+            }
             onClick={() => onStageClick(s.key)}
           >
             <div
@@ -159,7 +189,14 @@ export function PipelineStages({
               {s.label}
             </span>
             {ts && isDone && (
-              <div className="flex flex-col items-center -mt-0.5" dir="ltr">
+              <div
+                className={
+                  isVertical
+                    ? "flex flex-row items-baseline gap-1.5 ms-auto"
+                    : "flex flex-col items-center -mt-0.5"
+                }
+                dir="ltr"
+              >
                 <span className="text-[0.625rem] text-muted-foreground/50 tracking-wide uppercase">
                   {ts.date}
                 </span>

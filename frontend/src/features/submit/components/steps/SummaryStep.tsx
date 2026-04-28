@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/primitives/tabs";
+import { Separator } from "@/shared/ui/primitives/separator";
 import {
   User,
   Code,
@@ -34,11 +34,23 @@ const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m
 });
 
 const SUMMARY_TABS = [
-  { id: "general", label: "כללי", icon: <User className="size-3.5" /> },
+  {
+    id: "general",
+    label: msg("auto.features.submit.components.steps.summarystep.literal.1"),
+    icon: <User className="size-3.5" />,
+  },
   { id: "dataset", label: TERMS.dataset, icon: <Database className="size-3.5" /> },
-  { id: "models", label: "מודלים", icon: <Cpu className="size-3.5" /> },
+  {
+    id: "models",
+    label: msg("auto.features.submit.components.steps.summarystep.literal.2"),
+    icon: <Cpu className="size-3.5" />,
+  },
   { id: "optimizer", label: TERMS.optimizer, icon: <Target className="size-3.5" /> },
-  { id: "code", label: "קוד", icon: <Code className="size-3.5" /> },
+  {
+    id: "code",
+    label: msg("auto.features.submit.components.steps.summarystep.literal.3"),
+    icon: <Code className="size-3.5" />,
+  },
 ];
 
 /**
@@ -55,8 +67,13 @@ function SummaryAllAvailableRow({ count }: { count: number }) {
         <Boxes className="size-4" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-sm font-medium text-foreground">כל המודלים הזמינים</span>
-        <span className="text-[0.6875rem] text-muted-foreground">{count} מודלים בקטלוג</span>
+        <span className="text-sm font-medium text-foreground">
+          {msg("auto.features.submit.components.steps.summarystep.1")}
+        </span>
+        <span className="text-[0.6875rem] text-muted-foreground">
+          {count}
+          {msg("auto.features.submit.components.steps.summarystep.2")}
+        </span>
       </div>
     </div>
   );
@@ -139,23 +156,27 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Tag className="size-3.5" />
-                      שם ה{TERMS.optimization}
+                      {msg("auto.features.submit.components.steps.summarystep.3")}
+                      {TERMS.optimization}
                     </span>
                     <span className="text-sm font-medium">{jobName || "—"}</span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Layers className="size-3.5" />
-                      סוג {TERMS.optimization}
+                      {msg("auto.features.submit.components.steps.summarystep.4")}
+                      {TERMS.optimization}
                     </span>
                     <span className="text-sm font-medium">
-                      {jobType === "run" ? "ריצה" : "סריקה"}
+                      {jobType === "run"
+                        ? msg("auto.features.submit.components.steps.summarystep.literal.4")
+                        : msg("auto.features.submit.components.steps.summarystep.literal.5")}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Component className="size-3.5" />
-                      מודול
+                      {msg("auto.features.submit.components.steps.summarystep.5")}
                     </span>
                     <span className="text-sm font-medium font-mono" dir="ltr">
                       {moduleName === "predict" ? "Predict" : "CoT"}
@@ -167,7 +188,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                       {TERMS.optimizer}
                     </span>
                     <span className="text-sm font-medium font-mono" dir="ltr">
-                      GEPA
+                      {msg("auto.features.submit.components.steps.summarystep.6")}
                     </span>
                   </div>
                 </div>
@@ -178,7 +199,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <FileText className="size-3.5" />
-                      קובץ
+                      {msg("auto.features.submit.components.steps.summarystep.7")}
                     </span>
                     <span
                       className="text-sm font-medium truncate max-w-[60%]"
@@ -191,10 +212,13 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                     <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                       <span className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Database className="size-3.5" />
-                        גודל
+                        {msg("auto.features.submit.components.steps.summarystep.8")}
                       </span>
                       <span className="text-sm font-medium">
-                        {parsedDataset.rowCount} שורות · {parsedDataset.columns.length} עמודות
+                        {parsedDataset.rowCount}
+                        {msg("auto.features.submit.components.steps.summarystep.9")}
+                        {parsedDataset.columns.length}
+                        {msg("auto.features.submit.components.steps.summarystep.10")}
                       </span>
                     </div>
                   )}
@@ -202,14 +226,20 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                     <div className="space-y-2 pt-1">
                       <span className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Columns className="size-3.5" />
-                        מיפוי עמודות
+                        {msg("auto.features.submit.components.steps.summarystep.11")}
                       </span>
                       <div className="space-y-1.5">
                         {parsedDataset.columns.map((col) => {
                           const role = columnRoles[col];
                           if (role === "ignore") return null;
                           const roleLabel =
-                            role === "input" ? "קלט" : role === "output" ? "פלט" : "התעלם";
+                            role === "input"
+                              ? msg("auto.features.submit.components.steps.summarystep.literal.6")
+                              : role === "output"
+                                ? msg("auto.features.submit.components.steps.summarystep.literal.7")
+                                : msg(
+                                    "auto.features.submit.components.steps.summarystep.literal.8",
+                                  );
                           const roleColor =
                             role === "input"
                               ? "text-[#3D2E22] bg-[#3D2E22]/10"
@@ -239,7 +269,8 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="space-y-3">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Layers className="size-3.5" />
-                      חלוקת {TERMS.dataset}
+                      {msg("auto.features.submit.components.steps.summarystep.12")}
+                      {TERMS.dataset}
                     </span>
                     <div className="flex h-3 rounded-full overflow-hidden">
                       <div className="bg-[#3D2E22]" style={{ width: `${split.train * 100}%` }} />
@@ -249,24 +280,31 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                     <div className="grid grid-cols-3 gap-4">
                       <div className="flex items-center gap-1.5 text-xs">
                         <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]" />
-                        אימון {split.train}
+                        {msg("auto.features.submit.components.steps.summarystep.13")}
+                        {split.train}
                       </div>
                       <div className="flex items-center gap-1.5 text-xs">
                         <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]" />
-                        אימות {split.val}
+                        {msg("auto.features.submit.components.steps.summarystep.14")}
+                        {split.val}
                       </div>
                       <div className="flex items-center gap-1.5 text-xs">
                         <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]" />
-                        בדיקה {split.test}
+                        {msg("auto.features.submit.components.steps.summarystep.15")}
+                        {split.test}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Shuffle className="size-3.5" />
-                      ערבוב
+                      {msg("auto.features.submit.components.steps.summarystep.16")}
                     </span>
-                    <span className="text-sm font-medium">{shuffle ? "כן" : "לא"}</span>
+                    <span className="text-sm font-medium">
+                      {shuffle
+                        ? msg("auto.features.submit.components.steps.summarystep.literal.9")
+                        : msg("auto.features.submit.components.steps.summarystep.literal.10")}
+                    </span>
                   </div>
                 </div>
               )}
@@ -302,7 +340,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/20 px-3 py-2">
                             <span className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
-                              סה״כ זוגות
+                              {msg("auto.features.submit.components.steps.summarystep.17")}
                             </span>
                             <span className="font-mono text-sm text-foreground" dir="ltr">
                               {genCount} × {refCount} ={" "}
@@ -322,7 +360,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                             )}
                           </div>
                           <span className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
-                            מודלי רפלקציה
+                            {msg("auto.features.submit.components.steps.summarystep.18")}
                           </span>
                           <div className="space-y-1.5">
                             {useAllReflectionModels ? (
@@ -345,20 +383,20 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Search className="size-3.5" />
-                      רמת חיפוש
+                      {msg("auto.features.submit.components.steps.summarystep.19")}
                     </span>
                     <span className="text-sm font-medium">
                       {autoLevel === "light"
-                        ? "קלה"
+                        ? msg("auto.features.submit.components.steps.summarystep.literal.11")
                         : autoLevel === "medium"
-                          ? "בינונית"
-                          : "מעמיקה"}
+                          ? msg("auto.features.submit.components.steps.summarystep.literal.12")
+                          : msg("auto.features.submit.components.steps.summarystep.literal.13")}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Database className="size-3.5" />
-                      גודל מדגם לרפלקציה
+                      {msg("auto.features.submit.components.steps.summarystep.20")}
                     </span>
                     <span className="text-sm font-medium font-mono">
                       {reflectionMinibatchSize || "—"}
@@ -367,16 +405,20 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Layers className="size-3.5" />
-                      מקסימום סבבי הערכה
+                      {msg("auto.features.submit.components.steps.summarystep.21")}
                     </span>
                     <span className="text-sm font-medium font-mono">{maxFullEvals || "—"}</span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Shuffle className="size-3.5" />
-                      מיזוג מועמדים
+                      {msg("auto.features.submit.components.steps.summarystep.22")}
                     </span>
-                    <span className="text-sm font-medium">{useMerge ? "כן" : "לא"}</span>
+                    <span className="text-sm font-medium">
+                      {useMerge
+                        ? msg("auto.features.submit.components.steps.summarystep.literal.14")
+                        : msg("auto.features.submit.components.steps.summarystep.literal.15")}
+                    </span>
                   </div>
                 </div>
               )}
@@ -401,7 +443,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                         value="signature"
                         className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                       >
-                        Signature
+                        {msg("auto.features.submit.components.steps.summarystep.23")}
                       </TabsTrigger>
                     )}
                     {metricCode && (
@@ -409,7 +451,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                         value="metric"
                         className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                       >
-                        Metric
+                        {msg("auto.features.submit.components.steps.summarystep.24")}
                       </TabsTrigger>
                     )}
                   </TabsList>

@@ -6,6 +6,8 @@ site still writes ``from ..models import X``, so this ``__init__.py``
 re-exports the old flat surface.
 """
 
+from __future__ import annotations
+
 from .analytics import (
     AnalyticsSummaryResponse,
     DashboardAnalyticsJob,
@@ -20,15 +22,16 @@ from .analytics import (
 )
 from .artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact
 from .common import (
-    HEALTH_STATUS_OK,
     ColumnMapping,
     ModelConfig,
     OptimizationStatus,
     SplitCounts,
     SplitFractions,
 )
+from .constants import HEALTH_STATUS_OK
 from .dataset import (
     DatasetProfile,
+    InputColumnProfile,
     ProfileDatasetRequest,
     ProfileDatasetResponse,
     ProfileWarning,
@@ -85,6 +88,7 @@ __all__ = [
     "GridSearchRequest",
     "GridSearchResponse",
     "HealthResponse",
+    "InputColumnProfile",
     "JobCancelResponse",
     "JobDeleteResponse",
     "JobLogEntry",

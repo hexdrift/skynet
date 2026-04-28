@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronDown, Copy, RefreshCw } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, RefreshCw, type LucideIcon } from "lucide-react";
+import { msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import type { AgentToolCall } from "@/shared/ui/agent/types";
@@ -17,10 +18,18 @@ interface ToolCallRowProps {
   summary?: string | null;
   /** Override for the trigger title. Defaults to ``TOOL_META.title``. */
   title?: string | null;
+  /** Override for the status-glyph icon (done state). Defaults to ``TOOL_META.icon``. */
+  icon?: LucideIcon;
+  /**
+   * Replaces the default args/result body. Caller renders whatever fits the
+   * tool — e.g. a diff view. Wrapped in the same container as the default
+   * body so vertical rhythm stays identical to the generalist tools.
+   */
+  customBody?: React.ReactNode;
 }
 
 /**
- * One tool invocation rendered as an expandable row inside the assistant
+ * One tool invocation rendered as an expandable row inside the agent
  * bubble. While the call is running the row self-expands and shows a
  * pulse indicator with a live elapsed counter; once done it auto-collapses
  * into a compact chip. Errors keep the row expanded. A per-tool summary
@@ -32,11 +41,16 @@ export function ToolCallRow({
   isRetry = false,
   summary,
   title,
+  icon,
+  customBody,
 }: ToolCallRowProps) {
   const meta = getToolMeta(call.tool);
   const derivedTitle =
-    title ?? (meta.title === "אישור פעולה" ? prettifyToolName(call.tool) : meta.title);
-  const Icon = meta.icon;
+    title ??
+    (meta.title === msg("auto.features.agent.panel.components.toolcallrow.literal.1")
+      ? prettifyToolName(call.tool)
+      : meta.title);
+  const Icon = icon ?? meta.icon;
 
   const initiallyOpen = call.status !== "done";
   const [open, setOpen] = React.useState(initiallyOpen);
@@ -81,12 +95,7 @@ export function ToolCallRow({
   const showReasonInBody = call.reason && call.reason !== triggerText;
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-md",
-        isError && "bg-[#9B2C1F]/[0.04]",
-      )}
-    >
+    <div className={cn("overflow-hidden rounded-md", isError && "bg-[#9B2C1F]/[0.04]")}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -124,9 +133,7 @@ export function ToolCallRow({
             <span
               className={cn(
                 "font-mono tabular-nums text-[0.625rem]",
-                call.status === "running"
-                  ? "text-muted-foreground/80"
-                  : "text-muted-foreground/55",
+                call.status === "running" ? "text-muted-foreground/80" : "text-muted-foreground/55",
               )}
             >
               {elapsedLabel}
@@ -157,10 +164,10 @@ export function ToolCallRow({
                 {isRetry && (
                   <span
                     className="inline-flex items-center gap-1 text-[0.625rem] text-muted-foreground/70"
-                    title="ניסיון חוזר לאחר שגיאה"
+                    title={msg("auto.features.agent.panel.components.toolcallrow.literal.2")}
                   >
                     <RefreshCw className="size-2.5" aria-hidden="true" />
-                    ניסיון חוזר
+                    {msg("auto.features.agent.panel.components.toolcallrow.1")}
                   </span>
                 )}
               </div>
@@ -169,24 +176,38 @@ export function ToolCallRow({
                   {call.reason}
                 </div>
               )}
-              {hasArgs && (
-                <Section label="קלט">
-                  <dl className="space-y-1.5">
-                    {argEntries.map(([k, v]) => (
-                      <EntryRow key={k} argKey={k} value={v} />
-                    ))}
-                  </dl>
-                </Section>
-              )}
-              {hasResult && (
-                <Section label={isError ? "שגיאה" : "תוצאה"}>
-                  <ResultBody result={result} isError={isError} />
-                </Section>
-              )}
-              {!hasArgs && !hasResult && call.status === "running" && (
-                <div className="text-[0.75rem] text-muted-foreground italic">
-                  פועל כעת…
-                </div>
+              {customBody !== undefined ? (
+                customBody
+              ) : (
+                <>
+                  {hasArgs && (
+                    <Section
+                      label={msg("auto.features.agent.panel.components.toolcallrow.literal.3")}
+                    >
+                      <dl className="space-y-1.5">
+                        {argEntries.map(([k, v]) => (
+                          <EntryRow key={k} argKey={k} value={v} />
+                        ))}
+                      </dl>
+                    </Section>
+                  )}
+                  {hasResult && (
+                    <Section
+                      label={
+                        isError
+                          ? msg("auto.features.agent.panel.components.toolcallrow.literal.4")
+                          : msg("auto.features.agent.panel.components.toolcallrow.literal.5")
+                      }
+                    >
+                      <ResultBody result={result} isError={isError} />
+                    </Section>
+                  )}
+                  {!hasArgs && !hasResult && call.status === "running" && (
+                    <div className="text-[0.75rem] text-muted-foreground italic">
+                      {msg("auto.features.agent.panel.components.toolcallrow.2")}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </motion.div>
@@ -217,7 +238,7 @@ function StatusGlyph({
           "relative inline-flex size-4 items-center justify-center shrink-0 rounded-full",
           retryRing,
         )}
-        aria-label="פועל"
+        aria-label={msg("auto.features.agent.panel.components.toolcallrow.literal.6")}
       >
         <span className="absolute inset-0 rounded-full bg-[#3D2E22]/15 animate-ping motion-reduce:animate-none" />
         <span className="relative size-2 rounded-full bg-[#3D2E22]" />
@@ -231,7 +252,7 @@ function StatusGlyph({
           "inline-flex size-4 items-center justify-center rounded-full bg-[#9B2C1F]/15 text-[#9B2C1F] shrink-0",
           retryRing,
         )}
-        aria-label="שגיאה"
+        aria-label={msg("auto.features.agent.panel.components.toolcallrow.literal.7")}
       >
         <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
       </span>
@@ -243,7 +264,7 @@ function StatusGlyph({
         "inline-flex size-4 items-center justify-center rounded-full bg-[#3D2E22]/15 text-[#3D2E22] shrink-0",
         retryRing,
       )}
-      aria-label="הושלם"
+      aria-label={msg("auto.features.agent.panel.components.toolcallrow.literal.8")}
     >
       <Icon className="size-2.5" strokeWidth={2.5} aria-hidden />
     </span>
@@ -253,9 +274,7 @@ function StatusGlyph({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="mb-1 text-[0.6875rem] font-medium text-muted-foreground/75">
-        {label}
-      </div>
+      <div className="mb-1 text-[0.6875rem] font-medium text-muted-foreground/75">{label}</div>
       {children}
     </div>
   );
@@ -309,7 +328,8 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
         ))}
         {result.length > 20 && (
           <div className="text-[0.625rem] text-muted-foreground/70">
-            ועוד {result.length - 20}…
+            {msg("auto.features.agent.panel.components.toolcallrow.3")}
+            {result.length - 20}…
           </div>
         )}
       </dl>
@@ -339,7 +359,11 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={copy}
-      aria-label={copied ? "הועתק" : "העתק"}
+      aria-label={
+        copied
+          ? msg("auto.features.agent.panel.components.toolcallrow.literal.9")
+          : msg("auto.features.agent.panel.components.toolcallrow.literal.10")
+      }
       className={cn(
         "absolute end-1.5 top-1.5 inline-flex size-6 items-center justify-center rounded-md",
         "bg-background/85 text-muted-foreground/70 border border-border/40",
@@ -360,7 +384,7 @@ function RawName({ tool }: { tool: string }) {
     <div
       className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[0.625rem] text-muted-foreground/70 bg-muted/40"
       dir="ltr"
-      title="שם הכלי ב-MCP"
+      title={msg("auto.features.agent.panel.components.toolcallrow.literal.11")}
     >
       {tool}
     </div>

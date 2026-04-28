@@ -21,12 +21,7 @@ interface FieldPulseProps {
  * curve so it feels like a confirmation, not decoration. Respects
  * `prefers-reduced-motion` — users who reduce motion see a steady tint.
  */
-export function FieldPulse({
-  fields,
-  children,
-  className,
-  radius = 12,
-}: FieldPulseProps) {
+export function FieldPulse({ fields, children, className, radius = 12 }: FieldPulseProps) {
   const ctx = useWizardStateOptional();
   const [visible, setVisible] = React.useState(false);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,9 +39,12 @@ export function FieldPulse({
     timerRef.current = setTimeout(() => setVisible(false), 160);
   }, [ctx, ctx?.agentPulseTick, ctx?.agentPulseKeys, watched]);
 
-  React.useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-  }, []);
+  React.useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
 
   return (
     <div className={cn("relative", className)}>

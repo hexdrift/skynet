@@ -5,9 +5,9 @@ import Link from "next/link";
 import { X, ChevronLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import type { PublicDashboardPoint } from "@/shared/lib/api";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { msg } from "@/shared/lib/messages";
+import { Button } from "@/shared/ui/primitives/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 
 interface ExploreDetailPanelProps {
@@ -21,12 +21,16 @@ function formatAgo(iso: string | null): string {
   const diffMs = Date.now() - then;
   if (Number.isNaN(diffMs)) return "—";
   const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return "לפני רגע";
-  if (mins < 60) return `לפני ${mins} דק׳`;
+  if (mins < 1) return msg("auto.features.explore.components.exploredetailpanel.literal.1");
+  if (mins < 60)
+    return formatMsg("auto.features.explore.components.exploredetailpanel.template.1", {
+      p1: mins,
+    });
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `לפני ${hrs} שע׳`;
+  if (hrs < 24)
+    return formatMsg("auto.features.explore.components.exploredetailpanel.template.2", { p1: hrs });
   const days = Math.round(hrs / 24);
-  return `לפני ${days} ימים`;
+  return formatMsg("auto.features.explore.components.exploredetailpanel.template.3", { p1: days });
 }
 
 function formatMetric(v: number | null | undefined): string {
@@ -72,13 +76,17 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
             {point.task_name ?? point.optimization_type ?? "—"}
           </p>
           <p className="mt-0.5 text-[0.6875rem] text-[#8C7A6B]">
-            {msg("explore.detail.time_ago")} {formatAgo(point.created_at).replace(/^לפני /, "")}
+            {msg("explore.detail.time_ago")}{" "}
+            {formatAgo(point.created_at).replace(
+              new RegExp(`^${msg("explore.detail.time_ago")} `),
+              "",
+            )}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="סגור"
+          aria-label={msg("auto.features.explore.components.exploredetailpanel.literal.2")}
           className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#8C7A6B] transition-colors hover:bg-[#3D2E22]/5 hover:text-[#3D2E22]"
         >
           <X className="size-4" />
@@ -99,10 +107,7 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
           )}
           {point.optimized_metric != null && (
             <Row label={msg("explore.detail.score")}>
-              <span
-                className="inline-flex items-baseline gap-2 font-mono tabular-nums"
-                dir="ltr"
-              >
+              <span className="inline-flex items-baseline gap-2 font-mono tabular-nums" dir="ltr">
                 <span className="text-[#3D2E22]">{formatMetric(point.optimized_metric)}</span>
                 {point.baseline_metric != null && (
                   <span className="text-[0.6875rem] text-[#8C7A6B]">
@@ -118,7 +123,7 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
             </Row>
           )}
           {point.module_name && (
-            <Row label="מודול">
+            <Row label={msg("auto.features.explore.components.exploredetailpanel.literal.3")}>
               <span className="font-mono">{point.module_name}</span>
             </Row>
           )}
@@ -149,14 +154,18 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
             <Button asChild size="icon-sm" variant="default" className="shrink-0">
               <Link
                 href={`/optimizations/${point.optimization_id}`}
-                aria-label={`פתח ${TERMS.optimization}`}
+                aria-label={formatMsg(
+                  "auto.features.explore.components.exploredetailpanel.template.4",
+                  { p1: TERMS.optimization },
+                )}
               >
                 <ChevronLeft className="size-3.5" />
               </Link>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={6}>
-            פתח {TERMS.optimization}
+            {msg("auto.features.explore.components.exploredetailpanel.1")}
+            {TERMS.optimization}
           </TooltipContent>
         </Tooltip>
       </footer>

@@ -3,6 +3,8 @@
 PostgreSQL only. No SQLite.
 """
 
+from __future__ import annotations
+
 from ..config import settings
 from .base import JobStore
 from .remote import RemoteDBJobStore
@@ -11,13 +13,13 @@ from .remote import RemoteDBJobStore
 def get_job_store() -> JobStore:
     """Return the PostgreSQL job store backend.
 
-    Reads REMOTE_DB_URL from settings for the connection string.
+    Reads ``REMOTE_DB_URL`` from settings for the connection string.
 
     Returns:
-        PostgreSQL storage backend.
+        A ``RemoteDBJobStore`` configured against the URL from settings.
 
     Raises:
-        RuntimeError: If REMOTE_DB_URL is not set.
+        RuntimeError: When ``REMOTE_DB_URL`` is not configured.
     """
     if not settings.remote_db_url:
         raise RuntimeError(

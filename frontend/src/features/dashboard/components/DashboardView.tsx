@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { BarChart3, Compass, TableIcon } from "lucide-react";
 import { Skeleton } from "boneyard-js/react";
 import { toast } from "react-toastify";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
 import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -14,8 +14,10 @@ import { useColumnFilters, useColumnResize, type SortDir } from "@/shared/ui/exc
 import { getJobTypeLabel, getStatusLabel } from "@/shared/constants/job-status";
 import type { PaginatedJobsResponse } from "@/shared/types/api";
 import type { DashboardAnalytics } from "@/shared/lib/api";
-import { dashboardBones } from "@/features/dashboard/lib/bones";
-import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial/lib/bridge";
+import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
+import { ExploreView } from "@/features/explore";
+import { useUserPrefs } from "@/features/settings";
+import { dashboardBones } from "../lib/bones";
 import { transformChartData } from "../lib/transform-chart-data";
 import { useQueueStatus } from "../hooks/use-queue-status";
 import { useDashboardStats } from "../hooks/use-dashboard-stats";
@@ -30,7 +32,6 @@ import { BulkActionBar } from "./BulkActionBar";
 import { DeleteDialogs } from "./DeleteDialogs";
 import { JobsTab } from "./JobsTab";
 import { AnalyticsTab } from "./AnalyticsTab";
-import { ExploreView } from "@/features/explore/components/ExploreView";
 
 const COMPARE_MAX = 8;
 
@@ -44,15 +45,21 @@ export function DashboardView() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  const { prefs } = useUserPrefs();
+  const advancedMode = prefs.advancedMode;
+
   const [activeTab, setActiveTab] = useState("jobs");
   // Sync from URL on mount / when ?tab= changes (supports deep-linking from
   // UserFieldPreview and bookmarked tab URLs).
   const urlTab = searchParams.get("tab");
   useEffect(() => {
-    if (urlTab === "jobs" || urlTab === "analytics" || urlTab === "explore") {
+    if (urlTab === "jobs" || urlTab === "analytics" || (urlTab === "explore" && advancedMode)) {
       setActiveTab(urlTab);
     }
-  }, [urlTab]);
+  }, [urlTab, advancedMode]);
+  useEffect(() => {
+    if (!advancedMode && activeTab === "explore") setActiveTab("jobs");
+  }, [advancedMode, activeTab]);
   // Expose for tutorial beforeShow
   useEffect(() => registerTutorialHook("setTab", setActiveTab), []);
 
@@ -113,7 +120,7 @@ export function DashboardView() {
   // analytics-tab visit re-pulls.
   useEffect(() => {
     const onJobsChanged = () => {
-      fetchJobs();
+      void fetchJobs();
       setAnalyticsData(null);
     };
     window.addEventListener("optimizations-changed", onJobsChanged);
@@ -183,10 +190,9 @@ export function DashboardView() {
     router.push(`/compare?jobs=${compareEligibleIds.join(",")}`);
   }, [compareEligibleIds, router]);
 
-  /* ── Client-side filter + sort ── */
   const filteredItems = useMemo(() => {
     if (!effectiveData) return [];
-    let items = effectiveData.items.filter((job) => {
+    const items = effectiveData.items.filter((job) => {
       for (const [col, allowed] of Object.entries(filters)) {
         if (allowed.size === 0) continue;
         const val = String((job as unknown as Record<string, unknown>)[col] ?? "");
@@ -226,9 +232,8 @@ export function DashboardView() {
     });
   };
 
-  /* ── Unique values for filter dropdowns ── */
   const filterOptions = useMemo(() => {
-    if (!effectiveData) return {} as Record<string, { value: string; label: string }[]>;
+    if (!effectiveData) return {} as Record<string, Array<{ value: string; label: string }>>;
     const items = effectiveData.items;
     const unique = (key: string, labelFn?: (v: string) => string) => {
       const vals = [
@@ -269,21 +274,29 @@ export function DashboardView() {
         <DashboardHeader stats={stats} />
         <QueueStatusAlert queueStatus={queueStatus} />
 
-        {/* Main content with tabs */}
         <FadeIn delay={0.2}>
           {mounted && (
             <Tabs value={activeTab} dir="rtl" onValueChange={setActiveTab}>
               <TabsList className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto">
                 <div
-                  className="absolute top-1 bottom-1 w-[calc(33.333%-5.333px)] rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
-                  style={{
-                    insetInlineStart:
-                      activeTab === "jobs"
-                        ? 4
-                        : activeTab === "analytics"
-                          ? "calc(33.333% + 2.666px)"
-                          : "calc(66.666% + 1.333px)",
-                  }}
+                  className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
+                  style={
+                    advancedMode
+                      ? {
+                          width: "calc(33.333% - 5.333px)",
+                          insetInlineStart:
+                            activeTab === "jobs"
+                              ? 4
+                              : activeTab === "analytics"
+                                ? "calc(33.333% + 2.666px)"
+                                : "calc(66.666% + 1.333px)",
+                        }
+                      : {
+                          width: "calc(50% - 6px)",
+                          insetInlineStart:
+                            activeTab === "jobs" ? 4 : "calc(50% + 2px)",
+                        }
+                  }
                 />
                 <TabsTrigger
                   value="jobs"
@@ -298,15 +311,17 @@ export function DashboardView() {
                   className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                 >
                   <BarChart3 className="size-3.5" />
-                  סטטיסטיקות
+                  {msg("auto.features.dashboard.components.dashboardview.1")}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="explore"
-                  className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
-                >
-                  <Compass className="size-3.5" />
-                  מפה
-                </TabsTrigger>
+                {advancedMode && (
+                  <TabsTrigger
+                    value="explore"
+                    className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
+                  >
+                    <Compass className="size-3.5" />
+                    {msg("auto.features.dashboard.components.dashboardview.2")}
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="jobs">
@@ -349,9 +364,11 @@ export function DashboardView() {
                 />
               </TabsContent>
 
-              <TabsContent value="explore">
-                <ExploreView />
-              </TabsContent>
+              {advancedMode && (
+                <TabsContent value="explore">
+                  <ExploreView />
+                </TabsContent>
+              )}
             </Tabs>
           )}
         </FadeIn>

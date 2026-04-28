@@ -1,10 +1,14 @@
 /**
  * Builds a DSPy Signature class template from a column-role map.
  * Columns marked "input" become InputFields; "output" → OutputFields.
- * Column names are sanitized to valid Python identifiers.
+ * Input columns flagged ``"image"`` in ``kinds`` are typed ``dspy.Image``
+ * so vision-capable models receive the cell as an image instance — text
+ * inputs (the default) stay typed ``str``. Column names are sanitized
+ * to valid Python identifiers.
  */
 export function buildSignatureTemplate(
   roles: Record<string, "input" | "output" | "ignore">,
+  kinds: Record<string, "text" | "image"> = {},
 ): string {
   const inputs = Object.entries(roles)
     .filter(([, r]) => r === "input")
@@ -13,9 +17,12 @@ export function buildSignatureTemplate(
     .filter(([, r]) => r === "output")
     .map(([c]) => c);
   const toId = (s: string) => s.replace(/[^a-zA-Z0-9_\u0590-\u05FF]/g, "_").replace(/^(\d)/, "_$1");
+  const inputType = (col: string) => (kinds[col] === "image" ? "dspy.Image" : "str");
   const inLines =
     inputs.length > 0
-      ? inputs.map((c) => `    ${toId(c)}: str = dspy.InputField(desc="")`).join("\n")
+      ? inputs
+          .map((c) => `    ${toId(c)}: ${inputType(c)} = dspy.InputField(desc="")`)
+          .join("\n")
       : `    input_field: str = dspy.InputField(desc="")`;
   const outLines =
     outputs.length > 0

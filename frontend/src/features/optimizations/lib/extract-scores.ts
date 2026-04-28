@@ -11,7 +11,7 @@ export interface ScorePoint {
   best: number;
 }
 
-export function extractScoresFromLogs(logs: { message: string }[]): ScorePoint[] {
+export function extractScoresFromLogs(logs: Array<{ message: string }>): ScorePoint[] {
   const points: ScorePoint[] = [];
   let bestSoFar = -1;
 

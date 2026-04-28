@@ -36,10 +36,7 @@ export function detectStage(job: OptimizationStatusResponse): PipelineStage {
  * optimized_evaluated); falls back to the job-level stage for events emitted
  * before any pair started (validation, dataset splits).
  */
-export function detectPairStage(
-  job: OptimizationStatusResponse,
-  pairIndex: number,
-): PipelineStage {
+export function detectPairStage(job: OptimizationStatusResponse, pairIndex: number): PipelineStage {
   // Authoritative signal: if the pair result itself has a final score, an
   // artifact, or an error recorded, the pair is done — regardless of
   // whether the progress-event stream survived (events can be dropped

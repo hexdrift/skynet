@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Scores comparison chart
- * Displays baseline vs optimized scores for multiple jobs
- * Preserves exact styling, RTL layout, and hover interactions
- */
-
 import { useState } from "react";
 import {
   BarChart,
@@ -19,9 +13,10 @@ import {
 } from "recharts";
 import { ChartTooltip, ChartEmptyState } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface ScoresChartProps {
-  data: Array<{ name: string; ציון_התחלתי: number; ציון_משופר: number; delta?: number }>;
+  data: Array<{ name: string; baselineScore: number; optimizedScore: number; delta?: number }>;
   optimizationIds?: string[];
   onBarClick?: (optimizationId: string) => void;
 }
@@ -31,7 +26,13 @@ export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartPr
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
 
   if (data.length === 0) {
-    return <ChartEmptyState message={`אין עדיין ${TERMS.optimizationPlural} שהושלמו`} />;
+    return (
+      <ChartEmptyState
+        message={formatMsg("auto.shared.charts.scores.chart.template.1", {
+          p1: TERMS.optimizationPlural,
+        })}
+      />
+    );
   }
 
   const handleClick = (index: number) => {
@@ -65,13 +66,18 @@ export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartPr
               tick={{ fontSize: 11 }}
               className="fill-muted-foreground"
               ticks={[0, 25, 50, 75, 100]}
-              label={{ value: "ציון באחוזים", position: "insideBottom", offset: -5, fontSize: 11 }}
+              label={{
+                value: msg("auto.shared.charts.scores.chart.literal.1"),
+                position: "insideBottom",
+                offset: -5,
+                fontSize: 11,
+              }}
             />
             <YAxis type="category" dataKey="name" hide />
             <Tooltip content={<ChartTooltip />} />
             {!hiddenSeries.has(TERMS.baselineScore) && (
               <Bar
-                dataKey="ציון_התחלתי"
+                dataKey="baselineScore"
                 name={TERMS.baselineScore}
                 fill="var(--color-chart-4)"
                 radius={[0, 4, 4, 0]}
@@ -83,7 +89,7 @@ export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartPr
             )}
             {!hiddenSeries.has(TERMS.optimizedScore) && (
               <Bar
-                dataKey="ציון_משופר"
+                dataKey="optimizedScore"
                 name={TERMS.optimizedScore}
                 fill="var(--color-chart-2)"
                 radius={[0, 4, 4, 0]}

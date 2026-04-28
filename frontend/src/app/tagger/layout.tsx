@@ -3,9 +3,10 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { TERMS } from "@/shared/lib/terms";
 
+import { formatMsg } from "@/shared/lib/messages";
 export const metadata: Metadata = {
   title: "Text Tagger",
-  description: `הגדרות תיוג — סווג, תייג וחלץ מידע מ${TERMS.dataset}ים`,
+  description: formatMsg("auto.app.tagger.layout.template.1", { p1: TERMS.dataset }),
 };
 
 export default function TaggerLayout({ children }: { children: React.ReactNode }) {

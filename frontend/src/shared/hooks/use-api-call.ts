@@ -1,10 +1,6 @@
-/**
- * Unified API call hook
- * Provides consistent error handling, loading state, and toast integration
- */
-
 import { useState, useCallback } from "react";
 import { toast } from "react-toastify";
+import { msg } from "@/shared/lib/messages";
 
 interface UseApiCallOptions<T> {
   onSuccess?: (data: T) => void;
@@ -15,7 +11,7 @@ interface UseApiCallOptions<T> {
 
 export function useApiCall<T = void, Args extends unknown[] = []>(
   apiFunction: (...args: Args) => Promise<T>,
-  options: UseApiCallOptions<T> = {}
+  options: UseApiCallOptions<T> = {},
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -43,7 +39,7 @@ export function useApiCall<T = void, Args extends unknown[] = []>(
         if (options.errorMessage) {
           toast.error(options.errorMessage);
         } else {
-          toast.error(error.message || "אירעה שגיאה");
+          toast.error(error.message || msg("auto.shared.hooks.use.api.call.literal.1"));
         }
 
         options.onError?.(error);
@@ -52,7 +48,7 @@ export function useApiCall<T = void, Args extends unknown[] = []>(
         setLoading(false);
       }
     },
-    [apiFunction, options]
+    [apiFunction, options],
   );
 
   const reset = useCallback(() => {

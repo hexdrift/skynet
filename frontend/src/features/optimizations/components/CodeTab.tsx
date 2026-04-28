@@ -1,23 +1,16 @@
 "use client";
 
-/**
- * Code tab — shows signature/metric source and optimized prompt.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Owns its own active
- * sub-tab state (signature vs metric) and receives the code strings +
- * optimized prompt from the parent.
- */
-
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Code, Sparkles } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizedPredictor } from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
 import { CopyButton } from "./ui-primitives";
+import { msg } from "@/shared/lib/messages";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
@@ -40,7 +33,7 @@ export function CodeTab({
     <>
       <FadeIn>
         <p className="text-sm text-muted-foreground">
-          קוד המקור של הפרומפט ההתחלתי, פונקציית המדידה, והפרומפט המאומן.
+          {msg("auto.features.optimizations.components.codetab.1")}
         </p>
       </FadeIn>
       {(signatureCode || metricCode) && (
@@ -48,7 +41,9 @@ export function CodeTab({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Code className="size-4" />
-              <HelpTip text={tip("code.signature_metric")}>קוד</HelpTip>
+              <HelpTip text={tip("code.signature_metric")}>
+                {msg("auto.features.optimizations.components.codetab.2")}
+              </HelpTip>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -71,7 +66,7 @@ export function CodeTab({
                     value="signature"
                     className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                   >
-                    Signature
+                    {msg("auto.features.optimizations.components.codetab.3")}
                   </TabsTrigger>
                 )}
                 {metricCode && (
@@ -79,7 +74,7 @@ export function CodeTab({
                     value="metric"
                     className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
                   >
-                    Metric
+                    {msg("auto.features.optimizations.components.codetab.4")}
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -114,7 +109,7 @@ export function CodeTab({
             <CardTitle className="text-base flex items-center gap-2">
               <Sparkles className="size-4" />
               <HelpTip text={tip("prompt.optimized")}>
-                פרומפט מאופטם
+                {msg("auto.features.optimizations.components.codetab.5")}
               </HelpTip>
             </CardTitle>
           </CardHeader>
@@ -136,7 +131,7 @@ export function CodeTab({
                 <p className="text-xs text-muted-foreground mb-2">
                   {optimizedPrompt.demos.length}{" "}
                   <HelpTip text={tip("prompt.demonstrations")}>
-                    דוגמאות מובנות
+                    {msg("auto.features.optimizations.components.codetab.6")}
                   </HelpTip>
                 </p>
                 <div className="space-y-2">

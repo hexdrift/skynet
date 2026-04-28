@@ -4,6 +4,7 @@ export const TERMS = {
   optimization: "אופטימיזציה",
   optimizationPlural: "אופטימיזציות",
   optimizationTypeRun: "ריצה",
+  optimizationTypeRunPlural: "ריצות",
   optimizationTypeGrid: "סריקה",
   pair: "זוג",
   program: "תוכנית",
@@ -105,19 +106,15 @@ export const I18N_MESSAGES = {
   "optimization.no_artifact_generic": "ה{term.optimization} לא ייצרה תוצר.",
   "optimization.corrupt_result": "נתוני תוצאת ה{term.optimization} פגומים.",
   "optimization.corrupt_column_mapping": "מיפוי העמודות השמור אינו תקין.",
-  "optimization.not_success_status_for_serve":
-    "ה{term.optimization} במצב '{status}' — רק {term.optimizationPlural} שהושלמו בהצלחה ניתנות להגשה.",
-  "optimization.not_success_status_for_test_results":
-    "ה{term.optimization} במצב '{status}' — רק ל{term.optimizationPlural} שהושלמו בהצלחה יש תוצאות {term.splitTest}.",
+  "optimization.not_success_status_for_serve": "ה{term.optimization} במצב '{status}' — רק {term.optimizationPlural} שהושלמו בהצלחה ניתנות להגשה.",
+  "optimization.not_success_status_for_test_results": "ה{term.optimization} במצב '{status}' — רק ל{term.optimizationPlural} שהושלמו בהצלחה יש תוצאות {term.splitTest}.",
   "optimization.cancelled_no_artifact": "ה{term.optimization} בוטלה ולא ייצרה תוצר.",
   "optimization.failed_no_artifact": "ה{term.optimization} נכשלה ולא ייצרה תוצר. שגיאה: {error}",
   "optimization.already_terminal": "ה{term.optimization} כבר במצב סופי '{status}'.",
-  "optimization.cannot_delete":
-    "לא ניתן למחוק {term.optimization} במצב '{status}'. יש לבטל אותה קודם.",
+  "optimization.cannot_delete": "לא ניתן למחוק {term.optimization} במצב '{status}'. יש לבטל אותה קודם.",
   "optimization.clone_no_payload": "לאופטימיזציית המקור אין מטען שמור לשכפול.",
   "optimization.retry_no_payload": "לאופטימיזציית המקור אין מטען שמור להרצה חוזרת.",
-  "optimization.retry_wrong_status":
-    "ניתן להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. יש לשכפל במקום.",
+  "optimization.retry_wrong_status": "ניתן להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. יש לשכפל במקום.",
   "optimization.cannot_resubmit_payload": "לא ניתן לשלוח מחדש את המטען השמור: {error}",
   "optimization.pairs_label": "{count} {term.pairPlural}",
   "grid_search.no_best_pair": "לסריקה אין זוג מוצלח.",
@@ -126,25 +123,23 @@ export const I18N_MESSAGES = {
   "grid_search.pair_failed_error": "הזוג במיקום {pair_index} נכשל: {error}",
   "grid_search.pair_no_artifact": "לזוג במיקום {pair_index} אין תוצר {term.program}.",
   "grid_search.pair_submission_grid_only": "הגשה לפי זוג זמינה רק בריצות של סריקה.",
-  "grid_search.pair_test_results_grid_only":
-    "תוצאות {term.splitTest} לפי זוג זמינות רק בריצות של סריקה.",
+  "grid_search.pair_test_results_grid_only": "תוצאות {term.splitTest} לפי זוג זמינות רק בריצות של סריקה.",
   "grid_search.not_a_grid_search": "ה{term.optimization} אינה סריקה.",
-  "grid_search.artifact_per_pair_redirect":
-    "ריצות של סריקה מייצרות תוצרים לכל זוג. יש להשתמש ב-GET /optimizations/{{optimization_id}}/grid-result במקום.",
+  "grid_search.artifact_per_pair_redirect": "ריצות של סריקה מייצרות תוצרים לכל זוג. יש להשתמש ב-GET /optimizations/{{optimization_id}}/grid-result במקום.",
   "grid_search.failed_no_result": "הסריקה נכשלה ולא הפיקה תוצאה. שגיאה: {error}",
   "grid_search.cancelled_no_result": "הסריקה בוטלה ולא הפיקה תוצאה.",
   "grid_search.no_result_available": "אין תוצאה זמינה לסריקה.",
   "grid_search.corrupt_result": "נתוני תוצאת הסריקה פגומים.",
   "grid_search.no_result_to_modify": "לסריקה אין תוצאה לשנות.",
-  "grid_search.cannot_delete_pair":
-    "לא ניתן למחוק זוג בזמן שה{term.optimization} במצב '{status}'. יש לבטל את ה{term.optimization} קודם.",
+  "grid_search.cannot_delete_pair": "לא ניתן למחוק זוג בזמן שה{term.optimization} במצב '{status}'. יש לבטל את ה{term.optimization} קודם.",
   "filter.invalid_status": "סינון סטטוס לא תקין '{value}'. ערכים חוקיים: {allowed}",
-  "filter.invalid_optimization_type":
-    "סינון סוג {term.optimization} לא תקין '{value}'. ערכים חוקיים: {allowed}",
-  "quota.reached":
-    "הגעת למגבלת {quota} {term.optimizationPlural} לכל משתמש. מחק {term.optimizationPlural} ישנות כדי ליצור חדשות.",
-  "submit.no_models_available":
-    "אין {term.modelPlural} זמינים בקטלוג — יש להגדיר API key של ספק קודם.",
+  "filter.invalid_optimization_type": "סינון סוג {term.optimization} לא תקין '{value}'. ערכים חוקיים: {allowed}",
+  "quota.reached": "הגעת למגבלת {quota} {term.optimizationPlural} לכל משתמש. מחק {term.optimizationPlural} ישנות כדי ליצור חדשות.",
+  "submit.no_models_available": "אין {term.modelPlural} זמינים בקטלוג — יש להגדיר API key של ספק קודם.",
+  "submission.validation_failed": "אימות המטען נכשל: {error}",
+  "submission.module_resolve_failed": "טעינת ה{term.module} נכשלה: {error}",
+  "submission.vision_required": "ה{term.dataset} מכיל עמודות תמונה ({fields}) אך ה{term.model} שנבחר ('{model}') אינו תומך בקלט תמונות. בחרו {term.model} עם תמיכה ב־vision.",
+  "code_agent.upstream_failed": "שגיאה בסוכן הקוד: {error}",
   "health.workers_dead": "שרשורי העבודה אינם פועלים.",
   "health.workers_stuck": "שרשורי העבודה תקועים כבר {seconds} שניות.",
   "wizard.field_non_empty_string": "{field} חייב להיות מחרוזת לא ריקה.",
@@ -155,41 +150,25 @@ export const I18N_MESSAGES = {
   "wizard.model_max_tokens_int": "{field}.max_tokens חייב להיות מספר שלם.",
   "wizard.model_extra_not_object": "{field}.extra חייב להיות אובייקט.",
   "wizard.optimizer_kwargs_not_object": "optimizer_kwargs חייב להיות אובייקט.",
-  "dataset.sample_unknown":
-    "{term.dataset} {term.example} לא ידוע '{sample_id}'. יש לקרוא ל-GET /datasets/samples לרשימת מזהים חוקיים.",
-  "dataset.column_roles_unknown":
-    "תפקידי עמודות מפנים לעמודות שלא קיימות ב-dataset_columns: {unknown}",
-  "dataset.column_roles_invalid":
-    "ערכי תפקיד לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
+  "dataset.sample_unknown": "{term.dataset} {term.example} לא ידוע '{sample_id}'. יש לקרוא ל-GET /datasets/samples לרשימת מזהים חוקיים.",
+  "dataset.column_roles_unknown": "תפקידי עמודות מפנים לעמודות שלא קיימות ב-dataset_columns: {unknown}",
+  "dataset.column_roles_invalid": "ערכי תפקיד לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
   "dataset.column_roles_need_input": "לפחות עמודה אחת חייבת להיות בתפקיד 'input'.",
   "dataset.column_roles_need_output": "לפחות עמודה אחת חייבת להיות בתפקיד 'output'.",
   "dataset.profile.empty": "Dataset must contain at least one row.",
-  "dataset.profile.too_small":
-    "ה{term.dataset} מכיל {row_count} {term.examplePlural} — מעט מכדי להעריך שיפור אמיתי. כדאי להוסיף עוד {term.examplePlural} כדי לקבל ציונים יציבים.",
-  "dataset.profile.duplicates":
-    "זוהו {duplicate_count} {term.rowPlural} כפולות לפי {term.inputColumns}. כפילויות עלולות לגרום לאותן {term.examplePlural} להופיע גם ב{term.splitTrain} וגם ב{term.splitTest}.",
-  "dataset.profile.missing_target":
-    "{missing} {term.rowPlural} חסרות ערך ב{term.outputColumnTarget} '{column_name}'. מומלץ להסיר או למלא אותן לפני הריצה.",
-  "dataset.profile.rare_class":
-    "עמודת '{column_name}' מכילה קטגוריות נדירות ({rare_classes}) — חלקן עלולות להיעדר מסטי ה{term.splitVal} וה{term.splitTest}.",
-  "dataset.profile.class_imbalance":
-    "חוסר איזון בקטגוריות של '{column_name}' (יחס {ratio}:1). כדאי להוסיף {term.examplePlural} לקטגוריות החלשות.",
-  "dataset.split.rationale.micro":
-    "ה{term.dataset} קטן מאוד ({total} {term.examplePlural}) — הציונים יהיו רועשים. ב{term.optimization} DSPy סט ה{term.splitVal} הוא שדה החיפוש של ה{term.optimizer}, ולכן הקצנו אליו את רוב ה{term.examplePlural}.",
-  "dataset.split.rationale.small":
-    "{term.dataset} קטן ({total} {term.examplePlural}). ב{term.optimization} DSPy סט ה{term.splitVal} הוא שדה החיפוש של ה{term.optimizer}, אז אליו הולכות רוב ה{term.examplePlural}, וסט ה{term.splitTrain} משמש רק כמאגר {term.examplePlural}.",
-  "dataset.split.rationale.medium":
-    "{term.dataset} בגודל בינוני ({total} {term.examplePlural}) — {term.splitTrain} ו{term.splitVal} דומים בגודלם, ו{term.splitTest} 15% נותנת מספיק {term.examplePlural} למדידה אמינה.",
-  "dataset.split.rationale.large":
-    "{term.dataset} גדול ({total} {term.examplePlural}) — ה{term.splitTrain} מקבל את הרוב, ועדיין נשארות מספיק {term.examplePlural} ל{term.splitVal} ול{term.splitTest}.",
-  "dataset.split.rationale.huge":
-    "{term.dataset} גדול מאוד ({total} {term.examplePlural}). הגבלנו את ה{term.splitVal} ל-{val_count} ואת ה{term.splitTest} ל-{test_count} {term.examplePlural} — מספיק לציונים יציבים, בלי לבזבז זמן {term.optimization} על {term.examplePlural} מיותרות.",
-  "dataset.split.rationale.test_floor":
-    "הגדלנו את סט ה{term.splitTest} ל-{minimum} {term.examplePlural} לפחות — מספר קטן מזה נותן רעש סטטיסטי גבוה מדי על {term.finalScore}.",
-  "dataset.split.rationale.shuffle":
-    "ה{term.rowPlural} מעורבבות לפני הפיצול עם ערך התחלתי קבוע — ניתן לשחזר את התוצאה.",
-  "dataset.split.rationale.stratify":
-    "החלוקה תשמור על יחס הקטגוריות מעמודת '{stratify_column}' בכל שלושת הסטים, כדי שקטגוריה נדירה לא תיעלם מה{term.splitVal} או מה{term.splitTest}.",
+  "dataset.profile.too_small": "ה{term.dataset} מכיל {row_count} {term.examplePlural} — מעט מכדי להעריך שיפור אמיתי. כדאי להוסיף עוד {term.examplePlural} כדי לקבל ציונים יציבים.",
+  "dataset.profile.duplicates": "זוהו {duplicate_count} {term.rowPlural} כפולות לפי {term.inputColumns}. כפילויות עלולות לגרום לאותן {term.examplePlural} להופיע גם ב{term.splitTrain} וגם ב{term.splitTest}.",
+  "dataset.profile.missing_target": "{missing} {term.rowPlural} חסרות ערך ב{term.outputColumnTarget} '{column_name}'. מומלץ להסיר או למלא אותן לפני הריצה.",
+  "dataset.profile.rare_class": "עמודת '{column_name}' מכילה קטגוריות נדירות ({rare_classes}) — חלקן עלולות להיעדר מסטי ה{term.splitVal} וה{term.splitTest}.",
+  "dataset.profile.class_imbalance": "חוסר איזון בקטגוריות של '{column_name}' (יחס {ratio}:1). כדאי להוסיף {term.examplePlural} לקטגוריות החלשות.",
+  "dataset.split.rationale.micro": "ה{term.dataset} קטן מאוד ({total} {term.examplePlural}) — הציונים יהיו רועשים. ב{term.optimization} DSPy סט ה{term.splitVal} הוא שדה החיפוש של ה{term.optimizer}, ולכן הקצנו אליו את רוב ה{term.examplePlural}.",
+  "dataset.split.rationale.small": "{term.dataset} קטן ({total} {term.examplePlural}). ב{term.optimization} DSPy סט ה{term.splitVal} הוא שדה החיפוש של ה{term.optimizer}, אז אליו הולכות רוב ה{term.examplePlural}, וסט ה{term.splitTrain} משמש רק כמאגר {term.examplePlural}.",
+  "dataset.split.rationale.medium": "{term.dataset} בגודל בינוני ({total} {term.examplePlural}) — {term.splitTrain} ו{term.splitVal} דומים בגודלם, ו{term.splitTest} 15% נותנת מספיק {term.examplePlural} למדידה אמינה.",
+  "dataset.split.rationale.large": "{term.dataset} גדול ({total} {term.examplePlural}) — ה{term.splitTrain} מקבל את הרוב, ועדיין נשארות מספיק {term.examplePlural} ל{term.splitVal} ול{term.splitTest}.",
+  "dataset.split.rationale.huge": "{term.dataset} גדול מאוד ({total} {term.examplePlural}). הגבלנו את ה{term.splitVal} ל-{val_count} ואת ה{term.splitTest} ל-{test_count} {term.examplePlural} — מספיק לציונים יציבים, בלי לבזבז זמן {term.optimization} על {term.examplePlural} מיותרות.",
+  "dataset.split.rationale.test_floor": "הגדלנו את סט ה{term.splitTest} ל-{minimum} {term.examplePlural} לפחות — מספר קטן מזה נותן רעש סטטיסטי גבוה מדי על {term.finalScore}.",
+  "dataset.split.rationale.shuffle": "ה{term.rowPlural} מעורבבות לפני הפיצול עם ערך התחלתי קבוע — ניתן לשחזר את התוצאה.",
+  "dataset.split.rationale.stratify": "החלוקה תשמור על יחס הקטגוריות מעמודת '{stratify_column}' בכל שלושת הסטים, כדי שקטגוריה נדירה לא תיעלם מה{term.splitVal} או מה{term.splitTest}.",
   "dataset.split.rationale.categorical_target": "עמודת '{target_name}' קטגוריאלית: {preview}.",
   "agent.approval.unknown_call_id": "אין אישור ממתין ל-call_id שצויין.",
   "agent.status.tool_start": "הסוכן מפעיל כלי…",
@@ -197,8 +176,7 @@ export const I18N_MESSAGES = {
   "wizard.column_roles_not_object": "column_roles חייב להיות אובייקט.",
   "wizard.invalid_role_values": "ערכי תפקיד לא תקינים (חייבים להיות אחד מ-{allowed}): {bad}",
   "wizard.field_must_be_list": "{field} חייב להיות רשימה.",
-  "wizard.split_fractions_not_object":
-    "split_fractions חייב להיות אובייקט עם המפתחות train/val/test.",
+  "wizard.split_fractions_not_object": "split_fractions חייב להיות אובייקט עם המפתחות train/val/test.",
   "wizard.split_fractions_not_number": "ערכי split_fractions חייבים להיות מספרים: {error}",
   "wizard.split_fractions_negative": "split_fractions חייב להיות לא שלילי.",
   "wizard.split_fractions_sum": "split_fractions חייב להסתכם ל-1.0, התקבל {total}",
@@ -233,6 +211,7 @@ export const I18N_KEY = {
   AGENT_STATUS_TOOL_END: "agent.status.tool_end",
   AGENT_STATUS_TOOL_START: "agent.status.tool_start",
   ANALYTICS_OTHER_BUCKET: "analytics.other_bucket",
+  CODE_AGENT_UPSTREAM_FAILED: "code_agent.upstream_failed",
   DATASET_COLUMN_ROLES_INVALID: "dataset.column_roles_invalid",
   DATASET_COLUMN_ROLES_NEED_INPUT: "dataset.column_roles_need_input",
   DATASET_COLUMN_ROLES_NEED_OUTPUT: "dataset.column_roles_need_output",
@@ -307,8 +286,7 @@ export const I18N_KEY = {
   OPTIMIZATION_NOT_FINISHED: "optimization.not_finished",
   OPTIMIZATION_NOT_FOUND: "optimization.not_found",
   OPTIMIZATION_NOT_SUCCESS_STATUS_FOR_SERVE: "optimization.not_success_status_for_serve",
-  OPTIMIZATION_NOT_SUCCESS_STATUS_FOR_TEST_RESULTS:
-    "optimization.not_success_status_for_test_results",
+  OPTIMIZATION_NOT_SUCCESS_STATUS_FOR_TEST_RESULTS: "optimization.not_success_status_for_test_results",
   OPTIMIZATION_PAIRS_LABEL: "optimization.pairs_label",
   OPTIMIZATION_PAYLOAD_UNAVAILABLE: "optimization.payload_unavailable",
   OPTIMIZATION_RETRY_NO_PAYLOAD: "optimization.retry_no_payload",
@@ -317,6 +295,9 @@ export const I18N_KEY = {
   SERVE_MISSING_INPUTS: "serve.missing_inputs",
   SERVE_NO_DECLARED_INPUTS: "serve.no_declared_inputs",
   SERVE_NO_MODEL_CONFIG: "serve.no_model_config",
+  SUBMISSION_MODULE_RESOLVE_FAILED: "submission.module_resolve_failed",
+  SUBMISSION_VALIDATION_FAILED: "submission.validation_failed",
+  SUBMISSION_VISION_REQUIRED: "submission.vision_required",
   SUBMIT_NO_MODELS_AVAILABLE: "submit.no_models_available",
   TEMPLATE_CANNOT_DELETE_OTHERS: "template.cannot_delete_others",
   TEMPLATE_CANNOT_UPDATE_OTHERS: "template.cannot_update_others",
@@ -387,6 +368,7 @@ export const TERM_KEY = {
   OPTIMIZATION_PLURAL: "optimizationPlural",
   OPTIMIZATION_TYPE_GRID: "optimizationTypeGrid",
   OPTIMIZATION_TYPE_RUN: "optimizationTypeRun",
+  OPTIMIZATION_TYPE_RUN_PLURAL: "optimizationTypeRunPlural",
   OPTIMIZED_SCORE: "optimizedScore",
   OPTIMIZER: "optimizer",
   OPTIMIZER_PLURAL: "optimizerPlural",

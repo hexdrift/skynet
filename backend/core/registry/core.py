@@ -1,3 +1,9 @@
+"""Service registry holding user-defined DSPy modules, metrics, and optimizers.
+
+Provides ``ServiceRegistry`` and the typed errors it raises so that
+service code and tests can register and look up factories by name.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping
@@ -35,11 +41,11 @@ class ServiceRegistry:
         """Register a DSPy module factory under a short name.
 
         Args:
-            name: Short identifier used in RunRequest.module_name.
-            factory: Callable returning a dspy.Module instance.
+            name: Lookup key for the module factory.
+            factory: Callable returning a ``dspy.Module`` instance.
 
         Raises:
-            DuplicateRegistrationError: If ``name`` is already registered.
+            DuplicateRegistrationError: When ``name`` is already registered.
         """
         self._register(self.modules, name, factory)
 
@@ -47,11 +53,11 @@ class ServiceRegistry:
         """Register a metric function under a short name.
 
         Args:
-            name: Short identifier for the metric.
-            metric: Callable accepting (gold, pred[, trace]) and returning a float.
+            name: Lookup key for the metric.
+            metric: Scoring callable returning a ``float``.
 
         Raises:
-            DuplicateRegistrationError: If ``name`` is already registered.
+            DuplicateRegistrationError: When ``name`` is already registered.
         """
         self._register(self.metrics, name, metric)
 
@@ -59,11 +65,11 @@ class ServiceRegistry:
         """Register an optimizer factory under a short name.
 
         Args:
-            name: Short identifier used in RunRequest.optimizer_name.
-            factory: Callable returning a DSPy teleprompt optimizer instance.
+            name: Lookup key for the optimizer factory.
+            factory: Callable building an optimizer instance.
 
         Raises:
-            DuplicateRegistrationError: If ``name`` is already registered.
+            DuplicateRegistrationError: When ``name`` is already registered.
         """
         self._register(self.optimizers, name, factory)
 
@@ -71,13 +77,13 @@ class ServiceRegistry:
         """Return the module factory registered under ``name``.
 
         Args:
-            name: Identifier passed to register_module.
+            name: Lookup key.
 
         Returns:
-            The registered ModuleFactory callable.
+            The previously registered module factory.
 
         Raises:
-            UnknownRegistrationError: If no module is registered under ``name``.
+            UnknownRegistrationError: When ``name`` is not registered.
         """
         return self._get(self.modules, name, kind="module")
 
@@ -85,13 +91,13 @@ class ServiceRegistry:
         """Return the metric function registered under ``name``.
 
         Args:
-            name: Identifier passed to register_metric.
+            name: Lookup key.
 
         Returns:
-            The registered MetricFn callable.
+            The previously registered metric callable.
 
         Raises:
-            UnknownRegistrationError: If no metric is registered under ``name``.
+            UnknownRegistrationError: When ``name`` is not registered.
         """
         return self._get(self.metrics, name, kind="metric")
 
@@ -99,13 +105,13 @@ class ServiceRegistry:
         """Return the optimizer factory registered under ``name``.
 
         Args:
-            name: Identifier passed to register_optimizer.
+            name: Lookup key.
 
         Returns:
-            The registered OptimizerFactory callable.
+            The previously registered optimizer factory.
 
         Raises:
-            UnknownRegistrationError: If no optimizer is registered under ``name``.
+            UnknownRegistrationError: When ``name`` is not registered.
         """
         return self._get(self.optimizers, name, kind="optimizer")
 
@@ -113,8 +119,8 @@ class ServiceRegistry:
         """Return sorted registered names keyed by asset type.
 
         Returns:
-            Dict with keys ``"modules"``, ``"metrics"``, and ``"optimizers"``,
-            each mapping to a sorted list of registered names.
+            A mapping with sorted name lists under ``modules``, ``metrics``,
+            and ``optimizers`` keys.
         """
         return {
             "modules": sorted(self.modules.keys()),
@@ -127,12 +133,12 @@ class ServiceRegistry:
         """Insert ``value`` into ``store`` under ``name``, raising on duplicates.
 
         Args:
-            store: The mutable mapping to insert into.
-            name: Key to register under.
-            value: Factory or callable to store.
+            store: Mapping to mutate in place.
+            name: Key under which to register ``value``.
+            value: Object to store.
 
         Raises:
-            DuplicateRegistrationError: If ``name`` already exists in ``store``.
+            DuplicateRegistrationError: When ``name`` is already in ``store``.
         """
         if name in store:
             raise DuplicateRegistrationError(f"Entry '{name}' already registered.")
@@ -143,15 +149,15 @@ class ServiceRegistry:
         """Look up ``name`` in ``store``, raising a typed error when missing.
 
         Args:
-            store: The mapping to search.
-            name: Key to look up.
-            kind: Human-readable asset type used in the error message.
+            store: Mapping to read from.
+            name: Lookup key.
+            kind: Asset label used in the error message.
 
         Returns:
-            The value stored under ``name``.
+            The stored value.
 
         Raises:
-            UnknownRegistrationError: If ``name`` is not present in ``store``.
+            UnknownRegistrationError: When ``name`` is not in ``store``.
         """
         try:
             return store[name]

@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { Square } from "lucide-react";
+import { msg } from "@/shared/lib/messages";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import { cn } from "@/shared/lib/utils";
 
 interface ComposerProps {
@@ -26,15 +27,15 @@ export function Composer({
   placeholder,
   disabled,
   streaming,
-  sendAriaLabel = "שלח",
-  stopAriaLabel = "עצור",
+  sendAriaLabel = msg("auto.shared.ui.agent.composer.literal.1"),
+  stopAriaLabel = msg("auto.shared.ui.agent.composer.literal.2"),
 }: ComposerProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const autosize = (el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,10 +53,7 @@ export function Composer({
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="border-t border-border/40 px-3 py-3 shrink-0"
-    >
+    <form onSubmit={handleSubmit} className="border-t border-border/40 px-3 py-3 shrink-0">
       <div className="flex items-start gap-2">
         <textarea
           ref={textareaRef}

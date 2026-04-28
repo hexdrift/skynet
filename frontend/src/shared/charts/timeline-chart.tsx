@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Timeline chart (jobs per day)
- * Displays number of optimization jobs completed per day
- * Preserves exact styling, RTL layout, and hover interactions
- */
-
 import { useState } from "react";
 import {
   BarChart,
@@ -19,6 +13,7 @@ import {
 } from "recharts";
 import { ChartTooltip } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface TimelineChartProps {
   data: Array<{ name: string; [valueKey: string]: string | number }>;
@@ -42,7 +37,12 @@ export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
             axisLine={false}
             tick={{ fontSize: 9 }}
             className="fill-muted-foreground"
-            label={{ value: "תאריך", position: "insideBottom", offset: -8, fontSize: 10 }}
+            label={{
+              value: msg("auto.shared.charts.timeline.chart.literal.1"),
+              position: "insideBottom",
+              offset: -8,
+              fontSize: 10,
+            }}
           />
           <YAxis
             tickLine={false}
@@ -51,7 +51,9 @@ export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
             className="fill-muted-foreground"
             allowDecimals={false}
             label={{
-              value: `מספר ${TERMS.optimizationPlural}`,
+              value: formatMsg("auto.shared.charts.timeline.chart.template.1", {
+                p1: TERMS.optimizationPlural,
+              }),
               angle: -90,
               position: "center",
               dx: -10,

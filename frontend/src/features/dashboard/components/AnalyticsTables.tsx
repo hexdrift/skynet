@@ -9,11 +9,12 @@ import {
   TableBody,
   TableCell,
   TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+} from "@/shared/ui/primitives/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
+import { msg } from "@/shared/lib/messages";
 
 interface OptimizerComparisonData {
   name: string;
@@ -61,7 +62,9 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold">
           <HelpTip text={tip("analytics.optimizer_comparison_table")}>
-            השוואת {TERMS.optimizer}ים
+            {msg("auto.features.dashboard.components.analyticstables.1")}
+            {TERMS.optimizer}
+            {msg("auto.features.dashboard.components.analyticstables.2")}
           </HelpTip>
         </CardTitle>
       </CardHeader>
@@ -80,24 +83,27 @@ export function OptimizerComparisonTable({ data }: { data: OptimizerComparisonDa
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("avgImprovement")}
                 >
-                  שיפור ממוצע {sortKey === "avgImprovement" && (sortDir === "asc" ? "↑" : "↓")}
+                  {msg("auto.features.dashboard.components.analyticstables.3")}
+                  {sortKey === "avgImprovement" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("runs")}
                 >
-                  ריצות {sortKey === "runs" && (sortDir === "asc" ? "↑" : "↓")}
+                  {msg("auto.features.dashboard.components.analyticstables.4")}
+                  {sortKey === "runs" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("avgRuntime")}
                 >
-                  זמן ממוצע {sortKey === "avgRuntime" && (sortDir === "asc" ? "↑" : "↓")}
+                  {msg("auto.features.dashboard.components.analyticstables.5")}
+                  {sortKey === "avgRuntime" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((opt, idx) => (
+              {sorted.map((opt) => (
                 <TableRow key={opt.name} className="border-border/40">
                   <TableCell className="font-medium" dir="ltr">
                     {opt.name}
@@ -162,7 +168,9 @@ export function ModelPerformanceTable({ data }: { data: ModelPerformanceData[] }
     <Card className="border-border/60">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold">
-          <HelpTip text={tip("analytics.model_performance_table")}>ביצועי מודלים</HelpTip>
+          <HelpTip text={tip("analytics.model_performance_table")}>
+            {msg("auto.features.dashboard.components.analyticstables.6")}
+          </HelpTip>
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
@@ -174,21 +182,26 @@ export function ModelPerformanceTable({ data }: { data: ModelPerformanceData[] }
                   className="text-start cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("name")}
                 >
-                  מודל {sortKey === "name" && (sortDir === "asc" ? "↑" : "↓")}
+                  {msg("auto.features.dashboard.components.analyticstables.7")}
+                  {sortKey === "name" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
                   className="text-center cursor-pointer hover:text-foreground transition-colors"
                   onClick={() => toggleSort("usage")}
                 >
-                  שימושים {sortKey === "usage" && (sortDir === "asc" ? "↑" : "↓")}
+                  {msg("auto.features.dashboard.components.analyticstables.8")}
+                  {sortKey === "usage" && (sortDir === "asc" ? "↑" : "↓")}
                 </TableHead>
-                <TableHead className="text-center">תדירות</TableHead>
+                <TableHead className="text-center">
+                  {msg("auto.features.dashboard.components.analyticstables.9")}
+                </TableHead>
                 {data.some((m) => m.avgImprovement != null) && (
                   <TableHead
                     className="text-center cursor-pointer hover:text-foreground transition-colors"
                     onClick={() => toggleSort("avgImprovement")}
                   >
-                    שיפור ממוצע {sortKey === "avgImprovement" && (sortDir === "asc" ? "↑" : "↓")}
+                    {msg("auto.features.dashboard.components.analyticstables.10")}
+                    {sortKey === "avgImprovement" && (sortDir === "asc" ? "↑" : "↓")}
                   </TableHead>
                 )}
               </TableRow>

@@ -49,12 +49,12 @@ export const TOOLTIPS = {
   "grid.reflection_models": `המודלים שמנתחים שגיאות ומציעים שיפורים — כל ${TERMS.pair} נבדק עם ${TERMS.reflectionModel} שונה`,
   "grid.score_comparison": `השוואת ${TERMS.baselineScore} וה${TERMS.optimizedScore} לכל ${TERMS.pair} מודלים`,
   "grid.quality_speed_combined":
-    "איכות, מהירות, וציון משולב (ממוצע הרמוני) לכל זוג מודלים. ציון משולב גבוה = גם איכותי וגם מהיר.",
+    "איכות ומהירות לכל זוג מודלים, זה לצד זה. ככל שהאיכות והמהירות גבוהות יותר, כך הזוג טוב יותר.",
   "grid.avg_response_time_per_pair": "משך זמן ממוצע לכל קריאה למודל שפה, לפי זוג מודלים",
   "grid.best_pair_default":
-    "ברירת מחדל: הזוג עם הציון המשולב הגבוה ביותר (ממוצע הרמוני של איכות ומהירות). ניתן להחליף לכל זוג אחר.",
+    "ברירת מחדל: הזוג עם ציון האיכות הגבוה ביותר. ניתן להחליף לכל זוג אחר.",
 
-  "pair.runtime": `משך זמן כולל של ריצת ה${TERMS.optimization} עבור ${TERMS.pair} המודלים הזה`,
+  "pair.runtime": `משך ${TERMS.optimizationTypeRun} ה${TERMS.optimization} עבור ${TERMS.pair} המודלים הזה`,
 
   "serve.section_pair": "כתובת API וקוד לשילוב הזוג הנבחר באפליקציה שלך",
   "serve.section_run": `כתובת API וקוד לשילוב ה${TERMS.program} המאומנת באפליקציה שלך`,
@@ -85,24 +85,23 @@ export const TOOLTIPS = {
   "tagger.multiclass_categories": "הגדר את הקטגוריות הזמינות לבחירה בזמן התיוג — לפחות שתיים",
   "tagger.freetext_instruction": "ההנחיה שתוצג מעל שדה הטקסט — עזור למתייג להבין מה לכתוב",
 
-  "compare.detail": "השוואה מפורטת בין שתי ריצות — ציונים, הגדרות, ופרומפטים",
+  "compare.detail": `השוואה מפורטת בין שתי ${TERMS.optimizationTypeRunPlural} — ציונים, הגדרות, ופרומפטים`,
   "compare.scores_section": `ציוני המדידה לפני ואחרי ה${TERMS.optimization} לכל ${TERMS.optimizationTypeRun}`,
   "compare.config_section": `השוואת ההגדרות שנבחרו לכל ${TERMS.optimizationTypeRun} — ${TERMS.model}, ${TERMS.optimizer}, ונתונים`,
   "compare.per_example": "השוואה ברמת הדוגמה — לכל פריט בסט הבדיקה, מי עבר (ירוק) ומי נכשל (אדום)",
-  "compare.winner_improvement": `אחוז ה${TERMS.scoreImprovement} של הריצה הזוכה — ההפרש בין ה${TERMS.optimizedScore} ל${TERMS.baselineScore}`,
-  "compare.winner_runtime": `משך ה${TERMS.optimizationTypeRun} הכולל של הריצה הזוכה, מרגע השיגור ועד סיום ה${TERMS.optimization}`,
-  "compare.winner_models": `זוג מודלי השפה של הריצה הזוכה — ${TERMS.generationModel} שמייצר פלט, ו${TERMS.reflectionModel} שמשפר את ההנחיות`,
-  "compare.winner_metric_family": `סוג ${TERMS.metric} של הריצה הזוכה — איכות מודדת ${TERMS.score} ישיר, משולב הוא ממוצע הרמוני של איכות ומהירות עבור זוג מודלים`,
+  "compare.winner_improvement": `אחוז ה${TERMS.scoreImprovement} של ה${TERMS.optimizationTypeRun} הזוכה — ההפרש בין ה${TERMS.optimizedScore} ל${TERMS.baselineScore}`,
+  "compare.winner_runtime": `משך הזמן הכולל של ה${TERMS.optimizationTypeRun} הזוכה, מרגע השיגור ועד סיום ה${TERMS.optimization}`,
+  "compare.winner_models": `זוג מודלי השפה של ה${TERMS.optimizationTypeRun} הזוכה — ${TERMS.generationModel} שמייצר פלט, ו${TERMS.reflectionModel} שמשפר את ההנחיות`,
 
   "analytics.score_comparison": `השוואת ${TERMS.baselineScore} מול ה${TERMS.optimizedScore} לכל ${TERMS.optimization} שהושלמה`,
-  "analytics.runtime_vs_gain": "ניתוח זמני ריצה ויעילות — כמה שיפור מתקבל ביחס לזמן",
-  "analytics.runtime_minutes": `משך הריצה בדקות לכל ${TERMS.optimization} שהושלמה`,
-  "analytics.improvement_per_minute": `אחוזי ${TERMS.scoreImprovement} לכל דקת ריצה — ערך גבוה משמעו ${TERMS.optimization} יעילה יותר`,
+  "analytics.runtime_vs_gain": `ניתוח זמני ${TERMS.optimizationTypeRun} ויעילות — כמה שיפור מתקבל ביחס לזמן`,
+  "analytics.runtime_minutes": `משך ה${TERMS.optimizationTypeRun} בדקות לכל ${TERMS.optimization} שהושלמה`,
+  "analytics.improvement_per_minute": `אחוזי ${TERMS.scoreImprovement} לכל דקת ${TERMS.optimizationTypeRun} — ערך גבוה משמעו ${TERMS.optimization} יעילה יותר`,
   "analytics.dataset_size_vs_improvement": `האם יותר נתונים מובילים ל${TERMS.scoreImprovement} טוב יותר — כל נקודה היא ${TERMS.optimization} אחת`,
   "analytics.submissions_per_day": `מספר ה${TERMS.optimizationPlural} שהוגשו לפי יום`,
-  "analytics.optimizer_avg_improvement": `${TERMS.scoreImprovement} ממוצע באחוזים שכל ${TERMS.optimizer} השיג על פני כל הריצות`,
-  "analytics.top_improvements": "הריצות שהשיגו את השיפור הגדול ביותר בציון, מהטוב לפחות טוב",
-  "analytics.optimizer_comparison_table": `השוואה מפורטת בין ה${TERMS.optimizerPlural}: שיפור ממוצע, מספר ריצות, וזמן ריצה`,
+  "analytics.optimizer_avg_improvement": `${TERMS.scoreImprovement} ממוצע באחוזים שכל ${TERMS.optimizer} השיג על פני כל ה${TERMS.optimizationTypeRunPlural}`,
+  "analytics.top_improvements": `ה${TERMS.optimizationTypeRunPlural} שהשיגו את השיפור הגדול ביותר בציון, מהטוב לפחות טוב`,
+  "analytics.optimizer_comparison_table": `השוואה מפורטת בין ה${TERMS.optimizerPlural}: שיפור ממוצע, מספר ${TERMS.optimizationTypeRunPlural}, וזמן ${TERMS.optimizationTypeRun}`,
   "analytics.model_performance_table": "ביצועי המודלים השונים: תדירות שימוש ושיפור ממוצע",
 } as const;
 

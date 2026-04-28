@@ -1,8 +1,6 @@
-/* ── Job lifecycle ── */
 export type JobStatus = "pending" | "validating" | "running" | "success" | "failed" | "cancelled";
 export type OptimizationType = "run" | "grid_search";
 
-/* ── Request models ── */
 export interface ModelConfig {
   name: string;
   base_url?: string;
@@ -34,7 +32,7 @@ interface OptimizationRequestBase {
   optimizer_name: string;
   optimizer_kwargs?: Record<string, unknown>;
   compile_kwargs?: Record<string, unknown>;
-  dataset: Record<string, unknown>[];
+  dataset: Array<Record<string, unknown>>;
   column_mapping: ColumnMapping;
   split_fractions?: SplitFractions;
   shuffle?: boolean;
@@ -54,7 +52,6 @@ export interface GridSearchRequest extends OptimizationRequestBase {
   use_all_available_reflection_models?: boolean;
 }
 
-/* ── Response models ── */
 export interface OptimizationSubmissionResponse {
   optimization_id: string;
   optimization_type: OptimizationType;
@@ -227,8 +224,6 @@ export interface OptimizationPayloadResponse {
   payload: Record<string, unknown>;
 }
 
-/* ── Templates ── */
-
 export interface TemplateResponse {
   template_id: string;
   name: string;
@@ -237,8 +232,6 @@ export interface TemplateResponse {
   config: Record<string, unknown>;
   created_at: string;
 }
-
-/* ── Dataset ── */
 
 export interface DatasetRow {
   index: number;
@@ -264,8 +257,6 @@ export interface EvalExampleResult {
   error?: string;
 }
 
-/* ── Serving ── */
-
 export interface ServeInfoResponse {
   optimization_id: string;
   module_name: string;
@@ -285,13 +276,12 @@ export interface ServeResponse {
   model_used: string;
 }
 
-/* ── Model catalog ── */
-
 export interface CatalogModel {
   value: string;
   label: string;
   provider: string;
   supports_thinking: boolean;
+  supports_vision: boolean;
   available: boolean;
   max_input_tokens?: number;
 }
@@ -315,8 +305,6 @@ export interface DiscoverModelsResponse {
   error?: string;
 }
 
-/* ── Dataset profiling ── */
-
 export type ProfileWarningCode =
   | "too_small"
   | "class_imbalance"
@@ -337,11 +325,19 @@ export interface TargetColumnProfile {
   class_histogram: Record<string, number>;
 }
 
+export type ColumnKind = "text" | "image";
+
+export interface InputColumnProfile {
+  name: string;
+  kind: ColumnKind;
+}
+
 export interface DatasetProfile {
   row_count: number;
   column_count: number;
   target: TargetColumnProfile | null;
   targets: TargetColumnProfile[];
+  inputs: InputColumnProfile[];
   duplicate_count: number;
   warnings: ProfileWarning[];
 }
@@ -357,7 +353,7 @@ export interface SplitPlan {
 }
 
 export interface ProfileDatasetRequest {
-  dataset: Record<string, unknown>[];
+  dataset: Array<Record<string, unknown>>;
   column_mapping: ColumnMapping;
   seed?: number;
 }

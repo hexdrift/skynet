@@ -85,7 +85,14 @@ class SimilarResponse(BaseModel):
 
 
 def create_recommendations_router(*, job_store) -> APIRouter:
-    """Build the recommendations router."""
+    """Build the recommendations router.
+
+    Args:
+        job_store: Job-store instance used by the underlying search service.
+
+    Returns:
+        A FastAPI ``APIRouter`` exposing ``POST /recommendations/similar``.
+    """
     router = APIRouter()
 
     @router.post(
@@ -100,6 +107,12 @@ def create_recommendations_router(*, job_store) -> APIRouter:
 
         Phase 1 stub: always returns ``{"results": []}``. Phase 2 will
         fill in the real weighted-fusion search against pgvector.
+
+        Args:
+            req: The query body — task code, dataset schema, and ranking knobs.
+
+        Returns:
+            A ``SimilarResponse`` carrying the ranked neighbour list.
         """
         hits = search_similar(
             job_store=job_store,

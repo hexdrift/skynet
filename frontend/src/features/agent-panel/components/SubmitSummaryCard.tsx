@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckCircle2, CircleAlert, ExternalLink } from "lucide-react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
@@ -79,7 +80,11 @@ export function SubmitSummaryCard({ call, className }: SubmitSummaryCardProps) {
               isError ? "text-red-800" : "text-[#2F3E32]",
             )}
           >
-            {isError ? "הגשה נכשלה" : `ה${TERMS.optimization} הוגשה`}
+            {isError
+              ? msg("auto.features.agent.panel.components.submitsummarycard.literal.1")
+              : formatMsg("auto.features.agent.panel.components.submitsummarycard.template.1", {
+                  p1: TERMS.optimization,
+                })}
           </div>
           <div className="text-[0.75rem] text-foreground/80 mt-0.5 truncate">{jobName}</div>
         </div>
@@ -95,7 +100,7 @@ export function SubmitSummaryCard({ call, className }: SubmitSummaryCardProps) {
         >
           <span className="font-mono truncate text-muted-foreground">{jobId}</span>
           <span className="inline-flex items-center gap-1 text-[#3D2E22] shrink-0">
-            פתח
+            {msg("auto.features.agent.panel.components.submitsummarycard.1")}
             <ExternalLink className="size-3" aria-hidden="true" />
           </span>
         </a>

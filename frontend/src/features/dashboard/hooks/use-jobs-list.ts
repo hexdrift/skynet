@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  listJobs,
-  getOptimizationCounts,
-  type OptimizationCounts,
-} from "@/shared/lib/api";
+import { listJobs, getOptimizationCounts, type OptimizationCounts } from "@/shared/lib/api";
 import type { PaginatedJobsResponse } from "@/shared/types/api";
 import { msg } from "@/shared/lib/messages";
 import { FETCH_PAGE_SIZE } from "../constants";
@@ -25,10 +21,7 @@ export type UseJobsListReturn = {
   fetchJobs: () => Promise<void>;
 };
 
-export function useJobsList({
-  sessionUser,
-  isAdmin,
-}: UseJobsListArgs): UseJobsListReturn {
+export function useJobsList({ sessionUser, isAdmin }: UseJobsListArgs): UseJobsListReturn {
   const [data, setData] = useState<PaginatedJobsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -56,7 +49,7 @@ export function useJobsList({
 
   useEffect(() => {
     if (!data) setLoading(true);
-    fetchJobs();
+    void fetchJobs();
     // fetchJobs changes whenever sessionUser/isAdmin/pageOffset change, so
     // `data` deliberately stays out of the dep array to avoid a refetch loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps

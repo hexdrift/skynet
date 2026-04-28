@@ -11,7 +11,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * resets to the default variant.
  */
 
-
 type RectDef = { x: number; y: number; w: number; h: number };
 
 type LetterVariants = {
@@ -128,8 +127,6 @@ const TOTAL_WIDTH = 475;
 const VARIANT_NAMES = ["default", "glyph", "serif", "sans"] as const;
 type VariantName = (typeof VARIANT_NAMES)[number];
 
-
-/** Pick `count` unique random indices from [0, total) */
 function pickRandom(total: number, count: number): number[] {
   const indices: number[] = [];
   const pool = Array.from({ length: total }, (_, i) => i);
@@ -141,12 +138,10 @@ function pickRandom(total: number, count: number): number[] {
   return indices;
 }
 
-/** Pick a random variant name that is NOT the current one */
 function randomOtherVariant(current: VariantName): VariantName {
   const others = VARIANT_NAMES.filter((v) => v !== current);
   return others[Math.floor(Math.random() * others.length)]!;
 }
-
 
 // Uses cubic-bezier equivalent to 'ease-out-cubic' for incredibly smooth overlaps
 const TRANSITION = "opacity 300ms cubic-bezier(0.215, 0.610, 0.355, 1.000)";
@@ -178,7 +173,6 @@ function VariantGroup({
 
   return <path d={d} style={style} fillRule="nonzero" />;
 }
-
 
 export function AnimatedWordmark({
   size = 28,
@@ -226,7 +220,6 @@ export function AnimatedWordmark({
     }, morphSpeed);
   }, [morphSpeed]);
 
-  // Stop morphing — reset all to default
   const stopMorph = useCallback(() => {
     if (intervalRef.current != null) {
       clearInterval(intervalRef.current);
@@ -243,7 +236,6 @@ export function AnimatedWordmark({
     stopMorph();
   }, [stopMorph]);
 
-  // Auto-morph on mount (for splash screens)
   useEffect(() => {
     if (autoMorph && !reducedMotionRef.current) {
       // Clear any stale ref before starting to avoid the guard in startMorph
@@ -267,7 +259,7 @@ export function AnimatedWordmark({
   return (
     <span
       dir="ltr"
-      className={`inline-flex items-center select-none ${className ?? ""}`}
+      className={`inline-flex items-center select-none cursor-default ${className ?? ""}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       role="img"

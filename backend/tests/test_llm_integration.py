@@ -35,7 +35,8 @@ import json
 from pathlib import Path
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
+
 from .conftest import requires_llm, requires_server, wait_for_terminal
 
 BASE_URL = "http://localhost:8000"
@@ -68,27 +69,13 @@ MODEL = {
 
 
 def _load_dataset(rows: int = 12) -> list[dict]:
-    """Load the first *rows* rows from the GSM8K JSON fixture.
-
-    Args:
-        rows: Number of rows to return from the head of the dataset.
-
-    Returns:
-        A list of dataset row dicts.
-    """
+    """Read the GSM8K fixture and return the first ``rows`` rows."""
     with DATASET_PATH.open() as f:
         return json.load(f)[:rows]
 
 
 def _common_payload(username: str) -> dict:
-    """Build a minimal valid /run request payload for the given username.
-
-    Args:
-        username: The username field to embed in the payload.
-
-    Returns:
-        A dict suitable for POSTing to /run or /grid-search.
-    """
+    """Build the shared optimization-submit payload used by both golden-path tests."""
     return {
         "username": username,
         "module_name": "dspy.ChainOfThought",
@@ -108,11 +95,7 @@ def _common_payload(username: str) -> dict:
 
 
 def _cleanup(job_id: str) -> None:
-    """Delete the optimization job, suppressing any errors.
-
-    Args:
-        job_id: The optimization ID to delete.
-    """
+    """Best-effort delete the test job from the backend; swallow any error."""
     with contextlib.suppress(Exception):
         requests.delete(f"{BASE_URL}/optimizations/{job_id}", timeout=10)
 
@@ -122,7 +105,7 @@ def _cleanup(job_id: str) -> None:
 @requires_llm
 @requires_server
 def test_single_run_golden_path() -> None:
-    """Submit a real optimization, wait for success, serve an inference."""
+    """End-to-end check: a single ``/run`` job optimises and serves successfully."""
     payload = _common_payload("e2e-golden-single")
     payload["name"] = "golden path single-run smoke"
     payload["model_config"] = MODEL
@@ -134,9 +117,7 @@ def test_single_run_golden_path() -> None:
 
     try:
         final = wait_for_terminal(job_id, timeout=900)
-        assert final["status"] == "success", (
-            f"expected success, got {final['status']}: {final.get('message')}"
-        )
+        assert final["status"] == "success", f"expected success, got {final['status']}: {final.get('message')}"
 
         result = final["result"]
         assert result is not None, "completed job missing result payload"
@@ -151,9 +132,7 @@ def test_single_run_golden_path() -> None:
             json={"inputs": {"question": "What is 12 + 7?"}},
             timeout=60,
         )
-        assert inference.status_code == 200, (
-            f"serve returned {inference.status_code}: {inference.text}"
-        )
+        assert inference.status_code == 200, f"serve returned {inference.status_code}: {inference.text}"
         body = inference.json()
         assert "answer" in body["outputs"], f"missing answer in outputs: {body}"
         assert body["outputs"]["answer"], "answer should not be empty"
@@ -166,7 +145,7 @@ def test_single_run_golden_path() -> None:
 @requires_llm
 @requires_server
 def test_grid_search_golden_path() -> None:
-    """Submit a real 2-pair grid-search, wait for success, serve best-pair inference."""
+    """End-to-end check: a 2-pair grid-search completes and serves the best pair."""
     payload = _common_payload("e2e-golden-grid")
     payload["name"] = "golden path grid-search smoke"
     payload["model_config"] = MODEL
@@ -179,9 +158,7 @@ def test_grid_search_golden_path() -> None:
 
     try:
         final = wait_for_terminal(job_id, timeout=1500)
-        assert final["status"] == "success", (
-            f"expected success, got {final['status']}: {final.get('message')}"
-        )
+        assert final["status"] == "success", f"expected success, got {final['status']}: {final.get('message')}"
 
         grid = final["grid_result"]
         assert grid is not None, "grid-search job missing grid_result"
@@ -199,9 +176,7 @@ def test_grid_search_golden_path() -> None:
             json={"inputs": {"question": "What is 8 + 5?"}},
             timeout=60,
         )
-        assert inference.status_code == 200, (
-            f"pair serve returned {inference.status_code}: {inference.text}"
-        )
+        assert inference.status_code == 200, f"pair serve returned {inference.status_code}: {inference.text}"
         body = inference.json()
         assert "answer" in body["outputs"], f"missing answer in outputs: {body}"
         assert body["outputs"]["answer"], "answer should not be empty"

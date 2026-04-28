@@ -5,8 +5,9 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/shared/ui/primitives/tooltip";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 type BulkActionBarProps = {
   isAdmin: boolean;
@@ -48,10 +49,15 @@ export function BulkActionBar({
           <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/95 backdrop-blur-xl px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
             <span className="px-1 text-sm text-foreground">
               {selectedCount === 1 ? (
-                <>נבחרה {TERMS.optimization} אחת</>
+                <>
+                  {msg("auto.features.dashboard.components.bulkactionbar.1")}
+                  {TERMS.optimization}
+                  {msg("auto.features.dashboard.components.bulkactionbar.2")}
+                </>
               ) : (
                 <>
-                  נבחרו <span className="font-semibold tabular-nums">{selectedCount}</span>{" "}
+                  {msg("auto.features.dashboard.components.bulkactionbar.3")}
+                  <span className="font-semibold tabular-nums">{selectedCount}</span>{" "}
                   {TERMS.optimizationPlural}
                 </>
               )}
@@ -64,12 +70,14 @@ export function BulkActionBar({
                     type="button"
                     onClick={onClear}
                     className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent/80 hover:text-foreground active:scale-95 transition-all cursor-pointer"
-                    aria-label="נקה בחירה"
+                    aria-label={msg("auto.features.dashboard.components.bulkactionbar.literal.1")}
                   >
                     <X className="size-4" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top">נקה בחירה</TooltipContent>
+                <TooltipContent side="top">
+                  {msg("auto.features.dashboard.components.bulkactionbar.4")}
+                </TooltipContent>
               </UiTooltip>
               <UiTooltip>
                 <TooltipTrigger asChild>
@@ -78,7 +86,7 @@ export function BulkActionBar({
                     onClick={onCompare}
                     disabled={!canCompare}
                     className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary active:scale-95 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-                    aria-label="השווה נבחרים"
+                    aria-label={msg("auto.features.dashboard.components.bulkactionbar.literal.2")}
                     data-tutorial="compare-button"
                   >
                     <ArrowLeftRight className="size-4" />
@@ -87,9 +95,11 @@ export function BulkActionBar({
                 <TooltipContent side="top">
                   {canCompare
                     ? skipped > 0
-                      ? `השווה נבחרים (${skipped} לא מתאימות יושמטו)`
-                      : "השווה נבחרים"
-                    : "בחר לפחות 2 ריצות שהושלמו עם אותה משימה"}
+                      ? formatMsg("auto.features.dashboard.components.bulkactionbar.template.1", {
+                          p1: skipped,
+                        })
+                      : msg("auto.features.dashboard.components.bulkactionbar.literal.3")
+                    : msg("auto.features.dashboard.components.bulkactionbar.literal.4")}
                 </TooltipContent>
               </UiTooltip>
               {isAdmin && (
@@ -99,12 +109,14 @@ export function BulkActionBar({
                       type="button"
                       onClick={onRequestBulkDelete}
                       className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all cursor-pointer"
-                      aria-label="מחק נבחרים"
+                      aria-label={msg("auto.features.dashboard.components.bulkactionbar.literal.5")}
                     >
                       <Trash2 className="size-4" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top">מחק נבחרים</TooltipContent>
+                  <TooltipContent side="top">
+                    {msg("auto.features.dashboard.components.bulkactionbar.5")}
+                  </TooltipContent>
                 </UiTooltip>
               )}
             </TooltipProvider>

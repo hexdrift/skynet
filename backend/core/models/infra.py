@@ -1,8 +1,10 @@
 """Models for the infra endpoints exposed from app.py — /health and /queue."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
 
-from .common import HEALTH_STATUS_OK
+from .constants import HEALTH_STATUS_OK
 
 
 class HealthResponse(BaseModel):

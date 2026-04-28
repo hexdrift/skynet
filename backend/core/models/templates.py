@@ -1,5 +1,7 @@
 """Request/response models for the /templates CRUD endpoints."""
 
+from __future__ import annotations
+
 import json as _json
 from datetime import datetime
 from typing import Any
@@ -20,8 +22,15 @@ class TemplateCreateRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_config_size(self) -> "TemplateCreateRequest":
-        """Reject template configs whose JSON serialization exceeds 100 KB."""
+    def _validate_config_size(self) -> TemplateCreateRequest:
+        """Reject template configs whose JSON serialization exceeds 100 KB.
+
+        Returns:
+            The validated request instance.
+
+        Raises:
+            ValueError: When ``config`` serializes to more than 100 KB of JSON.
+        """
         if len(_json.dumps(self.config)) > _TEMPLATE_CONFIG_MAX_BYTES:
             raise ValueError(f"Template config exceeds maximum size of {_TEMPLATE_CONFIG_MAX_BYTES // 1000}KB.")
         return self

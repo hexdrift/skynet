@@ -13,24 +13,32 @@ import {
   Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import Link from "next/link";
+import { Button } from "@/shared/ui/primitives/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/shared/ui/primitives/card";
+import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
-import { parseDatasetFile } from "@/features/submit/lib/parse-dataset";
-import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial/lib/bridge";
+import { parseDatasetFile } from "@/shared/lib/parse-dataset";
+import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
 import type { AnnotationMode, TaggerConfig, DataRow, Category } from "../lib/types";
+import { msg } from "@/shared/lib/messages";
 
 interface TaggerSetupProps {
   onStart: (config: TaggerConfig, rows: DataRow[], columns: string[]) => void;
 }
 
 const TAGGER_STEPS = [
-  { id: "data", label: "קובץ נתונים" },
-  { id: "mode", label: "מצב תיוג" },
-  { id: "config", label: "הגדרות" },
+  { id: "data", label: msg("auto.features.tagger.components.taggersetup.literal.1") },
+  { id: "mode", label: msg("auto.features.tagger.components.taggersetup.literal.2") },
+  { id: "config", label: msg("auto.features.tagger.components.taggersetup.literal.3") },
 ] as const;
 
 const slideVariants = {
@@ -47,10 +55,30 @@ const slideVariants = {
   }),
 };
 
-const MODE_OPTIONS: { mode: AnnotationMode; label: string; desc: string; icon: typeof Binary }[] = [
-  { mode: "binary", label: "סיווג בינארי", desc: "כן / לא לכל טקסט", icon: Binary },
-  { mode: "multiclass", label: "קטגוריות", desc: "בחירת קטגוריות מרשימה", icon: ListChecks },
-  { mode: "freetext", label: "טקסט חופשי", desc: "חילוץ או כתיבת טקסט", icon: TextCursorInput },
+const MODE_OPTIONS: Array<{
+  mode: AnnotationMode;
+  label: string;
+  desc: string;
+  icon: typeof Binary;
+}> = [
+  {
+    mode: "binary",
+    label: msg("auto.features.tagger.components.taggersetup.literal.4"),
+    desc: msg("auto.features.tagger.components.taggersetup.literal.5"),
+    icon: Binary,
+  },
+  {
+    mode: "multiclass",
+    label: msg("auto.features.tagger.components.taggersetup.literal.6"),
+    desc: msg("auto.features.tagger.components.taggersetup.literal.7"),
+    icon: ListChecks,
+  },
+  {
+    mode: "freetext",
+    label: msg("auto.features.tagger.components.taggersetup.literal.8"),
+    desc: msg("auto.features.tagger.components.taggersetup.literal.9"),
+    icon: TextCursorInput,
+  },
 ];
 
 export function TaggerSetup({ onStart }: TaggerSetupProps) {
@@ -64,26 +92,38 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<AnnotationMode | null>(null);
 
-  const [question, setQuestion] = useState("האם הטקסט חיובי?");
+  const [question, setQuestion] = useState(
+    msg("auto.features.tagger.components.taggersetup.literal.10"),
+  );
   const [categories, setCategories] = useState<Category[]>([
-    { id: "cat1", label: "קטגוריה 1" },
-    { id: "cat2", label: "קטגוריה 2" },
+    { id: "cat1", label: msg("auto.features.tagger.components.taggersetup.literal.11") },
+    { id: "cat2", label: msg("auto.features.tagger.components.taggersetup.literal.12") },
   ]);
   const [prompt, setPrompt] = useState("");
-  const [placeholder, setPlaceholder] = useState("");
 
   // Tutorial hooks — let the guided tour inject demo data and navigate steps
-  useEffect(() => registerTutorialHook("setTaggerStep", (s: number) => {
-    setDirection(s > step ? 1 : -1);
-    setStep(s);
-  }), [step]);
-  useEffect(() => registerTutorialHook("setTaggerDemoData", (data) => {
-    setFile(new File([""], "demo_dataset.csv"));
-    setParsedRows(data.rows as DataRow[]);
-    setParsedCols(data.cols);
-    setTextCol(data.textCol);
-  }), []);
-  useEffect(() => registerTutorialQuery("hasTaggerData", () => parsedRows.length > 0), [parsedRows]);
+  useEffect(
+    () =>
+      registerTutorialHook("setTaggerStep", (s: number) => {
+        setDirection(s > step ? 1 : -1);
+        setStep(s);
+      }),
+    [step],
+  );
+  useEffect(
+    () =>
+      registerTutorialHook("setTaggerDemoData", (data) => {
+        setFile(new File([""], "demo_dataset.csv"));
+        setParsedRows(data.rows as DataRow[]);
+        setParsedCols(data.cols);
+        setTextCol(data.textCol);
+      }),
+    [],
+  );
+  useEffect(
+    () => registerTutorialQuery("hasTaggerData", () => parsedRows.length > 0),
+    [parsedRows],
+  );
 
   const handleFile = useCallback(async (f: File) => {
     setError(null);
@@ -103,7 +143,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     (e: React.DragEvent) => {
       e.preventDefault();
       const f = e.dataTransfer.files[0];
-      if (f) handleFile(f);
+      if (f) void handleFile(f);
     },
     [handleFile],
   );
@@ -173,18 +213,19 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     if (mode === "binary") config.question = question;
     if (mode === "multiclass") config.categories = categories.filter((c) => c.label.trim());
     if (mode === "freetext") {
-      config.prompt = prompt || "הקלד טקסט";
-      config.placeholder = placeholder;
+      config.prompt = prompt || msg("auto.features.tagger.components.taggersetup.literal.13");
+      config.placeholder = "";
     }
     onStart(config, mapped, parsedCols);
   };
 
   const steps = [
-    /* Step 0: File Upload */
     <Card key="data">
       <CardHeader>
         <CardTitle className="text-base">
-          <HelpTip text={tip("tagger.upload_file")}>קובץ נתונים</HelpTip>
+          <HelpTip text={tip("tagger.upload_file")}>
+            {msg("auto.features.tagger.components.taggersetup.1")}
+          </HelpTip>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -193,19 +234,22 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           onDragOver={(e) => e.preventDefault()}
           className={cn(
             "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-all duration-300 group",
-            file
-              ? "border-primary/40 bg-primary/5"
-              : "hover:border-primary/50 hover:bg-muted/30",
+            file ? "border-primary/40 bg-primary/5" : "hover:border-primary/50 hover:bg-muted/30",
           )}
         >
           <Upload className="size-8 text-muted-foreground group-hover:text-primary/70 transition-colors duration-300" />
           {file ? (
             <div className="text-center">
               <p className="font-medium text-foreground">{file.name}</p>
-              <p className="text-sm text-muted-foreground">{parsedRows.length} שורות</p>
+              <p className="text-sm text-muted-foreground">
+                {parsedRows.length}
+                {msg("auto.features.tagger.components.taggersetup.2")}
+              </p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">לחץ להעלאת קובץ CSV, JSON, או Excel</p>
+            <p className="text-sm text-muted-foreground">
+              {msg("auto.features.tagger.components.taggersetup.3")}
+            </p>
           )}
           <input
             type="file"
@@ -213,7 +257,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) handleFile(f);
+              if (f) void handleFile(f);
             }}
           />
         </label>
@@ -224,7 +268,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
             <Separator />
             <div className="space-y-3">
               <p className="text-sm font-medium">
-                <HelpTip text={tip("tagger.text_column")}>עמודת טקסט</HelpTip>
+                <HelpTip text={tip("tagger.text_column")}>
+                  {msg("auto.features.tagger.components.taggersetup.4")}
+                </HelpTip>
               </p>
               <div className="space-y-1">
                 {parsedCols.map((col) => (
@@ -239,12 +285,15 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                         : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                   >
-                    <span className="size-3 rounded-full border-2 flex items-center justify-center shrink-0"
+                    <span
+                      className="size-3 rounded-full border-2 flex items-center justify-center shrink-0"
                       style={{ borderColor: textCol === col ? "var(--primary)" : "var(--border)" }}
                     >
                       {textCol === col && <span className="size-1.5 rounded-full bg-primary" />}
                     </span>
-                    <span className="font-mono text-xs" dir="ltr">{col}</span>
+                    <span className="font-mono text-xs" dir="ltr">
+                      {col}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -254,11 +303,12 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       </CardContent>
     </Card>,
 
-    /* Step 1: Mode Picker */
     <Card key="mode" data-tutorial="tagger-modes">
       <CardHeader>
         <CardTitle className="text-base">
-          <HelpTip text={tip("tagger.mode")}>מצב תיוג</HelpTip>
+          <HelpTip text={tip("tagger.mode")}>
+            {msg("auto.features.tagger.components.taggersetup.5")}
+          </HelpTip>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -271,9 +321,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
               className={cn(
                 "flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all cursor-pointer",
                 "hover:border-primary/40 hover:bg-primary/5",
-                mode === opt.mode
-                  ? "border-primary bg-primary/10 shadow-sm"
-                  : "border-border/50",
+                mode === opt.mode ? "border-primary bg-primary/10 shadow-sm" : "border-border/50",
               )}
             >
               <opt.icon
@@ -297,16 +345,29 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       </CardContent>
     </Card>,
 
-    /* Step 2: Mode Config */
     <Card key="config">
       <CardHeader>
         <CardTitle className="text-base">
-          {mode === "binary" && <HelpTip text={tip("tagger.binary_question")}>שאלת הסיווג</HelpTip>}
-          {mode === "multiclass" && <HelpTip text={tip("tagger.multiclass_categories")}>קטגוריות</HelpTip>}
-          {mode === "freetext" && <HelpTip text={tip("tagger.freetext_instruction")}>הנחיה</HelpTip>}
-          {!mode && "הגדרות"}
+          {mode === "binary" && (
+            <HelpTip text={tip("tagger.binary_question")}>
+              {msg("auto.features.tagger.components.taggersetup.6")}
+            </HelpTip>
+          )}
+          {mode === "multiclass" && (
+            <HelpTip text={tip("tagger.multiclass_categories")}>
+              {msg("auto.features.tagger.components.taggersetup.7")}
+            </HelpTip>
+          )}
+          {mode === "freetext" && (
+            <HelpTip text={tip("tagger.freetext_instruction")}>
+              {msg("auto.features.tagger.components.taggersetup.8")}
+            </HelpTip>
+          )}
+          {!mode && msg("auto.features.tagger.components.taggersetup.literal.14")}
         </CardTitle>
-        {mode === "multiclass" && <CardDescription>הוסף לפחות 2 קטגוריות</CardDescription>}
+        {mode === "multiclass" && (
+          <CardDescription>{msg("auto.features.tagger.components.taggersetup.9")}</CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         {mode === "binary" && (
@@ -315,7 +376,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder='לדוגמה: "האם הטקסט חיובי?"'
+            placeholder={msg("auto.features.tagger.components.taggersetup.literal.15")}
             dir="rtl"
           />
         )}
@@ -328,7 +389,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                   value={cat.label}
                   onChange={(e) => updateCategory(cat.id, e.target.value)}
                   className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="שם הקטגוריה"
+                  placeholder={msg("auto.features.tagger.components.taggersetup.literal.16")}
                   dir="rtl"
                 />
                 <Button
@@ -341,7 +402,13 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                 </Button>
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={addCategory} className="mt-1 w-full" title="הוסף קטגוריה">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addCategory}
+              className="mt-1 w-full"
+              title={msg("auto.features.tagger.components.taggersetup.literal.17")}
+            >
               <Plus className="size-3.5" />
             </Button>
           </div>
@@ -352,12 +419,14 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="הנחיה שתוצג מעל שדה הטקסט"
+            placeholder={msg("auto.features.tagger.components.taggersetup.literal.18")}
             dir="rtl"
           />
         )}
         {!mode && (
-          <p className="text-sm text-muted-foreground">בחר מצב תיוג בשלב הקודם</p>
+          <p className="text-sm text-muted-foreground">
+            {msg("auto.features.tagger.components.taggersetup.10")}
+          </p>
         )}
       </CardContent>
     </Card>,
@@ -367,16 +436,16 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-8" data-tutorial="tagger-setup">
-      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <a href="/" className="hover:text-foreground transition-colors">
-          לוח בקרה
-        </a>
+        <Link href="/" className="hover:text-foreground transition-colors">
+          {msg("auto.features.tagger.components.taggersetup.11")}
+        </Link>
         <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">הגדרות תיוג</span>
+        <span className="text-foreground font-medium">
+          {msg("auto.features.tagger.components.taggersetup.12")}
+        </span>
       </div>
 
-      {/* Stepper */}
       <div className="relative">
         <div className="flex items-center justify-between">
           {TAGGER_STEPS.map((s, i) => {
@@ -413,7 +482,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                 <span
                   className={cn(
                     "mt-2 text-[0.6875rem] font-medium transition-colors duration-200 hidden sm:block text-center",
-                    active ? "text-foreground" : completed ? "text-primary" : "text-muted-foreground",
+                    active
+                      ? "text-foreground"
+                      : completed
+                        ? "text-primary"
+                        : "text-muted-foreground",
                   )}
                 >
                   {s.label}
@@ -433,7 +506,6 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         </div>
       </div>
 
-      {/* Step Content */}
       <div className="relative overflow-hidden pt-[10px]">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
@@ -450,38 +522,23 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         </AnimatePresence>
       </div>
 
-      {/* Nav */}
       {!isLastStep ? (
         <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            onClick={goPrev}
-            disabled={step === 0}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={goPrev} disabled={step === 0} className="gap-2">
             <ChevronRight className="h-4 w-4" />
-            הקודם
+            {msg("auto.features.tagger.components.taggersetup.13")}
           </Button>
           <span className="text-xs text-muted-foreground tabular-nums">
             {step + 1} / {TAGGER_STEPS.length}
           </span>
-          <Button
-            onClick={handleNext}
-            disabled={!validateStep(step)}
-            className="gap-2"
-          >
-            הבא
+          <Button onClick={handleNext} disabled={!validateStep(step)} className="gap-2">
+            {msg("auto.features.tagger.components.taggersetup.14")}
             <ChevronLeft className="h-4 w-4" />
           </Button>
         </div>
       ) : (
-        <Button
-          onClick={handleStart}
-          disabled={!validateStep(2)}
-          size="lg"
-          className="w-full"
-        >
-          התחל תיוג
+        <Button onClick={handleStart} disabled={!validateStep(2)} size="lg" className="w-full">
+          {msg("auto.features.tagger.components.taggersetup.15")}
         </Button>
       )}
     </div>

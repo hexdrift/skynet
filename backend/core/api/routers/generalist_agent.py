@@ -8,20 +8,20 @@ server → client only).
 
 from __future__ import annotations
 
-import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
-from ...i18n import t
-from ...service_gateway.generalist_agent import (
+from ...service_gateway.agents.generalist import (
     TrustMode,
     WizardState,
     get_approval_registry,
     run_generalist_agent,
 )
+from ..errors import DomainError
+from ._helpers import sse_from_events
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +37,7 @@ class GeneralistAgentRequest(BaseModel):
     """Input for a single generalist-agent turn."""
 
     user_message: str = Field(..., description="The user's latest Hebrew message.")
-    chat_history: list[ChatTurn] = Field(
-        default_factory=list, description="Prior {role, content} turns."
-    )
+    chat_history: list[ChatTurn] = Field(default_factory=list, description="Prior {role, content} turns.")
     wizard_state: dict = Field(
         default_factory=dict,
         description=(
@@ -67,7 +65,11 @@ class ConfirmApprovalResponse(BaseModel):
 
 
 def create_generalist_agent_router() -> APIRouter:
-    """Mount the ``/optimizations/generalist-agent`` SSE + confirm endpoints."""
+    """Mount the ``/optimizations/generalist-agent`` SSE + confirm endpoints.
+
+    Returns:
+        A configured :class:`APIRouter` with the generalist-agent endpoints attached.
+    """
     router = APIRouter()
 
     @router.post(
@@ -80,23 +82,24 @@ def create_generalist_agent_router() -> APIRouter:
         Event types: ``reasoning_patch``, ``tool_start``, ``tool_end``,
         ``status_patch``, ``pending_approval``, ``approval_resolved``,
         ``message_patch``, ``done``, ``error``.
+
+        Args:
+            req: Request body with user message, chat history, wizard
+                snapshot, and trust mode.
+
+        Returns:
+            A :class:`StreamingResponse` of Server-Sent Events.
         """
 
         wizard_state: WizardState = {**req.wizard_state}  # type: ignore[typeddict-item]
-
-        async def event_generator():
-            async for event in run_generalist_agent(
-                wizard_state=wizard_state,
-                chat_history=[t.model_dump() for t in req.chat_history],
-                user_message=req.user_message,
-                trust_mode=req.trust_mode,
-            ):
-                name = event["event"]
-                payload = json.dumps(event["data"], ensure_ascii=False)
-                yield f"event: {name}\ndata: {payload}\n\n"
-
+        source = run_generalist_agent(
+            wizard_state=wizard_state,
+            chat_history=[t.model_dump() for t in req.chat_history],
+            user_message=req.user_message,
+            trust_mode=req.trust_mode,
+        )
         return StreamingResponse(
-            event_generator(),
+            sse_from_events(source),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -113,12 +116,20 @@ def create_generalist_agent_router() -> APIRouter:
     def confirm_approval(req: ConfirmApprovalRequest) -> ConfirmApprovalResponse:
         """Resolve an outstanding approval from the client.
 
-        404 if the call_id is unknown or already resolved — the client
-        should treat that as a race and surface it as a UI warning.
+        Args:
+            req: Confirm payload with the ``call_id`` and approval boolean.
+
+        Returns:
+            A :class:`ConfirmApprovalResponse` with ``resolved=True`` on success.
+
+        Raises:
+            DomainError: 404 when the call id is unknown or already resolved —
+                the client should treat that as a race and surface it as a UI
+                warning.
         """
         resolved = get_approval_registry().resolve(req.call_id, req.approved)
         if not resolved:
-            raise HTTPException(status_code=404, detail=t("agent.approval.unknown_call_id"))
+            raise DomainError("agent.approval.unknown_call_id", status=404)
         return ConfirmApprovalResponse(resolved=True)
 
     return router

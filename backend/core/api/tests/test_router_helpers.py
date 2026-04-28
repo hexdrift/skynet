@@ -2,33 +2,39 @@
 
 from __future__ import annotations
 
-import base64  # noqa: F401 — used in _make_run_result_b64
+import base64
 import pickle
-from datetime import datetime, timezone
+from collections.abc import Generator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
 
+from ...constants import TQDM_REMAINING_KEY
+from ...models import OptimizationStatus
+
 # noinspection PyProtectedMember
-from ..routers import _helpers as _helpers_mod  # noqa: SLF001
-# noinspection PyProtectedMember
-from ..routers._helpers import (  # noqa: SLF001
+from ..routers import _helpers as _helpers_mod
+
+from ..routers.constants import (
     TERMINAL_STATUSES,
     VALID_OPTIMIZATION_TYPES,
     VALID_STATUSES,
+)
+
+# noinspection PyProtectedMember
+from ..routers._helpers import (
     build_summary,
     clear_program_cache,
     enforce_user_quota,
     load_program,
     strip_api_key,
 )
-from ...constants import TQDM_REMAINING_KEY
-from ...models import OptimizationStatus
 from .mocks import load_fixture
 
 
 def test_strip_api_key_removes_nested() -> None:
-    """strip_api_key removes the nested extra.api_key and preserves all other fields."""
+    """``strip_api_key`` removes the nested ``api_key`` while preserving siblings."""
     out = strip_api_key({"name": "gpt", "extra": {"api_key": "sk-secret", "region": "us"}})
     assert "api_key" not in out["extra"]
     assert out["extra"] == {"region": "us"}
@@ -36,25 +42,25 @@ def test_strip_api_key_removes_nested() -> None:
 
 
 def test_strip_api_key_passthrough_without_extra() -> None:
-    """strip_api_key returns the dict unchanged when there is no extra key."""
+    """A model config without ``extra`` round-trips unchanged."""
     out = strip_api_key({"name": "gpt"})
     assert out == {"name": "gpt"}
 
 
 def test_strip_api_key_does_not_mutate_input() -> None:
-    """strip_api_key does not modify the original dict (returns a shallow copy)."""
+    """``strip_api_key`` returns a new dict and never mutates its input."""
     src = {"name": "gpt", "extra": {"api_key": "sk-x"}}
     strip_api_key(src)
     assert src == {"name": "gpt", "extra": {"api_key": "sk-x"}}
 
 
 def test_valid_statuses_match_enum() -> None:
-    """VALID_STATUSES contains exactly the values of the OptimizationStatus enum."""
+    """The whitelisted status set matches the enum exactly."""
     assert {s.value for s in OptimizationStatus} == VALID_STATUSES
 
 
 def test_terminal_statuses_are_finite() -> None:
-    """TERMINAL_STATUSES contains exactly success, failed, and canceled."""
+    """Only ``success``/``failed``/``cancelled`` are considered terminal."""
     assert {
         OptimizationStatus.success,
         OptimizationStatus.failed,
@@ -63,13 +69,13 @@ def test_terminal_statuses_are_finite() -> None:
 
 
 def test_valid_job_types_covers_run_and_grid() -> None:
-    """VALID_OPTIMIZATION_TYPES contains exactly 'run' and 'grid_search'."""
+    """The whitelisted optimization types cover the public run/grid options."""
     assert {"run", "grid_search"} == VALID_OPTIMIZATION_TYPES
 
 
 def test_build_summary_on_pending_job_without_result() -> None:
-    """build_summary returns a valid summary for a pending job that has no result yet."""
-    now = datetime.now(timezone.utc)
+    """A pending job without result data still produces a valid summary."""
+    now = datetime.now(UTC)
     job_data = {
         "optimization_id": "abc123",
         "status": "pending",
@@ -96,8 +102,8 @@ def test_build_summary_on_pending_job_without_result() -> None:
 
 
 def test_build_summary_computes_improvement() -> None:
-    """build_summary derives metric_improvement from the fixture result's baseline and optimized metrics."""
-    now = datetime.now(timezone.utc)
+    """The summary reports baseline, optimized, and metric improvement values."""
+    now = datetime.now(UTC)
     fixture_result = load_fixture("jobs/success_single_gepa.detail.json")["result"]
     job_data = {
         "optimization_id": "job42",
@@ -123,8 +129,8 @@ def test_build_summary_computes_improvement() -> None:
 
 
 def test_build_summary_grid_search_uses_best_pair_metrics() -> None:
-    """build_summary uses the best_pair metrics and sets best_pair_label for grid-search jobs."""
-    now = datetime.now(timezone.utc).isoformat()
+    """A grid-search summary surfaces best-pair metrics and counters."""
+    now = datetime.now(UTC).isoformat()
     fixture_grid_result = load_fixture("jobs/success_grid.detail.json")["grid_result"]
     job_data = {
         "optimization_id": "gs1",
@@ -157,8 +163,8 @@ def test_build_summary_grid_search_uses_best_pair_metrics() -> None:
 
 
 def test_build_summary_grid_search_live_counters_from_latest_metrics() -> None:
-    """When result is absent, completed_pairs/failed_pairs fall back to latest_metrics."""
-    now = datetime.now(timezone.utc).isoformat()
+    """A running grid search surfaces live pair counters from ``latest_metrics``."""
+    now = datetime.now(UTC).isoformat()
     job_data = {
         "optimization_id": "gs2",
         "status": "running",
@@ -178,8 +184,8 @@ def test_build_summary_grid_search_live_counters_from_latest_metrics() -> None:
 
 
 def test_build_summary_estimated_remaining_set_for_running_job() -> None:
-    """build_summary formats estimated_remaining from the tqdm remaining key for running jobs."""
-    now = datetime.now(timezone.utc).isoformat()
+    """A running job exposes a formatted ``estimated_remaining`` value."""
+    now = datetime.now(UTC).isoformat()
     job_data = {
         "optimization_id": "r1",
         "status": "running",
@@ -198,8 +204,8 @@ def test_build_summary_estimated_remaining_set_for_running_job() -> None:
 
 
 def test_build_summary_estimated_remaining_absent_for_finished_job() -> None:
-    """build_summary returns None for estimated_remaining when the job is already finished."""
-    now = datetime.now(timezone.utc).isoformat()
+    """A finished job suppresses ``estimated_remaining`` even when metrics linger."""
+    now = datetime.now(UTC).isoformat()
     fixture_result = load_fixture("jobs/success_single_gepa.detail.json")["result"]
     job_data = {
         "optimization_id": "r2",
@@ -219,22 +225,38 @@ def test_build_summary_estimated_remaining_absent_for_finished_job() -> None:
 
 
 class _MinimalJobStore:
+    """Smallest possible store that returns a fixed count for any user."""
+
     def __init__(self, count: int) -> None:
+        """Capture the canned count to return from ``count_jobs``.
+
+        Args:
+            count: Number of jobs to report regardless of username.
+        """
         self._count = count
 
     def count_jobs(self, *, username: str | None = None, **_: object) -> int:
+        """Return the canned count.
+
+        Args:
+            username: Ignored; present for signature compatibility.
+            **_: Ignored extra filters.
+
+        Returns:
+            The fixed count captured during construction.
+        """
         return self._count
 
 
 def test_enforce_user_quota_allows_user_below_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """enforce_user_quota does not raise when the user's job count is below the cap."""
+    """A user under the cap passes ``enforce_user_quota`` without raising."""
     monkeypatch.setattr(_helpers_mod.settings.__class__, "get_user_quota", lambda self, u: 100)
     store = _MinimalJobStore(42)
-    enforce_user_quota(store, "alice")  # should not raise
+    enforce_user_quota(store, "alice")
 
 
 def test_enforce_user_quota_rejects_user_at_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """enforce_user_quota raises HTTPException 409 when the user's job count equals the cap."""
+    """A user exactly at the cap is rejected with a 409 referencing the cap."""
     monkeypatch.setattr(_helpers_mod.settings.__class__, "get_user_quota", lambda self, u: 100)
     store = _MinimalJobStore(100)
     with pytest.raises(HTTPException) as exc:
@@ -244,7 +266,7 @@ def test_enforce_user_quota_rejects_user_at_cap(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_enforce_user_quota_rejects_user_over_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """enforce_user_quota raises HTTPException 409 when the user's job count exceeds the cap."""
+    """A user above the cap is rejected with a 409."""
     monkeypatch.setattr(_helpers_mod.settings.__class__, "get_user_quota", lambda self, u: 100)
     store = _MinimalJobStore(250)
     with pytest.raises(HTTPException) as exc:
@@ -253,20 +275,35 @@ def test_enforce_user_quota_rejects_user_over_cap(monkeypatch: pytest.MonkeyPatc
 
 
 def test_enforce_user_quota_none_quota_bypasses_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    """enforce_user_quota does not raise when get_user_quota returns None (unlimited)."""
+    """A ``None`` quota disables the check entirely."""
     monkeypatch.setattr(_helpers_mod.settings.__class__, "get_user_quota", lambda self, u: None)
     store = _MinimalJobStore(9999)
-    enforce_user_quota(store, "admin")  # should not raise
+    enforce_user_quota(store, "admin")
 
 
 def _make_run_result_b64(obj: object) -> str:
-    """Return a base64-encoded pickle of *obj*."""
+    """Pickle ``obj`` and return a base64-encoded string.
+
+    Args:
+        obj: Object to serialise.
+
+    Returns:
+        A base64-encoded pickle string suitable for embedding in result JSON.
+    """
     return base64.b64encode(pickle.dumps(obj)).decode()
 
 
 def _run_job_data(optimization_id: str, program_obj: object) -> dict:
-    """Build a minimal success-status job dict with a pickled program artifact."""
-    now = datetime.now(timezone.utc).isoformat()
+    """Build a minimal run-job dict with a pickled program artifact.
+
+    Args:
+        optimization_id: Job id to embed in the dict.
+        program_obj: Program-like object to pickle into the artifact.
+
+    Returns:
+        A dict shaped like a stored run-job record.
+    """
+    now = datetime.now(UTC).isoformat()
     artifact_b64 = _make_run_result_b64(program_obj)
     return {
         "optimization_id": optimization_id,
@@ -291,33 +328,60 @@ def _run_job_data(optimization_id: str, program_obj: object) -> dict:
 
 
 class _JobStoreWithDelete:
-    """Minimal store that supports get_job and delete_job for cache tests."""
+    """Tiny in-memory store with seed/get/delete methods for cache tests."""
 
     def __init__(self) -> None:
+        """Initialise an empty job table."""
         self._jobs: dict = {}
 
     def seed(self, optimization_id: str, job_data: dict) -> None:
+        """Store ``job_data`` under ``optimization_id``.
+
+        Args:
+            optimization_id: Job id to seed under.
+            job_data: Job dict to store.
+        """
         self._jobs[optimization_id] = job_data
 
     def get_job(self, optimization_id: str) -> dict:
+        """Return a defensive copy of the stored job.
+
+        Args:
+            optimization_id: Job id to look up.
+
+        Returns:
+            A shallow copy of the stored job dict.
+
+        Raises:
+            KeyError: If the job was never seeded or was deleted.
+        """
         if optimization_id not in self._jobs:
             raise KeyError(optimization_id)
         return dict(self._jobs[optimization_id])
 
     def delete_job(self, optimization_id: str) -> None:
+        """Remove ``optimization_id`` from the store if present.
+
+        Args:
+            optimization_id: Job id to delete (no-op if missing).
+        """
         self._jobs.pop(optimization_id, None)
 
 
 @pytest.fixture(autouse=True)
-def _clear_program_cache_helpers() -> None:
-    """Clear the module-level program cache before and after each test."""
+def _clear_program_cache_helpers() -> Generator[None, None, None]:
+    """Reset the in-process program cache around every test in this file.
+
+    Yields:
+        ``None`` once the cache is cleared; the cache is cleared again on teardown.
+    """
     clear_program_cache()
     yield
     clear_program_cache()
 
 
 def test_load_program_deleted_job_raises_404_before_cache() -> None:
-    """If a job is deleted from the store and never cached, load_program raises 404."""
+    """``load_program`` raises 404 when the job is missing from the store."""
     store = _JobStoreWithDelete()
     # Job is never seeded — get_job will raise KeyError.
     with pytest.raises(HTTPException) as exc_info:
@@ -326,18 +390,20 @@ def test_load_program_deleted_job_raises_404_before_cache() -> None:
 
 
 def test_load_program_deleted_job_raises_404_even_when_cache_has_entry() -> None:
-    """load_program always calls get_job BEFORE consulting the cache.
-    So deleting a job from the store raises 404 on the NEXT call even if the
-    program was cached from a prior call.  The cache does NOT act as a
-    'serve from stale' fallback — it only avoids re-deserializing the pickle.
+    """The cache is not a stale-fallback; deleting from the store still raises 404.
+
+    ``load_program`` always calls ``get_job`` BEFORE consulting the cache. So
+    deleting a job from the store raises 404 on the NEXT call even if the
+    program was cached from a prior call. The cache does NOT act as a
+    "serve from stale" fallback -- it only avoids re-deserializing the pickle.
     """
     store = _JobStoreWithDelete()
     job_data = _run_job_data("job-then-deleted", object())
     store.seed("job-then-deleted", job_data)
 
     # First call succeeds and populates the cache.
-    program, _, _ = load_program(store, "job-then-deleted")
-    assert "job-then-deleted" in _helpers_mod._program_cache  # noqa: SLF001
+    _program, _, _ = load_program(store, "job-then-deleted")
+    assert "job-then-deleted" in _helpers_mod._program_cache
 
     # Delete the job from the store.
     store.delete_job("job-then-deleted")
@@ -349,9 +415,11 @@ def test_load_program_deleted_job_raises_404_even_when_cache_has_entry() -> None
 
 
 def test_load_program_cache_avoids_repeated_pickle_deserialisation() -> None:
-    """When a job exists in the store and the program is already cached,
-    load_program returns the SAME (identity-equal) object on every call,
-    proving the cache is used and pickle.loads is not called again.
+    """The cache returns the same instance across calls, avoiding repeated unpickling.
+
+    When a job exists in the store and the program is already cached,
+    ``load_program`` returns the SAME (identity-equal) object on every call,
+    proving the cache is used and ``pickle.loads`` is not called again.
     """
     store = _JobStoreWithDelete()
     store.seed("job-cache-hit", _run_job_data("job-cache-hit", object()))
@@ -364,22 +432,29 @@ def test_load_program_cache_avoids_repeated_pickle_deserialisation() -> None:
 
 
 def test_load_program_call_exception_propagates_and_cache_entry_is_retained() -> None:
-    """When the cached program's __call__ raises, the exception propagates to the
-    caller.  The cache entry itself is NOT evicted — load_program does not call
-    the program; the cache is a plain dict and is only written on first load.
-    This test documents that calling the program is the caller's responsibility.
+    """A raising program propagates to the caller and the cache entry is retained.
+
+    When the cached program's ``__call__`` raises, the exception propagates to
+    the caller. The cache entry itself is NOT evicted -- ``load_program`` does
+    not call the program; the cache is a plain dict and is only written on
+    first load. This test documents that calling the program is the caller's
+    responsibility.
     """
+
     # Inject a raising callable directly into the module-level cache.
     class _RaisingProgram:
+        """Picklable program stub whose ``__call__`` always raises."""
+
         def __call__(self, *args, **kwargs):
+            """Raise ``RuntimeError`` to simulate a program-level failure."""
             raise RuntimeError("program exploded")
 
     raiser = _RaisingProgram()
-    _helpers_mod._program_cache["direct-inject"] = raiser  # noqa: SLF001
+    _helpers_mod._program_cache["direct-inject"] = raiser
 
     # Simulate the caller invoking the cached program — the RuntimeError propagates.
     with pytest.raises(RuntimeError, match="program exploded"):
-        _helpers_mod._program_cache["direct-inject"]()  # noqa: SLF001
+        _helpers_mod._program_cache["direct-inject"]()
 
     # The cache entry must still be present after the failed call.
-    assert "direct-inject" in _helpers_mod._program_cache  # noqa: SLF001
+    assert "direct-inject" in _helpers_mod._program_cache

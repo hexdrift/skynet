@@ -1,19 +1,12 @@
 "use client";
 
-/**
- * Chat-style playground for the serve tab.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Owns its edit/cancel
- * state locally and receives refs + history via props from the parent
- * (which controls the actual /serve request).
- */
-
 import { useRef, useState } from "react";
 import { Loader2, MessageSquare, Pencil, XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import type { ServeInfoResponse } from "@/shared/types/api";
 import { CopyButton } from "./ui-primitives";
 import { formatOutput } from "@/shared/lib";
+import { msg } from "@/shared/lib/messages";
 
 export interface ServeChatProps {
   serveInfo: ServeInfoResponse;
@@ -71,9 +64,11 @@ export function ServeChat({
               <MessageSquare className="size-5 text-[#3D2E22]/35" />
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground/60">הרצת התוכנית המאומנת</p>
+              <p className="text-sm font-medium text-foreground/60">
+                {msg("auto.features.optimizations.components.servechat.1")}
+              </p>
               <p className="text-xs text-muted-foreground/50 max-w-xs leading-relaxed">
-                הזן ערכים בשדות הקלט למטה ולחץ על כפתור השליחה.
+                {msg("auto.features.optimizations.components.servechat.2")}
               </p>
             </div>
             {demos.length > 0 && (
@@ -87,7 +82,7 @@ export function ServeChat({
                         if (el) {
                           el.value = String(demo.inputs[f] ?? "");
                           el.style.height = "auto";
-                          el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                          el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
                         }
                       }
                     }}
@@ -95,7 +90,8 @@ export function ServeChat({
                     dir="auto"
                   >
                     <div className="text-[0.625rem] font-medium text-[#3D2E22]/50 mb-1">
-                      דוגמה {i + 1}
+                      {msg("auto.features.optimizations.components.servechat.3")}
+                      {i + 1}
                     </div>
                     <div className="text-xs text-foreground/70 line-clamp-2 font-mono" dir="ltr">
                       {Object.entries(demo.inputs)
@@ -136,14 +132,14 @@ export function ServeChat({
                             editTextareaRefs.current[field] = el;
                             if (el) {
                               el.style.height = "auto";
-                              el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                              el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
                             }
                           }}
                           dir="auto"
                           defaultValue={run.inputs[field] ?? ""}
                           onChange={(e) => {
                             e.target.style.height = "auto";
-                            e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                            e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                           }}
                           className="w-full bg-white border border-[#DDD4C8] rounded-xl px-3 py-2 text-sm font-mono resize-none outline-none focus:border-[#C8A882] transition-colors min-h-[40px] max-h-[120px]"
                           rows={1}
@@ -156,13 +152,13 @@ export function ServeChat({
                         onClick={() => setEditingRunTs(null)}
                         className="text-[0.6875rem] text-muted-foreground hover:text-foreground px-3 py-1 rounded-lg hover:bg-muted transition-colors"
                       >
-                        ביטול
+                        {msg("auto.features.optimizations.components.servechat.4")}
                       </button>
                       <button
                         onClick={() => handleEditAndResend(run.ts)}
                         className="text-[0.6875rem] text-white bg-[#3D2E22] hover:bg-[#3D2E22]/90 disabled:opacity-40 px-3 py-1 rounded-lg transition-colors"
                       >
-                        שלח
+                        {msg("auto.features.optimizations.components.servechat.5")}
                       </button>
                     </div>
                   </div>
@@ -189,7 +185,7 @@ export function ServeChat({
                     <button
                       onClick={() => setEditingRunTs(run.ts)}
                       className="self-center ms-1.5 opacity-0 group-hover/user:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted/60"
-                      title="ערוך ושלח שוב"
+                      title={msg("auto.features.optimizations.components.servechat.literal.1")}
                     >
                       <Pencil className="size-3 text-muted-foreground" />
                     </button>
@@ -256,7 +252,9 @@ export function ServeChat({
                     className="w-1.5 h-1.5 rounded-full bg-[#3D2E22]/30 animate-bounce"
                     style={{ animationDelay: "300ms" }}
                   />
-                  <span className="text-xs text-muted-foreground/40">חושב</span>
+                  <span className="text-xs text-muted-foreground/40">
+                    {msg("auto.features.optimizations.components.servechat.6")}
+                  </span>
                 </div>
               ) : (
                 serveInfo.output_fields.map((k, i, arr) => (
@@ -288,7 +286,10 @@ export function ServeChat({
               onClick={() => setServeError(null)}
               className="ms-auto p-0.5 hover:bg-red-100 rounded"
             >
-              <span className="sr-only">סגור</span>×
+              <span className="sr-only">
+                {msg("auto.features.optimizations.components.servechat.7")}
+              </span>
+              ×
             </button>
           </div>
         )}
@@ -307,7 +308,7 @@ export function ServeChat({
               size="icon"
               className="shrink-0 rounded-full !size-[42px]"
               disabled={serveLoading}
-              aria-label="שלח"
+              aria-label={msg("auto.features.optimizations.components.servechat.literal.2")}
             >
               {serveLoading ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -348,7 +349,7 @@ export function ServeChat({
                     defaultValue=""
                     onChange={(e) => {
                       e.target.style.height = "auto";
-                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                       if (serveError) setServeError(null);
                     }}
                     onKeyDown={(e) => {

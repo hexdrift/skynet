@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
-from ...service_gateway.code_agent import run_code_agent
+from ...service_gateway.agents.code import run_code_agent
+from ..errors import DomainError
+from ._helpers import sse_from_events
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,10 @@ class CodeAgentRequest(BaseModel):
 
     dataset_columns: list[str] = Field(..., min_length=1, description="All column names in the dataset.")
     column_roles: dict[str, str] = Field(..., description="Column → 'input'|'output'|'ignore'.")
+    column_kinds: dict[str, str] = Field(
+        default_factory=dict,
+        description="Input column → 'text'|'image'. Image columns get a dspy.Image typed InputField.",
+    )
     sample_rows: list[dict] = Field(default_factory=list, description="Up to 5 sample rows.")
     user_message: str = Field(default="", description="User's latest message. Empty triggers seed mode.")
     chat_history: list[ChatTurn] = Field(
@@ -51,9 +56,7 @@ class CodeAgentRequest(BaseModel):
     )
     prior_metric_validation: str = Field(
         default="",
-        description=(
-            "Short summary of the latest validation result for the current metric."
-        ),
+        description=("Short summary of the latest validation result for the current metric."),
     )
     initial_signature: str = Field(
         default="",
@@ -82,11 +85,19 @@ class EditCodeRequest(BaseModel):
     full chat history or validation-state scaffolding used by the wizard.
     """
 
-    goal: str = Field(..., min_length=1, description="What to change. Non-empty; empty triggers seed mode on the SSE endpoint.")
+    goal: str = Field(
+        ...,
+        min_length=1,
+        description=("What to change. Non-empty; empty triggers seed mode on the SSE endpoint."),
+    )
     current_signature: str = Field(default="", description="Current signature code (may be empty on first call).")
     current_metric: str = Field(default="", description="Current metric code (may be empty on first call).")
     dataset_columns: list[str] = Field(..., min_length=1, description="All column names in the dataset.")
     column_roles: dict[str, str] = Field(..., description="Column → 'input'|'output'|'ignore'.")
+    column_kinds: dict[str, str] = Field(
+        default_factory=dict,
+        description="Input column → 'text'|'image'.",
+    )
     sample_rows: list[dict] = Field(default_factory=list, description="Up to 5 sample rows.")
 
 
@@ -99,7 +110,11 @@ class EditCodeResponse(BaseModel):
 
 
 def create_code_agent_router() -> APIRouter:
-    """Mount the ``POST /optimizations/ai-generate-code`` SSE endpoint."""
+    """Mount the ``POST /optimizations/ai-generate-code`` SSE endpoint.
+
+    Returns:
+        A configured :class:`APIRouter` with the code-agent endpoints attached.
+    """
     router = APIRouter()
 
     @router.post(
@@ -120,28 +135,30 @@ def create_code_agent_router() -> APIRouter:
         * ``message_patch`` — ``{"chunk": "<token>"}`` (chat mode reply stream)
         * ``done`` — ``{"signature_code", "metric_code", "assistant_message"}``
         * ``error`` — ``{"error": "<message>"}``
+
+        Args:
+            req: Request body controlling code-agent inputs and chat history.
+
+        Returns:
+            A :class:`StreamingResponse` of Server-Sent Events.
         """
 
-        async def event_generator():
-            async for event in run_code_agent(
-                dataset_columns=req.dataset_columns,
-                column_roles=req.column_roles,
-                sample_rows=req.sample_rows,
-                user_message=req.user_message,
-                chat_history=[t.model_dump() for t in req.chat_history],
-                prior_signature=req.prior_signature,
-                prior_metric=req.prior_metric,
-                prior_signature_validation=req.prior_signature_validation,
-                prior_metric_validation=req.prior_metric_validation,
-                initial_signature=req.initial_signature,
-                initial_metric=req.initial_metric,
-            ):
-                name = event["event"]
-                payload = json.dumps(event["data"], ensure_ascii=False)
-                yield f"event: {name}\ndata: {payload}\n\n"
-
+        source = run_code_agent(
+            dataset_columns=req.dataset_columns,
+            column_roles=req.column_roles,
+            column_kinds=req.column_kinds,
+            sample_rows=req.sample_rows,
+            user_message=req.user_message,
+            chat_history=[t.model_dump() for t in req.chat_history],
+            prior_signature=req.prior_signature,
+            prior_metric=req.prior_metric,
+            prior_signature_validation=req.prior_signature_validation,
+            prior_metric_validation=req.prior_metric_validation,
+            initial_signature=req.initial_signature,
+            initial_metric=req.initial_metric,
+        )
         return StreamingResponse(
-            event_generator(),
+            sse_from_events(source),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -163,6 +180,16 @@ def create_code_agent_router() -> APIRouter:
         the ``done`` event, so a ReAct tool call sees a single request /
         response. Streaming updates remain available to human-driven UIs via
         ``POST /optimizations/ai-generate-code``.
+
+        Args:
+            req: Compact MCP-friendly input: goal plus current editor contents.
+
+        Returns:
+            An :class:`EditCodeResponse` with the final signature, metric, and
+            optional assistant message.
+
+        Raises:
+            DomainError: 502 when the code agent emits an ``error`` event.
         """
         final_signature = req.current_signature
         final_metric = req.current_metric
@@ -171,6 +198,7 @@ def create_code_agent_router() -> APIRouter:
         async for event in run_code_agent(
             dataset_columns=req.dataset_columns,
             column_roles=req.column_roles,
+            column_kinds=req.column_kinds,
             sample_rows=req.sample_rows,
             user_message=req.goal,
             chat_history=[],
@@ -184,7 +212,11 @@ def create_code_agent_router() -> APIRouter:
                 final_metric = data.get("metric_code", final_metric)
                 assistant_message = data.get("assistant_message", "")
             elif name == "error":
-                raise HTTPException(status_code=502, detail=data.get("error", "code agent failed"))
+                raise DomainError(
+                    "code_agent.upstream_failed",
+                    status=502,
+                    error=str(data.get("error", "code agent failed")),
+                )
 
         return EditCodeResponse(
             signature_code=final_signature,

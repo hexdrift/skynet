@@ -18,12 +18,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ...dataset import profile_dataset, recommend_split
-from ...i18n import SAMPLE_DATASETS, t
+from ...i18n import SAMPLE_DATASETS
 from ...models import ProfileDatasetRequest, ProfileDatasetResponse
+from ...service_gateway.datasets.planner import recommend_split
+from ...service_gateway.datasets.profiler import profile_dataset
+from ..errors import DomainError
 
 
 class SampleDatasetSummary(BaseModel):
@@ -38,6 +40,8 @@ class SampleDatasetSummary(BaseModel):
 
 
 class SampleDatasetListResponse(BaseModel):
+    """Envelope for ``GET /datasets/samples`` — the catalog of bundled samples."""
+
     samples: list[SampleDatasetSummary]
 
 
@@ -72,7 +76,12 @@ _VALID_COLUMN_ROLES = {"input", "output", "ignore"}
 
 
 def create_datasets_router() -> APIRouter:
-    """Build the datasets router."""
+    """Build the datasets router.
+
+    Returns:
+        A configured :class:`APIRouter` exposing the dataset profile, sample,
+        and column-roles endpoints.
+    """
     router = APIRouter()
 
     @router.post(
@@ -90,6 +99,13 @@ def create_datasets_router() -> APIRouter:
         override ``split_fractions`` when submitting the actual optimization.
 
         Errors: 400 (empty dataset), 422 (malformed body).
+
+        Args:
+            payload: Profiling request with dataset rows, column mapping, and seed.
+
+        Returns:
+            A :class:`ProfileDatasetResponse` containing the profile and the
+            recommended split plan.
         """
         dataset_profile = profile_dataset(payload.dataset, payload.column_mapping)
         plan = recommend_split(dataset_profile, seed=payload.seed)
@@ -107,6 +123,9 @@ def create_datasets_router() -> APIRouter:
         The catalog is small and static — suited for first-run demos where
         the user doesn't have a dataset of their own yet. Use
         ``POST /datasets/samples/{sample_id}/stage`` to prefill the wizard.
+
+        Returns:
+            A :class:`SampleDatasetListResponse` containing one summary per sample.
         """
         summaries = [
             SampleDatasetSummary(
@@ -133,13 +152,23 @@ def create_datasets_router() -> APIRouter:
         Populates dataset_ready, columns_configured, dataset_columns,
         column_roles, signature_code, metric_code, and a default job_name
         so a non-technical user can hit "run" without writing code.
-        404 if the sample ID is unknown.
+
+        Args:
+            sample_id: Identifier of the bundled sample dataset.
+
+        Returns:
+            A :class:`SampleDatasetStageResponse` with rows, filename, and
+            wizard-state patch.
+
+        Raises:
+            DomainError: 404 when ``sample_id`` is unknown.
         """
         sample = SAMPLE_DATASETS.get(sample_id)
         if sample is None:
-            raise HTTPException(
-                status_code=404,
-                detail=t("dataset.sample_unknown", sample_id=sample_id),
+            raise DomainError(
+                "dataset.sample_unknown",
+                status=404,
+                sample_id=sample_id,
             )
 
         columns = list(sample["input_columns"]) + list(sample["output_columns"])
@@ -182,27 +211,40 @@ def create_datasets_router() -> APIRouter:
         ``ignore``. At least one input and one output are required.
         On success the response contains a wizard_state patch with
         ``columns_configured`` set to true, the role map, and an
-        optional ``job_name``. Errors: 422 (unknown column or invalid role).
+        optional ``job_name``.
+
+        Args:
+            req: Request body with the dataset columns, role map, and an
+                optional job name.
+
+        Returns:
+            A :class:`ColumnRolesResponse` with the wizard-state patch.
+
+        Raises:
+            DomainError: 422 when a column is unknown, a role is invalid, or
+                no input/output role is supplied.
         """
         columns_set = set(req.dataset_columns)
         unknown = [col for col in req.column_roles if col not in columns_set]
         if unknown:
-            raise HTTPException(
-                status_code=422,
-                detail=t("dataset.column_roles_unknown", unknown=sorted(unknown)),
+            raise DomainError(
+                "dataset.column_roles_unknown",
+                status=422,
+                unknown=sorted(unknown),
             )
         bad_roles = {col: role for col, role in req.column_roles.items() if role not in _VALID_COLUMN_ROLES}
         if bad_roles:
-            raise HTTPException(
-                status_code=422,
-                detail=t("dataset.column_roles_invalid", bad=bad_roles),
+            raise DomainError(
+                "dataset.column_roles_invalid",
+                status=422,
+                bad=bad_roles,
             )
         inputs = [col for col, role in req.column_roles.items() if role == "input"]
         outputs = [col for col, role in req.column_roles.items() if role == "output"]
         if not inputs:
-            raise HTTPException(status_code=422, detail=t("dataset.column_roles_need_input"))
+            raise DomainError("dataset.column_roles_need_input", status=422)
         if not outputs:
-            raise HTTPException(status_code=422, detail=t("dataset.column_roles_need_output"))
+            raise DomainError("dataset.column_roles_need_output", status=422)
 
         wizard_state: dict[str, Any] = {
             "dataset_columns": req.dataset_columns,

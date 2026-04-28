@@ -24,10 +24,12 @@ TERM_PATTERN = re.compile(r"{term\.([A-Za-z0-9_]+)}")
 
 @lru_cache(maxsize=1)
 def _catalog() -> dict[str, Any]:
+    """Load and memoise the JSON i18n catalog from disk."""
     return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
 
 
 def _terms() -> dict[str, str]:
+    """Return the ``terms`` section of the catalog (or an empty dict)."""
     terms = _catalog().get("terms", {})
     if not isinstance(terms, dict):
         return {}
@@ -35,6 +37,7 @@ def _terms() -> dict[str, str]:
 
 
 def _messages() -> dict[str, str]:
+    """Return the ``messages`` section of the catalog (or an empty dict)."""
     messages = _catalog().get("messages", {})
     if not isinstance(messages, dict):
         return {}
@@ -42,6 +45,7 @@ def _messages() -> dict[str, str]:
 
 
 def _backend_constants() -> dict[str, str]:
+    """Return the ``backend.constants`` section of the catalog (or an empty dict)."""
     backend = _catalog().get("backend", {})
     constants = backend.get("constants", {}) if isinstance(backend, dict) else {}
     if not isinstance(constants, dict):
@@ -50,21 +54,24 @@ def _backend_constants() -> dict[str, str]:
 
 
 def term(key: str) -> str:
-    """Return a canonical shared term by key, or the key when missing."""
+    """Return a canonical shared term by key, or the key when missing.
+
+    Args:
+        key: Term identifier (e.g. ``"optimization"``).
+
+    Returns:
+        The Hebrew term string from the catalog, or ``key`` itself when the
+        catalog has no entry.
+    """
     value = _terms().get(key)
     return value if isinstance(value, str) else key
 
 
 def _constant(key: str) -> str:
+    """Resolve a backend-only string constant from the catalog."""
     value = _backend_constants().get(key)
     return value if isinstance(value, str) else key
 
-
-def _resolve_terms(template: str) -> str:
-    return TERM_PATTERN.sub(lambda match: term(match.group(1)), template)
-
-
-# -- Canonical terms -------------------------------------------------------
 
 TERM_OPTIMIZATION = term("optimization")
 TERM_OPTIMIZATION_PLURAL = term("optimizationPlural")
@@ -88,8 +95,6 @@ TERM_FINAL_SCORE = term("finalScore")
 TERM_MODEL = term("model")
 TERM_PAIR_PLURAL = term("pairPlural")
 
-# -- Constants (short noun phrases reused inline) --------------------------
-
 CANCELLATION_REASON = term("cancellationReason")
 
 CLONE_NAME_PREFIX = _constant("cloneNamePrefix")
@@ -107,9 +112,16 @@ def t(key: str, **params: Any) -> str:
 
     Returns the key itself when missing, surfacing catalog drift as an obvious
     development artifact rather than a silent blank.
+
+    Args:
+        key: Catalog identifier for the message template.
+        **params: Optional placeholder values substituted via ``str.format``.
+
+    Returns:
+        The localized, formatted string (or ``key`` when no template exists).
     """
     template = _messages().get(key, key)
-    template = _resolve_terms(template)
+    template = TERM_PATTERN.sub(lambda match: term(match.group(1)), template)
     if params:
         try:
             return template.format(**params)

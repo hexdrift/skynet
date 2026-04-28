@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  getDashboardAnalytics,
-  type DashboardAnalytics,
-} from "@/shared/lib/api";
+import { getDashboardAnalytics, type DashboardAnalytics } from "@/shared/lib/api";
 
 type UseDashboardAnalyticsArgs = {
   sessionUser: string;
@@ -17,9 +14,7 @@ type UseDashboardAnalyticsArgs = {
 
 export type UseDashboardAnalyticsReturn = {
   analyticsData: DashboardAnalytics | null;
-  setAnalyticsData: React.Dispatch<
-    React.SetStateAction<DashboardAnalytics | null>
-  >;
+  setAnalyticsData: React.Dispatch<React.SetStateAction<DashboardAnalytics | null>>;
   analyticsLoading: boolean;
   fetchDashboardAnalytics: () => Promise<void>;
 };
@@ -34,9 +29,7 @@ export function useDashboardAnalytics({
   jobId,
   date,
 }: UseDashboardAnalyticsArgs): UseDashboardAnalyticsReturn {
-  const [analyticsData, setAnalyticsData] = useState<DashboardAnalytics | null>(
-    null,
-  );
+  const [analyticsData, setAnalyticsData] = useState<DashboardAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const fetchDashboardAnalytics = useCallback(async () => {
@@ -61,7 +54,7 @@ export function useDashboardAnalytics({
 
   useEffect(() => {
     if (activeTab !== "analytics") return;
-    fetchDashboardAnalytics();
+    void fetchDashboardAnalytics();
   }, [activeTab, fetchDashboardAnalytics]);
 
   return {

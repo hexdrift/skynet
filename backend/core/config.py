@@ -13,9 +13,9 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve .env file relative to backend/ directory (parent of core/)
 _BACKEND_DIR = Path(__file__).parent.parent
 _ENV_FILE = _BACKEND_DIR / ".env"
+_VENDORED_EMBEDDER = _BACKEND_DIR / "vendor" / "models" / "jina-code-embeddings-0.5b"
 
 
 class Settings(BaseSettings):
@@ -90,7 +90,11 @@ class Settings(BaseSettings):
     )
     generalist_agent_model: str = Field(
         default="fireworks_ai/accounts/fireworks/models/minimax-m2p7",
-        description="LiteLLM model id used by the generalist agent (default: Fireworks-hosted MiniMax M2p7 — exposes <think> reasoning for streaming)",
+        description=(
+            "LiteLLM model id used by the generalist agent (default: "
+            "Fireworks-hosted MiniMax M2p7 — exposes <think> reasoning "
+            "for streaming)"
+        ),
     )
     generalist_agent_base_url: str = Field(
         default="",
@@ -98,11 +102,15 @@ class Settings(BaseSettings):
     )
 
     recommendations_embedding_model: str = Field(
-        default="jinaai/jina-code-embeddings-0.5b",
+        default=str(_VENDORED_EMBEDDER),
         description=(
-            "Hugging Face model id used by the recommendation embedder. "
-            "Must support MRL / head-truncated dimensions. Loaded via "
-            "sentence-transformers when the 'recommendations' extra is installed."
+            "Path or HF model id for the recommendation embedder. Defaults to "
+            "the snapshot vendored under backend/vendor/models/ (tracked via "
+            "git-lfs) so air-gapped deployments work out of the box. Override "
+            "with a HF id (e.g. 'jinaai/jina-code-embeddings-0.5b') to fetch "
+            "from Hugging Face when the host has internet, or with another "
+            "absolute path to use a different snapshot. Must support MRL / "
+            "head-truncated dimensions."
         ),
     )
     recommendations_embedding_dim: int = Field(
@@ -180,15 +188,13 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        """Return CORS origins as a stripped, non-empty list of strings."""
+        """Return ``cors_origins`` parsed into a list of trimmed, non-empty origins."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @property
     def admin_usernames_set(self) -> frozenset[str]:
         """Return admin usernames as a lowercase frozenset for O(1) membership tests."""
-        return frozenset(
-            s.strip().lower() for s in self.admin_usernames.split(",") if s.strip()
-        )
+        return frozenset(s.strip().lower() for s in self.admin_usernames.split(",") if s.strip())
 
     def get_user_quota(self, username: str) -> int | None:
         """Return the effective job quota for a user.

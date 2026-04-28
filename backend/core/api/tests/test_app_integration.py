@@ -1,9 +1,9 @@
-"""Integration tests for create_app() — lifespan, /health, /queue,
-cache-headers middleware, SIGTERM handler, and /openapi.public.json.
+"""Integration tests for ``create_app()``.
 
-These tests use the *real* create_app() factory but stub out every
-external dependency (Postgres, background worker, DSPy service) so
-the suite runs without any I/O.
+Covers lifespan startup, ``/health``, ``/queue``, cache-control middleware, the
+SIGTERM handler, and ``/openapi.public.json``. These tests use the real
+``create_app()`` factory but stub out every external dependency (Postgres, the
+background worker, the DSPy service) so the suite runs without any I/O.
 """
 
 from __future__ import annotations
@@ -14,13 +14,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from ..app import _SCALAR_HIDDEN_PATHS, create_app
-from ...models.common import HEALTH_STATUS_OK
+from ...models.constants import HEALTH_STATUS_OK
 from ...registry.core import ServiceRegistry
+from ..app import _SCALAR_HIDDEN_PATHS, create_app
 
 
 def _make_mock_worker(*, threads_alive: bool = True, stale_seconds: float | None = 0.0):
-    """Build a MagicMock configured with realistic BackgroundWorker defaults."""
+    """Build a ``MagicMock`` worker pre-configured for /health and /queue.
+
+    Args:
+        threads_alive: Value returned by ``threads_alive``.
+        stale_seconds: Value returned by ``seconds_since_last_activity``.
+
+    Returns:
+        A ``MagicMock`` with the worker interface stubbed out.
+    """
     w = MagicMock()
     w.threads_alive.return_value = threads_alive
     w.seconds_since_last_activity.return_value = stale_seconds
@@ -31,32 +39,51 @@ def _make_mock_worker(*, threads_alive: bool = True, stale_seconds: float | None
 
 
 def _make_mock_job_store(*, pending_ids: list[str] | None = None):
-    """Build a MagicMock configured with realistic JobStore defaults."""
+    """Build a ``MagicMock`` job store covering the lifespan recovery paths.
+
+    Args:
+        pending_ids: Identifiers returned by ``recover_pending_jobs``.
+
+    Returns:
+        A ``MagicMock`` job store with recovery hooks stubbed out.
+    """
     js = MagicMock()
     js.recover_orphaned_jobs.return_value = 0
     js.recover_pending_jobs.return_value = pending_ids or []
     return js
 
 
-
-
-@pytest.fixture()
+@pytest.fixture
 def mock_worker():
+    """Provide a default healthy worker mock for app integration tests.
+
+    Returns:
+        The mock built by ``_make_mock_worker``.
+    """
     return _make_mock_worker()
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_job_store():
+    """Provide a default job store mock for app integration tests.
+
+    Returns:
+        The mock built by ``_make_mock_job_store``.
+    """
     return _make_mock_job_store()
 
 
-@pytest.fixture()
+@pytest.fixture
 def app_client(mock_worker, mock_job_store):
-    """Return a TestClient backed by the real create_app().
+    """Build a ``TestClient`` around the real app with patched dependencies.
 
-    Patches are held open across the entire TestClient lifetime so that the
-    lifespan coroutine (which calls get_job_store / get_worker) runs under
-    the mocks.
+    Args:
+        mock_worker: Worker mock injected via ``get_worker``.
+        mock_job_store: Job store mock injected via ``get_job_store``.
+
+    Yields:
+        A 3-tuple of ``(client, worker, job_store)`` so individual tests can
+        adjust the underlying mocks before issuing requests.
     """
     registry = ServiceRegistry()
 
@@ -70,10 +97,8 @@ def app_client(mock_worker, mock_job_store):
             yield client, mock_worker, mock_job_store
 
 
-
-
 def test_lifespan_calls_recover_orphaned_jobs(mock_worker, mock_job_store):
-    """Lifespan startup calls ``recover_orphaned_jobs`` exactly once."""
+    """Lifespan startup invokes the orphan-recovery hook on the job store."""
     registry = ServiceRegistry()
     with (
         patch("core.api.app.get_job_store", return_value=mock_job_store),
@@ -86,7 +111,7 @@ def test_lifespan_calls_recover_orphaned_jobs(mock_worker, mock_job_store):
 
 
 def test_lifespan_calls_get_worker(mock_worker, mock_job_store):
-    """Lifespan startup calls ``get_worker`` at least once."""
+    """Lifespan startup obtains the worker exactly once via ``get_worker``."""
     registry = ServiceRegistry()
     with (
         patch("core.api.app.get_job_store", return_value=mock_job_store),
@@ -99,7 +124,7 @@ def test_lifespan_calls_get_worker(mock_worker, mock_job_store):
 
 
 def test_lifespan_requeues_pending_jobs(mock_worker):
-    """IDs from ``recover_pending_jobs`` are forwarded to ``get_worker`` as ``pending_optimization_ids``."""
+    """Pending jobs surfaced by the store are forwarded to the worker."""
     pending = ["job-aaa", "job-bbb"]
     mock_js = _make_mock_job_store(pending_ids=pending)
     registry = ServiceRegistry()
@@ -114,10 +139,8 @@ def test_lifespan_requeues_pending_jobs(mock_worker):
             assert kwargs.get("pending_optimization_ids") == pending
 
 
-
-
 def test_health_live_worker_returns_200(app_client):
-    """GET /health returns 200 when worker threads are alive and not stale."""
+    """A live, recently-active worker yields a 200 from ``/health``."""
     client, mock_worker, _ = app_client
     mock_worker.threads_alive.return_value = True
     mock_worker.seconds_since_last_activity.return_value = 0.0
@@ -128,7 +151,7 @@ def test_health_live_worker_returns_200(app_client):
 
 
 def test_health_live_worker_returns_expected_shape(app_client):
-    """GET /health response includes ``status`` and ``registered_assets`` fields."""
+    """``/health`` returns the standard status and registered-assets payload."""
     client, mock_worker, _ = app_client
     mock_worker.threads_alive.return_value = True
     mock_worker.seconds_since_last_activity.return_value = 0.0
@@ -140,7 +163,7 @@ def test_health_live_worker_returns_expected_shape(app_client):
 
 
 def test_health_stale_worker_returns_503(app_client):
-    """Worker threads alive but idle beyond WORKER_STALE_THRESHOLD → 503."""
+    """An idle worker past the staleness threshold returns 503."""
     client, mock_worker, _ = app_client
     mock_worker.threads_alive.return_value = True
     # 601 s > default threshold of 600 s
@@ -152,7 +175,7 @@ def test_health_stale_worker_returns_503(app_client):
 
 
 def test_health_dead_worker_returns_503(app_client):
-    """Worker threads not alive → 503."""
+    """A worker reporting ``threads_alive=False`` returns 503."""
     client, mock_worker, _ = app_client
     mock_worker.threads_alive.return_value = False
 
@@ -162,7 +185,7 @@ def test_health_dead_worker_returns_503(app_client):
 
 
 def test_health_no_worker_returns_503():
-    """GET /health returns 503 when worker threads report ``threads_alive=False``."""
+    """An app started without a worker reports unhealthy."""
     registry = ServiceRegistry()
     mock_js = _make_mock_job_store()
     null_worker = MagicMock()
@@ -180,17 +203,15 @@ def test_health_no_worker_returns_503():
     assert resp.status_code == 503
 
 
-
-
 def test_queue_with_worker_returns_200(app_client):
-    """GET /queue returns 200 when a worker is running."""
+    """``/queue`` reports 200 whenever a worker is wired in."""
     client, _, _ = app_client
     resp = client.get("/queue")
     assert resp.status_code == 200
 
 
 def test_queue_with_worker_returns_correct_shape(app_client):
-    """GET /queue response reflects the worker's live pending/active/thread counts."""
+    """``/queue`` propagates the worker's queue and thread counters."""
     client, mock_worker, _ = app_client
     mock_worker.queue_size.return_value = 3
     mock_worker.active_jobs.return_value = 1
@@ -206,7 +227,7 @@ def test_queue_with_worker_returns_correct_shape(app_client):
 
 
 def test_queue_without_worker_returns_zeros():
-    """If get_worker returns None the queue endpoint returns all-zeros shape."""
+    """Without a worker, ``/queue`` returns zeroed counters and 200."""
     registry = ServiceRegistry()
     mock_js = _make_mock_job_store()
 
@@ -225,10 +246,8 @@ def test_queue_without_worker_returns_zeros():
     assert body["workers_alive"] is False
 
 
-
-
 def test_cache_headers_health_no_cache(app_client):
-    """GET /health response carries ``no-cache`` Cache-Control."""
+    """``/health`` responses must declare ``no-cache``."""
     client, _, _ = app_client
     resp = client.get("/health")
     cc = resp.headers.get("cache-control", "")
@@ -236,7 +255,7 @@ def test_cache_headers_health_no_cache(app_client):
 
 
 def test_cache_headers_queue_private(app_client):
-    """GET /queue response carries a short private Cache-Control (max-age=5)."""
+    """``/queue`` declares a short private cache window."""
     client, _, _ = app_client
     resp = client.get("/queue")
     cc = resp.headers.get("cache-control", "")
@@ -245,7 +264,7 @@ def test_cache_headers_queue_private(app_client):
 
 
 def test_cache_headers_models_public(app_client):
-    """GET /models response carries a public Cache-Control (max-age=300)."""
+    """``/models`` declares the long public cache window."""
     client, _, _ = app_client
     resp = client.get("/models")
     cc = resp.headers.get("cache-control", "")
@@ -254,7 +273,7 @@ def test_cache_headers_models_public(app_client):
 
 
 def test_cache_headers_health_differs_from_models(app_client):
-    """Health and models must carry different Cache-Control policies."""
+    """Per-route cache policies are not collapsed into a single value."""
     client, mock_worker, _ = app_client
     mock_worker.threads_alive.return_value = True
     mock_worker.seconds_since_last_activity.return_value = 0.0
@@ -265,17 +284,16 @@ def test_cache_headers_health_differs_from_models(app_client):
     assert health_cc != models_cc
 
 
-
-
 def test_sigterm_handler_calls_worker_stop():
-    """The _graceful_shutdown closure must call worker.stop() on SIGTERM."""
+    """SIGTERM triggers a clean worker shutdown via ``worker.stop``."""
     registry = ServiceRegistry()
     mock_js = _make_mock_job_store()
     mock_w = _make_mock_worker()
 
-    captured_handler = {}
+    captured_handler: dict = {}
 
     def fake_signal(signum, handler):
+        """Capture the SIGTERM handler so the test can invoke it manually."""
         if signum == signal.SIGTERM:
             captured_handler["fn"] = handler
 
@@ -295,17 +313,15 @@ def test_sigterm_handler_calls_worker_stop():
             mock_w.stop.assert_called()
 
 
-
-
 def test_openapi_public_returns_200(app_client):
-    """GET /openapi.public.json returns 200."""
+    """The public OpenAPI spec endpoint serves a 200."""
     client, _, _ = app_client
     resp = client.get("/openapi.public.json")
     assert resp.status_code == 200
 
 
 def test_openapi_public_returns_valid_json(app_client):
-    """GET /openapi.public.json body is a valid OpenAPI dict with a ``paths`` key."""
+    """The public OpenAPI spec endpoint returns a JSON document with paths."""
     client, _, _ = app_client
     resp = client.get("/openapi.public.json")
     body = resp.json()
@@ -314,7 +330,7 @@ def test_openapi_public_returns_valid_json(app_client):
 
 
 def test_openapi_public_hides_hidden_paths(app_client):
-    """Every path in _SCALAR_HIDDEN_PATHS must be absent from the public spec."""
+    """All paths declared as hidden are absent from the public spec."""
     client, _, _ = app_client
     paths = client.get("/openapi.public.json").json().get("paths", {})
     for hidden in _SCALAR_HIDDEN_PATHS:
@@ -322,7 +338,7 @@ def test_openapi_public_hides_hidden_paths(app_client):
 
 
 def test_openapi_public_removes_empty_tag_groups(app_client):
-    """Tags that have no remaining operations after filtering must be pruned."""
+    """Tags with no remaining operations are pruned from the public spec."""
     client, _, _ = app_client
     body = client.get("/openapi.public.json").json()
     paths = body.get("paths", {})
@@ -337,13 +353,11 @@ def test_openapi_public_removes_empty_tag_groups(app_client):
 
     for tag_obj in body.get("tags", []):
         tag_name = tag_obj.get("name")
-        assert tag_name in tags_in_paths, (
-            f"Tag {tag_name!r} is still in spec['tags'] but has no operations"
-        )
+        assert tag_name in tags_in_paths, f"Tag {tag_name!r} is still in spec['tags'] but has no operations"
 
 
 def test_openapi_public_retains_public_paths(app_client):
-    """System endpoints ``/health`` and ``/queue`` are present in the public spec."""
+    """Public-facing paths remain in the public spec after filtering."""
     client, _, _ = app_client
     paths = client.get("/openapi.public.json").json().get("paths", {})
     assert "/health" in paths

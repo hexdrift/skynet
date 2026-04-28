@@ -2,8 +2,9 @@
  * Also persists to localStorage for instant availability on subsequent visits.
  */
 import type { ModelCatalogResponse, DiscoverModelsResponse } from "@/shared/types/api";
+import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = getRuntimeEnv().apiUrl;
 const LS_KEY = "skynet:model-catalog";
 const LS_TTL = 10 * 60 * 1000; // 10 min TTL for localStorage cache
 

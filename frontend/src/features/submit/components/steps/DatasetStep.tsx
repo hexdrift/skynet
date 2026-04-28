@@ -1,12 +1,19 @@
 "use client";
 
-import { Upload } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Image as ImageIcon, Type as TypeIcon, Upload } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/shared/ui/primitives/card";
+import { Label } from "@/shared/ui/primitives/label";
+import { Badge } from "@/shared/ui/primitives/badge";
+import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
+import { msg } from "@/shared/lib/messages";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
@@ -18,7 +25,16 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
     handleFileUpload,
     columnRoles,
     setColumnRoles,
+    columnKinds,
+    setColumnKinds,
+    datasetProfile,
   } = w;
+
+  // Auto-detected kinds straight from the profiler — used to mark a column
+  // as "auto-detected as image" (vs a user-driven manual flip) in the UI.
+  const autoDetectedKinds = new Map(
+    (datasetProfile?.inputs ?? []).map((entry) => [entry.name, entry.kind]),
+  );
 
   return (
     <Card
@@ -27,7 +43,9 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
     >
       <CardHeader>
         <CardTitle className="text-lg">{TERMS.dataset}</CardTitle>
-        <CardDescription>העלה קובץ נתונים והגדר את מיפוי העמודות</CardDescription>
+        <CardDescription>
+          {msg("auto.features.submit.components.steps.datasetstep.1")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <label
@@ -43,11 +61,14 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
             className="text-sm font-medium truncate max-w-full px-4"
             title={datasetFileName ?? undefined}
           >
-            {datasetFileName ?? "לחץ להעלאת קובץ CSV, JSON, או Excel"}
+            {datasetFileName ?? msg("auto.features.submit.components.steps.datasetstep.literal.1")}
           </p>
           {parsedDataset && (
             <Badge variant="secondary" className="mt-2">
-              {parsedDataset.rowCount} שורות · {parsedDataset.columns.length} עמודות
+              {parsedDataset.rowCount}
+              {msg("auto.features.submit.components.steps.datasetstep.2")}
+              {parsedDataset.columns.length}
+              {msg("auto.features.submit.components.steps.datasetstep.3")}
             </Badge>
           )}
           <input
@@ -63,52 +84,108 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
           <>
             <Separator />
             <div className="space-y-3" data-tutorial="column-mapping">
-              <Label>מיפוי עמודות</Label>
-              <p className="text-xs text-muted-foreground">סמן כל עמודה כקלט, פלט, או התעלם</p>
+              <Label>{msg("auto.features.submit.components.steps.datasetstep.4")}</Label>
+              <p className="text-xs text-muted-foreground">
+                {msg("auto.features.submit.components.steps.datasetstep.5")}
+              </p>
               <div className="space-y-2">
-                {parsedDataset.columns.map((col) => (
-                  <div key={col} className="flex items-center justify-between gap-2">
-                    <span className="text-xs sm:text-sm font-mono truncate" dir="ltr">
-                      {col}
-                    </span>
-                    {(() => {
-                      const options = [
-                        ["input", "קלט"],
-                        ["output", "פלט"],
-                        ["ignore", "התעלם"],
-                      ] as const;
-                      const activeIdx = options.findIndex(([v]) => v === columnRoles[col]);
-                      const pillLeft =
-                        activeIdx >= 0 ? `calc(${activeIdx} * 100% / 3 + 2px)` : "2px";
-                      return (
-                        <div
-                          className="relative inline-grid grid-cols-3 shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
-                          dir="rtl"
-                        >
+                {parsedDataset.columns.map((col) => {
+                  const isInput = columnRoles[col] === "input";
+                  const kind = columnKinds[col] ?? "text";
+                  const wasAutoImage = autoDetectedKinds.get(col) === "image";
+                  return (
+                    <div key={col} className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="text-xs sm:text-sm font-mono truncate" dir="ltr">
+                          {col}
+                        </span>
+                        {isInput && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setColumnKinds((prev) => ({
+                                ...prev,
+                                [col]: kind === "image" ? "text" : "image",
+                              }))
+                            }
+                            className={cn(
+                              "shrink-0 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.625rem] font-medium transition-colors cursor-pointer",
+                              kind === "image"
+                                ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                                : "border-border/60 bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                            )}
+                            title={
+                              kind === "image"
+                                ? wasAutoImage
+                                  ? msg("submit.dataset.column_kind.image_auto_hint")
+                                  : msg("submit.dataset.column_kind.image")
+                                : msg("submit.dataset.column_kind.text_manual_hint")
+                            }
+                          >
+                            {kind === "image" ? (
+                              <ImageIcon className="size-3" />
+                            ) : (
+                              <TypeIcon className="size-3" />
+                            )}
+                            <span>
+                              {kind === "image"
+                                ? msg("submit.dataset.column_kind.image")
+                                : msg("submit.dataset.column_kind.text")}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                      {(() => {
+                        const options = [
+                          [
+                            "input",
+                            msg("auto.features.submit.components.steps.datasetstep.literal.2"),
+                          ],
+                          [
+                            "output",
+                            msg("auto.features.submit.components.steps.datasetstep.literal.3"),
+                          ],
+                          [
+                            "ignore",
+                            msg("auto.features.submit.components.steps.datasetstep.literal.4"),
+                          ],
+                        ] as const;
+                        const activeIdx = options.findIndex(([v]) => v === columnRoles[col]);
+                        const pillLeft =
+                          activeIdx >= 0 ? `calc(${activeIdx} * 100% / 3 + 2px)` : "2px";
+                        return (
                           <div
-                            className="absolute top-0.5 bottom-0.5 rounded-md bg-stone-500/15 shadow-sm transition-[inset-inline-start] duration-100 ease-out"
-                            style={{ width: "calc((100% - 6px) / 3)", insetInlineStart: pillLeft }}
-                          />
-                          {options.map(([val, label]) => (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => setColumnRoles((prev) => ({ ...prev, [col]: val }))}
-                              className={cn(
-                                "relative z-10 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
-                                columnRoles[col] === val
-                                  ? "text-stone-600"
-                                  : "text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ))}
+                            className="relative inline-grid grid-cols-3 shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
+                            dir="rtl"
+                          >
+                            <div
+                              className="absolute top-0.5 bottom-0.5 rounded-md bg-stone-500/15 shadow-sm transition-[inset-inline-start] duration-100 ease-out"
+                              style={{
+                                width: "calc((100% - 6px) / 3)",
+                                insetInlineStart: pillLeft,
+                              }}
+                            />
+                            {options.map(([val, label]) => (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => setColumnRoles((prev) => ({ ...prev, [col]: val }))}
+                                className={cn(
+                                  "relative z-10 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
+                                  columnRoles[col] === val
+                                    ? "text-stone-600"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </>

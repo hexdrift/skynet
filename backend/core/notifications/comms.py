@@ -12,7 +12,7 @@ To integrate:
 import logging
 import os
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,22 @@ ENABLED = bool(WEBHOOK_URL)
 
 
 def send_message(text: str, channel: str | None = None) -> bool:
-    """Send a message to the internal comms webhook; returns True on success."""
+    """Send a message to the internal comms webhook.
+
+    Never raises: any transport/HTTP error is logged at WARNING and
+    surfaced via the boolean return. When the webhook URL is not
+    configured (``COMMS_WEBHOOK_URL`` unset) this is a no-op that
+    returns ``False``.
+
+    Args:
+        text: Message body to deliver.
+        channel: Optional override for the target channel; defaults to
+            ``COMMS_CHANNEL`` (``#skynet-notifications``).
+
+    Returns:
+        ``True`` when the webhook accepted the payload, ``False`` when
+        delivery was skipped or any error occurred.
+    """
     if not ENABLED:
         logger.debug("Comms not configured (COMMS_WEBHOOK_URL not set), skipping: %s", text[:80])
         return False

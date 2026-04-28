@@ -1,9 +1,3 @@
-/**
- * Shared type definitions
- * Re-exports core types from lib/types.ts for use in feature slices
- * Single source of truth for types matching backend Pydantic schemas
- */
-
 export type {
   JobStatus,
   OptimizationType,
@@ -34,5 +28,4 @@ export type {
   DiscoverModelsResponse,
 } from "./api";
 
-// Alias for cleaner imports
 export type { OptimizationSummaryResponse as Job } from "./api";

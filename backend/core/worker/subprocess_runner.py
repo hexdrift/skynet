@@ -7,22 +7,21 @@ module so ``engine.py`` can stay focused on the parent-side worker
 lifecycle.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
 from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN
 from ..models import GridSearchRequest, RunRequest
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
+from .constants import EVENT_ERROR, EVENT_LOG, EVENT_PROGRESS, EVENT_RESULT
 from .log_handler import get_current_pair_index
-
-EVENT_PROGRESS = "progress"
-EVENT_LOG = "log"
-EVENT_RESULT = "result"
-EVENT_ERROR = "error"
 
 # Populated by the parent via ``set_fork_service`` before forking so
 # child processes can reuse the same registry-backed service.
@@ -30,15 +29,46 @@ _FORK_SERVICE: DspyService | None = None
 
 
 def set_fork_service(service: DspyService | None) -> None:
-    """Store a service instance that child processes may reuse after fork."""
+    """Store a service instance that child processes may reuse after fork (or clear with None).
+
+    Args:
+        service: The service to share with forked children, or ``None`` to clear.
+    """
     global _FORK_SERVICE
     _FORK_SERVICE = service
 
 
 def safe_queue_put(event_queue: Any, event: dict[str, Any]) -> None:
-    """Put an event onto a multiprocessing queue, suppressing any errors."""
+    """Put an event onto a multiprocessing queue, swallowing any exception so the child keeps running.
+
+    Args:
+        event_queue: The shared queue to write to.
+        event: Pickleable payload to enqueue.
+    """
     with contextlib.suppress(Exception):
         event_queue.put(event)
+
+
+def _emit_progress_event(event_queue: Any, message: str, metrics: dict[str, Any]) -> None:
+    """Forward one optimizer progress event to the parent process.
+
+    Shape expected by the parent's ``_drain_subprocess_events``: an
+    ``EVENT_PROGRESS`` dict carrying the human-readable ``event`` label and
+    a ``metrics`` mapping (empty if the caller passed ``None``).
+
+    Args:
+        event_queue: The shared queue used to talk to the parent.
+        message: Human-readable phase label.
+        metrics: Metric snapshot for this phase (may be empty/None).
+    """
+    safe_queue_put(
+        event_queue,
+        {
+            "type": EVENT_PROGRESS,
+            "event": message,
+            "metrics": metrics or {},
+        },
+    )
 
 
 class SubprocessLogHandler(logging.Handler):
@@ -54,13 +84,17 @@ class SubprocessLogHandler(logging.Handler):
         """Initialize the handler with the shared multiprocessing queue.
 
         Args:
-            event_queue: Queue used to send ``EVENT_LOG`` events to the parent.
+            event_queue: The shared queue to which ``EVENT_LOG`` events go.
         """
         super().__init__()
         self._event_queue = event_queue
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Format and forward a log record to the parent process via the event queue."""
+        """Format and forward a log record to the parent process via the event queue.
+
+        Args:
+            record: The log record produced by the underlying logger.
+        """
         try:
             message = self.format(record)
         except Exception:
@@ -69,7 +103,7 @@ class SubprocessLogHandler(logging.Handler):
             self._event_queue,
             {
                 "type": EVENT_LOG,
-                "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+                "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
                 "message": message,
@@ -103,13 +137,10 @@ def run_service_in_subprocess(
     is constructed.
 
     Args:
-        payload_dict: Serialised job payload; ``_optimization_type`` key is popped
-            before model validation.
-        artifact_id: Passed through to ``service.run`` / ``service.run_grid_search``
-            as the artifact storage identifier.
-        event_queue: Multiprocessing queue used to stream events to the parent.
-        start_method: The context start method (``"fork"`` or ``"spawn"``); controls
-            whether ``_FORK_SERVICE`` is reused.
+        payload_dict: Submission payload plus the ``_optimization_type`` key.
+        artifact_id: ID used to attach progress and logs to the right job.
+        event_queue: Shared multiprocessing queue back to the parent.
+        start_method: The active multiprocessing start method (e.g. ``"fork"``).
     """
     service = _FORK_SERVICE if start_method == "fork" and _FORK_SERVICE is not None else DspyService(ServiceRegistry())
     dspy_logger = logging.getLogger("dspy")
@@ -125,31 +156,21 @@ def run_service_in_subprocess(
     try:
         payload_dict = dict(payload_dict)
         optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
-
-        def progress_callback(message: str, metrics: dict[str, Any]) -> None:
-            """Forward an optimizer progress event to the parent via the queue."""
-            safe_queue_put(
-                event_queue,
-                {
-                    "type": EVENT_PROGRESS,
-                    "event": message,
-                    "metrics": metrics or {},
-                },
-            )
+        progress_callback = partial(_emit_progress_event, event_queue)
 
         if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
             if not hasattr(service, "run_grid_search"):
                 service = DspyService(ServiceRegistry())
-            payload = GridSearchRequest.model_validate(payload_dict)
-            result = service.run_grid_search(
-                payload,
+            grid_payload = GridSearchRequest.model_validate(payload_dict)
+            result: Any = service.run_grid_search(
+                grid_payload,
                 artifact_id=artifact_id,
                 progress_callback=progress_callback,
             )
         else:
-            payload = RunRequest.model_validate(payload_dict)
+            run_payload = RunRequest.model_validate(payload_dict)
             result = service.run(
-                payload,
+                run_payload,
                 artifact_id=artifact_id,
                 progress_callback=progress_callback,
             )
@@ -160,6 +181,8 @@ def run_service_in_subprocess(
                 "result": result.model_dump(mode="json"),
             },
         )
+    # subprocess isolation boundary: report any failure (including
+    # SystemExit and KeyboardInterrupt) to the parent before the child exits.
     except BaseException as exc:
         safe_queue_put(
             event_queue,

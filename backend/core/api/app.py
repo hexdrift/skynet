@@ -19,15 +19,17 @@ from __future__ import annotations
 
 import logging
 import os
-import signal  # [WORKER-FIX] for SIGTERM graceful shutdown
+import signal
 import threading
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
+from types import FrameType
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -35,22 +37,23 @@ from fastapi.staticfiles import StaticFiles
 from scalar_fastapi import AgentScalarConfig, DocumentDownloadType, get_scalar_api_reference
 
 from ..exceptions import AppError
-from ..i18n import t
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
 from ..storage import get_job_store
 from ..worker import BackgroundWorker, get_worker
+from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
+from .observability import install_metrics, install_request_id_middleware
 from .routers.analytics import create_analytics_router
 from .routers.code_agent import create_code_agent_router
 from .routers.code_validation import create_code_validation_router
+from .routers.dashboard import create_dashboard_router
 from .routers.datasets import create_datasets_router
 from .routers.generalist_agent import create_generalist_agent_router
 from .routers.models import create_models_router
 from .routers.optimizations import create_optimizations_router
 from .routers.optimizations_meta import create_optimizations_meta_router
-from .routers.dashboard import create_dashboard_router
 from .routers.recommendations import create_recommendations_router
 from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
@@ -204,9 +207,9 @@ _SCALAR_CUSTOM_CSS = """
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   height: 32px;
-  width: 40px;
-  padding: 0 8px;
+  padding: 4px 8px;
   border: 0;
   background: transparent;
   color: #3D2E22;
@@ -221,28 +224,21 @@ _SCALAR_CUSTOM_CSS = """
   outline-offset: 2px;
 }
 
-.skynet-toolbar-brand .skynet-wordmark,
-.skynet-toolbar-brand .skynet-toolbar-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  transition: opacity 200ms ease;
+.skynet-brand-logo {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: block;
 }
 .skynet-toolbar-brand .skynet-toolbar-icon {
-  opacity: 0;
-  pointer-events: none;
+  flex-shrink: 0;
+  display: block;
+}
+.skynet-toolbar-brand .skynet-wordmark {
+  flex-shrink: 0;
 }
 .skynet-wordmark { color: #3D2E22; user-select: none; }
 .skynet-wordmark svg { overflow: visible; }
-
-/* Hover swap is only meaningful while the sidebar can still be opened */
-html[data-skynet-sidebar="hidden"] .skynet-toolbar-brand:hover .skynet-wordmark {
-  opacity: 0;
-}
-html[data-skynet-sidebar="hidden"] .skynet-toolbar-brand:hover .skynet-toolbar-icon {
-  opacity: 1;
-}
 
 /* When the sidebar is open, the brand moves into the sidebar header */
 html[data-skynet-sidebar="visible"] .skynet-toolbar-brand {
@@ -265,6 +261,7 @@ html[data-skynet-sidebar="hidden"] .skynet-sidebar-header {
 .skynet-sidebar-home {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   padding: 6px 8px;
   border-radius: 8px;
   color: #3D2E22;
@@ -392,6 +389,12 @@ html[data-skynet-sidebar="hidden"] .skynet-sidebar-header {
     opacity: 1;
   }
 }
+@media (max-width: 1023px) and (min-width: 769px) {
+  .section-container,
+  .endpoint-container {
+    padding-inline: 16px !important;
+  }
+}
 @media (max-width: 768px) {
   .section-container,
   .endpoint-container {
@@ -442,6 +445,58 @@ _OPENAPI_TAGS = [
 ]
 
 
+def _graceful_shutdown_handler(
+    worker: BackgroundWorker | None,
+    original_handler: Any,
+    signum: int,
+    frame: FrameType | None,
+) -> None:
+    """Stop the background worker on SIGTERM, then chain to the original handler.
+
+    Any prior handler that is neither ``SIG_DFL`` nor ``SIG_IGN`` is invoked
+    so an outer process supervisor can still respond.
+
+    Args:
+        worker: The background worker to stop, or ``None`` when not yet started.
+        original_handler: The previously installed SIGTERM handler.
+        signum: The signal number forwarded by the runtime.
+        frame: The current stack frame at signal delivery, or ``None``.
+    """
+    logger.info("SIGTERM received, stopping worker gracefully")
+    if worker:
+        worker.stop()
+    if callable(original_handler) and original_handler not in (signal.SIG_DFL, signal.SIG_IGN):
+        original_handler(signum, frame)
+
+
+def _format_validation_loc(loc: Iterable[Any]) -> str:
+    """Flatten a pydantic ``loc`` tuple into a dotted path.
+
+    Translates e.g. ``("body", "items", 0, "name")`` → ``"items[0].name"``.
+    The synthetic ``"body"`` / ``"__root__"`` entries pydantic emits at the
+    top of request-body errors are stripped so the path matches the user's
+    actual schema.
+
+    Args:
+        loc: Iterable of path segments (strings and ints) from pydantic's error.
+
+    Returns:
+        A dotted path string, or ``"body"`` when only synthetic prefixes were present.
+    """
+    parts: list[str] = []
+    for entry in loc:
+        if entry in {"body", "__root__"}:
+            continue
+        if isinstance(entry, int):
+            if parts:
+                parts[-1] = f"{parts[-1]}[{entry}]"
+            else:
+                parts.append(f"[{entry}]")
+        else:
+            parts.append(str(entry))
+    return ".".join(parts) if parts else "body"
+
+
 def create_app(
     registry: ServiceRegistry | None = None,
     *,
@@ -451,14 +506,15 @@ def create_app(
     """Assemble and return the fully-configured FastAPI application.
 
     Args:
-        registry: Pre-built ServiceRegistry; a new one is created if omitted.
-        service: Pre-built DspyService; constructed from *registry* if omitted.
-        service_kwargs: Extra kwargs forwarded to the DspyService constructor
-            when *service* is not supplied.
+        registry: Optional pre-built :class:`ServiceRegistry`; a fresh one is
+            created when omitted.
+        service: Optional pre-built :class:`DspyService`; constructed from
+            ``registry`` and ``service_kwargs`` when omitted.
+        service_kwargs: Optional kwargs forwarded to :class:`DspyService`
+            when building the default instance.
 
     Returns:
-        A FastAPI instance with all middleware, exception handlers, and routers
-        mounted and ready to serve.
+        The fully wired :class:`FastAPI` application.
     """
     registry = registry or ServiceRegistry()
     service = service or DspyService(
@@ -471,29 +527,41 @@ def create_app(
     worker: BackgroundWorker | None = None
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        """Recover orphan jobs, start the background worker, and install a SIGTERM handler.
+
+        Args:
+            app: The FastAPI application whose lifespan is being managed.
+
+        Yields:
+            ``None`` once the worker is running; stops the worker on exit.
+        """
         nonlocal worker
-        job_store.recover_orphaned_jobs()  # [WORKER-FIX] mark crashed jobs from previous run as failed
+        # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
+        # this only fails rows whose ``lease_expires_at`` is in the past — a
+        # peer pod's in-flight job is not orphaned and is left alone.
+        job_store.recover_orphaned_jobs()
+        # ``recover_pending_jobs`` is no longer required for correctness because
+        # any pod can claim a pending row via ``claim_next_job`` on its next
+        # tick, but we still pass the IDs as a same-pod hint so a fresh restart
+        # resumes work without waiting a full poll interval.
         pending_ids = job_store.recover_pending_jobs()
         worker = get_worker(job_store, service=service, pending_optimization_ids=pending_ids)
         if pending_ids:
-            logger.info("Re-queued %d pending jobs from previous run", len(pending_ids))
+            logger.info("Re-queued %d pending jobs from previous run (local hint)", len(pending_ids))
         logger.info("Background worker started")
 
-        # [WORKER-FIX] register SIGTERM handler for graceful shutdown on OpenShift
-        # only when running on the main interpreter thread.
+        # SIGTERM handler can only be registered on the main interpreter
+        # thread. ``threading.current_thread()`` lets us detect when the
+        # lifespan is running inside a worker thread (e.g. uvicorn reload).
         can_register_signal = threading.current_thread() is threading.main_thread()
         original_handler = signal.getsignal(signal.SIGTERM) if can_register_signal else None
 
-        def _graceful_shutdown(signum, frame):
-            logger.info("SIGTERM received, stopping worker gracefully")
-            if worker:
-                worker.stop()
-            if callable(original_handler) and original_handler not in (signal.SIG_DFL, signal.SIG_IGN):
-                original_handler(signum, frame)
-
         if can_register_signal:
-            signal.signal(signal.SIGTERM, _graceful_shutdown)
+            signal.signal(
+                signal.SIGTERM,
+                partial(_graceful_shutdown_handler, worker, original_handler),
+            )
 
         try:
             yield
@@ -526,6 +594,10 @@ def create_app(
         ),
     )
 
+    # Mount before middleware so the instrumentator wraps every request.
+    install_metrics(app)
+    install_request_id_middleware(app)
+
     app.mount(
         "/scalar-static",
         StaticFiles(directory=_SCALAR_STATIC_DIR),
@@ -534,7 +606,11 @@ def create_app(
 
     @app.get("/openapi.public.json", include_in_schema=False)
     async def public_openapi() -> JSONResponse:
-        """Filtered copy of /openapi.json with hidden paths and empty tags pruned."""
+        """Filtered copy of /openapi.json with hidden paths and empty tags pruned.
+
+        Returns:
+            A :class:`JSONResponse` containing the trimmed OpenAPI document.
+        """
         base = app.openapi()
         spec = deepcopy(base)
         paths = spec.get("paths", {})
@@ -555,6 +631,11 @@ def create_app(
 
     @app.get("/scalar", include_in_schema=False)
     async def scalar_docs() -> HTMLResponse:
+        """Render the Scalar API reference HTML, patched with the animated wordmark script.
+
+        Returns:
+            An :class:`HTMLResponse` with the patched Scalar reference page.
+        """
         base = get_scalar_api_reference(
             openapi_url="/openapi.public.json",
             title=f"{app.title} API",
@@ -570,7 +651,7 @@ def create_app(
         )
         # Inject the animated wordmark script. scalar-fastapi only exposes
         # custom_css, so we append our own <script> tag just before </body>.
-        html = base.body.decode("utf-8")
+        html = bytes(base.body).decode("utf-8")
         script_tag = '<script src="/scalar-static/wordmark.js" defer></script>'
         html = html.replace("</body>", f"{script_tag}</body>")
         return HTMLResponse(content=html)
@@ -586,7 +667,7 @@ def create_app(
 
     # All error responses share {"error": "<type>", "detail": "..."} so
     # API consumers can write a single error handler.
-    _STATUS_TO_ERROR_TYPE = {
+    status_to_error_type = {
         400: "validation_error",
         404: "not_found",
         409: "conflict",
@@ -597,45 +678,67 @@ def create_app(
 
     @app.exception_handler(AppError)
     async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+        """Serialize ``AppError`` instances to the shared ``{error, detail, code, params}`` envelope.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The raised :class:`AppError` to render.
+
+        Returns:
+            A :class:`JSONResponse` with the shared error envelope.
+        """
+        content: dict[str, Any] = {"error": exc.error_code.lower(), "detail": exc.message}
+        code = getattr(exc, "code", None)
+        if code:
+            content["code"] = code
+            content["params"] = getattr(exc, "params", None) or {}
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": exc.error_code.lower(), "detail": exc.message},
+            content=content,
         )
 
     @app.exception_handler(HTTPException)
     async def _http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
-        error_type = _STATUS_TO_ERROR_TYPE.get(exc.status_code, "error")
+        """Serialize Starlette ``HTTPException`` into the shared error envelope.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The raised :class:`HTTPException` to render.
+
+        Returns:
+            A :class:`JSONResponse` with the shared error envelope.
+        """
+        error_type = status_to_error_type.get(exc.status_code, "error")
+        content: dict[str, Any] = {"error": error_type, "detail": exc.detail}
+        code = getattr(exc, "code", None)
+        if code:
+            content["code"] = code
+            content["params"] = getattr(exc, "params", None) or {}
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": error_type, "detail": exc.detail},
+            content=content,
             headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        def _format_field(loc: Iterable[Any]) -> str:
-            parts: list[str] = []
-            for entry in loc:
-                if entry in {"body", "__root__"}:
-                    continue
-                if isinstance(entry, int):
-                    if parts:
-                        parts[-1] = f"{parts[-1]}[{entry}]"
-                    else:
-                        parts.append(f"[{entry}]")
-                else:
-                    parts.append(str(entry))
-            return ".".join(parts) if parts else "body"
+        """Convert FastAPI ``RequestValidationError`` into a list of ``{field, message, type}`` issues.
 
-        issues = []
-        for error in exc.errors():
-            issues.append(
-                {
-                    "field": _format_field(error.get("loc", [])),
-                    "message": error.get("msg", "Invalid value"),
-                    "type": error.get("type", "validation_error"),
-                }
-            )
+        Args:
+            request: The incoming HTTP request.
+            exc: The raised :class:`RequestValidationError`.
+
+        Returns:
+            A 422 :class:`JSONResponse` with one entry per failed field.
+        """
+        issues = [
+            {
+                "field": _format_validation_loc(error.get("loc", [])),
+                "message": error.get("msg", "Invalid value"),
+                "type": error.get("type", "validation_error"),
+            }
+            for error in exc.errors()
+        ]
         return JSONResponse(
             status_code=422,
             content={
@@ -646,6 +749,15 @@ def create_app(
 
     @app.exception_handler(Exception)
     async def _generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Catch-all handler that logs unhandled exceptions and returns a 500 envelope.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The unhandled exception.
+
+        Returns:
+            A 500 :class:`JSONResponse` with a generic ``internal_error`` envelope.
+        """
         logger.error(
             "Unhandled exception in %s %s: %s",
             request.method,
@@ -661,8 +773,7 @@ def create_app(
             },
         )
 
-    # [WORKER-FIX] max seconds of no worker activity before health check flags it
-    WORKER_STALE_THRESHOLD = float(os.getenv("WORKER_STALE_THRESHOLD", "600"))
+    worker_stale_threshold = float(os.getenv("WORKER_STALE_THRESHOLD", "600"))
 
     @app.get(
         "/health",
@@ -673,25 +784,29 @@ def create_app(
     def healthcheck() -> HealthResponse:
         """Return registered-asset inventory and worker health for liveness/readiness probes.
 
-        503 if workers are dead or stuck longer than ``WORKER_STALE_THRESHOLD`` seconds (default 600).
+        Returns:
+            A :class:`HealthResponse` snapshot of the registered assets.
+
+        Raises:
+            DomainError: 503 when workers are dead or stuck longer than
+                ``WORKER_STALE_THRESHOLD`` seconds (default 600).
         """
-        # [WORKER-FIX] return 503 if workers died so OpenShift probe detects it
         if worker is None or not worker.threads_alive():
             logger.error("Health check failed: worker threads are not alive")
-            raise HTTPException(status_code=503, detail=t("health.workers_dead"))
+            raise DomainError("health.workers_dead", status=503)
 
-        # [WORKER-FIX] detect threads that are alive but stuck (no activity for too long)
         stale_seconds = worker.seconds_since_last_activity()
-        if stale_seconds is not None and stale_seconds > WORKER_STALE_THRESHOLD:
+        if stale_seconds is not None and stale_seconds > worker_stale_threshold:
             stack_dump = worker.dump_thread_stacks()
             logger.error(
                 "Health check failed: workers stuck for %.0fs. Thread stacks:\n%s",
                 stale_seconds,
                 stack_dump,
             )
-            raise HTTPException(
-                status_code=503,
-                detail=t("health.workers_stuck", seconds=f"{stale_seconds:.0f}"),
+            raise DomainError(
+                "health.workers_stuck",
+                status=503,
+                seconds=f"{stale_seconds:.0f}",
             )
 
         snapshot = registry.snapshot()
@@ -699,7 +814,20 @@ def create_app(
         return HealthResponse(status=HEALTH_STATUS_OK, registered_assets=snapshot)
 
     @app.middleware("http")
-    async def add_cache_headers(request: Request, call_next):
+    async def add_cache_headers(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Attach ``Cache-Control`` headers to selected GET endpoints.
+
+        Args:
+            request: The incoming HTTP request.
+            call_next: The downstream handler to invoke.
+
+        Returns:
+            The downstream :class:`Response` with cache headers applied where
+            applicable.
+        """
         response = await call_next(request)
         path = request.url.path
         if request.method == "GET":
@@ -728,7 +856,7 @@ def create_app(
         All counts are zero before the lifespan context starts.
 
         Returns:
-            QueueStatusResponse with current queue depth and worker state.
+            A :class:`QueueStatusResponse` describing the current worker queue.
         """
         if worker is None:
             return QueueStatusResponse(

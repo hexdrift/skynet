@@ -1,20 +1,11 @@
 "use client";
 
-/**
- * Grid-search overview — aggregated KPIs, comparison charts, and pair
- * cards for a completed grid-search job.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Pure display component
- * that takes the job + a pair-selection callback.
- */
-
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ChevronLeft,
   Crown,
   Gauge,
   Loader2,
-  Target,
   Trash2,
   Trophy,
   X,
@@ -35,8 +26,8 @@ import {
   Scatter,
   ZAxis,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import { Button } from "@/shared/ui/primitives/button";
 import {
   Dialog,
   DialogContent,
@@ -44,13 +35,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/shared/ui/primitives/dialog";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/shared/ui/primitives/tooltip";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationStatusResponse, PairResult } from "@/shared/types/api";
@@ -58,82 +49,16 @@ import { formatPercent } from "@/shared/lib";
 import { deleteGridPair } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
-import { TERMS } from "@/shared/lib/terms";
-import { computePairScores, type PairScores } from "../lib/pair-scores";
+import { computePairScores } from "../lib/pair-scores";
 import { ReasoningPill } from "./ui-primitives";
-
-function HarmonicCalc({
-  scores,
-  className = "",
-}: {
-  scores: PairScores | null;
-  className?: string;
-}) {
-  if (!scores || scores.harmonic == null || scores.speed == null) return null;
-  const q = scores.quality.toFixed(2);
-  const s = scores.speed.toFixed(2);
-  const h = Math.round(scores.harmonic * 100);
-  return (
-    <div className={`mt-1.5 text-[0.5625rem] leading-tight ${className}`}>
-      <div className="mb-0.5" dir="rtl">
-        ממוצע הרמוני של איכות ומהירות:
-      </div>
-      <div className="font-mono tabular-nums" dir="ltr">
-        (2 × {q} × {s}) / ({q} + {s}) = <span className="font-semibold">{h}%</span>
-      </div>
-    </div>
-  );
-}
-
-interface ScatterPoint {
-  pair_index: number;
-  name: string;
-  quality: number;
-  latency: number;
-  combined: number | null;
-  isOverall: boolean;
-  isQuality: boolean;
-  isSpeed: boolean;
-}
-
-function computePareto(points: ScatterPoint[]): {
-  pareto: ScatterPoint[];
-  dominated: ScatterPoint[];
-} {
-  const pareto: ScatterPoint[] = [];
-  const dominated: ScatterPoint[] = [];
-  for (const p of points) {
-    const isDominated = points.some(
-      (q) =>
-        q !== p &&
-        q.quality >= p.quality &&
-        q.latency <= p.latency &&
-        (q.quality > p.quality || q.latency < p.latency),
-    );
-    if (isDominated) dominated.push(p);
-    else pareto.push(p);
-  }
-  pareto.sort((a, b) => a.latency - b.latency);
-  return { pareto, dominated };
-}
-
-function shortEffort(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const v = value.toLowerCase();
-  if (v === "minimal") return "min";
-  if (v === "medium") return "med";
-  return v;
-}
-
-function pairLabel(p: PairResult): string {
-  const gen = p.generation_model.split("/").pop();
-  const ref = p.reflection_model.split("/").pop();
-  const genE = shortEffort(p.generation_reasoning_effort);
-  const refE = shortEffort(p.reflection_reasoning_effort);
-  const genStr = genE ? `${gen}·${genE}` : gen;
-  const refStr = refE ? `${ref}·${refE}` : ref;
-  return `${genStr} × ${refStr}`;
-}
+import {
+  CombinedTip,
+  ScatterTip,
+  ScoreTip,
+  computePareto,
+  pairLabel,
+  type ScatterPoint,
+} from "./grid-overview-helpers";
 
 export function GridOverview({
   job,
@@ -200,24 +125,15 @@ export function GridOverview({
     i == null ? null : (prs.find((p) => p.pair_index === i) ?? null);
   const qualityPair = byIdx(scoring.qualityWinner);
   const speedPair = byIdx(scoring.speedWinner);
-  const overallPair = byIdx(scoring.overallWinner);
-  const qualityScores =
-    scoring.qualityWinner != null ? (scoring.byIndex[scoring.qualityWinner] ?? null) : null;
-  const speedScores =
-    scoring.speedWinner != null ? (scoring.byIndex[scoring.speedWinner] ?? null) : null;
-  const overallScores =
-    scoring.overallWinner != null ? (scoring.byIndex[scoring.overallWinner] ?? null) : null;
-  const overallScore = overallScores?.harmonic ?? overallScores?.quality ?? null;
-
   const pairScoresData = completedPrs.map((p) => ({
     pair_index: p.pair_index,
     name: pairLabel(p),
-    התחלתי: Math.round(
+    baselineScore: Math.round(
       (p.baseline_test_metric ?? 0) > 1
         ? (p.baseline_test_metric ?? 0)
         : (p.baseline_test_metric ?? 0) * 100,
     ),
-    משופר: Math.round(
+    optimizedScore: Math.round(
       (p.optimized_test_metric ?? 0) > 1
         ? (p.optimized_test_metric ?? 0)
         : (p.optimized_test_metric ?? 0) * 100,
@@ -231,9 +147,8 @@ export function GridOverview({
       return {
         pair_index: p.pair_index,
         name: pairLabel(p),
-        איכות: Math.round(s.quality * 100),
-        מהירות: s.speed != null ? Math.round(s.speed * 100) : 0,
-        משולב: s.harmonic != null ? Math.round(s.harmonic * 100) : 0,
+        quality: Math.round(s.quality * 100),
+        speed: s.speed != null ? Math.round(s.speed * 100) : 0,
         isBest: scoring.overallWinner === p.pair_index,
       };
     })
@@ -243,7 +158,7 @@ export function GridOverview({
     .map((p) => ({
       pair_index: p.pair_index,
       name: pairLabel(p),
-      זמן_תגובה: +(p.avg_response_time_ms! / 1000).toFixed(1),
+      responseTime: +(p.avg_response_time_ms! / 1000).toFixed(1),
       isBest: scoring.speedWinner === p.pair_index,
     }));
 
@@ -252,13 +167,11 @@ export function GridOverview({
     .map((p) => {
       const raw = p.optimized_test_metric!;
       const qPct = raw > 1 ? raw : raw * 100;
-      const harmonic = scoring.byIndex[p.pair_index]?.harmonic;
       return {
         pair_index: p.pair_index,
         name: pairLabel(p),
         quality: +qPct.toFixed(1),
         latency: +(p.avg_response_time_ms! / 1000).toFixed(2),
-        combined: harmonic != null ? Math.round(harmonic * 100) : null,
         isOverall: scoring.overallWinner === p.pair_index,
         isQuality: scoring.qualityWinner === p.pair_index,
         isSpeed: scoring.speedWinner === p.pair_index,
@@ -272,118 +185,20 @@ export function GridOverview({
   const pairRespTimeFiltered = pairRespTimeData.filter((r) => matchesFilter(r.pair_index));
   const paretoFiltered = paretoPoints.filter((p) => matchesFilter(p.pair_index));
   const dominatedFiltered = dominatedPoints.filter((p) => matchesFilter(p.pair_index));
-  const visiblePrs = useMemo(() => {
+  const visiblePrs = (() => {
     const filtered = pairFilter != null ? prs.filter((p) => p.pair_index === pairFilter) : prs;
     const winnerId = scoring.overallWinner;
     if (winnerId == null) return filtered;
     const winner = filtered.find((p) => p.pair_index === winnerId);
     if (!winner || filtered[0]?.pair_index === winnerId) return filtered;
     return [winner, ...filtered.filter((p) => p.pair_index !== winnerId)];
-  }, [prs, pairFilter, scoring.overallWinner]);
+  })();
   const selectedPair =
     pairFilter != null ? (prs.find((p) => p.pair_index === pairFilter) ?? null) : null;
 
-  const ScoreTip = ({
-    active,
-    payload,
-    label,
-  }: {
-    active?: boolean;
-    payload?: Array<{ value: number; dataKey?: string; color?: string }>;
-    label?: string;
-  }) => {
-    if (!active || !payload?.length) return null;
-    const nameMap: Record<string, string> = {
-      התחלתי: `${TERMS.score} לפני ${TERMS.optimization}`,
-      משופר: `${TERMS.score} אחרי ${TERMS.optimization}`,
-    };
-    return (
-      <div
-        className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg"
-        dir="rtl"
-      >
-        {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-        {payload.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-            {p.color && (
-              <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-            )}
-            <span>{nameMap[String(p.dataKey)] ?? String(p.dataKey)}</span>
-            <span className="font-mono font-semibold text-foreground ms-auto">{p.value}%</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const CombinedTip = ({
-    active,
-    payload,
-    label,
-  }: {
-    active?: boolean;
-    payload?: Array<{ value: number; dataKey?: string; color?: string }>;
-    label?: string;
-  }) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div
-        className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg"
-        dir="rtl"
-      >
-        {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-        {payload.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-            {p.color && (
-              <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-            )}
-            <span>{String(p.dataKey)}</span>
-            <span className="font-mono font-semibold text-foreground ms-auto">{p.value}%</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const ScatterTip = ({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload?: Array<{ payload: ScatterPoint }>;
-  }) => {
-    if (!active || !payload?.length) return null;
-    const first = payload[0];
-    if (!first) return null;
-    const p = first.payload;
-    return (
-      <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-2.5 shadow-lg">
-        <p className="font-mono font-semibold text-xs text-foreground mb-1" dir="ltr">
-          {p.name}
-        </p>
-        <div className="text-[0.6875rem] text-muted-foreground space-y-0.5" dir="rtl">
-          <div className="flex gap-4 justify-between">
-            <span>איכות</span>
-            <span className="font-mono text-foreground tabular-nums">{p.quality}%</span>
-          </div>
-          <div className="flex gap-4 justify-between">
-            <span>זמן תגובה</span>
-            <span className="font-mono text-foreground tabular-nums">{p.latency}s</span>
-          </div>
-          {p.combined != null && (
-            <div className="flex gap-4 justify-between">
-              <span>משולב</span>
-              <span className="font-mono text-foreground tabular-nums">{p.combined}%</span>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-4" data-tutorial="grid-search">
-      <StaggerContainer className="grid grid-cols-3 gap-3">
+      <StaggerContainer className="grid grid-cols-2 gap-3">
         <StaggerItem>
           <TiltCard
             className="rounded-xl border border-border/50 bg-card/80 p-4 text-center"
@@ -391,7 +206,9 @@ export function GridOverview({
           >
             <div className="flex items-center justify-center gap-1.5 mb-1">
               <Trophy className="size-3 text-[#C8A882]" />
-              <p className="text-[0.625rem] text-muted-foreground">איכות</p>
+              <p className="text-[0.625rem] text-muted-foreground">
+                {msg("auto.features.optimizations.components.gridoverview.7")}
+              </p>
             </div>
             <p
               className="font-mono text-[0.6875rem] font-semibold truncate text-foreground"
@@ -403,7 +220,6 @@ export function GridOverview({
             <p className="text-sm font-mono font-bold tabular-nums text-foreground mt-0.5">
               {formatPercent(qualityPair?.optimized_test_metric)}
             </p>
-            <HarmonicCalc scores={qualityScores} className="text-muted-foreground/70" />
           </TiltCard>
         </StaggerItem>
         <StaggerItem>
@@ -413,7 +229,9 @@ export function GridOverview({
           >
             <div className="flex items-center justify-center gap-1.5 mb-1">
               <Gauge className="size-3 text-[#3D2E22]" />
-              <p className="text-[0.625rem] text-muted-foreground">מהירות</p>
+              <p className="text-[0.625rem] text-muted-foreground">
+                {msg("auto.features.optimizations.components.gridoverview.8")}
+              </p>
             </div>
             <p
               className="font-mono text-[0.6875rem] font-semibold truncate text-foreground"
@@ -427,29 +245,6 @@ export function GridOverview({
                 ? `${(speedPair.avg_response_time_ms / 1000).toFixed(1)}s`
                 : "—"}
             </p>
-            <HarmonicCalc scores={speedScores} className="text-muted-foreground/70" />
-          </TiltCard>
-        </StaggerItem>
-        <StaggerItem>
-          <TiltCard
-            className="rounded-xl border border-[#3D2E22]/40 bg-[#3D2E22]/5 p-4 text-center"
-            onClick={overallPair ? () => setPairFilter(overallPair.pair_index) : undefined}
-          >
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <Target className="size-3 text-[#3D2E22]" />
-              <p className="text-[0.625rem] text-[#3D2E22]">{TERMS.optimizedScore}</p>
-            </div>
-            <p
-              className="font-mono text-[0.6875rem] font-semibold truncate text-[#3D2E22]"
-              title={overallPair ? pairLabel(overallPair) : undefined}
-              dir="ltr"
-            >
-              {overallPair ? pairLabel(overallPair) : "—"}
-            </p>
-            <p className="text-sm font-mono font-bold tabular-nums text-[#3D2E22] mt-0.5">
-              {overallScore != null ? `${Math.round(overallScore * 100)}%` : "—"}
-            </p>
-            <HarmonicCalc scores={overallScores} className="text-[#3D2E22]/60" />
           </TiltCard>
         </StaggerItem>
       </StaggerContainer>
@@ -468,7 +263,7 @@ export function GridOverview({
                 <button
                   onClick={() => setPairFilter(null)}
                   className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
-                  aria-label="הסר סינון"
+                  aria-label={msg("auto.features.optimizations.components.gridoverview.literal.1")}
                 >
                   <X className="size-3" />
                 </button>
@@ -479,8 +274,10 @@ export function GridOverview({
             <Card className="mb-4">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
-                  <HelpTip text="כל נקודה = זוג מודלים. נקודות בולטות (חומות) הן על חזית פארטו — אין זוג אחר שמנצח אותן גם באיכות וגם במהירות. נקודות שקופות נשלטות ע״י פשרה טובה יותר. לחצו על נקודה כדי לסנן.">
-                    חזית פארטו — איכות לעומת מהירות
+                  <HelpTip
+                    text={msg("auto.features.optimizations.components.gridoverview.literal.2")}
+                  >
+                    {msg("auto.features.optimizations.components.gridoverview.9")}
                   </HelpTip>
                 </CardTitle>
               </CardHeader>
@@ -499,7 +296,9 @@ export function GridOverview({
                         tick={{ fontSize: 10 }}
                         className="fill-muted-foreground"
                         label={{
-                          value: "זמן תגובה בשניות — נמוך יותר טוב יותר",
+                          value: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.3",
+                          ),
                           position: "insideBottom",
                           offset: -15,
                           fontSize: 10,
@@ -516,7 +315,9 @@ export function GridOverview({
                         tick={{ fontSize: 10 }}
                         className="fill-muted-foreground"
                         label={{
-                          value: "איכות באחוזים — גבוה יותר טוב יותר",
+                          value: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.4",
+                          ),
                           angle: -90,
                           position: "center",
                           dx: -15,
@@ -552,12 +353,12 @@ export function GridOverview({
                   {[
                     {
                       key: "pareto",
-                      label: "חזית פארטו — בחירה מיטבית",
+                      label: msg("auto.features.optimizations.components.gridoverview.literal.5"),
                       color: "#3D2E22",
                     },
                     {
                       key: "dominated",
-                      label: "נשלט — יש זוג טוב יותר בשני הצירים",
+                      label: msg("auto.features.optimizations.components.gridoverview.literal.6"),
                       color: "var(--color-muted-foreground)",
                     },
                   ].map(({ key, label, color }) => {
@@ -601,7 +402,9 @@ export function GridOverview({
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold">
-                      <HelpTip text={tip("grid.score_comparison")}>ציונים לפי זוג</HelpTip>
+                      <HelpTip text={tip("grid.score_comparison")}>
+                        {msg("auto.features.optimizations.components.gridoverview.10")}
+                      </HelpTip>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
@@ -625,7 +428,9 @@ export function GridOverview({
                             tick={{ fontSize: 10 }}
                             className="fill-muted-foreground"
                             label={{
-                              value: "ציון באחוזים",
+                              value: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.7",
+                              ),
                               position: "insideBottom",
                               offset: -2,
                               fontSize: 10,
@@ -635,12 +440,17 @@ export function GridOverview({
                             type="category"
                             dataKey="name"
                             tick={{ fontSize: 10 }}
-                            width={100}
+                            width={80}
+                            tickFormatter={(v: string) =>
+                              v.length > 12 ? `${v.slice(0, 11)}…` : v
+                            }
                             className="fill-muted-foreground"
                             tickLine={false}
                             axisLine={false}
                             label={{
-                              value: "זוג מודלים",
+                              value: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.8",
+                              ),
                               angle: -90,
                               position: "insideLeft",
                               offset: 15,
@@ -648,10 +458,14 @@ export function GridOverview({
                             }}
                           />
                           <Tooltip content={<ScoreTip />} />
-                          {!hiddenPairSeries.has("התחלתי") && (
+                          {!hiddenPairSeries.has(
+                            msg("auto.features.optimizations.components.gridoverview.literal.9"),
+                          ) && (
                             <Bar
-                              dataKey="התחלתי"
-                              name="התחלתי"
+                              dataKey="baselineScore"
+                              name={msg(
+                                "auto.features.optimizations.components.gridoverview.literal.10",
+                              )}
                               fill="var(--color-chart-4)"
                               radius={[0, 3, 3, 0]}
                               barSize={12}
@@ -660,10 +474,14 @@ export function GridOverview({
                               onClick={handleBarClick}
                             />
                           )}
-                          {!hiddenPairSeries.has("משופר") && (
+                          {!hiddenPairSeries.has(
+                            msg("auto.features.optimizations.components.gridoverview.literal.11"),
+                          ) && (
                             <Bar
-                              dataKey="משופר"
-                              name="משופר"
+                              dataKey="optimizedScore"
+                              name={msg(
+                                "auto.features.optimizations.components.gridoverview.literal.12",
+                              )}
                               fill="var(--color-chart-2)"
                               radius={[0, 3, 3, 0]}
                               barSize={12}
@@ -677,8 +495,18 @@ export function GridOverview({
                     </div>
                     <div className="flex justify-center gap-4 mt-1">
                       {[
-                        { key: "התחלתי", color: "var(--color-chart-4)" },
-                        { key: "משופר", color: "var(--color-chart-2)" },
+                        {
+                          key: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.13",
+                          ),
+                          color: "var(--color-chart-4)",
+                        },
+                        {
+                          key: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.14",
+                          ),
+                          color: "var(--color-chart-2)",
+                        },
                       ].map(({ key, color }) => {
                         const isHidden = hiddenPairSeries.has(key);
                         return (
@@ -712,7 +540,7 @@ export function GridOverview({
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold">
                       <HelpTip text={tip("grid.quality_speed_combined")}>
-                        ציונים משולבים לפי זוג
+                        {msg("auto.features.optimizations.components.gridoverview.11")}
                       </HelpTip>
                     </CardTitle>
                   </CardHeader>
@@ -737,7 +565,9 @@ export function GridOverview({
                             tick={{ fontSize: 10 }}
                             className="fill-muted-foreground"
                             label={{
-                              value: "ציון באחוזים",
+                              value: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.15",
+                              ),
                               position: "insideBottom",
                               offset: -2,
                               fontSize: 10,
@@ -747,12 +577,17 @@ export function GridOverview({
                             type="category"
                             dataKey="name"
                             tick={{ fontSize: 10 }}
-                            width={100}
+                            width={80}
+                            tickFormatter={(v: string) =>
+                              v.length > 12 ? `${v.slice(0, 11)}…` : v
+                            }
                             className="fill-muted-foreground"
                             tickLine={false}
                             axisLine={false}
                             label={{
-                              value: "זוג מודלים",
+                              value: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.16",
+                              ),
                               angle: -90,
                               position: "insideLeft",
                               offset: 15,
@@ -760,10 +595,14 @@ export function GridOverview({
                             }}
                           />
                           <Tooltip content={<CombinedTip />} />
-                          {!hiddenCombinedSeries.has("איכות") && (
+                          {!hiddenCombinedSeries.has(
+                            msg("auto.features.optimizations.components.gridoverview.literal.17"),
+                          ) && (
                             <Bar
-                              dataKey="איכות"
-                              name="איכות"
+                              dataKey="quality"
+                              name={msg(
+                                "auto.features.optimizations.components.gridoverview.literal.18",
+                              )}
                               fill="var(--color-chart-2)"
                               radius={[0, 3, 3, 0]}
                               barSize={8}
@@ -772,10 +611,14 @@ export function GridOverview({
                               onClick={handleBarClick}
                             />
                           )}
-                          {!hiddenCombinedSeries.has("מהירות") && (
+                          {!hiddenCombinedSeries.has(
+                            msg("auto.features.optimizations.components.gridoverview.literal.19"),
+                          ) && (
                             <Bar
-                              dataKey="מהירות"
-                              name="מהירות"
+                              dataKey="speed"
+                              name={msg(
+                                "auto.features.optimizations.components.gridoverview.literal.20",
+                              )}
                               fill="var(--color-chart-4)"
                               radius={[0, 3, 3, 0]}
                               barSize={8}
@@ -784,29 +627,23 @@ export function GridOverview({
                               onClick={handleBarClick}
                             />
                           )}
-                          {!hiddenCombinedSeries.has("משולב") && (
-                            <Bar
-                              dataKey="משולב"
-                              name="משולב"
-                              radius={[0, 3, 3, 0]}
-                              barSize={8}
-                              animationDuration={400}
-                              cursor="pointer"
-                              onClick={handleBarClick}
-                            >
-                              {combinedScoresFiltered.map((entry, i) => (
-                                <Cell key={i} fill={entry.isBest ? "#3D2E22" : "#8C7A6B"} />
-                              ))}
-                            </Bar>
-                          )}
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                     <div className="flex flex-wrap justify-center gap-3 mt-1">
                       {[
-                        { key: "איכות", color: "var(--color-chart-2)" },
-                        { key: "מהירות", color: "var(--color-chart-4)" },
-                        { key: "משולב", color: "#3D2E22" },
+                        {
+                          key: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.23",
+                          ),
+                          color: "var(--color-chart-2)",
+                        },
+                        {
+                          key: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.24",
+                          ),
+                          color: "var(--color-chart-4)",
+                        },
                       ].map(({ key, color }) => {
                         const isHidden = hiddenCombinedSeries.has(key);
                         return (
@@ -842,7 +679,7 @@ export function GridOverview({
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold">
                       <HelpTip text={tip("grid.avg_response_time_per_pair")}>
-                        זמן תגובה ממוצע לפי זוג
+                        {msg("auto.features.optimizations.components.gridoverview.12")}
                       </HelpTip>
                     </CardTitle>
                   </CardHeader>
@@ -866,7 +703,9 @@ export function GridOverview({
                             tick={{ fontSize: 10 }}
                             className="fill-muted-foreground"
                             label={{
-                              value: "זמן תגובה בשניות",
+                              value: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.26",
+                              ),
                               position: "insideBottom",
                               offset: -2,
                               fontSize: 10,
@@ -881,7 +720,9 @@ export function GridOverview({
                             tickLine={false}
                             axisLine={false}
                             label={{
-                              value: "זוג מודלים",
+                              value: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.27",
+                              ),
                               angle: -90,
                               position: "insideLeft",
                               offset: 15,
@@ -903,10 +744,15 @@ export function GridOverview({
                                   )}
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-muted-foreground">
-                                      זמן תגובה ממוצע לקריאה:
+                                      {msg(
+                                        "auto.features.optimizations.components.gridoverview.13",
+                                      )}
                                     </span>
                                     <span className="font-mono font-semibold text-foreground ms-auto">
-                                      {payload[0]!.value}s
+                                      {payload[0]!.value}
+                                      {msg(
+                                        "auto.features.optimizations.components.gridoverview.14",
+                                      )}
                                     </span>
                                   </div>
                                 </div>
@@ -914,8 +760,10 @@ export function GridOverview({
                             }}
                           />
                           <Bar
-                            dataKey="זמן_תגובה"
-                            name="זמן תגובה בשניות"
+                            dataKey="responseTime"
+                            name={msg(
+                              "auto.features.optimizations.components.gridoverview.literal.28",
+                            )}
                             radius={[0, 3, 3, 0]}
                             barSize={14}
                             animationDuration={400}
@@ -946,7 +794,7 @@ export function GridOverview({
           const isQuality = scoring.qualityWinner === pr.pair_index;
           const isSpeed = scoring.speedWinner === pr.pair_index;
           const s = scoring.byIndex[pr.pair_index];
-          const barRatio = s?.harmonic ?? s?.quality ?? 0;
+          const barRatio = s?.quality ?? 0;
           return (
             <div
               key={pr.pair_index}
@@ -991,7 +839,7 @@ export function GridOverview({
                     <div className="text-center min-w-[44px]">
                       <div className="text-[9px] text-foreground/50 mb-0.5 flex items-center justify-center gap-1">
                         <Trophy className="size-2.5" />
-                        איכות
+                        {msg("auto.features.optimizations.components.gridoverview.15")}
                       </div>
                       <div className={isQuality ? "font-bold text-[#3D2E22]" : "text-foreground"}>
                         {s ? `${Math.round(s.quality * 100)}%` : "—"}
@@ -1000,25 +848,12 @@ export function GridOverview({
                     <div className="text-center min-w-[44px]">
                       <div className="text-[9px] text-foreground/50 mb-0.5 flex items-center justify-center gap-1">
                         <Gauge className="size-2.5" />
-                        זמן תגובה
+                        {msg("auto.features.optimizations.components.gridoverview.16")}
                       </div>
                       <div className={isSpeed ? "font-bold text-[#3D2E22]" : "text-foreground"}>
                         {pr.avg_response_time_ms != null
                           ? `${(pr.avg_response_time_ms / 1000).toFixed(1)}s`
                           : "—"}
-                      </div>
-                    </div>
-                    <div className="text-center min-w-[44px]">
-                      <div className="text-[9px] text-foreground/50 mb-0.5 flex items-center justify-center gap-1">
-                        <Target className="size-2.5" />
-                        משולב
-                      </div>
-                      <div className={isOverall ? "font-bold text-[#3D2E22]" : "text-foreground"}>
-                        {s?.harmonic != null
-                          ? `${Math.round(s.harmonic * 100)}%`
-                          : s
-                            ? `${Math.round(s.quality * 100)}%`
-                            : "—"}
                       </div>
                     </div>
                   </div>
@@ -1038,7 +873,9 @@ export function GridOverview({
                         variant="ghost"
                         size="icon"
                         className="size-7 text-muted-foreground/50 hover:text-red-600 shrink-0"
-                        aria-label="מחיקת זוג"
+                        aria-label={msg(
+                          "auto.features.optimizations.components.gridoverview.literal.29",
+                        )}
                         onClick={(e) => {
                           e.stopPropagation();
                           setPendingDelete(pr);
@@ -1047,7 +884,9 @@ export function GridOverview({
                         <Trash2 className="size-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom">מחיקת זוג</TooltipContent>
+                    <TooltipContent side="bottom">
+                      {msg("auto.features.optimizations.components.gridoverview.18")}
+                    </TooltipContent>
                   </UiTooltip>
                 </TooltipProvider>
 
@@ -1074,13 +913,15 @@ export function GridOverview({
       <Dialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>מחיקת זוג</DialogTitle>
+            <DialogTitle>
+              {msg("auto.features.optimizations.components.gridoverview.19")}
+            </DialogTitle>
             <DialogDescription>
-              האם למחוק את הזוג{" "}
+              {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
               <span className="font-mono font-medium text-foreground break-all">
                 {pendingDelete ? pairLabel(pendingDelete) : ""}
               </span>
-              ? פעולה זו אינה הפיכה.
+              {msg("auto.features.optimizations.components.gridoverview.21")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="grid grid-cols-2 gap-2">
@@ -1090,7 +931,7 @@ export function GridOverview({
               disabled={deleting}
               className="w-full justify-center"
             >
-              ביטול
+              {msg("auto.features.optimizations.components.gridoverview.22")}
             </Button>
             <Button
               variant="destructive"
@@ -1098,7 +939,11 @@ export function GridOverview({
               disabled={deleting}
               className="w-full justify-center"
             >
-              {deleting ? <Loader2 className="size-4 animate-spin" /> : "מחיקה"}
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("auto.features.optimizations.components.gridoverview.literal.30")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

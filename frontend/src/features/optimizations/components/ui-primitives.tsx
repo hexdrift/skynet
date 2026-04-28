@@ -1,19 +1,12 @@
 "use client";
 
-/**
- * Small UI primitives used across the optimizations detail page.
- *
- * Extracted from app/optimizations/[id]/page.tsx. Each component owns
- * its own state but has no data dependencies on the parent — they are
- * pure display/interaction leaves.
- */
-
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Check, ChevronDown, Clipboard } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/shared/ui/primitives/badge";
 import { getStatusLabel } from "@/shared/constants/job-status";
 import { STATUS_COLORS } from "../constants";
+import { msg } from "@/shared/lib/messages";
 
 export function StatusBadge({ status }: { status: string }) {
   return (
@@ -183,13 +176,13 @@ export function CopyButton({ text, className = "" }: { text: string; className?:
     <button
       type="button"
       onClick={() => {
-        navigator.clipboard.writeText(text);
+        void navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
       className={`p-1.5 cursor-pointer transition-opacity duration-200 outline-none border-none shadow-none ring-0 bg-transparent hover:opacity-100 ${className}`}
-      title="העתק"
-      aria-label="העתק"
+      title={msg("auto.features.optimizations.components.ui.primitives.literal.1")}
+      aria-label={msg("auto.features.optimizations.components.ui.primitives.literal.2")}
     >
       {copied ? (
         <Check className="size-3.5 text-foreground/70" />

@@ -9,23 +9,24 @@ import {
   Check,
   ChevronRight,
   ChevronLeft,
-  ChevronDown,
   Ruler,
   FileCode2,
   Loader2,
   MessageSquarePlus,
 } from "lucide-react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import {
   AgentThread,
-  AssistantBubble,
+  AgentBubble,
   Composer,
   UserBubble,
   UserBubbleEditor,
 } from "@/shared/ui/agent";
 import type { AgentToolCall as SharedAgentToolCall } from "@/shared/ui/agent";
+import { ToolCallRow } from "@/features/agent-panel";
 
 import type { AgentMessage, AgentToolCall, CodeAgentState } from "../../hooks/use-code-agent";
 
@@ -39,10 +40,10 @@ interface Props {
 type Pair = {
   key: string;
   user: { msg: AgentMessage; index: number } | null;
-  assistant: AgentMessage | null;
+  agent: AgentMessage | null;
 };
 
-const COMPOSER_PLACEHOLDER = "בקש שינוי בפרומפט ההתחלתי או בפונקציית המדידה…";
+const COMPOSER_PLACEHOLDER = msg("auto.features.submit.components.steps.codeagentpanel.literal.1");
 
 export function CodeAgentPanel({ agent, disabled, disabledReason, className }: Props) {
   const [draft, setDraft] = React.useState("");
@@ -59,24 +60,24 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
     agent.messages.forEach((msg, i) => {
       if (msg.role === "user") {
         if (currentUser) {
-          result.push({ key: `p-${seq++}`, user: currentUser, assistant: null });
+          result.push({ key: `p-${seq++}`, user: currentUser, agent: null });
         }
         currentUser = { msg, index: i };
       } else {
-        result.push({ key: `p-${seq++}`, user: currentUser, assistant: msg });
+        result.push({ key: `p-${seq++}`, user: currentUser, agent: msg });
         currentUser = null;
       }
     });
     if (currentUser) {
-      result.push({ key: `p-${seq++}`, user: currentUser, assistant: null });
+      result.push({ key: `p-${seq++}`, user: currentUser, agent: null });
     }
     return result;
   }, [agent.messages]);
 
-  const latestAssistantKey = React.useMemo(() => {
+  const latestAgentKey = React.useMemo(() => {
     for (let i = pairs.length - 1; i >= 0; i--) {
       const p = pairs[i];
-      if (p && p.assistant) return p.key;
+      if (p && p.agent) return p.key;
     }
     return null;
   }, [pairs]);
@@ -121,7 +122,7 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
 
   const renderToolCall = React.useCallback(
     (call: SharedAgentToolCall, { isRetry }: { isRetry: boolean }) => (
-      <ToolCallCard call={call as AgentToolCall} isRetry={isRetry} />
+      <ToolCallCard call={call} isRetry={isRetry} />
     ),
     [],
   );
@@ -144,15 +145,15 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#FAF8F5]",
               "cursor-pointer",
             )}
-            title="התחל שיחה חדשה — מנקה את ההודעות וגרסאות הקוד"
-            aria-label="התחל שיחה חדשה"
+            title={msg("auto.features.submit.components.steps.codeagentpanel.literal.2")}
+            aria-label={msg("auto.features.submit.components.steps.codeagentpanel.literal.3")}
           >
             <MessageSquarePlus
               className="size-3.5 opacity-75 transition-opacity duration-150 ease-out group-hover:opacity-100"
               strokeWidth={2}
               aria-hidden
             />
-            <span>שיחה חדשה</span>
+            <span>{msg("auto.features.submit.components.steps.codeagentpanel.1")}</span>
           </button>
         </div>
       )}
@@ -195,12 +196,12 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
                     />
                   ))}
 
-                {pair.assistant && !isEditing && (
+                {pair.agent && !isEditing && (
                   <div className="flex justify-end">
-                    <AssistantBubble
-                      msg={pair.assistant}
+                    <AgentBubble
+                      msg={pair.agent}
                       thinking={
-                        pair.key === latestAssistantKey
+                        pair.key === latestAgentKey
                           ? {
                               reasoning: agent.reasoning,
                               startedAt: agent.reasoningStartedAt,
@@ -239,14 +240,14 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
                 className="inline-flex items-center gap-1 text-[0.6875rem] text-red-700 bg-red-100 hover:bg-red-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
               >
                 <RotateCcw className="size-3" />
-                נסה לתקן
+                {msg("auto.features.submit.components.steps.codeagentpanel.2")}
               </button>
               <button
                 type="button"
                 onClick={agent.fallbackToManual}
                 className="text-[0.6875rem] text-red-700 hover:bg-red-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
               >
-                עבור למצב ידני
+                {msg("auto.features.submit.components.steps.codeagentpanel.3")}
               </button>
             </div>
           </div>
@@ -258,7 +259,12 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
         onChange={setDraft}
         onSubmit={handleSend}
         onStop={agent.stop}
-        placeholder={disabled ? disabledReason || "לא זמין" : COMPOSER_PLACEHOLDER}
+        placeholder={
+          disabled
+            ? disabledReason ||
+              msg("auto.features.submit.components.steps.codeagentpanel.literal.4")
+            : COMPOSER_PLACEHOLDER
+        }
         disabled={disabled}
         streaming={streaming}
       />
@@ -315,15 +321,23 @@ export function VersionStepper({
 type StepState = "pending" | "active" | "done";
 
 function ActivityBreadcrumb({ agent }: { agent: CodeAgentState }) {
-  const steps = React.useMemo<{ label: string; state: StepState }[]>(() => {
+  const steps = React.useMemo<Array<{ label: string; state: StepState }>>(() => {
     const sig = agent.signatureStatus;
     const met = agent.metricStatus;
     const readingState: StepState = sig === "waiting" && met === "waiting" ? "active" : "done";
     const sigState: StepState = sig === "writing" ? "active" : sig === "done" ? "done" : "pending";
     const metState: StepState = met === "writing" ? "active" : met === "done" ? "done" : "pending";
     return [
-      { label: `קורא ${TERMS.dataset}`, state: readingState },
-      { label: "פרומפט התחלתי", state: sigState },
+      {
+        label: formatMsg("auto.features.submit.components.steps.codeagentpanel.template.1", {
+          p1: TERMS.dataset,
+        }),
+        state: readingState,
+      },
+      {
+        label: msg("auto.features.submit.components.steps.codeagentpanel.literal.5"),
+        state: sigState,
+      },
       { label: TERMS.metric, state: metState },
     ];
   }, [agent.signatureStatus, agent.metricStatus]);
@@ -440,150 +454,62 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   return out;
 }
 
-function ToolCallCard({ call, isRetry = false }: { call: AgentToolCall; isRetry?: boolean }) {
-  const isSignature = call.tool === "edit_signature";
+function ToolCallCard({ call, isRetry = false }: { call: SharedAgentToolCall; isRetry?: boolean }) {
+  const codeCall = call as AgentToolCall;
+  const isSignature = codeCall.tool === "edit_signature";
   const Icon = isSignature ? FileCode2 : Ruler;
-  const running = call.status === "running";
-  const errored = call.status === "error";
-  const verb = running
-    ? isRetry
-      ? "מנסה שוב את"
-      : "עורך את"
-    : errored
-      ? "שגיאה בעריכת"
-      : "ערך את";
-  const label = isSignature ? "הפרומפט ההתחלתי" : "פונקציית המדידה";
-  const canExpand = Boolean(call.newCode && call.newCode.trim().length > 0);
-  const [open, setOpen] = React.useState(false);
+  const title = isSignature
+    ? msg("submit.code.agent.tool.signature.title")
+    : msg("submit.code.agent.tool.metric.title");
 
   const diff = React.useMemo<DiffLine[]>(() => {
-    if (!call.newCode) return [];
-    return computeLineDiff(call.prevCode ?? "", call.newCode);
-  }, [call.prevCode, call.newCode]);
+    if (!codeCall.newCode) return [];
+    return computeLineDiff(codeCall.prevCode ?? "", codeCall.newCode);
+  }, [codeCall.prevCode, codeCall.newCode]);
 
   const addCount = diff.filter((d) => d.kind === "add").length;
   const delCount = diff.filter((d) => d.kind === "del").length;
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-      className={cn(
-        "group relative overflow-hidden rounded-xl border transition-colors",
-        running
-          ? "border-[#3D2E22]/20 bg-[#3D2E22]/[0.04]"
-          : errored
-            ? "border-red-200 bg-red-50/60"
-            : "border-[#3D2E22]/12 bg-[#3D2E22]/[0.025]",
-      )}
+  const summary = React.useMemo<string | null>(() => {
+    if (addCount === 0 && delCount === 0) return null;
+    const parts: string[] = [];
+    if (addCount > 0) parts.push(`+${addCount}`);
+    if (delCount > 0) parts.push(`-${delCount}`);
+    const noun =
+      addCount + delCount === 1
+        ? msg("auto.features.submit.components.steps.codeagentpanel.literal.12")
+        : msg("auto.features.submit.components.steps.codeagentpanel.literal.13");
+    return `${parts.join(" ")} ${noun}`;
+  }, [addCount, delCount]);
+
+  const customBody = codeCall.newCode ? (
+    <div
+      dir="ltr"
+      className="overflow-hidden rounded-md border border-border/40 bg-background/70"
     >
-      <button
-        type="button"
-        onClick={() => canExpand && setOpen((o) => !o)}
-        disabled={!canExpand}
-        aria-expanded={canExpand ? open : undefined}
-        className={cn(
-          "flex w-full items-start gap-2.5 px-3 py-2 text-start transition-colors",
-          canExpand
-            ? running
-              ? "hover:bg-[#3D2E22]/[0.06] cursor-pointer"
-              : errored
-                ? "hover:bg-red-100/60 cursor-pointer"
-                : "hover:bg-[#3D2E22]/[0.045] cursor-pointer"
-            : "cursor-default",
-        )}
-      >
-        <span
-          className={cn(
-            "relative mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-lg",
-            running
-              ? "bg-[#3D2E22]/10 text-[#3D2E22]"
-              : errored
-                ? "bg-red-100 text-red-600"
-                : "bg-[#3D2E22]/10 text-[#3D2E22]/75",
-          )}
-        >
-          {running && <span className="absolute inset-0 rounded-lg bg-[#3D2E22]/5 animate-pulse" />}
-          <Icon className="relative size-3.5" strokeWidth={2.2} />
-        </span>
-        <div className="flex-1 min-w-0 space-y-0.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-baseline gap-1.5 min-w-0">
-              <span
-                className={cn(
-                  "text-[0.75rem] font-semibold tracking-tight",
-                  running ? "text-[#3D2E22]" : errored ? "text-red-700" : "text-[#3D2E22]/85",
-                )}
-              >
-                {verb} {label}
-              </span>
-              {running && (
-                <span className="text-[0.6875rem] text-muted-foreground/60 animate-pulse">
-                  עובד…
-                </span>
-              )}
-              {canExpand && !running && (addCount > 0 || delCount > 0) && (
-                <span className="flex items-baseline gap-1 text-[0.625rem]" dir="ltr">
-                  <span className="font-mono tabular-nums text-[#3D2E22]/65">
-                    {addCount > 0 && `+${addCount}`}
-                    {addCount > 0 && delCount > 0 && " "}
-                    {delCount > 0 && `-${delCount}`}
-                  </span>
-                  <span className="text-muted-foreground/55">
-                    {addCount + delCount === 1 ? "שורה" : "שורות"}
-                  </span>
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <ToolStatusIcon status={call.status} />
-              {canExpand && (
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 text-muted-foreground/55 transition-transform",
-                    open ? "rotate-0" : "rotate-90",
-                  )}
-                />
-              )}
-            </div>
+      <div className="max-h-64 overflow-auto font-mono text-[0.6875rem] leading-[1.55]">
+        {diff.length === 0 ? (
+          <pre className="px-3 py-2.5 text-foreground whitespace-pre">{codeCall.newCode}</pre>
+        ) : (
+          <div className="py-1">
+            {diff.map((line, idx) => (
+              <DiffRow key={idx} line={line} />
+            ))}
           </div>
-          {call.reason && (
-            <p className="text-[0.75rem] leading-snug text-foreground/70 break-words">
-              {call.reason}
-            </p>
-          )}
-        </div>
-      </button>
-      <AnimatePresence initial={false}>
-        {open && canExpand && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-            className="overflow-hidden"
-          >
-            <div
-              dir="ltr"
-              className={cn("border-t", errored ? "border-red-200/70" : "border-[#3D2E22]/15")}
-            >
-              <div className="max-h-64 overflow-auto bg-[#FAF8F5]/60 font-mono text-[0.6875rem] leading-[1.55]">
-                {diff.length === 0 ? (
-                  <pre className="px-3 py-2.5 text-[#3D2E22]/85 whitespace-pre">{call.newCode}</pre>
-                ) : (
-                  <div className="py-1">
-                    {diff.map((line, idx) => (
-                      <DiffRow key={idx} line={line} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
         )}
-      </AnimatePresence>
-    </motion.div>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <ToolCallRow
+      call={call}
+      isRetry={isRetry}
+      title={title}
+      icon={Icon}
+      summary={summary}
+      customBody={customBody}
+    />
   );
 }
 
@@ -613,25 +539,6 @@ function DiffRow({ line }: { line: DiffLine }) {
   );
 }
 
-function ToolStatusIcon({ status }: { status: AgentToolCall["status"] }) {
-  if (status === "running") {
-    return (
-      <span className="relative inline-flex size-3.5 shrink-0 items-center justify-center">
-        <span className="absolute inset-0 rounded-full bg-[#3D2E22]/20 animate-ping" />
-        <span className="relative size-1.5 rounded-full bg-[#3D2E22]" />
-      </span>
-    );
-  }
-  if (status === "error") {
-    return <XCircle className="size-3.5 shrink-0 text-red-500" />;
-  }
-  return (
-    <span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[#3D2E22]/20">
-      <Check className="size-2.5 text-[#3D2E22]" strokeWidth={3} />
-    </span>
-  );
-}
-
 function EmptyState({ disabled, disabledReason }: { disabled?: boolean; disabledReason?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
@@ -640,12 +547,19 @@ function EmptyState({ disabled, disabledReason }: { disabled?: boolean; disabled
       </div>
       <div className="space-y-1.5 max-w-[260px]">
         <p className="text-sm font-medium text-foreground/70">
-          {disabled ? "לא זמין" : "העוזר מוכן"}
+          {disabled
+            ? msg("auto.features.submit.components.steps.codeagentpanel.literal.14")
+            : msg("auto.features.submit.components.steps.codeagentpanel.literal.15")}
         </p>
         <p className="text-xs text-muted-foreground/60 leading-relaxed">
           {disabled
-            ? disabledReason || "הגדר עמודות קודם"
-            : `העוזר יקרא את ה${TERMS.dataset} ויציע ${TERMS.signature} ו${TERMS.metric}. אפשר לאשר כמו שזה, או לבקש שינויים.`}
+            ? disabledReason ||
+              msg("auto.features.submit.components.steps.codeagentpanel.literal.16")
+            : formatMsg("auto.features.submit.components.steps.codeagentpanel.template.2", {
+                p1: TERMS.dataset,
+                p2: TERMS.signature,
+                p3: TERMS.metric,
+              })}
         </p>
       </div>
     </div>

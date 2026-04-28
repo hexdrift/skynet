@@ -14,17 +14,19 @@ Methods intentionally NOT tested here:
 
 from __future__ import annotations
 
-import multiprocessing as mp
 import queue
 import threading
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, call, patch
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import cast
+from unittest.mock import MagicMock, call
 
 import pytest
 
 import core.worker.engine as engine_module
+from core.storage.base import JobStore
 from core.worker.engine import BackgroundWorker, get_worker, reset_worker_for_tests
-from core.worker.subprocess_runner import (
+from core.worker.constants import (
     EVENT_ERROR,
     EVENT_LOG,
     EVENT_PROGRESS,
@@ -36,8 +38,8 @@ from .mocks import fake_mp_process
 
 
 @pytest.fixture(autouse=True)
-def _reset_global_worker() -> None:
-    """Ensure the module-level singleton is cleared before and after each test."""
+def _reset_global_worker() -> Iterator[None]:
+    """Reset the module-level singleton before and after each test."""
     reset_worker_for_tests()
     yield
     reset_worker_for_tests()
@@ -45,18 +47,18 @@ def _reset_global_worker() -> None:
 
 @pytest.fixture
 def store() -> FakeJobStore:
-    """Return a fresh FakeJobStore for each test."""
+    """Yield a fresh in-memory job store for a test."""
     return FakeJobStore()
 
 
 @pytest.fixture
 def worker(store: FakeJobStore) -> BackgroundWorker:
-    """An unstarted BackgroundWorker — no threads, no processes."""
-    return BackgroundWorker(job_store=store, num_workers=2, poll_interval=1.0)
+    """Build an unstarted BackgroundWorker bound to the test store."""
+    return BackgroundWorker(job_store=cast(JobStore, store), num_workers=2, poll_interval=1.0)
 
 
 def _make_fake_queue(*events: dict) -> queue.Queue:
-    """Return an in-process queue pre-loaded with the given events."""
+    """Build a real ``queue.Queue`` prefilled with the given events."""
     q: queue.Queue = queue.Queue()
     for event in events:
         q.put(event)
@@ -67,7 +69,7 @@ def test_drain_returns_none_result_and_none_error_for_empty_queue(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """Draining an empty queue returns (None, None)."""
+    """An empty queue yields ``(None, None)``."""
     store.seed_job("opt-1")
     q = _make_fake_queue()
 
@@ -81,11 +83,9 @@ def test_drain_routes_progress_event_to_record_progress(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """EVENT_PROGRESS events are forwarded to job_store.record_progress."""
+    """A progress event is forwarded to ``record_progress``."""
     store.seed_job("opt-1")
-    q = _make_fake_queue(
-        {"type": EVENT_PROGRESS, "event": "iter_done", "metrics": {"score": 0.8}}
-    )
+    q = _make_fake_queue({"type": EVENT_PROGRESS, "event": "iter_done", "metrics": {"score": 0.8}})
 
     worker._drain_subprocess_events("opt-1", q)
 
@@ -100,7 +100,7 @@ def test_drain_routes_log_event_to_append_log(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """EVENT_LOG events are forwarded to job_store.append_log with correct fields."""
+    """A log event is forwarded to ``append_log`` with parsed fields."""
     store.seed_job("opt-1")
     q = _make_fake_queue(
         {
@@ -126,7 +126,7 @@ def test_drain_parses_log_timestamp_to_datetime(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """ISO timestamp strings in EVENT_LOG are parsed to UTC datetime objects."""
+    """ISO timestamp strings are parsed to UTC-aware ``datetime`` values."""
     store.seed_job("opt-1")
     q = _make_fake_queue(
         {
@@ -143,14 +143,14 @@ def test_drain_parses_log_timestamp_to_datetime(
     ts = store.append_log_calls[0]["timestamp"]
     assert isinstance(ts, datetime)
     assert ts.tzinfo is not None
-    assert ts == datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    assert ts == datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 def test_drain_sets_log_timestamp_to_none_on_invalid_timestamp_string(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """An unparseable timestamp string in EVENT_LOG results in timestamp=None."""
+    """An unparseable timestamp string falls back to ``None``."""
     store.seed_job("opt-1")
     q = _make_fake_queue(
         {
@@ -171,7 +171,7 @@ def test_drain_returns_result_payload_from_result_event(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """EVENT_RESULT payload is returned as the first element of the tuple."""
+    """A ``result`` event surfaces its payload from the drain call."""
     store.seed_job("opt-1")
     payload = {"baseline_test_metric": 0.5, "optimized_test_metric": 0.7}
     q = _make_fake_queue({"type": EVENT_RESULT, "result": payload})
@@ -186,11 +186,11 @@ def test_drain_ignores_result_event_when_result_is_not_dict(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """Non-dict result payloads in EVENT_RESULT are silently discarded."""
+    """A non-dict ``result`` payload is ignored."""
     store.seed_job("opt-1")
     q = _make_fake_queue({"type": EVENT_RESULT, "result": "not-a-dict"})
 
-    result, error = worker._drain_subprocess_events("opt-1", q)
+    result, _error = worker._drain_subprocess_events("opt-1", q)
 
     assert result is None
 
@@ -199,11 +199,9 @@ def test_drain_returns_error_payload_from_error_event(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """EVENT_ERROR payload is returned as the second element with error and traceback keys."""
+    """An ``error`` event surfaces its payload from the drain call."""
     store.seed_job("opt-1")
-    q = _make_fake_queue(
-        {"type": EVENT_ERROR, "error": "boom", "traceback": "Traceback..."}
-    )
+    q = _make_fake_queue({"type": EVENT_ERROR, "error": "boom", "traceback": "Traceback..."})
 
     result, error = worker._drain_subprocess_events("opt-1", q)
 
@@ -217,7 +215,7 @@ def test_drain_processes_all_events_in_a_mixed_sequence(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """A queue with progress, log, and result events is fully drained with correct routing."""
+    """Drain handles a mixed sequence of progress/log/result events."""
     store.seed_job("opt-1")
     q = _make_fake_queue(
         {"type": EVENT_PROGRESS, "event": "step_a", "metrics": {}},
@@ -237,7 +235,7 @@ def test_drain_last_result_event_wins_when_multiple_present(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """When multiple EVENT_RESULT events appear, the last one takes precedence."""
+    """The most recently seen result payload is the one returned."""
     store.seed_job("opt-1")
     q = _make_fake_queue(
         {"type": EVENT_RESULT, "result": {"val": 1}},
@@ -253,7 +251,7 @@ def test_drain_silently_ignores_unknown_event_types(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """Unknown event type strings are silently discarded with no side effects."""
+    """Drain silently ignores events of unknown ``type``."""
     store.seed_job("opt-1")
     q = _make_fake_queue({"type": "totally_unknown", "data": "ignored"})
 
@@ -269,7 +267,7 @@ def test_drain_swallows_record_progress_store_error(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """Exceptions from job_store.record_progress are swallowed without aborting the drain."""
+    """Drain does not propagate exceptions from ``record_progress``."""
     store.seed_job("opt-1")
     store.record_progress = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("DB error"))  # type: ignore[method-assign]
     q = _make_fake_queue({"type": EVENT_PROGRESS, "event": "e", "metrics": {}})
@@ -282,22 +280,19 @@ def test_drain_swallows_append_log_store_error(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """Exceptions from job_store.append_log are swallowed without aborting the drain."""
+    """Drain does not propagate exceptions from ``append_log``."""
     store.seed_job("opt-1")
     store.append_log = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("DB error"))  # type: ignore[method-assign]
-    q = _make_fake_queue(
-        {"type": EVENT_LOG, "timestamp": None, "level": "INFO", "logger": "dspy", "message": "hi"}
-    )
+    q = _make_fake_queue({"type": EVENT_LOG, "timestamp": None, "level": "INFO", "logger": "dspy", "message": "hi"})
 
     # Must not raise.
     worker._drain_subprocess_events("opt-1", q)
 
 
-
 def test_terminate_run_process_calls_terminate_then_join(
     worker: BackgroundWorker,
 ) -> None:
-    """terminate() and join(timeout=3.0) are both called when the process exits after SIGTERM."""
+    """``_terminate_run_process`` issues terminate + join on a graceful exit."""
     # is_alive() is called twice: once before kill check, once for final log.
     # Return False on first call → skip kill; False on second call → log "terminated".
     proc = fake_mp_process(is_alive=[False, False])
@@ -311,7 +306,7 @@ def test_terminate_run_process_calls_terminate_then_join(
 def test_terminate_run_process_calls_kill_when_process_survives_terminate(
     worker: BackgroundWorker,
 ) -> None:
-    """kill() is called when the process is still alive after terminate()+join."""
+    """``_terminate_run_process`` escalates to ``kill`` if the process is still alive."""
     # Still alive at first is_alive() check (before kill); dead after kill's join.
     proc = fake_mp_process(is_alive=[True, False])
 
@@ -323,7 +318,7 @@ def test_terminate_run_process_calls_kill_when_process_survives_terminate(
 def test_terminate_run_process_does_not_call_kill_when_terminate_succeeds(
     worker: BackgroundWorker,
 ) -> None:
-    """kill() is skipped when the process dies within the 3-second terminate grace period."""
+    """``_terminate_run_process`` skips ``kill`` when terminate succeeds."""
     # Return False on the first is_alive() — process already dead after terminate+join.
     proc = fake_mp_process(is_alive=[False, False])
 
@@ -335,7 +330,7 @@ def test_terminate_run_process_does_not_call_kill_when_terminate_succeeds(
 def test_terminate_run_process_does_not_raise_when_stuck_process_never_dies(
     worker: BackgroundWorker,
 ) -> None:
-    """Even if the process never exits, _terminate_run_process must not raise."""
+    """``_terminate_run_process`` does not raise when the process never dies."""
     proc = fake_mp_process(is_alive=True)
 
     # Should not raise.
@@ -348,7 +343,7 @@ def test_terminate_run_process_does_not_raise_when_stuck_process_never_dies(
 def test_terminate_run_process_skips_kill_when_process_has_no_kill_method(
     worker: BackgroundWorker,
 ) -> None:
-    """kill() is not attempted when the process object lacks the kill attribute."""
+    """``_terminate_run_process`` skips ``kill`` when the process lacks the method."""
     proc = MagicMock(spec=["terminate", "join", "is_alive"])
     # still alive after terminate
     proc.is_alive.side_effect = [True, True, False]
@@ -360,12 +355,11 @@ def test_terminate_run_process_skips_kill_when_process_has_no_kill_method(
     assert not hasattr(proc, "kill")
 
 
-
 def test_submit_job_stores_payload_in_job_store(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """submit_job persists the serialised payload dict to the job store."""
+    """``submit_job`` writes the dumped payload onto the job row."""
     store.seed_job("opt-1")
     payload = MagicMock()
     payload.model_dump.return_value = {"key": "value"}
@@ -379,7 +373,7 @@ def test_submit_job_calls_model_dump_with_json_mode_and_alias(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """submit_job calls model_dump(mode='json', by_alias=True) to serialise the payload."""
+    """``submit_job`` serialises with ``mode="json"`` and ``by_alias=True``."""
     store.seed_job("opt-1")
     payload = MagicMock()
     payload.model_dump.return_value = {}
@@ -389,25 +383,38 @@ def test_submit_job_calls_model_dump_with_json_mode_and_alias(
     payload.model_dump.assert_called_once_with(mode="json", by_alias=True)
 
 
-def test_submit_job_enqueues_job_for_processing(
+def test_submit_job_leaves_row_pending_for_db_claim(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """submit_job adds the job ID to the pending queue after persisting."""
+    """``submit_job`` leaves the row pending so any pod's worker can claim it.
+
+    The DB-backed claim queue replaces the old in-memory enqueue: the next
+    worker tick — on this pod or a peer — picks the job up via
+    ``claim_next_job``.
+    """
     store.seed_job("opt-1")
     payload = MagicMock()
     payload.model_dump.return_value = {}
 
+    pre_status = store._jobs["opt-1"]["status"]
+
     worker.submit_job("opt-1", payload)
 
-    assert "opt-1" in worker._pending_jobs
+    # Status is unchanged: ``submit_job`` only writes the payload — it does
+    # not transition to ``running``/``validating``. Pickup happens later on
+    # the next worker tick via ``claim_next_job``.
+    assert store._jobs["opt-1"]["status"] == pre_status
+    # The local hint queue is intentionally not used by ``submit_job`` so two
+    # pods can balance load via ``claim_next_job``.
+    assert "opt-1" not in worker._pending_jobs
 
 
 def test_submit_job_creates_cancel_event(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """submit_job registers a threading.Event in _cancel_events for the job."""
+    """``submit_job`` registers a ``threading.Event`` as the cancel signal."""
     store.seed_job("opt-1")
     payload = MagicMock()
     payload.model_dump.return_value = {}
@@ -418,11 +425,10 @@ def test_submit_job_creates_cancel_event(
     assert isinstance(worker._cancel_events["opt-1"], threading.Event)
 
 
-
 def test_dump_thread_stacks_returns_string_without_raising(
     worker: BackgroundWorker,
 ) -> None:
-    """dump_thread_stacks() returns a string and does not raise."""
+    """``dump_thread_stacks`` returns a string and never raises."""
     result = worker.dump_thread_stacks()
 
     assert isinstance(result, str)
@@ -431,16 +437,16 @@ def test_dump_thread_stacks_returns_string_without_raising(
 def test_dump_thread_stacks_returns_empty_string_when_no_threads_started(
     worker: BackgroundWorker,
 ) -> None:
-    """dump_thread_stacks() returns an empty string when no threads have been started."""
+    """An unstarted worker produces an empty thread dump."""
     result = worker.dump_thread_stacks()
 
     assert result == ""
 
 
 def test_dump_thread_stacks_includes_thread_name_when_threads_are_running() -> None:
-    """With a live worker thread, the output contains the thread's name."""
+    """A running worker includes its thread names in the dump."""
     store = FakeJobStore()
-    w = BackgroundWorker(job_store=store, num_workers=1, poll_interval=0.05)
+    w = BackgroundWorker(job_store=cast(JobStore, store), num_workers=1, poll_interval=0.05)
     w.start()
     try:
         result = w.dump_thread_stacks()
@@ -449,12 +455,11 @@ def test_dump_thread_stacks_includes_thread_name_when_threads_are_running() -> N
         w.stop(timeout=2.0)
 
 
-
 def test_get_worker_returns_a_background_worker_instance(
     store: FakeJobStore,
 ) -> None:
-    """get_worker() returns a BackgroundWorker instance."""
-    w = get_worker(store)
+    """``get_worker`` returns a ``BackgroundWorker`` singleton."""
+    w = get_worker(cast(JobStore, store))
 
     assert isinstance(w, BackgroundWorker)
     w.stop(timeout=2.0)
@@ -463,9 +468,9 @@ def test_get_worker_returns_a_background_worker_instance(
 def test_get_worker_returns_same_instance_on_repeated_calls(
     store: FakeJobStore,
 ) -> None:
-    """get_worker() is a singleton — repeated calls return the same object."""
-    w1 = get_worker(store)
-    w2 = get_worker(store)
+    """Repeated ``get_worker`` calls return the same singleton."""
+    w1 = get_worker(cast(JobStore, store))
+    w2 = get_worker(cast(JobStore, store))
 
     assert w1 is w2
     w1.stop(timeout=2.0)
@@ -474,19 +479,18 @@ def test_get_worker_returns_same_instance_on_repeated_calls(
 def test_get_worker_enqueues_pending_optimization_ids(
     store: FakeJobStore,
 ) -> None:
-    """get_worker() enqueues all provided pending IDs on the returned worker."""
-    w = get_worker(store, pending_optimization_ids=["opt-a", "opt-b"])
+    """``get_worker`` re-enqueues IDs passed via ``pending_optimization_ids``."""
+    w = get_worker(cast(JobStore, store), pending_optimization_ids=["opt-a", "opt-b"])
 
     assert "opt-a" in w._pending_jobs or "opt-a" in w._processing_jobs or "opt-a" in w._cancel_events
     w.stop(timeout=2.0)
 
 
-
 def test_reset_worker_for_tests_clears_module_global(
     store: FakeJobStore,
 ) -> None:
-    """reset_worker_for_tests() sets the module-level _worker singleton to None."""
-    get_worker(store)
+    """``reset_worker_for_tests`` clears the module-level singleton."""
+    get_worker(cast(JobStore, store))
 
     reset_worker_for_tests()
 
@@ -494,7 +498,7 @@ def test_reset_worker_for_tests_clears_module_global(
 
 
 def test_reset_worker_for_tests_is_idempotent_when_no_worker_exists() -> None:
-    """Calling reset when no worker is set must not raise."""
+    """Calling ``reset_worker_for_tests`` twice does not raise."""
     reset_worker_for_tests()
     reset_worker_for_tests()  # second call — still should not raise
 
@@ -502,43 +506,25 @@ def test_reset_worker_for_tests_is_idempotent_when_no_worker_exists() -> None:
 def test_get_worker_creates_new_instance_after_reset(
     store: FakeJobStore,
 ) -> None:
-    """get_worker() creates a new instance after the previous singleton was reset."""
-    w1 = get_worker(store)
+    """``get_worker`` returns a fresh instance after a reset."""
+    w1 = get_worker(cast(JobStore, store))
     w1.stop(timeout=2.0)
     reset_worker_for_tests()
 
-    w2 = get_worker(store)
+    w2 = get_worker(cast(JobStore, store))
 
     assert w2 is not w1
     w2.stop(timeout=2.0)
-
 
 
 def test_init_falls_back_to_1_0_when_cancel_poll_interval_is_not_a_float(
     store: FakeJobStore,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When settings.cancel_poll_interval would produce a non-float str, the worker must
-    fall back to 1.0 without raising."""
-    # Patch settings on the engine module to return a non-float string.
-    monkeypatch.setattr(engine_module.settings, "cancel_poll_interval", "not-a-float", raising=False)
-
-    # Bypass the float() parsing that pydantic already does — we need to exercise the
-    # except ValueError branch in __init__, so we also monkey-patch the str() call path.
-    # The branch is: poll_raw = str(settings.cancel_poll_interval); float(poll_raw) → ValueError
-    original_init = BackgroundWorker.__init__
-
-    def _patched_init(self, job_store, num_workers=2, poll_interval=1.0, service=None):
-        # Temporarily replace the cancel_poll_interval value so str() → "not-a-float"
-        original_val = engine_module.settings.cancel_poll_interval
-        # Force the raw value by patching inside __init__ via the monkeypatch already applied.
-        original_init(self, job_store, num_workers=num_workers, poll_interval=poll_interval, service=service)
-
-    # The simplest approach: directly test the fallback logic path by patching str()
-    # to return an unconvertible value on the specific attribute read.
-    # Instead: we patch settings at module scope so str(settings.cancel_poll_interval)
-    # returns "not-a-float", then BackgroundWorker.__init__ must not raise.
-
+    """Init falls back to ``1.0`` when ``cancel_poll_interval`` cannot be parsed."""
+    # Patch settings on the engine module so ``str(settings.cancel_poll_interval)``
+    # returns a value that ``float()`` cannot parse — exercising the
+    # ``except ValueError`` fallback in ``BackgroundWorker.__init__``.
     class _FakeSettings:
         cancel_poll_interval = "not-a-float"
         job_run_start_method = "fork"
@@ -546,16 +532,15 @@ def test_init_falls_back_to_1_0_when_cancel_poll_interval_is_not_a_float(
     monkeypatch.setattr(engine_module, "settings", _FakeSettings())
 
     # Must not raise; must use 1.0 as the fallback.
-    w = BackgroundWorker(job_store=store, num_workers=1, poll_interval=1.0)
+    w = BackgroundWorker(job_store=cast(JobStore, store), num_workers=1, poll_interval=1.0)
     assert w._cancel_poll_interval == 1.0
-
 
 
 def test_resolve_mp_context_raises_and_falls_back_on_bogus_method(
     store: FakeJobStore,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An invalid JOB_RUN_START_METHOD triggers ValueError and falls back to the system default."""
+    """``_resolve_mp_context`` falls back to a default context for bad methods."""
     class _FakeSettings:
         cancel_poll_interval = 1.0
         job_run_start_method = "bogus_method"
@@ -574,7 +559,7 @@ def test_resolve_mp_context_emits_warning_for_bogus_method(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A warning containing the bad method name is logged when an invalid start method is requested."""
+    """``_resolve_mp_context`` warns when an unknown start method is configured."""
     class _FakeSettings:
         cancel_poll_interval = 1.0
         job_run_start_method = "definitely_invalid"
@@ -592,7 +577,7 @@ def test_resolve_mp_context_emits_warning_for_non_fork_method(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A warning about registry callables is logged when start method is not 'fork'."""
+    """``_resolve_mp_context`` warns when a non-fork method is configured."""
     class _FakeSettings:
         cancel_poll_interval = 1.0
         job_run_start_method = "spawn"
@@ -600,16 +585,15 @@ def test_resolve_mp_context_emits_warning_for_non_fork_method(
     monkeypatch.setattr(engine_module, "settings", _FakeSettings())
 
     with caplog.at_level("WARNING", logger="core.worker.engine"):
-        ctx = BackgroundWorker._resolve_mp_context()
+        BackgroundWorker._resolve_mp_context()
 
     # spawn is a valid method — the second warning about registry callables fires.
     assert any("spawn" in msg for msg in caplog.messages)
 
 
-
 def test_stop_sets_all_cancel_events(store: FakeJobStore) -> None:
     """stop() must set every cancel event so running jobs can detect shutdown promptly."""
-    w = BackgroundWorker(job_store=store, num_workers=1, poll_interval=0.05)
+    w = BackgroundWorker(job_store=cast(JobStore, store), num_workers=1, poll_interval=0.05)
     w.start()
     try:
         # Register several cancel events manually (as submit_job / enqueue_job would).

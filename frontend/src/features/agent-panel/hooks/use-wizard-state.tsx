@@ -4,35 +4,32 @@ import * as React from "react";
 
 import type { WizardState } from "../lib/types";
 
-const WIZARD_KEYS = [
-  "dataset_ready",
-  "columns_configured",
-  "signature_code",
-  "metric_code",
-  "model_configured",
-  "job_name",
-  "job_description",
-  "job_type",
-  "optimizer_name",
-  "module_name",
-  "dataset_columns",
-  "column_roles",
-  "model_config",
-  "reflection_model_config",
-  "generation_models",
-  "reflection_models",
-  "use_all_generation_models",
-  "use_all_reflection_models",
-  "split_fractions",
-  "split_mode",
-  "seed",
-  "shuffle",
-  "stratify",
-  "stratify_column",
-  "optimizer_kwargs",
-] as const satisfies readonly (keyof WizardState)[];
-
-type WizardKey = (typeof WIZARD_KEYS)[number];
+type WizardKey =
+  | "dataset_ready"
+  | "columns_configured"
+  | "signature_code"
+  | "metric_code"
+  | "model_configured"
+  | "job_name"
+  | "job_description"
+  | "job_type"
+  | "optimizer_name"
+  | "module_name"
+  | "dataset_columns"
+  | "column_roles"
+  | "model_config"
+  | "reflection_model_config"
+  | "generation_models"
+  | "reflection_models"
+  | "use_all_generation_models"
+  | "use_all_reflection_models"
+  | "split_fractions"
+  | "split_mode"
+  | "seed"
+  | "shuffle"
+  | "stratify"
+  | "stratify_column"
+  | "optimizer_kwargs";
 type WriteSource = "user" | "agent";
 
 interface WizardStateContextValue {
@@ -122,28 +119,22 @@ export function WizardStateProvider({ children }: { children: React.ReactNode })
     setPulseTick((t) => t + 1);
   }, []);
 
-  const clearField = React.useCallback<WizardStateContextValue["clearField"]>(
-    (key) => {
-      setState((prev) => {
-        if (!(key in prev)) return prev;
-        const next = { ...prev };
-        delete (next as Record<string, unknown>)[key];
-        return next;
-      });
-      setOverridden((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    },
-    [],
-  );
+  const clearField = React.useCallback<WizardStateContextValue["clearField"]>((key) => {
+    setState((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete (next as Record<string, unknown>)[key];
+      return next;
+    });
+    setOverridden((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }, []);
 
-  const overriddenFields = React.useMemo(
-    () => Array.from(overridden).sort(),
-    [overridden],
-  );
+  const overriddenFields = React.useMemo(() => Array.from(overridden).sort(), [overridden]);
 
   const value = React.useMemo<WizardStateContextValue>(
     () => ({
@@ -181,39 +172,46 @@ export function useWizardStateOptional(): WizardStateContextValue | null {
 export function extractWizardPatch(result: unknown): Partial<WizardState> {
   if (!result || typeof result !== "object") return {};
   const r = result as Record<string, unknown>;
-  const wrap = (r.wizard_state && typeof r.wizard_state === "object")
-    ? (r.wizard_state as Record<string, unknown>)
-    : r;
+  const wrap =
+    r.wizard_state && typeof r.wizard_state === "object"
+      ? (r.wizard_state as Record<string, unknown>)
+      : r;
   const patch: Partial<WizardState> = {};
 
-  // Phase gates (booleans)
   if (typeof wrap.dataset_ready === "boolean") patch.dataset_ready = wrap.dataset_ready;
-  if (typeof wrap.columns_configured === "boolean") patch.columns_configured = wrap.columns_configured;
+  if (typeof wrap.columns_configured === "boolean")
+    patch.columns_configured = wrap.columns_configured;
   if (typeof wrap.model_configured === "boolean") patch.model_configured = wrap.model_configured;
 
-  // Code blocks (strings)
   if (typeof wrap.signature_code === "string") patch.signature_code = wrap.signature_code;
   if (typeof wrap.metric_code === "string") patch.metric_code = wrap.metric_code;
 
-  // Job metadata
   if (typeof wrap.job_name === "string") patch.job_name = wrap.job_name;
   if (typeof wrap.job_description === "string") patch.job_description = wrap.job_description;
   if (wrap.job_type === "run" || wrap.job_type === "grid_search") patch.job_type = wrap.job_type;
 
-  // Optimizer / module choice
   if (typeof wrap.optimizer_name === "string") patch.optimizer_name = wrap.optimizer_name;
   if (typeof wrap.module_name === "string") patch.module_name = wrap.module_name;
 
-  // Dataset columns + roles
-  if (Array.isArray(wrap.dataset_columns) && wrap.dataset_columns.every((x) => typeof x === "string")) {
+  if (
+    Array.isArray(wrap.dataset_columns) &&
+    wrap.dataset_columns.every((x) => typeof x === "string")
+  ) {
     patch.dataset_columns = wrap.dataset_columns as string[];
   }
-  if (wrap.column_roles && typeof wrap.column_roles === "object" && !Array.isArray(wrap.column_roles)) {
+  if (
+    wrap.column_roles &&
+    typeof wrap.column_roles === "object" &&
+    !Array.isArray(wrap.column_roles)
+  ) {
     patch.column_roles = wrap.column_roles as Record<string, string>;
   }
 
-  // Model configs
-  if (wrap.model_config && typeof wrap.model_config === "object" && !Array.isArray(wrap.model_config)) {
+  if (
+    wrap.model_config &&
+    typeof wrap.model_config === "object" &&
+    !Array.isArray(wrap.model_config)
+  ) {
     patch.model_config = wrap.model_config as Record<string, unknown>;
   }
   if (
@@ -224,18 +222,17 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
     patch.reflection_model_config = wrap.reflection_model_config as Record<string, unknown>;
   }
 
-  // Grid-search model lists
   if (
     Array.isArray(wrap.generation_models) &&
     wrap.generation_models.every((m) => m && typeof m === "object" && !Array.isArray(m))
   ) {
-    patch.generation_models = wrap.generation_models as Record<string, unknown>[];
+    patch.generation_models = wrap.generation_models as Array<Record<string, unknown>>;
   }
   if (
     Array.isArray(wrap.reflection_models) &&
     wrap.reflection_models.every((m) => m && typeof m === "object" && !Array.isArray(m))
   ) {
-    patch.reflection_models = wrap.reflection_models as Record<string, unknown>[];
+    patch.reflection_models = wrap.reflection_models as Array<Record<string, unknown>>;
   }
   if (typeof wrap.use_all_generation_models === "boolean") {
     patch.use_all_generation_models = wrap.use_all_generation_models;
@@ -244,7 +241,6 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
     patch.use_all_reflection_models = wrap.use_all_reflection_models;
   }
 
-  // Split plan
   if (
     wrap.split_fractions &&
     typeof wrap.split_fractions === "object" &&
@@ -266,7 +262,6 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
   if (typeof wrap.stratify === "boolean") patch.stratify = wrap.stratify;
   if (typeof wrap.stratify_column === "string") patch.stratify_column = wrap.stratify_column;
 
-  // Optimizer kwargs
   if (
     wrap.optimizer_kwargs &&
     typeof wrap.optimizer_kwargs === "object" &&

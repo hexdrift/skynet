@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Settings, Copy, Trash2, Sparkles, Plus, Thermometer, Coins } from "lucide-react";
+import { Settings, Copy, Trash2, Plus, Thermometer, Coins, Eye } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import type { ModelConfig } from "@/shared/types/api";
-import { ReasoningPill } from "@/features/optimizations/components/ui-primitives";
+import type { CatalogModel, ModelConfig } from "@/shared/types/api";
+import { ReasoningPill } from "@/features/optimizations";
+import { msg } from "@/shared/lib/messages";
 
 interface ModelChipProps {
   config: ModelConfig;
@@ -17,10 +18,11 @@ interface ModelChipProps {
   /** Shows a visible "copy from X" button when the chip is empty */
   copyFromLabel?: string;
   onCopyFrom?: () => void;
+  /** Catalog used to resolve a model's vision capability for the badge. */
+  catalogModels?: CatalogModel[];
   className?: string;
 }
 
-/** Compact card showing a configured model. Click to open config modal. */
 export function ModelChip({
   config,
   roleLabel,
@@ -30,11 +32,15 @@ export function ModelChip({
   required,
   copyFromLabel,
   onCopyFrom,
+  catalogModels,
   className,
 }: ModelChipProps) {
   const effort = config.extra?.reasoning_effort as string | undefined;
-  const name = config.name || (required ? "בחר מודל..." : "לא הוגדר");
+  const name =
+    config.name ||
+    (required ? msg("shared.model_chip.choose_model") : msg("shared.model_chip.not_configured"));
   const isEmpty = !config.name;
+  const supportsVision = !!catalogModels?.find((m) => m.value === config.name)?.supports_vision;
 
   return (
     <div
@@ -48,7 +54,6 @@ export function ModelChip({
       )}
       onClick={onClick}
     >
-      {/* Model info */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {roleLabel && (
           <span className="text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground">
@@ -64,7 +69,6 @@ export function ModelChip({
         >
           {isEmpty ? name : (name.split("/").pop() ?? name)}
         </span>
-        {/* Settings summary */}
         {!isEmpty && (
           <div
             className="flex items-center gap-2.5 text-[0.625rem] text-muted-foreground"
@@ -81,11 +85,18 @@ export function ModelChip({
               </span>
             )}
             {effort && <ReasoningPill value={effort} />}
+            {supportsVision && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-sm bg-primary/10 px-1 py-px text-primary"
+                title={msg("shared.model_chip.vision_badge")}
+              >
+                <Eye className="size-2.5" />
+              </span>
+            )}
           </div>
         )}
       </div>
 
-      {/* Copy-from shortcut — visible when chip is empty and a source exists */}
       {isEmpty && copyFromLabel && onCopyFrom && (
         <button
           type="button"
@@ -100,7 +111,6 @@ export function ModelChip({
         </button>
       )}
 
-      {/* Right: action buttons */}
       <div className="flex shrink-0 items-center gap-1">
         {onClone && !isEmpty && (
           <button
@@ -110,7 +120,7 @@ export function ModelChip({
               onClone();
             }}
             className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground transition-all cursor-pointer"
-            title="שכפל"
+            title={msg("shared.model_chip.clone")}
           >
             <Copy className="size-3" />
           </button>
@@ -123,7 +133,7 @@ export function ModelChip({
               onRemove();
             }}
             className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all cursor-pointer"
-            title="הסר"
+            title={msg("shared.model_chip.remove")}
           >
             <Trash2 className="size-3" />
           </button>
@@ -140,8 +150,11 @@ interface AddModelButtonProps {
   className?: string;
 }
 
-/** "Add model" button that looks like an empty chip. */
-export function AddModelButton({ label = "הוסף מודל", onClick, className }: AddModelButtonProps) {
+export function AddModelButton({
+  label = msg("shared.model_chip.add_model"),
+  onClick,
+  className,
+}: AddModelButtonProps) {
   return (
     <button
       type="button"

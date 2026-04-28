@@ -3,17 +3,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  CheckCircle2,
-  Clock,
-  ExternalLink,
-  Loader2,
-  Medal,
-  TrendingUp,
-  X,
-  Zap,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { CheckCircle2, Clock, ExternalLink, Loader2, Medal, TrendingUp, Zap } from "lucide-react";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
 import {
   Table,
   TableBody,
@@ -21,22 +12,22 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/shared/ui/primitives/table";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/shared/ui/primitives/tooltip";
 import { AnimatedNumber, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { formatElapsed } from "@/shared/lib";
-import { getStatusLabel } from "@/shared/constants/job-status";
 import type { DashboardAnalytics } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
 import { AnalyticsEmpty } from "./AnalyticsEmpty";
+import { AnalyticsFilterChips } from "./AnalyticsFilterChips";
 import { AnalyticsSection } from "./AnalyticsSection";
 import type { ChartData } from "../lib/transform-chart-data";
 import type { UseAnalyticsFiltersReturn } from "../hooks/use-analytics-filters";
@@ -45,7 +36,9 @@ const ScoresChart = dynamic(() => import("@/shared/charts").then((m) => m.Scores
   ssr: false,
   loading: () => (
     <div className="h-[300px] flex items-center justify-center">
-      <span className="text-sm text-muted-foreground">טוען גרפים...</span>
+      <span className="text-sm text-muted-foreground">
+        {msg("auto.features.dashboard.components.analyticstab.1")}
+      </span>
     </div>
   ),
 });
@@ -102,7 +95,9 @@ export function AnalyticsTab({
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-24">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">טוען נתוני אנליטיקה...</p>
+        <p className="text-sm text-muted-foreground">
+          {msg("auto.features.dashboard.components.analyticstab.2")}
+        </p>
       </div>
     );
   }
@@ -124,105 +119,9 @@ export function AnalyticsTab({
     return <AnalyticsEmpty variant="no-data" />;
   }
 
-  const hasFilters = jobId || date || optimizer !== "all" || model !== "all" || status !== "all";
-  const clearAllFilters = () => {
-    setJobId(null);
-    setDate(null);
-    setOptimizer("all");
-    setModel("all");
-    setStatus("all");
-  };
-
   return (
     <div className="space-y-6">
-      {hasFilters && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {jobId && (
-            <span className="group inline-flex items-center gap-1.5 rounded-lg bg-[#3D2E22]/[0.06] border border-[#3D2E22]/10 pe-1 ps-2.5 py-1 transition-all duration-150 hover:bg-[#3D2E22]/[0.1] hover:border-[#3D2E22]/20">
-              <span className="font-mono text-[0.6875rem] font-medium text-[#3D2E22]/80" dir="ltr">
-                {jobId.slice(0, 8)}…
-              </span>
-              <button
-                onClick={() => setJobId(null)}
-                className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
-                aria-label="הסר סינון"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          {date && (
-            <span className="group inline-flex items-center gap-1.5 rounded-lg bg-[#3D2E22]/[0.06] border border-[#3D2E22]/10 pe-1 ps-2.5 py-1 transition-all duration-150 hover:bg-[#3D2E22]/[0.1] hover:border-[#3D2E22]/20">
-              <span className="text-[0.6875rem] font-medium text-[#3D2E22]/80">
-                {new Date(date).toLocaleDateString("he-IL", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </span>
-              <button
-                onClick={() => setDate(null)}
-                className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
-                aria-label="הסר סינון"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          {optimizer !== "all" && (
-            <span className="group inline-flex items-center gap-1.5 rounded-lg bg-[#3D2E22]/[0.06] border border-[#3D2E22]/10 pe-1 ps-2.5 py-1 transition-all duration-150 hover:bg-[#3D2E22]/[0.1] hover:border-[#3D2E22]/20">
-              <span className="text-[0.6875rem] font-medium text-[#3D2E22]/80" dir="ltr">
-                {optimizer}
-              </span>
-              <button
-                onClick={() => setOptimizer("all")}
-                className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
-                aria-label="הסר סינון"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          {model !== "all" && (
-            <span className="group inline-flex items-center gap-1.5 rounded-lg bg-[#3D2E22]/[0.06] border border-[#3D2E22]/10 pe-1 ps-2.5 py-1 transition-all duration-150 hover:bg-[#3D2E22]/[0.1] hover:border-[#3D2E22]/20">
-              <span
-                className="font-mono text-[0.6875rem] font-medium text-[#3D2E22]/80 truncate max-w-[140px]"
-                dir="ltr"
-                title={model}
-              >
-                {model}
-              </span>
-              <button
-                onClick={() => setModel("all")}
-                className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
-                aria-label="הסר סינון"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          {status !== "all" && (
-            <span className="group inline-flex items-center gap-1.5 rounded-lg bg-[#3D2E22]/[0.06] border border-[#3D2E22]/10 pe-1 ps-2.5 py-1 transition-all duration-150 hover:bg-[#3D2E22]/[0.1] hover:border-[#3D2E22]/20">
-              <span className="text-[0.6875rem] font-medium text-[#3D2E22]/80">
-                {getStatusLabel(status)}
-              </span>
-              <button
-                onClick={() => setStatus("all")}
-                className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
-                aria-label="הסר סינון"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          <button
-            onClick={clearAllFilters}
-            className="text-[0.625rem] text-[#3D2E22]/40 hover:text-[#3D2E22]/70 transition-colors cursor-pointer ms-0.5"
-          >
-            נקה הכל
-          </button>
-        </div>
-      )}
+      <AnalyticsFilterChips filters={filters} />
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -248,7 +147,7 @@ export function AnalyticsTab({
                               <div className="flex items-start justify-between">
                                 <div className="space-y-3">
                                   <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    אחוז הצלחה
+                                    {msg("auto.features.dashboard.components.analyticstab.4")}
                                   </p>
                                   <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums">
                                     <AnimatedNumber
@@ -282,13 +181,19 @@ export function AnalyticsTab({
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs">
                         <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">פרוט נוסף:</p>
+                          <p className="font-semibold">
+                            {msg("auto.features.dashboard.components.analyticstab.5")}
+                          </p>
                           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span className="text-muted-foreground">הצליחו:</span>
+                            <span className="text-muted-foreground">
+                              {msg("auto.features.dashboard.components.analyticstab.6")}
+                            </span>
                             <span className="font-mono tabular-nums">
                               {chartData.kpis.successCount}
                             </span>
-                            <span className="text-muted-foreground">סה"כ הסתיימו:</span>
+                            <span className="text-muted-foreground">
+                              {msg("auto.features.dashboard.components.analyticstab.7")}
+                            </span>
                             <span className="font-mono tabular-nums">
                               {chartData.kpis.terminalCount}
                             </span>
@@ -306,7 +211,7 @@ export function AnalyticsTab({
                               <div className="flex items-start justify-between">
                                 <div className="space-y-3">
                                   <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    שיפור ממוצע
+                                    {msg("auto.features.dashboard.components.analyticstab.8")}
                                   </p>
                                   <p
                                     className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${chartData.kpis.avgImprovement > 0 ? "text-emerald-700" : chartData.kpis.avgImprovement < 0 ? "text-red-600" : ""}`}
@@ -341,9 +246,12 @@ export function AnalyticsTab({
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs">
                         <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">פרוט נוסף:</p>
+                          <p className="font-semibold">
+                            {msg("auto.features.dashboard.components.analyticstab.9")}
+                          </p>
                           <p className="text-muted-foreground">
-                            שיפור ממוצע בציון הבדיקה לאחר {TERMS.optimization}
+                            {msg("auto.features.dashboard.components.analyticstab.10")}
+                            {TERMS.optimization}
                           </p>
                         </div>
                       </TooltipContent>
@@ -358,7 +266,7 @@ export function AnalyticsTab({
                               <div className="flex items-start justify-between">
                                 <div className="space-y-3">
                                   <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    זמן ריצה ממוצע
+                                    {msg("auto.features.dashboard.components.analyticstab.11")}
                                   </p>
                                   <p
                                     className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums"
@@ -372,7 +280,8 @@ export function AnalyticsTab({
                                 </div>
                               </div>
                               <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
-                                לכל {TERMS.optimization}
+                                {msg("auto.features.dashboard.components.analyticstab.12")}
+                                {TERMS.optimization}
                               </p>
                             </CardContent>
                           </Card>
@@ -380,9 +289,13 @@ export function AnalyticsTab({
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs">
                         <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">פרוט נוסף:</p>
+                          <p className="font-semibold">
+                            {msg("auto.features.dashboard.components.analyticstab.13")}
+                          </p>
                           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span className="text-muted-foreground">זוגות שרצו:</span>
+                            <span className="text-muted-foreground">
+                              {msg("auto.features.dashboard.components.analyticstab.14")}
+                            </span>
                             <span className="font-mono tabular-nums">
                               {chartData.kpis.totalPairsRun}
                             </span>
@@ -400,7 +313,7 @@ export function AnalyticsTab({
                               <div className="flex items-start justify-between">
                                 <div className="space-y-3">
                                   <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    שיפור מקסימלי
+                                    {msg("auto.features.dashboard.components.analyticstab.15")}
                                   </p>
                                   <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums text-amber-700">
                                     <AnimatedNumber
@@ -429,17 +342,25 @@ export function AnalyticsTab({
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs">
                         <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">פרוט נוסף:</p>
+                          <p className="font-semibold">
+                            {msg("auto.features.dashboard.components.analyticstab.16")}
+                          </p>
                           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span className="text-muted-foreground">שורות שנותחו:</span>
+                            <span className="text-muted-foreground">
+                              {msg("auto.features.dashboard.components.analyticstab.17")}
+                            </span>
                             <span className="font-mono tabular-nums">
                               {chartData.kpis.totalRows.toLocaleString("he-IL")}
                             </span>
-                            <span className="text-muted-foreground">סריקות:</span>
+                            <span className="text-muted-foreground">
+                              {msg("auto.features.dashboard.components.analyticstab.18")}
+                            </span>
                             <span className="font-mono tabular-nums">
                               {chartData.kpis.gridSearchCount}
                             </span>
-                            <span className="text-muted-foreground">ריצות בודדות:</span>
+                            <span className="text-muted-foreground">
+                              {msg("auto.features.dashboard.components.analyticstab.19")}
+                            </span>
                             <span className="font-mono tabular-nums">
                               {chartData.kpis.singleRunCount}
                             </span>
@@ -454,14 +375,21 @@ export function AnalyticsTab({
 
             <StaggerItem>
               <AnalyticsSection
-                title={<HelpTip text={tip("analytics.score_comparison")}>סקירת ביצועים</HelpTip>}
+                title={
+                  <HelpTip text={tip("analytics.score_comparison")}>
+                    {msg("auto.features.dashboard.components.analyticstab.20")}
+                  </HelpTip>
+                }
                 defaultOpen={true}
                 className="border-border/60"
               >
-                <div className="grid gap-5 md:grid-cols-7">
+                <div className="grid gap-5 xl:grid-cols-7">
                   <div className="md:col-span-4">
                     <div className="mb-3">
-                      <h4 className="text-sm font-semibold">ציונים לפי {TERMS.optimization}</h4>
+                      <h4 className="text-sm font-semibold">
+                        {msg("auto.features.dashboard.components.analyticstab.21")}
+                        {TERMS.optimization}
+                      </h4>
                     </div>
                     <ScoresChart
                       data={chartData.improvement}
@@ -473,7 +401,7 @@ export function AnalyticsTab({
                   <div className="md:col-span-3 space-y-6">
                     <div className="space-y-3">
                       <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase tracking-widest">
-                        סטטוסים
+                        {msg("auto.features.dashboard.components.analyticstab.22")}
                       </p>
                       {chartData.status.map((s, i) => {
                         const total = chartData.status.reduce((a, b) => a + b.value, 0);
@@ -513,7 +441,8 @@ export function AnalyticsTab({
 
                     <div className="space-y-3">
                       <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase tracking-widest">
-                        {TERMS.optimizer}ים
+                        {TERMS.optimizer}
+                        {msg("auto.features.dashboard.components.analyticstab.23")}
                       </p>
                       {chartData.optimizer.map((o, i) => {
                         const total = chartData.optimizer.reduce((a, b) => a + b.value, 0);
@@ -557,7 +486,8 @@ export function AnalyticsTab({
                         <div className="border-t border-border" />
                         <div className="space-y-3">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                            סוג {TERMS.optimization}
+                            {msg("auto.features.dashboard.components.analyticstab.24")}
+                            {TERMS.optimization}
                           </p>
                           {chartData.jobTypeData.map((d, i) => {
                             const total = chartData.jobTypeData.reduce((a, b) => a + b.value, 0);
@@ -590,7 +520,9 @@ export function AnalyticsTab({
               <StaggerItem>
                 <AnalyticsSection
                   title={
-                    <HelpTip text={tip("analytics.runtime_vs_gain")}>יעילות וזמני ריצה</HelpTip>
+                    <HelpTip text={tip("analytics.runtime_vs_gain")}>
+                      {msg("auto.features.dashboard.components.analyticstab.25")}
+                    </HelpTip>
                   }
                   defaultOpen={true}
                   className="border-border/60"
@@ -601,7 +533,7 @@ export function AnalyticsTab({
                         <div className="mb-3">
                           <h4 className="text-sm font-semibold">
                             <HelpTip text={tip("analytics.runtime_minutes")}>
-                              התפלגות זמני ריצה
+                              {msg("auto.features.dashboard.components.analyticstab.26")}
                             </HelpTip>
                           </h4>
                         </div>
@@ -617,7 +549,7 @@ export function AnalyticsTab({
                         <div className="mb-3">
                           <h4 className="text-sm font-semibold">
                             <HelpTip text={tip("analytics.improvement_per_minute")}>
-                              יעילות: שיפור לדקה
+                              {msg("auto.features.dashboard.components.analyticstab.27")}
                             </HelpTip>
                           </h4>
                         </div>
@@ -634,7 +566,9 @@ export function AnalyticsTab({
                       <div className="mb-3">
                         <h4 className="text-sm font-semibold">
                           <HelpTip text={tip("analytics.dataset_size_vs_improvement")}>
-                            גודל {TERMS.dataset} מול שיפור
+                            {msg("auto.features.dashboard.components.analyticstab.28")}
+                            {TERMS.dataset}
+                            {msg("auto.features.dashboard.components.analyticstab.29")}
                           </HelpTip>
                         </h4>
                       </div>
@@ -652,7 +586,11 @@ export function AnalyticsTab({
             {chartData.timelineData.length > 0 && (
               <StaggerItem>
                 <AnalyticsSection
-                  title={<HelpTip text={tip("analytics.submissions_per_day")}>ציר זמן</HelpTip>}
+                  title={
+                    <HelpTip text={tip("analytics.submissions_per_day")}>
+                      {msg("auto.features.dashboard.components.analyticstab.30")}
+                    </HelpTip>
+                  }
                   defaultOpen={true}
                   className="border-border/60"
                 >
@@ -670,13 +608,15 @@ export function AnalyticsTab({
                 <AnalyticsSection
                   title={
                     <HelpTip text={tip("analytics.optimizer_avg_improvement")}>
-                      השוואת {TERMS.optimizer}ים
+                      {msg("auto.features.dashboard.components.analyticstab.31")}
+                      {TERMS.optimizer}
+                      {msg("auto.features.dashboard.components.analyticstab.32")}
                     </HelpTip>
                   }
                   defaultOpen={true}
                   className="border-border/60"
                 >
-                  <div className="grid gap-5 md:grid-cols-7">
+                  <div className="grid gap-5 xl:grid-cols-7">
                     <div className="md:col-span-4">
                       <OptimizerChart
                         data={chartData.avgByOptimizer}
@@ -685,7 +625,9 @@ export function AnalyticsTab({
                     </div>
                     <div className="md:col-span-3">
                       <div className="mb-3">
-                        <h4 className="text-sm font-semibold">מודלים פופולריים</h4>
+                        <h4 className="text-sm font-semibold">
+                          {msg("auto.features.dashboard.components.analyticstab.33")}
+                        </h4>
                       </div>
                       {chartData.modelUsage.length > 0 ? (
                         <div className="space-y-3">
@@ -723,7 +665,9 @@ export function AnalyticsTab({
                         </div>
                       ) : (
                         <div className="flex h-[150px] items-center justify-center">
-                          <p className="text-sm text-muted-foreground">אין מידע על מודלים</p>
+                          <p className="text-sm text-muted-foreground">
+                            {msg("auto.features.dashboard.components.analyticstab.34")}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -741,7 +685,7 @@ export function AnalyticsTab({
                         <TrendingUp className="size-3 text-stone-600" />
                       </span>
                       <HelpTip text={tip("analytics.top_improvements")}>
-                        השיפורים הגדולים ביותר
+                        {msg("auto.features.dashboard.components.analyticstab.35")}
                       </HelpTip>
                     </div>
                   }
@@ -757,19 +701,20 @@ export function AnalyticsTab({
                               #
                             </TableHead>
                             <TableHead className="text-start text-[0.6875rem] uppercase tracking-wider text-stone-400">
-                              מזהה {TERMS.optimization}
+                              {msg("auto.features.dashboard.components.analyticstab.36")}
+                              {TERMS.optimization}
                             </TableHead>
                             <TableHead className="text-start text-[0.6875rem] uppercase tracking-wider text-stone-400">
                               {TERMS.optimizer}
                             </TableHead>
                             <TableHead className="text-center text-[0.6875rem] uppercase tracking-wider text-stone-400">
-                              לפני
+                              {msg("auto.features.dashboard.components.analyticstab.37")}
                             </TableHead>
                             <TableHead className="text-center text-[0.6875rem] uppercase tracking-wider text-stone-400">
-                              אחרי
+                              {msg("auto.features.dashboard.components.analyticstab.38")}
                             </TableHead>
                             <TableHead className="text-center text-[0.6875rem] uppercase tracking-wider text-stone-400">
-                              שיפור
+                              {msg("auto.features.dashboard.components.analyticstab.39")}
                             </TableHead>
                             <TableHead className="w-10"></TableHead>
                           </TableRow>
@@ -778,7 +723,7 @@ export function AnalyticsTab({
                           {chartData.topJobs.slice(0, leaderboardLimit).map((j, i) => {
                             const fmt = (n: number | undefined | null) => {
                               if (n == null) return "\u2014";
-                              return (n > 1 ? n : n * 100).toFixed(1) + "%";
+                              return `${(n > 1 ? n : n * 100).toFixed(1)}%`;
                             };
                             const imp = j.metric_improvement!;
                             const impPct = Math.abs(imp) > 1 ? imp : imp * 100;
@@ -797,7 +742,7 @@ export function AnalyticsTab({
 
                             const copyCell = (text: string) => (e: React.MouseEvent) => {
                               e.stopPropagation();
-                              navigator.clipboard.writeText(text);
+                              void navigator.clipboard.writeText(text);
                               toast.success(msg("clipboard.copied_short"), {
                                 autoClose: 1000,
                               });
@@ -905,7 +850,7 @@ export function AnalyticsTab({
                       {chartData.topJobs.slice(0, leaderboardLimit).map((j, i) => {
                         const fmt = (n: number | undefined | null) => {
                           if (n == null) return "—";
-                          return (n > 1 ? n : n * 100).toFixed(1) + "%";
+                          return `${(n > 1 ? n : n * 100).toFixed(1)}%`;
                         };
                         const imp = j.metric_improvement!;
                         const impPct = Math.abs(imp) > 1 ? imp : imp * 100;
@@ -944,20 +889,24 @@ export function AnalyticsTab({
                               </div>
                               <div className="grid grid-cols-3 gap-3 text-center">
                                 <div>
-                                  <p className="text-[0.625rem] text-muted-foreground mb-1">לפני</p>
+                                  <p className="text-[0.625rem] text-muted-foreground mb-1">
+                                    {msg("auto.features.dashboard.components.analyticstab.40")}
+                                  </p>
                                   <p className="font-mono text-sm text-stone-500">
                                     {fmt(j.baseline_test_metric)}
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-[0.625rem] text-muted-foreground mb-1">אחרי</p>
+                                  <p className="text-[0.625rem] text-muted-foreground mb-1">
+                                    {msg("auto.features.dashboard.components.analyticstab.41")}
+                                  </p>
                                   <p className="font-mono text-sm font-semibold">
                                     {fmt(j.optimized_test_metric)}
                                   </p>
                                 </div>
                                 <div>
                                   <p className="text-[0.625rem] text-muted-foreground mb-1">
-                                    שיפור
+                                    {msg("auto.features.dashboard.components.analyticstab.42")}
                                   </p>
                                   <p
                                     className={`font-mono text-sm font-bold ${impPct > 0 ? "text-emerald-700" : impPct < 0 ? "text-red-600" : "text-stone-500"}`}

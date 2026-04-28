@@ -1,6 +1,6 @@
 "use client";
 
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 
 /**
  * Zero-visual-impact jargon tooltip.

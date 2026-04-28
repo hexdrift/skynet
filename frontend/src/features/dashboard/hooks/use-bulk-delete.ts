@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { cancelJob, deleteJob, bulkDeleteJobs } from "@/shared/lib/api";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import type { JobStatus, PaginatedJobsResponse } from "@/shared/types/api";
 
@@ -100,7 +100,7 @@ export function useBulkDelete({
       window.dispatchEvent(new Event("optimizations-changed"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
-      fetchJobs();
+      void fetchJobs();
     } finally {
       setDeleting(false);
     }
@@ -151,21 +151,41 @@ export function useBulkDelete({
       if (effectivelyDeleted > 0 && realSkips.length === 0) {
         toast.success(
           effectivelyDeleted === 1
-            ? `נמחקה ${TERMS.optimization} אחת`
-            : `נמחקו ${effectivelyDeleted} ${TERMS.optimizationPlural}`,
+            ? formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.1", {
+                p1: TERMS.optimization,
+              })
+            : formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.2", {
+                p1: effectivelyDeleted,
+                p2: TERMS.optimizationPlural,
+              }),
         );
       } else if (effectivelyDeleted > 0 && realSkips.length > 0) {
         const delPart =
           effectivelyDeleted === 1
-            ? `נמחקה ${TERMS.optimization} אחת`
-            : `נמחקו ${effectivelyDeleted} ${TERMS.optimizationPlural}`;
-        const skipPart = realSkips.length === 1 ? "אחת לא נמחקה" : `${realSkips.length} לא נמחקו`;
+            ? formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.3", {
+                p1: TERMS.optimization,
+              })
+            : formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.4", {
+                p1: effectivelyDeleted,
+                p2: TERMS.optimizationPlural,
+              });
+        const skipPart =
+          realSkips.length === 1
+            ? msg("auto.features.dashboard.hooks.use.bulk.delete.literal.1")
+            : formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.5", {
+                p1: realSkips.length,
+              });
         toast.warning(`${delPart}, ${skipPart}`);
       } else {
         toast.error(
           realSkips.length === 1
-            ? `לא ניתן היה למחוק את ה${TERMS.optimization}`
-            : `לא ניתן היה למחוק ${realSkips.length} ${TERMS.optimizationPlural}`,
+            ? formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.6", {
+                p1: TERMS.optimization,
+              })
+            : formatMsg("auto.features.dashboard.hooks.use.bulk.delete.template.7", {
+                p1: realSkips.length,
+                p2: TERMS.optimizationPlural,
+              }),
         );
       }
       // Always re-fetch after delete to reconcile with server truth.
@@ -173,7 +193,7 @@ export function useBulkDelete({
       window.dispatchEvent(new Event("optimizations-changed"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
-      fetchJobs();
+      void fetchJobs();
     } finally {
       setBulkDeleting(false);
     }

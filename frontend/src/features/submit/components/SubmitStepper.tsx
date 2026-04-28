@@ -56,7 +56,6 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
           );
         })}
       </div>
-      {/* Connecting line behind circles */}
       <div className="absolute top-[18px] sm:top-5 inset-x-[10%] h-[2px] bg-muted -z-0 rounded-full">
         <motion.div
           className="h-full rounded-full"

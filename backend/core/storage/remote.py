@@ -3,14 +3,19 @@
 Provides RemoteDBJobStore for persisting job state to a PostgreSQL database.
 """
 
-import logging
-from datetime import datetime, timezone
-from typing import Any
+from __future__ import annotations
 
-from sqlalchemy import create_engine, func, text
+import logging
+import os
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
+
+from sqlalchemy import Engine, create_engine, func, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..constants import STRUCTURAL_PROGRESS_EVENTS
+from .base import JobRecord, LogEntryRecord, ProgressEventRecord
 from .models import Base, JobModel, LogEntryModel, ProgressEventModel
 
 logger = logging.getLogger(__name__)
@@ -22,22 +27,32 @@ MAX_LOG_ENTRIES = 5000
 class RemoteDBJobStore:
     """PostgreSQL-backed job storage using SQLAlchemy.
 
-    Connects to a PostgreSQL database using shared SQLAlchemy ORM models.
     No threading lock needed — PostgreSQL handles concurrent access natively.
-
-    Args:
-        db_url: PostgreSQL connection string (e.g., "postgresql://user:pass@host:5432/db").
     """
 
     def __init__(self, db_url: str) -> None:
+        """Build the SQLAlchemy engine, bootstrap pgvector, and create tables.
+
+        Pool sizing is read from the environment so total connections can be
+        sized against ``replicas × concurrency`` without a redeploy of code.
+        Set ``DB_POOL_SIZE`` / ``DB_POOL_MAX_OVERFLOW`` / ``DB_POOL_TIMEOUT``
+        / ``DB_POOL_RECYCLE`` in Helm values to tune per-pod budget.
+
+        Args:
+            db_url: PostgreSQL DSN to connect to.
+        """
+        pool_size = int(os.environ.get("DB_POOL_SIZE", "10"))
+        max_overflow = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "20"))
+        pool_timeout = float(os.environ.get("DB_POOL_TIMEOUT", "30"))
+        pool_recycle = int(os.environ.get("DB_POOL_RECYCLE", "3600"))
         self._engine = create_engine(
             db_url,
             echo=False,
             pool_pre_ping=True,
-            pool_size=10,
-            max_overflow=20,
-            pool_recycle=3600,
-            pool_timeout=30,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_recycle=pool_recycle,
+            pool_timeout=pool_timeout,
         )
         self._bootstrap_pgvector()
         Base.metadata.create_all(self._engine)
@@ -58,6 +73,7 @@ class RemoteDBJobStore:
                 logger.info("Migration: added 'pair_index' column to job_logs table")
 
         self._migrate_job_embeddings_columns()
+        self._migrate_jobs_claim_columns()
 
     def _bootstrap_pgvector(self) -> None:
         """Ensure the pgvector extension exists before creating Vector columns.
@@ -70,7 +86,7 @@ class RemoteDBJobStore:
             with self._engine.connect() as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 conn.commit()
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.warning(
                 "pgvector extension bootstrap failed (%s). "
                 "Recommendation service will be unavailable until an admin runs "
@@ -108,8 +124,33 @@ class RemoteDBJobStore:
                 for stmt in migrations:
                     conn.execute(text(stmt))
                 conn.commit()
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.warning("job_embeddings Phase-2 migration skipped: %s", exc)
+
+    def _migrate_jobs_claim_columns(self) -> None:
+        """Add the multi-pod claim columns + indexes on warm databases.
+
+        The DB-backed work queue (Wave 2) requires three new columns on
+        ``jobs``: ``claimed_by``, ``claimed_at``, ``lease_expires_at``. Fresh
+        installs get them via ``Base.metadata.create_all``; this method backfills
+        existing deployments with idempotent ``ADD COLUMN IF NOT EXISTS`` /
+        ``CREATE INDEX IF NOT EXISTS`` statements so an in-place upgrade is a
+        no-op restart away.
+        """
+        migrations = [
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS claimed_by VARCHAR(64)",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP",
+            "CREATE INDEX IF NOT EXISTS ix_jobs_status_created_at ON jobs (status, created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_jobs_lease_expires_at ON jobs (lease_expires_at)",
+        ]
+        try:
+            with self._engine.connect() as conn:
+                for stmt in migrations:
+                    conn.execute(text(stmt))
+                conn.commit()
+        except SQLAlchemyError as exc:
+            logger.warning("jobs claim-column migration skipped: %s", exc)
 
     def _bootstrap_vector_indexes(self) -> None:
         """Create HNSW cosine indexes on the job_embeddings vector columns.
@@ -137,37 +178,67 @@ class RemoteDBJobStore:
                 for stmt in statements:
                     conn.execute(text(stmt))
                 conn.commit()
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.warning("HNSW index bootstrap skipped: %s", exc)
 
     @property
-    def engine(self):
-        """The SQLAlchemy engine backing this store (for shared table operations)."""
+    def engine(self) -> Engine:
+        """Return the SQLAlchemy engine backing this store.
+
+        Exposed so callers can run shared table operations (direct
+        DDL, joined queries) outside the ORM session factory.
+
+        Returns:
+            The configured SQLAlchemy engine.
+        """
         return self._engine
 
     def _get_session(self) -> Session:
-        """Create and return a new SQLAlchemy session."""
+        """Create and return a new SQLAlchemy session.
+
+        Returns:
+            A new session; the caller is responsible for closing it.
+        """
         return self._session_factory()
 
-    def _job_to_dict(self, job: JobModel) -> dict[str, Any]:
-        """Convert a JobModel ORM instance to a plain dict with ISO-formatted timestamps."""
-        return {
-            "optimization_id": job.optimization_id,
-            "status": job.status,
-            "created_at": job.created_at.isoformat() if job.created_at else None,
-            "started_at": job.started_at.isoformat() if job.started_at else None,
-            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
-            "estimated_remaining_seconds": job.estimated_remaining_seconds,
-            "message": job.message,
-            "latest_metrics": job.latest_metrics or {},
-            "result": job.result,
-            "payload_overview": job.payload_overview or {},
-            "payload": job.payload,
-        }
+    def _job_to_dict(self, job: JobModel) -> JobRecord:
+        """Convert a JobModel ORM instance to its TypedDict representation.
 
-    def create_job(self, optimization_id: str, estimated_remaining_seconds: float | None = None) -> dict[str, Any]:
-        """Create a new job record in the database and return its dict representation."""
-        now = datetime.now(timezone.utc)
+        Args:
+            job: SQLAlchemy ORM row to serialize.
+
+        Returns:
+            A ``JobRecord`` with ISO-formatted timestamps and JSON columns
+            normalized to plain dicts.
+        """
+        return cast(
+            JobRecord,
+            {
+                "optimization_id": job.optimization_id,
+                "status": job.status,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+                "estimated_remaining_seconds": job.estimated_remaining_seconds,
+                "message": job.message,
+                "latest_metrics": job.latest_metrics or {},
+                "result": job.result,
+                "payload_overview": job.payload_overview or {},
+                "payload": job.payload,
+            },
+        )
+
+    def create_job(self, optimization_id: str, estimated_remaining_seconds: float | None = None) -> JobRecord:
+        """Create a new job record in the database.
+
+        Args:
+            optimization_id: Unique identifier for the new job.
+            estimated_remaining_seconds: Initial ETA, or ``None`` if unknown.
+
+        Returns:
+            The newly inserted row as a ``JobRecord``.
+        """
+        now = datetime.now(UTC)
         job = JobModel(
             optimization_id=optimization_id,
             status="pending",
@@ -186,9 +257,19 @@ class RemoteDBJobStore:
             session.close()
 
     def update_job(self, optimization_id: str, **kwargs: Any) -> None:
-        """Update fields on an existing job; raises KeyError if not found.
+        """Update fields on an existing job.
 
-        Datetime string values are automatically parsed; latest_metrics is merged instead of replaced.
+        Datetime string values are automatically parsed from ISO format;
+        ``latest_metrics`` is merged into the existing mapping rather
+        than replacing it.
+
+        Args:
+            optimization_id: ID of the job to update.
+            **kwargs: Column values to overwrite.
+
+        Raises:
+            KeyError: When the job does not exist.
+            ValueError: When ``kwargs`` contains a column name absent from ``JobModel``.
         """
         datetime_fields = {"created_at", "started_at", "completed_at"}
         session = self._get_session()
@@ -200,7 +281,7 @@ class RemoteDBJobStore:
                 if not hasattr(job, key):
                     raise ValueError(f"Unknown field '{key}' on JobModel")
                 if key in datetime_fields and isinstance(value, str):
-                    value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    value = datetime.fromisoformat(value)
                 if key == "latest_metrics" and job.latest_metrics:
                     merged = dict(job.latest_metrics)
                     merged.update(value)
@@ -211,8 +292,18 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def get_job(self, optimization_id: str) -> dict[str, Any]:
-        """Retrieve a job by its ID; raises KeyError if not found."""
+    def get_job(self, optimization_id: str) -> JobRecord:
+        """Retrieve a job by its ID.
+
+        Args:
+            optimization_id: ID of the job to fetch.
+
+        Returns:
+            The matching ``JobRecord``.
+
+        Raises:
+            KeyError: When the job does not exist.
+        """
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
@@ -223,7 +314,14 @@ class RemoteDBJobStore:
             session.close()
 
     def job_exists(self, optimization_id: str) -> bool:
-        """Return True if the job exists in the database."""
+        """Return ``True`` if the job exists in the database.
+
+        Args:
+            optimization_id: ID to check.
+
+        Returns:
+            Whether the row is present.
+        """
         session = self._get_session()
         try:
             return session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first() is not None
@@ -231,7 +329,13 @@ class RemoteDBJobStore:
             session.close()
 
     def delete_job(self, optimization_id: str) -> None:
-        """Delete a job and all its associated logs and progress events."""
+        """Delete a job and all its associated logs and progress events.
+
+        Missing IDs are a silent no-op.
+
+        Args:
+            optimization_id: ID of the job to remove.
+        """
         session = self._get_session()
         try:
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
@@ -249,11 +353,11 @@ class RemoteDBJobStore:
         regardless of how many IDs are supplied.
 
         Args:
-            optimization_ids: Identifiers to look up.
+            optimization_ids: IDs to look up.
 
         Returns:
-            Mapping from existing job IDs to their current status
-            string. Missing IDs are absent from the returned dict.
+            Mapping of present IDs to their status strings; missing IDs
+            are simply absent from the result.
         """
         if not optimization_ids:
             return {}
@@ -276,12 +380,10 @@ class RemoteDBJobStore:
         the round-trip cost is bounded regardless of batch size.
 
         Args:
-            optimization_ids: Identifiers to delete. Missing IDs are
-                tolerated — only rows that actually exist are
-                removed.
+            optimization_ids: IDs to remove. Duplicates and missing IDs are tolerated.
 
         Returns:
-            Number of job rows actually deleted.
+            The number of job rows actually deleted.
         """
         if not optimization_ids:
             return 0
@@ -304,49 +406,255 @@ class RemoteDBJobStore:
             session.close()
 
     def recover_orphaned_jobs(self) -> int:
-        """Mark running/validating jobs as failed after a service restart; returns count recovered."""
+        """Reclaim jobs whose worker lease has expired.
+
+        With the DB-backed claim queue, a "stuck" job is one whose
+        ``lease_expires_at`` is in the past — the previous worker is presumed
+        dead. Such jobs are transitioned to ``failed`` so the user isn't left
+        with a permanently "running" row, and a healthy peer pod is free to
+        accept new work in the freed slot.
+
+        Rows that have *no* claim at all (``claimed_by IS NULL`` while still
+        somehow in ``running``/``validating``) are also recovered, covering
+        the bootstrapping case of a fleet that just upgraded from the legacy
+        in-memory queue.
+
+        Returns:
+            The number of jobs transitioned to ``failed``.
+        """
         session = self._get_session()
         try:
-            now = datetime.now(timezone.utc)
-            orphaned = session.query(JobModel).filter(JobModel.status.in_(["running", "validating"])).all()
+            now = datetime.now(UTC)
+            orphaned = (
+                session.query(JobModel)
+                .filter(JobModel.status.in_(["running", "validating"]))
+                .filter(
+                    (JobModel.lease_expires_at.is_(None)) | (JobModel.lease_expires_at < now)
+                )
+                .all()
+            )
             for job in orphaned:
-                job.status = "failed"
-                job.message = "Job interrupted by service restart"
-                job.completed_at = now
+                job.status = "failed"  # type: ignore[assignment]
+                job.message = "Job interrupted by service restart"  # type: ignore[assignment]
+                job.completed_at = now  # type: ignore[assignment]
+                job.claimed_by = None  # type: ignore[assignment]
+                job.claimed_at = None  # type: ignore[assignment]
+                job.lease_expires_at = None  # type: ignore[assignment]
             session.commit()
             count = len(orphaned)
             if count:
-                logger.warning("Recovered %d orphaned jobs from previous crash", count)
+                logger.warning("Recovered %d orphaned jobs (expired lease)", count)
             return count
         finally:
             session.close()
 
+    def claim_next_job(
+        self,
+        worker_id: str,
+        lease_seconds: float,
+    ) -> JobRecord | None:
+        """Atomically claim the oldest pending job using FOR UPDATE SKIP LOCKED.
+
+        Two pods running this method concurrently are guaranteed to see
+        disjoint result sets — Postgres' ``SKIP LOCKED`` causes each session
+        to silently jump over rows the other has already row-locked. The
+        outer ``UPDATE`` then writes the lease metadata, completing the claim
+        in one round trip.
+
+        On non-PostgreSQL dialects (eg. SQLite in tests) the query falls back
+        to a non-locking SELECT-then-UPDATE; that is racy but tests run
+        single-threaded so it is sufficient.
+
+        Args:
+            worker_id: Identifier of the calling worker (typically pod name).
+            lease_seconds: Lease duration; the worker must call
+                :meth:`extend_lease` before it expires.
+
+        Returns:
+            The claimed ``JobRecord`` or ``None`` if no job was available.
+        """
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+
+        dialect = self._engine.dialect.name
+        if dialect == "postgresql":
+            return self._claim_next_job_postgres(worker_id, lease_seconds)
+        return self._claim_next_job_fallback(worker_id, lease_seconds)
+
+    def _claim_next_job_postgres(self, worker_id: str, lease_seconds: float) -> JobRecord | None:
+        """PostgreSQL fast path using ``FOR UPDATE SKIP LOCKED``."""
+        sql = text(
+            """
+            UPDATE jobs
+            SET status = 'validating',
+                claimed_by = :worker_id,
+                claimed_at = :now,
+                lease_expires_at = :lease_until
+            WHERE optimization_id = (
+                SELECT optimization_id FROM jobs
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING optimization_id
+            """
+        )
+        now = datetime.now(UTC)
+        lease_until = now + timedelta(seconds=lease_seconds)
+        with self._engine.begin() as conn:
+            result = conn.execute(
+                sql,
+                {"worker_id": worker_id, "now": now, "lease_until": lease_until},
+            )
+            row = result.fetchone()
+            if row is None:
+                return None
+            optimization_id = row[0]
+
+        # Re-load the full row through the ORM so the returned dict matches
+        # the shape of the rest of the API.
+        return self.get_job(optimization_id)
+
+    def _claim_next_job_fallback(self, worker_id: str, lease_seconds: float) -> JobRecord | None:
+        """Best-effort claim for non-Postgres backends (tests).
+
+        Holds an exclusive transaction so concurrent claims are serialized at
+        the engine level. Not race-safe across processes but adequate for
+        single-process test runs.
+        """
+        session = self._get_session()
+        try:
+            now = datetime.now(UTC)
+            lease_until = now + timedelta(seconds=lease_seconds)
+            job = (
+                session.query(JobModel)
+                .filter(JobModel.status == "pending")
+                .order_by(JobModel.created_at.asc())
+                .first()
+            )
+            if job is None:
+                return None
+            job.status = "validating"  # type: ignore[assignment]
+            job.claimed_by = worker_id  # type: ignore[assignment]
+            job.claimed_at = now  # type: ignore[assignment]
+            job.lease_expires_at = lease_until  # type: ignore[assignment]
+            session.commit()
+            session.refresh(job)
+            return self._job_to_dict(job)
+        finally:
+            session.close()
+
+    def extend_lease(
+        self,
+        optimization_id: str,
+        worker_id: str,
+        lease_seconds: float,
+    ) -> bool:
+        """Extend the lease iff this worker still owns the claim.
+
+        Args:
+            optimization_id: ID of the job whose lease to extend.
+            worker_id: Worker identity that originally claimed the job.
+            lease_seconds: New lease duration measured from now.
+
+        Returns:
+            ``True`` when the lease was extended; ``False`` when the row no
+            longer belongs to this worker (caller should abort processing).
+        """
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        sql = text(
+            """
+            UPDATE jobs
+            SET lease_expires_at = :lease_until
+            WHERE optimization_id = :oid
+              AND claimed_by = :worker_id
+            """
+        )
+        lease_until = datetime.now(UTC) + timedelta(seconds=lease_seconds)
+        with self._engine.begin() as conn:
+            result = conn.execute(
+                sql,
+                {"oid": optimization_id, "worker_id": worker_id, "lease_until": lease_until},
+            )
+            return (result.rowcount or 0) > 0
+
+    def release_job(self, optimization_id: str, worker_id: str) -> bool:
+        """Clear claim metadata for a job, only if this worker owns it.
+
+        Args:
+            optimization_id: ID of the job to release.
+            worker_id: Worker identity that claimed it.
+
+        Returns:
+            Whether claim metadata was actually cleared.
+        """
+        sql = text(
+            """
+            UPDATE jobs
+            SET claimed_by = NULL,
+                claimed_at = NULL,
+                lease_expires_at = NULL
+            WHERE optimization_id = :oid
+              AND claimed_by = :worker_id
+            """
+        )
+        with self._engine.begin() as conn:
+            result = conn.execute(sql, {"oid": optimization_id, "worker_id": worker_id})
+            return (result.rowcount or 0) > 0
+
     def recover_pending_jobs(self) -> list[str]:
-        """Return IDs of still-pending jobs ordered by creation time."""
+        """Return IDs of still-pending jobs ordered oldest first.
+
+        Returns:
+            Pending job IDs in FIFO order so the scheduler can
+            re-enqueue them on boot.
+        """
         session = self._get_session()
         try:
             jobs = (
                 session.query(JobModel).filter(JobModel.status == "pending").order_by(JobModel.created_at.asc()).all()
             )
-            return [j.optimization_id for j in jobs]
+            return [str(j.optimization_id) for j in jobs]
         finally:
             session.close()
 
     def set_payload_overview(self, optimization_id: str, overview: dict[str, Any]) -> None:
-        """Store a summary overview of the job payload."""
+        """Store a summary overview of the job payload.
+
+        The ``username`` field, if present in ``overview``, is hoisted
+        to the job row so list queries don't need to parse JSON.
+        Missing IDs are a silent no-op.
+
+        Args:
+            optimization_id: ID of the job to update.
+            overview: Summary fields to persist.
+        """
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
             if job:
-                job.payload_overview = overview or {}
-                job.username = (overview or {}).get("username")
+                job.payload_overview = overview or {}  # type: ignore[assignment]
+                job.username = (overview or {}).get("username")  # type: ignore[assignment]
                 session.commit()
         finally:
             session.close()
 
     def record_progress(self, optimization_id: str, message: str | None, metrics: dict[str, Any]) -> None:
-        """Record a progress event and merge metrics into the job's latest_metrics."""
-        now = datetime.now(timezone.utc)
+        """Record a progress event and merge metrics into the job's ``latest_metrics``.
+
+        When the per-job event count hits ``MAX_PROGRESS_EVENTS``,
+        evicts the oldest non-structural event first so UI phase
+        markers (baseline, pair-started, etc.) survive the cap on
+        long runs. Silent no-op if the job has been deleted.
+
+        Args:
+            optimization_id: ID of the job emitting the event.
+            message: Human-readable event marker, or ``None``.
+            metrics: Metric snapshot to merge into ``latest_metrics``.
+        """
+        now = datetime.now(UTC)
         session = self._get_session()
         try:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
@@ -386,14 +694,21 @@ class RemoteDBJobStore:
             if metrics:
                 merged = dict(job.latest_metrics or {})
                 merged.update(metrics)
-                job.latest_metrics = merged
+                job.latest_metrics = merged  # type: ignore[assignment]
 
             session.commit()
         finally:
             session.close()
 
-    def get_progress_events(self, optimization_id: str) -> list[dict[str, Any]]:
-        """Retrieve all progress events for a job in chronological order."""
+    def get_progress_events(self, optimization_id: str) -> list[ProgressEventRecord]:
+        """Retrieve all progress events for a job in chronological order.
+
+        Args:
+            optimization_id: ID of the job to inspect.
+
+        Returns:
+            Events ordered oldest-first.
+        """
         session = self._get_session()
         try:
             events = (
@@ -403,18 +718,28 @@ class RemoteDBJobStore:
                 .all()
             )
             return [
-                {
-                    "timestamp": e.timestamp.isoformat() if e.timestamp else None,
-                    "event": e.event,
-                    "metrics": e.metrics or {},
-                }
+                cast(
+                    ProgressEventRecord,
+                    {
+                        "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+                        "event": e.event,
+                        "metrics": e.metrics or {},
+                    },
+                )
                 for e in events
             ]
         finally:
             session.close()
 
     def get_progress_count(self, optimization_id: str) -> int:
-        """Return the number of progress events recorded for a job."""
+        """Return the number of progress events recorded for a job.
+
+        Args:
+            optimization_id: ID of the job to inspect.
+
+        Returns:
+            Number of stored events.
+        """
         session = self._get_session()
         try:
             return (
@@ -433,8 +758,22 @@ class RemoteDBJobStore:
         timestamp: datetime | None = None,
         pair_index: int | None = None,
     ) -> None:
-        """Append a log entry; silently discards if job is gone; evicts oldest when at cap."""
-        ts = timestamp or datetime.now(timezone.utc)
+        """Append a log entry for a job.
+
+        Silently discards the entry if the job no longer exists (a
+        late log from a cleaned-up run is not an error). When the
+        per-job log count reaches ``MAX_LOG_ENTRIES``, the oldest
+        entry is evicted before the new one is inserted.
+
+        Args:
+            optimization_id: ID of the job emitting the log.
+            level: Log level string (``INFO``, ``ERROR``, ...).
+            logger_name: Originating logger name.
+            message: Log line content.
+            timestamp: Optional override for the entry timestamp; defaults to ``now``.
+            pair_index: Optional grid-pair index when emitted from a sweep.
+        """
+        ts = timestamp or datetime.now(UTC)
         session = self._get_session()
         try:
             exists = (
@@ -476,8 +815,18 @@ class RemoteDBJobStore:
         limit: int | None = None,
         offset: int = 0,
         level: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Retrieve log entries for a job, ordered ascending, with optional level filter and pagination."""
+    ) -> list[LogEntryRecord]:
+        """Retrieve log entries for a job, ordered ascending.
+
+        Args:
+            optimization_id: ID of the job to inspect.
+            limit: Maximum number of entries to return; ``None`` means no cap.
+            offset: Number of entries to skip.
+            level: When set, restricts results to the given level.
+
+        Returns:
+            Matching log entries in chronological order.
+        """
         session = self._get_session()
         try:
             q = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id)
@@ -490,20 +839,31 @@ class RemoteDBJobStore:
                 q = q.limit(limit)
             logs = q.all()
             return [
-                {
-                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
-                    "level": log.level,
-                    "logger": log.logger,
-                    "message": log.message,
-                    "pair_index": log.pair_index,
-                }
+                cast(
+                    LogEntryRecord,
+                    {
+                        "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                        "level": log.level,
+                        "logger": log.logger,
+                        "message": log.message,
+                        "pair_index": log.pair_index,
+                    },
+                )
                 for log in logs
             ]
         finally:
             session.close()
 
     def get_log_count(self, optimization_id: str, *, level: str | None = None) -> int:
-        """Return the number of log entries for a job, optionally filtered by level."""
+        """Return the number of log entries for a job, optionally filtered by level.
+
+        Args:
+            optimization_id: ID of the job to inspect.
+            level: When set, counts only entries at this level.
+
+        Returns:
+            Number of matching log entries.
+        """
         session = self._get_session()
         try:
             q = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id)
@@ -521,8 +881,24 @@ class RemoteDBJobStore:
         optimization_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict[str, Any]]:
-        """List jobs with optional filtering and pagination, ordered by creation time descending."""
+    ) -> list[JobRecord]:
+        """List jobs with optional filtering and pagination, newest first.
+
+        Progress and log counts are folded in via two aggregate
+        queries so each returned row includes ``progress_count`` and
+        ``log_count`` without N extra round trips.
+
+        Args:
+            status: Restrict to jobs with this status when set.
+            username: Restrict to jobs owned by this user when set.
+            optimization_type: Restrict to a particular run type when set.
+            limit: Maximum number of rows to return.
+            offset: Number of rows to skip from the start.
+
+        Returns:
+            Matching ``JobRecord`` rows in newest-first order with
+            ``progress_count`` and ``log_count`` populated.
+        """
         session = self._get_session()
         try:
             q = session.query(JobModel).order_by(JobModel.created_at.desc())
@@ -535,32 +911,35 @@ class RemoteDBJobStore:
             jobs = q.offset(offset).limit(limit).all()
             optimization_ids = [j.optimization_id for j in jobs]
 
-            progress_counts = (
-                dict(
-                    session.query(ProgressEventModel.optimization_id, func.count())
+            progress_counts: dict[str, int] = (
+                {
+                    row[0]: row[1]
+                    for row in session.query(ProgressEventModel.optimization_id, func.count())
                     .filter(ProgressEventModel.optimization_id.in_(optimization_ids))
                     .group_by(ProgressEventModel.optimization_id)
                     .all()
-                )
+                }
                 if optimization_ids
                 else {}
             )
-            log_counts = (
-                dict(
-                    session.query(LogEntryModel.optimization_id, func.count())
+            log_counts: dict[str, int] = (
+                {
+                    row[0]: row[1]
+                    for row in session.query(LogEntryModel.optimization_id, func.count())
                     .filter(LogEntryModel.optimization_id.in_(optimization_ids))
                     .group_by(LogEntryModel.optimization_id)
                     .all()
-                )
+                }
                 if optimization_ids
                 else {}
             )
 
-            result = []
+            result: list[JobRecord] = []
             for j in jobs:
                 d = self._job_to_dict(j)
-                d["progress_count"] = progress_counts.get(j.optimization_id, 0)
-                d["log_count"] = log_counts.get(j.optimization_id, 0)
+                oid = str(j.optimization_id)
+                d["progress_count"] = progress_counts.get(oid, 0)
+                d["log_count"] = log_counts.get(oid, 0)
                 result.append(d)
             return result
         finally:
@@ -569,7 +948,16 @@ class RemoteDBJobStore:
     def count_jobs(
         self, *, status: str | None = None, username: str | None = None, optimization_type: str | None = None
     ) -> int:
-        """Count jobs matching the given filters."""
+        """Count jobs matching the given filters.
+
+        Args:
+            status: Restrict count to this status when set.
+            username: Restrict count to this owner when set.
+            optimization_type: Restrict count to this run type when set.
+
+        Returns:
+            Number of matching rows.
+        """
         session = self._get_session()
         try:
             q = session.query(func.count(JobModel.optimization_id))

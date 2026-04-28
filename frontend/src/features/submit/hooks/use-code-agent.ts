@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { toast } from "react-toastify";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { streamCodeAgent } from "@/shared/lib/api";
 import { TERMS } from "@/shared/lib/terms";
-import type { ParsedDataset } from "@/features/submit/lib/parse-dataset";
+import type { ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidateCodeResponse } from "@/shared/types/api";
 
 export type AgentStatus = "idle" | "streaming" | "done" | "error";
@@ -58,7 +59,9 @@ const MAX_AUTO_FIX = 2;
 // the conversation a natural starting point — the AI's first message reads
 // as a response to a real request, not a monologue — and lets the user
 // revise it via the edit pencil to steer the initial generation.
-const SEED_USER_MESSAGE = `תסתכל ב${TERMS.dataset} שלי ותכתוב Signature ו-Metric שיתאימו לו.`;
+const SEED_USER_MESSAGE = formatMsg("auto.features.submit.hooks.use.code.agent.template.1", {
+  p1: TERMS.dataset,
+});
 
 export interface AgentMessage {
   role: "assistant" | "user";
@@ -105,6 +108,7 @@ export interface UseCodeAgentArgs {
   codeAssistMode: "auto" | "manual";
   setCodeAssistMode: (m: "auto" | "manual") => void;
   columnRoles: Record<string, "input" | "output" | "ignore">;
+  columnKinds: Record<string, "text" | "image">;
   parsedDataset: ParsedDataset | null;
   moduleName: string;
   signatureCode: string;
@@ -128,6 +132,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
     codeAssistMode,
     setCodeAssistMode,
     columnRoles,
+    columnKinds,
     parsedDataset,
     moduleName,
     signatureCode,
@@ -216,7 +221,6 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
     return hasInput && hasOutput;
   }, [parsedDataset, columnRoles]);
 
-  /* ── helpers that mutate the last assistant message ───────────────── */
   const appendReply = React.useCallback((chunk: string) => {
     setMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -282,7 +286,6 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
     [],
   );
 
-  /* ── main stream runner ──────────────────────────────────────────── */
   const runAgent = React.useCallback(
     (userMessage: string, history: AgentMessage[]) => {
       if (!parsedDataset || !hasRequiredContext) return;
@@ -300,7 +303,13 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
       const isChat = userMessage.length > 0;
       setMode(isChat ? "chat" : "seed");
       setStatus("streaming");
-      setStatusLabel(isChat ? "חושב…" : `הסוכן קורא את ה${TERMS.dataset}…`);
+      setStatusLabel(
+        isChat
+          ? msg("auto.features.submit.hooks.use.code.agent.literal.1")
+          : formatMsg("auto.features.submit.hooks.use.code.agent.template.2", {
+              p1: TERMS.dataset,
+            }),
+      );
       setSignatureStatus(isChat ? "idle" : "waiting");
       setMetricStatus(isChat ? "idle" : "waiting");
       setReasoning("");
@@ -322,7 +331,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
         ]);
       }
 
-      const sampleRows = parsedDataset.rows.slice(0, 5) as Record<string, unknown>[];
+      const sampleRows = parsedDataset.rows.slice(0, 5) as Array<Record<string, unknown>>;
       const snapshot = snapshotRef.current;
       const { signatureVersions: sigVers, metricVersions: metVers } = versionsRef.current;
       const initialSignature = sigVers[0]?.code ?? snapshot.signatureCode;
@@ -331,10 +340,19 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
         .filter((m) => m.content.trim().length > 0)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      streamCodeAgent(
+      // Send only image-typed entries — the backend defaults the rest to
+      // text. Keeps the payload lean and makes the wire shape symmetric
+      // with the wizard's mental model: text is the default.
+      const imageColumnKinds: Record<string, "image"> = {};
+      for (const [col, kind] of Object.entries(columnKinds)) {
+        if (kind === "image") imageColumnKinds[col] = "image";
+      }
+
+      void streamCodeAgent(
         {
           dataset_columns: parsedDataset.columns,
           column_roles: columnRoles,
+          column_kinds: imageColumnKinds,
           sample_rows: sampleRows,
           user_message: userMessage,
           chat_history: chatHistory,
@@ -356,7 +374,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
           },
           onSignaturePatch: (chunk) => {
             if (sigBufRef.current === "") {
-              setStatusLabel("כותב Signature…");
+              setStatusLabel(msg("auto.features.submit.hooks.use.code.agent.literal.2"));
               setSignatureStatus("writing");
             }
             sigBufRef.current += chunk;
@@ -365,7 +383,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
           },
           onMetricPatch: (chunk) => {
             if (metricBufRef.current === "") {
-              setStatusLabel("כותב Metric…");
+              setStatusLabel(msg("auto.features.submit.hooks.use.code.agent.literal.3"));
               setSignatureStatus("done");
               setMetricStatus("writing");
             }
@@ -375,14 +393,18 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
           },
           onMessagePatch: (chunk) => {
             if (replyBufRef.current === "") {
-              setStatusLabel("כותב תשובה…");
+              setStatusLabel(msg("auto.features.submit.hooks.use.code.agent.literal.4"));
               if (reasoningBufRef.current) setReasoningEndedAt(Date.now());
             }
             replyBufRef.current += chunk;
             appendReply(chunk);
           },
           onToolStart: (ev) => {
-            setStatusLabel(ev.tool === "edit_signature" ? "עורך Signature…" : "עורך Metric…");
+            setStatusLabel(
+              ev.tool === "edit_signature"
+                ? msg("auto.features.submit.hooks.use.code.agent.literal.5")
+                : msg("auto.features.submit.hooks.use.code.agent.literal.6"),
+            );
             if (ev.tool === "edit_signature") setSignatureStatus("writing");
             else setMetricStatus("writing");
             pushToolCall({
@@ -478,7 +500,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
             setSignatureStatus("done");
             setMetricStatus("done");
             setStatus("done");
-            setStatusLabel("סיים");
+            setStatusLabel(msg("auto.features.submit.hooks.use.code.agent.literal.7"));
             if (reasoningBufRef.current) setReasoningEndedAt(Date.now());
 
             setMessages((prev) => {
@@ -530,7 +552,9 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
             if (controller.signal.aborted) return;
             if (autoFixAttemptsRef.current >= MAX_AUTO_FIX) return;
             autoFixAttemptsRef.current += 1;
-            const fixMessage = `האימות מצא שגיאות בקוד שנכתב. תקן את ה-Signature ואת ה-Metric כדי שיעברו אימות, תוך שמירה שהשדות ממופים לעמודות של ה${TERMS.dataset}.`;
+            const fixMessage = formatMsg("auto.features.submit.hooks.use.code.agent.template.3", {
+              p1: TERMS.dataset,
+            });
             setTimeout(() => {
               runAgentRef.current?.(fixMessage, messagesRef.current);
             }, 0);
@@ -538,11 +562,11 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
           onError: (message) => {
             if (controller.signal.aborted) return;
             setStatus("error");
-            setStatusLabel("שגיאה");
+            setStatusLabel(msg("auto.features.submit.hooks.use.code.agent.literal.8"));
             setSignatureStatus("idle");
             setMetricStatus("idle");
             setError(message);
-            // Drop the empty placeholder assistant bubble so the error UI
+            // Drop the empty placeholder agent bubble so the error UI
             // isn't followed by a blank message.
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -559,6 +583,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
       parsedDataset,
       hasRequiredContext,
       columnRoles,
+      columnKinds,
       setSignatureCode,
       setMetricCode,
       setSignatureValidation,
@@ -632,7 +657,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
     abortRef.current?.abort();
     abortRef.current = null;
     setCodeAssistMode("manual");
-    toast.info("עברת למצב ידני. אפשר לחזור למצב אוטומטי מהכפתור למעלה.");
+    toast.info(msg("auto.features.submit.hooks.use.code.agent.literal.9"));
   }, [setCodeAssistMode]);
 
   const stop = React.useCallback(() => {

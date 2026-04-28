@@ -1,9 +1,3 @@
-# TODO: On-premise - Configure pip to use local artifactory by creating pip.conf or using --index-url
-# Example pip.conf:
-#   [global]
-#   index-url = https://artifactory.your-company.com/api/pypi/pypi-remote/simple
-#   trusted-host = artifactory.your-company.com
-
 [build-system]
 requires = ["setuptools>=80.9.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -24,7 +18,7 @@ version = "0.1.0"
 description = "Skynet - FastAPI service wrapper for DSPy optimization workflows"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.23",
@@ -33,6 +27,7 @@ dependencies = [
     "dspy~=3.0",
     "litellm>=1.40",
     "sqlalchemy>=2.0",
+    "alembic>=1.13",
     "psycopg2-binary>=2.9",
     "pgvector>=0.3",
     "pandas>=2.1",
@@ -42,6 +37,8 @@ dependencies = [
     "scalar-fastapi>=1.8",
     "scipy>=1.15.3",
     "fastmcp>=3.0",
+    "prometheus-fastapi-instrumentator>=7.0",
+    "python-json-logger>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -60,22 +57,81 @@ recommendations = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 extend-exclude = ["usage_guide"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["E501"]
+# Lean modern set: PEP 8 errors/style + naming + import order + pyupgrade,
+# bugbear, simplify, ruff-specific, comprehensions, return, args, tidy
+# imports, try/except hygiene, performance, pytest, pathlib, misc cleanups,
+# async correctness, exception messages, import conventions, logging
+# format, implicit-str-concat, pylint errors+warnings, refurb.
+select = [
+    "E", "F", "I", "UP", "B", "SIM", "RUF",
+    "N", "C4", "RET", "ARG", "TID", "TRY", "PERF",
+    "PT", "PTH", "PIE", "ASYNC", "EM", "ICN", "G",
+    "ISC", "PLE", "PLW", "FURB",
+]
+ignore = [
+    "E501",     # line length — handled by ruff format
+    "TRY003",   # long messages outside exception class — too noisy with our DomainError pattern
+    "TRY300",   # 'try-consider-else' — over-eager, hurts readability
+    "EM101",    # raw string in exception — fine for short literal messages
+    "EM102",    # f-string in exception — fine for short interpolations
+    "G004",     # f-string in logging — we accept the perf cost for legibility
+    "PERF203",  # try/except in loops — sometimes the right thing
+    "PLW2901",  # loop variable overwritten by assignment — common idiom
+    "PLW0603",  # global statement — module-level singletons (caches, embedder, fork service) are intentional
+    "ARG001",   # unused function arg — too noisy on FastAPI dependency-injection sigs
+    "ARG002",   # unused method arg — too noisy on protocol implementations
+    "ARG003",   # unused class-method arg — too noisy on classmethod factories
+    "ARG004",   # unused static-method arg
+    "ARG005",   # unused lambda arg
+    "RET504",   # unnecessary assignment before return — clarity wins
+    "TRY301",   # raise within try — sometimes intentional
+    "RUF001",   # ambiguous unicode in string — em-dash and × are intentional typography
+    "RUF002",   # ambiguous unicode in docstring — em-dash and × are intentional typography
+    "RUF003",   # ambiguous unicode in comment — em-dash and × are intentional typography
+    "RUF012",   # mutable class default — Pydantic Field handles this; tests overrideable
+    "PT011",    # pytest.raises too broad — sometimes that's the point
+    "ISC001",   # conflicts with ruff format
+    "TID252",   # parent-relative imports — the subpackage layout is built on these
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["core"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["RUF012"]
-"core/**/tests/*" = ["RUF012"]
-"core/notifications/*" = ["RUF001"]
-"core/dataset/*" = ["RUF001"]
+# Tests intentionally violate some rules for clarity:
+#   RUF012  mutable defaults in test fixtures
+#   PLR2004 magic-number comparisons (asserting on literal values)
+#   N802    function names like ``test_X_does_Y``
+#   ARG     fixtures often accept and ignore parameters
+#   PT012   multiple statements in raises block
+#   S101    assert usage
+#   TID252  relative imports inside tests
+"tests/*" = ["RUF012", "ARG", "S101", "PLR2004", "PT012", "TID252"]
+"core/**/tests/*" = ["RUF012", "ARG", "S101", "PLR2004", "PT012", "TID252"]
+
+[tool.ruff.lint.pep8-naming]
+# Pydantic and SQLAlchemy validators / mixins use PascalCase classmethods
+# (validator, field_validator, validates) — don't flag.
+# ``model_validator`` is mode-dependent (``mode="before"`` is classmethod,
+# ``mode="after"`` is instance method); we use ``mode="after"`` exclusively,
+# so it stays out of this list and N804 keeps catching real misuse.
+classmethod-decorators = [
+    "classmethod",
+    "pydantic.validator",
+    "pydantic.field_validator",
+    "sqlalchemy.orm.validates",
+]
+
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+exclude = ["usage_guide/", ".venv/"]
 
 [tool.pytest.ini_options]
 # Unit tests live next to the code they cover under ``core/<subpkg>/tests/``

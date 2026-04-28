@@ -5,8 +5,6 @@
 
 import type { Bone, ResponsiveBones } from "boneyard-js";
 
-/* ── Helpers ── */
-
 function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {
   return container ? { x, y, w, h, r, c: true } : { x, y, w, h, r };
 }
@@ -31,7 +29,6 @@ function tableRowBones(y: number, w: number): Bone[] {
   ];
 }
 
-/* ── Desktop (1280+) ── */
 const dW = 1100;
 const dCard = (dW - 48) / 4;
 
@@ -54,7 +51,6 @@ const desktopBones: Bone[] = [
   ...tableRowBones(548, dW),
 ];
 
-/* ── Mobile (375) ── */
 const mW = 343;
 const mCard = (mW - 16) / 2;
 
@@ -78,7 +74,6 @@ const mobileBones: Bone[] = [
   bone(86, 508, 120, 14, 4),
 ];
 
-/* ── Tablet (768) ── */
 const tW = 720;
 const tCard = (tW - 48) / 4;
 

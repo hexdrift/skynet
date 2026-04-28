@@ -1,14 +1,16 @@
+"""Tests for ServeRequest, ServeResponse, and ServeInfoResponse models."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from core.models.serve import ServeRequest, ServeInfoResponse, ServeResponse
-
+from core.models.common import ModelConfig
+from core.models.serve import ServeInfoResponse, ServeRequest, ServeResponse
 
 
 def test_serve_request_accepts_non_empty_inputs() -> None:
-    """Verify ServeRequest accepts a non-empty inputs dict."""
+    """Verify ServeRequest accepts a non-empty inputs dict and defaults override to None."""
     req = ServeRequest(inputs={"question": "What is 2+2?"})
 
     assert req.inputs == {"question": "What is 2+2?"}
@@ -16,16 +18,16 @@ def test_serve_request_accepts_non_empty_inputs() -> None:
 
 
 def test_serve_request_rejects_empty_inputs() -> None:
-    """Verify ServeRequest rejects an empty inputs dict."""
+    """Verify ServeRequest validation rejects an empty inputs dict."""
     with pytest.raises(ValidationError, match="At least one input"):
         ServeRequest(inputs={})
 
 
 def test_serve_request_accepts_model_config_override() -> None:
-    """Verify ServeRequest stores a model_config_override when provided."""
+    """Verify ServeRequest accepts and exposes a ModelConfig override."""
     req = ServeRequest(
         inputs={"q": "hi"},
-        model_config_override={"name": "gpt-4o"},
+        model_config_override=ModelConfig(name="gpt-4o"),
     )
 
     assert req.model_config_override is not None
@@ -33,22 +35,21 @@ def test_serve_request_accepts_model_config_override() -> None:
 
 
 def test_serve_request_model_config_override_defaults_none() -> None:
-    """Verify ServeRequest defaults model_config_override to None."""
+    """Verify ServeRequest leaves model_config_override unset by default."""
     req = ServeRequest(inputs={"q": "hi"})
 
     assert req.model_config_override is None
 
 
 def test_serve_request_multiple_inputs_accepted() -> None:
-    """Verify ServeRequest accepts multiple input fields."""
+    """Verify ServeRequest accepts a multi-field inputs dict."""
     req = ServeRequest(inputs={"q": "hi", "context": "some text"})
 
     assert len(req.inputs) == 2
 
 
-
 def test_serve_response_stores_all_fields() -> None:
-    """Verify ServeResponse stores all required fields."""
+    """Verify ServeResponse round-trips all fields through construction."""
     resp = ServeResponse(
         optimization_id="abc123",
         outputs={"answer": "4"},
@@ -60,7 +61,6 @@ def test_serve_response_stores_all_fields() -> None:
     assert resp.optimization_id == "abc123"
     assert resp.outputs == {"answer": "4"}
     assert resp.model_used == "gpt-4o-mini"
-
 
 
 def test_serve_info_response_demo_count_defaults_zero() -> None:

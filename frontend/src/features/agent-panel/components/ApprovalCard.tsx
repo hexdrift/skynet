@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
+import { msg } from "@/shared/lib/messages";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import { cn } from "@/shared/lib/utils";
 
 import { EntryRow } from "../lib/entry-row";
@@ -138,17 +139,14 @@ export function ApprovalCard({ payload, onResolve, className }: ApprovalCardProp
               className={cn("size-3 transition-transform", showDetails && "rotate-180")}
               aria-hidden="true"
             />
-            {showDetails ? "הסתר פרטים טכניים" : "הצג פרטים טכניים"}
+            {showDetails
+              ? msg("auto.features.agent.panel.components.approvalcard.literal.1")
+              : msg("auto.features.agent.panel.components.approvalcard.literal.2")}
           </button>
           {showDetails && (
             <dl className="mt-2 space-y-2 text-[0.75rem]">
               {entries.map(([key, value]) => (
-                <EntryRow
-                  key={key}
-                  argKey={key}
-                  value={value}
-                  labelClassName={styles.descText}
-                />
+                <EntryRow key={key} argKey={key} value={value} labelClassName={styles.descText} />
               ))}
             </dl>
           )}
@@ -168,7 +166,11 @@ export function ApprovalCard({ payload, onResolve, className }: ApprovalCardProp
           disabled={busy !== null}
           className="flex-1 justify-center"
         >
-          {busy === "deny" ? <Loader2 className="size-4 animate-spin" /> : "ביטול"}
+          {busy === "deny" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            msg("auto.features.agent.panel.components.approvalcard.literal.3")
+          )}
         </Button>
         <Button
           variant={styles.confirmVariant}

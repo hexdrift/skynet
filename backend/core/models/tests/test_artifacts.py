@@ -1,14 +1,14 @@
+"""Tests for ProgramArtifact, OptimizedPredictor, and OptimizedDemo models."""
+
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
 from core.models.artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact
 
 
-
 def test_optimized_demo_defaults_empty_dicts() -> None:
-    """Verify OptimizedDemo initializes inputs and outputs to empty dicts."""
+    """Verify OptimizedDemo defaults inputs and outputs to empty dicts."""
     d = OptimizedDemo()
 
     assert d.inputs == {}
@@ -16,16 +16,15 @@ def test_optimized_demo_defaults_empty_dicts() -> None:
 
 
 def test_optimized_demo_stores_values() -> None:
-    """Verify OptimizedDemo stores provided input/output values."""
+    """Verify OptimizedDemo round-trips inputs and outputs through construction."""
     d = OptimizedDemo(inputs={"q": "What is 2+2?"}, outputs={"a": "4"})
 
     assert d.inputs == {"q": "What is 2+2?"}
     assert d.outputs == {"a": "4"}
 
 
-
 def test_optimized_predictor_required_fields() -> None:
-    """Verify OptimizedPredictor accepts the minimal required fields."""
+    """Verify OptimizedPredictor requires predictor_name and instructions."""
     p = OptimizedPredictor(predictor_name="pred0", instructions="Do X.")
 
     assert p.predictor_name == "pred0"
@@ -33,7 +32,7 @@ def test_optimized_predictor_required_fields() -> None:
 
 
 def test_optimized_predictor_defaults() -> None:
-    """Verify OptimizedPredictor optional fields default to None/empty."""
+    """Verify OptimizedPredictor optional fields default to expected empties."""
     p = OptimizedPredictor(predictor_name="pred0", instructions="Do X.")
 
     assert p.signature_name is None
@@ -44,7 +43,7 @@ def test_optimized_predictor_defaults() -> None:
 
 
 def test_optimized_predictor_accepts_demos() -> None:
-    """Verify OptimizedPredictor stores a list of OptimizedDemo objects."""
+    """Verify OptimizedPredictor stores nested OptimizedDemo entries."""
     p = OptimizedPredictor(
         predictor_name="pred0",
         instructions="Do X.",
@@ -56,7 +55,7 @@ def test_optimized_predictor_accepts_demos() -> None:
 
 
 def test_optimized_predictor_with_full_fields() -> None:
-    """Verify OptimizedPredictor stores all optional fields when provided."""
+    """Verify OptimizedPredictor populates every field when provided."""
     p = OptimizedPredictor(
         predictor_name="pred0",
         instructions="Do X.",
@@ -72,9 +71,8 @@ def test_optimized_predictor_with_full_fields() -> None:
     assert "question" in p.formatted_prompt
 
 
-
 def test_program_artifact_all_defaults_none() -> None:
-    """Verify ProgramArtifact defaults all optional fields to None."""
+    """Verify ProgramArtifact defaults every field to None."""
     art = ProgramArtifact()
 
     assert art.path is None
@@ -98,18 +96,19 @@ def test_program_artifact_with_nested_predictor() -> None:
 
 
 def test_program_artifact_with_metadata() -> None:
-    """Verify ProgramArtifact stores path and metadata dict."""
+    """Verify ProgramArtifact persists path and arbitrary metadata fields."""
     art = ProgramArtifact(
         path="/opt/artifacts/job123",
         metadata={"score": 0.95, "num_demos": 3},
     )
 
     assert art.path == "/opt/artifacts/job123"
+    assert art.metadata is not None
     assert art.metadata["score"] == pytest.approx(0.95)
 
 
 def test_program_artifact_with_pickle() -> None:
-    """Verify ProgramArtifact stores a base64-encoded pickle string."""
+    """Verify ProgramArtifact stores a base64-encoded program pickle."""
     art = ProgramArtifact(program_pickle_base64="abc123==")
 
     assert art.program_pickle_base64 == "abc123=="

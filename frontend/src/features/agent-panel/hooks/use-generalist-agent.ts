@@ -1,13 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 import type { AgentMessage, AgentStatus, AgentToolCall } from "@/shared/ui/agent/types";
 
-import {
-  confirmGeneralistApproval,
-  streamGeneralistAgent,
-} from "../lib/stream";
+import { confirmGeneralistApproval, streamGeneralistAgent } from "../lib/stream";
 import type {
   ChatTurn,
   PendingApprovalPayload,
@@ -81,8 +79,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
   const [reasoningStartedAt, setReasoningStartedAt] = React.useState<number | null>(null);
   const [reasoningEndedAt, setReasoningEndedAt] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [pendingApproval, setPendingApproval] =
-    React.useState<PendingApprovalPayload | null>(null);
+  const [pendingApproval, setPendingApproval] = React.useState<PendingApprovalPayload | null>(null);
 
   const abortRef = React.useRef<AbortController | null>(null);
   const reasoningBufRef = React.useRef("");
@@ -157,7 +154,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
       replyBufRef.current = "";
 
       setStatus("streaming");
-      setStatusLabel("חושב…");
+      setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.1"));
       setReasoning("");
       setReasoningStartedAt(Date.now());
       setReasoningEndedAt(null);
@@ -175,7 +172,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
         .map((m) => ({ role: m.role, content: m.content }));
       const { wizardState: ws, trustMode: tm } = snapshotRef.current;
 
-      streamGeneralistAgent(
+      void streamGeneralistAgent(
         {
           user_message: userMessage,
           chat_history: chatHistory,
@@ -195,7 +192,11 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             if (label) setStatusLabel(label);
           },
           onToolStart: (ev) => {
-            setStatusLabel(`מפעיל ${ev.tool}…`);
+            setStatusLabel(
+              formatMsg("auto.features.agent.panel.hooks.use.generalist.agent.template.1", {
+                p1: ev.tool,
+              }),
+            );
             pushToolCall({
               id: ev.id,
               tool: ev.tool,
@@ -226,15 +227,15 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
           },
           onPendingApproval: (ev) => {
             setPendingApproval(ev);
-            setStatusLabel("ממתין לאישור…");
+            setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.2"));
           },
           onApprovalResolved: () => {
             setPendingApproval(null);
-            setStatusLabel("ממשיך…");
+            setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.3"));
           },
           onMessagePatch: (chunk) => {
             if (replyBufRef.current === "") {
-              setStatusLabel("כותב תשובה…");
+              setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.4"));
               if (reasoningBufRef.current) setReasoningEndedAt(Date.now());
             }
             replyBufRef.current += chunk;
@@ -247,7 +248,11 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             setMessages((prev) => {
               const last = prev[prev.length - 1];
               if (!last || last.role !== "assistant") return prev;
-              const fallback = last.content || (last.toolCalls?.length ? "" : "סיימתי.");
+              const fallback =
+                last.content ||
+                (last.toolCalls?.length
+                  ? ""
+                  : msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.5"));
               const next = prev.slice();
               next[next.length - 1] = {
                 ...last,
@@ -259,16 +264,11 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
           onError: (message) => {
             if (controller.signal.aborted) return;
             setStatus("error");
-            setStatusLabel("שגיאה");
+            setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.6"));
             setError(message);
             setMessages((prev) => {
               const last = prev[prev.length - 1];
-              if (
-                last &&
-                last.role === "assistant" &&
-                !last.content &&
-                !last.toolCalls?.length
-              ) {
+              if (last && last.role === "assistant" && !last.content && !last.toolCalls?.length) {
                 return prev.slice(0, -1);
               }
               return prev;

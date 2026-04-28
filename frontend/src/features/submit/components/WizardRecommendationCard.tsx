@@ -4,11 +4,12 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Info, Sparkles, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Button } from "@/shared/ui/primitives/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
 import { fetchSimilarJobs, type SimilarJob } from "@/shared/lib/api";
 import { cn } from "@/shared/lib/utils";
+import { useUserPrefs } from "@/features/settings";
 
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";
 
@@ -52,7 +53,7 @@ function coldDefaultFor(kind: string): ColdDefault {
 function buildDatasetSchema(
   columnRoles: Record<string, "input" | "output" | "ignore">,
   sampleRow: Record<string, unknown> | null,
-): { columns: { name: string; role: "input" | "output" | "ignore"; dtype: string }[] } | null {
+): { columns: Array<{ name: string; role: "input" | "output" | "ignore"; dtype: string }> } | null {
   if (!Object.keys(columnRoles).length) return null;
   return {
     columns: Object.entries(columnRoles).map(([name, role]) => ({
@@ -92,6 +93,12 @@ function useDismissed(): [boolean, () => void, () => void] {
 }
 
 export function WizardRecommendationCard({ w }: { w: SubmitWizardContext }) {
+  const { prefs } = useUserPrefs();
+  if (!prefs.advancedMode) return null;
+  return <WizardRecommendationCardInner w={w} />;
+}
+
+function WizardRecommendationCardInner({ w }: { w: SubmitWizardContext }) {
   const {
     signatureCode,
     metricCode,
@@ -146,7 +153,7 @@ export function WizardRecommendationCard({ w }: { w: SubmitWizardContext }) {
         } else {
           setView({ kind: "cold", coldDefault: coldDefaultFor(jobType) });
         }
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) {
           setView({ kind: "hidden" });
         }
@@ -157,18 +164,14 @@ export function WizardRecommendationCard({ w }: { w: SubmitWizardContext }) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [
-    signatureCode,
-    metricCode,
-    schema,
-    jobType,
-    hasDrafted,
-    isCodeOrLaterStep,
-    dismissed,
-  ]);
+  }, [signatureCode, metricCode, schema, jobType, hasDrafted, isCodeOrLaterStep, dismissed]);
 
   const applyRun = React.useCallback(
-    (opts: { optimizer_name?: string | null; module_name?: string | null; optimizer_kwargs?: Record<string, unknown> }) => {
+    (opts: {
+      optimizer_name?: string | null;
+      module_name?: string | null;
+      optimizer_kwargs?: Record<string, unknown>;
+    }) => {
       if (opts.optimizer_name) setOptimizerName(opts.optimizer_name);
       if (opts.module_name) setModuleName(opts.module_name);
       const kw = opts.optimizer_kwargs ?? {};
@@ -184,7 +187,14 @@ export function WizardRecommendationCard({ w }: { w: SubmitWizardContext }) {
         dismiss();
       }, 1500);
     },
-    [setOptimizerName, setModuleName, setAutoLevel, setReflectionMinibatchSize, setUseMerge, dismiss],
+    [
+      setOptimizerName,
+      setModuleName,
+      setAutoLevel,
+      setReflectionMinibatchSize,
+      setUseMerge,
+      dismiss,
+    ],
   );
 
   const onApply = React.useCallback(() => {
@@ -234,7 +244,7 @@ export function WizardRecommendationCard({ w }: { w: SubmitWizardContext }) {
         transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn(
           "fixed z-40 w-[min(360px,calc(100vw-2rem))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 focus-visible:rounded-lg",
-          "bottom-4 start-4",
+          "bottom-4 start-4 md:start-[calc(clamp(200px,16vw,240px)+1rem)]",
         )}
       >
         {appliedPulse ? (
@@ -285,7 +295,7 @@ function CardHeader({ view, onDismiss }: { view: CardView; onDismiss: () => void
               <button
                 type="button"
                 aria-label={msg("submit.rec.recommendability_tooltip")}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[#8C7A6B] hover:text-[#3D2E22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 transition-colors cursor-help"
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[#8C7A6B] hover:text-[#3D2E22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 transition-colors cursor-default"
               >
                 <Info className="h-3 w-3" />
               </button>
@@ -348,7 +358,9 @@ function CardBody({ view, expanded }: { view: CardView; expanded: boolean }) {
     return (
       <div className="space-y-2.5 px-4 py-3">
         {description && (
-          <p className="text-xs leading-relaxed text-[#3D2E22] line-clamp-3">{description}</p>
+          <p dir="auto" className="text-xs leading-relaxed text-[#3D2E22] line-clamp-3">
+            {description}
+          </p>
         )}
         <div className="flex flex-wrap gap-1.5">
           {j.winning_model && <Pill>{j.winning_model}</Pill>}

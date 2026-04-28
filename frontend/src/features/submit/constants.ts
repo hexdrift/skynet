@@ -1,5 +1,6 @@
 import type { ModelConfig, SplitFractions } from "@/shared/types/api";
 import { TERMS } from "@/shared/lib/terms";
+import { msg } from "@/shared/lib/messages";
 
 export const emptyModelConfig = (): ModelConfig => ({
   name: "",
@@ -10,18 +11,18 @@ export const emptyModelConfig = (): ModelConfig => ({
 export const defaultSplit: SplitFractions = { train: 0.7, val: 0.15, test: 0.15 };
 
 export const STEPS = [
-  { id: "basics", label: "פרטים בסיסיים" },
+  { id: "basics", label: msg("auto.features.submit.constants.literal.1") },
   { id: "data", label: TERMS.dataset },
-  { id: "params", label: "פרמטרים" },
-  { id: "code", label: "קוד" },
+  { id: "params", label: msg("auto.features.submit.constants.literal.2") },
+  { id: "code", label: msg("auto.features.submit.constants.literal.3") },
   { id: "model", label: TERMS.model },
-  { id: "review", label: "סיכום ושליחה" },
+  { id: "review", label: msg("auto.features.submit.constants.literal.4") },
 ] as const;
 
 export const RECENT_KEY = "skynet:recent-model-configs";
 export const MAX_RECENT = 5;
 
-/* ── Slide animation variants (RTL: forward = slide from left, backward = slide from right) ── */
+/** RTL: forward = slide from left, backward = slide from right. */
 export const slideVariants = {
   enter: (direction: number) => ({
     x: direction > 0 ? -80 : 80,

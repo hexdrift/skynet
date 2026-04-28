@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Dataset size vs improvement scatter chart
- * Shows correlation between dataset size and optimization improvement
- * Preserves exact styling, RTL layout, and hover interactions
- */
-
 import {
   ScatterChart,
   Scatter,
@@ -17,9 +11,10 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface DatasetVsImprovementChartProps {
-  data: Array<{ שורות: number; שיפור: number; name: string }>;
+  data: Array<{ rows: number; improvement: number; name: string }>;
   optimizationIds?: string[];
   onDotClick?: (optimizationId: string) => void;
 }
@@ -38,13 +33,15 @@ export function DatasetVsImprovementChart({
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
             type="number"
-            dataKey="שורות"
+            dataKey="rows"
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 10 }}
             className="fill-muted-foreground"
             label={{
-              value: `שורות ב${TERMS.dataset}`,
+              value: formatMsg("auto.shared.charts.dataset.vs.improvement.chart.template.1", {
+                p1: TERMS.dataset,
+              }),
               position: "insideBottom",
               offset: -10,
               fontSize: 10,
@@ -52,13 +49,13 @@ export function DatasetVsImprovementChart({
           />
           <YAxis
             type="number"
-            dataKey="שיפור"
+            dataKey="improvement"
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 10 }}
             className="fill-muted-foreground"
             label={{
-              value: "שיפור באחוזים",
+              value: msg("auto.shared.charts.dataset.vs.improvement.chart.literal.1"),
               angle: -90,
               position: "center",
               dx: -15,
@@ -70,7 +67,7 @@ export function DatasetVsImprovementChart({
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const d = payload[0]?.payload as
-                | { name?: string; שורות?: number; שיפור?: number }
+                | { name?: string; rows?: number; improvement?: number }
                 | undefined;
               return (
                 <div
@@ -84,12 +81,14 @@ export function DatasetVsImprovementChart({
                   )}
                   <div className="space-y-0.5 text-xs text-muted-foreground">
                     <div>
-                      שורות:{" "}
-                      <span className="font-mono font-semibold text-foreground">{d?.שורות}</span>
+                      {msg("auto.shared.charts.dataset.vs.improvement.chart.1")}{" "}
+                      <span className="font-mono font-semibold text-foreground">{d?.rows}</span>
                     </div>
                     <div>
-                      שיפור:{" "}
-                      <span className="font-mono font-semibold text-foreground">{d?.שיפור}</span>
+                      {msg("auto.shared.charts.dataset.vs.improvement.chart.2")}{" "}
+                      <span className="font-mono font-semibold text-foreground">
+                        {d?.improvement}
+                      </span>
                     </div>
                   </div>
                 </div>

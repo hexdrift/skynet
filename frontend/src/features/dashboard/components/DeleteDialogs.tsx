@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/primitives/button";
 import {
   Dialog,
   DialogContent,
@@ -7,9 +7,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/shared/ui/primitives/dialog";
 import { TERMS } from "@/shared/lib/terms";
 import type { DeleteTarget } from "../hooks/use-bulk-delete";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 type DeleteDialogsProps = {
   deleteTarget: DeleteTarget;
@@ -46,16 +47,25 @@ export function DeleteDialogs({
           <DialogHeader>
             <DialogTitle>
               {selectedCount === 1
-                ? `מחיקת ${TERMS.optimization}`
-                : `מחיקת מספר ${TERMS.optimizationPlural}`}
+                ? formatMsg("auto.features.dashboard.components.deletedialogs.template.1", {
+                    p1: TERMS.optimization,
+                  })
+                : formatMsg("auto.features.dashboard.components.deletedialogs.template.2", {
+                    p1: TERMS.optimizationPlural,
+                  })}
             </DialogTitle>
             <DialogDescription>
               {selectedCount === 1 ? (
-                <>האם למחוק {TERMS.optimization} אחת? פעולה זו אינה הפיכה.</>
+                <>
+                  {msg("auto.features.dashboard.components.deletedialogs.1")}
+                  {TERMS.optimization}
+                  {msg("auto.features.dashboard.components.deletedialogs.2")}
+                </>
               ) : (
                 <>
-                  האם למחוק <span className="font-semibold">{selectedCount}</span>{" "}
-                  {TERMS.optimizationPlural}? פעולה זו אינה הפיכה.
+                  {msg("auto.features.dashboard.components.deletedialogs.3")}
+                  <span className="font-semibold">{selectedCount}</span> {TERMS.optimizationPlural}
+                  {msg("auto.features.dashboard.components.deletedialogs.4")}
                 </>
               )}
             </DialogDescription>
@@ -67,7 +77,7 @@ export function DeleteDialogs({
               disabled={bulkDeleting}
               className="w-full justify-center"
             >
-              ביטול
+              {msg("auto.features.dashboard.components.deletedialogs.5")}
             </Button>
             <Button
               variant="destructive"
@@ -75,7 +85,11 @@ export function DeleteDialogs({
               disabled={bulkDeleting}
               className="w-full justify-center"
             >
-              {bulkDeleting ? <Loader2 className="size-4 animate-spin" /> : "מחק הכל"}
+              {bulkDeleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("auto.features.dashboard.components.deletedialogs.literal.1")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -89,9 +103,13 @@ export function DeleteDialogs({
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>מחיקת {TERMS.optimization}</DialogTitle>
+            <DialogTitle>
+              {msg("auto.features.dashboard.components.deletedialogs.6")}
+              {TERMS.optimization}
+            </DialogTitle>
             <DialogDescription>
-              האם למחוק את ה{TERMS.optimization}{" "}
+              {msg("auto.features.dashboard.components.deletedialogs.7")}
+              {TERMS.optimization}{" "}
               <span className="font-mono font-medium text-foreground break-all">
                 {deleteTarget?.id}
               </span>
@@ -105,7 +123,7 @@ export function DeleteDialogs({
               disabled={deleting}
               className="w-full justify-center"
             >
-              ביטול
+              {msg("auto.features.dashboard.components.deletedialogs.8")}
             </Button>
             <Button
               variant="destructive"
@@ -113,7 +131,11 @@ export function DeleteDialogs({
               disabled={deleting}
               className="w-full justify-center"
             >
-              {deleting ? <Loader2 className="size-4 animate-spin" /> : "מחיקה"}
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("auto.features.dashboard.components.deletedialogs.literal.2")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

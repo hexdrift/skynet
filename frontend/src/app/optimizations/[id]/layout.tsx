@@ -3,9 +3,10 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { TERMS } from "@/shared/lib/terms";
 
+import { formatMsg } from "@/shared/lib/messages";
 export const metadata: Metadata = {
   title: "Optimization Details",
-  description: `צפה בפרטי ה${TERMS.optimization}, לוגים, ציונים ותוצאות`,
+  description: formatMsg("auto.app.optimizations.id.layout.template.1", { p1: TERMS.optimization }),
 };
 
 export default function JobLayout({ children }: { children: React.ReactNode }) {

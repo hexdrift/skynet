@@ -11,34 +11,38 @@ import {
   validateCode,
   getOptimizationPayload,
   getJob,
-  profileDataset,
 } from "@/shared/lib/api";
 import type {
   ModelConfig,
-  ColumnMapping,
   SplitFractions,
   ValidateCodeResponse,
-  ModelCatalogResponse,
   DatasetProfile,
   SplitPlan,
 } from "@/shared/types/api";
-import { parseDatasetFile, type ParsedDataset } from "@/features/submit/lib/parse-dataset";
+import { parseDatasetFile, type ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/shared/ui/code-editor";
-import { getModelCatalog, cachedCatalog } from "@/shared/lib/model-catalog";
-import { registerTutorialHook } from "@/features/tutorial/lib/bridge";
-import { msg } from "@/shared/lib/messages";
-import { useWizardStateOptional } from "@/features/agent-panel/hooks/use-wizard-state";
+import { registerTutorialHook } from "@/features/tutorial";
+import { formatMsg, msg } from "@/shared/lib/messages";
+import { useWizardStateOptional } from "@/features/agent-panel";
+import { readPref, useUserPrefs } from "@/features/settings";
 
-import { STEPS, emptyModelConfig, defaultSplit, RECENT_KEY, MAX_RECENT } from "../constants";
+import { STEPS, emptyModelConfig, defaultSplit } from "../constants";
 import { buildSignatureTemplate } from "../lib/build-signature";
 import { buildMetricTemplate } from "../lib/build-metric";
 import { buildOptimizerKwargs } from "../lib/build-kwargs";
 import { useCodeAgent } from "./use-code-agent";
+import {
+  buildColumnMapping,
+  useDatasetProfiling,
+  useModelCatalog,
+  useRecentModelConfigs,
+} from "./use-submit-wizard-data";
 
 export function useSubmitWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { prefs } = useUserPrefs();
 
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -47,7 +51,6 @@ export function useSubmitWizard() {
 
   const [jobType, setOptimizationType] = useState<"run" | "grid_search">("run");
 
-  // Username — always from the logged-in session
   const username = session?.user?.name ?? "";
   const [jobName, setJobName] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -62,15 +65,19 @@ export function useSubmitWizard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [columnRoles, setColumnRoles] = useState<Record<string, "input" | "output" | "ignore">>({});
+  // Manual override for input column modality. The dataset profiler auto-fills
+  // entries for every input column (kind = "text" | "image"); the user can
+  // flip a column manually via the DatasetStep toggle.
+  const [columnKinds, setColumnKinds] = useState<Record<string, "text" | "image">>({});
   const [signatureManuallyEdited, setSignatureManuallyEdited] = useState(false);
   const [metricManuallyEdited, setMetricManuallyEdited] = useState(false);
-  const [codeAssistMode, setCodeAssistMode] = useState<"auto" | "manual">("auto");
+  const [codeAssistMode, setCodeAssistMode] = useState<"auto" | "manual">(
+    () => readPref("wizardCodeAssist"),
+  );
 
-  // Global provider settings (shared across all models)
   const [globalBaseUrl, setGlobalBaseUrl] = useState("");
   const [globalApiKey, setGlobalApiKey] = useState("");
 
-  // Run model configs — primary + secondary (shared across optimizers)
   const [modelConfig, setModelConfig] = useState<ModelConfig>(emptyModelConfig());
   const [secondModelConfig, setSecondModelConfig] = useState<ModelConfig | null>(null);
 
@@ -81,40 +88,10 @@ export function useSubmitWizard() {
     onSelectAllAvailable?: () => void;
   } | null>(null);
 
-  // Recent model configs — persisted in localStorage
-  const [recentConfigs, setRecentConfigs] = useState<ModelConfig[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
-    } catch {
-      return [];
-    }
-  });
-  const saveToRecent = useCallback((config: ModelConfig) => {
-    if (!config.name) return;
-    setRecentConfigs((prev) => {
-      const deduped = prev.filter((c) => c.name !== config.name);
-      const next = [config, ...deduped].slice(0, MAX_RECENT);
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  const { recentConfigs, saveToRecent, clearRecentConfigs } = useRecentModelConfigs();
 
-  // Model catalog — prefetched on module load, instant here
-  const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(cachedCatalog);
-  useEffect(() => {
-    if (catalog) return;
-    let cancelled = false;
-    getModelCatalog()
-      .then((c) => {
-        if (!cancelled) setCatalog(c);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [catalog]);
+  const catalog = useModelCatalog();
 
-  // Check if ANY provider has an env key configured on the backend
   const anyProviderHasEnvKey = catalog?.providers.some((p) => p.has_env_key) ?? false;
 
   const [generationModels, setGenerationModels] = useState<ModelConfig[]>([emptyModelConfig()]);
@@ -130,17 +107,43 @@ export function useSubmitWizard() {
   const [datasetProfile, setDatasetProfile] = useState<DatasetProfile | null>(null);
   const [splitPlan, setSplitPlan] = useState<SplitPlan | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [splitMode, setSplitModeState] = useState<"auto" | "manual">("auto");
-  const splitModeRef = useRef<"auto" | "manual">("auto");
+  const [splitMode, setSplitModeState] = useState<"auto" | "manual">(
+    () => readPref("wizardSplitMode"),
+  );
+  const splitModeRef = useRef<"auto" | "manual">(readPref("wizardSplitMode"));
+
+  // Mirror live pref changes into local wizard state so changes the user
+  // makes in the settings modal while the wizard is mounted take effect
+  // without a remount. Skip the first run because UserPrefsProvider boots
+  // with DEFAULT_PREFS and hydrates from localStorage in a useEffect — our
+  // useState initializers above already used readPref() (sync), so the first
+  // render's `prefs.*` values would clobber them with defaults.
+  const codeAssistFirstRunRef = useRef(true);
+  useEffect(() => {
+    if (codeAssistFirstRunRef.current) {
+      codeAssistFirstRunRef.current = false;
+      return;
+    }
+    setCodeAssistMode(prefs.wizardCodeAssist);
+  }, [prefs.wizardCodeAssist]);
+
+  const splitModeFirstRunRef = useRef(true);
+  useEffect(() => {
+    if (splitModeFirstRunRef.current) {
+      splitModeFirstRunRef.current = false;
+      return;
+    }
+    splitModeRef.current = prefs.wizardSplitMode;
+    setSplitModeState(prefs.wizardSplitMode);
+  }, [prefs.wizardSplitMode]);
+
   const [seed, setSeed] = useState<number | undefined>(undefined);
   const [stratify, setStratify] = useState(false);
   const [stratifyColumn, setStratifyColumn] = useState<string | null>(null);
 
-  // Code validation — each block is validated independently
   const [signatureValidation, setSignatureValidation] = useState<ValidateCodeResponse | null>(null);
   const [metricValidation, setMetricValidation] = useState<ValidateCodeResponse | null>(null);
 
-  // Advanced — structured optimizer/compile kwargs
   const [autoLevel, setAutoLevel] = useState<string>("light");
   const [reflectionMinibatchSize, setReflectionMinibatchSize] = useState<string>("3");
   const [maxFullEvals, setMaxFullEvals] = useState<string>("6");
@@ -150,7 +153,18 @@ export function useSubmitWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<"idle" | "sending" | "splash" | "done">("idle");
 
-  /* ── Clone pre-fill ── */
+  // Guard against double-clicks on the Next button while the code-step
+  // validation network call is in flight (~5s). Without this, two
+  // sequential `setStep((s) => s + 1)` calls advance the wizard twice.
+  const [advancing, setAdvancing] = useState(false);
+  const advancingRef = useRef(false);
+
+  // Memoise validation results per (kind, code, mapping, sample_row,
+  // optimizer) tuple. Storing the in-flight promise itself also dedupes
+  // concurrent calls against the same key — useful when both signature and
+  // metric run in parallel and one is re-triggered before the other lands.
+  const validationCacheRef = useRef(new Map<string, Promise<ValidateCodeResponse>>());
+
   const [cloneLoading, setCloneLoading] = useState(false);
   const cloneRan = useRef(false);
 
@@ -169,12 +183,11 @@ export function useSubmitWizard() {
     return () => unregister.forEach((fn) => fn());
   }, []);
 
-  /* ── Shared wizard-state bridge ──────────────────────────────────────────
-   * The generalist agent writes wizard fields into WizardStateContext. We
-   * mirror those agent writes into the local wizard state, and push local
-   * edits back so the agent's phased-exposure gate sees them. Echo is
-   * avoided by only pushing when the value actually differs from shared.
-   */
+  // Shared wizard-state bridge: the generalist agent writes wizard fields
+  // into WizardStateContext. We mirror those agent writes into the local
+  // wizard state, and push local edits back so the agent's phased-exposure
+  // gate sees them. Echo is avoided by only pushing when the value actually
+  // differs from shared.
   const wizardCtx = useWizardStateOptional();
   const { agentPulseTick, agentPulseKeys, sharedState } = {
     agentPulseTick: wizardCtx?.agentPulseTick ?? 0,
@@ -218,7 +231,10 @@ export function useSubmitWizard() {
           return next;
         });
       } else if (key === "model_config" && sharedState.model_config) {
-        setModelConfig({ ...emptyModelConfig(), ...(sharedState.model_config as Partial<ModelConfig>) });
+        setModelConfig({
+          ...emptyModelConfig(),
+          ...(sharedState.model_config as Partial<ModelConfig>),
+        });
       } else if (key === "reflection_model_config" && sharedState.reflection_model_config) {
         setSecondModelConfig({
           ...emptyModelConfig(),
@@ -291,8 +307,8 @@ export function useSubmitWizard() {
     }
     const columns = parsedDataset?.columns ?? [];
     const shared = wizardCtx.state.dataset_columns;
-    const changed = !shared || shared.length !== columns.length ||
-      columns.some((c, i) => shared[i] !== c);
+    const changed =
+      !shared || shared.length !== columns.length || columns.some((c, i) => shared[i] !== c);
     if (changed && columns.length > 0) {
       wizardCtx.setField("dataset_columns", columns, "user");
     }
@@ -342,11 +358,7 @@ export function useSubmitWizard() {
     if (wizardCtx.state.model_configured !== configured) {
       wizardCtx.setField("model_configured", configured, "user");
     }
-    wizardCtx.setField(
-      "model_config",
-      modelConfig as unknown as Record<string, unknown>,
-      "user",
-    );
+    wizardCtx.setField("model_config", modelConfig as unknown as Record<string, unknown>, "user");
   }, [modelConfig, wizardCtx]);
 
   // Outgoing: scalar wizard fields the agent can read back for decisions.
@@ -430,7 +442,7 @@ export function useSubmitWizard() {
     if (!wizardCtx) return;
     wizardCtx.setField(
       "generation_models",
-      generationModels as unknown as Record<string, unknown>[],
+      generationModels as unknown as Array<Record<string, unknown>>,
       "user",
     );
   }, [generationModels, wizardCtx]);
@@ -439,7 +451,7 @@ export function useSubmitWizard() {
     if (!wizardCtx) return;
     wizardCtx.setField(
       "reflection_models",
-      reflectionModels as unknown as Record<string, unknown>[],
+      reflectionModels as unknown as Array<Record<string, unknown>>,
       "user",
     );
   }, [reflectionModels, wizardCtx]);
@@ -481,7 +493,7 @@ export function useSubmitWizard() {
           : Object.keys(rows[0] ?? {});
       setParsedDataset({
         columns,
-        rows: rows as Record<string, unknown>[],
+        rows: rows as Array<Record<string, unknown>>,
         rowCount: rows.length,
       });
       const explicitFilename =
@@ -491,8 +503,9 @@ export function useSubmitWizard() {
       const jobBasedFilename =
         typeof ws?.job_name === "string" && ws.job_name ? `${ws.job_name}.json` : null;
       setDatasetFileName(explicitFilename ?? jobBasedFilename ?? "sample.json");
-      splitModeRef.current = "auto";
-      setSplitModeState("auto");
+      const stagedDefaultMode = readPref("wizardSplitMode");
+      splitModeRef.current = stagedDefaultMode;
+      setSplitModeState(stagedDefaultMode);
       setDatasetProfile(null);
       setSplitPlan(null);
       setStratify(false);
@@ -504,13 +517,35 @@ export function useSubmitWizard() {
     return () => window.removeEventListener("wizard:dataset-staged", handler);
   }, []);
 
-  // Auto-update signature template when column roles change
+  // Auto-seed columnKinds from the dataset profile. The profiler returns
+  // ``inputs: [{name, kind}]`` once it has classified each input column; we
+  // fill any column the user hasn't already overridden. A fresh dataset
+  // upload clears columnKinds entirely, so this effect re-seeds on every
+  // new file. Columns the user has manually flipped stay flipped.
+  useEffect(() => {
+    if (!datasetProfile?.inputs?.length) return;
+    setColumnKinds((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const entry of datasetProfile.inputs) {
+        if (next[entry.name] === undefined) {
+          next[entry.name] = entry.kind === "image" ? "image" : "text";
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [datasetProfile]);
+
+  // Auto-update signature template when column roles or modalities change.
+  // ``columnKinds`` flips an input column to ``dspy.Image`` so the auto
+  // template tracks the modality toggle without waiting for the AI agent.
   useEffect(() => {
     if (signatureManuallyEdited) return;
     const hasRoles = Object.values(columnRoles).some((r) => r === "input" || r === "output");
     if (!hasRoles) return;
-    setSignatureCode(buildSignatureTemplate(columnRoles));
-  }, [columnRoles, signatureManuallyEdited]);
+    setSignatureCode(buildSignatureTemplate(columnRoles, columnKinds));
+  }, [columnRoles, columnKinds, signatureManuallyEdited]);
 
   // Auto-update metric template when output roles change. The agent
   // overwrites this in auto mode; the manual-edit flag protects a user's
@@ -522,18 +557,15 @@ export function useSubmitWizard() {
     setMetricCode(buildMetricTemplate(columnRoles));
   }, [columnRoles, metricManuallyEdited]);
 
-  /* ── Clone pre-fill effect ── */
   useEffect(() => {
     const cloneId = searchParams.get("clone");
     if (!cloneId || cloneRan.current) return;
     cloneRan.current = true;
     setCloneLoading(true);
-    // Fetch both payload and job display name in parallel
     Promise.all([getOptimizationPayload(cloneId), getJob(cloneId).catch(() => null)])
       .then(([{ optimization_type, payload }, jobData]) => {
-              setOptimizationType(optimization_type === "grid_search" ? "grid_search" : "run");
+        setOptimizationType(optimization_type === "grid_search" ? "grid_search" : "run");
 
-        // Basic fields — prefer the current display name over the payload name
         const displayName = jobData?.name || payload.name;
         if (displayName) setJobName(String(displayName));
         if (payload.description) setJobDescription(String(payload.description));
@@ -548,8 +580,8 @@ export function useSubmitWizard() {
           setMetricManuallyEdited(true);
         }
 
-              if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
-          const rows = payload.dataset as Record<string, unknown>[];
+        if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
+          const rows = payload.dataset as Array<Record<string, unknown>>;
           const columns = Object.keys(rows[0] ?? {});
           setParsedDataset({ columns, rows, rowCount: rows.length });
           setDatasetFileName(
@@ -559,7 +591,7 @@ export function useSubmitWizard() {
           );
         }
 
-              const cm = payload.column_mapping as
+        const cm = payload.column_mapping as
           | { inputs?: Record<string, string>; outputs?: Record<string, string> }
           | undefined;
         if (cm) {
@@ -575,7 +607,7 @@ export function useSubmitWizard() {
           setColumnRoles(roles);
         }
 
-              const sf = payload.split_fractions as
+        const sf = payload.split_fractions as
           | { train?: number; val?: number; test?: number }
           | undefined;
         if (sf) {
@@ -588,15 +620,15 @@ export function useSubmitWizard() {
 
         if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
         if (payload.stratify != null) setStratify(Boolean(payload.stratify));
-        if (payload.stratify_column != null)
-          setStratifyColumn(String(payload.stratify_column));
+        if (payload.stratify_column != null) setStratifyColumn(String(payload.stratify_column));
         if (payload.seed != null) setSeed(Number(payload.seed));
 
         const mc = payload.model_config as ModelConfig | undefined;
         if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
 
-        const smc = (payload.reflection_model_config ??
-          payload.task_model_config) as ModelConfig | undefined;
+        const smc = (payload.reflection_model_config ?? payload.task_model_config) as
+          | ModelConfig
+          | undefined;
         if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
 
         const gm = payload.generation_models as ModelConfig[] | undefined;
@@ -626,7 +658,6 @@ export function useSubmitWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ── Navigation ── */
   const goNext = () => {
     if (step < STEPS.length - 1) {
       setDirection(1);
@@ -644,62 +675,21 @@ export function useSubmitWizard() {
     setStep(idx);
   };
 
-  /* ── Build column mapping ── */
-  const buildColumnMapping = (): ColumnMapping => {
-    const inputs: Record<string, string> = {};
-    const outputs: Record<string, string> = {};
-    Object.entries(columnRoles).forEach(([col, role]) => {
-      if (role === "input") inputs[col] = col;
-      else if (role === "output") outputs[col] = col;
-    });
-    return { inputs, outputs };
-  };
+  const currentColumnMapping = () => buildColumnMapping(columnRoles);
 
-  /* ── Auto-profile: fetch a recommended split whenever the dataset or
-   * column mapping changes. Debounced so rapid role edits don't spam the
-   * endpoint. Auto-applies the plan to split/shuffle/seed only when the
-   * user hasn't taken manual control of the split yet — the "החל המלצה"
-   * button in ParamsStep re-applies it on demand. Failures are swallowed;
-   * the existing manual controls remain usable. */
-  useEffect(() => {
-    if (!parsedDataset || parsedDataset.rowCount === 0) return;
-    const mapping: ColumnMapping = { inputs: {}, outputs: {} };
-    Object.entries(columnRoles).forEach(([col, role]) => {
-      if (role === "input") mapping.inputs[col] = col;
-      else if (role === "output") mapping.outputs[col] = col;
-    });
-    if (Object.keys(mapping.inputs).length === 0) return;
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      setProfileLoading(true);
-      profileDataset({
-        dataset: parsedDataset.rows as Record<string, unknown>[],
-        column_mapping: mapping,
-      })
-        .then((response) => {
-          if (cancelled) return;
-          setDatasetProfile(response.profile);
-          setSplitPlan(response.plan);
-          if (splitModeRef.current === "auto") {
-            setSplit(response.plan.fractions);
-            setShuffle(response.plan.shuffle);
-            setSeed(response.plan.seed);
-            setStratify(response.plan.stratify);
-            setStratifyColumn(response.plan.stratify_column);
-          }
-        })
-        .catch(() => {
-          /* non-blocking: manual controls still work */
-        })
-        .finally(() => {
-          if (!cancelled) setProfileLoading(false);
-        });
-    }, 400);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [parsedDataset, columnRoles]);
+  useDatasetProfiling({
+    parsedDataset,
+    columnRoles,
+    splitModeRef,
+    setDatasetProfile,
+    setSplitPlan,
+    setProfileLoading,
+    setSplit,
+    setShuffle,
+    setSeed,
+    setStratify,
+    setStratifyColumn,
+  });
 
   const setSplitMode = useCallback(
     (mode: "auto" | "manual") => {
@@ -716,7 +706,7 @@ export function useSubmitWizard() {
     [splitPlan],
   );
 
-  /* ── Step validation (optionally shows toast errors) ── */
+  /** Validates a wizard step; optionally surfaces toast errors. */
   const validateStep = (s: number, showToast = false): boolean => {
     switch (s) {
       case 0:
@@ -734,7 +724,7 @@ export function useSubmitWizard() {
           if (showToast) toast.error(msg("submit.validation.dataset_required"));
           return false;
         }
-        const m = buildColumnMapping();
+        const m = currentColumnMapping();
         if (Object.keys(m.inputs).length === 0) {
           if (showToast) toast.error(msg("submit.validation.input_column_required"));
           return false;
@@ -763,7 +753,7 @@ export function useSubmitWizard() {
           return false;
         }
         return true;
-      case 4:
+      case 4: {
         if (jobType === "run") {
           if (!modelConfig.name.trim()) {
             if (showToast) toast.error(msg("submit.validation.model_required"));
@@ -798,13 +788,43 @@ export function useSubmitWizard() {
             return false;
           }
         }
+        // Vision gate: if any input column is image-typed, every chosen
+        // generation model must support vision. Mirrors the backend's
+        // ``submission.vision_required`` rejection so we fail fast in the UI
+        // instead of waiting for a 400 from /run.
+        const imageInputs = Object.entries(columnKinds)
+          .filter(([col, kind]) => kind === "image" && columnRoles[col] === "input")
+          .map(([col]) => col);
+        if (imageInputs.length > 0 && catalog?.models?.length) {
+          const visionByValue = new Map(catalog.models.map((m) => [m.value, m.supports_vision]));
+          const isVision = (id: string): boolean => visionByValue.get(id) ?? false;
+          const candidates: string[] =
+            jobType === "run"
+              ? [modelConfig.name].filter((n) => n.trim())
+              : useAllGenerationModels
+                ? catalog.models.filter((m) => m.available).map((m) => m.value)
+                : generationModels.map((m) => m.name).filter((n) => n.trim());
+          const offenders = candidates.filter((id) => !isVision(id));
+          if (offenders.length > 0) {
+            if (showToast) {
+              toast.error(
+                formatMsg("submit.validation.vision_required", {
+                  fields: imageInputs.join(", "),
+                  model: offenders.join(", "),
+                }),
+              );
+            }
+            return false;
+          }
+        }
         return true;
+      }
       default:
         return true;
     }
   };
 
-  /* ── Highest reachable step (all prior steps must be valid) ── */
+  // Highest reachable step — all prior steps must be valid.
   const maxReachableStep = (() => {
     for (let i = 0; i < STEPS.length; i++) {
       if (!validateStep(i)) return i;
@@ -812,7 +832,6 @@ export function useSubmitWizard() {
     return STEPS.length - 1;
   })();
 
-  /* ── Code validation ── */
   const validateBlock = async (
     kind: "signature" | "metric",
     overrideCode?: string,
@@ -824,15 +843,21 @@ export function useSubmitWizard() {
     if (!parsedDataset || parsedDataset.rowCount === 0) {
       return { valid: false, errors: ["Upload a dataset before validating code"], warnings: [] };
     }
-    const mapping = buildColumnMapping();
+    const mapping = currentColumnMapping();
     const sampleRow = parsedDataset.rows[0] as Record<string, unknown>;
-    return validateCode({
+    const cacheKey = JSON.stringify([kind, code, mapping, sampleRow, optimizerName]);
+    const cached = validationCacheRef.current.get(cacheKey);
+    if (cached) return cached;
+    const pending = validateCode({
       signature_code: kind === "signature" ? code : undefined,
       metric_code: kind === "metric" ? code : undefined,
       column_mapping: mapping,
       sample_row: sampleRow,
       optimizer_name: optimizerName,
     });
+    validationCacheRef.current.set(cacheKey, pending);
+    pending.catch(() => validationCacheRef.current.delete(cacheKey));
+    return pending;
   };
 
   const runSignatureValidation = async (
@@ -883,29 +908,33 @@ export function useSubmitWizard() {
   };
 
   const handleNext = async () => {
-    // Auto-trigger code validation when leaving the code step (step 3)
-    if (step === 3 && signatureCode.trim() && metricCode.trim() && parsedDataset) {
-      // Run validation — triggers the inline error UI in the CodeEditors
-      const passed = await handleValidateCode();
-      if (!passed) return;
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setAdvancing(true);
+    try {
+      if (step === 3 && signatureCode.trim() && metricCode.trim() && parsedDataset) {
+        const passed = await handleValidateCode();
+        if (!passed) return;
+      }
+      if (validateStep(step, true)) goNext();
+    } finally {
+      advancingRef.current = false;
+      setAdvancing(false);
     }
-    if (validateStep(step, true)) goNext();
   };
 
   const handleTabClick = (idx: number) => {
     if (idx <= step) {
       goTo(idx);
       return;
-    } // going back is always allowed
+    }
     if (idx <= maxReachableStep) {
       goTo(idx);
       return;
-    } // all prior steps valid
-    // try to validate current step and show error
+    }
     validateStep(step, true);
   };
 
-  /* ── File upload handler ── */
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -918,10 +947,16 @@ export function useSubmitWizard() {
         roles[col] = "input";
       });
       setColumnRoles(roles);
-      // A fresh dataset deserves a fresh recommendation — reset to auto mode
-      // so the auto-profile effect can apply the new plan.
-      splitModeRef.current = "auto";
-      setSplitModeState("auto");
+      // Drop any prior modality overrides — the profiler effect will re-seed
+      // from the new dataset's detected kinds.
+      setColumnKinds({});
+      // A fresh dataset deserves a fresh recommendation — reset split mode to
+      // the user's saved preference so the auto-profile effect applies the new
+      // plan when they prefer auto, and stays out of the way when they prefer
+      // manual.
+      const uploadDefaultMode = readPref("wizardSplitMode");
+      splitModeRef.current = uploadDefaultMode;
+      setSplitModeState(uploadDefaultMode);
       setDatasetProfile(null);
       setSplitPlan(null);
       setStratify(false);
@@ -933,13 +968,17 @@ export function useSubmitWizard() {
       setMetricManuallyEdited(false);
       setSignatureValidation(null);
       setMetricValidation(null);
-      toast.success(`נטען ${parsed.rowCount} שורות מ-${file.name}`);
+      toast.success(
+        formatMsg("auto.features.submit.hooks.use.submit.wizard.template.1", {
+          p1: parsed.rowCount,
+          p2: file.name,
+        }),
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("submit.dataset.file_error"));
     }
   }, []);
 
-  /* ── Split fraction handler ── */
   const updateSplit = (field: keyof SplitFractions, value: string) => {
     if (splitModeRef.current === "auto") return;
     const num = parseFloat(value);
@@ -948,7 +987,6 @@ export function useSubmitWizard() {
   };
   const splitSum = +(split.train + split.val + split.test).toFixed(4);
 
-  /* ── Submit ── */
   const handleSubmit = async () => {
     if (!username.trim()) {
       toast.error(msg("submit.validation.username_required"));
@@ -971,7 +1009,7 @@ export function useSubmitWizard() {
       return;
     }
 
-    const columnMapping = buildColumnMapping();
+    const columnMapping = currentColumnMapping();
     if (Object.keys(columnMapping.inputs).length === 0) {
       toast.error(msg("submit.validation.input_column_required"));
       goTo(1);
@@ -1000,7 +1038,7 @@ export function useSubmitWizard() {
         signature_code: signatureCode,
         metric_code: metricCode,
         optimizer_name: optimizerName,
-        dataset: parsedDataset.rows as Record<string, unknown>[],
+        dataset: parsedDataset.rows as Array<Record<string, unknown>>,
         dataset_filename: datasetFileName || undefined,
         column_mapping: columnMapping,
         split_fractions: split,
@@ -1074,7 +1112,6 @@ export function useSubmitWizard() {
         });
       }
 
-      // Show splash transition, then navigate
       const jobUrl = `/optimizations/${result.optimization_id}`;
       setSubmitPhase("splash");
       // Collapse sidebar before navigating so the job page opens with full width
@@ -1090,11 +1127,6 @@ export function useSubmitWizard() {
     }
   };
 
-  const clearRecentConfigs = () => {
-    setRecentConfigs([]);
-    localStorage.removeItem(RECENT_KEY);
-  };
-
   // Hoisted to wizard scope so the seed pass fires as soon as the user
   // has a dataset + I/O roles — by the time they reach the code step,
   // the Signature + metric are already filled (or streaming in).
@@ -1102,6 +1134,7 @@ export function useSubmitWizard() {
     codeAssistMode,
     setCodeAssistMode,
     columnRoles,
+    columnKinds,
     parsedDataset,
     moduleName,
     signatureCode,
@@ -1161,14 +1194,16 @@ export function useSubmitWizard() {
     setMetricValidation,
     runSignatureValidation,
     runMetricValidation,
-      parsedDataset,
+    parsedDataset,
     setParsedDataset,
     datasetFileName,
     setDatasetFileName,
     fileInputRef,
     handleFileUpload,
-      columnRoles,
+    columnRoles,
     setColumnRoles,
+    columnKinds,
+    setColumnKinds,
     globalBaseUrl,
     setGlobalBaseUrl,
     globalApiKey,
@@ -1213,6 +1248,7 @@ export function useSubmitWizard() {
     setUseMerge,
     submitting,
     submitPhase,
+    advancing,
     handleSubmit,
     cloneLoading,
     agent,

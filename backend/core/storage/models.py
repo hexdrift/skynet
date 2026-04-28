@@ -3,10 +3,12 @@
 Defines the shared database models used by the PostgreSQL storage backend.
 """
 
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from datetime import UTC, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, PrimaryKeyConstraint, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Index, Integer, PrimaryKeyConstraint, String, Text
 from sqlalchemy.orm import DeclarativeBase
 
 EMBEDDING_DIM = 512
@@ -15,17 +17,22 @@ EMBEDDING_DIM = 512
 class Base(DeclarativeBase):
     """SQLAlchemy declarative base for all models."""
 
-    pass
-
 
 class JobModel(Base):
-    """SQLAlchemy model for the jobs table."""
+    """SQLAlchemy model for the jobs table.
+
+    The ``claimed_by`` / ``claimed_at`` / ``lease_expires_at`` triplet implements
+    a DB-backed work queue safe for multi-pod horizontal scaling: each worker
+    atomically claims a row via ``SELECT ... FOR UPDATE SKIP LOCKED`` and
+    extends the lease while it holds the job. A pod that crashes leaves an
+    expired lease which any other pod is free to re-claim on its next poll.
+    """
 
     __tablename__ = "jobs"
 
     optimization_id = Column(String(36), primary_key=True)
     status = Column(String(20), nullable=False, default="pending")
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     estimated_remaining_seconds = Column(Float, nullable=True)
@@ -35,6 +42,14 @@ class JobModel(Base):
     payload_overview = Column(JSON, default=dict)
     payload = Column(JSON, nullable=True)
     username = Column(String(255), nullable=True)
+    claimed_by = Column(String(64), nullable=True)
+    claimed_at = Column(DateTime, nullable=True)
+    lease_expires_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_jobs_status_created_at", "status", "created_at"),
+        Index("ix_jobs_lease_expires_at", "lease_expires_at"),
+    )
 
 
 class ProgressEventModel(Base):
@@ -43,7 +58,7 @@ class ProgressEventModel(Base):
     __tablename__ = "job_progress_events"
 
     optimization_id = Column(String(36), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     event = Column(String(255), nullable=True)
     metrics = Column(JSON, default=dict)
 
@@ -57,7 +72,7 @@ class LogEntryModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     optimization_id = Column(String(36), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     level = Column(String(20), nullable=False)
     logger = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
@@ -74,7 +89,7 @@ class TemplateModel(Base):
     description = Column(Text, nullable=True)
     username = Column(String(255), nullable=False)
     config = Column(JSON, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 class JobEmbeddingModel(Base):
@@ -99,7 +114,7 @@ class JobEmbeddingModel(Base):
     optimization_type = Column(String(32), nullable=True, index=True)
     winning_model = Column(String(255), nullable=True)
     winning_rank = Column(Integer, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     embedding_summary = Column(Vector(EMBEDDING_DIM), nullable=True)
     embedding_code = Column(Vector(EMBEDDING_DIM), nullable=True)
     embedding_schema = Column(Vector(EMBEDDING_DIM), nullable=True)

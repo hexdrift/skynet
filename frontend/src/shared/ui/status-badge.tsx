@@ -1,12 +1,6 @@
 "use client";
 
-/**
- * Status badge component
- * Displays job status with appropriate color and animation
- * Consolidated from StatusBadge (features/optimizations) and statusBadge (features/dashboard)
- */
-
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/shared/ui/primitives/badge";
 import { getStatusLabel } from "@/shared/constants/job-status";
 import type { JobStatus } from "@/shared/types/api";
 

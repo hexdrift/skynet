@@ -108,11 +108,10 @@
 │   │   │   ├── hooks/           use-api-call, use-debounce, use-local-storage
 │   │   │   ├── layout/          app-shell, splash-screen
 │   │   │   ├── providers/       session, theme, toast providers
-│   │   │   ├── lib/             api client, formatters, validation, utils
+│   │   │   ├── lib/             api client, auth, formatters, validation, utils
 │   │   │   ├── types/           Shared TypeScript types
 │   │   │   └── constants/       dspy-constants, job-status
-│   │   ├── components/ui/       shadcn/ui primitives (button, card, dialog, etc.)
-│   │   └── lib/auth.ts          NextAuth configuration
+│   │   └── components/ui/       shadcn/ui primitives (button, card, dialog, etc.)
 │
 ├── scripts/
 │   └── update_scalar.sh         Rebuild bundled Scalar API docs
@@ -159,6 +158,13 @@ cd frontend && npm run build
 ## RTL/Hebrew
 - UI is RTL (Hebrew) by default
 - Notification messages are in Hebrew
+
+## Commenting & docstring style
+
+- **Never write WHAT-comments.** Don't restate what a line of code does, name a section, or label obvious blocks. Identifiers and the code itself already convey the WHAT.
+- **Only write WHY-comments.** Add a comment when intent is non-obvious: a hidden constraint, a workaround for a specific bug, surprising behavior, or a non-trivial design decision. If removing the comment wouldn't confuse a future reader, don't write it.
+- **Backend Python — Google Args/Returns docstrings.** New public and internal functions get a Google-style docstring with `Args:` and `Returns:` sections (and `Raises:` only when the failure mode is non-obvious). Skip Args/Returns only when both are trivially typed and the one-line summary already covers them.
+- **Existing files** that have already had docstrings stripped (post-cleanup pass) stay stripped — don't reintroduce them.
 
 ## Refactoring rules
 

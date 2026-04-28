@@ -1,3 +1,5 @@
+"""Tests for OptimizationStatus, ColumnMapping, SplitFractions, and ModelConfig."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,9 +8,8 @@ from pydantic import ValidationError
 from core.models.common import ColumnMapping, ModelConfig, OptimizationStatus, SplitFractions
 
 
-
 def test_optimization_status_complete_set() -> None:
-    """Verify OptimizationStatus contains exactly the expected six values."""
+    """Verify OptimizationStatus exposes the full set of expected status values."""
     assert {s.value for s in OptimizationStatus} == {
         "pending",
         "validating",
@@ -19,27 +20,30 @@ def test_optimization_status_complete_set() -> None:
     }
 
 
-@pytest.mark.parametrize("member,value", [
-    ("pending", "pending"),
-    ("validating", "validating"),
-    ("running", "running"),
-    ("success", "success"),
-    ("failed", "failed"),
-    ("cancelled", "cancelled"),
-], ids=["pending", "validating", "running", "success", "failed", "cancelled"])
+@pytest.mark.parametrize(
+    ("member", "value"),
+    [
+        ("pending", "pending"),
+        ("validating", "validating"),
+        ("running", "running"),
+        ("success", "success"),
+        ("failed", "failed"),
+        ("cancelled", "cancelled"),
+    ],
+    ids=["pending", "validating", "running", "success", "failed", "cancelled"],
+)
 def test_optimization_status_each_value(member: str, value: str) -> None:
-    """Verify each OptimizationStatus member has the expected string value."""
+    """Verify each OptimizationStatus member maps to its expected string value."""
     assert OptimizationStatus[member].value == value
 
 
 def test_optimization_status_is_str_subclass() -> None:
-    """Verify OptimizationStatus members are str instances."""
+    """Verify OptimizationStatus members are subclasses of str (StrEnum)."""
     assert isinstance(OptimizationStatus.pending, str)
 
 
-
 def test_column_mapping_accepts_disjoint_columns() -> None:
-    """Verify ColumnMapping accepts non-overlapping input and output columns."""
+    """Verify ColumnMapping accepts disjoint input and output column sets."""
     m = ColumnMapping(inputs={"q": "question"}, outputs={"a": "answer"})
 
     assert m.inputs == {"q": "question"}
@@ -53,7 +57,7 @@ def test_column_mapping_requires_at_least_one_input() -> None:
 
 
 def test_column_mapping_rejects_shared_column_values() -> None:
-    """Verify ColumnMapping rejects when input and output map to the same column."""
+    """Verify ColumnMapping rejects when input and output values overlap."""
     with pytest.raises(ValidationError, match="must not reuse the same columns"):
         ColumnMapping(inputs={"q": "col"}, outputs={"a": "col"})
 
@@ -66,21 +70,20 @@ def test_column_mapping_empty_outputs_accepted() -> None:
 
 
 def test_column_mapping_multiple_shared_columns_reported() -> None:
-    """Verify ColumnMapping reports all shared columns when multiple overlap."""
+    """Verify ColumnMapping rejects multiple overlapping column values."""
     with pytest.raises(ValidationError, match="must not reuse the same columns"):
         ColumnMapping(inputs={"q": "x", "r": "y"}, outputs={"a": "x", "b": "y"})
 
 
-
 def test_split_fractions_defaults_sum_to_one() -> None:
-    """Verify default SplitFractions sums to 1.0."""
+    """Verify default SplitFractions train/val/test sum to 1.0."""
     s = SplitFractions()
 
     assert abs(s.train + s.val + s.test - 1.0) < 1e-6
 
 
 def test_split_fractions_defaults_values() -> None:
-    """Verify SplitFractions default values are 0.7/0.15/0.15."""
+    """Verify default SplitFractions are 0.7/0.15/0.15."""
     s = SplitFractions()
 
     assert s.train == pytest.approx(0.7)
@@ -120,15 +123,14 @@ def test_split_fractions_zero_val_accepted() -> None:
 
 
 def test_split_fractions_custom_valid_split() -> None:
-    """Verify SplitFractions accepts a custom split that sums to 1.0."""
+    """Verify SplitFractions accepts a custom 0.6/0.2/0.2 split."""
     s = SplitFractions(train=0.6, val=0.2, test=0.2)
 
     assert abs(s.train + s.val + s.test - 1.0) < 1e-6
 
 
-
 def test_model_config_minimal_defaults() -> None:
-    """Verify ModelConfig optional fields default to None/empty when not provided."""
+    """Verify ModelConfig defaults all optional fields to None or empty."""
     m = ModelConfig(name="gpt-4o-mini")
 
     assert m.temperature is None
@@ -154,19 +156,23 @@ def test_model_config_normalized_identifier_strips_both_slashes() -> None:
 
 
 def test_model_config_normalized_identifier_no_slashes_unchanged() -> None:
-    """Verify normalized_identifier returns the name unchanged when no slashes present."""
+    """Verify normalized_identifier returns the name unchanged when no slashes."""
     assert ModelConfig(name="gpt-4o-mini").normalized_identifier() == "gpt-4o-mini"
 
 
-@pytest.mark.parametrize("temp,valid", [
-    (-0.1, False),
-    (0.0, True),
-    (1.0, True),
-    (2.0, True),
-    (2.1, False),
-], ids=["below_min", "min", "mid", "max", "above_max"])
+@pytest.mark.parametrize(
+    ("temp", "valid"),
+    [
+        (-0.1, False),
+        (0.0, True),
+        (1.0, True),
+        (2.0, True),
+        (2.1, False),
+    ],
+    ids=["below_min", "min", "mid", "max", "above_max"],
+)
 def test_model_config_temperature_boundary(temp: float, valid: bool) -> None:
-    """Verify ModelConfig accepts temperature in [0.0, 2.0] and rejects outside that range."""
+    """Verify ModelConfig.temperature accepts [0.0, 2.0] and rejects values outside."""
     if valid:
         m = ModelConfig(name="x", temperature=temp)
         assert m.temperature == pytest.approx(temp)
@@ -175,15 +181,19 @@ def test_model_config_temperature_boundary(temp: float, valid: bool) -> None:
             ModelConfig(name="x", temperature=temp)
 
 
-@pytest.mark.parametrize("top_p,valid", [
-    (-0.01, False),
-    (0.0, True),
-    (0.5, True),
-    (1.0, True),
-    (1.01, False),
-], ids=["below_min", "min", "mid", "max", "above_max"])
+@pytest.mark.parametrize(
+    ("top_p", "valid"),
+    [
+        (-0.01, False),
+        (0.0, True),
+        (0.5, True),
+        (1.0, True),
+        (1.01, False),
+    ],
+    ids=["below_min", "min", "mid", "max", "above_max"],
+)
 def test_model_config_top_p_boundary(top_p: float, valid: bool) -> None:
-    """Verify ModelConfig accepts top_p in [0.0, 1.0] and rejects outside that range."""
+    """Verify ModelConfig.top_p accepts [0.0, 1.0] and rejects values outside."""
     if valid:
         m = ModelConfig(name="x", top_p=top_p)
         assert m.top_p == pytest.approx(top_p)
@@ -192,13 +202,17 @@ def test_model_config_top_p_boundary(top_p: float, valid: bool) -> None:
             ModelConfig(name="x", top_p=top_p)
 
 
-@pytest.mark.parametrize("max_tokens,valid", [
-    (0, False),
-    (1, True),
-    (4096, True),
-], ids=["zero", "min", "large"])
+@pytest.mark.parametrize(
+    ("max_tokens", "valid"),
+    [
+        (0, False),
+        (1, True),
+        (4096, True),
+    ],
+    ids=["zero", "min", "large"],
+)
 def test_model_config_max_tokens_boundary(max_tokens: int, valid: bool) -> None:
-    """Verify ModelConfig accepts max_tokens >= 1 and rejects zero."""
+    """Verify ModelConfig.max_tokens requires >= 1 and rejects 0 or negative."""
     if valid:
         m = ModelConfig(name="x", max_tokens=max_tokens)
         assert m.max_tokens == max_tokens

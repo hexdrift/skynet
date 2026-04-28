@@ -30,14 +30,14 @@ Usage:
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 FIXTURES_ROOT = Path(__file__).parent
 
 
-@lru_cache(maxsize=None)
+@cache
 def _read(path: str) -> str:
     """Read and cache the raw text of a fixture file at *path* relative to FIXTURES_ROOT.
 

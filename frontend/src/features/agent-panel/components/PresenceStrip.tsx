@@ -15,11 +15,7 @@ interface PresenceStripProps {
  * is working so activity is noticeable even at a glance. The hue is
  * driven by the current trust mode so the color carries that signal.
  */
-export function PresenceStrip({
-  active,
-  hue = "#3D2E22",
-  className,
-}: PresenceStripProps) {
+export function PresenceStrip({ active, hue = "#3D2E22", className }: PresenceStripProps) {
   return (
     <span
       aria-hidden="true"

@@ -1,12 +1,5 @@
-/**
- * Constants for the optimization detail page.
- *
- * Extracted from app/optimizations/[id]/page.tsx as a partial split —
- * full decomposition of the 2735-line page is a dedicated follow-up
- * (audit #13). These constants are pure data and safe to move first.
- */
-
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 export const STATUS_COLORS: Record<string, string> = {
   pending: "status-pill-pending",
@@ -25,38 +18,83 @@ export type PipelineStage =
   | "evaluating"
   | "done";
 
-export const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = [
-  { key: "validating", label: "אימות" },
-  { key: "splitting", label: "חלוקת נתונים" },
+export const PIPELINE_STAGES: Array<{ key: PipelineStage; label: string }> = [
+  { key: "validating", label: msg("auto.features.optimizations.constants.literal.1") },
+  { key: "splitting", label: msg("auto.features.optimizations.constants.literal.2") },
   { key: "baseline", label: TERMS.baselineScore },
   { key: "optimizing", label: TERMS.optimization },
-  { key: "evaluating", label: "הערכה" },
+  { key: "evaluating", label: msg("auto.features.optimizations.constants.literal.3") },
 ];
 
 export const STAGE_INFO: Record<string, { title: string; description: string; details: string }> = {
   validating: {
-    title: "אימות הקלט",
-    description: `בדיקה שכל הרכיבים תקינים לפני תחילת ה${TERMS.optimization}.`,
-    details: `ה${TERMS.signature} של הקלט והפלט נבדק מול מיפוי העמודות ב${TERMS.dataset}. ${TERMS.metric} נטענת ומאומתת. ה${TERMS.module} וה${TERMS.optimizer} נבדקים לתאימות. אם נמצאת שגיאה — ה${TERMS.optimization} נעצרת כאן.`,
+    title: msg("auto.features.optimizations.constants.literal.4"),
+    description: formatMsg("auto.features.optimizations.constants.template.1", {
+      p1: TERMS.optimization,
+    }),
+    details: formatMsg("auto.features.optimizations.constants.template.2", {
+      p1: TERMS.signature,
+      p2: TERMS.dataset,
+      p3: TERMS.metric,
+      p4: TERMS.module,
+      p5: TERMS.optimizer,
+      p6: TERMS.optimization,
+    }),
   },
   splitting: {
-    title: "חלוקת הנתונים",
-    description: `ה${TERMS.dataset} מחולק לשלושה סטים: ${TERMS.splitTrain}, ${TERMS.splitVal} ו${TERMS.splitTest}.`,
-    details: `השורות מעורבבות באופן אקראי עם ערך התחלתי קבוע כדי להבטיח תוצאות זהות בכל ${TERMS.optimizationTypeRun}. לאחר מכן הן מחולקות לפי היחסים שהוגדרו. סט הבדיקה נשמר בצד ולא משתתף בתהליך ה${TERMS.optimization}.`,
+    title: msg("auto.features.optimizations.constants.literal.5"),
+    description: formatMsg("auto.features.optimizations.constants.template.3", {
+      p1: TERMS.dataset,
+      p2: TERMS.splitTrain,
+      p3: TERMS.splitVal,
+      p4: TERMS.splitTest,
+    }),
+    details: formatMsg("auto.features.optimizations.constants.template.4", {
+      p1: TERMS.optimizationTypeRun,
+      p2: TERMS.optimization,
+    }),
   },
   baseline: {
-    title: `מדידת ${TERMS.baselineScore}`,
-    description: `הרצת ה${TERMS.program} ללא ${TERMS.optimization} על סט הבדיקה.`,
-    details: `ה${TERMS.program} רצה כפי שהיא — ללא prompt engineering או דוגמאות — על כל ${TERMS.example} בסט הבדיקה. ${TERMS.metric} מחשבת ${TERMS.score} לכל ${TERMS.example}, והממוצע הוא ${TERMS.baselineScore}. ציון זה משמש כנקודת השוואה ל${TERMS.scoreImprovement} שה${TERMS.optimization} מביאה.`,
+    title: formatMsg("auto.features.optimizations.constants.template.5", {
+      p1: TERMS.baselineScore,
+    }),
+    description: formatMsg("auto.features.optimizations.constants.template.6", {
+      p1: TERMS.program,
+      p2: TERMS.optimization,
+    }),
+    details: formatMsg("auto.features.optimizations.constants.template.7", {
+      p1: TERMS.program,
+      p2: TERMS.example,
+      p3: TERMS.metric,
+      p4: TERMS.score,
+      p5: TERMS.example,
+      p6: TERMS.baselineScore,
+      p7: TERMS.scoreImprovement,
+      p8: TERMS.optimization,
+    }),
   },
   optimizing: {
     title: TERMS.optimization,
-    description: `ה${TERMS.optimizer} משפר את ה${TERMS.program} באמצעות סט האימון.`,
-    details: `ה${TERMS.optimizer} מנסה שילובים שונים של הנחיות, דוגמאות נבחרות והוראות כדי למקסם את ציון המדידה על סט האימות. כל ניסיון מריץ את ה${TERMS.program} עם הגדרה שונה ומודד את התוצאה. בסיום נבחרת הגרסה הטובה ביותר.`,
+    description: formatMsg("auto.features.optimizations.constants.template.8", {
+      p1: TERMS.optimizer,
+      p2: TERMS.program,
+    }),
+    details: formatMsg("auto.features.optimizations.constants.template.9", {
+      p1: TERMS.optimizer,
+      p2: TERMS.program,
+    }),
   },
   evaluating: {
-    title: "הערכה סופית",
-    description: `הרצת ה${TERMS.program} המשופרת על סט הבדיקה.`,
-    details: `ה${TERMS.program} המשופרת רצה על סט הבדיקה — אותן דוגמאות שנמדדו בשלב ה${TERMS.baseline}. ההשוואה בין הציונים מראה את ה${TERMS.scoreImprovement} בפועל. אם ה${TERMS.program} המשופרת גרועה יותר מהמקורית, המערכת שומרת את ה${TERMS.program} המקורית.`,
+    title: msg("auto.features.optimizations.constants.literal.6"),
+    description: formatMsg("auto.features.optimizations.constants.template.10", {
+      p1: TERMS.program,
+    }),
+    details: formatMsg("auto.features.optimizations.constants.template.11", {
+      p1: TERMS.program,
+      p2: TERMS.baseline,
+      p3: TERMS.scoreImprovement,
+      p4: TERMS.program,
+      p5: TERMS.program,
+    }),
   },
 };

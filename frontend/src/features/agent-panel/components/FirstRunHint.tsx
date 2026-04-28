@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
+import { msg } from "@/shared/lib/messages";
+import { formatShortcut, useUserPrefs } from "@/features/settings";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -10,12 +12,9 @@ interface FirstRunHintProps {
   className?: string;
 }
 
-/**
- * One-time tooltip anchored above the minimized pill that teaches
- * users about the Ctrl+J shortcut. Dismisses permanently on first
- * interaction anywhere on the hint or the pill itself.
- */
 export function FirstRunHint({ onDismiss, className }: FirstRunHintProps) {
+  const { prefs } = useUserPrefs();
+  const shortcutLabel = formatShortcut(prefs.agentShortcut);
   return (
     <div
       role="status"
@@ -32,15 +31,18 @@ export function FirstRunHint({ onDismiss, className }: FirstRunHintProps) {
     >
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0 leading-snug">
-          <div className="font-medium">עוזר חדש</div>
+          <div className="font-medium">
+            {msg("auto.features.agent.panel.components.firstrunhint.1")}
+          </div>
           <div className="text-muted-foreground mt-0.5">
-            נסה — <span className="font-mono text-[0.6875rem]">Ctrl+J</span>
+            {msg("auto.features.agent.panel.components.firstrunhint.2")}
+            <span className="font-mono text-[0.6875rem]">{shortcutLabel}</span>
           </div>
         </div>
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="סגור"
+          aria-label={msg("auto.features.agent.panel.components.firstrunhint.literal.1")}
           className="rounded-md p-0.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors cursor-pointer -me-1 -mt-0.5"
         >
           <X className="size-3" />

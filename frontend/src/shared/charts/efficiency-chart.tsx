@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Efficiency chart (improvement per minute)
- * Shows optimization efficiency as improvement per minute of runtime
- * Preserves exact styling, RTL layout, and hover interactions
- */
-
 import { useState } from "react";
 import {
   BarChart,
@@ -19,9 +13,10 @@ import {
 } from "recharts";
 import { ChartTooltip } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface EfficiencyChartProps {
-  data: Array<{ name: string; יעילות: number }>;
+  data: Array<{ name: string; efficiency: number }>;
   optimizationIds?: string[];
   onBarClick?: (optimizationId: string) => void;
 }
@@ -42,7 +37,9 @@ export function EfficiencyChart({ data, optimizationIds, onBarClick }: Efficienc
             axisLine={false}
             tick={{ fontSize: 9, fill: "#A69585", fontFamily: "var(--font-mono, monospace)" }}
             label={{
-              value: `מזהה ${TERMS.optimization}`,
+              value: formatMsg("auto.shared.charts.efficiency.chart.template.1", {
+                p1: TERMS.optimization,
+              }),
               position: "insideBottom",
               offset: -10,
               fontSize: 10,
@@ -53,12 +50,18 @@ export function EfficiencyChart({ data, optimizationIds, onBarClick }: Efficienc
             axisLine={false}
             tick={{ fontSize: 10 }}
             className="fill-muted-foreground"
-            label={{ value: "שיפור לדקה", angle: -90, position: "center", dx: -15, fontSize: 10 }}
+            label={{
+              value: msg("auto.shared.charts.efficiency.chart.literal.1"),
+              angle: -90,
+              position: "center",
+              dx: -15,
+              fontSize: 10,
+            }}
           />
           <Tooltip content={<ChartTooltip />} />
           <Bar
-            dataKey="יעילות"
-            name="שיפור לדקה"
+            dataKey="efficiency"
+            name={msg("auto.shared.charts.efficiency.chart.literal.2")}
             fill="var(--color-chart-1)"
             radius={[4, 4, 0, 0]}
             barSize={24}
