@@ -1,0 +1,657 @@
+"""Single-optimization read routes and evaluate-examples."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import logging
+import pickle
+import random
+from datetime import UTC, datetime
+
+import dspy
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+
+from ....constants import (
+    OPTIMIZATION_TYPE_GRID_SEARCH,
+    OPTIMIZATION_TYPE_RUN,
+    PAYLOAD_OVERVIEW_MODEL_NAME,
+    PAYLOAD_OVERVIEW_MODEL_SETTINGS,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
+)
+from ....models import (
+    ColumnMapping,
+    GridSearchResponse,
+    JobLogEntry,
+    ModelConfig,
+    OptimizationStatus,
+    OptimizationStatusResponse,
+    OptimizationSummaryResponse,
+    ProgramArtifactResponse,
+    RunResponse,
+    SplitFractions,
+)
+from ....registry import ResolverError, resolve_module_factory
+from ....service_gateway.language_models import build_language_model
+from ....service_gateway.optimization.data import load_metric_from_code, load_signature_from_code
+from ...converters import (
+    compute_elapsed,
+    extract_estimated_remaining,
+    overview_to_base_fields,
+    parse_overview,
+    parse_timestamp,
+    status_to_job_status,
+)
+from ...errors import DomainError
+from .._helpers import _program_cache, build_summary
+from ..constants import TERMINAL_STATUSES
+from ._local import remap_test_indices
+
+logger = logging.getLogger(__name__)
+
+
+def register_detail_routes(router: APIRouter, *, job_store) -> None:
+    """Register single-optimization read routes on ``router``.
+
+    Args:
+        router: The router to attach the detail routes to.
+        job_store: Job-store the routes read from.
+    """
+
+    @router.get(
+        "/optimizations/{optimization_id}",
+        response_model=OptimizationStatusResponse,
+        summary="Full optimization detail with logs, progress, metrics, and result",
+    )
+    def get_job(optimization_id: str, request: Request) -> JSONResponse:
+        """Return full optimization detail with logs, progress, metrics, and result.
+
+        Supports conditional GET via ``If-None-Match`` / ``ETag`` (304 when
+        unchanged). Grid searches include partial ``grid_result`` while still
+        running. Corrupted result data is omitted with a warning rather than
+        raising 500. 404 if the optimization id is unknown.
+
+        Args:
+            optimization_id: The id of the optimization to fetch.
+            request: Starlette request used to check ``If-None-Match``.
+
+        Returns:
+            A ``JSONResponse`` carrying the serialized
+            ``OptimizationStatusResponse`` (or a 304 when the ETag matches).
+
+        Raises:
+            DomainError: 404 when the optimization id is unknown.
+        """
+
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            logger.warning("Optimization status requested for unknown optimization_id=%s", optimization_id)
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+
+        progress_events = job_store.get_progress_events(optimization_id)
+        logs = job_store.get_logs(optimization_id)
+
+        overview = parse_overview(job_data)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
+
+        result = None
+        grid_result = None
+        result_data = job_data.get("result")
+        if result_data and isinstance(result_data, dict):
+            try:
+                if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+                    grid_result = GridSearchResponse.model_validate(result_data)
+                elif status == OptimizationStatus.success:
+                    result = RunResponse.model_validate(result_data)
+            except ValidationError:
+                logger.warning("Optimization %s has corrupted result data", optimization_id)
+
+        created_at = parse_timestamp(job_data.get("created_at")) or datetime.now(UTC)
+        started_at = parse_timestamp(job_data.get("started_at"))
+        completed_at = parse_timestamp(job_data.get("completed_at"))
+
+        est_remaining = None
+        if status not in TERMINAL_STATUSES:
+            est_remaining = extract_estimated_remaining(job_data)
+
+        latest_metrics = job_data.get("latest_metrics", {})
+        completed_pairs = None
+        failed_pairs = None
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+            if grid_result:
+                completed_pairs = grid_result.completed_pairs
+                failed_pairs = grid_result.failed_pairs
+            else:
+                live_completed = latest_metrics.get("completed_so_far")
+                completed_pairs = live_completed if isinstance(live_completed, int) else 0
+                live_failed = latest_metrics.get("failed_so_far")
+                failed_pairs = live_failed if isinstance(live_failed, int) else 0
+
+        elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
+
+        logger.debug("Returning status for optimization_id=%s state=%s", optimization_id, status)
+        response_data = OptimizationStatusResponse(
+            optimization_id=optimization_id,
+            status=status,
+            created_at=created_at,
+            started_at=started_at,
+            completed_at=completed_at,
+            elapsed=elapsed_str,
+            elapsed_seconds=elapsed_secs,
+            estimated_remaining=est_remaining,
+            **overview_to_base_fields(overview),
+            message=job_data.get("message"),
+            latest_metrics=latest_metrics,
+            completed_pairs=completed_pairs,
+            failed_pairs=failed_pairs,
+            progress_events=progress_events,
+            logs=[JobLogEntry(**log) for log in logs],
+            result=result,
+            grid_result=grid_result,
+        )
+
+        etag_src = f"{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}"
+        etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == etag:
+            return JSONResponse(status_code=304, content=None, headers={"ETag": etag})
+
+        headers = {"ETag": etag}
+        if status in TERMINAL_STATUSES:
+            headers["Cache-Control"] = "private, max-age=60"
+        else:
+            headers["Cache-Control"] = "private, max-age=1"
+
+        return JSONResponse(
+            content=response_data.model_dump(mode="json"),
+            headers=headers,
+        )
+
+    @router.get(
+        "/optimizations/{optimization_id}/summary",
+        response_model=OptimizationSummaryResponse,
+        summary="Lightweight summary card for one optimization",
+        tags=["agent"],
+    )
+    def get_job_summary(optimization_id: str) -> OptimizationSummaryResponse:
+        """Return the compact dashboard-card shape for a single optimization.
+
+        Args:
+            optimization_id: Optimization id to summarise.
+
+        Returns:
+            An ``OptimizationSummaryResponse`` for dashboard display.
+
+        Raises:
+            DomainError: 404 if the optimization is unknown.
+        """
+
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            logger.warning("Optimization summary requested for unknown optimization_id=%s", optimization_id)
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        job_data["progress_count"] = job_store.get_progress_count(optimization_id)
+        job_data["log_count"] = job_store.get_log_count(optimization_id)
+        return build_summary(job_data)
+
+    @router.get(
+        "/optimizations/{optimization_id}/dataset",
+        summary="Reconstruct the train/val/test split used by this optimization",
+    )
+    def get_job_dataset(optimization_id: str) -> dict:
+        """Reconstruct the train/val/test split deterministically from the stored seed.
+
+        Each row includes its global dataset index for UI highlighting.
+
+        Args:
+            optimization_id: Optimization id whose dataset should be returned.
+
+        Returns:
+            A dict with ``total_rows``, ``splits``, ``column_mapping``, and
+            ``split_counts``.
+
+        Raises:
+            DomainError: 404 (optimization/payload/dataset missing), 500
+                (corrupt mapping).
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        payload = job_data.get("payload")
+        if not payload or not isinstance(payload, dict):
+            raise DomainError("optimization.payload_unavailable", status=404)
+
+        dataset = payload.get("dataset")
+        if not dataset or not isinstance(dataset, list):
+            raise DomainError("optimization.dataset_unavailable", status=404)
+
+        raw_mapping = payload.get("column_mapping", {})
+        try:
+            column_mapping = ColumnMapping.model_validate(raw_mapping)
+        except ValidationError:
+            raise DomainError("optimization.corrupt_column_mapping", status=500) from None
+
+        raw_fractions = payload.get("split_fractions", {})
+        try:
+            fractions = SplitFractions.model_validate(raw_fractions)
+        except ValidationError:
+            fractions = SplitFractions()
+
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+
+        # Replicates the service_gateway/data.py split algorithm. When seed
+        # is None, derive a stable seed from optimization_id so repeated
+        # calls produce the same shuffle (needed for index remapping).
+        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+        total = len(dataset)
+        indices = list(range(total))
+        if shuffle:
+            rng = random.Random(effective_seed)
+            rng.shuffle(indices)
+
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        train_indices = indices[:train_end]
+        val_indices = indices[train_end:val_end]
+        test_indices = indices[val_end:]
+
+        splits = {
+            "train": [{"index": i, "row": dataset[i]} for i in train_indices],
+            "val": [{"index": i, "row": dataset[i]} for i in val_indices],
+            "test": [{"index": i, "row": dataset[i]} for i in test_indices],
+        }
+
+        return {
+            "total_rows": total,
+            "splits": splits,
+            "column_mapping": {
+                "inputs": column_mapping.inputs,
+                "outputs": column_mapping.outputs,
+            },
+            "split_counts": {
+                "train": len(train_indices),
+                "val": len(val_indices),
+                "test": len(test_indices),
+            },
+        }
+
+    @router.post(
+        "/optimizations/{optimization_id}/evaluate-examples",
+        summary="Run the optimized or baseline program on specific dataset rows",
+    )
+    def evaluate_examples(optimization_id: str, req: dict) -> dict:
+        """Run the optimized or baseline program on specific dataset rows.
+
+        Out-of-range indices are silently skipped.
+
+        Args:
+            optimization_id: Optimization id whose program should run.
+            req: Request body with ``indices`` and ``program_type`` keys.
+
+        Returns:
+            ``{"results": [...], "program_type": ...}`` with one entry per
+            evaluated row.
+
+        Raises:
+            DomainError: 404 (missing optimization/payload), 400 (no
+                metric/model/module), 409 (no result available for the
+                optimized program).
+        """
+        indices = req.get("indices", [])
+        program_type = req.get("program_type", "optimized")
+
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        overview = parse_overview(job_data)
+        payload = job_data.get("payload")
+        if not payload or not isinstance(payload, dict):
+            raise DomainError("optimization.no_payload", status=404)
+
+        dataset = payload.get("dataset", [])
+        total = len(dataset)
+        column_mapping_raw = payload.get("column_mapping", {})
+        column_mapping = ColumnMapping.model_validate(column_mapping_raw)
+
+        metric_code = payload.get("metric_code", "")
+        if not metric_code:
+            raise DomainError("optimization.no_metric_code", status=400)
+        # exec() isolation gap: runs user code in the API process. Same Phase B
+        # story as ``/probe-models`` — evaluate-examples calls the metric once
+        # per requested row, so ``safe_exec.probe_metric_on_sample`` would
+        # spawn a subprocess per row. The payload here was already validated
+        # through the subprocess boundary when the job was submitted.
+        metric = load_metric_from_code(metric_code)
+
+        model_settings = payload.get("model_config") or overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS, {})
+        model_name_str = overview.get(PAYLOAD_OVERVIEW_MODEL_NAME, "")
+        if model_settings:
+            model_config = ModelConfig.model_validate(model_settings)
+        elif model_name_str:
+            model_config = ModelConfig(name=model_name_str)
+        else:
+            raise DomainError("optimization.no_model_config", status=400)
+
+        lm = build_language_model(model_config)
+
+        if program_type == "baseline":
+            signature_code = payload.get("signature_code", "")
+            signature_cls = load_signature_from_code(signature_code)
+            module_name = payload.get("module_name", "predict")
+            module_kwargs = dict(payload.get("module_kwargs", {}))
+
+            try:
+                module_factory, auto_signature = resolve_module_factory(module_name)
+            except ResolverError as exc:
+                raise DomainError("submission.module_resolve_failed", status=400, error=str(exc)) from exc
+            if auto_signature or "signature" not in module_kwargs:
+                module_kwargs["signature"] = signature_cls
+            program = module_factory(**module_kwargs)
+        else:
+            result_data = job_data.get("result")
+            if not result_data:
+                raise DomainError("optimization.no_result_for_artifact", status=409)
+            result = RunResponse.model_validate(result_data)
+            artifact = result.program_artifact
+            if not artifact or not artifact.program_pickle_base64:
+                raise DomainError("optimization.no_program_artifact", status=409)
+            if optimization_id not in _program_cache:
+                program_bytes = base64.b64decode(artifact.program_pickle_base64)
+                _program_cache[optimization_id] = pickle.loads(program_bytes)
+            program = _program_cache[optimization_id]
+
+        results = []
+        with dspy.context(lm=lm):
+            for idx in indices:
+                if idx < 0 or idx >= total:
+                    continue
+                row = dataset[idx]
+                example_dict = {}
+                for sig_field, col_name in column_mapping.inputs.items():
+                    example_dict[sig_field] = row.get(col_name, "")
+                for sig_field, col_name in column_mapping.outputs.items():
+                    example_dict[sig_field] = row.get(col_name, "")
+
+                example = dspy.Example(**example_dict).with_inputs(*list(column_mapping.inputs.keys()))
+
+                try:
+                    prediction = program(**{k: example_dict[k] for k in column_mapping.inputs})
+                    outputs = {}
+                    for sig_field in column_mapping.outputs:
+                        outputs[sig_field] = getattr(prediction, sig_field, None)
+
+                    try:
+                        score = metric(example, prediction)
+                        score = float(score) if isinstance(score, (int, float, bool)) else 0.0
+                    except Exception:
+                        score = 0.0
+
+                    results.append(
+                        {
+                            "index": idx,
+                            "outputs": outputs,
+                            "score": score,
+                            "pass": score > 0,
+                        }
+                    )
+                except Exception as exc:
+                    results.append(
+                        {
+                            "index": idx,
+                            "outputs": {},
+                            "score": 0.0,
+                            "pass": False,
+                            "error": str(exc),
+                        }
+                    )
+
+        return {"results": results, "program_type": program_type}
+
+    @router.get(
+        "/optimizations/{optimization_id}/test-results",
+        summary="Per-example baseline and optimized test scores",
+    )
+    def get_test_results(optimization_id: str) -> dict:
+        """Return stored per-example baseline and optimized test scores.
+
+        Sequential test-split indices are remapped to global dataset indices for
+        UI use. No inference is executed.
+
+        Args:
+            optimization_id: Optimization id whose test results should be returned.
+
+        Returns:
+            ``{"baseline": [...], "optimized": [...]}`` with global indices.
+
+        Raises:
+            DomainError: 404 if unknown, 409 if no result yet.
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        result_data = job_data.get("result")
+        if not result_data:
+            raise DomainError("optimization.no_result_pending", status=409)
+
+        result = RunResponse.model_validate(result_data)
+
+        payload = job_data.get("payload", {})
+        dataset = payload.get("dataset", [])
+        total = len(dataset)
+        fractions_raw = payload.get("split_fractions", {})
+        fractions = SplitFractions.model_validate(fractions_raw)
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+
+        ordered = list(range(total))
+        if shuffle:
+            rng = random.Random(effective_seed)
+            rng.shuffle(ordered)
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        test_indices = ordered[val_end:]
+
+        return {
+            "baseline": remap_test_indices(result.baseline_test_results, test_indices),
+            "optimized": remap_test_indices(result.optimized_test_results, test_indices),
+        }
+
+    @router.get(
+        "/optimizations/{optimization_id}/artifact",
+        response_model=ProgramArtifactResponse,
+        summary="Download the compiled DSPy program artifact",
+    )
+    def get_job_artifact(optimization_id: str) -> ProgramArtifactResponse:
+        """Return the pickled program artifact for a successful single-run optimization.
+
+        Grid searches 404 here — use ``/grid-result`` instead (one artifact per pair).
+
+        Args:
+            optimization_id: Optimization id whose artifact should be returned.
+
+        Returns:
+            A ``ProgramArtifactResponse`` carrying the pickled program.
+
+        Raises:
+            DomainError: 404 (unknown / grid), 409 (not success), 500
+                (corrupt result).
+        """
+
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            logger.warning("Artifact requested for unknown optimization_id=%s", optimization_id)
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        overview = parse_overview(job_data)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
+
+        if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise DomainError("grid_search.artifact_per_pair_redirect", status=404)
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+
+        if status in {OptimizationStatus.pending, OptimizationStatus.validating, OptimizationStatus.running}:
+            raise DomainError("optimization.not_finished", status=409)
+
+        if status == OptimizationStatus.failed:
+            error_msg = job_data.get("message") or "unknown error"
+            raise DomainError("optimization.failed_no_artifact", status=409, error=error_msg)
+
+        if status == OptimizationStatus.cancelled:
+            raise DomainError("optimization.cancelled_no_artifact", status=409)
+
+        if status == OptimizationStatus.success:
+            result_data = job_data.get("result")
+            if result_data and isinstance(result_data, dict):
+                try:
+                    result = RunResponse.model_validate(result_data)
+                except ValidationError:
+                    logger.warning("Optimization %s has corrupted result data", optimization_id)
+                    raise DomainError("optimization.corrupt_result", status=500) from None
+                return ProgramArtifactResponse(
+                    program_artifact=result.program_artifact,
+                )
+
+        raise DomainError("optimization.no_artifact_generic", status=409)
+
+    @router.get(
+        "/optimizations/{optimization_id}/grid-result",
+        response_model=GridSearchResponse,
+        summary="Retrieve the full grid-search result with per-pair details",
+    )
+    def get_grid_search_result(optimization_id: str) -> GridSearchResponse:
+        """Return all pair results for a finished grid search, including ``best_pair``.
+
+        Only valid after the sweep reaches a terminal status. For live progress
+        use ``GET /optimizations/{id}`` whose ``grid_result`` field updates
+        in-flight.
+
+        Args:
+            optimization_id: Grid-search optimization id.
+
+        Returns:
+            The full ``GridSearchResponse`` including every pair.
+
+        Raises:
+            DomainError: 404 (unknown / not grid / no result), 409 (still
+                running / failed without result), 500 (corrupt result).
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        overview = parse_overview(job_data)
+        if overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise DomainError("grid_search.not_a_grid_search", status=404)
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status not in TERMINAL_STATUSES:
+            raise DomainError("optimization.not_finished", status=409)
+
+        result_data = job_data.get("result")
+        if not result_data or not isinstance(result_data, dict):
+            if status == OptimizationStatus.failed:
+                error_msg = job_data.get("message") or "unknown error"
+                raise DomainError("grid_search.failed_no_result", status=409, error=error_msg)
+            if status == OptimizationStatus.cancelled:
+                raise DomainError("grid_search.cancelled_no_result", status=409)
+            raise DomainError("grid_search.no_result_available", status=404)
+
+        try:
+            return GridSearchResponse.model_validate(result_data)
+        except ValidationError:
+            raise DomainError("grid_search.corrupt_result", status=500) from None
+
+    @router.get(
+        "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
+        summary="Per-example test scores for one grid-search pair",
+    )
+    def get_pair_test_results(optimization_id: str, pair_index: int) -> dict:
+        """Per-pair analogue of ``GET /test-results`` with global-index remapping.
+
+        Args:
+            optimization_id: Grid-search optimization id.
+            pair_index: Index of the pair to score.
+
+        Returns:
+            ``{"baseline": [...], "optimized": [...]}`` with global indices.
+
+        Raises:
+            DomainError: 404 (unknown / pair missing), 409 (not a grid
+                search, not success, or no stored result).
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+
+        overview = parse_overview(job_data)
+        optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
+
+        if optimization_type != OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise DomainError("grid_search.pair_test_results_grid_only", status=409)
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status != OptimizationStatus.success:
+            raise DomainError(
+                "optimization.not_success_status_for_test_results",
+                status=409,
+                params={"status": status.value},
+            )
+
+        result_data = job_data.get("result")
+        if not result_data or not isinstance(result_data, dict):
+            raise DomainError("optimization.no_result", status=409)
+
+        grid_result = GridSearchResponse.model_validate(result_data)
+
+        pair = None
+        for pr in grid_result.pair_results:
+            if pr.pair_index == pair_index:
+                pair = pr
+                break
+        if pair is None:
+            raise DomainError(
+                "grid_search.pair_position_missing",
+                status=404,
+                pair_index=pair_index,
+            )
+
+        payload = job_data.get("payload", {})
+        dataset = payload.get("dataset", [])
+        total = len(dataset)
+        fractions_raw = payload.get("split_fractions", {})
+        fractions = SplitFractions.model_validate(fractions_raw)
+        shuffle = payload.get("shuffle", True)
+        seed = payload.get("seed")
+        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+
+        ordered = list(range(total))
+        if shuffle:
+            rng = random.Random(effective_seed)
+            rng.shuffle(ordered)
+        train_end = int(total * fractions.train)
+        val_end = train_end + int(total * fractions.val)
+        test_indices = ordered[val_end:]
+
+        return {
+            "baseline": remap_test_indices(pair.baseline_test_results, test_indices),
+            "optimized": remap_test_indices(pair.optimized_test_results, test_indices),
+        }
