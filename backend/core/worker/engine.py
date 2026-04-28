@@ -35,6 +35,7 @@ from ..models import GridSearchRequest, RunRequest
 from ..notifications import notify_job_completed
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
+from ..service_gateway.recommendations import embed_finished_job
 from ..storage import JobStore
 from .constants import EVENT_ERROR, EVENT_LOG, EVENT_PROGRESS, EVENT_RESULT
 from .subprocess_runner import run_service_in_subprocess, set_fork_service
@@ -674,8 +675,6 @@ class BackgroundWorker:
             optimization_id: ID of the finished job to embed.
         """
         try:
-            from ..service_gateway.recommendations import embed_finished_job
-
             embed_finished_job(optimization_id, job_store=self._job_store)
         except Exception as exc:  # isolation boundary: best-effort indexing must never impact job status
             logger.debug("Recommendation indexing for %s failed: %s", optimization_id, exc)

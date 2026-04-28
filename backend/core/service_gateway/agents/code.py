@@ -103,9 +103,6 @@ def _validate_metric_code(code: str) -> str:
     return ""
 
 
-# ─────────────────────────── Seed-mode signatures ────────────────────────────
-
-
 class GenerateSignatureCode(dspy.Signature):
     """Write a dspy.Signature class that teaches the downstream LLM what to do.
 
@@ -378,9 +375,6 @@ class GenerateSeedMessage(dspy.Signature):
     )
 
 
-# ─────────────────────────── Chat-mode signature ─────────────────────────────
-
-
 class CodeAssistant(dspy.Signature):
     """Chat assistant attached to a DSPy Signature + metric-function editor.
 
@@ -526,9 +520,6 @@ class CodeAssistant(dspy.Signature):
     )
 
 
-# ─────────────────────────── Reasoning streaming ─────────────────────────────
-
-
 def _extract_reasoning_token(chunk: object) -> str | None:
     """Pull a thinking/reasoning token from a raw LiteLLM streaming chunk.
 
@@ -626,9 +617,6 @@ class ReasoningStreamListener(dspy.streaming.StreamListener):
         return
 
 
-# ─────────────────────────── LM construction ─────────────────────────────────
-
-
 def _build_agent_lm() -> dspy.LM:
     """Construct the LM used by the code agent from global settings.
 
@@ -661,9 +649,6 @@ def _build_agent_lm() -> dspy.LM:
         extra=extra,
     )
     return build_language_model(config)
-
-
-# ─────────────────────────── Seed path ───────────────────────────────────────
 
 
 async def _pump_seed_stream(
@@ -799,9 +784,6 @@ async def _run_seed(
                 results["assistant_message"] = getattr(chunk, "assistant_message", "") or ""
 
     return results
-
-
-# ─────────────────────────── Chat (ReAct) path ───────────────────────────────
 
 
 def _emit_to_code_queue(
@@ -1152,9 +1134,6 @@ async def _run_agent(
         "metric_code": session.metric_code,
         "assistant_message": reply_text,
     }
-
-
-# ─────────────────────────── Public entrypoint ───────────────────────────────
 
 
 async def _run_code_agent_orchestration(

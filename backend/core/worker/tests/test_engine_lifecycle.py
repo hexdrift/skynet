@@ -25,13 +25,13 @@ import pytest
 
 import core.worker.engine as engine_module
 from core.storage.base import JobStore
-from core.worker.engine import BackgroundWorker, get_worker, reset_worker_for_tests
 from core.worker.constants import (
     EVENT_ERROR,
     EVENT_LOG,
     EVENT_PROGRESS,
     EVENT_RESULT,
 )
+from core.worker.engine import BackgroundWorker, get_worker, reset_worker_for_tests
 
 from .conftest import FakeJobStore
 from .mocks import fake_mp_process

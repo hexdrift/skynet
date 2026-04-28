@@ -159,12 +159,15 @@ cd frontend && npm run build
 - UI is RTL (Hebrew) by default
 - Notification messages are in Hebrew
 
-## Commenting & docstring style
+## Commenting, docstring & import style (MANDATORY — apply to all backend Python, every session)
 
-- **Never write WHAT-comments.** Don't restate what a line of code does, name a section, or label obvious blocks. Identifiers and the code itself already convey the WHAT.
-- **Only write WHY-comments.** Add a comment when intent is non-obvious: a hidden constraint, a workaround for a specific bug, surprising behavior, or a non-trivial design decision. If removing the comment wouldn't confuse a future reader, don't write it.
-- **Backend Python — Google Args/Returns docstrings.** New public and internal functions get a Google-style docstring with `Args:` and `Returns:` sections (and `Raises:` only when the failure mode is non-obvious). Skip Args/Returns only when both are trivially typed and the one-line summary already covers them.
-- **Existing files** that have already had docstrings stripped (post-cleanup pass) stay stripped — don't reintroduce them.
+These rules are durable. They apply to every backend Python file (under `backend/`, excluding `.venv/`, `__pycache__/`, and `alembic/versions/`) and to every future change. New code follows them; existing code is brought into compliance whenever it is touched.
+
+- **Google-style docstrings on every function and method (public and private).** Format: a one-line imperative summary, then `Args:`, `Returns:`, and (only when the failure mode is non-obvious) `Raises:`. Skip the `Args:` / `Returns:` blocks only when **both** are trivially typed and the summary already covers them (e.g. tests that take no args and assert; private one-liners). Module docstrings are required at the top of every file.
+- **Imports only at the top of the file. No exceptions.** No `import` inside a function, method, or conditional block anywhere except module top. Optional deps go in a module-level `try/except ImportError` that aliases the symbol to ``None``; tests that need fresh re-imports use ``importlib.import_module`` (a function call, not an ``import`` statement); circular imports are resolved structurally (slim `__init__.py`, leaf-module splits, `TYPE_CHECKING` blocks) — never with inline imports.
+- **No WHAT-comments.** Don't restate what code does, label sections, or echo identifiers ("# loop over users", "# call API"). If a competent reader can understand the line by reading the line, the comment is dead weight — delete it.
+- **WHY-comments only.** Comments are reserved for non-obvious intent: a hidden constraint, a workaround for a specific bug, surprising behavior, a subtle invariant, a non-trivial design decision, or a tracking ticket. If deleting the comment wouldn't confuse a future reader, the comment shouldn't exist.
+- **Pydantic class docstrings are part of the OpenAPI contract** — see "Backend — Pydantic docstring OpenAPI drift" below before adding/removing them on `BaseModel` subclasses.
 
 ## Refactoring rules
 

@@ -9,7 +9,7 @@ from .api import create_app
 from .registry import ServiceRegistry
 from .service_gateway import DspyService
 from .storage import RemoteDBJobStore
-from .worker import BackgroundWorker, get_worker
+from .worker.engine import BackgroundWorker, get_worker
 
 __all__ = [
     "BackgroundWorker",

@@ -41,7 +41,7 @@ from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
 from ..storage import get_job_store
-from ..worker import BackgroundWorker, get_worker
+from ..worker.engine import BackgroundWorker, get_worker
 from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
 from .observability import install_metrics, install_request_id_middleware

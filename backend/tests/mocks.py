@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 from contextlib import contextmanager
 from typing import Any
@@ -55,5 +56,4 @@ def import_main_fresh(registry: Any = None, app: Any = None):
     """
     sys.modules.pop("main", None)
     with patch_main_dependencies(registry=registry, app=app):
-        import main as _main
-    return _main
+        return importlib.import_module("main")

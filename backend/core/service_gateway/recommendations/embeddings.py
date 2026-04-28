@@ -19,12 +19,22 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import TYPE_CHECKING
 
 from ...config import settings
 
-if TYPE_CHECKING:
+# sentence-transformers is an optional extra (pulls in torch); the recommendation
+# pipeline degrades to a no-op when it isn't installed.
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None  # type: ignore[assignment,misc]
+
+# numpy ships with sentence-transformers; when the extra isn't installed we never
+# call the encode path, so a stub is fine.
+try:
     import numpy as np
+except ImportError:
+    np = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +68,7 @@ class _JinaEmbedder:
         """
         if self._model is not None or self._failed:
             return
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
+        if SentenceTransformer is None:
             logger.warning(
                 "sentence-transformers not installed. Recommendations "
                 "ingest + search will be disabled until you run "
@@ -117,10 +125,8 @@ class _JinaEmbedder:
         if self._model is None:
             return None
         try:
-            import numpy as np
-
             raw = self._model.encode(text, show_progress_bar=False, convert_to_numpy=True)
-            vec: np.ndarray = raw[: self._dim]
+            vec = raw[: self._dim]
             norm = float(np.linalg.norm(vec))
             if norm == 0.0:
                 return None

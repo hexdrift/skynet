@@ -20,6 +20,7 @@ just with weaker summary-side signal.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -131,16 +132,14 @@ def summarize_task(
     if lm is None:
         return fallback
     try:
-        import json as _json
-
         sample_rows = dataset_sample[:3] if dataset_sample else []
         predictor = dspy.Predict(_TaskSummary)
         with dspy.context(lm=lm):
             out = predictor(
                 signature_code=(signature_code or "").strip()[:4000],
                 metric_code=(metric_code or "").strip()[:4000],
-                column_mapping=_json.dumps(column_mapping or {}, ensure_ascii=False)[:1000],
-                dataset_sample=_json.dumps(sample_rows, ensure_ascii=False)[:2000],
+                column_mapping=json.dumps(column_mapping or {}, ensure_ascii=False)[:1000],
+                dataset_sample=json.dumps(sample_rows, ensure_ascii=False)[:2000],
             )
         text = (out.task_description or "").strip()
         return text or fallback
