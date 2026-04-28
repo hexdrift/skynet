@@ -1,3 +1,9 @@
+"""DSPy language model factory.
+
+Builds ``dspy.LM`` instances from ``ModelConfig`` while filtering out
+``None`` optional fields so LiteLLM does not reject the call.
+"""
+
 import dspy
 
 from ..exceptions import ServiceError
@@ -12,13 +18,13 @@ def build_language_model(config: ModelConfig) -> dspy.LM:
     Extra kwargs from ``config.extra`` are merged in last.
 
     Args:
-        config: Model configuration including name and optional sampling parameters.
+        config: Provider-agnostic model configuration.
 
     Returns:
-        An instantiated DSPy LM ready for use in a ``dspy.context``.
+        A configured ``dspy.LM`` ready for use by an optimizer.
 
     Raises:
-        ServiceError: If ``dspy.LM`` raises a ValueError (e.g. unsupported model).
+        ServiceError: When ``dspy.LM`` rejects the configuration.
     """
 
     model_name = config.name.strip("/")

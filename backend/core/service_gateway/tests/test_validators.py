@@ -1,4 +1,4 @@
-"""Tests for the pure service_gateway validators."""
+"""Tests for ``core.service_gateway.optimization.validators``."""
 
 from __future__ import annotations
 
@@ -6,39 +6,39 @@ import pytest
 
 from core.exceptions import ServiceError
 from core.models import ColumnMapping
-from core.service_gateway.validators import (
+from core.service_gateway.optimization.validators import (
     require_mapping_columns_in_dataset,
     require_mapping_matches_signature,
 )
 
 
 def _mapping(inputs: dict[str, str], outputs: dict[str, str]) -> ColumnMapping:
-    """Build a ColumnMapping from raw dicts."""
+    """Build a ``ColumnMapping`` directly from input/output dicts."""
     return ColumnMapping(inputs=inputs, outputs=outputs)
 
 
 def test_require_mapping_matches_signature_ok() -> None:
-    """Mapping that covers all signature fields does not raise."""
+    """A complete mapping passes signature validation without raising."""
     m = _mapping({"question": "q"}, {"answer": "a"})
     require_mapping_matches_signature(m, ["question"], ["answer"])
 
 
 def test_require_mapping_matches_signature_missing_input() -> None:
-    """Missing input field in mapping raises ServiceError naming the field."""
+    """A missing required signature input raises with the offending name listed."""
     m = _mapping({"question": "q"}, {"answer": "a"})
     with pytest.raises(ServiceError, match="Missing inputs: \\['context'\\]"):
         require_mapping_matches_signature(m, ["question", "context"], ["answer"])
 
 
 def test_require_mapping_matches_signature_missing_output() -> None:
-    """Missing output field in mapping raises ServiceError naming the field."""
+    """A missing required signature output raises with the offending name listed."""
     m = _mapping({"question": "q"}, {"answer": "a"})
     with pytest.raises(ServiceError, match="missing outputs: \\['confidence'\\]"):
         require_mapping_matches_signature(m, ["question"], ["answer", "confidence"])
 
 
 def test_require_mapping_matches_signature_reports_both() -> None:
-    """Both missing inputs and outputs are reported in the same ServiceError."""
+    """When inputs and outputs are both incomplete, the error names both."""
     m = _mapping({"q": "q"}, {"a": "a"})
     with pytest.raises(ServiceError) as exc:
         require_mapping_matches_signature(m, ["q", "x"], ["a", "y"])
@@ -47,27 +47,27 @@ def test_require_mapping_matches_signature_reports_both() -> None:
 
 
 def test_require_mapping_columns_in_dataset_ok() -> None:
-    """Mapping whose columns all exist in the dataset does not raise."""
+    """A mapping whose columns all exist in the dataset passes validation."""
     m = _mapping({"question": "q"}, {"answer": "a"})
     require_mapping_columns_in_dataset(m, [{"q": "hi", "a": "hello", "extra": 1}])
 
 
 def test_require_mapping_columns_in_dataset_missing() -> None:
-    """Mapped column absent from dataset raises ServiceError."""
+    """A mapping referencing a column missing from every row raises."""
     m = _mapping({"question": "q"}, {"answer": "a"})
     with pytest.raises(ServiceError, match="columns not found in dataset: \\['a'\\]"):
         require_mapping_columns_in_dataset(m, [{"q": "hi"}])
 
 
 def test_require_mapping_columns_in_dataset_merges_row_keys() -> None:
-    """Columns across multiple rows are merged when checking availability."""
+    """Different rows can contribute different columns to the available set."""
     m = _mapping({"question": "q"}, {"answer": "a"})
     # Different rows contribute columns to the available set.
     require_mapping_columns_in_dataset(m, [{"q": "hi"}, {"a": "hello"}])
 
 
 def test_require_mapping_columns_in_dataset_lists_available() -> None:
-    """ServiceError lists available dataset columns to aid debugging."""
+    """The error message lists the columns that ARE available, sorted."""
     m = _mapping({"question": "missing_col"}, {"answer": "also_missing"})
     with pytest.raises(ServiceError) as exc:
         require_mapping_columns_in_dataset(m, [{"q": "hi", "a": "hello"}])

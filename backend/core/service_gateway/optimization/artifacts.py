@@ -1,3 +1,11 @@
+"""Persistence and prompt-extraction helpers for compiled DSPy programs.
+
+Encapsulates two concerns: turning a compiled :class:`dspy.Program` into a
+JSON-friendly :class:`ProgramArtifact` (pickle base64-encoded alongside its
+metadata) and extracting a human-readable :class:`OptimizedPredictor` view
+from the program's first named predictor for the UI.
+"""
+
 import base64
 import json
 import logging
@@ -7,8 +15,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from ..exceptions import ServiceError
-from ..models import OptimizedDemo, OptimizedPredictor, ProgramArtifact
+from ...exceptions import ServiceError
+from ...models import OptimizedDemo, OptimizedPredictor, ProgramArtifact
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +31,14 @@ def _format_prompt_string(
     """Build a human-readable prompt string from instructions, fields, and demos.
 
     Args:
-        instructions: System/task instruction text prepended to the output.
-        input_fields: Ordered list of input field names.
-        output_fields: Ordered list of output field names.
-        demos: List of few-shot demonstrations to include.
-        signature: DSPy signature object used to retrieve field descriptions.
+        instructions: Top-level signature instruction text.
+        input_fields: Ordered names of input fields.
+        output_fields: Ordered names of output fields.
+        demos: Few-shot demo pairs to render.
+        signature: The signature object used to look up field descriptions.
 
     Returns:
-        A formatted multi-line string suitable for human review.
+        A multi-line string ready to display in the UI.
     """
     parts: list[str] = []
 
@@ -87,14 +95,14 @@ def _format_prompt_string(
 
 
 def extract_optimized_prompt(program: Any) -> OptimizedPredictor | None:
-    """Extract instructions, fields, and demos from the first named predictor, or None on failure.
+    """Extract instructions, fields, and demos from the first named predictor.
 
     Args:
-        program: A compiled DSPy module with a ``named_predictors()`` method.
+        program: A compiled DSPy program.
 
     Returns:
-        An ``OptimizedPredictor`` populated with the first predictor's data,
-        or ``None`` if no predictors are found or extraction fails.
+        An :class:`OptimizedPredictor` describing the predictor's prompt
+        surface, or ``None`` when introspection fails.
     """
     try:
         named_predictors = list(program.named_predictors())
@@ -153,7 +161,25 @@ def persist_program(
     program: Any,
     artifact_id: str | None,
 ) -> ProgramArtifact | None:
-    """Save the compiled program to a temp dir, encode to base64, clean up, and return the artifact."""
+    """Save the compiled program to a temp dir, encode to base64, clean up, and return the artifact.
+
+    DSPy's serializer writes two files (``metadata.json`` and
+    ``program.pkl``) into a directory; we read both back, pack the
+    pickle into base64 so the artifact can live inside a JSON payload,
+    and delete the scratch dir before returning.
+
+    Args:
+        program: The compiled DSPy program to serialize.
+        artifact_id: Optional identifier baked into the temp directory name.
+
+    Returns:
+        A :class:`ProgramArtifact` containing metadata and the base64-encoded
+        pickle, or ``None`` when no artifact is produced.
+
+    Raises:
+        ServiceError: When ``program.save`` fails or the serialized files
+            cannot be read back from the scratch directory.
+    """
     temp_dir = None
     try:
         temp_dir = tempfile.mkdtemp(prefix=f"dspy_artifact_{artifact_id or uuid4()}_")

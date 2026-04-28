@@ -29,6 +29,7 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import Any, Literal, TypedDict
 
 import dspy
@@ -36,12 +37,13 @@ from dspy.streaming import StatusMessageProvider
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-from ..config import settings
-from ..exceptions import ServiceError
-from ..i18n import t
-from ..models import ModelConfig
-from .code_agent import REASONING_FIELD, ReasoningStreamListener
-from .language_models import build_language_model
+from ...config import settings
+from ...exceptions import ServiceError
+from ...i18n import t
+from ...models import ModelConfig
+from ..language_models import build_language_model
+from .code import ReasoningStreamListener
+from .constants import REASONING_FIELD
 
 
 def _is_openai_reasoning_model(model_name: str) -> bool:
@@ -51,12 +53,18 @@ def _is_openai_reasoning_model(model_name: str) -> bool:
     init; they also emit thinking on the ``reasoning_content`` channel when
     ``reasoning_effort`` is set. Fireworks/OpenRouter hosts of these models
     don't share the same constraints, so we scope to the ``openai/`` prefix.
+
+    Args:
+        model_name: The fully-qualified model identifier.
+
+    Returns:
+        True when ``model_name`` is an OpenAI-hosted reasoning model.
     """
     lower = model_name.lower()
     if not lower.startswith("openai/"):
         return False
     tail = lower.removeprefix("openai/")
-    return tail.startswith("gpt-5") or tail.startswith("o1") or tail.startswith("o3") or tail.startswith("o4")
+    return tail.startswith(("gpt-5", "o1", "o3", "o4"))
 
 
 def _build_generalist_lm() -> dspy.LM:
@@ -73,6 +81,9 @@ def _build_generalist_lm() -> dspy.LM:
       mandatory, not optional.
     - **Everything else**: no reasoning knob; ``max_tokens=4000`` is plenty for
       a chat-style reply.
+
+    Returns:
+        A configured :class:`dspy.LM` instance for the generalist agent.
     """
     model_name = settings.generalist_agent_model
     lower = model_name.lower()
@@ -154,15 +165,34 @@ class ApprovalRegistry:
     """
 
     def __init__(self) -> None:
+        """Initialize the in-memory pending-approvals map."""
         self._pending: dict[str, asyncio.Future[bool]] = {}
 
     def register(self, call_id: str) -> asyncio.Future[bool]:
+        """Register ``call_id`` and return a future the tool awaits until resolved.
+
+        Args:
+            call_id: Unique identifier for the pending tool call.
+
+        Returns:
+            A future that resolves to the user's approval decision.
+        """
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         self._pending[call_id] = fut
         return fut
 
     def resolve(self, call_id: str, approved: bool) -> bool:
+        """Complete a pending approval future.
+
+        Args:
+            call_id: Identifier matching a previous :meth:`register` call.
+            approved: The user's decision (True to allow, False to decline).
+
+        Returns:
+            True when a matching pending future was resolved; False if the
+            id was unknown or already settled.
+        """
         fut = self._pending.pop(call_id, None)
         if fut is None or fut.done():
             return False
@@ -170,6 +200,11 @@ class ApprovalRegistry:
         return True
 
     def cancel(self, call_id: str) -> None:
+        """Cancel a still-pending approval (e.g. the stream was torn down).
+
+        Args:
+            call_id: Identifier matching a previous :meth:`register` call.
+        """
         fut = self._pending.pop(call_id, None)
         if fut is not None and not fut.done():
             fut.cancel()
@@ -179,23 +214,41 @@ _global_registry = ApprovalRegistry()
 
 
 def get_approval_registry() -> ApprovalRegistry:
-    """Return the process-wide :class:`ApprovalRegistry` singleton."""
+    """Return the process-wide :class:`ApprovalRegistry` singleton.
+
+    Returns:
+        The shared registry used to coordinate tool approvals.
+    """
     return _global_registry
 
 
 def _needs_approval(tool_name: str, trust_mode: TrustMode) -> bool:
-    """Decide whether a tool call must pause for user confirmation."""
+    """Decide whether a tool call must pause for user confirmation.
+
+    Args:
+        tool_name: The MCP tool's registered name.
+        trust_mode: The caller's selected trust level.
+
+    Returns:
+        True when the call should be gated behind an approval prompt.
+    """
     if trust_mode == "yolo":
         return False
     if tool_name in _DESTRUCTIVE_TOOLS:
         return True
-    if trust_mode == "ask" and tool_name in _SAFE_MUTATIONS:
-        return True
-    return False
+    return trust_mode == "ask" and tool_name in _SAFE_MUTATIONS
 
 
 def _serialize_tool_result(v: Any) -> Any:
-    """Best-effort JSON-friendly conversion for SSE ``tool_end.result``."""
+    """Best-effort JSON-friendly conversion for SSE ``tool_end.result``.
+
+    Args:
+        v: The raw value returned by an MCP tool.
+
+    Returns:
+        ``v`` unchanged if already JSON-friendly, the parsed JSON value
+        when ``str(v)`` decodes, or the stringified form as a last resort.
+    """
     if v is None or isinstance(v, (dict, list, bool, int, float)):
         return v
     s = str(v)
@@ -203,6 +256,148 @@ def _serialize_tool_result(v: Any) -> Any:
         return json.loads(s)
     except (ValueError, TypeError):
         return s
+
+
+class _ApprovalGatedTool:
+    """Callable replacement for a ``dspy.Tool.func`` that enforces approval.
+
+    Installed by :func:`_wrap_tool_with_approval`. The original async
+    callable is stored on the instance so the wrapper can live at module
+    scope instead of inside a closure. ``__call__`` emits ``tool_start``
+    before the underlying call and ``tool_end`` after it (status
+    ``ok``/``error`` with a best-effort JSON-serialized result). When the
+    tool is gated by the caller's ``TrustMode`` it also emits
+    ``pending_approval`` / ``approval_resolved`` events and returns
+    ``"User declined"`` on refusal so the ReAct loop can reason about it.
+    """
+
+    def __init__(
+        self,
+        original: Callable[..., Awaitable[Any]],
+        tool_name: str,
+        trust_mode: TrustMode,
+        registry: ApprovalRegistry,
+        emit: Callable[[dict], None],
+    ) -> None:
+        """Capture the underlying tool and the side-channel plumbing.
+
+        Args:
+            original: The async callable to wrap.
+            tool_name: Registered MCP tool name.
+            trust_mode: The caller's trust level.
+            registry: Approval registry used for gating.
+            emit: Thread-safe callback for SSE events.
+        """
+        self._original = original
+        self._tool_name = tool_name
+        self._trust_mode = trust_mode
+        self._registry = registry
+        self._emit = emit
+
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Run the wrapped tool, emitting approval and lifecycle events.
+
+        Returns ``"User declined"`` when the gated approval is rejected;
+        re-raises ``CancelledError`` and tool-side exceptions after emitting
+        a ``tool_end`` with ``status="error"``.
+
+        Args:
+            *args: Positional arguments forwarded to the underlying tool.
+            **kwargs: Keyword arguments forwarded to the underlying tool.
+
+        Returns:
+            The wrapped tool's return value, or the literal string
+            ``"User declined"`` when the call is rejected.
+
+        Raises:
+            asyncio.CancelledError: If the surrounding stream is cancelled.
+            Exception: Re-raised after emitting a ``tool_end`` error event
+                when the underlying tool raises.
+        """
+        call_id = uuid.uuid4().hex[:12]
+        self._emit(
+            {
+                "event": "tool_start",
+                "data": {
+                    "id": call_id,
+                    "tool": self._tool_name,
+                    "reason": "",
+                    "arguments": kwargs,
+                },
+            }
+        )
+        try:
+            if _needs_approval(self._tool_name, self._trust_mode):
+                fut = self._registry.register(call_id)
+                self._emit(
+                    {
+                        "event": "pending_approval",
+                        "data": {"id": call_id, "tool": self._tool_name, "arguments": kwargs},
+                    }
+                )
+                try:
+                    approved = await fut
+                except asyncio.CancelledError:
+                    self._registry.cancel(call_id)
+                    self._emit(
+                        {
+                            "event": "tool_end",
+                            "data": {
+                                "id": call_id,
+                                "tool": self._tool_name,
+                                "status": "error",
+                                "result": "cancelled",
+                            },
+                        }
+                    )
+                    raise
+                self._emit(
+                    {
+                        "event": "approval_resolved",
+                        "data": {"id": call_id, "tool": self._tool_name, "approved": approved},
+                    }
+                )
+                if not approved:
+                    self._emit(
+                        {
+                            "event": "tool_end",
+                            "data": {
+                                "id": call_id,
+                                "tool": self._tool_name,
+                                "status": "error",
+                                "result": "User declined",
+                            },
+                        }
+                    )
+                    return "User declined"
+            result = await self._original(*args, **kwargs)
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {
+                        "id": call_id,
+                        "tool": self._tool_name,
+                        "status": "ok",
+                        "result": _serialize_tool_result(result),
+                    },
+                }
+            )
+            return result
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._emit(
+                {
+                    "event": "tool_end",
+                    "data": {
+                        "id": call_id,
+                        "tool": self._tool_name,
+                        "status": "error",
+                        "result": f"{type(exc).__name__}: {exc}",
+                    },
+                }
+            )
+            raise
 
 
 def _wrap_tool_with_approval(
@@ -214,103 +409,22 @@ def _wrap_tool_with_approval(
 ) -> dspy.Tool:
     """Replace ``tool.func`` with an approval-aware wrapper.
 
-    The wrapper emits ``tool_start`` before the call and ``tool_end`` after it
-    (with ``status: ok|error`` and a best-effort JSON-serialized ``result``),
-    so the UI can react to every MCP tool call — not just approval flows.
-    If the tool is gated by the current ``trust_mode`` it also emits
-    ``pending_approval`` / ``approval_resolved`` and returns ``"User declined"``
-    on refusal so the ReAct loop can reason about it.
+    Args:
+        tool: The DSPy tool whose ``func`` is being wrapped in place.
+        trust_mode: Caller's trust level.
+        registry: Approval registry used for gating.
+        emit: Thread-safe SSE event emitter.
+
+    Returns:
+        The same ``tool`` instance with its ``func`` replaced.
     """
-    original: Callable[..., Awaitable[Any]] = tool.func
-    tool_name = tool.name
-
-    async def gated(*args: Any, **kwargs: Any) -> Any:
-        call_id = uuid.uuid4().hex[:12]
-        emit(
-            {
-                "event": "tool_start",
-                "data": {
-                    "id": call_id,
-                    "tool": tool_name,
-                    "reason": "",
-                    "arguments": kwargs,
-                },
-            }
-        )
-        try:
-            if _needs_approval(tool_name, trust_mode):
-                fut = registry.register(call_id)
-                emit(
-                    {
-                        "event": "pending_approval",
-                        "data": {"id": call_id, "tool": tool_name, "arguments": kwargs},
-                    }
-                )
-                try:
-                    approved = await fut
-                except asyncio.CancelledError:
-                    registry.cancel(call_id)
-                    emit(
-                        {
-                            "event": "tool_end",
-                            "data": {
-                                "id": call_id,
-                                "tool": tool_name,
-                                "status": "error",
-                                "result": "cancelled",
-                            },
-                        }
-                    )
-                    raise
-                emit(
-                    {
-                        "event": "approval_resolved",
-                        "data": {"id": call_id, "tool": tool_name, "approved": approved},
-                    }
-                )
-                if not approved:
-                    emit(
-                        {
-                            "event": "tool_end",
-                            "data": {
-                                "id": call_id,
-                                "tool": tool_name,
-                                "status": "error",
-                                "result": "User declined",
-                            },
-                        }
-                    )
-                    return "User declined"
-            result = await original(*args, **kwargs)
-            emit(
-                {
-                    "event": "tool_end",
-                    "data": {
-                        "id": call_id,
-                        "tool": tool_name,
-                        "status": "ok",
-                        "result": _serialize_tool_result(result),
-                    },
-                }
-            )
-            return result
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            emit(
-                {
-                    "event": "tool_end",
-                    "data": {
-                        "id": call_id,
-                        "tool": tool_name,
-                        "status": "error",
-                        "result": f"{type(exc).__name__}: {exc}",
-                    },
-                }
-            )
-            raise
-
-    tool.func = gated
+    tool.func = _ApprovalGatedTool(
+        original=tool.func,
+        tool_name=tool.name,
+        trust_mode=trust_mode,
+        registry=registry,
+        emit=emit,
+    )
     return tool
 
 
@@ -399,6 +513,12 @@ def tools_for(state: WizardState) -> set[str]:
 
     The generalist never sees all tools at once — it would burn context
     and invite misuse. Each phase of the wizard unlocks its own slice.
+
+    Args:
+        state: Snapshot describing what the wizard has filled in so far.
+
+    Returns:
+        The set of MCP tool names allowed for this wizard state.
     """
     allowed = set(_ALWAYS_TOOLS) | set(_POST_SUBMIT_TOOLS)
     dataset_ready = bool(state.get("dataset_ready") and state.get("columns_configured"))
@@ -474,9 +594,26 @@ class GeneralistStatusProvider(StatusMessageProvider):
     """
 
     def tool_start_status_message(self, instance: Any, inputs: dict[str, Any]) -> str:
+        """Return the localized status line shown just before a tool call.
+
+        Args:
+            instance: The tool instance about to run.
+            inputs: Keyword arguments the tool will be invoked with.
+
+        Returns:
+            Localized status text for the ``tool_start`` event.
+        """
         return t("agent.status.tool_start")
 
     def tool_end_status_message(self, outputs: Any) -> str:
+        """Return the localized status line shown after a tool call settles.
+
+        Args:
+            outputs: The value returned by the completed tool call.
+
+        Returns:
+            Localized status text for the ``tool_end`` event.
+        """
         return t("agent.status.tool_end")
 
 
@@ -491,14 +628,122 @@ async def _mcp_session(mcp_url: str) -> AsyncGenerator[ClientSession, None]:
     server (``http://localhost:<port>/mcp/``); taking the URL as an
     argument keeps the function testable against an out-of-process
     MCP server or a test fixture.
+
+    Args:
+        mcp_url: The HTTP endpoint of the target MCP server.
+
+    Yields:
+        An initialized :class:`ClientSession` ready for ``list_tools``.
     """
-    async with streamablehttp_client(mcp_url) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    async with streamablehttp_client(mcp_url) as (read, write, _), ClientSession(read, write) as session:
+        await session.initialize()
+        yield session
 
 
 # ───────────────────────────── Runner ─────────────────────────────
+
+
+def _emit_to_queue_threadsafe(loop: asyncio.AbstractEventLoop, out_queue: asyncio.Queue[dict], ev: dict) -> None:
+    """Hand ``ev`` to ``out_queue`` from any thread by scheduling ``put_nowait`` on ``loop``.
+
+    The ReAct loop runs tool wrappers on worker threads; SSE events must
+    land on the coroutine's queue from the coroutine's loop to avoid
+    ``asyncio.Queue`` thread-unsafety. Binding ``loop`` and ``out_queue``
+    with :func:`functools.partial` turns this into a closure-free drop-in
+    emit callback.
+
+    Args:
+        loop: The event loop owning ``out_queue``.
+        out_queue: Destination queue for SSE events.
+        ev: The event payload to enqueue.
+    """
+    loop.call_soon_threadsafe(out_queue.put_nowait, ev)
+
+
+async def _drive_generalist_agent(
+    *,
+    mcp_url: str,
+    wizard_state: WizardState,
+    chat_history: list[dict],
+    user_message: str,
+    trust_mode: TrustMode,
+    registry: ApprovalRegistry,
+    emit: Callable[[dict], None],
+    lm: Any,
+) -> str:
+    """Open the MCP session, run the ReAct loop, and return the final assistant message.
+
+    Streams reasoning / assistant / status chunks through ``emit`` as they
+    arrive from DSPy's async streamer. The final assistant reply is
+    returned so the outer coroutine can emit a terminal ``done`` event.
+
+    Args:
+        mcp_url: HTTP endpoint of the target MCP server.
+        wizard_state: Snapshot of wizard state used to phase tool exposure.
+        chat_history: Prior chat turns as ``{role, content}`` dicts.
+        user_message: The user's latest message.
+        trust_mode: Caller's trust level for tool gating.
+        registry: Approval registry used for tool gating.
+        emit: Thread-safe SSE event emitter.
+        lm: Language model bound to the ReAct program.
+
+    Returns:
+        The full assistant reply text after the loop completes.
+    """
+    import json
+
+    async with _mcp_session(mcp_url) as session:
+        listing = await session.list_tools()
+        allowed_names = tools_for(wizard_state)
+        dspy_tools = [
+            _wrap_tool_with_approval(
+                dspy.Tool.from_mcp_tool(session, t),
+                trust_mode=trust_mode,
+                registry=registry,
+                emit=emit,
+            )
+            for t in listing.tools
+            if t.name in allowed_names
+        ]
+        react = dspy.ReAct(GeneralistSig, tools=dspy_tools, max_iters=8)
+        # Two reasoning listeners: one on the iterative ReAct predict (fires
+        # once per loop step — allow_reuse=True is mandatory) and one on the
+        # final extract CoT. Reasoning tokens arrive on the raw LiteLLM chunk
+        # regardless of which predict is active; binding per-predict is how
+        # DSPy routes chunks to the listener at each stage.
+        program = dspy.streamify(
+            react,
+            stream_listeners=[
+                dspy.streaming.StreamListener(signature_field_name="assistant_message", allow_reuse=True),
+                ReasoningStreamListener(predict=react.react, allow_reuse=True),
+                ReasoningStreamListener(predict=react.extract.predict, allow_reuse=True),
+            ],
+            status_message_provider=GeneralistStatusProvider(),
+            async_streaming=True,
+            is_async_program=True,
+        )
+
+        inputs = {
+            "wizard_state": json.dumps(wizard_state, ensure_ascii=False),
+            "chat_history": json.dumps(chat_history, ensure_ascii=False),
+            "user_message": user_message,
+        }
+        reply_text = ""
+        with dspy.context(lm=lm):
+            async for chunk in program(**inputs):
+                if isinstance(chunk, dspy.streaming.StatusMessage):
+                    emit({"event": "status_patch", "data": {"chunk": chunk.message}})
+                elif isinstance(chunk, dspy.streaming.StreamResponse):
+                    if chunk.signature_field_name == REASONING_FIELD:
+                        emit({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
+                    elif chunk.signature_field_name == "assistant_message":
+                        reply_text += chunk.chunk
+                        emit({"event": "message_patch", "data": {"chunk": chunk.chunk}})
+                elif isinstance(chunk, dspy.Prediction):
+                    final = getattr(chunk, "assistant_message", "") or ""
+                    if final and final != reply_text:
+                        reply_text = final
+        return reply_text
 
 
 async def run_generalist_agent(
@@ -522,9 +767,26 @@ async def run_generalist_agent(
     * ``message_patch`` — per-token assistant reply
     * ``done`` — terminal event with the final assistant message
     * ``error`` — terminal event carrying a user-facing error string
-    """
-    import json
 
+    On caller-side cancellation (SSE stream dropped) the orchestration task
+    is cancelled and ``CancelledError`` is re-raised; every other
+    orchestration error is caught and surfaced as an ``error`` envelope.
+
+    Args:
+        wizard_state: Snapshot of the wizard the agent is driving.
+        chat_history: Prior chat turns as ``{role, content}`` dicts.
+        user_message: The user's latest Hebrew message.
+        trust_mode: Trust level controlling which tool calls require approval.
+        mcp_url: Optional override for the MCP server URL.
+        model_config: Optional override for the language model configuration.
+        approval_registry: Optional registry used for tool approval coordination.
+
+    Yields:
+        SSE event dicts of shape ``{"event": str, "data": dict}``.
+
+    Raises:
+        asyncio.CancelledError: Re-raised when the stream is cancelled.
+    """
     url = mcp_url or settings.generalist_agent_mcp_url
     registry = approval_registry or get_approval_registry()
     try:
@@ -538,65 +800,20 @@ async def run_generalist_agent(
     # SSE events onto the out-queue below.
     out_queue: asyncio.Queue[dict] = asyncio.Queue()
     loop = asyncio.get_running_loop()
+    emit: Callable[[dict], None] = partial(_emit_to_queue_threadsafe, loop, out_queue)
 
-    def emit(ev: dict) -> None:
-        loop.call_soon_threadsafe(out_queue.put_nowait, ev)
-
-    async def drive_agent() -> str:
-        async with _mcp_session(url) as session:
-            listing = await session.list_tools()
-            allowed_names = tools_for(wizard_state)
-            dspy_tools = [
-                _wrap_tool_with_approval(
-                    dspy.Tool.from_mcp_tool(session, t),
-                    trust_mode=trust_mode,
-                    registry=registry,
-                    emit=emit,
-                )
-                for t in listing.tools
-                if t.name in allowed_names
-            ]
-            react = dspy.ReAct(GeneralistSig, tools=dspy_tools, max_iters=8)
-            # Two reasoning listeners: one on the iterative ReAct predict (fires
-            # once per loop step — allow_reuse=True is mandatory) and one on the
-            # final extract CoT. Reasoning tokens arrive on the raw LiteLLM chunk
-            # regardless of which predict is active; binding per-predict is how
-            # DSPy routes chunks to the listener at each stage.
-            program = dspy.streamify(
-                react,
-                stream_listeners=[
-                    dspy.streaming.StreamListener(signature_field_name="assistant_message", allow_reuse=True),
-                    ReasoningStreamListener(predict=react.react, allow_reuse=True),
-                    ReasoningStreamListener(predict=react.extract.predict, allow_reuse=True),
-                ],
-                status_message_provider=GeneralistStatusProvider(),
-                async_streaming=True,
-                is_async_program=True,
-            )
-
-            inputs = {
-                "wizard_state": json.dumps(wizard_state, ensure_ascii=False),
-                "chat_history": json.dumps(chat_history, ensure_ascii=False),
-                "user_message": user_message,
-            }
-            reply_text = ""
-            with dspy.context(lm=lm):
-                async for chunk in program(**inputs):
-                    if isinstance(chunk, dspy.streaming.StatusMessage):
-                        emit({"event": "status_patch", "data": {"chunk": chunk.message}})
-                    elif isinstance(chunk, dspy.streaming.StreamResponse):
-                        if chunk.signature_field_name == REASONING_FIELD:
-                            emit({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                        elif chunk.signature_field_name == "assistant_message":
-                            reply_text += chunk.chunk
-                            emit({"event": "message_patch", "data": {"chunk": chunk.chunk}})
-                    elif isinstance(chunk, dspy.Prediction):
-                        final = getattr(chunk, "assistant_message", "") or ""
-                        if final and final != reply_text:
-                            reply_text = final
-            return reply_text
-
-    drive_task = asyncio.create_task(drive_agent())
+    drive_task = asyncio.create_task(
+        _drive_generalist_agent(
+            mcp_url=url,
+            wizard_state=wizard_state,
+            chat_history=chat_history,
+            user_message=user_message,
+            trust_mode=trust_mode,
+            registry=registry,
+            emit=emit,
+            lm=lm,
+        )
+    )
     try:
         while not drive_task.done() or not out_queue.empty():
             getter = asyncio.create_task(out_queue.get())

@@ -1,3 +1,9 @@
+"""Tests for ``core.service_gateway.optimization.data``.
+
+Covers split helpers, signature loading, metric loading, row-to-example
+conversion, and image-field detection.
+"""
+
 from __future__ import annotations
 
 import dspy
@@ -5,11 +11,12 @@ import pytest
 
 from core.exceptions import ServiceError
 from core.models import ColumnMapping, SplitFractions
-from core.service_gateway.data import (
-    DatasetSplits,
+from core.service_gateway.optimization.data import (
+    _coerce_image,
     _is_signature_field,
     extract_signature_fields,
     extract_stratify_values,
+    image_input_field_names,
     load_metric_from_code,
     load_signature_from_code,
     rows_to_examples,
@@ -18,18 +25,17 @@ from core.service_gateway.data import (
 
 
 def _fractions(train: float, val: float, test: float) -> SplitFractions:
-    """Build a SplitFractions from positional floats."""
+    """Build a ``SplitFractions`` with the provided ratios."""
     return SplitFractions(train=train, val=val, test=test)
 
 
 def _items(n: int) -> list[int]:
-    """Return a stable list of ints as stand-in examples."""
+    """Return ``[0, 1, ..., n-1]`` as a stand-in dataset of trivial items."""
     return list(range(n))
 
 
-
 @pytest.mark.parametrize(
-    "n, train_f, val_f, test_f, exp_train, exp_val, exp_test",
+    ("n", "train_f", "val_f", "test_f", "exp_train", "exp_val", "exp_test"),
     [
         (10, 0.7, 0.15, 0.15, 7, 1, 2),
         (100, 0.7, 0.15, 0.15, 70, 15, 15),
@@ -40,7 +46,7 @@ def _items(n: int) -> list[int]:
     ids=["10-std", "100-std", "1-all-train", "10-80-10-10", "10-50-50-0"],
 )
 def test_split_examples_counts(n, train_f, val_f, test_f, exp_train, exp_val, exp_test) -> None:
-    """Parametrized check that split sizes match expected counts for various fraction combos."""
+    """Split counts match expectations across multiple dataset sizes."""
     items = _items(n)
     fractions = _fractions(train_f, val_f, test_f)
 
@@ -52,7 +58,7 @@ def test_split_examples_counts(n, train_f, val_f, test_f, exp_train, exp_val, ex
 
 
 def test_split_examples_too_small_for_nonzero_val_raises() -> None:
-    """Dataset too small for a non-zero val fraction raises ServiceError."""
+    """Datasets too small to allocate a non-empty val split raise ``ServiceError``."""
     items = _items(3)
     fractions = _fractions(0.7, 0.15, 0.15)
 
@@ -61,7 +67,7 @@ def test_split_examples_too_small_for_nonzero_val_raises() -> None:
 
 
 def test_split_examples_empty_dataset_returns_empty_splits() -> None:
-    """Empty dataset returns three empty lists without raising."""
+    """An empty input yields three empty splits."""
     result = split_examples([], _fractions(0.7, 0.15, 0.15), shuffle=False, seed=None)
 
     assert result.train == []
@@ -70,7 +76,7 @@ def test_split_examples_empty_dataset_returns_empty_splits() -> None:
 
 
 def test_split_examples_all_items_accounted_for() -> None:
-    """No examples are lost or duplicated across the three splits."""
+    """Train + val + test sum to the original dataset size."""
     items = _items(20)
     fractions = _fractions(0.7, 0.15, 0.15)
 
@@ -80,7 +86,7 @@ def test_split_examples_all_items_accounted_for() -> None:
 
 
 def test_split_examples_no_shuffle_preserves_order() -> None:
-    """shuffle=False keeps the original item order across concatenated splits."""
+    """``shuffle=False`` keeps the original ordering across all three splits."""
     items = _items(10)
     fractions = _fractions(0.7, 0.15, 0.15)
 
@@ -90,9 +96,8 @@ def test_split_examples_no_shuffle_preserves_order() -> None:
     assert combined == items
 
 
-
 def test_split_examples_shuffle_changes_order() -> None:
-    """shuffle=True reorders items while preserving the full set."""
+    """``shuffle=True`` reorders the dataset while preserving membership."""
     items = _items(20)
     fractions = _fractions(0.7, 0.15, 0.15)
 
@@ -104,7 +109,7 @@ def test_split_examples_shuffle_changes_order() -> None:
 
 
 def test_split_examples_same_seed_is_deterministic() -> None:
-    """Same seed produces identical splits on repeated calls."""
+    """The same seed produces identical splits across calls."""
     items = _items(30)
     fractions = _fractions(0.7, 0.15, 0.15)
 
@@ -117,7 +122,7 @@ def test_split_examples_same_seed_is_deterministic() -> None:
 
 
 def test_split_examples_different_seeds_differ() -> None:
-    """Different seeds produce different orderings (statistically guaranteed)."""
+    """Different seeds produce different orderings (statistically certain)."""
     items = _items(30)
     fractions = _fractions(0.7, 0.15, 0.15)
 
@@ -129,7 +134,7 @@ def test_split_examples_different_seeds_differ() -> None:
 
 
 def test_split_examples_shuffle_does_not_mutate_input() -> None:
-    """split_examples does not mutate the input list even when shuffling."""
+    """The caller's input list is not reordered as a side effect of shuffle."""
     items = _items(20)
     original = list(items)
     fractions = _fractions(0.7, 0.15, 0.15)
@@ -146,9 +151,7 @@ def test_split_examples_stratified_preserves_class_proportions() -> None:
     labels = ["a"] * 80 + ["b"] * 20
     fractions = _fractions(0.6, 0.2, 0.2)
 
-    result = split_examples(
-        items, fractions, shuffle=True, seed=42, stratify_values=labels
-    )
+    result = split_examples(items, fractions, shuffle=True, seed=42, stratify_values=labels)
 
     train_a = sum(1 for i in result.train if labels[i] == "a")
     train_b = sum(1 for i in result.train if labels[i] == "b")
@@ -158,9 +161,12 @@ def test_split_examples_stratified_preserves_class_proportions() -> None:
     test_b = sum(1 for i in result.test if labels[i] == "b")
 
     # Each class is split 60/20/20 independently.
-    assert train_a == 48 and train_b == 12
-    assert val_a == 16 and val_b == 4
-    assert test_a == 16 and test_b == 4
+    assert train_a == 48
+    assert train_b == 12
+    assert val_a == 16
+    assert val_b == 4
+    assert test_a == 16
+    assert test_b == 4
 
 
 def test_split_examples_stratified_keeps_rare_class_in_every_slice() -> None:
@@ -169,9 +175,7 @@ def test_split_examples_stratified_keeps_rare_class_in_every_slice() -> None:
     labels = ["majority"] * 100 + ["rare"] * 5
     fractions = _fractions(0.6, 0.2, 0.2)
 
-    result = split_examples(
-        items, fractions, shuffle=True, seed=7, stratify_values=labels
-    )
+    result = split_examples(items, fractions, shuffle=True, seed=7, stratify_values=labels)
 
     assert any(labels[i] == "rare" for i in result.train)
     assert any(labels[i] == "rare" for i in result.val)
@@ -179,14 +183,12 @@ def test_split_examples_stratified_keeps_rare_class_in_every_slice() -> None:
 
 
 def test_split_examples_stratified_all_items_accounted_for() -> None:
-    """Stratified split partitions every item exactly once with no duplicates."""
+    """Stratified splits keep every item exactly once with no duplicates."""
     items = _items(50)
     labels = ["a"] * 25 + ["b"] * 25
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    result = split_examples(
-        items, fractions, shuffle=True, seed=1, stratify_values=labels
-    )
+    result = split_examples(items, fractions, shuffle=True, seed=1, stratify_values=labels)
     combined = result.train + result.val + result.test
 
     assert sorted(combined) == items
@@ -194,7 +196,7 @@ def test_split_examples_stratified_all_items_accounted_for() -> None:
 
 
 def test_split_examples_stratified_is_deterministic_with_same_seed() -> None:
-    """Same seed produces identical stratified splits on repeated calls."""
+    """Stratified splitting honours the seed for reproducibility."""
     items = _items(60)
     labels = (["a"] * 40) + (["b"] * 20)
     fractions = _fractions(0.7, 0.15, 0.15)
@@ -208,18 +210,16 @@ def test_split_examples_stratified_is_deterministic_with_same_seed() -> None:
 
 
 def test_split_examples_stratified_length_mismatch_raises() -> None:
-    """Mismatched stratify_values length raises ServiceError."""
+    """A label list of the wrong length raises ``ServiceError``."""
     items = _items(10)
     fractions = _fractions(0.7, 0.15, 0.15)
 
     with pytest.raises(ServiceError, match="stratify_values length"):
-        split_examples(
-            items, fractions, shuffle=True, seed=1, stratify_values=["a"] * 9
-        )
+        split_examples(items, fractions, shuffle=True, seed=1, stratify_values=["a"] * 9)
 
 
 def test_extract_stratify_values_reads_first_output_column() -> None:
-    """extract_stratify_values pulls the first output field from each example."""
+    """Without an explicit column kwarg, the first output column is used."""
     mapping = ColumnMapping(inputs={"q": "q"}, outputs={"label": "label"})
     rows = [{"q": "x", "label": "cat"}, {"q": "y", "label": "dog"}]
     examples = rows_to_examples(rows, mapping)
@@ -273,7 +273,7 @@ def test_extract_stratify_values_accepts_signature_field_or_dataset_column() -> 
 
 
 def test_extract_stratify_values_unknown_column_raises() -> None:
-    """Asking for a column that isn't in the mapping raises ServiceError."""
+    """An unknown ``column`` kwarg raises ``ServiceError``."""
     mapping = ColumnMapping(inputs={"q": "q"}, outputs={"label": "label"})
     rows = [{"q": "x", "label": "a"}]
     examples = rows_to_examples(rows, mapping)
@@ -283,7 +283,7 @@ def test_extract_stratify_values_unknown_column_raises() -> None:
 
 
 def test_extract_stratify_values_no_outputs_raises() -> None:
-    """A mapping with no outputs cannot be used for stratification."""
+    """A mapping with no outputs raises ``ServiceError``."""
     mapping = ColumnMapping(inputs={"q": "q"})
 
     with pytest.raises(ServiceError, match="no output columns"):
@@ -297,27 +297,28 @@ class QA(dspy.Signature):
     answer: str = dspy.OutputField()
 """
 
+
 def test_load_signature_from_code_returns_signature_class() -> None:
-    """Valid signature code returns a dspy.Signature subclass."""
+    """Valid source returns a ``dspy.Signature`` subclass."""
     sig = load_signature_from_code(_VALID_SIG)
 
     assert issubclass(sig, dspy.Signature)
 
 
 def test_load_signature_from_code_syntax_error_raises_service_error() -> None:
-    """Syntax error in signature code raises ServiceError."""
+    """A syntax error in user source raises a ``ServiceError``."""
     with pytest.raises(ServiceError, match="syntax error"):
         load_signature_from_code("def bad syntax !!!")
 
 
 def test_load_signature_from_code_no_signature_raises_service_error() -> None:
-    """Code defining no Signature subclass raises ServiceError."""
-    with pytest.raises(ServiceError, match="must define a dspy.Signature"):
+    """Source without a ``dspy.Signature`` subclass raises ``ServiceError``."""
+    with pytest.raises(ServiceError, match=r"must define a dspy\.Signature"):
         load_signature_from_code("x = 1")
 
 
 def test_load_signature_from_code_multiple_signatures_raises_service_error() -> None:
-    """Code defining more than one Signature subclass raises ServiceError."""
+    """Source with more than one signature raises ``ServiceError``."""
     code = """
 import dspy
 class A(dspy.Signature):
@@ -331,9 +332,8 @@ class B(dspy.Signature):
         load_signature_from_code(code)
 
 
-
 def test_load_metric_from_code_returns_callable() -> None:
-    """Valid metric code returns a callable."""
+    """A valid ``def metric`` source loads as a callable."""
     code = "def metric(example, prediction, trace=None): return 1.0"
 
     result = load_metric_from_code(code)
@@ -353,16 +353,15 @@ def metric(example, prediction, trace=None): return 1.0
 
 
 def test_load_metric_from_code_no_callable_raises_service_error() -> None:
-    """Code with no callable raises ServiceError."""
+    """Source without any callable raises ``ServiceError``."""
     with pytest.raises(ServiceError, match="must define a callable"):
         load_metric_from_code("x = 42")
 
 
 def test_load_metric_from_code_syntax_error_raises_service_error() -> None:
-    """Syntax error in metric code raises ServiceError."""
+    """A syntax error in metric source raises ``ServiceError``."""
     with pytest.raises(ServiceError, match="syntax error"):
         load_metric_from_code("def !!!")
-
 
 
 _SIMPLE_MAPPING = ColumnMapping(inputs={"question": "q"}, outputs={"answer": "a"})
@@ -374,28 +373,28 @@ _SIMPLE_ROWS = [
 
 
 def test_rows_to_examples_happy_path_returns_correct_count() -> None:
-    """Happy path produces one Example per input row."""
+    """Two source rows produce two examples."""
     examples = rows_to_examples(_SIMPLE_ROWS, _SIMPLE_MAPPING)
 
     assert len(examples) == 2
 
 
 def test_rows_to_examples_example_has_expected_input_value() -> None:
-    """Input column value is accessible via the signature field name on the Example."""
+    """The mapped input field carries the source-column value."""
     examples = rows_to_examples(_SIMPLE_ROWS, _SIMPLE_MAPPING)
 
     assert examples[0].question == "What is 1+1?"
 
 
 def test_rows_to_examples_example_has_expected_output_value() -> None:
-    """Output column value is accessible via the signature field name on the Example."""
+    """The mapped output field carries the source-column value."""
     examples = rows_to_examples(_SIMPLE_ROWS, _SIMPLE_MAPPING)
 
     assert examples[0].answer == "2"
 
 
 def test_rows_to_examples_column_mapping_fanout_multi_rename() -> None:
-    """Multiple input columns are all remapped to their signature field names."""
+    """A many-to-many mapping renames every column correctly."""
     mapping = ColumnMapping(inputs={"q1": "col_a", "q2": "col_b"}, outputs={"ans": "col_c"})
     rows = [{"col_a": "hello", "col_b": "world", "col_c": "hi"}]
 
@@ -407,7 +406,7 @@ def test_rows_to_examples_column_mapping_fanout_multi_rename() -> None:
 
 
 def test_rows_to_examples_missing_input_column_raises_service_error() -> None:
-    """Missing mapped input column raises ServiceError."""
+    """A row missing a mapped input column raises ``ServiceError``."""
     rows = [{"wrong_col": "value", "a": "2"}]
 
     with pytest.raises(ServiceError, match="Missing input column"):
@@ -415,7 +414,7 @@ def test_rows_to_examples_missing_input_column_raises_service_error() -> None:
 
 
 def test_rows_to_examples_missing_output_column_raises_service_error() -> None:
-    """Missing mapped output column raises ServiceError."""
+    """A row missing a mapped output column raises ``ServiceError``."""
     rows = [{"q": "value", "wrong_col": "2"}]
 
     with pytest.raises(ServiceError, match="Missing output column"):
@@ -423,7 +422,7 @@ def test_rows_to_examples_missing_output_column_raises_service_error() -> None:
 
 
 def test_rows_to_examples_non_dict_row_raises_service_error() -> None:
-    """Non-dict row raises ServiceError."""
+    """A non-mapping row raises ``ServiceError``."""
     rows = ["not-a-dict"]  # type: ignore[list-item]
 
     with pytest.raises(ServiceError, match="not a mapping"):
@@ -431,11 +430,10 @@ def test_rows_to_examples_non_dict_row_raises_service_error() -> None:
 
 
 def test_rows_to_examples_empty_dataset_returns_empty_list() -> None:
-    """Empty dataset returns an empty list without raising."""
+    """An empty input list returns an empty examples list."""
     examples = rows_to_examples([], _SIMPLE_MAPPING)
 
     assert examples == []
-
 
 
 _SIG_CODE = """\
@@ -448,7 +446,7 @@ class QA(dspy.Signature):
 
 
 def test_extract_signature_fields_returns_correct_inputs() -> None:
-    """Input field names are correctly extracted from a signature class."""
+    """All input fields are returned in the inputs slot."""
     sig_cls = load_signature_from_code(_SIG_CODE)
 
     inputs, _ = extract_signature_fields(sig_cls)
@@ -458,7 +456,7 @@ def test_extract_signature_fields_returns_correct_inputs() -> None:
 
 
 def test_extract_signature_fields_returns_correct_outputs() -> None:
-    """Output field names are correctly extracted from a signature class."""
+    """All output fields are returned in the outputs slot."""
     sig_cls = load_signature_from_code(_SIG_CODE)
 
     _, outputs = extract_signature_fields(sig_cls)
@@ -467,7 +465,7 @@ def test_extract_signature_fields_returns_correct_outputs() -> None:
 
 
 def test_extract_signature_fields_returns_two_element_tuple() -> None:
-    """extract_signature_fields returns a 2-tuple of (inputs, outputs) lists."""
+    """The function returns a 2-tuple of ``(inputs, outputs)``."""
     sig_cls = load_signature_from_code(_SIG_CODE)
 
     result = extract_signature_fields(sig_cls)
@@ -476,7 +474,7 @@ def test_extract_signature_fields_returns_two_element_tuple() -> None:
 
 
 def test_extract_signature_fields_raises_when_no_inputs() -> None:
-    """Signature with no InputFields raises ServiceError."""
+    """A signature with no inputs raises ``ServiceError``."""
     code = """\
 import dspy
 class NoIn(dspy.Signature):
@@ -489,7 +487,7 @@ class NoIn(dspy.Signature):
 
 
 def test_extract_signature_fields_raises_when_no_outputs() -> None:
-    """Signature with no OutputFields raises ServiceError."""
+    """A signature with no outputs raises ``ServiceError``."""
     code = """\
 import dspy
 class NoOut(dspy.Signature):
@@ -501,56 +499,155 @@ class NoOut(dspy.Signature):
         extract_signature_fields(sig_cls)
 
 
-
 def test_is_signature_field_returns_false_for_plain_string() -> None:
-    """Plain string is not a signature field."""
+    """A plain string is not a DSPy field."""
     assert _is_signature_field("not-a-field", field_type="input") is False
 
 
 def test_is_signature_field_returns_false_for_none() -> None:
-    """None is not a signature field."""
+    """``None`` is not a DSPy field."""
     assert _is_signature_field(None, field_type="output") is False
 
 
 def test_is_signature_field_returns_false_for_plain_int() -> None:
-    """Plain integer is not a signature field."""
+    """An ``int`` is not a DSPy field."""
     assert _is_signature_field(42, field_type="input") is False
 
 
 def test_is_signature_field_returns_true_for_dspy_input_field() -> None:
-    """dspy.InputField() is recognised as an input field."""
+    """``dspy.InputField()`` is detected as an input field."""
     field = dspy.InputField()
 
     assert _is_signature_field(field, field_type="input") is True
 
 
 def test_is_signature_field_returns_false_for_dspy_input_field_when_querying_output() -> None:
-    """dspy.InputField() is not recognised as an output field."""
+    """An input field is not classified as output."""
     field = dspy.InputField()
 
     assert _is_signature_field(field, field_type="output") is False
 
 
 def test_is_signature_field_returns_true_for_dspy_output_field() -> None:
-    """dspy.OutputField() is recognised as an output field."""
+    """``dspy.OutputField()`` is detected as an output field."""
     field = dspy.OutputField()
 
     assert _is_signature_field(field, field_type="output") is True
 
 
 def test_is_signature_field_detects_via_dspy_field_type_marker() -> None:
-    """Object with __dspy_field_type marker is recognised even without isinstance match."""
+    """Detection via the ``__dspy_field_type`` instance attribute."""
     # Must use setattr to avoid Python's name-mangling of double-underscore names
-    obj = object.__new__(type("_FakeField", (), {}))
+    obj: object = object.__new__(type("_FakeField", (), {}))
     setattr(obj, "__dspy_field_type", "input")
 
     assert _is_signature_field(obj, field_type="input") is True
 
 
 def test_is_signature_field_detects_via_json_schema_extra() -> None:
-    """Object using json_schema_extra dict is recognised as the correct type."""
-
+    """Detection via the ``json_schema_extra`` schema dict."""
     class _SchemaField:
         json_schema_extra = {"__dspy_field_type": "output"}
 
     assert _is_signature_field(_SchemaField(), field_type="output") is True
+
+
+_IMAGE_SIG_CODE = """\
+import dspy
+class VisionQA(dspy.Signature):
+    picture: dspy.Image = dspy.InputField()
+    question: str = dspy.InputField()
+    answer: str = dspy.OutputField()
+"""
+
+
+def test_image_input_field_names_returns_image_typed_inputs() -> None:
+    """Inputs typed as ``dspy.Image`` are returned by ``image_input_field_names``."""
+    sig = load_signature_from_code(_IMAGE_SIG_CODE)
+
+    fields = image_input_field_names(sig)
+
+    assert fields == {"picture"}
+
+
+def test_image_input_field_names_empty_for_text_only_signature() -> None:
+    """A text-only signature returns an empty image-field set."""
+    sig = load_signature_from_code(_VALID_SIG)
+
+    assert image_input_field_names(sig) == set()
+
+
+def test_image_input_field_names_ignores_image_typed_outputs() -> None:
+    """Only inputs typed as Image are returned — outputs are skipped."""
+    sig = load_signature_from_code(_IMAGE_SIG_CODE)
+
+    fields = image_input_field_names(sig)
+
+    assert "answer" not in fields
+
+
+def test_coerce_image_wraps_string_url() -> None:
+    """A plain URL string is wrapped into a ``dspy.Image`` instance."""
+    image = _coerce_image("https://example.com/cat.png")
+
+    assert isinstance(image, dspy.Image)
+
+
+def test_coerce_image_passes_through_existing_image_instance() -> None:
+    """Already-wrapped dspy.Image instances are returned unchanged (no double-wrap)."""
+    original = dspy.Image(url="https://example.com/dog.jpg")
+
+    result = _coerce_image(original)
+
+    assert result is original
+
+
+def test_coerce_image_handles_data_uri() -> None:
+    """A ``data:image/...`` URI is wrapped into a ``dspy.Image`` instance."""
+    data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+
+    image = _coerce_image(data_uri)
+
+    assert isinstance(image, dspy.Image)
+
+
+def test_rows_to_examples_wraps_declared_image_field() -> None:
+    """Declared image fields are wrapped into ``dspy.Image`` during conversion."""
+    mapping = ColumnMapping(
+        inputs={"picture": "img", "question": "q"},
+        outputs={"answer": "a"},
+    )
+    rows = [
+        {"img": "https://example.com/cat.png", "q": "what?", "a": "cat"},
+    ]
+
+    examples = rows_to_examples(rows, mapping, image_input_fields={"picture"})
+
+    assert isinstance(examples[0].picture, dspy.Image)
+
+
+def test_rows_to_examples_does_not_wrap_non_image_inputs() -> None:
+    """Non-image inputs stay as raw strings even when image fields are declared."""
+    mapping = ColumnMapping(
+        inputs={"picture": "img", "question": "q"},
+        outputs={"answer": "a"},
+    )
+    rows = [
+        {"img": "https://example.com/cat.png", "q": "what is it?", "a": "cat"},
+    ]
+
+    examples = rows_to_examples(rows, mapping, image_input_fields={"picture"})
+
+    assert examples[0].question == "what is it?"
+    assert not isinstance(examples[0].question, dspy.Image)
+
+
+def test_rows_to_examples_no_image_fields_keeps_raw_strings() -> None:
+    """Without ``image_input_fields``, image-like cells stay as raw strings."""
+    mapping = ColumnMapping(inputs={"picture": "img"}, outputs={"answer": "a"})
+    rows = [{"img": "https://example.com/cat.png", "a": "cat"}]
+
+    examples = rows_to_examples(rows, mapping)
+
+    assert examples[0].picture == "https://example.com/cat.png"
+    assert not isinstance(examples[0].picture, dspy.Image)

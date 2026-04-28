@@ -1,35 +1,38 @@
+"""Tests for ``core.service_gateway.optimization.artifacts``.
+
+Covers prompt-string formatting, optimized-predictor extraction, and the
+``persist_program`` save/cleanup contract.
+"""
+
 from __future__ import annotations
 
 import base64
 import json
-import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.exceptions import ServiceError
 from core.models import OptimizedDemo, OptimizedPredictor, ProgramArtifact
-from core.service_gateway.artifacts import (
+from core.service_gateway.optimization.artifacts import (
     _format_prompt_string,
     extract_optimized_prompt,
     persist_program,
 )
 
 
-
 def test_format_prompt_string_instructions_only() -> None:
-    """Instructions-only call returns just the instruction text."""
+    """Instructions alone round-trip unchanged when no fields or demos exist."""
     result = _format_prompt_string("Do the thing.", [], [], [], None)
 
     assert result == "Do the thing."
 
 
 def test_format_prompt_string_includes_input_and_output_field_labels() -> None:
-    """Field names are prefixed with [Input] / [Output] labels."""
+    """Field labels are rendered as ``[Input]``/``[Output]`` markers."""
     result = _format_prompt_string("Instr", ["question"], ["answer"], [], _mock_sig())
 
     assert "[Input] question" in result
@@ -37,7 +40,7 @@ def test_format_prompt_string_includes_input_and_output_field_labels() -> None:
 
 
 def test_format_prompt_string_demo_block_present() -> None:
-    """A demo list produces an Examples section with demo content."""
+    """A single demo's inputs and outputs appear under an ``Examples:`` header."""
     demo = OptimizedDemo(inputs={"q": "What?"}, outputs={"a": "42"})
 
     result = _format_prompt_string("Instr", ["q"], ["a"], [demo], _mock_sig())
@@ -48,14 +51,14 @@ def test_format_prompt_string_demo_block_present() -> None:
 
 
 def test_format_prompt_string_empty_everything_returns_empty_string() -> None:
-    """All-empty inputs produce an empty string, not whitespace."""
+    """All-empty inputs collapse to an empty string."""
     result = _format_prompt_string("", [], [], [], None)
 
     assert result == ""
 
 
 def test_format_prompt_string_multiple_demos_numbered() -> None:
-    """Multiple demos are numbered sequentially (Example 1, Example 2, …)."""
+    """Multiple demos are numbered ``Example 1:``, ``Example 2:``..."""
     demo1 = OptimizedDemo(inputs={"q": "q1"}, outputs={"a": "a1"})
     demo2 = OptimizedDemo(inputs={"q": "q2"}, outputs={"a": "a2"})
 
@@ -65,9 +68,8 @@ def test_format_prompt_string_multiple_demos_numbered() -> None:
     assert "Example 2:" in result
 
 
-
 def test_extract_optimized_prompt_no_predictors_returns_none() -> None:
-    """Program with no named predictors returns None."""
+    """A program with zero predictors yields ``None``."""
     program = MagicMock()
     program.named_predictors.return_value = []
 
@@ -77,7 +79,7 @@ def test_extract_optimized_prompt_no_predictors_returns_none() -> None:
 
 
 def test_extract_optimized_prompt_named_predictors_raises_returns_none() -> None:
-    """Exception from named_predictors() is swallowed and None is returned."""
+    """An exception from ``named_predictors()`` must NOT propagate — extraction is best-effort."""
     program = MagicMock()
     program.named_predictors.side_effect = RuntimeError("boom")
 
@@ -87,8 +89,8 @@ def test_extract_optimized_prompt_named_predictors_raises_returns_none() -> None
 
 
 def test_extract_optimized_prompt_no_signature_returns_none() -> None:
-    """Predictor without a signature attribute returns None."""
-    predictor = MagicMock(spec=[])          # no .signature attribute
+    """A predictor lacking a ``signature`` attribute yields ``None``."""
+    predictor = MagicMock(spec=[])  # no .signature attribute
     program = MagicMock()
     program.named_predictors.return_value = [("predict", predictor)]
 
@@ -98,7 +100,7 @@ def test_extract_optimized_prompt_no_signature_returns_none() -> None:
 
 
 def test_extract_optimized_prompt_happy_path_returns_optimized_predictor() -> None:
-    """Happy path returns an OptimizedPredictor with the correct predictor name."""
+    """A well-formed predictor returns an ``OptimizedPredictor`` carrying its name."""
     sig = _mock_sig()
     predictor = MagicMock()
     predictor.signature = sig
@@ -113,7 +115,7 @@ def test_extract_optimized_prompt_happy_path_returns_optimized_predictor() -> No
 
 
 def test_extract_optimized_prompt_demos_extracted() -> None:
-    """Demo inputs and outputs are correctly extracted into OptimizedDemo objects."""
+    """Demo input/output cells are projected into the returned ``OptimizedPredictor``."""
     sig = _mock_sig(input_fields=["q"], output_fields=["a"])
     demo = MagicMock()
     demo.q = "What?"
@@ -126,14 +128,14 @@ def test_extract_optimized_prompt_demos_extracted() -> None:
 
     result = extract_optimized_prompt(program)
 
+    assert result is not None
     assert len(result.demos) == 1
     assert result.demos[0].inputs == {"q": "What?"}
     assert result.demos[0].outputs == {"a": "42"}
 
 
-
 def test_persist_program_save_failure_raises_service_error() -> None:
-    """program.save() raising RuntimeError becomes a ServiceError."""
+    """A ``save`` failure surfaces as ``ServiceError`` with the save-failure prefix."""
     program = MagicMock()
     program.save.side_effect = RuntimeError("disk full")
 
@@ -142,7 +144,7 @@ def test_persist_program_save_failure_raises_service_error() -> None:
 
 
 def test_persist_program_missing_files_raises_service_error(tmp_path) -> None:
-    """save() creates the temp dir but writes no files."""
+    """Missing artifact files raise the load-failure ``ServiceError``."""
     program = MagicMock()
     program.save.return_value = None  # creates nothing
 
@@ -151,7 +153,7 @@ def test_persist_program_missing_files_raises_service_error(tmp_path) -> None:
 
 
 def test_persist_program_base64_encodes_correctly(tmp_path) -> None:
-    """program.pkl bytes are base64-encoded in the returned ProgramArtifact."""
+    """Pickle bytes are base64-encoded into ``program_pickle_base64``."""
     raw_bytes = b"fake-pickle-bytes"
     expected_b64 = base64.b64encode(raw_bytes).decode("ascii")
 
@@ -164,20 +166,21 @@ def test_persist_program_base64_encodes_correctly(tmp_path) -> None:
 
 
 def test_persist_program_no_temp_files_left_on_disk() -> None:
-    """Temp artifact directory is cleaned up after a successful persist."""
+    """No ``dspy_artifact_*`` temp directories survive a successful persist call."""
     raw_bytes = b"bytes"
     program = _fake_save_program(raw_bytes)
-    tmp_dirs_before = set(os.listdir(tempfile.gettempdir()))
+    tmp_root = Path(tempfile.gettempdir())
+    tmp_dirs_before = {p.name for p in tmp_root.iterdir()}
 
     persist_program(program, artifact_id="cleanup-test")
 
-    tmp_dirs_after = set(os.listdir(tempfile.gettempdir()))
+    tmp_dirs_after = {p.name for p in tmp_root.iterdir()}
     dspy_dirs = [d for d in tmp_dirs_after - tmp_dirs_before if d.startswith("dspy_artifact_")]
     assert dspy_dirs == [], f"Temp dirs not cleaned up: {dspy_dirs}"
 
 
 def test_persist_program_returns_program_artifact_model() -> None:
-    """Return value is a ProgramArtifact instance with path=None."""
+    """``persist_program`` returns a ``ProgramArtifact`` with no on-disk path."""
     program = _fake_save_program(b"data")
 
     result = persist_program(program, artifact_id="abc")
@@ -186,9 +189,8 @@ def test_persist_program_returns_program_artifact_model() -> None:
     assert result.path is None
 
 
-
 def test_persist_program_raises_service_error_when_save_fails() -> None:
-    """OSError during save is wrapped in a ServiceError."""
+    """An ``OSError`` from ``save`` is wrapped as the save-failure ``ServiceError``."""
     program = MagicMock()
     program.save.side_effect = OSError("no space left on device")
 
@@ -197,7 +199,7 @@ def test_persist_program_raises_service_error_when_save_fails() -> None:
 
 
 def test_persist_program_raises_service_error_when_metadata_read_fails() -> None:
-    """save() succeeds (files written) but metadata.json read raises."""
+    """A missing ``metadata.json`` produces the load-failure ``ServiceError``."""
     def _save_no_metadata(path: str, save_program: bool = True) -> None:
         dest = Path(path)
         # Deliberately omit metadata.json so read_text() raises FileNotFoundError
@@ -212,7 +214,7 @@ def test_persist_program_raises_service_error_when_metadata_read_fails() -> None
 
 
 def test_persist_program_raises_service_error_when_pkl_read_fails() -> None:
-    """save() succeeds, metadata.json is present, but program.pkl is absent."""
+    """A missing ``program.pkl`` produces the load-failure ``ServiceError``."""
     def _save_no_pkl(path: str, save_program: bool = True) -> None:
         dest = Path(path)
         (dest / "metadata.json").write_text(json.dumps({"dspy_version": "0"}))
@@ -227,25 +229,27 @@ def test_persist_program_raises_service_error_when_pkl_read_fails() -> None:
 
 
 def test_persist_program_cleans_up_tempdir_on_error() -> None:
-    """Temp dir is removed via shutil.rmtree even when ServiceError is raised."""
+    """The temp dir is removed even when ``ServiceError`` propagates."""
     known_path = tempfile.mkdtemp(prefix="dspy_sentinel_")
     try:
         program = MagicMock()
         program.save.side_effect = RuntimeError("boom")
 
-        with patch("core.service_gateway.artifacts.tempfile.mkdtemp", return_value=known_path), \
-             patch("core.service_gateway.artifacts.shutil.rmtree") as mock_rmtree:
+        with (
+            patch("core.service_gateway.optimization.artifacts.tempfile.mkdtemp", return_value=known_path),
+            patch("core.service_gateway.optimization.artifacts.shutil.rmtree") as mock_rmtree,
+        ):
             with pytest.raises(ServiceError):
                 persist_program(program, artifact_id="cleanup-err")
 
             mock_rmtree.assert_called_once_with(known_path, ignore_errors=True)
     finally:
-        if os.path.exists(known_path):
+        if Path(known_path).exists():
             shutil.rmtree(known_path, ignore_errors=True)
 
 
 def test_persist_program_cleans_up_tempdir_on_success() -> None:
-    """Temp dir is removed via shutil.rmtree on the happy path too."""
+    """Symmetric to the error-cleanup test: cleanup must run on the happy path too."""
     known_path = tempfile.mkdtemp(prefix="dspy_sentinel_success_")
     try:
         raw_bytes = b"success-bytes"
@@ -259,16 +263,17 @@ def test_persist_program_cleans_up_tempdir_on_success() -> None:
         program.save.side_effect = _save_files
         program.named_predictors.return_value = []
 
-        with patch("core.service_gateway.artifacts.tempfile.mkdtemp", return_value=known_path), \
-             patch("core.service_gateway.artifacts.shutil.rmtree") as mock_rmtree:
+        with (
+            patch("core.service_gateway.optimization.artifacts.tempfile.mkdtemp", return_value=known_path),
+            patch("core.service_gateway.optimization.artifacts.shutil.rmtree") as mock_rmtree,
+        ):
             result = persist_program(program, artifact_id="cleanup-ok")
 
             assert result is not None
             mock_rmtree.assert_called_once_with(known_path, ignore_errors=True)
     finally:
-        if os.path.exists(known_path):
+        if Path(known_path).exists():
             shutil.rmtree(known_path, ignore_errors=True)
-
 
 
 def _mock_sig(
@@ -277,7 +282,7 @@ def _mock_sig(
     output_fields: list[str] | None = None,
     instructions: str = "test instructions",
 ) -> MagicMock:
-    """Return a MagicMock DSPy signature with configurable fields and instructions."""
+    """Build a ``MagicMock`` shaped like a DSPy ``Signature`` class."""
     sig = MagicMock()
     sig.instructions = instructions
     sig.__class__.__name__ = "MockSignature"
@@ -287,7 +292,7 @@ def _mock_sig(
 
 
 def _fake_save_program(raw_bytes: bytes) -> MagicMock:
-    """Return a program mock whose .save() writes the expected artifact files."""
+    """Return a fake program whose ``save`` writes ``metadata.json`` and ``program.pkl``."""
     def _save(path: str, save_program: bool = True) -> None:
         dest = Path(path)
         (dest / "metadata.json").write_text(json.dumps({"dspy_version": "0"}))

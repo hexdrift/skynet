@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.service_gateway import recommendations as recs
+from core.service_gateway.recommendations import core as recs
 
 
 class _FakeEmbedder:
@@ -23,16 +23,17 @@ class _FakeEmbedder:
     """
 
     def __init__(self, *, available: bool = True, vector: list[float] | None = None) -> None:
+        """Configure availability and the canned vector returned by ``encode``."""
         self._available = available
         self._vector = vector if vector is not None else [0.1, 0.2, 0.3]
         self.encode_calls: list[str] = []
 
     def available(self) -> bool:
-        """Mirror the real embedder's availability check."""
+        """Return whether this embedder is configured as available."""
         return self._available
 
     def encode(self, text: str) -> list[float] | None:
-        """Record the argument and return the canned vector (or None when empty)."""
+        """Record the call and return the canned vector (or ``None`` for blanks)."""
         self.encode_calls.append(text)
         if not text or not text.strip():
             return None
@@ -43,18 +44,19 @@ class _FakeJobStore:
     """Carries just the attributes ``embed_finished_job`` and ``search_similar`` touch."""
 
     def __init__(self, jobs: dict[str, dict[str, Any]] | None = None) -> None:
+        """Seed the in-memory job map and an opaque engine handle."""
         self._jobs = jobs or {}
         self.engine = MagicMock(name="engine")
 
     def get_job(self, optimization_id: str) -> dict[str, Any]:
-        """Return the seeded job dict or raise KeyError like the real store."""
+        """Return the seeded job dict, raising ``KeyError`` if unknown."""
         if optimization_id not in self._jobs:
             raise KeyError(optimization_id)
         return self._jobs[optimization_id]
 
 
 def _success_job(**overrides: Any) -> dict[str, Any]:
-    """Build a baseline "finished successfully" job dict for ingest tests."""
+    """Build a minimal successful run-job dict with optional overrides."""
     job = {
         "status": "success",
         "payload_overview": {
@@ -74,13 +76,8 @@ def _success_job(**overrides: Any) -> dict[str, Any]:
     return job
 
 
-# ---------------------------------------------------------------------------
-# Pure helpers
-# ---------------------------------------------------------------------------
-
-
 def test_build_code_text_joins_signature_and_metric() -> None:
-    """Both signature and metric sources end up in the digest with headers."""
+    """``_build_code_text`` emits headed sections for signature and metric."""
     out = recs._build_code_text("sig", "metric")
     assert "# Signature" in out
     assert "sig" in out
@@ -89,19 +86,21 @@ def test_build_code_text_joins_signature_and_metric() -> None:
 
 
 def test_build_code_text_handles_missing_parts() -> None:
-    """Empty/None inputs are skipped instead of producing stray headers."""
+    """Empty/None inputs are skipped — no stray section headers are emitted."""
+    # Empty/None inputs must be skipped — otherwise a stray "# Signature" header
+    # leaks into embeddings and degrades recall.
     assert recs._build_code_text(None, None) == ""
     assert recs._build_code_text("sig", None).strip().startswith("# Signature")
     assert "# Metric" not in recs._build_code_text("sig", None)
 
 
 def test_build_code_text_strips_whitespace_only() -> None:
-    """Whitespace-only source is treated as empty."""
+    """Whitespace-only sections collapse to an empty string."""
     assert recs._build_code_text("   ", "\n\n") == ""
 
 
 def test_build_schema_text_annotates_roles() -> None:
-    """Each column gets a role tag based on the column_mapping inputs/outputs."""
+    """``_build_schema_text`` annotates each dataset column with its mapping role."""
     dataset = [{"question": "hi", "answer": "hello", "extra": 1}]
     mapping = {"inputs": {"q": "question"}, "outputs": {"a": "answer"}}
     out = recs._build_schema_text(dataset, mapping)
@@ -111,13 +110,14 @@ def test_build_schema_text_annotates_roles() -> None:
 
 
 def test_build_schema_text_empty_dataset_returns_empty() -> None:
-    """No sample → no lines."""
+    """An empty or missing dataset produces an empty schema text."""
     assert recs._build_schema_text([], {"inputs": {}, "outputs": {}}) == ""
     assert recs._build_schema_text(None, None) == ""
 
 
 def test_extract_metadata_run_uses_overview_model() -> None:
-    """For a ``run`` job the winner comes from overview.model_name."""
+    """For a ``run`` job the winning model comes from the overview, rank is 1."""
+    # For a `run` job the winner comes from overview.model_name (not from result.best_pair).
     job = _success_job()
     model, rank, job_type = recs._extract_metadata(job)
     assert model == "openai/gpt-4o-mini"
@@ -126,7 +126,8 @@ def test_extract_metadata_run_uses_overview_model() -> None:
 
 
 def test_extract_metadata_grid_search_reads_best_pair() -> None:
-    """For a grid search the winner is pulled from result.best_pair.generation_model."""
+    """For grid-search the winning model comes from ``result.best_pair``."""
+    # Grid-search winner is pulled from result.best_pair.generation_model (overview is empty for grids).
     job = {
         "payload_overview": {"optimization_type": "grid_search"},
         "result": {"best_pair": {"generation_model": "anthropic/claude-3-5-sonnet"}},
@@ -138,7 +139,7 @@ def test_extract_metadata_grid_search_reads_best_pair() -> None:
 
 
 def test_extract_metadata_grid_search_without_best_pair() -> None:
-    """Grid search without a best_pair returns (None, None, 'grid_search')."""
+    """A grid-search job missing ``best_pair`` returns ``(None, None, 'grid_search')``."""
     job = {"payload_overview": {"optimization_type": "grid_search"}, "result": {}}
     model, rank, job_type = recs._extract_metadata(job)
     assert model is None
@@ -147,17 +148,18 @@ def test_extract_metadata_grid_search_without_best_pair() -> None:
 
 
 def test_encode_vector_literal_formats_for_pgvector() -> None:
-    """pgvector literal is ``[x,y,z]`` with 6 decimals per component."""
+    """Vector literals are formatted as ``[x,y,z]`` with 6 decimals per component."""
+    # pgvector literal contract: [x,y,z] with exactly 6 decimals per component.
     assert recs._encode_vector_literal([0.1, 0.25, 0.333333]) == "[0.100000,0.250000,0.333333]"
 
 
 def test_encode_vector_literal_none_is_none() -> None:
-    """None vector → None literal (caller skips that parameter)."""
+    """``None`` round-trips to ``None`` instead of a literal string."""
     assert recs._encode_vector_literal(None) is None
 
 
 def test_weighted_fusion_sql_all_three_aspects() -> None:
-    """All three embedding terms appear when every aspect has a query vector."""
+    """SQL with all three aspects includes the canonical 0.5/0.3/0.2 weights."""
     sql = recs._weighted_fusion_sql(has_summary=True, has_code=True, has_schema=True, filter_type=False)
     assert "embedding_summary <=> CAST(:q_summary AS vector)" in sql
     assert "embedding_code <=> CAST(:q_code AS vector)" in sql
@@ -172,7 +174,7 @@ def test_weighted_fusion_sql_all_three_aspects() -> None:
 
 
 def test_weighted_fusion_sql_selects_apply_config_columns() -> None:
-    """Query returns the fields the frontend needs for one-click apply."""
+    """The fusion SQL selects every column the apply-config UI consumes."""
     sql = recs._weighted_fusion_sql(has_summary=True, has_code=True, has_schema=True, filter_type=False)
     for col in (
         "baseline_metric",
@@ -189,7 +191,7 @@ def test_weighted_fusion_sql_selects_apply_config_columns() -> None:
 
 
 def test_weighted_fusion_sql_only_code() -> None:
-    """Missing aspects are dropped from the SELECT expression."""
+    """SQL with only the code aspect references only ``:q_code``."""
     sql = recs._weighted_fusion_sql(has_summary=False, has_code=True, has_schema=False, filter_type=False)
     assert ":q_code" in sql
     assert ":q_summary" not in sql
@@ -197,13 +199,13 @@ def test_weighted_fusion_sql_only_code() -> None:
 
 
 def test_weighted_fusion_sql_with_type_filter() -> None:
-    """filter_type=True adds the optimization_type predicate."""
+    """``filter_type`` adds a ``WHERE optimization_type`` clause to the SQL."""
     sql = recs._weighted_fusion_sql(has_summary=True, has_code=False, has_schema=False, filter_type=True)
     assert "optimization_type = :filter_type" in sql
 
 
 def test_build_schema_from_query_schema_columns_shape() -> None:
-    """Frontend ``{"columns": [{"name", "role", "dtype"}]}`` format renders lines."""
+    """A typed columns spec renders ``name (role, dtype)`` lines."""
     schema = {
         "columns": [
             {"name": "question", "role": "input", "dtype": "str"},
@@ -216,31 +218,26 @@ def test_build_schema_from_query_schema_columns_shape() -> None:
 
 
 def test_build_schema_from_query_schema_fallback_json() -> None:
-    """Non-columns shape falls back to a JSON dump."""
+    """An unrecognised schema falls back to JSON serialization."""
     out = recs._build_schema_from_query_schema({"foo": "bar"})
     assert '"foo"' in out
     assert '"bar"' in out
 
 
 def test_build_schema_from_query_schema_none_empty() -> None:
-    """None or falsy schema → empty string."""
+    """``None`` and ``{}`` produce an empty schema string."""
     assert recs._build_schema_from_query_schema(None) == ""
     assert recs._build_schema_from_query_schema({}) == ""
 
 
-# ---------------------------------------------------------------------------
-# embed_finished_job
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def fake_embedder() -> _FakeEmbedder:
-    """Default available embedder reused across ingest/search tests."""
+    """Provide a fresh ``_FakeEmbedder`` for each test."""
     return _FakeEmbedder()
 
 
-def _patch_pipeline(fake_embedder: _FakeEmbedder, summary_text: str = "A summary."):
-    """Bundle the three patches the ingest + search paths both need."""
+def _patch_pipeline(fake_embedder: _FakeEmbedder, summary_text: str = "A summary.") -> tuple[Any, Any]:
+    """Build matching patches for ``get_embedder`` and ``summarize_task``."""
     return (
         patch.object(recs, "get_embedder", return_value=fake_embedder),
         patch.object(recs, "summarize_task", return_value=summary_text),
@@ -248,7 +245,7 @@ def _patch_pipeline(fake_embedder: _FakeEmbedder, summary_text: str = "A summary
 
 
 def test_embed_finished_job_inserts_new_row(fake_embedder: _FakeEmbedder) -> None:
-    """Happy path: a success job with all fields → one session.add + commit."""
+    """A new optimization id triggers an INSERT with all three embeddings."""
     store = _FakeJobStore({"job-1": _success_job()})
     session_mock = MagicMock()
     session_mock.query.return_value.filter.return_value.first.return_value = None
@@ -280,7 +277,7 @@ def test_embed_finished_job_inserts_new_row(fake_embedder: _FakeEmbedder) -> Non
 def test_embed_finished_job_marks_recommendable_when_quality_clears_gate(
     fake_embedder: _FakeEmbedder,
 ) -> None:
-    """A job with real scores + apply config is flagged and its fields persist."""
+    """A strong score lift sets ``is_recommendable=True`` and persists apply-config fields."""
     job = _success_job(
         latest_metrics={"baseline_test_metric": 52.0, "optimized_test_metric": 78.5},
     )
@@ -319,7 +316,9 @@ def test_embed_finished_job_marks_recommendable_when_quality_clears_gate(
 def test_embed_finished_job_low_absolute_score_not_recommendable(
     fake_embedder: _FakeEmbedder,
 ) -> None:
-    """Optimized score below the absolute floor never earns the flag — even if lift is huge."""
+    """An optimized score below the absolute floor never sets ``is_recommendable``."""
+    # Quality gate: an optimized score below the absolute floor must NEVER earn the
+    # recommendable flag — even when the relative lift looks large.
     job = _success_job(
         latest_metrics={"baseline_test_metric": 5.0, "optimized_test_metric": 40.0},
     )
@@ -342,7 +341,9 @@ def test_embed_finished_job_low_absolute_score_not_recommendable(
 
 
 def test_embed_finished_job_updates_existing_row(fake_embedder: _FakeEmbedder) -> None:
-    """Re-running ingest on the same optimization_id updates, never inserts twice."""
+    """Re-running ingest on the same id updates the existing row instead of inserting."""
+    # Idempotency invariant: re-running ingest on the same optimization_id must
+    # update the existing row, not insert a duplicate.
     store = _FakeJobStore({"job-1": _success_job()})
     existing = MagicMock()
     session_mock = MagicMock()
@@ -364,7 +365,7 @@ def test_embed_finished_job_updates_existing_row(fake_embedder: _FakeEmbedder) -
 
 
 def test_embed_finished_job_skips_when_disabled(fake_embedder: _FakeEmbedder) -> None:
-    """Feature flag off → no embedder work, no DB write."""
+    """The ``recommendations_enabled=False`` setting short-circuits the entire pipeline."""
     store = _FakeJobStore({"job-1": _success_job()})
     with (
         patch.object(recs.settings, "recommendations_enabled", False),
@@ -378,7 +379,7 @@ def test_embed_finished_job_skips_when_disabled(fake_embedder: _FakeEmbedder) ->
 
 
 def test_embed_finished_job_skips_when_embedder_unavailable() -> None:
-    """Embedder not loaded → exit before touching the job store."""
+    """An unavailable embedder skips the DB session entirely."""
     store = _FakeJobStore({"job-1": _success_job()})
     unavailable = _FakeEmbedder(available=False)
     with (
@@ -391,7 +392,7 @@ def test_embed_finished_job_skips_when_embedder_unavailable() -> None:
 
 
 def test_embed_finished_job_skips_non_success_jobs(fake_embedder: _FakeEmbedder) -> None:
-    """Only status == 'success' is indexed."""
+    """A non-success status is ignored with no DB writes."""
     store = _FakeJobStore({"job-1": _success_job(status="failed")})
     get_emb, summ = _patch_pipeline(fake_embedder)
     with get_emb, summ, patch.object(recs, "Session") as sess:
@@ -401,7 +402,8 @@ def test_embed_finished_job_skips_non_success_jobs(fake_embedder: _FakeEmbedder)
 
 
 def test_embed_finished_job_missing_job_is_silent(fake_embedder: _FakeEmbedder) -> None:
-    """Unknown optimization_id → log + return, never raise."""
+    """An unknown optimization id logs and returns silently rather than raising."""
+    # Daemon-thread contract: unknown optimization_id must log and return — never raise.
     store = _FakeJobStore({})
     get_emb, summ = _patch_pipeline(fake_embedder)
     with get_emb, summ, patch.object(recs, "Session") as sess:
@@ -411,7 +413,7 @@ def test_embed_finished_job_missing_job_is_silent(fake_embedder: _FakeEmbedder) 
 
 
 def test_embed_finished_job_skips_when_all_text_empty() -> None:
-    """No usable text from any aspect → nothing to embed, nothing to store."""
+    """Jobs with no embeddable text bypass DB writes entirely."""
     empty_job = {
         "status": "success",
         "payload_overview": {"username": "alice", "optimization_type": "run"},
@@ -430,7 +432,8 @@ def test_embed_finished_job_skips_when_all_text_empty() -> None:
 
 
 def test_embed_finished_job_swallows_commit_errors(fake_embedder: _FakeEmbedder) -> None:
-    """DB failure during upsert is logged, never propagated (daemon-thread contract)."""
+    """A DB failure during commit is logged, never propagated."""
+    # Daemon-thread contract: DB failure during upsert is logged, never propagated.
     store = _FakeJobStore({"job-1": _success_job()})
     session_mock = MagicMock()
     session_mock.query.return_value.filter.return_value.first.return_value = None
@@ -444,13 +447,8 @@ def test_embed_finished_job_swallows_commit_errors(fake_embedder: _FakeEmbedder)
         recs.embed_finished_job("job-1", job_store=store)
 
 
-# ---------------------------------------------------------------------------
-# search_similar
-# ---------------------------------------------------------------------------
-
-
 def _session_returning(rows: list[dict[str, Any]]) -> tuple[MagicMock, MagicMock]:
-    """Build a MagicMock Session ctx whose execute(...).mappings().all() = rows."""
+    """Build a Session context-manager mock whose ``execute`` returns ``rows``."""
     session_mock = MagicMock()
     exec_result = MagicMock()
     exec_result.mappings.return_value.all.return_value = rows
@@ -462,7 +460,7 @@ def _session_returning(rows: list[dict[str, Any]]) -> tuple[MagicMock, MagicMock
 
 
 def test_search_similar_returns_parsed_rows(fake_embedder: _FakeEmbedder) -> None:
-    """Happy path: SQL rows are reshaped into the API result schema."""
+    """``search_similar`` parses SQL rows into stable result dicts and emits embedded params."""
     store = _FakeJobStore()
     rows = [
         {
@@ -536,7 +534,7 @@ def test_search_similar_returns_parsed_rows(fake_embedder: _FakeEmbedder) -> Non
 
 
 def test_search_similar_returns_empty_when_disabled(fake_embedder: _FakeEmbedder) -> None:
-    """Feature flag off → short-circuit to empty list."""
+    """``search_similar`` returns ``[]`` when the feature flag is off."""
     with patch.object(recs.settings, "recommendations_enabled", False):
         out = recs.search_similar(
             job_store=_FakeJobStore(),
@@ -551,7 +549,7 @@ def test_search_similar_returns_empty_when_disabled(fake_embedder: _FakeEmbedder
 
 
 def test_search_similar_returns_empty_when_embedder_unavailable() -> None:
-    """Embedder not loaded → no query, no DB hit."""
+    """``search_similar`` returns ``[]`` when the embedder is unavailable."""
     unavailable = _FakeEmbedder(available=False)
     with (
         patch.object(recs, "get_embedder", return_value=unavailable),
@@ -571,7 +569,7 @@ def test_search_similar_returns_empty_when_embedder_unavailable() -> None:
 
 
 def test_search_similar_returns_empty_when_no_text_to_embed() -> None:
-    """All inputs empty + empty summary → nothing to query against."""
+    """A query with no embeddable text returns ``[]`` and never opens a session."""
     fake_embedder = _FakeEmbedder()
     with (
         patch.object(recs, "get_embedder", return_value=fake_embedder),
@@ -592,7 +590,8 @@ def test_search_similar_returns_empty_when_no_text_to_embed() -> None:
 
 
 def test_search_similar_swallows_sql_errors(fake_embedder: _FakeEmbedder) -> None:
-    """A Postgres hiccup degrades to an empty result, not a 500."""
+    """A Postgres error degrades to ``[]`` rather than surfacing as a 500."""
+    # Postgres hiccup must degrade to an empty result rather than surface a 500.
     session_mock = MagicMock()
     session_mock.execute.side_effect = RuntimeError("pgvector extension missing")
     session_cm = MagicMock()
@@ -614,7 +613,7 @@ def test_search_similar_swallows_sql_errors(fake_embedder: _FakeEmbedder) -> Non
 
 
 def test_search_similar_omits_type_filter_when_not_given(fake_embedder: _FakeEmbedder) -> None:
-    """No optimization_type → no :filter_type param."""
+    """Without ``optimization_type`` the SQL params omit ``filter_type``."""
     session_cm, session_mock = _session_returning([])
     get_emb, summ = _patch_pipeline(fake_embedder)
     with get_emb, summ, patch.object(recs, "Session", return_value=session_cm):
@@ -632,13 +631,8 @@ def test_search_similar_omits_type_filter_when_not_given(fake_embedder: _FakeEmb
     assert params["top_k"] == 3
 
 
-# ---------------------------------------------------------------------------
-# Quality gate + score/config extraction (PER-11 Feature C)
-# ---------------------------------------------------------------------------
-
-
 def test_extract_scores_run_reads_latest_metrics() -> None:
-    """Run jobs carry the pair directly on latest_metrics."""
+    """For ``run`` jobs scores come from ``latest_metrics``."""
     job = {
         "payload_overview": {"optimization_type": "run"},
         "latest_metrics": {"baseline_test_metric": 51.2, "optimized_test_metric": 74.9},
@@ -649,7 +643,9 @@ def test_extract_scores_run_reads_latest_metrics() -> None:
 
 
 def test_extract_scores_grid_search_prefers_best_pair() -> None:
-    """Grid search: the winner's scores live on result.best_pair and override top-level metrics."""
+    """Grid-search scores come from ``result.best_pair`` and override top-level metrics."""
+    # Grid search: the winner's scores live on result.best_pair and OVERRIDE top-level
+    # metrics (which would otherwise reflect an arbitrary pair).
     job = {
         "payload_overview": {"optimization_type": "grid_search"},
         "latest_metrics": {"baseline_test_metric": 10.0, "optimized_test_metric": 20.0},
@@ -663,13 +659,14 @@ def test_extract_scores_grid_search_prefers_best_pair() -> None:
 
 
 def test_extract_scores_handles_missing_metrics() -> None:
-    """Completely absent metrics → (None, None), never raises."""
+    """Jobs without metrics return ``(None, None)`` rather than raising."""
     assert recs._extract_scores({}) == (None, None)
     assert recs._extract_scores({"payload_overview": {"optimization_type": "run"}}) == (None, None)
 
 
 def test_extract_scores_coerces_string_numbers() -> None:
-    """SQL/JSON often hands back stringified floats — coerce rather than drop."""
+    """Stringified floats from SQL/JSON are coerced to numeric scores."""
+    # SQL/JSON often hands back stringified floats — coerce rather than drop them.
     job = {
         "payload_overview": {"optimization_type": "run"},
         "latest_metrics": {"baseline_test_metric": "50.5", "optimized_test_metric": "77.0"},
@@ -680,7 +677,7 @@ def test_extract_scores_coerces_string_numbers() -> None:
 
 
 def test_extract_scores_returns_none_on_bad_string() -> None:
-    """Unparseable strings degrade to None, not raise."""
+    """Non-numeric strings yield ``(None, None)``."""
     job = {
         "payload_overview": {"optimization_type": "run"},
         "latest_metrics": {"baseline_test_metric": "abc", "optimized_test_metric": None},
@@ -689,37 +686,37 @@ def test_extract_scores_returns_none_on_bad_string() -> None:
 
 
 def test_evaluate_quality_clears_gate_on_strong_run() -> None:
-    """Clear absolute floor + absolute-lift threshold → recommendable."""
+    """A strong score lift clears the quality gate."""
     assert recs._evaluate_quality(52.0, 78.5) is True
 
 
 def test_evaluate_quality_rejects_below_absolute_floor() -> None:
-    """Good lift but optimized still below the absolute floor is not recommendable."""
+    """An optimized score below the absolute floor fails the gate."""
     assert recs._evaluate_quality(10.0, 45.0) is False  # 45 < default 50
 
 
 def test_evaluate_quality_rejects_tiny_lift() -> None:
-    """Strong absolute but micro-lift fails the gain floor."""
+    """A lift below the required (absolute or relative) threshold fails."""
     # Default min_gain_absolute=5.0, min_gain_relative=0.10 → required=max(5, 60*0.10)=6.0
     assert recs._evaluate_quality(60.0, 64.0) is False
     assert recs._evaluate_quality(60.0, 67.0) is True
 
 
 def test_evaluate_quality_rejects_non_improvement() -> None:
-    """Zero or negative lift never clears the gate."""
+    """A flat or negative lift fails the gate."""
     assert recs._evaluate_quality(70.0, 70.0) is False
     assert recs._evaluate_quality(70.0, 65.0) is False
 
 
 def test_evaluate_quality_handles_missing() -> None:
-    """Missing either half → not recommendable."""
+    """Missing scores fail the gate without raising."""
     assert recs._evaluate_quality(None, 80.0) is False
     assert recs._evaluate_quality(80.0, None) is False
     assert recs._evaluate_quality(None, None) is False
 
 
 def test_extract_applyable_config_pulls_from_payload() -> None:
-    """Optimizer/module/metric/task all come from the submission payload."""
+    """Apply-config fields are pulled from the payload, with task name from overview."""
     job = {
         "payload": {
             "optimizer_name": "gepa",
@@ -741,7 +738,7 @@ def test_extract_applyable_config_pulls_from_payload() -> None:
 
 
 def test_extract_applyable_config_defaults_to_empty() -> None:
-    """Missing payload keys degrade to Nones/empty kwargs."""
+    """An empty job produces all-None apply-config defaults."""
     cfg = recs._extract_applyable_config({})
     assert cfg["optimizer_name"] is None
     assert cfg["optimizer_kwargs"] == {}
@@ -751,7 +748,7 @@ def test_extract_applyable_config_defaults_to_empty() -> None:
 
 
 def test_as_float_coercion() -> None:
-    """Handles numeric types, None, and broken strings without raising."""
+    """``_as_float`` coerces ints, decimals, and numeric strings; rejects others."""
     from decimal import Decimal
 
     assert recs._as_float(None) is None

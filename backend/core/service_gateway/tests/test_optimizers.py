@@ -1,20 +1,17 @@
-"""Tests for core.service_gateway.optimizers."""
+"""Tests for ``core.service_gateway.optimization.optimizers``."""
 
 from __future__ import annotations
 
-import inspect
 import logging
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.service_gateway.tests.mocks import fake_compiled_program, fake_language_model
-
 from core.exceptions import ServiceError
 from core.models import ModelConfig
-from core.service_gateway.data import DatasetSplits
-from core.service_gateway.optimizers import (
+from core.service_gateway.optimization.data import DatasetSplits
+from core.service_gateway.optimization.optimizers import (
     _callable_accepts_metric,
     _compile_accepts_valset,
     _extract_factory_targets,
@@ -25,11 +22,11 @@ from core.service_gateway.optimizers import (
     validate_optimizer_kwargs,
     validate_optimizer_signature,
 )
+from core.service_gateway.tests.mocks import fake_compiled_program, fake_language_model
 
 
-
-def _splits(train=None, val=None, test=None) -> DatasetSplits:
-    """Return a DatasetSplits with defaults: train=[1,2,3], val=[], test=[]."""
+def _splits(train: Any = None, val: Any = None, test: Any = None) -> DatasetSplits:
+    """Build a ``DatasetSplits`` with ``[1, 2, 3]`` train and empty val/test by default."""
     return DatasetSplits(
         train=train if train is not None else [1, 2, 3],
         val=val if val is not None else [],
@@ -38,40 +35,39 @@ def _splits(train=None, val=None, test=None) -> DatasetSplits:
 
 
 def _model_cfg(name: str = "openai/gpt-4o-mini") -> ModelConfig:
-    """Return a ModelConfig for the given model name."""
+    """Build a minimal ``ModelConfig`` defaulting to ``openai/gpt-4o-mini``."""
     return ModelConfig(name=name)
 
 
 class _FakeOptimizer:
-    """Minimal fake optimizer that records compile calls."""
+    """Optimizer test double whose ``compile`` ignores valset."""
 
     def __init__(self, **kwargs: Any) -> None:
-        """Store kwargs for later inspection."""
+        """Capture init kwargs for later inspection."""
         self.kwargs = kwargs
 
     def compile(self, program: Any, *, trainset: Any, **kwargs: Any) -> Any:
-        """Return the program unchanged."""
+        """Return the program unchanged, ignoring trainset and extra kwargs."""
         return program
 
 
 class _FakeOptimizerWithValset:
-    """Fake optimizer whose compile() accepts a valset parameter."""
+    """Optimizer test double whose ``compile`` accepts a valset kwarg."""
 
     def __init__(self, **kwargs: Any) -> None:
-        """Store kwargs."""
+        """Capture init kwargs for later inspection."""
         self.kwargs = kwargs
 
     def compile(self, program: Any, *, trainset: Any, valset: Any = None, **kwargs: Any) -> Any:
-        """Return the program unchanged."""
+        """Return the program unchanged, ignoring trainset/valset/extras."""
         return program
 
 
 class _FactoryWithMetric:
-    """Fake optimizer factory that exposes a metric parameter in __init__."""
+    """Optimizer factory test double whose constructor accepts ``metric``."""
 
-    def __init__(self, metric=None, **kwargs: Any) -> None:
-        """Accept and ignore all kwargs."""
-        pass
+    def __init__(self, metric: Any = None, **kwargs: Any) -> None:
+        """Accept and ignore ``metric`` plus extra kwargs."""
 
     def compile(self, program: Any, **kwargs: Any) -> Any:
         """Return the program unchanged."""
@@ -79,11 +75,10 @@ class _FactoryWithMetric:
 
 
 class _FactoryNoMetric:
-    """Fake optimizer factory without a metric parameter."""
+    """Optimizer factory test double whose constructor lacks ``metric``."""
 
     def __init__(self, **kwargs: Any) -> None:
-        """Accept and ignore all kwargs."""
-        pass
+        """Accept and ignore extra kwargs."""
 
     def compile(self, program: Any, **kwargs: Any) -> Any:
         """Return the program unchanged."""
@@ -91,13 +86,12 @@ class _FactoryNoMetric:
 
 
 def _dummy_metric(example: Any, prediction: Any, trace: Any = None) -> float:
-    """Always return 1.0; used as a stand-in metric in tests."""
+    """Constant metric that returns 1.0 for any inputs."""
     return 1.0
 
 
-
 def test_compile_accepts_valset_returns_true_when_valset_in_signature() -> None:
-    """Optimizer whose compile() accepts valset returns True."""
+    """``_compile_accepts_valset`` returns True when compile() exposes ``valset``."""
     optimizer = _FakeOptimizerWithValset()
 
     result = _compile_accepts_valset(optimizer)
@@ -106,7 +100,7 @@ def test_compile_accepts_valset_returns_true_when_valset_in_signature() -> None:
 
 
 def test_compile_accepts_valset_returns_false_when_valset_not_in_signature() -> None:
-    """Optimizer whose compile() does not accept valset returns False."""
+    """``_compile_accepts_valset`` returns False when compile() lacks ``valset``."""
     optimizer = _FakeOptimizer()
 
     result = _compile_accepts_valset(optimizer)
@@ -115,15 +109,14 @@ def test_compile_accepts_valset_returns_false_when_valset_not_in_signature() -> 
 
 
 def test_compile_accepts_valset_returns_false_when_no_compile_method() -> None:
-    """Object with no compile method returns False."""
+    """``_compile_accepts_valset`` returns False for objects without ``compile``."""
     result = _compile_accepts_valset(object())
 
     assert result is False
 
 
-
 def test_compile_program_empty_train_raises_service_error() -> None:
-    """Empty trainset raises ServiceError before calling the optimizer."""
+    """An empty training split surfaces a ``ServiceError``."""
     splits = _splits(train=[])
     optimizer = _FakeOptimizer()
 
@@ -138,7 +131,7 @@ def test_compile_program_empty_train_raises_service_error() -> None:
 
 
 def test_compile_program_calls_optimizer_compile_with_trainset() -> None:
-    """compile_program calls optimizer.compile and returns the result."""
+    """``compile_program`` returns whatever the optimizer's compile() returns."""
     program = fake_compiled_program()
     optimizer = _FakeOptimizer()
     splits = _splits(train=[1, 2, 3])
@@ -155,6 +148,7 @@ def test_compile_program_calls_optimizer_compile_with_trainset() -> None:
 
 
 def test_compile_program_injects_valset_when_optimizer_accepts_it() -> None:
+    """A valset is injected when the optimizer's compile() accepts ``valset``."""
     received: dict = {}
 
     class _RecordingOpt:
@@ -175,6 +169,7 @@ def test_compile_program_injects_valset_when_optimizer_accepts_it() -> None:
 
 
 def test_compile_program_does_not_inject_valset_when_optimizer_does_not_accept_it() -> None:
+    """A valset is NOT injected when the optimizer's compile() rejects ``valset``."""
     received: dict = {}
 
     class _StrictOpt:
@@ -195,6 +190,7 @@ def test_compile_program_does_not_inject_valset_when_optimizer_does_not_accept_i
 
 
 def test_compile_program_honours_pre_set_trainset_in_compile_kwargs() -> None:
+    """A pre-set ``trainset`` in compile_kwargs takes precedence over the split."""
     received: dict = {}
 
     class _RecordingOpt:
@@ -215,7 +211,7 @@ def test_compile_program_honours_pre_set_trainset_in_compile_kwargs() -> None:
 
 
 def test_compile_program_type_error_from_optimizer_raises_service_error() -> None:
-    """TypeError from optimizer.compile is wrapped in a ServiceError."""
+    """A ``TypeError`` from compile() is wrapped into a ``ServiceError``."""
     class _BadOpt:
         def compile(self, program: Any, **kwargs: Any) -> Any:
             raise TypeError("bad kwarg")
@@ -230,16 +226,15 @@ def test_compile_program_type_error_from_optimizer_raises_service_error() -> Non
         )
 
 
-
 def test_optimizer_requires_metric_returns_true_when_metric_in_init() -> None:
-    """Factory with 'metric' in __init__ signature reports it requires a metric."""
+    """A factory whose __init__ exposes ``metric`` returns True."""
     result = optimizer_requires_metric(_FactoryWithMetric)
 
     assert result is True
 
 
 def test_optimizer_requires_metric_returns_false_when_metric_not_present() -> None:
-    """Factory without 'metric' parameter reports it does not require a metric."""
+    """A factory whose __init__ has no ``metric`` parameter returns False."""
     def _no_metric_factory(num_threads: int = 4) -> None:
         pass
 
@@ -249,38 +244,36 @@ def test_optimizer_requires_metric_returns_false_when_metric_not_present() -> No
 
 
 def test_optimizer_requires_metric_returns_false_for_uninspectable() -> None:
-    """None factory returns False rather than raising."""
-    result = optimizer_requires_metric(None)
+    """``None`` factories return False rather than raising."""
+    result = optimizer_requires_metric(cast(Any, None))
 
     assert result is False
 
 
-
 def test_callable_accepts_metric_true_for_metric_param() -> None:
-    """Callable with 'metric' parameter returns True."""
-    def fn(metric, other=None):
+    """A callable whose first parameter is ``metric`` reports True."""
+    def fn(metric: Any, other: Any = None) -> None:
         pass
 
     assert _callable_accepts_metric(fn) is True
 
 
 def test_callable_accepts_metric_false_when_no_metric_param() -> None:
-    """Callable without 'metric' parameter returns False."""
-    def fn(foo, bar):
+    """A callable without a ``metric`` parameter reports False."""
+    def fn(foo: Any, bar: Any) -> None:
         pass
 
     assert _callable_accepts_metric(fn) is False
 
 
 def test_callable_accepts_metric_false_for_none() -> None:
-    """None returns False without raising."""
+    """``None`` reports False rather than raising."""
     assert _callable_accepts_metric(None) is False
 
 
-
 def test_extract_factory_targets_includes_factory_itself() -> None:
-    """The factory itself is always included in the targets list."""
-    def my_factory():
+    """The factory itself is always among the extracted targets."""
+    def my_factory() -> None:
         pass
 
     targets = _extract_factory_targets(my_factory)
@@ -289,32 +282,32 @@ def test_extract_factory_targets_includes_factory_itself() -> None:
 
 
 def test_extract_factory_targets_includes_wrapped_when_present() -> None:
-    """A __wrapped__ attribute is added to the targets list."""
-    def inner():
+    """A function with ``__wrapped__`` exposes the inner callable as a target."""
+    def inner() -> None:
         pass
 
-    def outer():
+    def outer() -> None:
         pass
 
-    outer.__wrapped__ = inner
+    outer.__wrapped__ = inner  # type: ignore[attr-defined]
 
     targets = _extract_factory_targets(outer)
 
     assert inner in targets
 
 
-
 def test_validate_optimizer_kwargs_empty_kwargs_always_passes() -> None:
-    """Empty kwargs dict passes validation without raising."""
+    """No kwargs always validates without raising."""
     validate_optimizer_kwargs(_FactoryNoMetric, {}, "no_metric")
 
 
 def test_validate_optimizer_kwargs_valid_kwargs_passes() -> None:
-    """Valid (empty) kwargs dict passes validation."""
+    """Empty kwargs against a no-metric factory validates without raising."""
     validate_optimizer_kwargs(_FactoryNoMetric, {}, "no_metric")
 
 
 def test_validate_optimizer_kwargs_invalid_kwarg_raises_service_error() -> None:
+    """A factory with a closed signature rejects unknown kwargs."""
     # Use a factory with explicit, closed signature (no **kwargs) so
     # bind_partial can actually reject unknown keys.
     def _strict_factory(num_threads: int = 4, max_rounds: int = 1) -> None:
@@ -329,32 +322,27 @@ def test_validate_optimizer_kwargs_invalid_kwarg_raises_service_error() -> None:
 
 
 def test_validate_optimizer_kwargs_uninspectable_factory_does_not_raise() -> None:
-    """Uninspectable factory (e.g. built-in) silently skips validation."""
+    """Factories whose signatures cannot be inspected silently skip validation."""
     # Built-in int doesn't expose a useful signature in older Pythons — the
     # function should silently skip validation rather than raise.
     validate_optimizer_kwargs(int, {"foo": "bar"}, "int_factory")
 
 
-
-def test_validate_optimizer_signature_logs_warning_for_uninspectable(caplog) -> None:
-    """None factory logs a warning rather than raising."""
+def test_validate_optimizer_signature_logs_warning_for_uninspectable(caplog: pytest.LogCaptureFixture) -> None:
+    """An uninspectable factory logs a warning instead of raising."""
     with caplog.at_level(logging.WARNING):
-        validate_optimizer_signature(None, "bad_factory")
-
-    # Should not raise; may emit a warning
-    # (None raises TypeError in inspect.signature)
-
+        validate_optimizer_signature(cast(Any, None), "bad_factory")
 
 
 def test_instantiate_optimizer_injects_metric_when_factory_requires_it() -> None:
-    """Metric is injected when the factory exposes a 'metric' parameter."""
+    """A metric is forwarded to factories that expose a ``metric`` parameter."""
     captured: dict = {}
 
     class _MetricFactory:
-        def __init__(self, metric=None, **kw):
+        def __init__(self, metric: Any = None, **kw: Any) -> None:
             captured["metric"] = metric
 
-        def compile(self, *a, **kw):
+        def compile(self, *a: Any, **kw: Any) -> None:
             return None
 
     instantiate_optimizer(
@@ -370,15 +358,17 @@ def test_instantiate_optimizer_injects_metric_when_factory_requires_it() -> None
 
 
 def test_instantiate_optimizer_does_not_override_metric_if_already_in_kwargs() -> None:
-    """Pre-set metric in optimizer_kwargs is not overridden by the service metric."""
+    """A caller-supplied ``metric`` in optimizer_kwargs is preserved."""
     captured: dict = {}
-    custom_metric = lambda e, p: 0.5
+
+    def custom_metric(e: Any, p: Any) -> float:
+        return 0.5
 
     class _MetricFactory:
-        def __init__(self, metric=None, **kw):
+        def __init__(self, metric: Any = None, **kw: Any) -> None:
             captured["metric"] = metric
 
-        def compile(self, *a, **kw):
+        def compile(self, *a: Any, **kw: Any) -> None:
             return None
 
     instantiate_optimizer(
@@ -394,11 +384,12 @@ def test_instantiate_optimizer_does_not_override_metric_if_already_in_kwargs() -
 
 
 def test_instantiate_optimizer_gepa_requires_reflection_model_or_raises() -> None:
+    """The gepa factory raises ``ServiceError`` when no reflection model is provided."""
     class _GepaFactory:
-        def __init__(self, metric=None, auto=None, reflection_lm=None, **kw):
+        def __init__(self, metric: Any = None, auto: Any = None, reflection_lm: Any = None, **kw: Any) -> None:
             pass
 
-        def compile(self, *a, **kw):
+        def compile(self, *a: Any, **kw: Any) -> None:
             return None
 
     with pytest.raises(ServiceError, match="reflection_model_config"):
@@ -413,18 +404,18 @@ def test_instantiate_optimizer_gepa_requires_reflection_model_or_raises() -> Non
 
 
 def test_instantiate_optimizer_gepa_injects_reflection_lm_when_model_provided() -> None:
-    """GEPA reflection_lm is built and injected when reflection_model is provided."""
+    """The reflection LM is built and passed through to the gepa factory."""
     captured: dict = {}
     fake_lm = fake_language_model()
 
     class _GepaFactory:
-        def __init__(self, metric=None, auto=None, reflection_lm=None, **kw):
+        def __init__(self, metric: Any = None, auto: Any = None, reflection_lm: Any = None, **kw: Any) -> None:
             captured["reflection_lm"] = reflection_lm
 
-        def compile(self, *a, **kw):
+        def compile(self, *a: Any, **kw: Any) -> None:
             return None
 
-    with patch("core.service_gateway.optimizers.build_language_model", return_value=fake_lm):
+    with patch("core.service_gateway.optimization.optimizers.build_language_model", return_value=fake_lm):
         instantiate_optimizer(
             factory=_GepaFactory,
             optimizer_name="gepa",
@@ -438,18 +429,18 @@ def test_instantiate_optimizer_gepa_injects_reflection_lm_when_model_provided() 
 
 
 def test_instantiate_optimizer_gepa_sets_auto_light_default() -> None:
-    """GEPA auto defaults to 'light' when no budget kwarg is supplied."""
+    """The gepa factory defaults ``auto`` to 'light' when caller leaves it unset."""
     captured: dict = {}
     fake_lm = fake_language_model()
 
     class _GepaFactory:
-        def __init__(self, metric=None, auto=None, reflection_lm=None, **kw):
+        def __init__(self, metric: Any = None, auto: Any = None, reflection_lm: Any = None, **kw: Any) -> None:
             captured["auto"] = auto
 
-        def compile(self, *a, **kw):
+        def compile(self, *a: Any, **kw: Any) -> None:
             return None
 
-    with patch("core.service_gateway.optimizers.build_language_model", return_value=fake_lm):
+    with patch("core.service_gateway.optimization.optimizers.build_language_model", return_value=fake_lm):
         instantiate_optimizer(
             factory=_GepaFactory,
             optimizer_name="gepa",
@@ -463,86 +454,86 @@ def test_instantiate_optimizer_gepa_sets_auto_light_default() -> None:
 
 
 class _FakeEvalResult:
-    """Fake EvaluationResult returned by dspy.Evaluate."""
+    """Stand-in for dspy.Evaluate's structured result with score + results."""
 
     def __init__(self, score: Any, results: list | None = None) -> None:
-        """Set score and optional per-example results list."""
+        """Store the aggregate score and per-example results list."""
         self.score = score
         self.results = results or []
 
 
 class _FakeExample:
-    """Minimal stand-in for a dspy.Example."""
+    """Stand-in dataset example exposing a single 'answer' label."""
 
     def labels(self) -> list[str]:
-        """Return a fixed list of output field names."""
+        """Return the canonical label list for this example."""
         return ["answer"]
 
 
 def test_evaluate_on_test_happy_path_returns_float_and_empty_results() -> None:
-    """Happy path returns the aggregate score and an empty per-example list."""
+    """A structured evaluator result returns the score and an empty per-example list."""
     program = fake_compiled_program()
     metric = _dummy_metric
     test_examples = [_FakeExample()]
     fake_evaluator = MagicMock()
     fake_evaluator.return_value = _FakeEvalResult(score=0.75, results=[])
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate", return_value=fake_evaluator):
-        score, per_example = evaluate_on_test(
-            program, test_examples, metric, collect_per_example=True
-        )
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate", return_value=fake_evaluator):
+        score, per_example = evaluate_on_test(program, test_examples, metric, collect_per_example=True)
 
     assert score == pytest.approx(0.75)
     assert per_example == []
 
 
 def test_evaluate_on_test_bare_int_float_return_treated_as_aggregate() -> None:
-    """Evaluator returns a plain float (not EvaluationResult)."""
+    """A bare float evaluator return value is treated as the aggregate score."""
     program = fake_compiled_program()
     metric = _dummy_metric
     test_examples = [_FakeExample()]
     fake_evaluator = MagicMock()
     fake_evaluator.return_value = 0.42  # bare float
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate", return_value=fake_evaluator):
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate", return_value=fake_evaluator):
         result = evaluate_on_test(program, test_examples, metric, collect_per_example=False)
 
     assert result == pytest.approx(0.42)
 
 
 def test_evaluate_on_test_bare_int_return_treated_as_aggregate() -> None:
-    """Evaluator returns a plain int (not EvaluationResult)."""
+    """A bare int evaluator return value is coerced to float aggregate."""
     program = fake_compiled_program()
     metric = _dummy_metric
     test_examples = [_FakeExample()]
     fake_evaluator = MagicMock()
     fake_evaluator.return_value = 1  # bare int
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate", return_value=fake_evaluator):
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate", return_value=fake_evaluator):
         result = evaluate_on_test(program, test_examples, metric, collect_per_example=False)
 
     assert result == pytest.approx(1.0)
 
 
 def test_evaluate_on_test_non_numeric_score_raises_service_error() -> None:
-    """Evaluator returns an object whose .score is not numeric → ServiceError."""
+    """A non-numeric ``score`` field raises a ``ServiceError``."""
     program = fake_compiled_program()
     metric = _dummy_metric
     test_examples = [_FakeExample()]
     fake_evaluator = MagicMock()
     fake_evaluator.return_value = _FakeEvalResult(score="not-a-number")
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate", return_value=fake_evaluator):
-        with pytest.raises(ServiceError, match="non-numeric"):
-            evaluate_on_test(program, test_examples, metric, collect_per_example=True)
+    with (
+        patch("core.service_gateway.optimization.optimizers.dspy.Evaluate", return_value=fake_evaluator),
+        pytest.raises(ServiceError, match="non-numeric"),
+    ):
+        evaluate_on_test(program, test_examples, metric, collect_per_example=True)
 
 
 def test_evaluate_on_test_empty_test_set_returns_none_when_not_collecting() -> None:
-    """Empty test set short-circuits before calling dspy.Evaluate."""
+    """An empty test set returns ``None`` and never invokes the evaluator."""
     program = fake_compiled_program()
     metric = _dummy_metric
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate") as mock_eval_cls:
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate") as mock_eval_cls:
         result = evaluate_on_test(program, [], metric, collect_per_example=False)
 
     mock_eval_cls.assert_not_called()
@@ -550,11 +541,11 @@ def test_evaluate_on_test_empty_test_set_returns_none_when_not_collecting() -> N
 
 
 def test_evaluate_on_test_empty_test_set_returns_none_and_empty_list_when_collecting() -> None:
-    """Empty test set short-circuits and returns (None, []) when collect_per_example=True."""
+    """An empty test set with ``collect_per_example`` returns ``(None, [])``."""
     program = fake_compiled_program()
     metric = _dummy_metric
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate") as mock_eval_cls:
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate") as mock_eval_cls:
         score, per_example = evaluate_on_test(program, [], metric, collect_per_example=True)
 
     mock_eval_cls.assert_not_called()
@@ -563,7 +554,7 @@ def test_evaluate_on_test_empty_test_set_returns_none_and_empty_list_when_collec
 
 
 def test_evaluate_on_test_per_example_unpacking_normal_entry() -> None:
-    """Per-example results are correctly unpacked from (example, prediction, score) tuples."""
+    """A normal (example, prediction, score) tuple unpacks into a per-example dict."""
     program = fake_compiled_program()
     metric = _dummy_metric
     test_examples = [_FakeExample()]
@@ -575,10 +566,8 @@ def test_evaluate_on_test_per_example_unpacking_normal_entry() -> None:
     fake_evaluator = MagicMock()
     fake_evaluator.return_value = _FakeEvalResult(score=1.0, results=raw_results)
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate", return_value=fake_evaluator):
-        score, per_example = evaluate_on_test(
-            program, test_examples, metric, collect_per_example=True
-        )
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate", return_value=fake_evaluator):
+        _score, per_example = evaluate_on_test(program, test_examples, metric, collect_per_example=True)
 
     assert len(per_example) == 1
     entry = per_example[0]
@@ -588,7 +577,9 @@ def test_evaluate_on_test_per_example_unpacking_normal_entry() -> None:
 
 
 def test_evaluate_on_test_per_example_bare_except_fallback() -> None:
-    """Malformed entry triggers the bare-except fallback (index, 0.0, pass=False)."""
+    """A malformed result tuple falls back to a default ``score=0.0, pass=False`` entry."""
+    # Malformed result entry (wrong tuple shape) must fall through to (index, 0.0, pass=False)
+    # rather than blowing up the whole evaluation.
     program = fake_compiled_program()
     metric = _dummy_metric
     test_examples = [_FakeExample()]
@@ -598,10 +589,8 @@ def test_evaluate_on_test_per_example_bare_except_fallback() -> None:
     fake_evaluator = MagicMock()
     fake_evaluator.return_value = _FakeEvalResult(score=0.0, results=raw_results)
 
-    with patch("core.service_gateway.optimizers.dspy.Evaluate", return_value=fake_evaluator):
-        score, per_example = evaluate_on_test(
-            program, test_examples, metric, collect_per_example=True
-        )
+    with patch("core.service_gateway.optimization.optimizers.dspy.Evaluate", return_value=fake_evaluator):
+        _score, per_example = evaluate_on_test(program, test_examples, metric, collect_per_example=True)
 
     assert len(per_example) == 1
     entry = per_example[0]

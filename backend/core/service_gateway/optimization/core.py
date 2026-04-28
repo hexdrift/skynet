@@ -1,13 +1,23 @@
+"""High-level :class:`DspyService` facade for running optimization jobs.
+
+Glues together signature/metric loading, dataset splitting, optimizer
+instantiation, baseline-vs-optimized evaluation, artifact persistence,
+and progress callbacks for both single-run and grid-search payloads.
+The companion modules in this package handle the individual concerns;
+this file orchestrates them.
+"""
+
 import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import dspy
 
-from ..constants import (
+from ...constants import (
     DETAIL_BASELINE,
     DETAIL_OPTIMIZED,
     DETAIL_TEST,
@@ -25,8 +35,8 @@ from ..constants import (
     PROGRESS_OPTIMIZED,
     PROGRESS_SPLITS_READY,
 )
-from ..exceptions import ServiceError
-from ..models import (
+from ...exceptions import ServiceError
+from ...models import (
     GridSearchRequest,
     GridSearchResponse,
     PairResult,
@@ -34,23 +44,25 @@ from ..models import (
     RunResponse,
     SplitCounts,
 )
-from ..registry import (
+from ...registry import (
     ResolverError,
     ServiceRegistry,
     UnknownRegistrationError,
     resolve_module_factory,
     resolve_optimizer_factory,
 )
+from ..language_models import build_language_model
+from ..safe_exec import validate_metric_code, validate_signature_code
 from .artifacts import persist_program
 from .data import (
     extract_signature_fields,
     extract_stratify_values,
+    image_input_field_names,
     load_metric_from_code,
     load_signature_from_code,
     rows_to_examples,
     split_examples,
 )
-from .language_models import build_language_model
 from .optimizers import (
     compile_program,
     evaluate_on_test,
@@ -68,6 +80,240 @@ from .validators import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class _GridPairContext:
+    """Shared state threaded through grid-search pair workers.
+
+    Groups every value a pair worker previously pulled from the
+    ``run_grid_search`` closure so the worker can live at module scope.
+    Counters are mutated through ``results_lock`` (never directly); pair
+    workers read the snapshot inside the lock so progress callbacks see a
+    consistent view.
+    """
+
+    total_pairs: int
+    module_factory: Any
+    module_kwargs: dict[str, Any]
+    payload: GridSearchRequest
+    optimizer_factory: Any
+    metric: Any
+    splits: Any
+    artifact_id: str | None
+    progress_callback: Callable[[str, dict[str, Any]], None] | None
+    results_lock: threading.Lock = field(default_factory=threading.Lock)
+    completed: int = 0
+    failed: int = 0
+
+
+def _run_grid_pair(
+    ctx: _GridPairContext,
+    i: int,
+    gen_cfg: Any,
+    ref_cfg: Any,
+) -> PairResult:
+    """Execute one (generation_model, reflection_model) pair and return its ``PairResult``.
+
+    Mirrors the per-pair flow of ``run_grid_search``: compiles the module,
+    evaluates baseline and optimized programs on the test split, persists
+    the better program, and emits progress events through
+    ``ctx.progress_callback``. On failure returns a ``PairResult`` carrying
+    the stringified exception rather than propagating — the caller treats
+    unsuccessful pairs as soft failures.
+
+    Args:
+        ctx: Shared grid-pair context with payload, factories, and counters.
+        i: Zero-based pair index for this worker.
+        gen_cfg: Generation-model config for this pair.
+        ref_cfg: Reflection-model config for this pair.
+
+    Returns:
+        The :class:`PairResult` for this pair (carrying an ``error`` string
+        when execution failed).
+    """
+    from ...worker.log_handler import set_current_pair_index  # local: circular import with core.worker.engine
+
+    set_current_pair_index(i)
+    pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
+    logger.info("Grid pair %d/%d: %s", i + 1, ctx.total_pairs, pair_label)
+    if ctx.progress_callback:
+        ctx.progress_callback(
+            PROGRESS_GRID_PAIR_STARTED,
+            {
+                "pair_index": i,
+                "total_pairs": ctx.total_pairs,
+                "generation_model": gen_cfg.name,
+                "reflection_model": ref_cfg.name,
+            },
+        )
+
+    pair_start = datetime.now(UTC)
+    try:
+        program = ctx.module_factory(**dict(ctx.module_kwargs))
+        language_model = build_language_model(gen_cfg)
+        gen_timing = GenLMTimingCallback(language_model)
+
+        with dspy.context(lm=language_model, callbacks=[gen_timing]):
+            optimizer = instantiate_optimizer(
+                ctx.optimizer_factory,
+                ctx.payload.optimizer_name,
+                ctx.payload.optimizer_kwargs,
+                ctx.metric,
+                gen_cfg,
+                ref_cfg,
+            )
+            baseline = None
+            baseline_test_results: list[dict] = []
+            if ctx.splits.test:
+                baseline, baseline_test_results = evaluate_on_test(
+                    program,
+                    ctx.splits.test,
+                    ctx.metric,
+                    collect_per_example=True,
+                )
+                if ctx.progress_callback and baseline is not None:
+                    ctx.progress_callback(
+                        PROGRESS_BASELINE,
+                        {
+                            DETAIL_BASELINE: baseline,
+                            "pair_index": i,
+                        },
+                    )
+
+            with capture_tqdm(ctx.progress_callback):
+                compiled = compile_program(
+                    optimizer=optimizer,
+                    program=program,
+                    splits=ctx.splits,
+                    metric=ctx.metric,
+                    compile_kwargs=ctx.payload.compile_kwargs,
+                )
+
+            optimized = None
+            optimized_test_results: list[dict] = []
+            if ctx.splits.test:
+                optimized, optimized_test_results = evaluate_on_test(
+                    compiled,
+                    ctx.splits.test,
+                    ctx.metric,
+                    collect_per_example=True,
+                )
+                if ctx.progress_callback and optimized is not None:
+                    ctx.progress_callback(
+                        PROGRESS_OPTIMIZED,
+                        {
+                            DETAIL_OPTIMIZED: optimized,
+                            "pair_index": i,
+                        },
+                    )
+
+        best = compiled
+        if baseline is not None and optimized is not None and optimized < baseline:
+            logger.warning(
+                "Grid pair %d: optimized (%.4f) worse than baseline (%.4f) — keeping baseline",
+                i,
+                optimized,
+                baseline,
+            )
+            best = program
+            optimized = baseline
+
+        art_id = f"{ctx.artifact_id}_pair_{i}" if ctx.artifact_id else None
+        program_artifact = persist_program(best, art_id)
+
+        improvement = None
+        if baseline is not None and optimized is not None:
+            improvement = optimized - baseline
+
+        pair_runtime = (datetime.now(UTC) - pair_start).total_seconds()
+        pair_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
+        _, pair_avg_ms = gen_timing.summary()
+        result = PairResult(
+            pair_index=i,
+            generation_model=gen_cfg.name,
+            reflection_model=ref_cfg.name,
+            generation_reasoning_effort=gen_cfg.extra.get("reasoning_effort"),
+            reflection_reasoning_effort=ref_cfg.extra.get("reasoning_effort"),
+            baseline_test_metric=baseline,
+            optimized_test_metric=optimized,
+            metric_improvement=improvement,
+            runtime_seconds=round(pair_runtime, 2),
+            num_lm_calls=pair_lm_calls,
+            avg_response_time_ms=pair_avg_ms,
+            program_artifact=program_artifact,
+            baseline_test_results=baseline_test_results,
+            optimized_test_results=optimized_test_results,
+        )
+        with ctx.results_lock:
+            ctx.completed += 1
+        logger.info(
+            "Grid pair %d/%d completed: baseline=%.4f optimized=%.4f (%.1fs)",
+            i + 1,
+            ctx.total_pairs,
+            baseline or 0,
+            optimized or 0,
+            pair_runtime,
+        )
+        if ctx.progress_callback:
+            with ctx.results_lock:
+                c, f = ctx.completed, ctx.failed
+            ctx.progress_callback(
+                PROGRESS_GRID_PAIR_COMPLETED,
+                {
+                    "pair_index": i,
+                    "total_pairs": ctx.total_pairs,
+                    "generation_model": gen_cfg.name,
+                    "reflection_model": ref_cfg.name,
+                    "baseline_test_metric": baseline,
+                    "optimized_test_metric": optimized,
+                    "metric_improvement": improvement,
+                    "runtime_seconds": round(pair_runtime, 2),
+                    "completed_so_far": c,
+                    "failed_so_far": f,
+                },
+            )
+        set_current_pair_index(None)
+        return result
+
+    except Exception as exc:
+        pair_runtime = (datetime.now(UTC) - pair_start).total_seconds()
+        error_msg = str(exc)
+        result = PairResult(
+            pair_index=i,
+            generation_model=gen_cfg.name,
+            reflection_model=ref_cfg.name,
+            generation_reasoning_effort=gen_cfg.extra.get("reasoning_effort"),
+            reflection_reasoning_effort=ref_cfg.extra.get("reasoning_effort"),
+            error=error_msg,
+            runtime_seconds=round(pair_runtime, 2),
+        )
+        with ctx.results_lock:
+            ctx.failed += 1
+        logger.warning(
+            "Grid pair %d/%d failed (%s): %s",
+            i + 1,
+            ctx.total_pairs,
+            pair_label,
+            error_msg,
+        )
+        if ctx.progress_callback:
+            with ctx.results_lock:
+                c, f = ctx.completed, ctx.failed
+            ctx.progress_callback(
+                PROGRESS_GRID_PAIR_FAILED,
+                {
+                    "pair_index": i,
+                    "total_pairs": ctx.total_pairs,
+                    "generation_model": gen_cfg.name,
+                    "reflection_model": ref_cfg.name,
+                    "error": error_msg,
+                    "completed_so_far": c,
+                    "failed_so_far": f,
+                },
+            )
+        set_current_pair_index(None)
+        return result
+
+
 class DspyService:
     """High-level coordinator between FastAPI payloads and DSPy runtimes."""
 
@@ -79,8 +325,8 @@ class DspyService:
         """Initialize DspyService with a module/optimizer registry and optional default seed.
 
         Args:
-            registry: Registry for looking up custom modules and optimizers.
-            default_seed: Fallback RNG seed used when a request omits its own seed.
+            registry: Module/optimizer registry used to resolve named factories.
+            default_seed: Optional default split seed when a payload omits one.
         """
         self.registry = registry
         self.default_seed = default_seed
@@ -101,18 +347,14 @@ class DspyService:
         the reported optimized metric is swapped to the baseline value.
 
         Args:
-            payload: All parameters for the optimization run.
-            artifact_id: Optional identifier used when persisting the program artifact.
-            progress_callback: Optional callable invoked with (event_name, data_dict)
-                at key milestones during the run.
+            payload: The validated run request to execute.
+            artifact_id: Optional identifier carried into artifact storage.
+            progress_callback: Optional callback receiving ``(event, detail)`` updates.
 
         Returns:
-            A RunResponse with metrics, artifact, and runtime statistics.
-
-        Raises:
-            ServiceError: If any stage of loading, splitting, or compiling fails.
+            A populated :class:`RunResponse` summarising the run.
         """
-        run_start = datetime.now(timezone.utc)
+        run_start = datetime.now(UTC)
         logger.info(
             "Starting DSPy run: module=%s optimizer=%s dataset_rows=%d",
             payload.module_name,
@@ -149,7 +391,11 @@ class DspyService:
             payload.reflection_model_settings,
         )
 
-        examples = rows_to_examples(payload.dataset, payload.column_mapping)
+        examples = rows_to_examples(
+            payload.dataset,
+            payload.column_mapping,
+            image_input_fields=image_input_field_names(signature_cls),
+        )
         logger.info("Converted dataset to %d DSPy examples", len(examples))
 
         stratify_values = (
@@ -271,7 +517,7 @@ class DspyService:
         if baseline_test_metric is not None and optimized_test_metric is not None:
             metric_improvement = optimized_test_metric - baseline_test_metric
 
-        runtime_seconds = (datetime.now(timezone.utc) - run_start).total_seconds()
+        runtime_seconds = (datetime.now(UTC) - run_start).total_seconds()
         # num_lm_calls comes from LM history (preserves counting for mocked LMs);
         # avg is wall-clock time spent inside the generation LM only, via the callback.
         num_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
@@ -316,19 +562,15 @@ class DspyService:
         recorded with their error message rather than aborting the whole search.
 
         Args:
-            payload: Grid-search parameters including the model Cartesian product.
-            artifact_id: Optional base identifier; each pair artifact is suffixed with
-                ``_pair_<index>``.
-            progress_callback: Optional callable invoked at each pair start, completion,
-                and failure.
+            payload: The validated grid-search request to execute.
+            artifact_id: Optional identifier carried into per-pair artifacts.
+            progress_callback: Optional callback receiving ``(event, detail)`` updates.
 
         Returns:
-            A GridSearchResponse summarising all pairs and the overall best pair.
-
-        Raises:
-            ServiceError: If shared setup (signature, metric, module) fails.
+            A populated :class:`GridSearchResponse` with per-pair results
+            and the best overall pair.
         """
-        grid_start = datetime.now(timezone.utc)
+        grid_start = datetime.now(UTC)
         pairs = [(gen_cfg, ref_cfg) for gen_cfg in payload.generation_models for ref_cfg in payload.reflection_models]
         total_pairs = len(pairs)
         logger.info(
@@ -354,7 +596,11 @@ class DspyService:
         metric_identifier = getattr(metric, "__name__", "inline_metric")
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
 
-        examples = rows_to_examples(payload.dataset, payload.column_mapping)
+        examples = rows_to_examples(
+            payload.dataset,
+            payload.column_mapping,
+            image_input_fields=image_input_field_names(signature_cls),
+        )
         stratify_values = (
             extract_stratify_values(
                 examples,
@@ -388,205 +634,33 @@ class DspyService:
             )
 
         pair_results: list[PairResult] = [None] * total_pairs  # type: ignore[list-item]
-        results_lock = threading.Lock()
-        completed_count_ref = [0]
-        failed_count_ref = [0]
-
-        def _run_pair(i: int, gen_cfg, ref_cfg) -> PairResult:
-            """Execute one grid-search pair and return its PairResult."""
-            from ..worker.log_handler import set_current_pair_index  # local: circular import with core.worker.engine
-            set_current_pair_index(i)
-            pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
-            logger.info("Grid pair %d/%d: %s", i + 1, total_pairs, pair_label)
-            if progress_callback:
-                progress_callback(
-                    PROGRESS_GRID_PAIR_STARTED,
-                    {
-                        "pair_index": i,
-                        "total_pairs": total_pairs,
-                        "generation_model": gen_cfg.name,
-                        "reflection_model": ref_cfg.name,
-                    },
-                )
-
-            pair_start = datetime.now(timezone.utc)
-            try:
-                program = module_factory(**dict(module_kwargs))
-                language_model = build_language_model(gen_cfg)
-                gen_timing = GenLMTimingCallback(language_model)
-
-                with dspy.context(lm=language_model, callbacks=[gen_timing]):
-                    optimizer = instantiate_optimizer(
-                        optimizer_factory,
-                        payload.optimizer_name,
-                        payload.optimizer_kwargs,
-                        metric,
-                        gen_cfg,
-                        ref_cfg,
-                    )
-                    baseline = None
-                    baseline_test_results: list[dict] = []
-                    if splits.test:
-                        baseline, baseline_test_results = evaluate_on_test(
-                            program,
-                            splits.test,
-                            metric,
-                            collect_per_example=True,
-                        )
-                        if progress_callback and baseline is not None:
-                            progress_callback(
-                                PROGRESS_BASELINE,
-                                {
-                                    DETAIL_BASELINE: baseline,
-                                    "pair_index": i,
-                                },
-                            )
-
-                    with capture_tqdm(progress_callback):
-                        compiled = compile_program(
-                            optimizer=optimizer,
-                            program=program,
-                            splits=splits,
-                            metric=metric,
-                            compile_kwargs=payload.compile_kwargs,
-                        )
-
-                    optimized = None
-                    optimized_test_results: list[dict] = []
-                    if splits.test:
-                        optimized, optimized_test_results = evaluate_on_test(
-                            compiled,
-                            splits.test,
-                            metric,
-                            collect_per_example=True,
-                        )
-                        if progress_callback and optimized is not None:
-                            progress_callback(
-                                PROGRESS_OPTIMIZED,
-                                {
-                                    DETAIL_OPTIMIZED: optimized,
-                                    "pair_index": i,
-                                },
-                            )
-
-                best = compiled
-                if baseline is not None and optimized is not None and optimized < baseline:
-                    logger.warning(
-                        "Grid pair %d: optimized (%.4f) worse than baseline (%.4f) — keeping baseline",
-                        i,
-                        optimized,
-                        baseline,
-                    )
-                    best = program
-                    optimized = baseline
-
-                art_id = f"{artifact_id}_pair_{i}" if artifact_id else None
-                program_artifact = persist_program(best, art_id)
-
-                improvement = None
-                if baseline is not None and optimized is not None:
-                    improvement = optimized - baseline
-
-                pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
-                pair_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
-                _, pair_avg_ms = gen_timing.summary()
-                result = PairResult(
-                    pair_index=i,
-                    generation_model=gen_cfg.name,
-                    reflection_model=ref_cfg.name,
-                    generation_reasoning_effort=gen_cfg.extra.get("reasoning_effort"),
-                    reflection_reasoning_effort=ref_cfg.extra.get("reasoning_effort"),
-                    baseline_test_metric=baseline,
-                    optimized_test_metric=optimized,
-                    metric_improvement=improvement,
-                    runtime_seconds=round(pair_runtime, 2),
-                    num_lm_calls=pair_lm_calls,
-                    avg_response_time_ms=pair_avg_ms,
-                    program_artifact=program_artifact,
-                    baseline_test_results=baseline_test_results,
-                    optimized_test_results=optimized_test_results,
-                )
-                with results_lock:
-                    completed_count_ref[0] += 1
-                logger.info(
-                    "Grid pair %d/%d completed: baseline=%.4f optimized=%.4f (%.1fs)",
-                    i + 1,
-                    total_pairs,
-                    baseline or 0,
-                    optimized or 0,
-                    pair_runtime,
-                )
-                if progress_callback:
-                    with results_lock:
-                        c, f = completed_count_ref[0], failed_count_ref[0]
-                    progress_callback(
-                        PROGRESS_GRID_PAIR_COMPLETED,
-                        {
-                            "pair_index": i,
-                            "total_pairs": total_pairs,
-                            "generation_model": gen_cfg.name,
-                            "reflection_model": ref_cfg.name,
-                            "baseline_test_metric": baseline,
-                            "optimized_test_metric": optimized,
-                            "metric_improvement": improvement,
-                            "runtime_seconds": round(pair_runtime, 2),
-                            "completed_so_far": c,
-                            "failed_so_far": f,
-                        },
-                    )
-                set_current_pair_index(None)
-                return result
-
-            except Exception as exc:
-                pair_runtime = (datetime.now(timezone.utc) - pair_start).total_seconds()
-                error_msg = str(exc)
-                result = PairResult(
-                    pair_index=i,
-                    generation_model=gen_cfg.name,
-                    reflection_model=ref_cfg.name,
-                    generation_reasoning_effort=gen_cfg.extra.get("reasoning_effort"),
-                    reflection_reasoning_effort=ref_cfg.extra.get("reasoning_effort"),
-                    error=error_msg,
-                    runtime_seconds=round(pair_runtime, 2),
-                )
-                with results_lock:
-                    failed_count_ref[0] += 1
-                logger.warning(
-                    "Grid pair %d/%d failed (%s): %s",
-                    i + 1,
-                    total_pairs,
-                    pair_label,
-                    error_msg,
-                )
-                if progress_callback:
-                    with results_lock:
-                        c, f = completed_count_ref[0], failed_count_ref[0]
-                    progress_callback(
-                        PROGRESS_GRID_PAIR_FAILED,
-                        {
-                            "pair_index": i,
-                            "total_pairs": total_pairs,
-                            "generation_model": gen_cfg.name,
-                            "reflection_model": ref_cfg.name,
-                            "error": error_msg,
-                            "completed_so_far": c,
-                            "failed_so_far": f,
-                        },
-                    )
-                set_current_pair_index(None)
-                return result
+        grid_ctx = _GridPairContext(
+            total_pairs=total_pairs,
+            module_factory=module_factory,
+            module_kwargs=module_kwargs,
+            payload=payload,
+            optimizer_factory=optimizer_factory,
+            metric=metric,
+            splits=splits,
+            artifact_id=artifact_id,
+            progress_callback=progress_callback,
+        )
 
         max_workers = min(total_pairs, 4)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_run_pair, i, gen_cfg, ref_cfg): i for i, (gen_cfg, ref_cfg) in enumerate(pairs)}
+            futures = {
+                executor.submit(_run_grid_pair, grid_ctx, i, gen_cfg, ref_cfg): i
+                for i, (gen_cfg, ref_cfg) in enumerate(pairs)
+            }
             for future in as_completed(futures):
                 idx = futures[future]
                 pair_results[idx] = future.result()
 
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
-        best_pair = max(successful, key=lambda p: p.optimized_test_metric) if successful else None
+        # successful is filtered above so optimized_test_metric is never None here.
+        best_pair = max(successful, key=lambda p: p.optimized_test_metric or 0.0) if successful else None
 
-        grid_runtime = (datetime.now(timezone.utc) - grid_start).total_seconds()
+        grid_runtime = (datetime.now(UTC) - grid_start).total_seconds()
         completed_count = len([p for p in pair_results if p.error is None])
         failed_count = len([p for p in pair_results if p.error is not None])
 
@@ -615,14 +689,21 @@ class DspyService:
     def validate_grid_search_payload(self, payload: GridSearchRequest) -> None:
         """Validate a GridSearchRequest without executing any optimization.
 
+        User-authored signature and metric code is exec'd inside isolated
+        subprocesses via ``safe_exec`` — this runs in the API/worker-engine
+        process, so we cannot trust the exec to live here.
+
+        Args:
+            payload: The grid-search request to validate.
+
         Raises:
-            ServiceError: If any component of the payload is invalid.
+            ServiceError: When any field fails validation (mapping mismatch,
+                unknown module/optimizer, malformed kwargs, etc.).
         """
-        signature_cls = load_signature_from_code(payload.signature_code)
-        inputs, outputs = extract_signature_fields(signature_cls)
-        require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        intro = validate_signature_code(payload.signature_code)
+        require_mapping_matches_signature(payload.column_mapping, intro.input_fields, intro.output_fields)
         require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
-        load_metric_from_code(payload.metric_code)
+        validate_metric_code(payload.metric_code)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         validate_optimizer_signature(optimizer_factory, payload.optimizer_name)
@@ -635,8 +716,16 @@ class DspyService:
     def validate_payload(self, payload: RunRequest) -> None:
         """Validate a RunRequest without executing any optimization.
 
+        User-authored signature and metric code is exec'd inside isolated
+        subprocesses via ``safe_exec`` — this runs in the API/worker-engine
+        process, so we cannot trust the exec to live here.
+
+        Args:
+            payload: The run request to validate.
+
         Raises:
-            ServiceError: If any component of the payload is invalid.
+            ServiceError: When any field fails validation (mapping mismatch,
+                unknown module/optimizer, malformed kwargs, etc.).
         """
         logger.info(
             "Validating payload for module=%s optimizer=%s dataset_rows=%d",
@@ -645,11 +734,10 @@ class DspyService:
             len(payload.dataset),
         )
 
-        signature_cls = load_signature_from_code(payload.signature_code)
-        inputs, outputs = extract_signature_fields(signature_cls)
-        require_mapping_matches_signature(payload.column_mapping, inputs, outputs)
+        intro = validate_signature_code(payload.signature_code)
+        require_mapping_matches_signature(payload.column_mapping, intro.input_fields, intro.output_fields)
         require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
-        load_metric_from_code(payload.metric_code)
+        validate_metric_code(payload.metric_code)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         validate_optimizer_signature(optimizer_factory, payload.optimizer_name)
@@ -660,14 +748,14 @@ class DspyService:
         """Resolve a module factory by name from registry or built-in resolver.
 
         Args:
-            name: Module name (e.g. ``"cot"`` or a registry key).
+            name: The module factory name to resolve.
 
         Returns:
-            A ``(factory, auto_signature)`` tuple; ``auto_signature`` is False
-            for registry entries and True for resolver-provided ones.
+            A tuple ``(factory, auto_signature)`` where ``auto_signature``
+            is False for registry entries and True for resolver-provided ones.
 
         Raises:
-            ServiceError: If the name cannot be resolved.
+            ServiceError: When ``name`` cannot be resolved.
         """
         try:
             return self.registry.get_module(name), False
@@ -681,13 +769,13 @@ class DspyService:
         """Resolve an optimizer factory by name from registry or built-in resolver.
 
         Args:
-            name: Optimizer name (e.g. ``"dspy.BootstrapFewShot"``).
+            name: The optimizer factory name to resolve.
 
         Returns:
-            A callable that instantiates the optimizer.
+            The resolved optimizer factory callable.
 
         Raises:
-            ServiceError: If the name cannot be resolved.
+            ServiceError: When ``name`` cannot be resolved.
         """
         try:
             return self.registry.get_optimizer(name)
