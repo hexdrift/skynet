@@ -1,5 +1,5 @@
 {
-  "$schema": "./schema.json",
+  "$schema": "../schema.json",
   "locale": "he",
   "terms": {
     "optimization": "אופטימיזציה",
@@ -47,7 +47,7 @@
     "reflectionModel": "מודל רפלקציה",
     "generationModel": "מודל מג׳נרט",
     "generationModelShort": "מג׳נרט",
-    "generationModelPlural": "מודלי ג׳ינרוט",
+    "generationModelPlural": "מודלי מג׳נרט",
     "modelConfig": "הגדרות מודל",
     "apiKey": "API key",
     "modelCatalog": "קטלוג מודלים",
@@ -125,7 +125,7 @@
     "grid_search.pair_submission_grid_only": "הגשה לפי זוג זמינה רק בריצות של סריקה.",
     "grid_search.pair_test_results_grid_only": "תוצאות {term.splitTest} לפי זוג זמינות רק בריצות של סריקה.",
     "grid_search.not_a_grid_search": "ה{term.optimization} אינה סריקה.",
-    "grid_search.artifact_per_pair_redirect": "ריצות של סריקה מייצרות תוצרים לכל זוג. יש להשתמש ב-GET /optimizations/{{optimization_id}}/grid-result במקום.",
+    "grid_search.artifact_per_pair_redirect": "ריצות של סריקה מייצרות תוצרים לכל זוג. יש להשתמש ב-GET /optimizations/{optimization_id}/grid-result במקום.",
     "grid_search.failed_no_result": "הסריקה נכשלה ולא הפיקה תוצאה. שגיאה: {error}",
     "grid_search.cancelled_no_result": "הסריקה בוטלה ולא הפיקה תוצאה.",
     "grid_search.no_result_available": "אין תוצאה זמינה לסריקה.",
@@ -155,7 +155,7 @@
     "dataset.column_roles_invalid": "ערכי תפקיד לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
     "dataset.column_roles_need_input": "לפחות עמודה אחת חייבת להיות בתפקיד 'input'.",
     "dataset.column_roles_need_output": "לפחות עמודה אחת חייבת להיות בתפקיד 'output'.",
-    "dataset.profile.empty": "Dataset must contain at least one row.",
+    "dataset.profile.empty": "ה{term.dataset} חייב להכיל לפחות {term.row} אחת.",
     "dataset.profile.too_small": "ה{term.dataset} מכיל {row_count} {term.examplePlural} — מעט מכדי להעריך שיפור אמיתי. כדאי להוסיף עוד {term.examplePlural} כדי לקבל ציונים יציבים.",
     "dataset.profile.duplicates": "זוהו {duplicate_count} {term.rowPlural} כפולות לפי {term.inputColumns}. כפילויות עלולות לגרום לאותן {term.examplePlural} להופיע גם ב{term.splitTrain} וגם ב{term.splitTest}.",
     "dataset.profile.missing_target": "{missing} {term.rowPlural} חסרות ערך ב{term.outputColumnTarget} '{column_name}'. מומלץ להסיר או למלא אותן לפני הריצה.",
@@ -186,20 +186,19 @@
     "notifier.title.completed": "{term.optimization} הושלמה בהצלחה",
     "notifier.title.cancelled": "{term.optimization} בוטלה",
     "notifier.title.failed": "{term.optimization} נכשלה",
-    "notifier.label.user": "משתמש",
-    "notifier.label.type": "סוג",
-    "notifier.label.module": "מודול",
+    "notifier.label.user": "{term.user}",
+    "notifier.label.type": "{term.type}",
+    "notifier.label.module": "{term.module}",
     "notifier.label.optimizer": "{term.optimizer}",
     "notifier.label.model": "{term.model}",
     "notifier.label.score": "{term.score}",
-    "notifier.label.error": "שגיאה",
+    "notifier.label.error": "{term.error}",
     "notifier.link.follow": "מעקב אחר ה{term.optimization}",
     "notifier.link.results": "צפייה בתוצאות",
     "notifier.link.details": "פרטי ה{term.optimization}"
   },
   "backend": {
     "constants": {
-      "cancellationReason": "בוטלה על ידי המשתמש",
       "cloneNamePrefix": "עותק של",
       "retryNamePrefix": "ניסיון חוזר של",
       "gridSearchLabel": "סריקה",
@@ -279,7 +278,7 @@
       },
       "email-triage-he": {
         "name": "מיון פניות מייל",
-        "description": "סיווג פניות דוא\"ל לתמיכה, חיוב או מכירות. 10 דוגמאות.",
+        "description": "סיווג פניות דוא״ל לתמיכה, חיוב או מכירות. 10 דוגמאות.",
         "task_type": "classification",
         "dataset_filename": "email-triage-he.csv",
         "rows": [
@@ -315,7 +314,7 @@
           },
           {
             "subject": "לא מגיעות התראות",
-            "body": "הפסקתי לקבל התראות בדוא\"ל כבר שבוע",
+            "body": "הפסקתי לקבל התראות בדוא״ל כבר שבוע",
             "category": "תמיכה"
           },
           {
