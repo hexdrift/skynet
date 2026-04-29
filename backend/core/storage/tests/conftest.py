@@ -6,8 +6,6 @@ imports) and to extend it with the methods the api-tier fake deliberately
 omitted (create_job, record_progress, append_log, bulk helpers, recovery).
 """
 
-from __future__ import annotations
-
 import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any

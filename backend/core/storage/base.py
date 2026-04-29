@@ -28,6 +28,8 @@ class JobRecord(TypedDict, total=False):
     result: dict[str, Any] | None
     payload_overview: dict[str, Any]
     payload: dict[str, Any] | None
+    username: str | None
+    optimization_type: str | None
     progress_count: int
     log_count: int
 

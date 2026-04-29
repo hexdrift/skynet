@@ -1,23 +1,20 @@
 """Unit tests for RemoteDBJobStore against an in-memory SQLite engine.
 
 SQLite is used to avoid requiring a live Postgres instance for the fast CI gate.
-The only Postgres-specific feature that cannot be emulated is the ``information_schema``
-migration query inside ``RemoteDBJobStore.__init__``; this is bypassed by the
-``SQLiteJobStore`` subclass defined in the module-level fixture below.
+``SQLiteJobStore`` bypasses ``RemoteDBJobStore.__init__`` so the fast suite can
+avoid PostgreSQL-only engine options and pgvector bootstrap calls.
 
 Two additional behaviours depend on a real Postgres instance and are explicitly skipped
 here with a clear reason:
   - UTC timezone offset is NOT preserved by SQLite's ``DateTime`` column (it stores the
     wall-clock value as a naive string).  Tests that need timezone-aware comparisons are
     structured to compare the time *value* only.
-  - The ``optimization_type`` JSON path filter (``payload_overview['optimization_type']``)
-    uses ``.as_string()``, which does work on SQLite through SQLAlchemy's JSON accessor
-    so those tests run normally.
+  - Production filters ``optimization_type`` through a top-level indexed column;
+    SQLite exercises the same ORM column but not PostgreSQL's planner behaviour.
 """
 
 from __future__ import annotations
 
-import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -40,7 +37,7 @@ class SQLiteJobStore(RemoteDBJobStore):
     Overrides only ``__init__`` to:
     - Use ``StaticPool`` (required for sqlite:///:memory: across multiple
       session factory calls to share one connection).
-    - Skip the ``information_schema`` migration that is Postgres-specific.
+    - Skip PostgreSQL-only pgvector bootstrap calls.
     """
 
     def __init__(self, db_url: str = "sqlite:///:memory:") -> None:
@@ -56,6 +53,11 @@ class SQLiteJobStore(RemoteDBJobStore):
         )
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(bind=self._engine)
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parse an ISO timestamp that may use a trailing ``Z`` UTC marker."""
+    return datetime.fromisoformat(value)
 
 
 @pytest.fixture
@@ -167,9 +169,7 @@ def test_update_job_datetime_string_parsed_and_stored(store: SQLiteJobStore) -> 
     # but the wall-clock time must be preserved.
     started_at = job["started_at"]
     assert isinstance(started_at, str)
-    stored = datetime.fromisoformat(
-        started_at.replace("Z", "+00:00") if "Z" in started_at else started_at
-    )
+    stored = _parse_iso_datetime(started_at)
     expected = datetime(2026, 4, 14, 10, 0, 0)
     assert stored.replace(tzinfo=None) == expected
 
@@ -320,7 +320,6 @@ def test_get_progress_events_chronological_order(store: SQLiteJobStore) -> None:
     store.create_job("p5")
     for i in range(3):
         store.record_progress("p5", f"step-{i}", {"i": i})
-        time.sleep(0.001)  # ensure distinct timestamps
     events = store.get_progress_events("p5")
     names = [e["event"] for e in events]
     assert names == ["step-0", "step-1", "step-2"]
@@ -372,12 +371,13 @@ def test_append_log_pair_index_null_when_absent(store: SQLiteJobStore) -> None:
     assert store.get_logs("l3")[0]["pair_index"] is None
 
 
-def test_append_log_silently_ignored_for_deleted_job(store: SQLiteJobStore) -> None:
-    """Append log silently ignored for deleted job."""
+def test_append_log_warns_for_deleted_job(store: SQLiteJobStore, caplog: pytest.LogCaptureFixture) -> None:
+    """Append log warns and skips the entry for deleted jobs."""
     store.create_job("l-del")
     store.delete_job("l-del")
     store.append_log("l-del", level="INFO", logger_name="lg", message="after delete")
     assert store.get_logs("l-del") == []
+    assert "Discarding log entry for missing job l-del" in caplog.text
 
 
 def test_get_logs_level_filter(store: SQLiteJobStore) -> None:
@@ -466,6 +466,15 @@ def test_set_payload_overview_sets_username_column(store: SQLiteJobStore) -> Non
     # The store writes to the job.username column as well; verify via list_jobs filter
     jobs = store.list_jobs(username="carol")
     assert any(j["optimization_id"] == "o3" for j in jobs)
+
+
+def test_set_payload_overview_without_username_preserves_column(store: SQLiteJobStore) -> None:
+    """Payload overview updates without username keep the indexed owner."""
+    store.create_job("o4")
+    store.set_payload_overview("o4", {"username": "dana", "optimization_type": "gepa"})
+    store.set_payload_overview("o4", {"optimization_type": "bootstrap"})
+    assert store.get_job("o4")["username"] == "dana"
+    assert store.list_jobs(username="dana")[0]["optimization_id"] == "o4"
 
 
 def test_list_jobs_no_filter_returns_all(store: SQLiteJobStore) -> None:

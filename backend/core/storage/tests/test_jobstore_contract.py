@@ -493,14 +493,14 @@ def test_protocol_rejects_instance_missing_one_method() -> None:
     the named attributes exist (not their signatures), so we verify by
     removing each method name one by one.
     """
-    # Collect the public method names from the protocol.
     protocol_methods = [
         name for name in dir(JobStore) if not name.startswith("_") and callable(getattr(JobStore, name, None))
     ]
     assert protocol_methods, "Protocol has no public methods — test setup is wrong"
 
     for missing_method in protocol_methods:
-        # Build a class that has all methods EXCEPT the one being tested.
+        # Build each one-method-short permutation to prove every protocol
+        # member is required by the runtime-checkable interface.
         attrs = {m: lambda self, *a, **kw: None for m in protocol_methods if m != missing_method}
         IncompleteClass = type("IncompleteClass", (), attrs)  # noqa: N806 — runtime-built class
 

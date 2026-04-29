@@ -19,13 +19,17 @@ import os
 import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import text
 
+from alembic import command
 from core.storage.remote import RemoteDBJobStore
 
 REMOTE_DB_URL = os.environ.get("REMOTE_DB_URL")
+BACKEND_DIR = Path(__file__).resolve().parents[3]
 
 pytestmark = pytest.mark.skipif(
     not REMOTE_DB_URL or not REMOTE_DB_URL.startswith("postgresql"),
@@ -37,10 +41,15 @@ pytestmark = pytest.mark.skipif(
 def store() -> Iterator[RemoteDBJobStore]:
     """Yield a single store backed by the real Postgres for the whole module.
 
-    The store is reused across tests because :class:`RemoteDBJobStore`
-    bootstraps the schema on construction and we don't want to repeat
-    that work per test.
+    The live database is upgraded to Alembic head first so model changes
+    such as new indexed columns are present before rows are inserted.
+    The store is reused across tests to avoid repeating that setup work.
     """
+    alembic_cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    alembic_cfg.set_main_option("sqlalchemy.url", REMOTE_DB_URL or "")
+    command.upgrade(alembic_cfg, "head")
+
     s = RemoteDBJobStore(REMOTE_DB_URL)
     try:
         yield s

@@ -6,12 +6,15 @@ Defines the shared database models used by the PostgreSQL storage backend.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Index, Integer, PrimaryKeyConstraint, String, Text
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import JSON, Boolean, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 EMBEDDING_DIM = 512
+JSON_STORE = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Base(DeclarativeBase):
@@ -30,21 +33,22 @@ class JobModel(Base):
 
     __tablename__ = "jobs"
 
-    optimization_id = Column(String(36), primary_key=True)
-    status = Column(String(20), nullable=False, default="pending")
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    estimated_remaining_seconds = Column(Float, nullable=True)
-    message = Column(Text, nullable=True)
-    latest_metrics = Column(JSON, default=dict)
-    result = Column(JSON, nullable=True)
-    payload_overview = Column(JSON, default=dict)
-    payload = Column(JSON, nullable=True)
-    username = Column(String(255), nullable=True)
-    claimed_by = Column(String(64), nullable=True)
-    claimed_at = Column(DateTime, nullable=True)
-    lease_expires_at = Column(DateTime, nullable=True)
+    optimization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    estimated_remaining_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latest_metrics: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, default=dict)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON_STORE, nullable=True)
+    payload_overview: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, default=dict)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_STORE, nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    optimization_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    claimed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (
         Index("ix_jobs_status_created_at", "status", "created_at"),
@@ -57,12 +61,13 @@ class ProgressEventModel(Base):
 
     __tablename__ = "job_progress_events"
 
-    optimization_id = Column(String(36), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    event = Column(String(255), nullable=True)
-    metrics = Column(JSON, default=dict)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    optimization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    event: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, default=dict)
 
-    __table_args__ = (PrimaryKeyConstraint("optimization_id", "timestamp"),)
+    __table_args__ = (Index("ix_job_progress_events_optimization_timestamp", "optimization_id", "timestamp"),)
 
 
 class LogEntryModel(Base):
@@ -70,13 +75,13 @@ class LogEntryModel(Base):
 
     __tablename__ = "job_logs"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    optimization_id = Column(String(36), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    level = Column(String(20), nullable=False)
-    logger = Column(String(255), nullable=False)
-    message = Column(Text, nullable=False)
-    pair_index = Column(Integer, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    optimization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    level: Mapped[str] = mapped_column(String(20), nullable=False)
+    logger: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    pair_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class TemplateModel(Base):
@@ -84,12 +89,12 @@ class TemplateModel(Base):
 
     __tablename__ = "job_templates"
 
-    template_id = Column(String(36), primary_key=True)
-    name = Column(String(200), nullable=False)
-    description = Column(Text, nullable=True)
-    username = Column(String(255), nullable=False)
-    config = Column(JSON, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    template_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 class JobEmbeddingModel(Base):
@@ -109,24 +114,26 @@ class JobEmbeddingModel(Base):
 
     __tablename__ = "job_embeddings"
 
-    optimization_id = Column(String(36), primary_key=True)
-    user_id = Column(String(255), nullable=True, index=True)
-    optimization_type = Column(String(32), nullable=True, index=True)
-    winning_model = Column(String(255), nullable=True)
-    winning_rank = Column(Integer, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    embedding_summary = Column(Vector(EMBEDDING_DIM), nullable=True)
-    embedding_code = Column(Vector(EMBEDDING_DIM), nullable=True)
-    embedding_schema = Column(Vector(EMBEDDING_DIM), nullable=True)
-    is_recommendable = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
-    baseline_metric = Column(Float, nullable=True)
-    optimized_metric = Column(Float, nullable=True)
-    summary_text = Column(Text, nullable=True)
-    signature_code = Column(Text, nullable=True)
-    metric_name = Column(String(255), nullable=True)
-    optimizer_name = Column(String(64), nullable=True)
-    optimizer_kwargs = Column(JSON, nullable=True)
-    module_name = Column(String(128), nullable=True)
-    task_name = Column(String(255), nullable=True)
-    projection_x = Column(Float, nullable=True)
-    projection_y = Column(Float, nullable=True)
+    optimization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    optimization_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    winning_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    winning_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    embedding_summary: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    embedding_code: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    embedding_schema: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    is_recommendable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
+    baseline_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
+    optimized_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signature_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metric_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    optimizer_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    optimizer_kwargs: Mapped[dict[str, Any] | None] = mapped_column(JSON_STORE, nullable=True)
+    module_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    task_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    projection_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    projection_y: Mapped[float | None] = mapped_column(Float, nullable=True)
