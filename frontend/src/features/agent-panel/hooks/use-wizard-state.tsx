@@ -27,8 +27,6 @@ type WizardKey =
   | "split_mode"
   | "seed"
   | "shuffle"
-  | "stratify"
-  | "stratify_column"
   | "optimizer_kwargs";
 type WriteSource = "user" | "agent";
 
@@ -259,8 +257,6 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
   }
   if (typeof wrap.seed === "number" && Number.isFinite(wrap.seed)) patch.seed = wrap.seed;
   if (typeof wrap.shuffle === "boolean") patch.shuffle = wrap.shuffle;
-  if (typeof wrap.stratify === "boolean") patch.stratify = wrap.stratify;
-  if (typeof wrap.stratify_column === "string") patch.stratify_column = wrap.stratify_column;
 
   if (
     wrap.optimizer_kwargs &&

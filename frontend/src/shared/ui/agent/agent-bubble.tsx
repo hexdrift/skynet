@@ -12,6 +12,7 @@ interface AgentBubbleProps {
   msg: AgentMessage;
   thinking?: AgentThinking;
   renderToolCall?: (call: AgentToolCall, ctx: { isRetry: boolean }) => React.ReactNode;
+  onRunCode?: (code: string, language: string) => void;
   className?: string;
 }
 
@@ -19,6 +20,7 @@ export function AgentBubble({
   msg,
   thinking,
   renderToolCall,
+  onRunCode,
   className,
 }: AgentBubbleProps) {
   const visibleToolCalls = React.useMemo<Array<{ call: AgentToolCall; isRetry: boolean }>>(() => {
@@ -68,7 +70,7 @@ export function AgentBubble({
             hasThinking && "border-t border-[#3D2E22]/[0.08]",
           )}
         >
-          <MessageMarkdown content={msg.content} />
+          <MessageMarkdown content={msg.content} onRunCode={onRunCode} />
         </div>
       )}
       {hasTools && renderToolCall && (

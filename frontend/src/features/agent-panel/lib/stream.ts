@@ -27,7 +27,7 @@ export interface GeneralistAgentHandlers {
   onPendingApproval?: (ev: PendingApprovalPayload) => void;
   onApprovalResolved?: (ev: ApprovalResolvedPayload) => void;
   onMessagePatch?: (chunk: string) => void;
-  onDone: (result: { assistant_message: string }) => void;
+  onDone: (result: { assistant_message: string; model: string | null }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
 }
@@ -121,9 +121,14 @@ export async function streamGeneralistAgent(
       case "message_patch":
         handlers.onMessagePatch?.(String(data.chunk ?? ""));
         break;
-      case "done":
-        handlers.onDone({ assistant_message: String(data.assistant_message ?? "") });
+      case "done": {
+        const rawModel = data.model;
+        handlers.onDone({
+          assistant_message: String(data.assistant_message ?? ""),
+          model: typeof rawModel === "string" && rawModel.length > 0 ? rawModel : null,
+        });
         break;
+      }
       case "error":
         handlers.onError(
           String(data.error ?? msg("auto.features.agent.panel.lib.stream.literal.2")),

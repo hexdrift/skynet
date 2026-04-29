@@ -67,6 +67,7 @@ export interface AgentMessage {
   role: "assistant" | "user";
   content: string;
   toolCalls?: AgentToolCall[];
+  model?: string | null;
 }
 
 export interface ArtifactVersion {
@@ -511,7 +512,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
                 : "I wrote a Signature and Metric based on your data.";
               const finalContent = result.assistant_message || last.content || fallback;
               const next = prev.slice();
-              next[next.length - 1] = { ...last, content: finalContent };
+              next[next.length - 1] = { ...last, content: finalContent, model: result.model };
               return next;
             });
 

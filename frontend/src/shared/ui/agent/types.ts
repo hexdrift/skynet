@@ -16,6 +16,7 @@ export interface AgentMessage {
   role: "assistant" | "user";
   content: string;
   toolCalls?: AgentToolCall[];
+  model?: string | null;
 }
 
 export interface AgentThinking {

@@ -41,8 +41,6 @@ export interface WizardState {
   split_mode?: "auto" | "manual";
   seed?: number;
   shuffle?: boolean;
-  stratify?: boolean;
-  stratify_column?: string;
   optimizer_kwargs?: Record<string, unknown>;
 }
 

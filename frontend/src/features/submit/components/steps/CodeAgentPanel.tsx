@@ -22,6 +22,7 @@ import {
   AgentThread,
   AgentBubble,
   Composer,
+  MessageActions,
   UserBubble,
   UserBubbleEditor,
 } from "@/shared/ui/agent";
@@ -196,24 +197,48 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
                     />
                   ))}
 
-                {pair.agent && !isEditing && (
-                  <div className="flex justify-end">
-                    <AgentBubble
-                      msg={pair.agent}
-                      thinking={
-                        pair.key === latestAgentKey
-                          ? {
-                              reasoning: agent.reasoning,
-                              startedAt: agent.reasoningStartedAt,
-                              endedAt: agent.reasoningEndedAt,
-                              streaming,
+                {pair.agent && !isEditing && (() => {
+                  const agentMsg = pair.agent;
+                  const agentText = agentMsg.content.trim();
+                  const isStreamingThisPair = streaming && pair.key === latestAgentKey;
+                  const showActions =
+                    !isStreamingThisPair &&
+                    (agentText.length > 0 || Boolean(agentMsg.model));
+                  return (
+                    <div className="flex justify-end">
+                      <div className="flex flex-col items-end gap-1 max-w-[88%]">
+                        <AgentBubble
+                          msg={agentMsg}
+                          thinking={
+                            pair.key === latestAgentKey
+                              ? {
+                                  reasoning: agent.reasoning,
+                                  startedAt: agent.reasoningStartedAt,
+                                  endedAt: agent.reasoningEndedAt,
+                                  streaming,
+                                }
+                              : undefined
+                          }
+                          renderToolCall={renderToolCall}
+                          className="max-w-full"
+                        />
+                        {showActions && (
+                          <MessageActions
+                            text={agentMsg.content}
+                            model={agentMsg.model}
+                            onRegenerate={
+                              pair.user
+                                ? () =>
+                                    pair.user &&
+                                    agent.editAndResend(pair.user.index, pair.user.msg.content)
+                                : undefined
                             }
-                          : undefined
-                      }
-                      renderToolCall={renderToolCall}
-                    />
-                  </div>
-                )}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </motion.div>
             );
           })}

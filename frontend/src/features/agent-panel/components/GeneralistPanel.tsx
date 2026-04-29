@@ -11,9 +11,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/
 import { AgentThread } from "@/shared/ui/agent/agent-thread";
 import { AgentBubble } from "@/shared/ui/agent/agent-bubble";
 import { Composer } from "@/shared/ui/agent/composer";
-import { UserBubble } from "@/shared/ui/agent/user-bubble";
-import type { AgentThinking, AgentToolCall } from "@/shared/ui/agent/types";
+import { MessageActions } from "@/shared/ui/agent/message-actions";
+import { UserBubble, UserBubbleEditor } from "@/shared/ui/agent/user-bubble";
+import type { AgentMessage, AgentThinking, AgentToolCall } from "@/shared/ui/agent/types";
 import { cn } from "@/shared/lib/utils";
+import { formatMsg } from "@/shared/lib/messages";
 
 import { formatShortcut, useUserPrefs } from "@/features/settings";
 
@@ -50,6 +52,12 @@ interface GeneralistPanelProps {
   /** Optional wizard-state override. Defaults to the shared context. */
   wizardState?: WizardState;
 }
+
+type Pair = {
+  key: string;
+  user: { msg: AgentMessage; index: number } | null;
+  agent: AgentMessage | null;
+};
 
 /**
  * Docked generalist agent panel. Renders as a left-anchored aside that
@@ -127,12 +135,35 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     onToolEnd: handleToolEnd,
   });
   const streaming = agent.status === "streaming";
-  const lastAgentIdx = React.useMemo(() => {
-    for (let i = agent.messages.length - 1; i >= 0; i--) {
-      if (agent.messages[i]?.role === "assistant") return i;
+
+  const pairs = React.useMemo<Pair[]>(() => {
+    const result: Pair[] = [];
+    let currentUser: { msg: AgentMessage; index: number } | null = null;
+    let seq = 0;
+    agent.messages.forEach((m, idx) => {
+      if (m.role === "user") {
+        if (currentUser) {
+          result.push({ key: `g-${seq++}`, user: currentUser, agent: null });
+        }
+        currentUser = { msg: m, index: idx };
+      } else {
+        result.push({ key: `g-${seq++}`, user: currentUser, agent: m });
+        currentUser = null;
+      }
+    });
+    if (currentUser) {
+      result.push({ key: `g-${seq++}`, user: currentUser, agent: null });
     }
-    return -1;
+    return result;
   }, [agent.messages]);
+
+  const latestAgentKey = React.useMemo(() => {
+    for (let i = pairs.length - 1; i >= 0; i--) {
+      const p = pairs[i];
+      if (p && p.agent) return p.key;
+    }
+    return null;
+  }, [pairs]);
 
   const thinking: AgentThinking = {
     reasoning: agent.reasoning,
@@ -142,12 +173,53 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   };
 
   const [draft, setDraft] = React.useState("");
+  const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
+  const [editDraft, setEditDraft] = React.useState("");
+  const isEditingAny = editingIndex !== null;
+
   const handleSubmit = () => {
     const trimmed = draft.trim();
     if (!trimmed) return;
     agent.send(trimmed);
     setDraft("");
   };
+
+  const startEdit = (index: number, content: string) => {
+    setEditingIndex(index);
+    setEditDraft(content);
+  };
+  const cancelEdit = () => {
+    setEditingIndex(null);
+    setEditDraft("");
+  };
+  const submitEdit = () => {
+    if (editingIndex === null) return;
+    const trimmed = editDraft.trim();
+    if (!trimmed) return;
+    agent.editAndResend(editingIndex, trimmed);
+    setEditingIndex(null);
+    setEditDraft("");
+  };
+
+  const handleRunCode = React.useCallback(
+    (code: string, language: string) => {
+      if (streaming) return;
+      const prompt = formatMsg("shared.agent.run_code_prompt", {
+        language: language || "code",
+        code,
+      });
+      agent.send(prompt);
+    },
+    [agent, streaming],
+  );
+
+  const handleRegenerate = React.useCallback(
+    (userIndex: number, userContent: string) => {
+      if (streaming) return;
+      agent.editAndResend(userIndex, userContent);
+    },
+    [agent, streaming],
+  );
 
   const resizingRef = React.useRef(false);
   const startResize = (e: React.MouseEvent) => {
@@ -182,9 +254,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
       </span>
       <p className="mt-3 text-sm text-foreground">
         {msg("auto.features.agent.panel.components.generalistpanel.1")}
-      </p>
-      <p className="mt-1 text-[0.75rem] text-muted-foreground leading-relaxed max-w-[28ch]">
-        {msg("auto.features.agent.panel.components.generalistpanel.2")}
       </p>
     </div>
   );
@@ -306,17 +375,70 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   agent.pendingApproval?.id ?? "",
                 ]}
               >
-                {agent.messages.map((m, i) => {
-                  if (m.role === "user") {
-                    return <UserBubble key={i} content={m.content} editable={false} />;
-                  }
+                {pairs.map((pair) => {
+                  const isEditing = pair.user !== null && editingIndex === pair.user.index;
+                  const isAfterEdit =
+                    isEditingAny &&
+                    pair.user !== null &&
+                    editingIndex !== null &&
+                    pair.user.index > editingIndex;
+                  if (isAfterEdit) return null;
+                  const agentMsg = pair.agent;
+                  const agentText = agentMsg?.content.trim() ?? "";
+                  const isStreamingThisPair =
+                    streaming && pair.key === latestAgentKey;
+                  const showActions =
+                    !isEditing &&
+                    agentMsg !== null &&
+                    !isStreamingThisPair &&
+                    (agentText.length > 0 || Boolean(agentMsg.model));
                   return (
-                    <div key={i} className="flex justify-end">
-                      <AgentBubble
-                        msg={m}
-                        thinking={i === lastAgentIdx ? thinking : undefined}
-                        renderToolCall={renderToolCall}
-                      />
+                    <div key={pair.key} className="space-y-1.5">
+                      {pair.user &&
+                        (isEditing ? (
+                          <UserBubbleEditor
+                            value={editDraft}
+                            onChange={setEditDraft}
+                            onSubmit={submitEdit}
+                            onCancel={cancelEdit}
+                            disabled={streaming}
+                          />
+                        ) : (
+                          <UserBubble
+                            content={pair.user.msg.content}
+                            editable={!streaming}
+                            onEdit={() =>
+                              pair.user && startEdit(pair.user.index, pair.user.msg.content)
+                            }
+                          />
+                        ))}
+
+                      {agentMsg && !isEditing && (
+                        <div className="flex justify-end">
+                          <div className="flex flex-col items-end gap-1 max-w-[88%]">
+                            <AgentBubble
+                              msg={agentMsg}
+                              thinking={pair.key === latestAgentKey ? thinking : undefined}
+                              renderToolCall={renderToolCall}
+                              onRunCode={handleRunCode}
+                              className="max-w-full"
+                            />
+                            {showActions && (
+                              <MessageActions
+                                text={agentMsg.content}
+                                model={agentMsg.model}
+                                onRegenerate={
+                                  pair.user
+                                    ? () =>
+                                        pair.user &&
+                                        handleRegenerate(pair.user.index, pair.user.msg.content)
+                                    : undefined
+                                }
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
