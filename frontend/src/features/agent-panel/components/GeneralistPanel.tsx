@@ -24,7 +24,6 @@ import { useGeneralistAgent } from "../hooks/use-generalist-agent";
 import { useGeneralistPanelState } from "../hooks/use-panel-state";
 import { TRUST_MODE_HUE, useTrustMode } from "../hooks/use-trust-mode";
 import { extractWizardPatch, useWizardStateOptional } from "../hooks/use-wizard-state";
-import { getToolRenderer } from "../lib/tool-renderers";
 import type { WizardState } from "../lib/types";
 import { registerTutorialHook } from "@/features/tutorial";
 
@@ -37,6 +36,7 @@ import { PresenceStrip } from "./PresenceStrip";
 import { ToolCallRow } from "./ToolCallRow";
 import { ToolsCarousel } from "./ToolsCarousel";
 import { TrustToggle } from "./TrustToggle";
+import { getToolRenderer } from "./tool-renderers";
 
 function getEffectiveMinWidth(): number {
   if (typeof window === "undefined") return MIN_WIDTH;
@@ -177,12 +177,12 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   const [editDraft, setEditDraft] = React.useState("");
   const isEditingAny = editingIndex !== null;
 
-  const handleSubmit = () => {
+  const handleSubmit = React.useCallback(() => {
     const trimmed = draft.trim();
     if (!trimmed) return;
     agent.send(trimmed);
     setDraft("");
-  };
+  }, [agent, draft]);
 
   const startEdit = (index: number, content: string) => {
     setEditingIndex(index);
@@ -222,21 +222,24 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   );
 
   const resizingRef = React.useRef(false);
-  const startResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    resizingRef.current = true;
-    const onMove = (ev: MouseEvent) => {
-      if (!resizingRef.current) return;
-      setWidth(clampWidth(ev.clientX));
-    };
-    const onUp = () => {
-      resizingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
+  const startResize = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      resizingRef.current = true;
+      const onMove = (ev: MouseEvent) => {
+        if (!resizingRef.current) return;
+        setWidth(clampWidth(ev.clientX));
+      };
+      const onUp = () => {
+        resizingRef.current = false;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [setWidth],
+  );
 
   const renderToolCall = React.useCallback((call: AgentToolCall, ctx: { isRetry: boolean }) => {
     const renderer = getToolRenderer(call.tool);
@@ -385,8 +388,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   if (isAfterEdit) return null;
                   const agentMsg = pair.agent;
                   const agentText = agentMsg?.content.trim() ?? "";
-                  const isStreamingThisPair =
-                    streaming && pair.key === latestAgentKey;
+                  const isStreamingThisPair = streaming && pair.key === latestAgentKey;
                   const showActions =
                     !isEditing &&
                     agentMsg !== null &&

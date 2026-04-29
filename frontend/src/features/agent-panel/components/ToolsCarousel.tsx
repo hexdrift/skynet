@@ -167,7 +167,10 @@ export function ToolsCarousel() {
 
   return (
     <div
-      className="w-[min(300px,calc(100vw-2rem))] p-3 select-none outline-none focus:outline-none focus-visible:outline-none"
+      className={cn(
+        "w-[min(300px,calc(100vw-2rem))] p-3 select-none rounded-xl",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1",
+      )}
       dir="rtl"
       role="region"
       aria-label={msg("auto.features.agent.panel.components.toolscarousel.literal.13")}
@@ -223,7 +226,7 @@ export function ToolsCarousel() {
             aria-current={i === idx ? "true" : undefined}
             className={cn(
               "h-1.5 rounded-full transition-all duration-200 cursor-pointer",
-              "outline-none focus:outline-none focus-visible:outline-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1",
               i === idx ? "w-4 bg-[#3D2E22]/70" : "w-1.5 bg-[#3D2E22]/20 hover:bg-[#3D2E22]/40",
             )}
           />
@@ -305,7 +308,7 @@ function NavButton({
         "inline-flex size-7 items-center justify-center rounded-full",
         "border border-border/50 bg-background/85",
         "transition-all duration-150 cursor-pointer",
-        "outline-none focus:outline-none focus-visible:outline-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1",
         "hover:bg-accent/60 hover:border-border active:scale-[0.96]",
         "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-background/85",
       )}
