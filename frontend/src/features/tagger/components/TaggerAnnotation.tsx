@@ -57,29 +57,40 @@ export function TaggerAnnotation({
   const [showConfetti, setShowConfetti] = useState(false);
   const [exportConfirm, setExportConfirm] = useState<"csv" | "json" | "xlsx" | "xls" | null>(null);
   const confettiFired = useRef(false);
-  const freetextRef = useRef<HTMLTextAreaElement>(null);
+  const confettiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const item = data[currentIndex];
   const id = item ? String(item.id) : "";
   const pct = data.length > 0 ? (taggedCount / data.length) * 100 : 0;
   const currentAnn = annotations[id];
 
+  const showConfettiBriefly = useCallback(() => {
+    setShowConfetti(true);
+    if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current);
+    confettiTimerRef.current = setTimeout(() => setShowConfetti(false), 4000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (taggedCount === data.length && data.length > 0 && !confettiFired.current) {
       confettiFired.current = true;
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 4000);
+      showConfettiBriefly();
     }
     if (taggedCount < data.length) confettiFired.current = false;
-  }, [taggedCount, data.length]);
+  }, [taggedCount, data.length, showConfettiBriefly]);
 
   const doExport = useCallback(
     (format: "csv" | "json" | "xlsx" | "xls") => {
       exportAnnotations(data, columns, annotations, config, format);
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 4000);
+      showConfettiBriefly();
     },
-    [data, columns, annotations, config],
+    [data, columns, annotations, config, showConfettiBriefly],
   );
 
   const handleExport = useCallback(
@@ -192,7 +203,7 @@ export function TaggerAnnotation({
             className="h-full rounded-full transition-all duration-300"
             style={{
               width: `${pct}%`,
-              background: "linear-gradient(90deg, #c8a882, #a68b6b, #d4b896)",
+              background: "var(--gradient-progress)",
             }}
           />
         </div>
@@ -294,11 +305,9 @@ export function TaggerAnnotation({
 
           {config.mode === "freetext" && (
             <textarea
-              ref={freetextRef}
               value={typeof currentAnn === "string" ? currentAnn : ""}
               onChange={(e) => onSetFreetext(id, e.target.value)}
               className="flex-1 min-h-0 resize-none rounded-xl border border-input/90 bg-background/75 px-4 py-3 text-sm leading-relaxed shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-sm transition-[color,box-shadow,border-color] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              placeholder={config.placeholder || ""}
               dir="auto"
             />
           )}
@@ -318,7 +327,12 @@ export function TaggerAnnotation({
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" onClick={() => onGoTo(0)}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => onGoTo(0)}
+                  aria-label={msg("auto.features.tagger.components.taggerannotation.9")}
+                >
                   <SkipBack className="size-4" />
                 </Button>
               </TooltipTrigger>
@@ -333,6 +347,7 @@ export function TaggerAnnotation({
                   size="icon-sm"
                   onClick={onJumpUntagged}
                   disabled={taggedCount === data.length}
+                  aria-label={msg("auto.features.tagger.components.taggerannotation.10")}
                 >
                   <CircleMinus className="size-4" />
                 </Button>
@@ -344,7 +359,12 @@ export function TaggerAnnotation({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" onClick={() => setShowShortcuts(true)}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setShowShortcuts(true)}
+                  aria-label={msg("auto.features.tagger.components.taggerannotation.11")}
+                >
                   <Keyboard className="size-4" />
                 </Button>
               </TooltipTrigger>
@@ -356,7 +376,11 @@ export function TaggerAnnotation({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <PopoverPrimitive.Trigger asChild>
-                    <Button variant="ghost" size="icon-sm">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={msg("auto.features.tagger.components.taggerannotation.12")}
+                    >
                       <Download className="size-4" />
                     </Button>
                   </PopoverPrimitive.Trigger>

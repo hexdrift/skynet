@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { DataRow, Annotation, TaggerConfig, AnnotationMode } from "../lib/types";
 
 function isTagged(ann: Annotation, mode: AnnotationMode): boolean {
@@ -113,48 +113,11 @@ export function useTagger() {
     });
   }, []);
 
-  const taggedCount = config
-    ? data.filter((d) => isTagged(annotations[String(d.id)], config.mode)).length
-    : 0;
-
-  const distribution = (() => {
-    if (!config) return {} as Record<string, number>;
-    if (config.mode === "binary") {
-      let yes = 0,
-        no = 0,
-        none = 0;
-      for (const d of data) {
-        const v = annotations[String(d.id)];
-        if (v === "yes") yes++;
-        else if (v === "no") no++;
-        else none++;
-      }
-      return { yes, no, untagged: none };
-    }
-    if (config.mode === "multiclass") {
-      const counts: Record<string, number> = {};
-      for (const cat of config.categories ?? []) counts[cat.id] = 0;
-      let untagged = 0;
-      for (const d of data) {
-        const sel = annotations[String(d.id)];
-        if (!Array.isArray(sel) || sel.length === 0) {
-          untagged++;
-          continue;
-        }
-        for (const catId of sel) {
-          if (counts[catId] !== undefined) counts[catId]!++;
-        }
-      }
-      return { ...counts, untagged };
-    }
-    let filled = 0,
-      empty = 0;
-    for (const d of data) {
-      if (isTagged(annotations[String(d.id)], "freetext")) filled++;
-      else empty++;
-    }
-    return { filled, empty };
-  })();
+  const taggedCount = useMemo(
+    () =>
+      config ? data.filter((d) => isTagged(annotations[String(d.id)], config.mode)).length : 0,
+    [config, data, annotations],
+  );
 
   return {
     phase,
@@ -164,7 +127,6 @@ export function useTagger() {
     annotations,
     currentIndex,
     taggedCount,
-    distribution,
     startAnnotating,
     backToSetup,
     navigate,

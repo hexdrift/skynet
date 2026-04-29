@@ -10,7 +10,6 @@ export interface TaggerConfig {
   question?: string;
   categories?: Category[];
   prompt?: string;
-  placeholder?: string;
 }
 
 export interface DataRow {
@@ -20,12 +19,3 @@ export interface DataRow {
 }
 
 export type Annotation = string | string[] | undefined;
-
-export interface TaggerState {
-  phase: "setup" | "annotating";
-  config: TaggerConfig | null;
-  data: DataRow[];
-  columns: string[];
-  annotations: Record<string, Annotation>;
-  currentIndex: number;
-}
