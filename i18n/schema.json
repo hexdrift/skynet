@@ -13,6 +13,9 @@
     },
     "messages": {
       "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      },
       "additionalProperties": { "type": "string" }
     },
     "backend": {

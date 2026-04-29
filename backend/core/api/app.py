@@ -50,7 +50,7 @@ from ..storage import get_job_store
 from ..worker.engine import BackgroundWorker, get_worker
 from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
-from .observability import install_metrics, install_request_id_middleware
+from .observability import get_request_id, install_metrics, install_request_id_middleware
 from .routers.analytics import create_analytics_router
 from .routers.code_agent import create_code_agent_router
 from .routers.code_validation import create_code_validation_router
@@ -680,8 +680,9 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    # All error responses share {"error": "<type>", "detail": "..."} so
-    # API consumers can write a single error handler.
+    # Error envelope follows RFC 9457 (Problem Details) with stable English
+    # ``detail`` strings and a ``code`` extension member for client-side i18n.
+    # Legacy ``error`` field is retained for backwards compatibility.
     status_to_error_type = {
         400: "validation_error",
         404: "not_found",
@@ -691,9 +692,54 @@ def create_app(
         503: "service_unavailable",
     }
 
+    def _problem_response(
+        request: Request,
+        *,
+        status: int,
+        error_type: str,
+        detail: object,
+        code: str | None = None,
+        params: dict[str, Any] | None = None,
+        title: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> JSONResponse:
+        """Build an RFC 9457 ``application/problem+json`` response.
+
+        Args:
+            request: The incoming HTTP request used to populate ``instance``.
+            status: HTTP status code to return.
+            error_type: Legacy ``error`` slug retained for backward compatibility.
+            detail: Stable English string (or list, for validation issues).
+            code: Optional i18n key identifying the problem class.
+            params: Optional substitution params attached to ``code``.
+            title: Optional human-readable title; derived from ``code`` when omitted.
+            headers: Optional response headers (e.g. ``WWW-Authenticate``).
+
+        Returns:
+            A :class:`JSONResponse` with media type ``application/problem+json``.
+        """
+        body: dict[str, Any] = {
+            "type": f"https://errors.skynet.app/{code}" if code else "about:blank",
+            "title": title or (code.replace("_", " ").replace(".", " ").capitalize() if code else error_type.replace("_", " ").capitalize()),
+            "status": status,
+            "detail": detail,
+            "instance": request.url.path,
+            "trace_id": get_request_id(),
+            "error": error_type,
+        }
+        if code:
+            body["code"] = code
+            body["params"] = params or {}
+        return JSONResponse(
+            status_code=status,
+            content=body,
+            headers=headers,
+            media_type="application/problem+json",
+        )
+
     @app.exception_handler(AppError)
     async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-        """Serialize ``AppError`` instances to the shared ``{error, detail, code, params}`` envelope.
+        """Serialize ``AppError`` instances to the RFC 9457 problem envelope.
 
         Args:
             request: The incoming HTTP request.
@@ -702,19 +748,18 @@ def create_app(
         Returns:
             A :class:`JSONResponse` with the shared error envelope.
         """
-        content: dict[str, Any] = {"error": exc.error_code.lower(), "detail": exc.message}
-        code = getattr(exc, "code", None)
-        if code:
-            content["code"] = code
-            content["params"] = getattr(exc, "params", None) or {}
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=content,
+        return _problem_response(
+            request,
+            status=exc.status_code,
+            error_type=exc.error_code.lower(),
+            detail=exc.message,
+            code=getattr(exc, "code", None),
+            params=getattr(exc, "params", None),
         )
 
     @app.exception_handler(HTTPException)
     async def _http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
-        """Serialize Starlette ``HTTPException`` into the shared error envelope.
+        """Serialize Starlette ``HTTPException`` into the RFC 9457 problem envelope.
 
         Args:
             request: The incoming HTTP request.
@@ -723,15 +768,13 @@ def create_app(
         Returns:
             A :class:`JSONResponse` with the shared error envelope.
         """
-        error_type = status_to_error_type.get(exc.status_code, "error")
-        content: dict[str, Any] = {"error": error_type, "detail": exc.detail}
-        code = getattr(exc, "code", None)
-        if code:
-            content["code"] = code
-            content["params"] = getattr(exc, "params", None) or {}
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=content,
+        return _problem_response(
+            request,
+            status=exc.status_code,
+            error_type=status_to_error_type.get(exc.status_code, "error"),
+            detail=exc.detail,
+            code=getattr(exc, "code", None),
+            params=getattr(exc, "params", None),
             headers=getattr(exc, "headers", None),
         )
 
@@ -754,12 +797,12 @@ def create_app(
             }
             for error in exc.errors()
         ]
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": "invalid_request",
-                "detail": issues,
-            },
+        return _problem_response(
+            request,
+            status=422,
+            error_type="invalid_request",
+            detail=issues,
+            title="Invalid request",
         )
 
     @app.exception_handler(Exception)
@@ -780,12 +823,12 @@ def create_app(
             exc,
             exc_info=True,
         )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "internal_error",
-                "detail": "An internal server error occurred. Please contact support.",
-            },
+        return _problem_response(
+            request,
+            status=500,
+            error_type="internal_error",
+            detail="An internal server error occurred. Please contact support.",
+            title="Internal server error",
         )
 
     worker_stale_threshold = float(os.getenv("WORKER_STALE_THRESHOLD", "600"))

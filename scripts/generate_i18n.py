@@ -38,6 +38,8 @@ PY_OUT = ROOT / "backend" / "core" / "i18n_keys.py"
 KEYS_OUT = ROOT / "i18n" / "keys.json"
 PY_CATALOG_OUT = ROOT / "backend" / "core" / "i18n_locales" / "he.json"
 
+MESSAGE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+
 
 def _load_catalog() -> dict[str, Any]:
     """Read and validate the catalog file against ``i18n/schema.json``.
@@ -66,6 +68,13 @@ def _load_catalog() -> dict[str, Any]:
         for section in ("terms", "messages"):
             if not isinstance(catalog.get(section), dict):
                 raise TypeError(f"{CATALOG_PATH} must contain object section {section!r}")
+    # Enforce the naming convention even when jsonschema is unavailable so a
+    # malformed key never sneaks through.
+    bad_keys = [k for k in catalog["messages"] if not MESSAGE_KEY_PATTERN.fullmatch(k)]
+    if bad_keys:
+        raise ValueError(
+            f"messages keys must match {MESSAGE_KEY_PATTERN.pattern!r}; offenders: {sorted(bad_keys)}"
+        )
     return catalog
 
 
@@ -159,6 +168,7 @@ def _render_ts(catalog: dict[str, Any]) -> str:
             "",
             "export type TermKey = keyof typeof TERMS;",
             "export type I18nMessageKey = keyof typeof I18N_MESSAGES;",
+            "export type ErrorCode = I18nMessageKey;",
             "",
             f"export const I18N_KEY = {message_key_ts} as const;",
             "",
