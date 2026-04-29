@@ -324,9 +324,13 @@ export function CodeEditor({
   const lineCount = value.split("\n").length;
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.warn("Failed to copy editor contents", error);
+    }
   }, [value]);
 
   const handleRun = useCallback(async () => {
@@ -357,8 +361,8 @@ export function CodeEditor({
         const data = await res.json();
         if (data.changed) onChange(data.code);
       }
-    } catch {
-      /* silent */
+    } catch (error) {
+      console.warn("Failed to format code", error);
     } finally {
       setFormatting(false);
     }

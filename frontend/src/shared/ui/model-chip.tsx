@@ -1,10 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Settings, Copy, Trash2, Plus, Thermometer, Coins, Eye } from "lucide-react";
+import { Settings, Copy, Trash2, Plus, Thermometer, Coins, Eye, Brain } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { CatalogModel, ModelConfig } from "@/shared/types/api";
-import { ReasoningPill } from "@/features/optimizations";
 import { msg } from "@/shared/lib/messages";
 
 interface ModelChipProps {
@@ -21,6 +20,32 @@ interface ModelChipProps {
   /** Catalog used to resolve a model's vision capability for the badge. */
   catalogModels?: CatalogModel[];
   className?: string;
+}
+
+const REASONING_EFFORT_LABELS: Record<string, string> = {
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+function reasoningEffortLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return REASONING_EFFORT_LABELS[value.toLowerCase()] ?? value;
+}
+
+function ReasoningPill({ value }: { value: string | null | undefined }) {
+  const label = reasoningEffortLabel(value);
+  if (!label) return null;
+  return (
+    <span
+      className="shrink-0 inline-flex items-center gap-0.5 rounded bg-muted/50 px-1 py-0.5 text-[9px] font-semibold text-muted-foreground/80"
+      title={`Reasoning effort: ${label}`}
+    >
+      <Brain className="size-2.5" />
+      {label}
+    </span>
+  );
 }
 
 export function ModelChip({

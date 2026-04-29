@@ -11,6 +11,45 @@ export { LoadingState } from "./loading-state";
 export { StatusBadge } from "./status-badge";
 export { ConfirmDialog } from "./confirm-dialog";
 export { MetricCard } from "./metric-card";
+export { AnimatedWordmark } from "./animated-wordmark";
+export { CodeEditor, type ValidationResult } from "./code-editor";
+export {
+  ColumnHeader,
+  ResetColumnsButton,
+  useColumnFilters,
+  useColumnResize,
+  type Filters,
+  type SortDir,
+} from "./excel-filter";
+export { HelpTip } from "./help-tip";
+export { ModelChip, AddModelButton } from "./model-chip";
+export {
+  FadeIn,
+  StaggerContainer,
+  StaggerItem,
+  HoverScale,
+  TiltCard,
+  AnimatedNumber,
+} from "./motion";
+export { NumberInput } from "./number-input";
+export { ParticleHero } from "./particle-hero";
+export { ScoreChart } from "./score-chart";
+export {
+  AgentThread,
+  AgentBubble,
+  Composer,
+  MessageActions,
+  ThinkingSection,
+  UserBubble,
+  UserBubbleEditor,
+} from "./agent";
+export type {
+  AgentMessage,
+  AgentStatus,
+  AgentThinking,
+  AgentToolCall,
+  AgentToolStatus,
+} from "./agent";
 
 export { Button } from "./primitives/button";
 export {
@@ -45,4 +84,17 @@ export {
   SelectLabel,
 } from "./primitives/select";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./primitives/tooltip";
+export { Popover, PopoverContent, PopoverTrigger } from "./primitives/popover";
+export { Separator } from "./primitives/separator";
+export {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "./primitives/sheet";
+export { Switch } from "./primitives/switch";
 export { Skeleton } from "boneyard-js/react";

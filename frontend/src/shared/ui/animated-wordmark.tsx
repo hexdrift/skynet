@@ -273,7 +273,7 @@ export function AnimatedWordmark({
         fill="currentColor"
         stroke="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ color: "#3D2E22" }}
+        style={{ color: "var(--foreground)" }}
       >
         {LETTERS.map((letter, li) => (
           <g key={li} transform={`translate(${letter.offset}, 0)`}>

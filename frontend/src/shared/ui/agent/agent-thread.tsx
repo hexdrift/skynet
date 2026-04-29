@@ -25,9 +25,7 @@ export function AgentThread({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-    // deps intentionally dynamic — the caller owns the trigger set
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, scrollDeps);
+  }, [children, scrollDeps]);
 
   return (
     <div

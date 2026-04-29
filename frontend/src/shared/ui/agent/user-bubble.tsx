@@ -62,14 +62,15 @@ export function UserBubbleEditor({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
 
+  React.useEffect(() => {
+    autosize(textareaRef.current);
+  }, [value]);
+
   return (
     <div className="flex justify-start">
       <div className="max-w-[80%] w-full space-y-2">
         <textarea
-          ref={(el) => {
-            textareaRef.current = el;
-            autosize(el);
-          }}
+          ref={textareaRef}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);

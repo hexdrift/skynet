@@ -28,6 +28,11 @@ export function NumberInput({
   const numValue = typeof value === "number" ? value : 0;
   const decimals = step < 1 ? Math.max(String(step).split(".")[1]?.length ?? 0, 2) : 0;
   const round = (n: number) => (decimals ? parseFloat(n.toFixed(decimals)) : n);
+  const clamp = (n: number) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
 
   const decrement = () => {
     const next = round(numValue - step);
@@ -54,7 +59,6 @@ export function NumberInput({
         onClick={decrement}
         disabled={disabled || (min != null && numValue <= min)}
         className="flex items-center justify-center size-9 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-        tabIndex={-1}
         aria-label="Decrease"
       >
         <Minus className="size-3" />
@@ -72,9 +76,16 @@ export function NumberInput({
           }
           const n = parseFloat(raw);
           if (isNaN(n)) return;
-          if (min != null && n < min) return;
-          if (max != null && n > max) return;
-          onChange(round(n));
+          onChange(round(clamp(n)));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            increment();
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            decrement();
+          }
         }}
         disabled={disabled}
         className="flex-1 min-w-0 h-full bg-transparent text-center text-sm tabular-nums outline-none"
@@ -85,7 +96,6 @@ export function NumberInput({
         onClick={increment}
         disabled={disabled || (max != null && numValue >= max)}
         className="flex items-center justify-center size-9 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-        tabIndex={-1}
         aria-label="Increase"
       >
         <Plus className="size-3" />

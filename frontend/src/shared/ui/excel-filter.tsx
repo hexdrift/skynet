@@ -45,29 +45,44 @@ export function ColumnHeader<K extends string>({
   const isOpen = hasFilter && openFilter === filterCol;
   const filterIconRef = useRef<HTMLButtonElement>(null);
   const thRef = useRef<HTMLTableCellElement>(null);
+  const resizeAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      resizeAbortRef.current?.abort();
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      const th = thRef.current;
+      if (!th) return;
+      resizeAbortRef.current?.abort();
+      const controller = new AbortController();
+      resizeAbortRef.current = controller;
       const startX = e.clientX;
-      const startW = thRef.current?.offsetWidth ?? 120;
+      const startW = th.offsetWidth;
       const onMove = (ev: MouseEvent) => {
-        const isRtl = getComputedStyle(thRef.current!).direction === "rtl";
+        if (!thRef.current || controller.signal.aborted) return;
+        const isRtl = getComputedStyle(thRef.current).direction === "rtl";
         const delta = isRtl ? startX - ev.clientX : ev.clientX - startX;
         const newW = Math.max(60, startW + delta);
         onResize?.(sortKey, newW);
       };
       const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
+        controller.abort();
+        resizeAbortRef.current = null;
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
       };
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
+      document.addEventListener("mousemove", onMove, { signal: controller.signal });
+      document.addEventListener("mouseup", onUp, { signal: controller.signal });
     },
     [sortKey, onResize],
   );
