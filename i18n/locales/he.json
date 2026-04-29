@@ -116,7 +116,7 @@
     "optimization.retry_no_payload": "לאופטימיזציית המקור אין מטען שמור להרצה חוזרת.",
     "optimization.retry_wrong_status": "ניתן להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. יש לשכפל במקום.",
     "optimization.cannot_resubmit_payload": "לא ניתן לשלוח מחדש את המטען השמור: {error}",
-    "optimization.pairs_label": "{count} {term.pairPlural}",
+    "optimization.pairs_label": "{count, plural, one {{term.pair} אחד} two {שני {term.pairPlural}} other {# {term.pairPlural}}}",
     "grid_search.no_best_pair": "לסריקה אין זוג מוצלח.",
     "grid_search.no_best_program_artifact": "לזוג המוביל אין תוצר {term.program}.",
     "grid_search.pair_position_missing": "אין זוג במיקום {pair_index} בתוצאות הסריקה.",

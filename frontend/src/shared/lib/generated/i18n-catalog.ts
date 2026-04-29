@@ -165,7 +165,7 @@ export const I18N_MESSAGES = {
   "optimization.not_found": "{term.optimization} לא נמצאה: '{optimization_id}'.",
   "optimization.not_success_status_for_serve": "ה{term.optimization} במצב '{status}' — רק {term.optimizationPlural} שהושלמו בהצלחה ניתנות להגשה.",
   "optimization.not_success_status_for_test_results": "ה{term.optimization} במצב '{status}' — רק ל{term.optimizationPlural} שהושלמו בהצלחה יש תוצאות {term.splitTest}.",
-  "optimization.pairs_label": "{count} {term.pairPlural}",
+  "optimization.pairs_label": "{count, plural, one {{term.pair} אחד} two {שני {term.pairPlural}} other {# {term.pairPlural}}}",
   "optimization.payload_unavailable": "המטען של ה{term.optimization} אינו זמין.",
   "optimization.retry_no_payload": "לאופטימיזציית המקור אין מטען שמור להרצה חוזרת.",
   "optimization.retry_wrong_status": "ניתן להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. יש לשכפל במקום.",
@@ -200,6 +200,7 @@ export const I18N_MESSAGES = {
 
 export type TermKey = keyof typeof TERMS;
 export type I18nMessageKey = keyof typeof I18N_MESSAGES;
+export type ErrorCode = I18nMessageKey;
 
 export const I18N_KEY = {
   AGENT_APPROVAL_UNKNOWN_CALL_ID: "agent.approval.unknown_call_id",
