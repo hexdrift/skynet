@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { matchShortcut, useUserPrefs } from "@/features/settings";
+import { useUserPrefs, type AgentShortcut } from "@/features/settings";
 
 import {
   DEFAULT_WIDTH,
@@ -10,6 +10,20 @@ import {
   STORAGE_KEY_OPEN,
   STORAGE_KEY_WIDTH,
 } from "../constants";
+
+// The default shortcut is ``Ctrl+J`` (see ``DEFAULT_AGENT_SHORTCUT`` in
+// ``features/settings/lib/prefs.ts``). On macOS users naturally press
+// ``Cmd+J`` instead, so we treat ``ctrl`` and ``meta`` as interchangeable
+// for the panel toggle. The exact-match ``matchShortcut`` from settings is
+// still correct for the recorder UI and is intentionally not used here.
+function matchPanelShortcut(e: KeyboardEvent, s: AgentShortcut): boolean {
+  const ctrlOrMeta = e.ctrlKey || e.metaKey;
+  const wantsCtrlOrMeta = s.ctrl || s.meta;
+  if (ctrlOrMeta !== wantsCtrlOrMeta) return false;
+  if (e.altKey !== s.alt) return false;
+  if (e.shiftKey !== s.shift) return false;
+  return e.key.toLowerCase() === s.key.toLowerCase();
+}
 
 interface PanelState {
   open: boolean;
@@ -83,7 +97,7 @@ export function GeneralistPanelProvider({ children }: { children: React.ReactNod
   const shortcut = prefs.agentShortcut;
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (matchShortcut(e, shortcut)) {
+      if (matchPanelShortcut(e, shortcut)) {
         e.preventDefault();
         toggle();
       }

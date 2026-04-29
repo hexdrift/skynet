@@ -29,20 +29,12 @@ export function TrustToggle({ mode, onCycle, className }: TrustToggleProps) {
   const hue = TRUST_MODE_HUE[mode];
   const label = TRUST_MODE_LABEL[mode];
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (e.shiftKey && e.key === "Tab") {
-      e.preventDefault();
-      onCycle();
-    }
-  };
-
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={onCycle}
-          onKeyDown={onKeyDown}
           aria-label={formatMsg("auto.features.agent.panel.components.trusttoggle.template.1", {
             p1: label,
           })}

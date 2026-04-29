@@ -95,10 +95,24 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     snapshotRef.current = { wizardState, trustMode };
   }, [wizardState, trustMode]);
 
-  const callbacksRef = React.useRef(args);
+  const callbacksRef = React.useRef<{
+    onToolStart: UseGeneralistAgentArgs["onToolStart"];
+    onToolEnd: UseGeneralistAgentArgs["onToolEnd"];
+  }>({ onToolStart: args.onToolStart, onToolEnd: args.onToolEnd });
   React.useEffect(() => {
-    callbacksRef.current = args;
-  }, [args]);
+    callbacksRef.current = { onToolStart: args.onToolStart, onToolEnd: args.onToolEnd };
+  }, [args.onToolStart, args.onToolEnd]);
+
+  // Abort any in-flight stream when the hook unmounts so callbacks can't
+  // resume firing into a torn-down React tree (setState-on-unmounted warnings,
+  // window-event dispatch from a stale tool-end, etc.).
+  React.useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    },
+    [],
+  );
 
   const appendReply = React.useCallback((chunk: string) => {
     setMessages((prev) => {
@@ -173,6 +187,9 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
         .map((m) => ({ role: m.role, content: m.content }));
       const { wizardState: ws, trustMode: tm } = snapshotRef.current;
 
+      // Every stream callback short-circuits on ``controller.signal.aborted``
+      // so a slow stream replaced by a fresh ``send`` (or by the unmount-time
+      // abort) cannot leak state writes or window events into the live view.
       void streamGeneralistAgent(
         {
           user_message: userMessage,
@@ -183,6 +200,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
         {
           signal: controller.signal,
           onReasoningPatch: (chunk) => {
+            if (controller.signal.aborted) return;
             if (reasoningBufRef.current === "") {
               setReasoningStartedAt(Date.now());
             }
@@ -190,9 +208,11 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             setReasoning(reasoningBufRef.current);
           },
           onStatusPatch: (label) => {
+            if (controller.signal.aborted) return;
             if (label) setStatusLabel(label);
           },
           onToolStart: (ev) => {
+            if (controller.signal.aborted) return;
             setStatusLabel(
               formatMsg("auto.features.agent.panel.hooks.use.generalist.agent.template.1", {
                 p1: ev.tool,
@@ -210,6 +230,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             callbacksRef.current.onToolStart?.(ev);
           },
           onToolEnd: (ev) => {
+            if (controller.signal.aborted) return;
             finishToolCall(ev.id, ev.status === "ok" ? "done" : "error", ev.result);
             if (ev.status === "ok") {
               if (OPTIMIZATION_MUTATING_TOOLS.has(ev.tool)) {
@@ -227,14 +248,17 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             callbacksRef.current.onToolEnd?.(ev);
           },
           onPendingApproval: (ev) => {
+            if (controller.signal.aborted) return;
             setPendingApproval(ev);
             setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.2"));
           },
           onApprovalResolved: () => {
+            if (controller.signal.aborted) return;
             setPendingApproval(null);
             setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.3"));
           },
           onMessagePatch: (chunk) => {
+            if (controller.signal.aborted) return;
             if (replyBufRef.current === "") {
               setStatusLabel(msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.4"));
               if (reasoningBufRef.current) setReasoningEndedAt(Date.now());
@@ -243,6 +267,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             appendReply(chunk);
           },
           onDone: (result) => {
+            if (controller.signal.aborted) return;
             setStatus("done");
             setStatusLabel("");
             if (reasoningBufRef.current) setReasoningEndedAt(Date.now());

@@ -7,7 +7,7 @@ import { msg } from "@/shared/lib/messages";
 import { Button } from "@/shared/ui/primitives/button";
 import { cn } from "@/shared/lib/utils";
 
-import { EntryRow } from "../lib/entry-row";
+import { EntryRow } from "./EntryRow";
 import { DEFAULT_META, TOOL_META, type ApprovalSeverity } from "../lib/tool-meta";
 import type { PendingApprovalPayload } from "../lib/types";
 
