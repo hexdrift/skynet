@@ -28,6 +28,22 @@ def test_send_message_returns_false_when_not_enabled(
     assert result is False
 
 
+def test_send_message_logs_truncated_debug_when_not_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Disabled channel debug log includes only the first 80 message chars."""
+    disable_channel(monkeypatch, comms_module)
+    message = "x" * 120
+
+    with caplog.at_level("DEBUG", logger="core.notifications.comms"):
+        result = send_message(message)
+
+    assert result is False
+    assert "x" * 80 in caplog.text
+    assert "x" * 120 not in caplog.text
+
+
 def test_send_message_does_not_call_requests_when_not_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -51,6 +67,21 @@ def test_send_message_returns_true_on_success(
     result = send_message("hello")
 
     assert result is True
+
+
+def test_send_message_logs_target_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Successful delivery logs the target channel."""
+    enable_channel(monkeypatch, comms_module)
+    monkeypatch.setattr("requests.post", lambda *a, **kw: FakeHTTPResponse())
+
+    with caplog.at_level("INFO", logger="core.notifications.comms"):
+        result = send_message("hello", channel="#alerts")
+
+    assert result is True
+    assert "Comms message sent to #alerts" in caplog.text
 
 
 def test_send_message_posts_to_webhook_url(
@@ -132,6 +163,21 @@ def test_send_message_returns_false_on_http_error(
     assert result is False
 
 
+def test_send_message_logs_warning_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Failed delivery logs a warning with the transport error."""
+    enable_channel(monkeypatch, comms_module)
+    monkeypatch.setattr("requests.post", lambda *a, **kw: FakeFailingResponse())
+
+    with caplog.at_level("WARNING", logger="core.notifications.comms"):
+        result = send_message("hello")
+
+    assert result is False
+    assert "Failed to send comms message: 500 Server Error" in caplog.text
+
+
 def test_send_message_returns_false_on_connection_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -149,10 +195,10 @@ def test_send_message_returns_false_on_connection_error(
     assert result is False
 
 
-def test_send_message_does_not_propagate_exceptions(
+def test_send_message_propagates_unexpected_exceptions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Even unexpected ``RuntimeError`` is swallowed and surfaces as ``False``."""
+    """Unexpected programmer errors are not swallowed as transport failures."""
     enable_channel(monkeypatch, comms_module)
 
     def fake_post(*args, **kwargs):
@@ -161,17 +207,14 @@ def test_send_message_does_not_propagate_exceptions(
 
     monkeypatch.setattr("requests.post", fake_post)
 
-    result = send_message("hello")
-    assert result is False
+    with pytest.raises(RuntimeError, match="unexpected boom"):
+        send_message("hello")
 
 
 def test_send_message_enabled_but_empty_webhook_url_does_not_raise(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Enabled channel with an empty webhook URL must not propagate exceptions."""
-    # Empty WEBHOOK_URL makes requests.post raise MissingSchema; the source's
-    # except-block must swallow it and return False — do NOT mock requests.post
-    # here so the real exception path is exercised.
+    """Enabled channel with an empty webhook URL is treated as disabled."""
     enable_channel(monkeypatch, comms_module, webhook="")
     result = send_message("hello")
 

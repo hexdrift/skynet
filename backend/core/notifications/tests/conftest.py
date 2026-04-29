@@ -32,6 +32,7 @@ class FakeComms:
 
     def last_call(self) -> dict:
         """Return the most recent recorded call payload."""
+        assert self.calls, "no send_message calls recorded"
         return self.calls[-1]
 
 

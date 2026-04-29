@@ -92,12 +92,12 @@ def test_notify_job_started_message_contains_optimization_id_as_link(
 
 
 @pytest.mark.parametrize(
-    ("optimization_type", "expected_label"),
-    [
-        ("grid_search", "סריקה"),
-        ("run", "ריצה"),
-        ("anything_else", "ריצה"),  # default branch
-    ],
+        ("optimization_type", "expected_label"),
+        [
+            ("grid_search", "סריקה"),
+            ("run", "ריצה"),
+            ("anything_else", "ריצה"),
+        ],
 )
 def test_notify_job_started_type_label(
     monkeypatch: pytest.MonkeyPatch,
@@ -105,7 +105,7 @@ def test_notify_job_started_type_label(
     optimization_type: str,
     expected_label: str,
 ) -> None:
-    """``optimization_type`` maps to the correct Hebrew label, with ``run`` as default."""
+    """``optimization_type`` maps to the correct Hebrew label, with ``run`` fallback."""
     monkeypatch.setattr(notifier_module, "send_message", fake_comms.send_message)
 
     notify_job_started(
@@ -117,6 +117,27 @@ def test_notify_job_started_type_label(
     )
 
     assert expected_label in fake_comms.last_call()["text"]
+
+
+def test_notify_job_started_unknown_type_logs_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_comms: FakeComms,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unknown optimization types are visible in logs while still notifying."""
+    monkeypatch.setattr(notifier_module, "send_message", fake_comms.send_message)
+
+    with caplog.at_level("WARNING", logger="core.notifications.notifier"):
+        notify_job_started(
+            optimization_id="abc123",
+            username="alice",
+            optimization_type="anything_else",
+            optimizer_name="GEPA",
+            module_name="MyModule",
+        )
+
+    assert fake_comms.call_count == 1
+    assert "Unknown optimization type for started notification: anything_else" in caplog.text
 
 
 def test_notify_job_started_includes_model_name_when_provided(
@@ -152,7 +173,6 @@ def test_notify_job_started_omits_model_part_when_model_name_is_none(
         model_name=None,
     )
 
-    # "מודל:" is the Hebrew label that appears only when model_name is set
     assert "מודל:" not in fake_comms.last_call()["text"]
 
 
@@ -252,7 +272,6 @@ def test_notify_job_completed_success_shows_negative_improvement(
     )
 
     text = fake_comms.last_call()["text"]
-    # improvement is -15.0, no leading "+"
     assert "-15.0%" in text
     assert "+-" not in text
 
@@ -372,7 +391,7 @@ def test_notify_job_completed_failed_includes_message_when_provided(
 def test_notify_job_completed_failed_truncates_long_message(
     monkeypatch: pytest.MonkeyPatch, fake_comms: FakeComms
 ) -> None:
-    """The failure ``message`` is truncated to 150 characters."""
+    """The failure ``message`` is truncated to 150 characters plus marker."""
     monkeypatch.setattr(notifier_module, "send_message", fake_comms.send_message)
     long_error = "x" * 300
 
@@ -383,9 +402,9 @@ def test_notify_job_completed_failed_truncates_long_message(
         message=long_error,
     )
 
-    # The notifier slices message[:150], so the full 300-char string must not appear
-    assert long_error not in fake_comms.last_call()["text"]
-    assert "x" * 150 in fake_comms.last_call()["text"]
+    text = fake_comms.last_call()["text"]
+    assert long_error not in text
+    assert f"{'x' * 150}..." in text
 
 
 def test_notify_job_completed_failed_omits_error_part_when_no_message(
@@ -401,14 +420,13 @@ def test_notify_job_completed_failed_omits_error_part_when_no_message(
         message=None,
     )
 
-    # "שגיאה:" is the Hebrew label prepended only when message is set
     assert "שגיאה:" not in fake_comms.last_call()["text"]
 
 
 def test_notify_job_completed_unknown_status_treated_as_failed(
     monkeypatch: pytest.MonkeyPatch, fake_comms: FakeComms
 ) -> None:
-    """Unknown statuses fall through to the failed-branch path."""
+    """Unknown statuses are skipped rather than mislabeled as failed."""
     monkeypatch.setattr(notifier_module, "send_message", fake_comms.send_message)
 
     notify_job_completed(
@@ -417,8 +435,26 @@ def test_notify_job_completed_unknown_status_treated_as_failed(
         status="unknown_status",
     )
 
-    # Falls into else (failed) branch — should still send exactly once
-    assert fake_comms.call_count == 1
+    assert fake_comms.call_count == 0
+
+
+def test_notify_job_completed_unknown_status_logs_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_comms: FakeComms,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unknown statuses are logged for operator visibility."""
+    monkeypatch.setattr(notifier_module, "send_message", fake_comms.send_message)
+
+    with caplog.at_level("WARNING", logger="core.notifications.notifier"):
+        notify_job_completed(
+            optimization_id="abc123",
+            username="alice",
+            status="unknown_status",
+        )
+
+    assert fake_comms.call_count == 0
+    assert "Skipping notification for unknown job status: unknown_status" in caplog.text
 
 
 def test_notify_job_completed_success_zero_improvement_uses_plus_sign(
@@ -435,7 +471,6 @@ def test_notify_job_completed_success_zero_improvement_uses_plus_sign(
         optimized_score=75.0,
     )
 
-    # improvement == 0.0, condition is >= 0, so prefix must be "+"
     assert "+0.0%" in fake_comms.last_call()["text"]
 
 

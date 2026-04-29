@@ -7,7 +7,7 @@ submitted or completed.
 import logging
 import os
 
-from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH
+from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN
 from ..i18n import GRID_SEARCH_LABEL, RUN_LABEL, t
 from .comms import send_message
 
@@ -40,7 +40,13 @@ def notify_job_started(
         module_name: Name of the DSPy module (e.g. ``"ChainOfThought"``).
         model_name: Optional model identifier appended to the message when set.
     """
-    type_label = GRID_SEARCH_LABEL if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH else RUN_LABEL
+    if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+        type_label = GRID_SEARCH_LABEL
+    elif optimization_type == OPTIMIZATION_TYPE_RUN:
+        type_label = RUN_LABEL
+    else:
+        logger.warning("Unknown optimization type for started notification: %s", optimization_type)
+        type_label = RUN_LABEL
     model_part = f" | {t('notifier.label.model')}: {model_name}" if model_name else ""
     link = _job_url(optimization_id)
 
@@ -69,8 +75,8 @@ def notify_job_completed(
     Args:
         optimization_id: Job identifier used to render the dashboard link.
         username: User who submitted the job.
-        status: One of ``"success"``, ``"cancelled"`` or any other value
-            (treated as ``failed``).
+        status: One of ``"success"``, ``"cancelled"`` or ``"failed"``.
+            Unknown statuses are logged and skipped.
         message: Optional error/context message; only rendered for the
             failed branch and truncated to 150 characters.
         baseline_score: Pre-optimization score; combined with
@@ -94,8 +100,12 @@ def notify_job_completed(
         text = f"*{t('notifier.title.completed')}*\n{user_line}{scores}\n[{t('notifier.link.results')}]({link})"
     elif status == "cancelled":
         text = f"*{t('notifier.title.cancelled')}*\n{user_line}\n[{t('notifier.link.details')}]({link})"
-    else:
-        error_part = f"\n{t('notifier.label.error')}: {message[:150]}" if message else ""
+    elif status == "failed":
+        truncated_message = f"{message[:150]}..." if message and len(message) > 150 else message
+        error_part = f"\n{t('notifier.label.error')}: {truncated_message}" if truncated_message else ""
         text = f"*{t('notifier.title.failed')}*\n{user_line}{error_part}\n[{t('notifier.link.details')}]({link})"
+    else:
+        logger.warning("Skipping notification for unknown job status: %s", status)
+        return
 
     send_message(text)

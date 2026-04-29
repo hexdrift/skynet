@@ -10,8 +10,6 @@ from typing import Any
 
 import requests  # type: ignore[import-untyped]
 
-from tests.fixtures import load_fixture
-
 
 class FakeHTTPResponse:
     """Stand-in for a successful 200 ``requests`` response."""
@@ -34,20 +32,6 @@ class FakeFailingResponse:
             requests.HTTPError: Always.
         """
         raise requests.HTTPError("500 Server Error")
-
-
-def fake_requests_post_ok(*args: Any, **kwargs: Any) -> FakeHTTPResponse:
-    """Return a ``FakeHTTPResponse`` regardless of arguments."""
-    return FakeHTTPResponse()
-
-
-def fake_requests_post_failing(*args: Any, **kwargs: Any) -> None:
-    """Raise ``requests.HTTPError`` regardless of arguments.
-
-    Raises:
-        requests.HTTPError: Always.
-    """
-    raise requests.HTTPError("500 Server Error")
 
 
 def capture_requests_post() -> tuple[list[tuple], Any]:
@@ -92,23 +76,3 @@ def disable_channel(monkeypatch: Any, module: Any) -> None:
         module: The comms module whose ``ENABLED`` flag is set to ``False``.
     """
     monkeypatch.setattr(module, "ENABLED", False)
-
-
-def real_success_summary() -> dict:
-    """Load the cached summary payload for a successful single-run job."""
-    return load_fixture("jobs/success_single_gepa.summary.json")
-
-
-def real_failed_summary() -> dict:
-    """Load the cached summary payload for a failed run."""
-    return load_fixture("jobs/failed_runtime.summary.json")
-
-
-def real_grid_summary() -> dict:
-    """Load the cached summary payload for a successful grid-search job."""
-    return load_fixture("jobs/success_grid.summary.json")
-
-
-def real_cancelled_summary() -> dict:
-    """Load the cached summary payload for a cancelled run."""
-    return load_fixture("jobs/cancelled_mid_run.summary.json")
