@@ -26,6 +26,10 @@ export function getJobTypeLabel(type: string): string {
   return isOptimizationType(type) ? JOB_TYPE_LABELS[type] : type;
 }
 
+export function isActiveStatus(status: string): status is JobStatus {
+  return isJobStatus(status) && ACTIVE_STATUSES.has(status);
+}
+
 function isJobStatus(status: string): status is JobStatus {
   return status in STATUS_LABELS;
 }
