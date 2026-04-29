@@ -80,8 +80,6 @@ export function useDatasetProfiling({
   setSplit,
   setShuffle,
   setSeed,
-  setStratify,
-  setStratifyColumn,
 }: {
   parsedDataset: ParsedDataset | null;
   columnRoles: Record<string, ColumnRole>;
@@ -92,8 +90,6 @@ export function useDatasetProfiling({
   setSplit: (split: SplitFractions) => void;
   setShuffle: (shuffle: boolean) => void;
   setSeed: (seed: number | undefined) => void;
-  setStratify: (stratify: boolean) => void;
-  setStratifyColumn: (column: string | null) => void;
 }) {
   useEffect(() => {
     if (!parsedDataset || parsedDataset.rowCount === 0) return;
@@ -115,8 +111,6 @@ export function useDatasetProfiling({
             setSplit(response.plan.fractions);
             setShuffle(response.plan.shuffle);
             setSeed(response.plan.seed);
-            setStratify(response.plan.stratify);
-            setStratifyColumn(response.plan.stratify_column);
           }
         })
         .catch(() => {
@@ -140,8 +134,6 @@ export function useDatasetProfiling({
     setShuffle,
     setSplit,
     setSplitPlan,
-    setStratify,
-    setStratifyColumn,
     splitModeRef,
   ]);
 }

@@ -57,7 +57,6 @@ from ..safe_exec import validate_metric_code, validate_signature_code
 from .artifacts import persist_program
 from .data import (
     extract_signature_fields,
-    extract_stratify_values,
     image_input_field_names,
     load_metric_from_code,
     load_signature_from_code,
@@ -397,28 +396,17 @@ class DspyService:
         )
         logger.info("Converted dataset to %d DSPy examples", len(examples))
 
-        stratify_values = (
-            extract_stratify_values(
-                examples,
-                payload.column_mapping,
-                column=payload.stratify_column,
-            )
-            if payload.stratify
-            else None
-        )
         splits = split_examples(
             examples,
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
-            stratify_values=stratify_values,
         )
         logger.info(
-            "Split dataset -> train=%d val=%d test=%d (stratify=%s)",
+            "Split dataset -> train=%d val=%d test=%d",
             len(splits.train),
             len(splits.val),
             len(splits.test),
-            payload.stratify,
         )
         if progress_callback:
             progress_callback(
@@ -600,21 +588,11 @@ class DspyService:
             payload.column_mapping,
             image_input_fields=image_input_field_names(signature_cls),
         )
-        stratify_values = (
-            extract_stratify_values(
-                examples,
-                payload.column_mapping,
-                column=payload.stratify_column,
-            )
-            if payload.stratify
-            else None
-        )
         splits = split_examples(
             examples,
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
-            stratify_values=stratify_values,
         )
         split_counts = SplitCounts(
             train=len(splits.train),

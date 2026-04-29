@@ -3,7 +3,13 @@
 Pure helpers used by :class:`DspyService` to: load a user-authored
 :class:`dspy.Signature` and metric callable from source, convert raw
 rows into :class:`dspy.Example` instances, and partition the example
-list into train/val/test slices (random or stratified).
+list into train/val/test slices.
+
+Splits are size-based only: see ``datasets/planner.py`` for the
+research-grounded tier policy. Per-class stratification was removed —
+GEPA's reflection LM consumes free-form trajectories and the Pareto
+frontier scores against an aggregate metric, so balanced sampling
+buys nothing here.
 """
 
 from __future__ import annotations
@@ -284,146 +290,33 @@ def load_metric_from_code(code: str) -> Callable[..., Any]:
     return metric
 
 
-def extract_stratify_values(
-    examples: list[Any],
-    mapping: ColumnMapping,
-    *,
-    column: str | None = None,
-) -> list[str]:
-    """Pull the stratify label for each example from a target column.
-
-    When ``column`` is omitted, falls back to the first declared output column.
-
-    Args:
-        examples: The dspy Example list to inspect.
-        mapping: Column mapping declaring outputs.
-        column: Optional dataset column name (or signature field name) to
-            stratify on.
-
-    Returns:
-        The list of stratify labels (one per example), as stripped strings.
-
-    Raises:
-        ServiceError: When the mapping has no outputs, or when ``column``
-            is provided but does not match any mapped output column.
-    """
-
-    if not mapping.outputs:
-        raise ServiceError("Cannot stratify split: column_mapping has no output columns.")
-
-    field_name: str
-    if column is None:
-        field_name = next(iter(mapping.outputs.keys()))
-    else:
-        resolved = _signature_field_for_column(mapping, column)
-        if resolved is None:
-            raise ServiceError(f"stratify column '{column}' is not present in column_mapping outputs.")
-        field_name = resolved
-
-    values: list[str] = []
-    for example in examples:
-        raw = getattr(example, field_name, None)
-        if raw is None:
-            values.append("")
-        elif isinstance(raw, str):
-            values.append(raw.strip())
-        else:
-            values.append(str(raw))
-    return values
-
-
-def _signature_field_for_column(mapping: ColumnMapping, column: str) -> str | None:
-    """Return the signature field name whose mapped output is ``column``.
-
-    Accepts either the dataset column name (the value side of
-    ``mapping.outputs``) or the signature field name itself (the key
-    side), since the planner emits the dataset column name but callers
-    may already be using signature field names.
-
-    Args:
-        mapping: Column mapping to search.
-        column: Dataset column name or signature field name.
-
-    Returns:
-        The matching signature field name, or ``None`` when no output matches.
-    """
-    for sig_field, col_name in mapping.outputs.items():
-        if col_name == column or sig_field == column:
-            return sig_field
-    return None
-
-
 def split_examples(
     examples: list[Any],
     fractions: SplitFractions,
     *,
     shuffle: bool,
     seed: int | None,
-    stratify_values: list[str] | None = None,
 ) -> DatasetSplits:
     """Split examples into train/val/test partitions.
-
-    When ``stratify_values`` is provided, each class is partitioned into
-    train/val/test independently and proportionally so rare classes survive
-    in every slice; it must be the same length as ``examples``.
 
     Args:
         examples: Examples to partition.
         fractions: Train/val/test fractions summing to 1.0.
-        shuffle: Whether to shuffle before slicing in non-stratified mode.
+        shuffle: Whether to shuffle before slicing.
         seed: Optional RNG seed for deterministic splits.
-        stratify_values: Optional per-example labels to stratify on.
 
     Returns:
         A populated :class:`DatasetSplits` with train/val/test lists.
 
     Raises:
         ServiceError: If the dataset is too small to produce the requested
-            val split, or if ``stratify_values`` length does not match ``examples``.
+            val split.
     """
 
     total = len(examples)
     if total == 0:
         return DatasetSplits(train=[], val=[], test=[])
 
-    if stratify_values is not None:
-        if len(stratify_values) != total:
-            raise ServiceError(
-                f"stratify_values length ({len(stratify_values)}) does not match examples length ({total})."
-            )
-        splits = _stratified_split(examples, stratify_values, fractions, seed=seed)
-    else:
-        splits = _simple_split(examples, fractions, shuffle=shuffle, seed=seed)
-
-    if fractions.val > 0 and len(splits.val) == 0:
-        raise ServiceError(
-            f"Dataset has {total} examples — too small for a val split of "
-            f"{fractions.val:.0%}. Add more data or set val fraction to 0."
-        )
-
-    return splits
-
-
-def _simple_split(
-    examples: list[Any],
-    fractions: SplitFractions,
-    *,
-    shuffle: bool,
-    seed: int | None,
-) -> DatasetSplits:
-    """Random (non-stratified) split into train/val/test.
-
-    Args:
-        examples: Examples to partition.
-        fractions: Train/val/test fractions.
-        shuffle: Whether to shuffle before slicing.
-        seed: Optional RNG seed.
-
-    Returns:
-        A populated :class:`DatasetSplits`.
-    """
-
-    total = len(examples)
     ordered = list(examples)
     if shuffle:
         rng = random.Random(seed)
@@ -432,67 +325,19 @@ def _simple_split(
     train_count = int(total * fractions.train)
     val_count = int(total * fractions.val)
     val_end = train_count + val_count
-    return DatasetSplits(
+    splits = DatasetSplits(
         train=ordered[:train_count],
         val=ordered[train_count:val_end],
         test=ordered[val_end:],
     )
 
+    if fractions.val > 0 and len(splits.val) == 0:
+        raise ServiceError(
+            f"Dataset has {total} examples — too small for a val split of "
+            f"{fractions.val:.0%}. Add more data or set val fraction to 0."
+        )
 
-def _stratified_split(
-    examples: list[Any],
-    stratify_values: list[str],
-    fractions: SplitFractions,
-    *,
-    seed: int | None,
-) -> DatasetSplits:
-    """Per-class proportional split.
-
-    Groups example indices by their stratify value, splits each group
-    independently using the same fractions, then re-shuffles the resulting
-    train/val/test lists so a single class doesn't appear contiguously
-    inside a slice. Always shuffles per-class indices before slicing —
-    stratification without shuffle would defeat the purpose for any
-    dataset whose rows are sorted by class.
-
-    Args:
-        examples: Examples to partition.
-        stratify_values: Per-example label list (same length as ``examples``).
-        fractions: Train/val/test fractions.
-        seed: Optional RNG seed.
-
-    Returns:
-        A populated :class:`DatasetSplits`.
-    """
-
-    rng = random.Random(seed)
-    groups: dict[str, list[int]] = {}
-    for idx, value in enumerate(stratify_values):
-        groups.setdefault(value, []).append(idx)
-
-    train_idx: list[int] = []
-    val_idx: list[int] = []
-    test_idx: list[int] = []
-
-    for class_indices in groups.values():
-        shuffled = list(class_indices)
-        rng.shuffle(shuffled)
-        n = len(shuffled)
-        n_train = int(n * fractions.train)
-        n_val = int(n * fractions.val)
-        train_idx.extend(shuffled[:n_train])
-        val_idx.extend(shuffled[n_train : n_train + n_val])
-        test_idx.extend(shuffled[n_train + n_val :])
-
-    rng.shuffle(train_idx)
-    rng.shuffle(val_idx)
-    rng.shuffle(test_idx)
-
-    return DatasetSplits(
-        train=[examples[i] for i in train_idx],
-        val=[examples[i] for i in val_idx],
-        test=[examples[i] for i in test_idx],
-    )
+    return splits
 
 
 def _is_signature_field(value: Any, *, field_type: str) -> bool:

@@ -29,8 +29,8 @@ from ...models.dataset import (
 # Between ``MIN_UNIQUE`` and ``MAX_UNIQUE`` we additionally require the
 # unique-to-row ratio to be small enough that each class has roughly five+
 # examples on average — otherwise the "classes" are just per-row labels.
-# Above ``MAX_UNIQUE`` no column is categorical, since stratifying over
-# hundreds of micro-classes is meaningless.
+# Above ``MAX_UNIQUE`` no column is categorical — hundreds of micro-classes
+# carry no useful structure for display or warnings.
 CATEGORICAL_MIN_UNIQUE = 20
 CATEGORICAL_MAX_UNIQUE = 100
 CATEGORICAL_UNIQUE_RATIO = 0.2
@@ -298,12 +298,12 @@ def _profile_single_target(
 def _select_primary_target(
     targets: list[TargetColumnProfile],
 ) -> TargetColumnProfile | None:
-    """Pick the target column the planner should reason about by default.
+    """Pick the target column to surface as the profile's representative output.
 
-    Prefers categorical columns (those let us stratify); among
-    categoricals, picks the one with the fewest unique values, since a
-    smaller class set typically indicates a cleaner label space. Falls
-    back to the first declared output when no categoricals are present.
+    Prefers categorical columns; among categoricals, picks the one with
+    the fewest unique values, since a smaller class set typically
+    indicates a cleaner label space worth highlighting in the UI summary.
+    Falls back to the first declared output when no categoricals exist.
 
     Args:
         targets: Per-output target profiles.

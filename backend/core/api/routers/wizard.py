@@ -94,8 +94,6 @@ class WizardUpdateRequest(BaseModel):
     )
     seed: int | None = Field(default=None, description="Shuffle/split seed.")
     shuffle: bool | None = Field(default=None)
-    stratify: bool | None = Field(default=None)
-    stratify_column: str | None = Field(default=None)
 
     optimizer_kwargs: dict[str, Any] | None = Field(
         default=None,
@@ -260,7 +258,6 @@ def create_wizard_router() -> APIRouter:
             "use_all_generation_models",
             "use_all_reflection_models",
             "shuffle",
-            "stratify",
         ):
             if bool_key in supplied and supplied[bool_key] is not None:
                 patch[bool_key] = bool(supplied[bool_key])
@@ -287,9 +284,6 @@ def create_wizard_router() -> APIRouter:
 
         if "seed" in supplied and supplied["seed"] is not None:
             patch["seed"] = int(supplied["seed"])
-
-        if "stratify_column" in supplied and supplied["stratify_column"] is not None:
-            patch["stratify_column"] = str(supplied["stratify_column"])
 
         if "optimizer_kwargs" in supplied and supplied["optimizer_kwargs"] is not None:
             ok = supplied["optimizer_kwargs"]

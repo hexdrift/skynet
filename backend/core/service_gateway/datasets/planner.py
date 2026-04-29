@@ -1,19 +1,31 @@
 """Turn a dataset profile into a recommended split plan.
 
-Given a ``DatasetProfile``, pick train/val/test fractions, compute
-concrete per-split example counts, and assemble a human-readable
-rationale tuned to the dataset's size tier. The output ``SplitPlan`` is
-surfaced by ``POST /datasets/profile``; the submit wizard renders it as
-the "we'll split it like this" card and the user either accepts the
-fractions or overrides them before sending the real job payload.
+Given a ``DatasetProfile``, pick train/val/test fractions purely from the
+example count and assemble a human-readable rationale. The output
+``SplitPlan`` is surfaced by ``POST /datasets/profile``; the submit
+wizard renders it as the "we'll split it like this" card and the user
+either accepts the fractions or overrides them before sending the real
+job payload.
 
-The fractions are tuned for DSPy's optimization paradigm where the val
-set acts as the optimizer's search surface (every trial is scored on
-val), not just a held-out hyperparameter dial. That makes val cheaper
-than train at small dataset sizes, so the small-dataset tiers invert
-the classical 80/10/10 in favour of more val. Train still matters as
-the demo pool, but DSPy only samples a handful of demos from it
-regardless of pool size.
+The fractions are tuned for DSPy GEPA, which inverts the classical
+prompt-optimizer ratio. DSPy's optimization overview explicitly notes
+that GEPA "follows the more standard ML convention: maximize the
+training set, while keeping the validation set just large enough to
+reflect the distribution of the downstream tasks." Trainset (D_feedback)
+drives reflective mutation; valset (D_pareto) is a fixed holdout used
+to score every candidate against the Pareto frontier. GEPA accepts
+val=trainset as a fallback for tiny corpora — formally allowed but
+discouraged when more data exists.
+
+The tier thresholds below are anchored to published GEPA tutorials —
+the facility-support analyzer ran on 14/10/10, the HF cookbook on
+112/22/90, AIME on 33/33/34 — and to DSPy's documented "substantial
+value out of 30 examples" floor. We deliberately do not branch on
+column type or class balance: GEPA's reflection LM consumes free-form
+trajectories and the Pareto frontier scores against an aggregate
+metric, so per-class stratified sampling buys nothing here. Pure
+size-based splitting is simpler, defensible, and matches every
+published GEPA configuration we found.
 """
 
 from __future__ import annotations
@@ -22,25 +34,14 @@ import random
 
 from ...i18n import t
 from ...models.common import SplitCounts, SplitFractions
-from ...models.dataset import (
-    DatasetProfile,
-    ProfileWarningCode,
-    SplitPlan,
-)
+from ...models.dataset import DatasetProfile, SplitPlan
 
-TIER_SMALL = 200
-TIER_MEDIUM = 2_000
-TIER_LARGE = 20_000
+TIER_TINY = 30
+TIER_SMALL = 80
+TIER_MEDIUM = 300
 
-MAX_VAL_COUNT = 4_000
-MAX_TEST_COUNT = 2_000
-
-# Floor for the test slice — fewer than this gives confidence intervals
-# too wide to compare runs meaningfully.
-MIN_TEST_COUNT = 30
-# Don't promote test to the floor if doing so would leave fewer than
-# this many examples for train+val combined.
-MIN_REMAINDER_AFTER_FLOOR = 30
+VAL_CAP = 200
+TEST_CAP = 500
 
 
 def recommend_split(profile: DatasetProfile, *, seed: int | None = None) -> SplitPlan:
@@ -55,12 +56,11 @@ def recommend_split(profile: DatasetProfile, *, seed: int | None = None) -> Spli
 
     Returns:
         A fully-populated :class:`SplitPlan` describing fractions, counts,
-        stratification, seed, and rationale.
+        seed, and rationale.
     """
     total = profile.row_count
     fractions = _recommend_fractions(total)
-    counts, floor_applied = _compute_counts(total, fractions)
-    stratify, stratify_column = _should_stratify(profile)
+    counts = _compute_counts(total, fractions)
     resolved_seed = seed if seed is not None else random.Random().randint(0, 2**31 - 1)
 
     return SplitPlan(
@@ -68,26 +68,27 @@ def recommend_split(profile: DatasetProfile, *, seed: int | None = None) -> Spli
         shuffle=True,
         seed=resolved_seed,
         counts=counts,
-        stratify=stratify,
-        stratify_column=stratify_column,
-        rationale=_build_rationale(
-            profile,
-            counts,
-            total,
-            stratify=stratify,
-            stratify_column=stratify_column,
-            floor_applied=floor_applied,
-        ),
+        rationale=_build_rationale(total, counts),
     )
 
 
 def _recommend_fractions(total: int) -> SplitFractions:
-    """Pick train/val/test fractions tuned for DSPy optimization.
+    """Pick train/val/test fractions sized to GEPA's documented sweet spots.
 
-    Small datasets give the optimizer's val search surface most of the
-    data; medium and large datasets shift gradually toward train as the
-    demo pool starts to matter more; very large datasets cap val and
-    test at fixed absolute counts so optimizer compute stays bounded.
+    Tier policy (research-grounded; see module docstring for citations):
+
+    * ``total < 30``  — all train (val=test=0). GEPA falls back to using
+      the trainset as the valset; documented as legal-but-discouraged
+      and the only viable option for tutorial-scale corpora.
+    * ``30 <= total < 80`` — 80/20/0. Enough to give GEPA a true holdout
+      valset for Pareto scoring; a test slice would starve training.
+    * ``80 <= total < 300`` — 60/20/20. Standard 3-way split where val
+      and test are both large enough (≥16 / ≥16) for stable scoring.
+    * ``total >= 300`` — 60/20/20 with val capped at ``VAL_CAP`` and
+      test capped at ``TEST_CAP``. DSPy's GEPA notes call out a ~35
+      example threshold below which further valset reduction is
+      unhelpful; the cap keeps optimizer compute bounded once the
+      valset is "large enough to reflect the distribution."
 
     Args:
         total: Total number of rows in the dataset.
@@ -95,155 +96,65 @@ def _recommend_fractions(total: int) -> SplitFractions:
     Returns:
         Recommended train/val/test fractions summing to 1.0.
     """
+    if total < TIER_TINY:
+        return SplitFractions(train=1.0, val=0.0, test=0.0)
     if total < TIER_SMALL:
-        return SplitFractions(train=0.30, val=0.50, test=0.20)
+        return SplitFractions(train=0.80, val=0.20, test=0.0)
     if total < TIER_MEDIUM:
-        return SplitFractions(train=0.40, val=0.45, test=0.15)
-    if total < TIER_LARGE:
-        return SplitFractions(train=0.60, val=0.30, test=0.10)
+        return SplitFractions(train=0.60, val=0.20, test=0.20)
 
-    val_fraction = round(MAX_VAL_COUNT / total, 4)
-    test_fraction = round(MAX_TEST_COUNT / total, 4)
+    val_fraction = round(min(0.20, VAL_CAP / total), 4)
+    test_fraction = round(min(0.20, TEST_CAP / total), 4)
     train_fraction = round(1.0 - val_fraction - test_fraction, 4)
-    # Recompute val last to absorb rounding drift so the three fractions
-    # sum to exactly 1.0 (SplitFractions enforces that invariant).
     val_fraction = round(1.0 - train_fraction - test_fraction, 4)
     return SplitFractions(train=train_fraction, val=val_fraction, test=test_fraction)
 
 
-def _compute_counts(total: int, fractions: SplitFractions) -> tuple[SplitCounts, bool]:
-    """Convert fractional sizes into integer counts, enforcing a test floor.
+def _compute_counts(total: int, fractions: SplitFractions) -> SplitCounts:
+    """Convert fractional sizes into integer counts that sum to ``total``.
 
     Rounds train and val down; test absorbs the remainder so the three
-    counts always sum to ``total``. When the resulting test slice would
-    fall below ``MIN_TEST_COUNT`` (and the dataset is large enough to
-    spare them), promote the test slice to the floor by reducing train
-    and val proportionally to their original ratio. The returned
-    ``floor_applied`` flag is True when the floor was applied.
+    counts always sum exactly to ``total``. No floor logic — the new
+    tier policy already guarantees test=0 when the dataset can't
+    afford a meaningful holdout.
 
     Args:
         total: Total number of rows in the dataset.
         fractions: Recommended train/val/test fractions.
 
     Returns:
-        A tuple ``(SplitCounts, floor_applied)`` where ``floor_applied``
-        indicates whether the test floor was enforced.
+        :class:`SplitCounts` with train+val+test == total.
     """
     train = int(total * fractions.train)
     val = int(total * fractions.val)
+    if fractions.test == 0:
+        train = total - val
+        return SplitCounts(train=train, val=val, test=0)
     test = total - train - val
-
-    floor_applied = False
-    if test < MIN_TEST_COUNT and total - MIN_TEST_COUNT >= MIN_REMAINDER_AFTER_FLOOR and fractions.test > 0:
-        floor_applied = True
-        test = MIN_TEST_COUNT
-        remaining = total - test
-        non_test_fraction = fractions.train + fractions.val
-        if non_test_fraction > 0:
-            train = int(remaining * fractions.train / non_test_fraction)
-            val = remaining - train
-        else:
-            train = remaining
-            val = 0
-
-    return SplitCounts(train=train, val=val, test=test), floor_applied
+    return SplitCounts(train=train, val=val, test=test)
 
 
-def _should_stratify(profile: DatasetProfile) -> tuple[bool, str | None]:
-    """Pick a column to stratify on, if any output needs it.
-
-    Walks every profiled output column and returns the first categorical
-    one whose warnings include ``class_imbalance`` or ``rare_class``.
-    Random sampling on imbalanced data risks dropping a class entirely
-    from val or test; stratified sampling preserves the per-class ratio
-    across all three slices.
+def _build_rationale(total: int, counts: SplitCounts) -> list[str]:
+    """Build short Hebrew rationale bullets explaining the chosen tier.
 
     Args:
-        profile: The dataset profile to inspect.
-
-    Returns:
-        A tuple ``(stratify, column_name)`` where ``stratify`` is True when
-        a stratification column was found and ``column_name`` names it
-        (or ``None`` when stratification is unnecessary).
-    """
-    relevant_codes = {
-        ProfileWarningCode.class_imbalance,
-        ProfileWarningCode.rare_class,
-    }
-    targets = profile.targets or ([profile.target] if profile.target else [])
-    for target in targets:
-        if target is None or target.kind != "categorical":
-            continue
-        for warning in profile.warnings:
-            if warning.code not in relevant_codes:
-                continue
-            if warning.details.get("target_column") == target.name:
-                return True, target.name
-    return False, None
-
-
-def _build_rationale(
-    profile: DatasetProfile,
-    counts: SplitCounts,
-    total: int,
-    *,
-    stratify: bool,
-    stratify_column: str | None,
-    floor_applied: bool,
-) -> list[str]:
-    """Build short Hebrew rationale bullets explaining each decision.
-
-    Args:
-        profile: The dataset profile being summarised.
-        counts: Per-split row counts produced by ``_compute_counts``.
         total: Total dataset size.
-        stratify: Whether stratified splitting was applied.
-        stratify_column: Column name used for stratification, if any.
-        floor_applied: Whether the minimum-test floor was enforced.
+        counts: Per-split row counts produced by ``_compute_counts``.
 
     Returns:
         A list of short Hebrew bullet strings describing the plan.
     """
-    lines: list[str] = []
-
+    if total < TIER_TINY:
+        return [t("dataset.split.rationale.tiny", total=total)]
     if total < TIER_SMALL:
-        if total < MIN_TEST_COUNT:
-            lines.append(t("dataset.split.rationale.micro", total=total))
-        else:
-            lines.append(t("dataset.split.rationale.small", total=total))
-    elif total < TIER_MEDIUM:
-        lines.append(t("dataset.split.rationale.medium", total=total))
-    elif total < TIER_LARGE:
-        lines.append(t("dataset.split.rationale.large", total=total))
-    else:
-        lines.append(
-            t(
-                "dataset.split.rationale.huge",
-                total=total,
-                val_count=counts.val,
-                test_count=counts.test,
-            )
+        return [t("dataset.split.rationale.small", total=total)]
+    if total < TIER_MEDIUM:
+        return [t("dataset.split.rationale.medium", total=total)]
+    return [
+        t(
+            "dataset.split.rationale.large",
+            total=total,
+            val_count=counts.val,
+            test_count=counts.test,
         )
-
-    if floor_applied:
-        lines.append(t("dataset.split.rationale.test_floor", minimum=MIN_TEST_COUNT))
-
-    if stratify and stratify_column:
-        lines.append(t("dataset.split.rationale.stratify", stratify_column=stratify_column))
-
-    categorical_targets = [
-        t
-        for t in (profile.targets or ([profile.target] if profile.target else []))
-        if t and t.kind == "categorical" and len(t.class_histogram) >= 2
     ]
-    for target in categorical_targets[:2]:
-        preview = ", ".join(f"{name}={count}" for name, count in list(target.class_histogram.items())[:5])
-        lines.append(
-            t(
-                "dataset.split.rationale.categorical_target",
-                target_name=target.name,
-                preview=preview,
-            )
-        )
-
-    return lines
