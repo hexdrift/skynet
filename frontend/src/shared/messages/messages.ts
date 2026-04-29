@@ -20,6 +20,7 @@ export const sharedMessages = {
   "app.shell.api_docs_tooltip": "תיעוד API אינטראקטיבי",
   "app.shell.logout": "התנתק",
   "app.shell.menu": "תפריט",
+  "app.shell.menu_close": "סגור תפריט",
   "not_found.title": "הדף לא נמצא",
   "not_found.description": "הכתובת שחיפשת לא קיימת או שהועברה למיקום אחר",
   "not_found.back_dashboard": "חזרה ללוח בקרה",
