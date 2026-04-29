@@ -8,8 +8,10 @@ import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
 import type { AgentToolCall } from "@/shared/ui/agent/types";
 
-import { EntryRow, isPlainObject } from "../lib/entry-row";
+import { isPlainObject } from "../lib/entry-format";
 import { getToolMeta, prettifyToolName } from "../lib/tool-meta";
+
+import { EntryRow } from "./EntryRow";
 
 interface ToolCallRowProps {
   call: AgentToolCall;

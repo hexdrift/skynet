@@ -35,7 +35,11 @@ interface WizardStateContextValue {
   overriddenFields: string[];
   /** Bumped whenever the agent writes a field so consumers can pulse. */
   agentPulseTick: number;
-  /** Which keys the agent most recently touched (clears after next render tick). */
+  /**
+   * Keys touched by the most recent agent write. Persists until the next agent
+   * write replaces it; consumers gate on ``agentPulseTick`` (not on a clearing
+   * tick) to detect new pulses.
+   */
   agentPulseKeys: readonly string[];
   setField: (key: WizardKey, value: WizardState[WizardKey], source?: WriteSource) => void;
   applyAgentPatch: (patch: Partial<WizardState>) => void;

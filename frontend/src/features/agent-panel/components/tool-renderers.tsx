@@ -4,8 +4,9 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import type { AgentToolCall } from "@/shared/ui/agent/types";
 import { TERMS } from "@/shared/lib/terms";
 
-import { SubmitSummaryCard } from "../components/SubmitSummaryCard";
-import { UUID_RE } from "./entry-row";
+import { UUID_RE } from "../lib/entry-format";
+
+import { SubmitSummaryCard } from "./SubmitSummaryCard";
 
 export interface ToolRenderer {
   card?: (call: AgentToolCall) => React.ReactNode;
