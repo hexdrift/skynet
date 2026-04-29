@@ -55,16 +55,10 @@ from .optimizations import (
     OptimizationSummaryResponse,
     PaginatedJobsResponse,
     ProgramArtifactResponse,
-    _JobResponseBase,
 )
 from .results import GridSearchResponse, PairResult, RunResponse
 from .serve import ServeInfoResponse, ServeRequest, ServeResponse
-from .submissions import (
-    GridSearchRequest,
-    OptimizationSubmissionResponse,
-    RunRequest,
-    _OptimizationRequestBase,
-)
+from .submissions import GridSearchRequest, OptimizationSubmissionResponse, RunRequest
 from .telemetry import JobLogEntry, ProgressEvent
 from .templates import TemplateCreateRequest, TemplateResponse
 from .validation import ValidateCodeRequest, ValidateCodeResponse
@@ -128,6 +122,4 @@ __all__ = [
     "TemplateResponse",
     "ValidateCodeRequest",
     "ValidateCodeResponse",
-    "_JobResponseBase",
-    "_OptimizationRequestBase",
 ]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from .common import ModelConfig
 
@@ -17,8 +17,6 @@ class ServeRequest(BaseModel):
         default=None,
         description="Optional model config override. Uses the original optimization model if omitted.",
     )
-
-    model_config = ConfigDict(populate_by_name=True)
 
     @model_validator(mode="after")
     def _ensure_inputs(self) -> ServeRequest:

@@ -75,6 +75,12 @@ def test_column_mapping_multiple_shared_columns_reported() -> None:
         ColumnMapping(inputs={"q": "x", "r": "y"}, outputs={"a": "x", "b": "y"})
 
 
+def test_column_mapping_rejects_shared_signature_field_name() -> None:
+    """Verify ColumnMapping rejects when a signature field appears in inputs and outputs."""
+    with pytest.raises(ValidationError, match="cannot be both input and output"):
+        ColumnMapping(inputs={"shared": "col_a"}, outputs={"shared": "col_b"})
+
+
 def test_split_fractions_defaults_sum_to_one() -> None:
     """Verify default SplitFractions train/val/test sum to 1.0."""
     s = SplitFractions()

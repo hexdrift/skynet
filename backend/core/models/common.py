@@ -31,20 +31,28 @@ class ColumnMapping(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_non_empty(self) -> ColumnMapping:
-        """Reject empty inputs or overlapping column values between inputs and outputs.
+        """Reject empty inputs, shared signature fields, or shared dataset columns.
 
         Returns:
             The validated mapping instance.
 
         Raises:
-            ValueError: When ``inputs`` is empty, or when ``inputs`` and
-                ``outputs`` reuse the same dataset column.
+            ValueError: When ``inputs`` is empty, when a signature field name
+                appears in both ``inputs`` and ``outputs``, or when ``inputs``
+                and ``outputs`` reuse the same dataset column.
         """
         if not self.inputs:
             raise ValueError("At least one input column must be specified.")
-        shared = set(self.inputs.values()) & set(self.outputs.values())
-        if shared:
-            raise ValueError(f"Input and output column mappings must not reuse the same columns: {sorted(shared)}")
+        shared_fields = self.inputs.keys() & self.outputs.keys()
+        if shared_fields:
+            raise ValueError(
+                f"Signature fields cannot be both input and output: {sorted(shared_fields)}"
+            )
+        shared_columns = set(self.inputs.values()) & set(self.outputs.values())
+        if shared_columns:
+            raise ValueError(
+                f"Input and output column mappings must not reuse the same columns: {sorted(shared_columns)}"
+            )
         return self
 
 
@@ -59,7 +67,7 @@ class ModelConfig(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
     def normalized_identifier(self) -> str:
-        """Return the LiteLLM identifier (deprecated: identical to ``name``).
+        """Return the LiteLLM identifier with any leading or trailing slashes stripped.
 
         Returns:
             ``name`` with any leading or trailing ``/`` characters stripped.

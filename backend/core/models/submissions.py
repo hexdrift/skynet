@@ -13,6 +13,11 @@ from .common import ColumnMapping, ModelConfig, OptimizationStatus, Optimization
 class _OptimizationRequestBase(BaseModel):
     """Shared fields for all optimization submissions."""
 
+    # ``model_config`` here is the Pydantic class-config attr; ``RunRequest``
+    # additionally exposes a wire-aliased field whose alias is also
+    # ``model_config`` (the OpenAPI property name the frontend sends), so the
+    # same identifier intentionally serves two purposes — class config here
+    # vs. field alias on the subclass.
     model_config = ConfigDict(populate_by_name=True)
 
     name: str | None = Field(default=None, description="User-defined display name for this optimization.")
