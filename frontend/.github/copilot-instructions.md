@@ -1,6 +1,6 @@
 # Skynet Frontend — Copilot Instructions
 
-Next.js 16 App Router · React 19 · Tailwind v4 · shadcn/Radix · Framer Motion · Lucide. Hebrew-first (RTL), light mode only. See `frontend/.impeccable.md` for the full design context; this file is the condensed version Copilot should consult on every suggestion.
+Next.js 16 App Router · React 19 · Tailwind v4 · shadcn/ui (Radix-based primitives) · Framer Motion · Lucide. Hebrew-first (RTL), light mode only. See `frontend/.impeccable.md` for the full design context (keep both files in sync); this file is the condensed version Copilot should consult on every suggestion.
 
 ## Design Context
 
@@ -11,14 +11,14 @@ External developers who build with LLMs but are **not** data scientists or ML sp
 **Easy · Reliable · Valuable.** Voice: clear, factual, no jargon. Tone: calm and confident — never hype, never cute, never apologetic. Emotional goal: the user should feel in control and unhurried. Submitting an optimization should feel like sending a well-formed API request.
 
 ### Aesthetic Direction
-Reference: **Vercel.** Restrained typography, generous whitespace, decisive contrast, tiny delightful motion, zero ornament.
+Reference: **Vercel.** Restrained typography, generous whitespace, decisive contrast, tiny delightful motion details, zero ornament.
 
-- **Palette**: warm monochromatic — cream `#faf8f5` bg, near-black-brown `#1c1612` fg, dark-brown `#3d2e22` primary. Chart ramp is a 5-step brown gradient. Accent colors (`--danger`, `--success`, `--warning`) used only for state.
-- **Theme**: light mode only. Don't design for dark unless explicitly asked.
-- **Typography**: Heebo Variable (body/UI), Inter Variable (headings), base 16px. Hierarchy is currently under-expressed — strengthen it when given the chance.
-- **Motion**: `--duration-fast: 120ms`, `--duration-base: 160ms`, `--ease-snappy`. State transitions, not decoration.
+- **Palette**: warm monochromatic — cream `#FAF8F5` bg, deep brown `#1C1612` fg, dark-brown `#3D2E22` primary. Chart ramp is a 5-step brown gradient. Accent colors (`--danger`, `--success`, `--warning`) used only for state. Tokens defined in `src/app/globals.css`.
+- **Theme**: light mode only — dark theme is not wired up. Don't design for dark unless explicitly asked.
+- **Typography**: Heebo Variable (body/UI), Inter Variable (headings), base 16px. Build hierarchy through size, weight, and whitespace — not color or borders.
+- **Motion**: `--duration-fast: 120ms`, `--duration-base: 160ms`, `--ease-snappy` (defined in `src/app/globals.css`). State transitions, not decoration.
 - **Radius**: `0.5rem` base.
-- **Icons**: Lucide only, stroke 1.5–2, text color.
+- **Icons**: Lucide only, default stroke 1.5 (vary for emphasis), text color.
 
 ### Design Principles
 1. **Boring is a feature.** Prefer the dull, correct affordance over the clever one.
@@ -32,3 +32,13 @@ Reference: **Vercel.** Restrained typography, generous whitespace, decisive cont
 - **Hebrew typography is a hard constraint.** Don't swap Heebo. Watch line-height. Never letter-space Hebrew. Hebrew has no true italic — don't fake it.
 - **Mixed direction**: use `dir="ltr"` or `<bdi>` for English identifiers inside Hebrew UI.
 - **Reduced motion**: respect `prefers-reduced-motion`. Nothing critical depends on motion.
+
+## Code Conventions
+
+- **No inline Hebrew literals.** Hebrew copy lives in `src/shared/lib/{messages,tooltips,terms}.ts`, `src/shared/messages/**`, or per-feature `src/features/<feature>/messages.ts`. ESLint rejects Hebrew literals anywhere else.
+- **Canonical terms** (e.g. אופטימיזציה, דאטאסט, מודל רפלקציה, אופטימייזר, פונקציית מדידה) come from `TERMS` in `src/shared/lib/terms.ts`. Import and reference — never inline.
+- **Path alias**: `@/*` resolves to `./src/*`. Cross-module imports use `@/...`; within a feature, use relative paths to siblings, and reach into another feature only through its `@/features/<name>` public index — feature internals (`@/features/*/components/*`, `hooks/*`, `lib/*`, `constants`) are blocked by ESLint.
+
+## Project Structure
+
+Per-feature code lives under `src/features/<feature>/{components,hooks,lib,constants.ts,index.ts}`. Cross-feature primitives live under `src/shared/`. See `AGENTS.md` for the full layout.
