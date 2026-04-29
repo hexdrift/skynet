@@ -178,7 +178,7 @@ class BackgroundWorker:
             optimization_id: ID of the job to register.
         """
         with self._queue_lock:
-            self._cancel_events[optimization_id] = threading.Event()
+            self._cancel_events.setdefault(optimization_id, threading.Event())
             if (
                 optimization_id not in self._pending_jobs
                 and optimization_id not in self._processing_jobs
@@ -186,7 +186,7 @@ class BackgroundWorker:
                 self._pending_jobs.append(optimization_id)
                 logger.info("Optimization %s enqueued (local hint)", optimization_id)
 
-    def submit_job(self, optimization_id: str, payload) -> None:
+    def submit_job(self, optimization_id: str, payload: RunRequest | GridSearchRequest) -> None:
         """Persist payload to the job store; rely on DB claim for pickup.
 
         Writes the payload onto the existing ``pending`` row and registers a
@@ -333,7 +333,7 @@ class BackgroundWorker:
         """
         logger.info("Processing job %s", optimization_id)
 
-        overview: dict = {}  # pre-init so BaseException handler has a defined value even if early error
+        overview: dict[str, Any] = {}  # pre-init so BaseException handler has a defined value even if early error
 
         with self._queue_lock:
             cancel_event = self._cancel_events.get(optimization_id)
@@ -353,13 +353,14 @@ class BackgroundWorker:
                     overview = json.loads(overview)
                 except (json.JSONDecodeError, TypeError):
                     overview = {}
+            if not isinstance(overview, dict):
+                overview = {}
             optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
-            payload: GridSearchRequest | RunRequest
             if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
-                payload = GridSearchRequest.model_validate(payload_dict)
+                grid_payload = GridSearchRequest.model_validate(payload_dict)
             else:
-                payload = RunRequest.model_validate(payload_dict)
+                run_payload = RunRequest.model_validate(payload_dict)
 
             self._job_store.update_job(
                 optimization_id,
@@ -369,11 +370,9 @@ class BackgroundWorker:
 
             service = self._get_service()
             if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH and hasattr(service, "validate_grid_search_payload"):
-                assert isinstance(payload, GridSearchRequest)
-                service.validate_grid_search_payload(payload)
+                service.validate_grid_search_payload(grid_payload)
             elif optimization_type == OPTIMIZATION_TYPE_RUN:
-                assert isinstance(payload, RunRequest)
-                service.validate_payload(payload)
+                service.validate_payload(run_payload)
 
             _raise_if_cancelled(cancel_event, optimization_id)  # before starting the optimization
 
@@ -405,6 +404,7 @@ class BackgroundWorker:
                     name=f"dspy-run-{optimization_id[:8]}",
                     daemon=True,
                 )
+                assert run_process is not None
                 run_process.start()
 
                 while run_process.is_alive():
@@ -667,9 +667,8 @@ class BackgroundWorker:
     def _embed_finished_job_best_effort(self, optimization_id: str) -> None:
         """Embed a finished job into the recommendations index, swallowing failures.
 
-        Lazy-imports :func:`embed_finished_job` so a missing pgvector extension
-        or LLM credentials issue only surfaces on the indexing thread, never
-        on the worker hot path.
+        A missing pgvector extension or LLM credentials issue only surfaces
+        on the indexing thread, never on the worker hot path.
 
         Args:
             optimization_id: ID of the finished job to embed.

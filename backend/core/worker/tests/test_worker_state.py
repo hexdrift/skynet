@@ -117,6 +117,16 @@ def test_enqueue_job_cancel_event_starts_unset(worker: BackgroundWorker) -> None
     assert not worker._cancel_events["opt-1"].is_set()
 
 
+def test_enqueue_job_preserves_existing_cancel_event(worker: BackgroundWorker) -> None:
+    """Re-enqueueing does not clear a previously signaled cancel event."""
+    worker.enqueue_job("opt-1")
+    worker._cancel_events["opt-1"].set()
+
+    worker.enqueue_job("opt-1")
+
+    assert worker._cancel_events["opt-1"].is_set()
+
+
 def test_get_next_job_returns_none_when_empty(worker: BackgroundWorker) -> None:
     """``_get_next_job`` returns ``None`` when the queue is empty."""
     assert worker._get_next_job() is None

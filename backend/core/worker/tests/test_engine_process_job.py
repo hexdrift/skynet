@@ -127,6 +127,32 @@ def test_process_job_handles_invalid_json_string_payload_overview_gracefully(
     assert store._jobs["opt-3"]["status"] == "success"
 
 
+def test_process_job_handles_non_dict_json_payload_overview_gracefully(
+    worker: BackgroundWorker,
+    store: FakeJobStore,
+) -> None:
+    """A JSON payload overview that is not an object falls back to defaults."""
+    store.seed_job(
+        "opt-3b",
+        payload=REAL_RUN_PAYLOAD,
+        payload_overview="[]",
+    )
+    worker.enqueue_job("opt-3b")
+
+    ctx, _proc = make_mp_context(
+        exitcode=0,
+        result_events=[{"type": EVENT_RESULT, "result": {"baseline_test_metric": 0.5, "optimized_test_metric": 0.7}}],
+    )
+    worker._mp_ctx = ctx
+    worker._mp_start_method = "spawn"
+
+    with patch("core.worker.engine.notify_job_completed"), patch.object(worker, "_get_service") as mock_svc:
+        mock_svc.return_value.validate_payload = MagicMock()
+        worker._process_job("opt-3b", 0)
+
+    assert store._jobs["opt-3b"]["status"] == "success"
+
+
 def test_process_job_sets_status_failed_on_nonzero_exit_without_result(
     worker: BackgroundWorker,
     store: FakeJobStore,
