@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getPublicDashboard, invalidateCache, type PublicDashboardPoint } from "@/shared/lib/api";
-
-const POLL_INTERVAL_MS = 30000;
+import { POLL_CATCHUP_EPSILON_MS, POLL_INTERVAL_MS } from "../constants";
 
 export interface PublicDashboardState {
   points: PublicDashboardPoint[];
@@ -19,54 +18,57 @@ export function usePublicDashboard(): PublicDashboardState {
   });
   const lastTickRef = useRef<number>(0);
 
-  const load = useCallback(async () => {
-    try {
-      const data = await getPublicDashboard();
-      lastTickRef.current = Date.now();
-      setState({ points: data.points, loading: false, error: null });
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error: err instanceof Error ? err.message : "load failed",
-      }));
-    }
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
 
-    const tick = async () => {
+    const load = async () => {
+      if (cancelled) return;
+      try {
+        const data = await getPublicDashboard();
+        if (cancelled) return;
+        lastTickRef.current = Date.now();
+        setState({ points: data.points, loading: false, error: null });
+      } catch (err) {
+        if (cancelled) return;
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: err instanceof Error ? err.message : "load failed",
+        }));
+      }
+    };
+
+    const tick = () => {
       if (cancelled) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       invalidateCache("/dashboard/public");
-      await load();
+      void load();
     };
 
     const onVisibility = () => {
       if (typeof document === "undefined") return;
       if (document.visibilityState !== "visible") return;
-      // Catch up if we missed ticks while hidden.
-      if (Date.now() - lastTickRef.current > POLL_INTERVAL_MS) {
-        void tick();
-      }
+      // Refresh only when we've drifted at least one full interval since the
+      // last successful load — the epsilon absorbs sub-second jitter so a
+      // visibility flip 29.9s after a tick doesn't immediately retrigger.
+      const elapsed = Date.now() - lastTickRef.current;
+      if (elapsed >= POLL_INTERVAL_MS - POLL_CATCHUP_EPSILON_MS) tick();
     };
 
     void load();
-    timer = setInterval(tick, POLL_INTERVAL_MS);
+    const timer = setInterval(tick, POLL_INTERVAL_MS);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibility);
     }
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
+      clearInterval(timer);
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", onVisibility);
       }
     };
-  }, [load]);
+  }, []);
 
   return state;
 }
