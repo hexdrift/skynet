@@ -197,48 +197,49 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
                     />
                   ))}
 
-                {pair.agent && !isEditing && (() => {
-                  const agentMsg = pair.agent;
-                  const agentText = agentMsg.content.trim();
-                  const isStreamingThisPair = streaming && pair.key === latestAgentKey;
-                  const showActions =
-                    !isStreamingThisPair &&
-                    (agentText.length > 0 || Boolean(agentMsg.model));
-                  return (
-                    <div className="flex justify-end">
-                      <div className="flex flex-col items-end gap-1 max-w-[88%]">
-                        <AgentBubble
-                          msg={agentMsg}
-                          thinking={
-                            pair.key === latestAgentKey
-                              ? {
-                                  reasoning: agent.reasoning,
-                                  startedAt: agent.reasoningStartedAt,
-                                  endedAt: agent.reasoningEndedAt,
-                                  streaming,
-                                }
-                              : undefined
-                          }
-                          renderToolCall={renderToolCall}
-                          className="max-w-full"
-                        />
-                        {showActions && (
-                          <MessageActions
-                            text={agentMsg.content}
-                            model={agentMsg.model}
-                            onRegenerate={
-                              pair.user
-                                ? () =>
-                                    pair.user &&
-                                    agent.editAndResend(pair.user.index, pair.user.msg.content)
+                {pair.agent &&
+                  !isEditing &&
+                  (() => {
+                    const agentMsg = pair.agent;
+                    const agentText = agentMsg.content.trim();
+                    const isStreamingThisPair = streaming && pair.key === latestAgentKey;
+                    const showActions =
+                      !isStreamingThisPair && (agentText.length > 0 || Boolean(agentMsg.model));
+                    return (
+                      <div className="flex justify-end">
+                        <div className="flex flex-col items-end gap-1 max-w-[88%]">
+                          <AgentBubble
+                            msg={agentMsg}
+                            thinking={
+                              pair.key === latestAgentKey
+                                ? {
+                                    reasoning: agent.reasoning,
+                                    startedAt: agent.reasoningStartedAt,
+                                    endedAt: agent.reasoningEndedAt,
+                                    streaming,
+                                  }
                                 : undefined
                             }
+                            renderToolCall={renderToolCall}
+                            className="max-w-full"
                           />
-                        )}
+                          {showActions && (
+                            <MessageActions
+                              text={agentMsg.content}
+                              model={agentMsg.model}
+                              onRegenerate={
+                                pair.user
+                                  ? () =>
+                                      pair.user &&
+                                      agent.editAndResend(pair.user.index, pair.user.msg.content)
+                                  : undefined
+                              }
+                            />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
               </motion.div>
             );
           })}
@@ -508,10 +509,7 @@ function ToolCallCard({ call, isRetry = false }: { call: SharedAgentToolCall; is
   }, [addCount, delCount]);
 
   const customBody = codeCall.newCode ? (
-    <div
-      dir="ltr"
-      className="overflow-hidden rounded-md border border-border/40 bg-background/70"
-    >
+    <div dir="ltr" className="overflow-hidden rounded-md border border-border/40 bg-background/70">
       <div className="max-h-64 overflow-auto font-mono text-[0.6875rem] leading-[1.55]">
         {diff.length === 0 ? (
           <pre className="px-3 py-2.5 text-foreground whitespace-pre">{codeCall.newCode}</pre>

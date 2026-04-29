@@ -25,27 +25,43 @@ export function buildColumnMapping(columnRoles: Record<string, ColumnRole>): Col
 }
 
 export function useRecentModelConfigs() {
-  const [recentConfigs, setRecentConfigs] = useState<ModelConfig[]>(() => {
+  // Initial state must be empty: this hook is client-only but Next.js still
+  // renders client components on the server. Touching `localStorage` in the
+  // initializer throws ReferenceError under SSR, the try/catch falls back
+  // to [], and the UI hydrates without any recent configs. Hydrate via an
+  // effect instead.
+  const [recentConfigs, setRecentConfigs] = useState<ModelConfig[]>([]);
+
+  useEffect(() => {
     try {
-      return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      const stored = localStorage.getItem(RECENT_KEY);
+      if (stored) setRecentConfigs(JSON.parse(stored));
     } catch {
-      return [];
+      // Private-mode Safari / disabled storage / corrupt JSON — keep [].
     }
-  });
+  }, []);
 
   const saveToRecent = useCallback((config: ModelConfig) => {
     if (!config.name) return;
     setRecentConfigs((prev) => {
       const deduped = prev.filter((c) => c.name !== config.name);
       const next = [config, ...deduped].slice(0, MAX_RECENT);
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      } catch {
+        // Quota exceeded or storage disabled — in-memory list still updates.
+      }
       return next;
     });
   }, []);
 
   const clearRecentConfigs = useCallback(() => {
     setRecentConfigs([]);
-    localStorage.removeItem(RECENT_KEY);
+    try {
+      localStorage.removeItem(RECENT_KEY);
+    } catch {
+      // Storage disabled — already cleared in-memory.
+    }
   }, []);
 
   return { recentConfigs, saveToRecent, clearRecentConfigs };

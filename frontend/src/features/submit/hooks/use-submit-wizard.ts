@@ -71,8 +71,8 @@ export function useSubmitWizard() {
   const [columnKinds, setColumnKinds] = useState<Record<string, "text" | "image">>({});
   const [signatureManuallyEdited, setSignatureManuallyEdited] = useState(false);
   const [metricManuallyEdited, setMetricManuallyEdited] = useState(false);
-  const [codeAssistMode, setCodeAssistMode] = useState<"auto" | "manual">(
-    () => readPref("wizardCodeAssist"),
+  const [codeAssistMode, setCodeAssistMode] = useState<"auto" | "manual">(() =>
+    readPref("wizardCodeAssist"),
   );
 
   const [globalBaseUrl, setGlobalBaseUrl] = useState("");
@@ -107,8 +107,8 @@ export function useSubmitWizard() {
   const [datasetProfile, setDatasetProfile] = useState<DatasetProfile | null>(null);
   const [splitPlan, setSplitPlan] = useState<SplitPlan | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [splitMode, setSplitModeState] = useState<"auto" | "manual">(
-    () => readPref("wizardSplitMode"),
+  const [splitMode, setSplitModeState] = useState<"auto" | "manual">(() =>
+    readPref("wizardSplitMode"),
   );
   const splitModeRef = useRef<"auto" | "manual">(readPref("wizardSplitMode"));
 
@@ -845,8 +845,8 @@ export function useSubmitWizard() {
       setSignatureValidation(result as ValidateCodeResponse);
       return result;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Signature validation failed";
-      return { valid: false, errors: [msg], warnings: [] };
+      const errorMessage = err instanceof Error ? err.message : "Signature validation failed";
+      return { valid: false, errors: [errorMessage], warnings: [] };
     }
   };
 
@@ -858,8 +858,8 @@ export function useSubmitWizard() {
       setMetricValidation(result as ValidateCodeResponse);
       return result;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Metric validation failed";
-      return { valid: false, errors: [msg], warnings: [] };
+      const errorMessage = err instanceof Error ? err.message : "Metric validation failed";
+      return { valid: false, errors: [errorMessage], warnings: [] };
     }
   };
 

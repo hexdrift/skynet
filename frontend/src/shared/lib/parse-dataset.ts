@@ -7,19 +7,21 @@ export interface ParsedDataset {
 }
 
 /**
- * Parse a single CSV field that may be quoted.
- * Handles commas inside quotes and escaped quotes ("").
+ * Parse CSV text into rows of fields per RFC 4180.
+ * Handles \r\n / \n / \r line endings, quoted fields containing commas
+ * or embedded newlines, and escaped quotes ("").
  */
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = [];
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let current = "";
   let inQuotes = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
+        if (i + 1 < text.length && text[i + 1] === '"') {
           current += '"';
           i++;
         } else {
@@ -28,17 +30,28 @@ function parseCSVLine(line: string): string[] {
       } else {
         current += ch;
       }
-    } else if (ch === '"') {
+      continue;
+    }
+    if (ch === '"') {
       inQuotes = true;
     } else if (ch === ",") {
-      fields.push(current.trim());
+      row.push(current.trim());
       current = "";
+    } else if (ch === "\r" || ch === "\n") {
+      row.push(current.trim());
+      current = "";
+      rows.push(row);
+      row = [];
+      if (ch === "\r" && text[i + 1] === "\n") i++;
     } else {
       current += ch;
     }
   }
-  fields.push(current.trim());
-  return fields;
+  if (current.length > 0 || row.length > 0) {
+    row.push(current.trim());
+    rows.push(row);
+  }
+  return rows.filter((r) => r.length > 0 && !(r.length === 1 && r[0] === ""));
 }
 
 export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
@@ -53,11 +66,10 @@ export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
   }
 
   if (ext === "csv") {
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) throw new Error("CSV must have a header row and at least one data row");
-    const headers = parseCSVLine(lines[0]!);
-    const rows = lines.slice(1).map((line) => {
-      const values = parseCSVLine(line);
+    const parsed = parseCSV(text);
+    if (parsed.length < 2) throw new Error("CSV must have a header row and at least one data row");
+    const headers = parsed[0]!;
+    const rows = parsed.slice(1).map((values) => {
       const row: Record<string, unknown> = {};
       headers.forEach((h, i) => {
         row[h] = values[i] ?? "";

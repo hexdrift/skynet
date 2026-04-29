@@ -38,12 +38,40 @@ import {
   type ProbeLogEntry,
   type RowStatus,
 } from "./model-probe-model";
-import {
-  TrajectoryDetailChart,
-  TrajectorySparkline,
-} from "./model-probe-charts";
+import { TrajectoryDetailChart, TrajectorySparkline } from "./model-probe-charts";
 
 export { TrajectoryCompareChart } from "./model-probe-charts";
+
+// `navigator.clipboard` is only defined in secure contexts (HTTPS / localhost).
+// Plain-HTTP previews would otherwise throw a TypeError when the user clicks
+// a log cell to copy. Falls back to a hidden textarea + execCommand("copy"),
+// which works in any context but is deprecated — try the modern API first.
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // permission denied or insecure context — fall through
+    }
+  }
+  if (typeof document === "undefined") return false;
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
+}
 
 export function ModelDetailPanel({
   row,
@@ -262,8 +290,9 @@ export function ModelDetailPanel({
                             if (!td) return;
                             const text = td.textContent?.trim();
                             if (text) {
-                              void navigator.clipboard.writeText(text);
-                              toast.success(msg("clipboard.copied"));
+                              void copyTextToClipboard(text).then((ok) => {
+                                if (ok) toast.success(msg("clipboard.copied"));
+                              });
                             }
                           }}
                         >

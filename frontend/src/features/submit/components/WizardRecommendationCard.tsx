@@ -153,8 +153,12 @@ function WizardRecommendationCardInner({ w }: { w: SubmitWizardContext }) {
         } else {
           setView({ kind: "cold", coldDefault: coldDefaultFor(jobType) });
         }
-      } catch {
+      } catch (err) {
         if (!controller.signal.aborted) {
+          // Non-critical fetch — hiding the card is the right UX for
+          // a network/server error, but log so the failure isn't silent
+          // during dev.
+          console.warn("WizardRecommendationCard: fetchSimilarJobs failed", err);
           setView({ kind: "hidden" });
         }
       }
