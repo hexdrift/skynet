@@ -7,58 +7,36 @@ import { motion } from "framer-motion";
 import type { PublicDashboardPoint } from "@/shared/lib/api";
 import { Button } from "@/shared/ui/primitives/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
-import { formatMsg, msg } from "@/shared/lib/messages";
+import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
+import { formatAgo, formatGain, formatMetric } from "../lib/format";
 
 interface ExploreDetailPanelProps {
   point: PublicDashboardPoint;
   onClose: () => void;
 }
 
-function formatAgo(iso: string | null): string {
-  if (!iso) return "—";
-  const then = new Date(iso).getTime();
-  const diffMs = Date.now() - then;
-  if (Number.isNaN(diffMs)) return "—";
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return msg("auto.features.explore.components.exploredetailpanel.literal.1");
-  if (mins < 60)
-    return formatMsg("auto.features.explore.components.exploredetailpanel.template.1", {
-      p1: mins,
-    });
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24)
-    return formatMsg("auto.features.explore.components.exploredetailpanel.template.2", { p1: hrs });
-  const days = Math.round(hrs / 24);
-  return formatMsg("auto.features.explore.components.exploredetailpanel.template.3", { p1: days });
-}
-
-function formatMetric(v: number | null | undefined): string {
-  if (v == null) return "—";
-  // dashboard values already on 0-100 scale (see backend/service_gateway/recommendations._extract_scores)
-  return v.toFixed(1);
-}
-
-function formatGain(baseline: number | null, optimized: number | null): string | null {
-  if (baseline == null || optimized == null) return null;
-  const gain = optimized - baseline;
-  if (gain <= 0) return null;
-  return `+${gain.toFixed(1)}`;
-}
-
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-baseline gap-3">
-      <dt className="text-[0.625rem] font-semibold uppercase tracking-wider text-[#8C7A6B]">
+      <dt className="text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </dt>
-      <dd className="min-w-0 text-[0.8125rem] text-[#3D2E22]">{children}</dd>
+      <dd className="min-w-0 text-[0.8125rem] text-foreground">{children}</dd>
     </div>
   );
 }
 
+const GAIN_TONE: Record<"positive" | "negative" | "neutral", string> = {
+  positive: "bg-accent text-foreground",
+  negative: "bg-destructive/10 text-destructive",
+  neutral: "bg-muted text-muted-foreground",
+};
+
 export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) {
   const gain = formatGain(point.baseline_metric, point.optimized_metric);
+  const ago = formatAgo(point.created_at);
+  const timeAgoText = ago ? `${msg("explore.detail.time_ago")} ${ago}` : "—";
 
   return (
     <motion.aside
@@ -68,26 +46,25 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
       exit={{ x: "100%", opacity: 0 }}
       transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
       dir="rtl"
-      className="flex h-full w-full flex-col overflow-hidden rounded-lg border border-[#DDD6CC]/50 bg-[#FAF8F5]"
+      className="flex h-full w-full flex-col overflow-hidden rounded-lg border border-border/50 bg-background"
     >
-      <header className="flex items-center justify-between gap-2 border-b border-[#DDD6CC]/50 px-4 py-3">
+      <header className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold tracking-tight text-[#3D2E22]">
+          <p className="truncate text-sm font-semibold tracking-tight text-foreground">
             {point.task_name ?? point.optimization_type ?? "—"}
           </p>
-          <p className="mt-0.5 text-[0.6875rem] text-[#8C7A6B]">
-            {msg("explore.detail.time_ago")}{" "}
-            {formatAgo(point.created_at).replace(
-              new RegExp(`^${msg("explore.detail.time_ago")} `),
-              "",
-            )}
+          <p
+            className="mt-0.5 text-[0.6875rem] text-muted-foreground"
+            title={point.created_at ?? undefined}
+          >
+            {timeAgoText}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label={msg("auto.features.explore.components.exploredetailpanel.literal.2")}
-          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#8C7A6B] transition-colors hover:bg-[#3D2E22]/5 hover:text-[#3D2E22]"
+          aria-label={msg("explore.detail.close")}
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
         >
           <X className="size-4" />
         </button>
@@ -108,44 +85,46 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
           {point.optimized_metric != null && (
             <Row label={msg("explore.detail.score")}>
               <span className="inline-flex items-baseline gap-2 font-mono tabular-nums" dir="ltr">
-                <span className="text-[#3D2E22]">{formatMetric(point.optimized_metric)}</span>
+                <span className="text-foreground">{formatMetric(point.optimized_metric)}</span>
                 {point.baseline_metric != null && (
-                  <span className="text-[0.6875rem] text-[#8C7A6B]">
+                  <span className="text-[0.6875rem] text-muted-foreground">
                     / {formatMetric(point.baseline_metric)}
                   </span>
                 )}
                 {gain && (
-                  <span className="rounded-sm bg-[#EDE7DD] px-1.5 py-0.5 text-[0.6875rem] text-[#3D2E22]">
-                    {gain}
+                  <span
+                    className={`rounded-sm px-1.5 py-0.5 text-[0.6875rem] ${GAIN_TONE[gain.kind]}`}
+                  >
+                    {gain.text}
                   </span>
                 )}
               </span>
             </Row>
           )}
           {point.module_name && (
-            <Row label={msg("auto.features.explore.components.exploredetailpanel.literal.3")}>
+            <Row label={msg("explore.detail.module")}>
               <span className="font-mono">{point.module_name}</span>
             </Row>
           )}
         </dl>
 
         {point.summary_text && (
-          <div className="mt-5 border-t border-[#DDD6CC]/50 pt-4">
-            <p className="mb-2 text-[0.625rem] font-semibold uppercase tracking-wider text-[#8C7A6B]">
+          <div className="mt-5 border-t border-border/50 pt-4">
+            <p className="mb-2 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
               {msg("explore.detail.task")}
             </p>
-            <p className="text-[0.8125rem] leading-relaxed text-[#3D2E22]/85">
+            <p className="text-[0.8125rem] leading-relaxed text-foreground/85">
               {point.summary_text}
             </p>
           </div>
         )}
       </div>
 
-      <footer className="flex items-center gap-3 border-t border-[#DDD6CC]/50 px-4 py-3">
+      <footer className="flex items-center gap-3 border-t border-border/50 px-4 py-3">
         <span
           dir="ltr"
           title={point.optimization_id}
-          className="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-[#8C7A6B]"
+          className="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-muted-foreground"
         >
           {point.optimization_id}
         </span>
@@ -154,18 +133,14 @@ export function ExploreDetailPanel({ point, onClose }: ExploreDetailPanelProps) 
             <Button asChild size="icon-sm" variant="default" className="shrink-0">
               <Link
                 href={`/optimizations/${point.optimization_id}`}
-                aria-label={formatMsg(
-                  "auto.features.explore.components.exploredetailpanel.template.4",
-                  { p1: TERMS.optimization },
-                )}
+                aria-label={`${msg("explore.detail.open_action")} ${TERMS.optimization}`}
               >
                 <ChevronLeft className="size-3.5" />
               </Link>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={6}>
-            {msg("auto.features.explore.components.exploredetailpanel.1")}
-            {TERMS.optimization}
+            {msg("explore.detail.open_action")} {TERMS.optimization}
           </TooltipContent>
         </Tooltip>
       </footer>

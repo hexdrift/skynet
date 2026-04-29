@@ -4,8 +4,27 @@ import * as React from "react";
 import { RotateCcw } from "lucide-react";
 import type { PublicDashboardPoint } from "@/shared/lib/api";
 import { getJobTypeLabel } from "@/shared/constants/job-status";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
+import {
+  BASE_RADIUS,
+  DRAG_THRESHOLD_PX,
+  FOCUS_RING_COLOR,
+  FOCUS_RING_OFFSET,
+  GRID_AXIS_COLOR,
+  HOVER_RADIUS,
+  MAX_SCALE,
+  MIN_SCALE,
+  PADDING,
+  POINT_OUTLINE_COLOR,
+  TOOLTIP_ABOVE_THRESHOLD,
+  TOOLTIP_EDGE_INSET,
+  TOOLTIP_MAX_WIDTH,
+  ZOOM_DOUBLECLICK_IN,
+  ZOOM_DOUBLECLICK_OUT,
+  ZOOM_WHEEL_FACTOR,
+} from "../constants";
+import { clampNorm, clampView, colorForPoint, formatScore, type View } from "../lib/format";
 
 export type ExploreFilter = "all" | "run" | "grid_search";
 
@@ -13,9 +32,9 @@ interface ScatterCanvasProps {
   points: PublicDashboardPoint[];
   filter: ExploreFilter;
   selectedId: string | null;
-  focusId?: string | null;
   onSelect: (id: string | null) => void;
   dimmed?: boolean;
+  hideResetButton?: boolean;
   heightClass?: string;
   children?: React.ReactNode;
 }
@@ -29,47 +48,13 @@ interface ProjectedPoint {
   color: string;
 }
 
-interface View {
-  k: number;
-  tx: number;
-  ty: number;
-}
-
-const PADDING = 48;
-const BASE_RADIUS = 4;
-const HOVER_RADIUS = 7;
-const FOCUS_RING_COLOR = "#C8A882";
-const MIN_SCALE = 1;
-const MAX_SCALE = 24;
-const DRAG_THRESHOLD = 4;
-
-function colorForPoint(match: boolean): string {
-  const chroma = match ? 0.05 : 0.01;
-  return `oklch(0.3 ${chroma} 40)`;
-}
-
-function formatScore(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value)) return null;
-  const v = value > 1.5 ? value : value * 100;
-  return v.toFixed(1);
-}
-
-function clampView(v: View, size: { w: number; h: number }): View {
-  const maxPan = Math.max(size.w, size.h) * Math.max(0, v.k - 1);
-  return {
-    k: v.k,
-    tx: Math.max(-maxPan, Math.min(maxPan, v.tx)),
-    ty: Math.max(-maxPan, Math.min(maxPan, v.ty)),
-  };
-}
-
 export function ScatterCanvas({
   points,
   filter,
   selectedId,
-  focusId = null,
   onSelect,
   dimmed = false,
+  hideResetButton = false,
   heightClass = "h-[64vh] min-h-[420px]",
   children,
 }: ScatterCanvasProps) {
@@ -81,6 +66,7 @@ export function ScatterCanvas({
   const [view, setView] = React.useState<View>({ k: 1, tx: 0, ty: 0 });
   const [isDragging, setIsDragging] = React.useState(false);
   const panStateRef = React.useRef<null | {
+    pointerId: number;
     startClientX: number;
     startClientY: number;
     startTx: number;
@@ -106,8 +92,8 @@ export function ScatterCanvas({
     const plotH = Math.max(1, size.h - PADDING * 2);
     return points.map((point) => {
       const match = filter === "all" || point.optimization_type === filter;
-      const normX = (point.x + 1) / 2;
-      const normY = 1 - (point.y + 1) / 2;
+      const normX = (clampNorm(point.x) + 1) / 2;
+      const normY = 1 - (clampNorm(point.y) + 1) / 2;
       return {
         point,
         basePx: PADDING + normX * plotW,
@@ -134,7 +120,7 @@ export function ScatterCanvas({
 
     const cx = (size.w / 2) * view.k + view.tx;
     const cy = (size.h / 2) * view.k + view.ty;
-    ctx.strokeStyle = "oklch(0.94 0.005 50)";
+    ctx.strokeStyle = GRID_AXIS_COLOR;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx, PADDING);
@@ -144,12 +130,7 @@ export function ScatterCanvas({
     ctx.stroke();
 
     const rank = (p: ProjectedPoint) => {
-      if (
-        focusId === p.point.optimization_id ||
-        selectedId === p.point.optimization_id ||
-        hoveredId === p.point.optimization_id
-      )
-        return 2;
+      if (selectedId === p.point.optimization_id || hoveredId === p.point.optimization_id) return 2;
       return p.match ? 1 : 0;
     };
     const sorted = [...projected].sort((a, b) => rank(a) - rank(b));
@@ -157,8 +138,7 @@ export function ScatterCanvas({
     for (const p of sorted) {
       const isHovered = hoveredId === p.point.optimization_id;
       const isSelected = selectedId === p.point.optimization_id;
-      const isFocused = focusId === p.point.optimization_id;
-      const isActive = isHovered || isSelected || isFocused;
+      const isActive = isHovered || isSelected;
 
       let alpha = p.match ? 1 : 0.35;
       if (dimmed && !isActive) alpha *= 0.35;
@@ -172,22 +152,22 @@ export function ScatterCanvas({
       ctx.arc(sx, sy, isActive ? HOVER_RADIUS : p.radius, 0, Math.PI * 2);
       ctx.fill();
 
-      if (isFocused) {
+      if (isSelected) {
         ctx.globalAlpha = 1;
         ctx.strokeStyle = FOCUS_RING_COLOR;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(sx, sy, HOVER_RADIUS + 3, 0, Math.PI * 2);
+        ctx.arc(sx, sy, HOVER_RADIUS + FOCUS_RING_OFFSET, 0, Math.PI * 2);
         ctx.stroke();
-      } else if (isSelected || isHovered) {
+      } else if (isHovered) {
         ctx.globalAlpha = 1;
-        ctx.strokeStyle = "oklch(0.2 0.02 40)";
+        ctx.strokeStyle = POINT_OUTLINE_COLOR;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
     }
     ctx.globalAlpha = 1;
-  }, [projected, size, hoveredId, selectedId, focusId, dimmed, view]);
+  }, [projected, size, hoveredId, selectedId, dimmed, view]);
 
   const pickNearest = React.useCallback(
     (clientX: number, clientY: number): ProjectedPoint | null => {
@@ -227,17 +207,25 @@ export function ScatterCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const onWheel = (e: WheelEvent) => {
+      // Only intercept clear zoom intent: ctrl/meta-held (pinch-zoom on
+      // trackpads) or vertical scroll past a threshold. Otherwise let the
+      // page scroll naturally so the canvas isn't a scroll trap.
+      const isZoomIntent = e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > 5;
+      if (!isZoomIntent) return;
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      const factor = Math.exp(-e.deltaY * 0.0015);
+      const factor = Math.exp(-e.deltaY * ZOOM_WHEEL_FACTOR);
       zoomAt(e.clientX - rect.left, e.clientY - rect.top, factor);
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     panStateRef.current = {
+      pointerId: e.pointerId,
       startClientX: e.clientX,
       startClientY: e.clientY,
       startTx: view.tx,
@@ -246,12 +234,12 @@ export function ScatterCanvas({
     };
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const ps = panStateRef.current;
-    if (ps) {
+    if (ps && ps.pointerId === e.pointerId) {
       const dx = e.clientX - ps.startClientX;
       const dy = e.clientY - ps.startClientY;
-      if (!ps.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      if (!ps.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
         ps.moved = true;
         setIsDragging(true);
         setHoveredId(null);
@@ -262,6 +250,7 @@ export function ScatterCanvas({
       }
       return;
     }
+    if (e.pointerType !== "mouse") return;
     const hit = pickNearest(e.clientX, e.clientY);
     if (hit) {
       const sx = hit.basePx * view.k + view.tx;
@@ -274,16 +263,19 @@ export function ScatterCanvas({
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const ps = panStateRef.current;
-    panStateRef.current = null;
-    if (ps?.moved) {
-      setIsDragging(false);
-      return;
+    if (ps && ps.pointerId === e.pointerId) {
+      panStateRef.current = null;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      if (ps.moved) {
+        setIsDragging(false);
+        return;
+      }
     }
     const hit = pickNearest(e.clientX, e.clientY);
     if (!hit) {
-      onSelect(null);
+      if (selectedId !== null) onSelect(null);
       return;
     }
     if (selectedId === hit.point.optimization_id) {
@@ -293,9 +285,17 @@ export function ScatterCanvas({
     }
   };
 
-  const handleMouseLeave = () => {
-    panStateRef.current = null;
-    setIsDragging(false);
+  const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (panStateRef.current?.pointerId === e.pointerId) {
+      panStateRef.current = null;
+      setIsDragging(false);
+    }
+    setHoveredId(null);
+    setTooltipPos(null);
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType !== "mouse") return;
     setHoveredId(null);
     setTooltipPos(null);
   };
@@ -304,7 +304,7 @@ export function ScatterCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const factor = e.shiftKey ? 1 / 1.8 : 1.8;
+    const factor = e.shiftKey ? ZOOM_DOUBLECLICK_OUT : ZOOM_DOUBLECLICK_IN;
     zoomAt(e.clientX - rect.left, e.clientY - rect.top, factor);
   };
 
@@ -313,28 +313,32 @@ export function ScatterCanvas({
 
   const hovered = projected.find((p) => p.point.optimization_id === hoveredId)?.point ?? null;
   const cursor = isDragging ? "cursor-grabbing" : hoveredId ? "cursor-pointer" : "cursor-grab";
+  const ariaLabel = formatMsg("explore.canvas.aria_label", { count: points.length });
 
   return (
     <div
       ref={containerRef}
-      className={`relative ${heightClass} w-full overflow-hidden rounded-lg border border-[#DDD6CC]/50 bg-[#FAF8F5]`}
+      className={`relative ${heightClass} w-full overflow-hidden rounded-lg border border-border/50 bg-background`}
     >
       <canvas
         ref={canvasRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
+        role="img"
+        aria-label={ariaLabel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerLeave={handlePointerLeave}
         onDoubleClick={handleDoubleClick}
-        className={`absolute inset-0 select-none ${cursor}`}
+        className={`absolute inset-0 select-none touch-none ${cursor}`}
       />
       {children}
-      {isTransformed && (
+      {isTransformed && !hideResetButton && (
         <button
           type="button"
           onClick={resetView}
           aria-label={msg("explore.map.reset")}
-          className="absolute top-3 start-3 z-10 inline-flex items-center gap-1.5 rounded-md border border-[#DDD6CC]/70 bg-[#FAF8F5]/90 px-2.5 py-1.5 text-[0.75rem] font-medium text-[#3D2E22] backdrop-blur-sm transition-colors cursor-pointer hover:bg-[#EDE7DD] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/25"
+          className="absolute top-3 end-3 z-20 inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-background/90 px-2.5 py-1.5 text-[0.75rem] font-medium text-foreground backdrop-blur-sm transition-colors cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
         >
           <RotateCcw className="size-3.5" aria-hidden="true" />
           <span>{msg("explore.map.reset")}</span>
@@ -361,17 +365,15 @@ function Tooltip({
   const primary = point.summary_text ?? point.task_name ?? "—";
   const typeLabel = point.optimization_type ? getJobTypeLabel(point.optimization_type) : null;
   const score = formatScore(point.optimized_metric);
-  const above = y > 120;
+  const above = y > TOOLTIP_ABOVE_THRESHOLD;
 
-  const MAX_WIDTH = 260;
-  const HALF = MAX_WIDTH / 2;
-  const EDGE = 12;
-
+  const half = TOOLTIP_MAX_WIDTH / 2;
   let shiftX = 0;
-  const leftEdge = x - HALF;
-  const rightEdge = x + HALF;
-  if (leftEdge < EDGE) shiftX = EDGE - leftEdge;
-  else if (rightEdge > containerWidth - EDGE) shiftX = containerWidth - EDGE - rightEdge;
+  const leftEdge = x - half;
+  const rightEdge = x + half;
+  if (leftEdge < TOOLTIP_EDGE_INSET) shiftX = TOOLTIP_EDGE_INSET - leftEdge;
+  else if (rightEdge > containerWidth - TOOLTIP_EDGE_INSET)
+    shiftX = containerWidth - TOOLTIP_EDGE_INSET - rightEdge;
 
   const style: React.CSSProperties = {
     left: x,
@@ -379,33 +381,32 @@ function Tooltip({
     transform: above
       ? `translate(calc(-50% + ${shiftX}px), calc(-100% - 12px))`
       : `translate(calc(-50% + ${shiftX}px), 12px)`,
-    maxWidth: MAX_WIDTH,
+    maxWidth: TOOLTIP_MAX_WIDTH,
   };
 
   return (
     <div
       dir="rtl"
-      role="tooltip"
-      className="pointer-events-none absolute z-10 rounded-xl border border-[#DDD6CC]/70 bg-[#FAF8F5]/95 p-3 shadow-lg backdrop-blur-sm"
+      className="pointer-events-none absolute z-10 rounded-xl border border-border/70 bg-background/95 p-3 shadow-lg backdrop-blur-sm"
       style={style}
     >
       <p
         dir="auto"
-        className="mb-2 text-[0.8125rem] font-semibold leading-snug tracking-tight text-[#3D2E22] line-clamp-2"
+        className="mb-2 text-[0.8125rem] font-semibold leading-snug tracking-tight text-foreground line-clamp-2"
       >
         {primary}
       </p>
-      <div className="space-y-1 text-[0.6875rem] text-[#8C7A6B]">
+      <div className="space-y-1 text-[0.6875rem] text-muted-foreground">
         {typeLabel && (
           <div className="flex items-baseline justify-between gap-4">
             <span>{TERMS.type}</span>
-            <span className="text-[#3D2E22]">{typeLabel}</span>
+            <span className="text-foreground">{typeLabel}</span>
           </div>
         )}
         {score !== null && (
           <div className="flex items-baseline justify-between gap-4">
             <span>{msg("explore.detail.score")}</span>
-            <span className="font-mono tabular-nums text-[#3D2E22]" dir="ltr">
+            <span className="font-mono tabular-nums text-foreground" dir="ltr">
               {score}
             </span>
           </div>
@@ -414,7 +415,7 @@ function Tooltip({
           <div className="flex items-baseline justify-between gap-4">
             <span className="shrink-0">{msg("explore.detail.model")}</span>
             <span
-              className="min-w-0 truncate font-mono text-[#3D2E22]"
+              className="min-w-0 truncate font-mono text-foreground"
               dir="ltr"
               title={point.winning_model}
             >
@@ -423,7 +424,7 @@ function Tooltip({
           </div>
         )}
       </div>
-      <p className="mt-2 border-t border-[#DDD6CC]/50 pt-1.5 text-[0.6875rem] text-[#8C7A6B]/80">
+      <p className="mt-2 border-t border-border/50 pt-1.5 text-[0.6875rem] text-muted-foreground/80">
         {msg("explore.tooltip.open_hint")}
       </p>
     </div>
