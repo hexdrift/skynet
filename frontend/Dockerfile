@@ -1,14 +1,26 @@
 # On-prem mirrors / artifactory: see deploy/ON_PREM_CHECKLIST.md (sections 1, 4).
-FROM node:22-alpine AS base
+#
+# Build args:
+#   BASE_IMAGE   — node:22-alpine compatible image; override with internal mirror.
+#   NPM_REGISTRY — npm registry URL; override with Artifactory for air-gap builds.
+#                  Note: lockfile `resolved` URLs must also point at the mirror,
+#                  otherwise `npm ci` still fetches tarballs from the original host.
+ARG BASE_IMAGE=node:22-alpine
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+
+FROM ${BASE_IMAGE} AS base
+ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
+ARG NPM_REGISTRY
 WORKDIR /app
 
 COPY package.json package-lock.json .npmrc* ./
-RUN npm ci
+RUN npm config set registry "$NPM_REGISTRY" && npm ci
 
 FROM base AS build
 WORKDIR /app
+ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
