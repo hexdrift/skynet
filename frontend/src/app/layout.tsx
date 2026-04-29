@@ -8,13 +8,14 @@ import { TutorialOverlay, TutorialMenu, TutorialProvider } from "@/features/tuto
 import { UserPrefsProvider, SettingsModalProvider, SettingsModal } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
 import { getServerRuntimeEnv, serializeRuntimeEnv } from "@/shared/lib/runtime-env";
+import { getSiteUrl } from "@/shared/lib/site-config";
 import { SentryInit } from "@/shared/observability/sentry-init";
 import "@fontsource-variable/heebo/index.css";
 import "@fontsource-variable/inter/index.css";
 import "react-toastify/dist/ReactToastify.css";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://skynet.app";
+const siteUrl = getSiteUrl();
 const siteName = "Skynet";
 const siteDescription = msg("app.meta.description");
 
@@ -81,18 +82,28 @@ const jsonLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const runtimeEnv = getServerRuntimeEnv();
+  // dns-prefetch only helps when the API is on a different origin than the
+  // document; on same-origin deploys the browser already resolved the host.
+  let apiOrigin: string | null = null;
+  try {
+    const apiHost = new URL(runtimeEnv.apiUrl).origin;
+    const siteHost = new URL(siteUrl).origin;
+    if (apiHost !== siteHost) apiOrigin = apiHost;
+  } catch {
+    /* malformed URL — skip the hint */
+  }
+  // JSON.stringify does not escape `</` so a future field sourced from the
+  // backend could prematurely close the surrounding <script>. Escape `<`
+  // before injecting into dangerouslySetInnerHTML.
+  const jsonLdSafe = JSON.stringify(jsonLd).replace(/</g, "\\u003c");
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
       <head>
         <Script id="skynet-runtime-env" strategy="beforeInteractive">
           {serializeRuntimeEnv(runtimeEnv)}
         </Script>
-        <link rel="preconnect" href="/" crossOrigin="" />
-        <link rel="dns-prefetch" href={runtimeEnv.apiUrl} />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        {apiOrigin && <link rel="dns-prefetch" href={apiOrigin} />}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe }} />
       </head>
       <body suppressHydrationWarning>
         <SentryInit />

@@ -33,7 +33,10 @@ export const COL_HUES = [
   "#A48B75", // H · sandy           (L≈60)
 ];
 export const colorFor = (i: number) => COL_HUES[i % COL_HUES.length];
-export const runToken = (i: number) => String.fromCharCode(65 + i); // A, B, C …
+// A, B, C … through Z. Past 26 (caller passes more runs than the 8-hue
+// palette can distinguish anyway) fall back to "27", "28" so we don't render
+// the punctuation chars (`[`, `\`, `]` …) that follow Z in ASCII.
+export const runToken = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : String(i + 1));
 
 export function RunChip({
   index,
