@@ -1,46 +1,55 @@
-/* Model catalog client — fires a single fetch on module load and caches forever.
- * Also persists to localStorage for instant availability on subsequent visits.
- */
 import type { ModelCatalogResponse, DiscoverModelsResponse } from "@/shared/types/api";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
 const API = getRuntimeEnv().apiUrl;
 const LS_KEY = "skynet:model-catalog";
-const LS_TTL = 10 * 60 * 1000; // 10 min TTL for localStorage cache
+const LS_TTL = 10 * 60 * 1000;
 
-// Try to hydrate from localStorage immediately (sync, zero latency)
+const EMPTY_CATALOG: ModelCatalogResponse = { providers: [], models: [] };
+
+function isModelCatalogResponse(value: unknown): value is ModelCatalogResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ModelCatalogResponse>;
+  return Array.isArray(candidate.providers) && Array.isArray(candidate.models);
+}
+
 let _cache: ModelCatalogResponse | null = null;
 try {
   const raw = typeof window !== "undefined" ? localStorage.getItem(LS_KEY) : null;
   if (raw) {
-    const parsed = JSON.parse(raw);
-    if (parsed.ts && Date.now() - parsed.ts < LS_TTL) {
-      _cache = parsed.data as ModelCatalogResponse;
+    const parsed = JSON.parse(raw) as { ts?: unknown; data?: unknown };
+    if (
+      typeof parsed.ts === "number" &&
+      Date.now() - parsed.ts < LS_TTL &&
+      isModelCatalogResponse(parsed.data)
+    ) {
+      _cache = parsed.data;
     }
   }
 } catch {
   /* ignore parse errors */
 }
 
-// Kick off network fetch — updates cache and localStorage
-const _ready: Promise<ModelCatalogResponse> = (async () => {
-  try {
-    const res = await fetch(`${API}/models`);
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    const data: ModelCatalogResponse = await res.json();
-    _cache = data;
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ data, ts: Date.now() }));
-    } catch {}
-    return data;
-  } catch {
-    // Return cached or empty catalog on failure
-    if (_cache) return _cache;
-    const empty: ModelCatalogResponse = { providers: [], models: [] };
-    _cache = empty;
-    return empty;
-  }
-})();
+const _ready: Promise<ModelCatalogResponse> =
+  typeof window === "undefined"
+    ? Promise.resolve(_cache ?? EMPTY_CATALOG)
+    : (async () => {
+        try {
+          const res = await fetch(`${API}/models`);
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          const data: unknown = await res.json();
+          if (!isModelCatalogResponse(data)) throw new Error("Invalid model catalog response");
+          _cache = data;
+          try {
+            localStorage.setItem(LS_KEY, JSON.stringify({ data, ts: Date.now() }));
+          } catch {}
+          return data;
+        } catch {
+          if (_cache) return _cache;
+          _cache = EMPTY_CATALOG;
+          return EMPTY_CATALOG;
+        }
+      })();
 
 export function getModelCatalog(): Promise<ModelCatalogResponse> {
   return _ready;

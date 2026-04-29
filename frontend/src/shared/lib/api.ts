@@ -22,6 +22,9 @@ import { tI18n } from "@/shared/lib/i18n";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
 const API = getRuntimeEnv().apiUrl;
+const JOB_CACHE_MS = 1000;
+const QUEUE_CACHE_MS = 5000;
+const SIDEBAR_CACHE_MS = 3000;
 
 if (
   typeof window !== "undefined" &&
@@ -79,7 +82,8 @@ function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
 export function invalidateCache(...pathSubstrings: string[]) {
   _cacheGen++;
   const matches = (key: string) =>
-    pathSubstrings.length === 0 || pathSubstrings.some((s) => key.includes(s));
+    pathSubstrings.length === 0 ||
+    pathSubstrings.some((s) => key === s || key.startsWith(`${s}/`) || key.startsWith(`${s}?`));
   for (const [key] of _cache) if (matches(key)) _cache.delete(key);
   for (const [key] of _inflight) if (matches(key)) _inflight.delete(key);
 }
@@ -101,8 +105,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
     });
-  } catch {
-    throw new Error(msg("auto.shared.lib.api.literal.1"));
+  } catch (err) {
+    throw new Error(msg("auto.shared.lib.api.literal.1"), { cause: err });
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -260,7 +264,7 @@ export function getDashboardAnalytics(params?: {
 }
 
 export function getJob(optimizationId: string) {
-  return cachedGet<OptimizationStatusResponse>(`/optimizations/${optimizationId}`, 1000);
+  return cachedGet<OptimizationStatusResponse>(`/optimizations/${optimizationId}`, JOB_CACHE_MS);
 }
 
 export function getOptimizationPayload(optimizationId: string) {
@@ -456,6 +460,63 @@ export interface ModelProbeHandlers {
   signal?: AbortSignal;
 }
 
+interface ServerSentEvent {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+function normalizeStreamChunk(chunk: string): string {
+  return chunk.replace(/\r\n/g, "\n");
+}
+
+function dispatchNdjsonLine(raw: string, dispatch: (line: string) => void) {
+  const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+  dispatch(line);
+}
+
+function parseServerSentEvent(raw: string): ServerSentEvent | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of normalizeStreamChunk(raw).split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+  }
+  if (dataLines.length === 0) return null;
+  try {
+    return { event, data: JSON.parse(dataLines.join("\n")) as Record<string, unknown> };
+  } catch {
+    return null;
+  }
+}
+
+async function readServerSentEvents(
+  body: ReadableStream<Uint8Array>,
+  processEvent: (event: ServerSentEvent) => void,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) {
+      buf += decoder.decode();
+      if (buf.trim()) {
+        const event = parseServerSentEvent(buf);
+        if (event) processEvent(event);
+      }
+      break;
+    }
+    buf += normalizeStreamChunk(decoder.decode(value, { stream: true }));
+    let sepIdx: number;
+    while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
+      const raw = buf.slice(0, sepIdx);
+      buf = buf.slice(sepIdx + 2);
+      const event = parseServerSentEvent(raw);
+      if (event) processEvent(event);
+    }
+  }
+}
+
 /** Stream per-model probe scores via POST /models/probe (NDJSON). */
 export async function probeModels(
   payload: ModelProbeRequest,
@@ -481,8 +542,6 @@ export async function probeModels(
     );
     return;
   }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
   let buf = "";
   const dispatch = (line: string) => {
     const trimmed = line.trim();
@@ -502,18 +561,21 @@ export async function probeModels(
     else if (data.event === "error") handlers.onError?.(data.message);
   };
   try {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
     for (;;) {
       const { value, done } = await reader.read();
       if (done) {
+        buf += decoder.decode();
         if (buf.length) dispatch(buf);
         break;
       }
-      buf += decoder.decode(value, { stream: true });
+      buf += normalizeStreamChunk(decoder.decode(value, { stream: true }));
       let newlineIdx: number;
       while ((newlineIdx = buf.indexOf("\n")) !== -1) {
         const raw = buf.slice(0, newlineIdx);
         buf = buf.slice(newlineIdx + 1);
-        dispatch(raw);
+        dispatchNdjsonLine(raw, dispatch);
       }
     }
   } catch (err) {
@@ -524,7 +586,7 @@ export async function probeModels(
 }
 
 export function getQueueStatus() {
-  return cachedGet<QueueStatusResponse>("/queue", 5000);
+  return cachedGet<QueueStatusResponse>("/queue", QUEUE_CACHE_MS);
 }
 
 export interface SidebarJobItem {
@@ -549,7 +611,7 @@ export function listJobsSidebar(params?: { username?: string; limit?: number; of
   const qs = q.toString();
   return cachedGet<{ items: SidebarJobItem[]; total: number }>(
     `/optimizations/sidebar${qs ? `?${qs}` : ""}`,
-    3000,
+    SIDEBAR_CACHE_MS,
   );
 }
 
@@ -613,23 +675,7 @@ export async function serveProgramStream(
     );
     return;
   }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  const processEvent = (raw: string) => {
-    let event = "message";
-    const dataLines: string[] = [];
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("event:")) event = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-    }
-    if (dataLines.length === 0) return;
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(dataLines.join("\n"));
-    } catch {
-      return;
-    }
+  const processEvent = ({ event, data }: ServerSentEvent) => {
     if (event === "token") {
       handlers.onToken(String(data.field ?? ""), String(data.chunk ?? ""));
     } else if (event === "final") {
@@ -644,21 +690,7 @@ export async function serveProgramStream(
     }
   };
   try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) {
-        // Flush any trailing event without double-newline terminator
-        if (buf.trim()) processEvent(buf);
-        break;
-      }
-      buf += decoder.decode(value, { stream: true });
-      let sepIdx: number;
-      while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
-        const raw = buf.slice(0, sepIdx);
-        buf = buf.slice(sepIdx + 2);
-        processEvent(raw);
-      }
-    }
+    await readServerSentEvents(res.body, processEvent);
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
       handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.6"));
@@ -693,23 +725,7 @@ export async function servePairProgramStream(
     );
     return;
   }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  const processEvent = (raw: string) => {
-    let event = "message";
-    const dataLines: string[] = [];
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("event:")) event = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-    }
-    if (dataLines.length === 0) return;
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(dataLines.join("\n"));
-    } catch {
-      return;
-    }
+  const processEvent = ({ event, data }: ServerSentEvent) => {
     if (event === "token") {
       handlers.onToken(String(data.field ?? ""), String(data.chunk ?? ""));
     } else if (event === "final") {
@@ -724,20 +740,7 @@ export async function servePairProgramStream(
     }
   };
   try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) {
-        if (buf.trim()) processEvent(buf);
-        break;
-      }
-      buf += decoder.decode(value, { stream: true });
-      let sepIdx: number;
-      while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
-        const raw = buf.slice(0, sepIdx);
-        buf = buf.slice(sepIdx + 2);
-        processEvent(raw);
-      }
-    }
+    await readServerSentEvents(res.body, processEvent);
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
       handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.9"));
@@ -823,23 +826,7 @@ export async function streamCodeAgent(
     );
     return;
   }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  const processEvent = (raw: string) => {
-    let event = "message";
-    const dataLines: string[] = [];
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("event:")) event = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-    }
-    if (dataLines.length === 0) return;
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(dataLines.join("\n"));
-    } catch {
-      return;
-    }
+  const processEvent = ({ event, data }: ServerSentEvent) => {
     if (event === "signature_patch") {
       handlers.onSignaturePatch(String(data.chunk ?? ""));
     } else if (event === "metric_patch") {
@@ -883,20 +870,7 @@ export async function streamCodeAgent(
     }
   };
   try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) {
-        if (buf.trim()) processEvent(buf);
-        break;
-      }
-      buf += decoder.decode(value, { stream: true });
-      let sepIdx: number;
-      while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
-        const raw = buf.slice(0, sepIdx);
-        buf = buf.slice(sepIdx + 2);
-        processEvent(raw);
-      }
-    }
+    await readServerSentEvents(res.body, processEvent);
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
       handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.10"));
@@ -908,23 +882,26 @@ let _templatesCache: TemplateResponse[] | null = null;
 let _templatesFlight: Promise<TemplateResponse[]> | null = null;
 
 export function listTemplates(username?: string): Promise<TemplateResponse[]> {
-  // Only cache the "all templates" call (no username filter)
   if (!username) {
     if (_templatesCache) return Promise.resolve(_templatesCache);
     if (_templatesFlight) return _templatesFlight;
-    _templatesFlight = request<TemplateResponse[]>("/templates").then((r) => {
-      _templatesCache = r;
-      _templatesFlight = null;
-      return r;
-    });
+    _templatesFlight = request<TemplateResponse[]>("/templates")
+      .then((r) => {
+        _templatesCache = r;
+        return r;
+      })
+      .finally(() => {
+        _templatesFlight = null;
+      });
     return _templatesFlight;
   }
   const q = `?username=${encodeURIComponent(username)}`;
   return request<TemplateResponse[]>(`/templates${q}`);
 }
 
-/** Prefetch templates on module load so they're ready when submit page opens. */
-listTemplates().catch(() => {});
+if (typeof window !== "undefined") {
+  listTemplates().catch(() => {});
+}
 
 function _invalidateTemplatesCache() {
   _templatesCache = null;
