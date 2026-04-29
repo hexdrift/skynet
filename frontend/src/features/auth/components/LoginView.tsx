@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signIn, getProviders } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardDescription } from "@/shared/ui/primitives/card";
@@ -12,20 +13,29 @@ import { Loader2 } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
 
 export function LoginView() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"loading" | "sso" | "dev">("loading");
 
   useEffect(() => {
-    void getProviders().then((providers) => {
-      if (providers?.adfs) {
-        setMode("sso");
-        void signIn("adfs", { callbackUrl: "/" });
-      } else {
+    // If the providers endpoint errors (network blip, mis-deployed
+    // [...nextauth] route), fall back to the dev form instead of leaving the
+    // page on the loading spinner forever.
+    void getProviders()
+      .then((providers) => {
+        if (providers?.adfs) {
+          setMode("sso");
+          void signIn("adfs", { callbackUrl: "/" });
+        } else {
+          setMode("dev");
+        }
+      })
+      .catch((err) => {
+        console.warn("LoginView: getProviders failed", err);
         setMode("dev");
-      }
-    });
+      });
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -40,9 +50,12 @@ export function LoginView() {
     setLoading(false);
     if (result?.error) {
       setError(msg("auth.login.error"));
-    } else {
-      window.location.href = "/";
+      return;
     }
+    // Soft-nav so we don't hard-reload and double-fetch the dashboard the way
+    // `window.location.href = "/"` did.
+    router.push("/");
+    router.refresh();
   };
 
   if (mode === "loading" || mode === "sso") {

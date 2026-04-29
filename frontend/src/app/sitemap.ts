@@ -1,20 +1,15 @@
 import type { MetadataRoute } from "next";
+import { getSiteUrl } from "@/shared/lib/site-config";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://skynet.app";
+const siteUrl = getSiteUrl();
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const now = new Date();
   return [
-    {
-      url: siteUrl,
-      lastModified: new Date(),
-      changeFrequency: "daily",
-      priority: 1,
-    },
-    {
-      url: `${siteUrl}/submit`,
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 0.8,
-    },
+    { url: siteUrl, lastModified: now, changeFrequency: "daily", priority: 1 },
+    { url: `${siteUrl}/submit`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${siteUrl}/explore`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
+    { url: `${siteUrl}/compare`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${siteUrl}/tagger`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
   ];
 }

@@ -464,11 +464,6 @@ table tbody tr td:not(:last-child):hover {
   }
 }
 
-/* Rows: contained layout for minimal reflow on table updates */
-table tbody tr {
-  contain: layout style;
-}
-
 /* Smooth transitions for chart containers on data change */
 .recharts-wrapper {
   transition: opacity 0.3s ease;

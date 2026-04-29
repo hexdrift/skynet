@@ -1,13 +1,14 @@
 import type { MetadataRoute } from "next";
+import { getSiteUrl } from "@/shared/lib/site-config";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://skynet.app";
+const siteUrl = getSiteUrl();
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/api/"],
+      disallow: ["/api/", "/login"],
     },
     sitemap: `${siteUrl}/sitemap.xml`,
   };

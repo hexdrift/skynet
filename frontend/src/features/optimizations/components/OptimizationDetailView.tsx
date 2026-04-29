@@ -74,13 +74,45 @@ import { PairDetailView } from "./PairDetailView";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
 
+const URL_RE = /https?:\/\/[^\s<>"]+/g;
+const URL_TRAILING_RE = /[.,;:!?)\]}'"]+$/;
+
+/**
+ * Linkify URLs inside a string, keeping trailing sentence punctuation
+ * (`.`, `,`, `)`, `]`, …) outside the anchor href so links like
+ * `https://example.com).` don't render with a broken trailing `).`
+ * inside the underline.
+ */
+function linkifyMessage(text: string, anchorClass: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let key = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    const matchIdx = m.index ?? 0;
+    if (matchIdx > lastIdx) nodes.push(text.slice(lastIdx, matchIdx));
+    const raw = m[0];
+    const trailingMatch = URL_TRAILING_RE.exec(raw);
+    const trailing = trailingMatch ? trailingMatch[0] : "";
+    const url = trailing ? raw.slice(0, raw.length - trailing.length) : raw;
+    nodes.push(
+      <a key={key++} href={url} target="_blank" rel="noopener noreferrer" className={anchorClass}>
+        {url}
+      </a>,
+    );
+    if (trailing) nodes.push(trailing);
+    lastIdx = matchIdx + raw.length;
+  }
+  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
+  return nodes;
+}
+
 export function OptimizationDetailView() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") ?? "overview";
   const [detailTab, setDetailTab] = useState(initialTab);
-  // Expose for tutorial via the typed bridge (see lib/tutorial-bridge.ts).
+  // Expose for tutorial via the typed bridge (features/tutorial/lib/bridge.ts).
   useEffect(() => registerTutorialHook("setDetailTab", setDetailTab), []);
 
   const isDemoMode = id === DEMO_OPTIMIZATION_ID;
@@ -151,14 +183,20 @@ export function OptimizationDetailView() {
   const pairFilteredLogs =
     activePairIndex === null || !job?.logs
       ? (job?.logs ?? [])
-      : job.logs.filter((l) => l.pair_index === activePairIndex || l.pair_index == null);
+      : job.logs.filter(
+          (l) =>
+            l.pair_index === activePairIndex || l.pair_index === null || l.pair_index === undefined,
+        );
 
   const fetchJob = useCallback(async () => {
     try {
       const data = await getJob(id);
       setJob(data);
       setError(null);
-    } catch {
+    } catch (err) {
+      // Distinguish auth/network failures from a genuine 404 — the previous
+      // catch lumped 401/403/500/network into "not found" copy.
+      console.warn("OptimizationDetailView: getJob failed", err);
       setError(formatMsg("auto.app.optimizations.id.page.template.1", { p1: TERMS.optimization }));
     } finally {
       setLoading(false);
@@ -187,7 +225,7 @@ export function OptimizationDetailView() {
     let fallbackInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
-      eventSource = new EventSource(`${API}/optimizations/${id}/stream`);
+      eventSource = new EventSource(`${API}/optimizations/${encodeURIComponent(id)}/stream`);
 
       eventSource.onmessage = (event) => {
         try {
@@ -227,9 +265,13 @@ export function OptimizationDetailView() {
       });
 
       eventSource.onerror = () => {
-        eventSource?.close();
+        // Only fall back to polling once the browser's built-in reconnect has
+        // given up (readyState === CLOSED). Transient blips set readyState to
+        // CONNECTING — leave EventSource alone so it auto-retries instead of
+        // locking the page into 5 s polling for the rest of the session.
+        if (eventSource?.readyState !== EventSource.CLOSED) return;
         eventSource = null;
-        // Fall back to polling
+        if (fallbackInterval) return;
         fallbackInterval = setInterval(() => {
           if (jobRef.current && TERMINAL_STATUSES.has(jobRef.current.status)) {
             if (fallbackInterval) clearInterval(fallbackInterval);
@@ -415,15 +457,19 @@ export function OptimizationDetailView() {
       },
       onFinal: (res) => {
         if (isStale()) return;
-        setRunHistory((prev) => [
-          { inputs: { ...inputs }, outputs: res.outputs, model: res.model_used, ts: Date.now() },
-          ...prev,
-        ]);
+        setRunHistory((prev) => {
+          // Cap history so the chat panel stays responsive across long sessions.
+          const next = [
+            { inputs: { ...inputs }, outputs: res.outputs, model: res.model_used, ts: Date.now() },
+            ...prev,
+          ];
+          return next.length > 50 ? next.slice(0, 50) : next;
+        });
         setStreamingRun(null);
       },
-      onError: (msg) => {
+      onError: (errorMsg) => {
         if (isStale()) return;
-        setServeError(msg);
+        setServeError(errorMsg);
         setStreamingRun(null);
       },
     });
@@ -659,44 +705,17 @@ export function OptimizationDetailView() {
               className="text-xs text-red-700 mt-3 whitespace-pre-wrap break-words font-mono leading-relaxed"
               dir="ltr"
             >
-              {(job.message ?? "")?.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
-                /^https?:\/\//.test(part) ? (
-                  <a
-                    key={i}
-                    href={part}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-red-900 transition-colors"
-                  >
-                    {part}
-                  </a>
-                ) : (
-                  part
-                ),
-              )}
+              {linkifyMessage(job.message ?? "", "underline hover:text-red-900 transition-colors")}
             </pre>
             {typeof metrics.error === "string" && !job.message?.includes(metrics.error) && (
               <pre
                 className="text-xs text-red-700 mt-2 whitespace-pre-wrap break-words font-mono leading-relaxed border-t border-red-200 pt-2"
                 dir="ltr"
               >
-                {String(metrics.error)
-                  .split(/(https?:\/\/[^\s]+)/g)
-                  .map((part: string, i: number) =>
-                    /^https?:\/\//.test(part) ? (
-                      <a
-                        key={i}
-                        href={part}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-red-900 transition-colors"
-                      >
-                        {part}
-                      </a>
-                    ) : (
-                      part
-                    ),
-                  )}
+                {linkifyMessage(
+                  String(metrics.error),
+                  "underline hover:text-red-900 transition-colors",
+                )}
               </pre>
             )}
           </div>
