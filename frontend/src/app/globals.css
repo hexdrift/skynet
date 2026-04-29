@@ -179,6 +179,8 @@
   --chart-4: #c8b9a8;
   --chart-5: #e5ddd4;
 
+  --gradient-progress: linear-gradient(90deg, #c8a882, #a68b6b, #d4b896);
+
   --sidebar: #f5f1ec;
   --sidebar-foreground: #1c1612;
   --sidebar-primary: #3d2e22;

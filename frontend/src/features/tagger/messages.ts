@@ -37,6 +37,7 @@ export const taggerMessages = {
   "auto.features.tagger.components.taggersetup.13": "הקודם",
   "auto.features.tagger.components.taggersetup.14": "הבא",
   "auto.features.tagger.components.taggersetup.15": "התחל תיוג",
+  "auto.features.tagger.components.taggersetup.16": "מחק קטגוריה",
   "auto.features.tagger.components.taggerannotation.literal.1": "סיווג",
   "auto.features.tagger.components.taggerannotation.literal.2": "בחר קטגוריות",
   "auto.features.tagger.components.taggerannotation.literal.3": "הקלד טקסט",

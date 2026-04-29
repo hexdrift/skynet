@@ -149,8 +149,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   );
 
   const addCategory = () => {
-    const id = `cat${Date.now()}`;
-    setCategories((prev) => [...prev, { id, label: "" }]);
+    setCategories((prev) => [...prev, { id: crypto.randomUUID(), label: "" }]);
   };
 
   const removeCategory = (id: string) => {
@@ -204,17 +203,21 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
 
   const handleStart = () => {
     if (!mode || !validateStep(0) || !validateStep(1) || !validateStep(2)) return;
-    const mapped: DataRow[] = parsedRows.map((row, i) => ({
-      ...row,
-      id: i + 1,
-      text: String(row[textCol] ?? ""),
-    }));
+    const mapped: DataRow[] = parsedRows.map((row, i) => {
+      const raw = row[textCol];
+      const text =
+        raw === undefined || raw === null
+          ? ""
+          : typeof raw === "object"
+            ? JSON.stringify(raw)
+            : String(raw);
+      return { ...row, id: i + 1, text };
+    });
     const config: TaggerConfig = { mode };
     if (mode === "binary") config.question = question;
     if (mode === "multiclass") config.categories = categories.filter((c) => c.label.trim());
     if (mode === "freetext") {
       config.prompt = prompt || msg("auto.features.tagger.components.taggersetup.literal.13");
-      config.placeholder = "";
     }
     onStart(config, mapped, parsedCols);
   };
@@ -273,9 +276,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                 </HelpTip>
               </p>
               <div className="space-y-1">
-                {parsedCols.map((col) => (
+                {parsedCols.map((col, i) => (
                   <button
-                    key={col}
+                    key={`${col}-${i}`}
                     type="button"
                     onClick={() => setTextCol(col)}
                     className={cn(
@@ -397,6 +400,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                   size="icon-xs"
                   onClick={() => removeCategory(cat.id)}
                   disabled={categories.length <= 2}
+                  aria-label={msg("auto.features.tagger.components.taggersetup.16")}
                 >
                   <Trash2 className="size-3.5 text-muted-foreground" />
                 </Button>
@@ -408,6 +412,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
               onClick={addCategory}
               className="mt-1 w-full"
               title={msg("auto.features.tagger.components.taggersetup.literal.17")}
+              aria-label={msg("auto.features.tagger.components.taggersetup.literal.17")}
             >
               <Plus className="size-3.5" />
             </Button>
@@ -498,7 +503,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         <div className="absolute top-[18px] sm:top-5 inset-x-[10%] h-[2px] bg-muted -z-0 rounded-full">
           <motion.div
             className="h-full rounded-full"
-            style={{ background: "linear-gradient(90deg, #c8a882, #a68b6b, #d4b896)" }}
+            style={{ background: "var(--gradient-progress)" }}
             initial={{ width: 0 }}
             animate={{ width: `${(step / (TAGGER_STEPS.length - 1)) * 100}%` }}
             transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
