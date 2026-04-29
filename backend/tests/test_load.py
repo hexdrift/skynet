@@ -4,10 +4,13 @@ Tests API performance under concurrent load. Uses httpx for async
 concurrency and measures latency percentiles + error rates.
 
 Assumed environment:
-    - Backend running on localhost:8000 (single Uvicorn worker is fine for smoke,
+    - Backend running on localhost:8000 (single Uvicorn worker is fine,
       use multiple workers for realistic load numbers)
     - PostgreSQL reachable from the backend
-    - No OpenAI calls are made — validation/read paths only for deterministic latency
+    - The two POST /run write tests submit a real job (model from
+      ``LOAD_TEST_MODEL``, default ``openai/gpt-5.4-nano``) and cancel it
+      immediately to keep API spend negligible; the rest of the suite only
+      hits read/validation paths.
 
 Latency thresholds assume a local dev machine with no network hop.
 Scale them up proportionally for remote deployments.
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import statistics
 import time
 
@@ -30,6 +34,7 @@ import requests  # type: ignore[import-untyped]
 from .conftest import requires_server, wait_for_terminal
 
 BASE_URL = "http://localhost:8000"
+LOAD_TEST_MODEL = os.getenv("LOAD_TEST_MODEL", "openai/gpt-5.4-nano")
 
 
 async def _hammer(
@@ -67,7 +72,7 @@ async def _hammer(
                 else:
                     r = await client.get(url, timeout=30)
                 results.append((r.status_code, time.monotonic() - t0))
-            except Exception:
+            except (httpx.HTTPError, OSError):
                 results.append((0, time.monotonic() - t0))
 
     t_start = time.monotonic()
@@ -172,7 +177,7 @@ class TestWriteEndpointLoad:
             "optimizer_name": "gepa",
             "dataset": [{"q": "hi", "a": "bye"}],
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
-            "model_config": {"name": "openai/gpt-5.4-nano"},
+            "model_config": {"name": LOAD_TEST_MODEL},
         }
         r = asyncio.run(_hammer("POST", f"{BASE_URL}/run", n=10, concurrency=5, json_body=payload))
         _print_results("POST /run (10 rapid submissions)", r)
@@ -212,7 +217,7 @@ class TestMixedWorkload:
             "optimizer_name": "gepa",
             "dataset": [{"q": "hi", "a": "bye"}],
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
-            "model_config": {"name": "openai/gpt-5.4-nano"},
+            "model_config": {"name": LOAD_TEST_MODEL},
         }
         r = requests.post(f"{BASE_URL}/run", json=payload, timeout=10)
         assert r.status_code == 201, f"Background job submit failed: {r.status_code}"

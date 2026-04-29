@@ -50,6 +50,8 @@ SIGNATURE_CODE = (
     '    answer: str = dspy.OutputField(desc="The final numeric answer")\n'
 )
 
+# Submitted as user-code to the worker, which exec()s it in a fresh namespace —
+# the inline `import dspy, re` is intentional, not a §9 import-style violation.
 METRIC_CODE = """
 def gsm8k_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
     import dspy, re

@@ -41,7 +41,7 @@ def is_server_available() -> bool:
     """
     try:
         return requests.get(f"{_BASE_URL}/health", timeout=2).status_code == 200
-    except Exception:
+    except (requests.RequestException, OSError):
         return False
 
 
@@ -54,20 +54,6 @@ requires_server = pytest.mark.skipif(
     not is_server_available(),
     reason="Backend server not running on localhost:8000 — start with: cd backend && ../.venv/bin/python main.py",
 )
-
-
-@pytest.fixture(scope="session")
-def api_base_url() -> str:
-    """Yield the base URL of the running backend, skipping the test if unavailable.
-
-    Yields:
-        The string ``"http://localhost:8000"`` once the server is reachable.
-    """
-    if not is_server_available():
-        pytest.skip(
-            "Backend server not running on localhost:8000 — start with: cd backend && ../.venv/bin/python main.py"
-        )
-    return _BASE_URL
 
 
 _TERMINAL = frozenset({"success", "failed", "cancelled"})
@@ -97,38 +83,3 @@ def wait_for_terminal(job_id: str, base_url: str = _BASE_URL, timeout: float = 1
             return last
         time.sleep(3)
     raise TimeoutError(f"Job {job_id} did not finish within {timeout}s (last status: {last.get('status')!r})")
-
-
-def wait_for_status(
-    job_id: str,
-    target: str | set[str],
-    base_url: str = _BASE_URL,
-    timeout: float = 30,
-) -> dict:
-    """Poll the backend until ``job_id`` reports any status in ``target``.
-
-    Args:
-        job_id: Identifier returned by ``POST /run`` or ``POST /grid-search``.
-        target: A single status string or a set of acceptable statuses.
-        base_url: Base URL of the backend; defaults to ``localhost:8000``.
-        timeout: Maximum seconds to wait before raising.
-
-    Returns:
-        The matching ``GET /optimizations/{job_id}`` JSON payload.
-
-    Raises:
-        TimeoutError: When the job does not reach the target status within
-            ``timeout`` seconds.
-    """
-    targets = {target} if isinstance(target, str) else set(target)
-    deadline = time.monotonic() + timeout
-    last: dict = {}
-    while time.monotonic() < deadline:
-        r = requests.get(f"{base_url}/optimizations/{job_id}", timeout=10)
-        last = r.json()
-        if last.get("status") in targets:
-            return last
-        time.sleep(2)
-    raise TimeoutError(
-        f"Job {job_id} did not reach status {targets!r} within {timeout}s (last status: {last.get('status')!r})"
-    )

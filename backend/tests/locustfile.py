@@ -23,7 +23,11 @@ Expected shape at 50 users, 10 rps spawn rate (local single-worker dev server):
     - POST /run p99 < 3 s (accepted synchronously, LLM runs async)
 """
 
+import os
+
 from locust import HttpUser, between, tag, task
+
+LOAD_TEST_MODEL = os.getenv("LOAD_TEST_MODEL", "openai/gpt-5.4-nano")
 
 
 class SkynetAPIUser(HttpUser):
@@ -91,7 +95,7 @@ class SkynetAPIUser(HttpUser):
             "optimizer_name": "gepa",
             "dataset": [{"q": "test", "a": "test"}],
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
-            "model_config": {"name": "openai/gpt-5.4-nano"},
+            "model_config": {"name": LOAD_TEST_MODEL},
         }
         with self.client.post("/run", json=payload, catch_response=True) as r:
             if r.status_code == 201:
