@@ -18,6 +18,7 @@ import type {
   ValidateCodeResponse,
   DatasetProfile,
   SplitPlan,
+  RunRequest,
 } from "@/shared/types/api";
 import { parseDatasetFile, type ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/shared/ui/code-editor";
@@ -1043,11 +1044,11 @@ export function useSubmitWizard() {
         const secondApplied = secondModelConfig?.name?.trim()
           ? applyGlobals(secondModelConfig)
           : undefined;
-        const runPayload = {
+        const runPayload: RunRequest = {
           ...base,
           model_config: applyGlobals(modelConfig),
           ...(secondApplied ? { reflection_model_config: secondApplied } : {}),
-        } as Parameters<typeof submitRun>[0];
+        };
         result = await submitRun(runPayload);
       } else {
         const validGen = generationModels.filter((m) => m.name.trim()).map(applyGlobals);

@@ -44,8 +44,8 @@ function fmtTs(iso: string): StageTs {
  */
 export function computeStageTimestamps(
   events: ProgressEvent[],
-  startedAt: string | undefined,
-  completedAt: string | undefined,
+  startedAt: string | null | undefined,
+  completedAt: string | null | undefined,
   pairIndex?: number,
 ): Partial<Record<PipelineStage, StageTs>> {
   const globalMap: Record<string, PipelineStage> = {
@@ -121,9 +121,7 @@ export function PipelineStages({
     <div
       ref={containerRef}
       className={
-        isVertical
-          ? "relative flex flex-col gap-3"
-          : "relative flex items-start justify-between"
+        isVertical ? "relative flex flex-col gap-3" : "relative flex items-start justify-between"
       }
       dir="rtl"
       data-tutorial={dataTutorial}
