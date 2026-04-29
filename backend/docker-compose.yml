@@ -1,18 +1,20 @@
 # Skynet — Docker Compose with PostgreSQL
-# Usage: docker-compose up --build
-
-version: "3.8"
+# Usage:
+#   cp .env.example .env
+#   docker compose up --build
+#
+# Air-gap operators: set REGISTRY_PREFIX (and DEBIAN_MIRROR / PIP_INDEX_URL
+# for the API build) so nothing pulls from public registries. See
+# deploy/ON_PREM_CHECKLIST.md.
 
 services:
   db:
-    # TODO: On-premise — Pull pgvector image from internal registry.
-    # Example: image: artifactory.your-company.com/docker-remote/pgvector/pgvector:pg16
-    image: pgvector/pgvector:pg16
+    image: ${REGISTRY_PREFIX:-docker.io}/pgvector/pgvector:pg16
     container_name: skynet-db
     environment:
       POSTGRES_DB: skynet
       POSTGRES_USER: skynet
-      POSTGRES_PASSWORD: skynet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     ports:
       - "5432:5432"
     volumes:
@@ -23,18 +25,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        REGISTRY_PREFIX: ${REGISTRY_PREFIX:-docker.io}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL-}
     container_name: skynet-api
     ports:
       - "8000:8000"
     environment:
-      - REMOTE_DB_URL=postgresql://skynet:skynet@db:5432/skynet
+      - REMOTE_DB_URL=postgresql://skynet:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/skynet
       - WORKER_CONCURRENCY=2
       - WORKER_POLL_INTERVAL=2.0
       - LOG_LEVEL=INFO
-      # Set your LLM API key:
-      # - OPENAI_API_KEY=sk-your-key-here
     env_file:
-      - .env
+      - path: .env
+        required: false
     depends_on:
       - db
     restart: unless-stopped

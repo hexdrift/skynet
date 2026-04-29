@@ -7,6 +7,7 @@ the ``ServiceRegistry`` and the FastAPI ``app`` object, and exposes
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import uvicorn
@@ -26,8 +27,10 @@ app = create_app(registry=registry)
 
 
 def run_server() -> None:
-    """Boot the FastAPI application using Uvicorn on ``0.0.0.0:8000``."""
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    """Boot the FastAPI application using Uvicorn, honouring API_HOST / API_PORT."""
+    host = os.getenv("API_HOST", "0.0.0.0")
+    port = int(os.getenv("API_PORT", "8000"))
+    uvicorn.run("main:app", host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":

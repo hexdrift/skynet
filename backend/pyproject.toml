@@ -17,8 +17,7 @@ include = ["core*"]
 name = "skynet"
 version = "0.1.0"
 description = "Skynet - FastAPI service wrapper for DSPy optimization workflows"
-authors = [{ name = "Your Name", email = "you@example.com" }]
-readme = "README.md"
+authors = [{ name = "Skynet maintainers" }]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",

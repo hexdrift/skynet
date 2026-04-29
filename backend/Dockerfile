@@ -1,16 +1,24 @@
-# On-prem mirrors / artifactory: see deploy/ON_PREM_CHECKLIST.md (sections 1–3).
-FROM python:3.11-slim
+# Air-gap operators: see deploy/ON_PREM_CHECKLIST.md (sections 1–3) for
+# REGISTRY_PREFIX / DEBIAN_MIRROR / PIP_INDEX_URL build-args. With those set
+# nothing in this file fetches from public mirrors.
+ARG REGISTRY_PREFIX=docker.io
+FROM ${REGISTRY_PREFIX}/python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
+ARG DEBIAN_MIRROR
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+        find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec \
+            sed -i "s|http[s]\?://deb.debian.org|$DEBIAN_MIRROR|g; s|http[s]\?://security.debian.org|$DEBIAN_MIRROR|g" {} \; ; \
+    fi \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
 
-RUN pip install -e .
+ARG PIP_INDEX_URL
+RUN pip install ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} -e .
 
 COPY . .
 
