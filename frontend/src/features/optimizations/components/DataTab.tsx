@@ -176,8 +176,10 @@ export function DataTab({
         for (const r of res.baseline ?? []) baseline[r.index] = r;
         setTestResults({ optimized, baseline });
       })
-      .catch(() => {
-        /* non-critical */
+      .catch((err) => {
+        // Test-results endpoint is non-critical for the data view; log so the
+        // failure is visible in dev tools without breaking the dataset render.
+        console.warn("test results fetch failed:", err);
       })
       .finally(() => setTestResultsLoading(false));
   }, [job.optimization_id, job.status, pairIndex, isDemoMode]);
@@ -472,10 +474,11 @@ export function DataTab({
                             const td = (e.target as HTMLElement).closest("td");
                             if (!td || td === td.parentElement?.lastElementChild) return;
                             const text = td.textContent?.trim();
-                            if (text) {
-                              void navigator.clipboard.writeText(text);
-                              toast.success(msg("clipboard.copied"));
-                            }
+                            if (!text) return;
+                            navigator.clipboard
+                              .writeText(text)
+                              .then(() => toast.success(msg("clipboard.copied")))
+                              .catch(() => toast.error(msg("clipboard.copy_failed")));
                           }}
                         >
                           {split === "test" && evalCount > 0 && (

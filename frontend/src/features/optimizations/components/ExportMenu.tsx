@@ -19,7 +19,14 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // Defer revoke so the browser has time to start the download in slow paths.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function escapeCsvField(value: string | number | null | undefined): string {
+  const s = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
 }
 
 export function exportPromptAsJson(prompt: OptimizedPredictor, optimizationId: string) {
@@ -33,10 +40,12 @@ export function exportPromptAsJson(prompt: OptimizedPredictor, optimizationId: s
 export function exportLogsAsCsv(logs: OptimizationLogEntry[], optimizationId: string) {
   const header = "timestamp,level,logger,message\n";
   const rows = logs
-    .map((l) => {
-      const escapedMsg = `"${l.message.replace(/"/g, '""')}"`;
-      return `${l.timestamp},${l.level},${l.logger},${escapedMsg}`;
-    })
+    .map(
+      (l) =>
+        `${escapeCsvField(l.timestamp)},${escapeCsvField(l.level)},${escapeCsvField(
+          l.logger,
+        )},${escapeCsvField(l.message)}`,
+    )
     .join("\n");
   downloadFile(header + rows, `logs_${optimizationId.slice(0, 8)}.csv`, "text/csv");
 }
@@ -107,7 +116,7 @@ export function ExportMenu({
                     a.href = url;
                     a.download = `program_${job.optimization_id.slice(0, 8)}.pkl`;
                     a.click();
-                    URL.revokeObjectURL(url);
+                    setTimeout(() => URL.revokeObjectURL(url), 0);
                   } catch {
                     toast.error(msg("optimization.file.parse_error"));
                   }
