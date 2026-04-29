@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const { data: session } = useSession();
   const pathname = usePathname();
-  const { openMenu } = useTutorialContext();
+  const { startDeepDive } = useTutorialContext();
   const { prefs } = useUserPrefs();
   const scalarDocsUrl = `${getRuntimeEnv().apiUrl}/scalar`;
 
@@ -114,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={openMenu}
+                onClick={startDeepDive}
                 className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
                 aria-label={msg("app.shell.tour_aria")}
               >

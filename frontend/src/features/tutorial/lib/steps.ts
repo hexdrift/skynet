@@ -15,6 +15,7 @@ import {
   DEMO_COMPARE_EXAMPLES,
   DEMO_COMPARE_DATASET,
   DEMO_GRID_OPTIMIZATION_ID,
+  DEMO_OPTIMIZATION_ID,
 } from "./demo-data";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -70,17 +71,25 @@ function navigateTo(path: string) {
   }
 }
 
-/** Wait for a selector to appear in the DOM (up to timeoutMs) */
-function waitForElement(selector: string, timeoutMs = 5000): Promise<void> {
+/**
+ * Wait for a selector to appear in the DOM (up to timeoutMs).
+ * Resolves true when the element appears, false on timeout — so callers
+ * can branch on "element really arrived" vs "we gave up waiting".
+ */
+function waitForElement(selector: string, timeoutMs = 5000): Promise<boolean> {
   return new Promise((resolve) => {
     if (document.querySelector(selector)) {
-      resolve();
+      resolve(true);
       return;
     }
     const start = Date.now();
     const check = () => {
-      if (document.querySelector(selector) || Date.now() - start > timeoutMs) {
-        resolve();
+      if (document.querySelector(selector)) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        resolve(false);
         return;
       }
       requestAnimationFrame(check);
@@ -134,11 +143,12 @@ async function ensureSubmit() {
 }
 
 async function ensureDemoDetail() {
-  if (window.location.pathname === "/optimizations/a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b") {
+  const path = `/optimizations/${DEMO_OPTIMIZATION_ID}`;
+  if (window.location.pathname === path) {
     await waitForHook("setDetailTab");
     return;
   }
-  navigateTo("/optimizations/a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b");
+  navigateTo(path);
   await waitForElement("[data-tutorial='detail-header']");
   await waitForHook("setDetailTab");
 }
@@ -706,7 +716,7 @@ const tutorialSteps: TutorialStep[] = [
     placement: "bottom",
     beforeShow: async () => {
       const onDetail =
-        window.location.pathname === "/optimizations/a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b";
+        window.location.pathname === `/optimizations/${DEMO_OPTIMIZATION_ID}`;
       // Splash should only fire on the first crossing from /submit → /detail
       // per tour, not on every PREV→NEXT cycle through this step.
       if (!onDetail && !detailHeaderSplashShown) {

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useReducer, useEffect, useCallback, useRef, createContext, useContext } from "react";
-import type { TutorialTrack } from "../lib/steps";
+import type { TutorialTrack, TutorialStep } from "../lib/steps";
 import { getTrack, resetTutorialOneShotState } from "../lib/steps";
 
 export interface TutorialState {
@@ -128,16 +128,14 @@ const STORAGE_KEY = "skynet-tutorial-state";
 
 interface TutorialContextValue {
   state: TutorialState;
-  currentStep: ReturnType<typeof getTrack> extends { steps: Array<infer S> } | undefined
-    ? S | undefined
-    : never;
+  currentStep: TutorialStep | undefined;
   startTrack: (track: TutorialTrack) => void;
   nextStep: () => void;
   prevStep: () => void;
   goToStep: (index: number) => void;
   exitTutorial: () => void;
   completeTrack: () => void;
-  openMenu: () => void;
+  startDeepDive: () => void;
   closeMenu: () => void;
   resetAll: () => void;
   toggleAutoPlay: () => void;
@@ -148,30 +146,25 @@ const TutorialContext = createContext<TutorialContextValue | null>(null);
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(tutorialReducer, initialState);
 
-  // Restore full state on mount (survives page navigation)
+  // Restore completedTracks on mount. We deliberately do NOT restore
+  // activeTrack/currentStepIndex/isVisible — a fresh page load should
+  // start with the tour closed, even if it was open at unload.
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        const wasVisible = !!parsed.isVisible;
         const completed = new Set<TutorialTrack>(parsed.completedTracks || []);
-        // Only restore the active track if the tour was visible at unload —
-        // that handles HMR / parent re-renders where the spotlight should
-        // stay put. Otherwise drop the active track so closed tours don't
-        // silently re-open on next load.
         dispatch({
           type: "LOAD_STATE",
-          state: {
-            completedTracks: completed,
-            activeTrack: wasVisible ? parsed.activeTrack || null : null,
-            currentStepIndex: wasVisible ? parsed.currentStepIndex || 0 : 0,
-            isVisible: wasVisible,
-          },
+          state: { completedTracks: completed },
         });
       }
     } catch {
-      /* ignore */
+      // Intentionally swallow: localStorage can throw in private-mode
+      // Safari or when disabled by the user, and JSON.parse can throw on
+      // corrupted state. Falling back to defaults is the right behavior;
+      // a stale completion flag isn't worth surfacing to the user.
     }
 
     // Auto-start tutorial in auto-play mode via URL param
@@ -184,22 +177,21 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Persist full state on every change
+  // Persist only completed tracks. Ephemeral session state (active track,
+  // step index, visibility) intentionally lives in memory only.
   useEffect(() => {
     try {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
           completedTracks: Array.from(state.completedTracks),
-          activeTrack: state.activeTrack,
-          currentStepIndex: state.currentStepIndex,
-          isVisible: state.isVisible,
         }),
       );
     } catch {
-      /* ignore */
+      // Intentionally swallow: setItem throws on quota exceeded or when
+      // storage is disabled. Tutorial completion persistence is best-effort.
     }
-  }, [state.completedTracks, state.activeTrack, state.currentStepIndex, state.isVisible]);
+  }, [state.completedTracks]);
 
   const startTrack = useCallback((track: TutorialTrack) => {
     // Clear per-tour ephemeral flags (e.g. dd-detail-header splash one-shot)
@@ -213,10 +205,11 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const goToStep = useCallback((index: number) => dispatch({ type: "GO_TO_STEP", index }), []);
   const exitTutorial = useCallback(() => dispatch({ type: "EXIT_TUTORIAL" }), []);
   const completeTrack = useCallback(() => dispatch({ type: "COMPLETE_TRACK" }), []);
-  const openMenu = useCallback(() => {
-    // The first step's beforeShow (ensureDashboard) handles client-side
-    // navigation to "/" via the routerPush bridge hook, so no hard reload
-    // and no pre-save into localStorage is needed.
+  // We have a single track, so the help button starts it directly rather
+  // than opening a one-option chooser. The first step's beforeShow
+  // (ensureDashboard) handles client-side navigation to "/" via the
+  // routerPush bridge hook.
+  const startDeepDive = useCallback(() => {
     startTrack("deep-dive" as TutorialTrack);
   }, [startTrack]);
   const closeMenu = useCallback(() => dispatch({ type: "CLOSE_MENU" }), []);
@@ -251,7 +244,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
         goToStep,
         exitTutorial,
         completeTrack,
-        openMenu,
+        startDeepDive,
         closeMenu,
         resetAll,
         toggleAutoPlay,
