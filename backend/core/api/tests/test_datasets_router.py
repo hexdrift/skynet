@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from core.exceptions import AppError
-from core.i18n import t
+from core.i18n_en import t_en
+from core.i18n_keys import I18nKey
 
 from ..routers.datasets import create_datasets_router
 
@@ -29,10 +30,11 @@ def datasets_client() -> TestClient:
     # as a proper HTTP response instead of bubbling up as a 500.
     @app.exception_handler(AppError)
     async def _app_error_handler(_request, exc: AppError) -> JSONResponse:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"error": exc.error_code.lower(), "detail": exc.message},
-        )
+        content = {"error": exc.error_code.lower(), "detail": exc.message}
+        if exc.code:
+            content["code"] = exc.code
+            content["params"] = exc.params
+        return JSONResponse(status_code=exc.status_code, content=content)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(_request, exc: RequestValidationError) -> JSONResponse:
@@ -67,7 +69,7 @@ def test_profile_returns_plan_and_profile(datasets_client: TestClient) -> None:
 
 
 def test_profile_empty_dataset_returns_400(datasets_client: TestClient) -> None:
-    """An empty dataset is rejected with a 400 and a helpful detail message."""
+    """An empty dataset is rejected with a 400 carrying English detail and i18n code."""
     payload = {
         "dataset": [],
         "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
@@ -76,7 +78,9 @@ def test_profile_empty_dataset_returns_400(datasets_client: TestClient) -> None:
     resp = datasets_client.post("/datasets/profile", json=payload)
 
     assert resp.status_code == 400
-    assert resp.json()["detail"] == t("dataset.profile.empty")
+    body = resp.json()
+    assert body["detail"] == t_en(I18nKey.DATASET_PROFILE_EMPTY)
+    assert body["code"] == I18nKey.DATASET_PROFILE_EMPTY.value
 
 
 def test_profile_missing_column_mapping_returns_422(datasets_client: TestClient) -> None:

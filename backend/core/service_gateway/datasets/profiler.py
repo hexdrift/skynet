@@ -15,6 +15,8 @@ from typing import Any
 
 from ...exceptions import ValidationError
 from ...i18n import t
+from ...i18n_en import t_en
+from ...i18n_keys import I18nKey
 from ...models.common import ColumnMapping
 from ...models.dataset import (
     DatasetProfile,
@@ -62,7 +64,10 @@ def profile_dataset(dataset: list[dict[str, Any]], mapping: ColumnMapping) -> Da
         ValidationError: When ``dataset`` is empty.
     """
     if not dataset:
-        raise ValidationError(t("dataset.profile.empty"))
+        raise ValidationError(
+            t_en(I18nKey.DATASET_PROFILE_EMPTY),
+            code=I18nKey.DATASET_PROFILE_EMPTY.value,
+        )
 
     row_count = len(dataset)
     columns: set[str] = set()
