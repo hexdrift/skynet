@@ -41,18 +41,30 @@ class _JobResponseBase(BaseModel):
 
     latest_metrics: dict[str, Any] = Field(default_factory=dict)
 
-    # Run-specific (null for grid search)
-    model_name: str | None = None
-    model_settings: dict[str, Any] | None = None
-    reflection_model_name: str | None = None
-    task_model_name: str | None = None
+    model_name: str | None = Field(default=None, description="Single-run model name; null for grid searches.")
+    model_settings: dict[str, Any] | None = Field(
+        default=None, description="Single-run model settings; null for grid searches."
+    )
+    reflection_model_name: str | None = Field(
+        default=None, description="Single-run reflection model name; null for grid searches."
+    )
+    task_model_name: str | None = Field(
+        default=None, description="Single-run task model name; null for grid searches."
+    )
 
-    # Grid-search-specific (null for run)
-    total_pairs: int | None = None
-    completed_pairs: int | None = None
-    failed_pairs: int | None = None
-    generation_models: list[Any] | None = None
-    reflection_models: list[Any] | None = None
+    total_pairs: int | None = Field(default=None, description="Grid-search pair count; null for single runs.")
+    completed_pairs: int | None = Field(
+        default=None, description="Grid-search pairs that finished; null for single runs."
+    )
+    failed_pairs: int | None = Field(
+        default=None, description="Grid-search pairs that errored; null for single runs."
+    )
+    generation_models: list[Any] | None = Field(
+        default=None, description="Grid-search generation model list; null for single runs."
+    )
+    reflection_models: list[Any] | None = Field(
+        default=None, description="Grid-search reflection model list; null for single runs."
+    )
 
 
 class OptimizationStatusResponse(_JobResponseBase):
@@ -75,10 +87,18 @@ class OptimizationSummaryResponse(_JobResponseBase):
     progress_count: int = 0
     log_count: int = 0
 
-    # Metrics (run: direct values; grid search: best pair's values)
-    baseline_test_metric: float | None = None
-    optimized_test_metric: float | None = None
-    metric_improvement: float | None = None
+    baseline_test_metric: float | None = Field(
+        default=None,
+        description="Baseline test metric; for grid searches this is the best pair's value.",
+    )
+    optimized_test_metric: float | None = Field(
+        default=None,
+        description="Optimized test metric; for grid searches this is the best pair's value.",
+    )
+    metric_improvement: float | None = Field(
+        default=None,
+        description="Metric improvement; for grid searches this is the best pair's value.",
+    )
 
     best_pair_label: str | None = None
 

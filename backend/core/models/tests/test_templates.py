@@ -71,3 +71,9 @@ def test_template_create_username_stored() -> None:
     req = TemplateCreateRequest(name="t", username="alice", config={})
 
     assert req.username == "alice"
+
+
+def test_template_create_rejects_non_json_serializable_config() -> None:
+    """Verify TemplateCreateRequest rejects configs with non-JSON-serializable values."""
+    with pytest.raises(ValidationError, match="JSON-serializable"):
+        TemplateCreateRequest(name="t", username="u", config={"opaque": object()})

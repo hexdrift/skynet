@@ -23,15 +23,20 @@ class TemplateCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_config_size(self) -> TemplateCreateRequest:
-        """Reject template configs whose JSON serialization exceeds 100 KB.
+        """Reject template configs that aren't JSON-serializable or exceed 100 KB.
 
         Returns:
             The validated request instance.
 
         Raises:
-            ValueError: When ``config`` serializes to more than 100 KB of JSON.
+            ValueError: When ``config`` contains values that cannot be JSON
+                encoded, or when its JSON serialization exceeds 100 KB.
         """
-        if len(_json.dumps(self.config)) > _TEMPLATE_CONFIG_MAX_BYTES:
+        try:
+            serialized = _json.dumps(self.config)
+        except TypeError as exc:
+            raise ValueError(f"Template config must be JSON-serializable: {exc}") from exc
+        if len(serialized) > _TEMPLATE_CONFIG_MAX_BYTES:
             raise ValueError(f"Template config exceeds maximum size of {_TEMPLATE_CONFIG_MAX_BYTES // 1000}KB.")
         return self
 

@@ -53,14 +53,18 @@ def test_validate_code_request_accepts_both_blocks() -> None:
 
 def test_validate_code_request_sample_row_defaults_empty() -> None:
     """Verify ValidateCodeRequest defaults sample_row to an empty dict."""
-    req = ValidateCodeRequest.model_validate({"column_mapping": _column_mapping()})
+    req = ValidateCodeRequest.model_validate(
+        {"signature_code": "class S: pass", "column_mapping": _column_mapping()}
+    )
 
     assert req.sample_row == {}
 
 
 def test_validate_code_request_optimizer_name_defaults_none() -> None:
     """Verify ValidateCodeRequest defaults optimizer_name to None."""
-    req = ValidateCodeRequest.model_validate({"column_mapping": _column_mapping()})
+    req = ValidateCodeRequest.model_validate(
+        {"signature_code": "class S: pass", "column_mapping": _column_mapping()}
+    )
 
     assert req.optimizer_name is None
 
@@ -68,7 +72,15 @@ def test_validate_code_request_optimizer_name_defaults_none() -> None:
 def test_validate_code_request_rejects_invalid_column_mapping() -> None:
     """Verify ValidateCodeRequest rejects a column mapping with no inputs."""
     with pytest.raises(ValidationError, match="At least one input"):
-        ValidateCodeRequest.model_validate({"column_mapping": {"inputs": {}, "outputs": {"a": "a"}}})
+        ValidateCodeRequest.model_validate(
+            {"signature_code": "class S: pass", "column_mapping": {"inputs": {}, "outputs": {"a": "a"}}}
+        )
+
+
+def test_validate_code_request_rejects_when_both_code_blocks_missing() -> None:
+    """Verify ValidateCodeRequest rejects payloads with neither signature nor metric code."""
+    with pytest.raises(ValidationError, match="At least one of signature_code or metric_code"):
+        ValidateCodeRequest.model_validate({"column_mapping": _column_mapping()})
 
 
 def test_validate_code_response_valid_true_defaults() -> None:
