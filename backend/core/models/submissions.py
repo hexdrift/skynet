@@ -31,21 +31,6 @@ class _OptimizationRequestBase(BaseModel):
     column_mapping: ColumnMapping
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
-    stratify: bool = Field(
-        default=False,
-        description=(
-            "Stratify the train/val/test split. Recommended by the planner "
-            "when an output is categorical and the profiler flagged class "
-            "imbalance or a rare class."
-        ),
-    )
-    stratify_column: str | None = Field(
-        default=None,
-        description=(
-            "Dataset column whose values define the strata. When omitted "
-            "while ``stratify`` is true, the first output column is used."
-        ),
-    )
     seed: int | None = None
     dataset_filename: str | None = Field(default=None, description="Original dataset file name.")
 

@@ -347,8 +347,6 @@ export interface SplitPlan {
   shuffle: boolean;
   seed: number;
   counts: { train: number; val: number; test: number };
-  stratify: boolean;
-  stratify_column: string | null;
   rationale: string[];
 }
 

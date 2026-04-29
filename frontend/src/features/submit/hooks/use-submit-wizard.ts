@@ -138,8 +138,6 @@ export function useSubmitWizard() {
   }, [prefs.wizardSplitMode]);
 
   const [seed, setSeed] = useState<number | undefined>(undefined);
-  const [stratify, setStratify] = useState(false);
-  const [stratifyColumn, setStratifyColumn] = useState<string | null>(null);
 
   const [signatureValidation, setSignatureValidation] = useState<ValidateCodeResponse | null>(null);
   const [metricValidation, setMetricValidation] = useState<ValidateCodeResponse | null>(null);
@@ -276,10 +274,6 @@ export function useSubmitWizard() {
         setSeed(sharedState.seed);
       } else if (key === "shuffle" && typeof sharedState.shuffle === "boolean") {
         setShuffle(sharedState.shuffle);
-      } else if (key === "stratify" && typeof sharedState.stratify === "boolean") {
-        setStratify(sharedState.stratify);
-      } else if (key === "stratify_column" && typeof sharedState.stratify_column === "string") {
-        setStratifyColumn(sharedState.stratify_column);
       } else if (key === "optimizer_kwargs" && sharedState.optimizer_kwargs) {
         const kw = sharedState.optimizer_kwargs as Record<string, unknown>;
         if (typeof kw.auto === "string") setAutoLevel(kw.auto);
@@ -392,13 +386,6 @@ export function useSubmitWizard() {
     if (s.shuffle !== shuffle) {
       wizardCtx.setField("shuffle", shuffle, "user");
     }
-    if (s.stratify !== stratify) {
-      wizardCtx.setField("stratify", stratify, "user");
-    }
-    const nextStratifyCol = stratifyColumn ?? undefined;
-    if (s.stratify_column !== nextStratifyCol) {
-      wizardCtx.setField("stratify_column", nextStratifyCol, "user");
-    }
   }, [
     jobDescription,
     jobType,
@@ -409,8 +396,6 @@ export function useSubmitWizard() {
     splitMode,
     seed,
     shuffle,
-    stratify,
-    stratifyColumn,
     wizardCtx,
   ]);
 
@@ -508,8 +493,6 @@ export function useSubmitWizard() {
       setSplitModeState(stagedDefaultMode);
       setDatasetProfile(null);
       setSplitPlan(null);
-      setStratify(false);
-      setStratifyColumn(null);
       setSignatureValidation(null);
       setMetricValidation(null);
     };
@@ -619,8 +602,6 @@ export function useSubmitWizard() {
         }
 
         if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
-        if (payload.stratify != null) setStratify(Boolean(payload.stratify));
-        if (payload.stratify_column != null) setStratifyColumn(String(payload.stratify_column));
         if (payload.seed != null) setSeed(Number(payload.seed));
 
         const mc = payload.model_config as ModelConfig | undefined;
@@ -687,8 +668,6 @@ export function useSubmitWizard() {
     setSplit,
     setShuffle,
     setSeed,
-    setStratify,
-    setStratifyColumn,
   });
 
   const setSplitMode = useCallback(
@@ -699,8 +678,6 @@ export function useSubmitWizard() {
         setSplit(splitPlan.fractions);
         setShuffle(splitPlan.shuffle);
         setSeed(splitPlan.seed);
-        setStratify(splitPlan.stratify);
-        setStratifyColumn(splitPlan.stratify_column);
       }
     },
     [splitPlan],
@@ -959,8 +936,6 @@ export function useSubmitWizard() {
       setSplitModeState(uploadDefaultMode);
       setDatasetProfile(null);
       setSplitPlan(null);
-      setStratify(false);
-      setStratifyColumn(null);
       // A new dataset invalidates any cloned or user-authored code — clear
       // the manual-edit flags so the template effects and the code agent
       // can repopulate for the new schema.
@@ -1043,8 +1018,6 @@ export function useSubmitWizard() {
         column_mapping: columnMapping,
         split_fractions: split,
         shuffle,
-        stratify,
-        ...(stratify && stratifyColumn ? { stratify_column: stratifyColumn } : {}),
         ...(seed != null && { seed }),
         ...(Object.keys(optKw).length > 0 && { optimizer_kwargs: optKw }),
       };

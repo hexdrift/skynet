@@ -90,14 +90,6 @@ class SplitPlan(BaseModel):
     shuffle: bool
     seed: int = Field(ge=0)
     counts: SplitCounts
-    stratify: bool = Field(
-        default=False,
-        description=("When true, the planner recommends stratified sampling so rare classes survive in val and test."),
-    )
-    stratify_column: str | None = Field(
-        default=None,
-        description=("Dataset column whose values define the strata when stratify is true. Null otherwise."),
-    )
     rationale: list[str] = Field(
         default_factory=list,
         description="Ordered list of short Hebrew bullets explaining each decision.",

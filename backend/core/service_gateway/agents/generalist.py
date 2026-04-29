@@ -562,7 +562,7 @@ class GeneralistSig(dspy.Signature):
       of editable fields — optimizer_name, module_name, model_config
       (teacher/student), reflection_model_config, generation_models /
       reflection_models (grid search), split_fractions, split_mode, seed,
-      shuffle, stratify, optimizer_kwargs, job_name, job_description,
+      shuffle, optimizer_kwargs, job_name, job_description,
       job_type, signature_code, metric_code. Supply only the fields you
       want to change; everything else is left alone. Prefer it over the
       narrow per-field tools when changing one thing, and combine edits
