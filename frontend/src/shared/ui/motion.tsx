@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, type HTMLMotionProps } from "framer-motion";
+import { motion, useReducedMotion, type HTMLMotionProps } from "framer-motion";
 import * as React from "react";
 
 export const FadeIn = React.memo(function FadeIn({
@@ -15,6 +15,7 @@ export const FadeIn = React.memo(function FadeIn({
   direction?: "up" | "down" | "left" | "right";
   className?: string;
 } & Omit<HTMLMotionProps<"div">, "initial" | "whileInView" | "viewport" | "transition">) {
+  const shouldReduceMotion = useReducedMotion();
   const offsets = {
     up: { y: 24 },
     down: { y: -24 },
@@ -24,10 +25,12 @@ export const FadeIn = React.memo(function FadeIn({
 
   return (
     <motion.div
-      initial={{ opacity: 0, ...offsets[direction] }}
-      whileInView={{ opacity: 1, x: 0, y: 0 }}
+      initial={shouldReduceMotion ? false : { opacity: 0, ...offsets[direction] }}
+      whileInView={shouldReduceMotion ? undefined : { opacity: 1, x: 0, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.5, delay, ease: [0.2, 0.8, 0.2, 1] }}
+      transition={
+        shouldReduceMotion ? undefined : { duration: 0.5, delay, ease: [0.2, 0.8, 0.2, 1] }
+      }
       className={className}
       {...props}
     >
@@ -45,10 +48,11 @@ export const StaggerContainer = React.memo(function StaggerContainer({
   className?: string;
   staggerDelay?: number;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   return (
     <motion.div
-      initial="hidden"
-      whileInView="visible"
+      initial={shouldReduceMotion ? false : "hidden"}
+      whileInView={shouldReduceMotion ? undefined : "visible"}
       viewport={{ once: true, margin: "-40px" }}
       variants={{
         hidden: {},
@@ -68,17 +72,22 @@ export const StaggerItem = React.memo(function StaggerItem({
   children: React.ReactNode;
   className?: string;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   return (
     <motion.div
-      variants={{
-        hidden: { opacity: 0, y: 20, scale: 0.97 },
-        visible: {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          transition: { duration: 0.45, ease: [0.2, 0.8, 0.2, 1] },
-        },
-      }}
+      variants={
+        shouldReduceMotion
+          ? undefined
+          : {
+              hidden: { opacity: 0, y: 20, scale: 0.97 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                transition: { duration: 0.45, ease: [0.2, 0.8, 0.2, 1] },
+              },
+            }
+      }
       className={className}
     >
       {children}
@@ -95,10 +104,11 @@ export function HoverScale({
   className?: string;
   scale?: number;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   return (
     <motion.div
-      whileHover={{ scale }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      whileHover={shouldReduceMotion ? undefined : { scale }}
+      transition={shouldReduceMotion ? undefined : { duration: 0.2, ease: "easeOut" }}
       className={className}
     >
       {children}
@@ -116,15 +126,20 @@ export function TiltCard({
   onClick?: () => void;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = useReducedMotion();
 
-  const handleMouseMove = React.useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    el.style.transform = `perspective(800px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) translateY(-2px)`;
-  }, []);
+  const handleMouseMove = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (shouldReduceMotion) return;
+      const el = ref.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      el.style.transform = `perspective(800px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) translateY(-2px)`;
+    },
+    [shouldReduceMotion],
+  );
 
   const handleMouseLeave = React.useCallback(() => {
     const el = ref.current;
@@ -156,7 +171,7 @@ export function TiltCard({
       tabIndex={interactive ? 0 : undefined}
       style={{
         transition: "transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1)",
-        willChange: "transform",
+        willChange: shouldReduceMotion ? undefined : "transform",
       }}
     >
       {children}
@@ -180,6 +195,7 @@ export const AnimatedNumber = React.memo(function AnimatedNumber({
   suffix?: string;
   className?: string;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   const [displayed, setDisplayed] = React.useState(value);
   const ref = React.useRef<HTMLSpanElement>(null);
   const prevValue = React.useRef(value);
@@ -187,6 +203,12 @@ export const AnimatedNumber = React.memo(function AnimatedNumber({
   const hasBeenVisible = React.useRef(false);
 
   React.useEffect(() => {
+    if (shouldReduceMotion) {
+      cancelAnimationFrame(animFrame.current);
+      setDisplayed(value);
+      prevValue.current = value;
+      return;
+    }
     const el = ref.current;
     if (!el) return;
 
@@ -235,7 +257,7 @@ export const AnimatedNumber = React.memo(function AnimatedNumber({
       observer.disconnect();
       cancelAnimationFrame(animFrame.current);
     };
-  }, [value, duration, decimals]);
+  }, [value, duration, decimals, shouldReduceMotion]);
 
   const formatted = decimals > 0 ? displayed.toFixed(decimals) : displayed.toLocaleString("he-IL");
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
@@ -17,6 +17,7 @@ export function ThinkingSection({ thinking }: { thinking: AgentThinking }) {
   const [nowTs, setNowTs] = React.useState(() => Date.now());
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const autoCollapsedRef = React.useRef(false);
+  const shouldReduceMotion = useReducedMotion();
 
   React.useEffect(() => {
     if (!isThinking) return;
@@ -64,7 +65,9 @@ export function ThinkingSection({ thinking }: { thinking: AgentThinking }) {
           <span
             className={cn(
               "text-xs font-medium",
-              isThinking ? "text-[#3D2E22] animate-pulse" : "text-foreground/70",
+              isThinking
+                ? "text-[#3D2E22] animate-pulse motion-reduce:animate-none"
+                : "text-foreground/70",
             )}
           >
             {label}
@@ -94,10 +97,12 @@ export function ThinkingSection({ thinking }: { thinking: AgentThinking }) {
       <AnimatePresence initial={false}>
         {open && reasoning && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
+            initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+            exit={shouldReduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={
+              shouldReduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }
+            }
             className="overflow-hidden"
           >
             <div
@@ -118,7 +123,7 @@ function ThinkingIndicator({ active }: { active: boolean }) {
   if (active) {
     return (
       <span className="relative inline-flex size-4 items-center justify-center shrink-0">
-        <span className="absolute inset-0 rounded-full bg-[#3D2E22]/15 animate-ping" />
+        <span className="absolute inset-0 rounded-full bg-[#3D2E22]/15 animate-ping motion-reduce:animate-none" />
         <span className="relative size-2 rounded-full bg-[#3D2E22]" />
       </span>
     );

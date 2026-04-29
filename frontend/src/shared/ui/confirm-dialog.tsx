@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import {
   Dialog,
   DialogContent,
@@ -18,7 +20,7 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   variant?: "default" | "destructive";
   loading?: boolean;
 }
@@ -34,6 +36,21 @@ export function ConfirmDialog({
   variant = "default",
   loading = false,
 }: ConfirmDialogProps) {
+  const [pending, setPending] = React.useState(false);
+  const busy = loading || pending;
+
+  const handleConfirm = async () => {
+    setPending(true);
+    try {
+      await onConfirm();
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Confirm action failed", error);
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" dir="rtl">
@@ -42,16 +59,13 @@ export function ConfirmDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             {cancelLabel}
           </Button>
           <Button
             variant={variant === "destructive" ? "destructive" : "default"}
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
-            }}
-            disabled={loading}
+            onClick={handleConfirm}
+            disabled={busy}
           >
             {confirmLabel}
           </Button>

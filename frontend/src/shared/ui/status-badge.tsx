@@ -26,11 +26,11 @@ export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
   return (
     <Badge
       variant="outline"
-      className={`text-[0.8125rem] px-3 py-1 font-bold tracking-wide ${colorClass} ${isRunning ? "animate-pulse" : ""} ${className}`}
+      className={`text-[0.8125rem] px-3 py-1 font-bold tracking-wide ${colorClass} ${isRunning ? "animate-pulse motion-reduce:animate-none" : ""} ${className}`}
     >
       {isRunning && (
         <span className="relative flex size-2 me-1">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
+          <span className="animate-ping motion-reduce:animate-none absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
           <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
         </span>
       )}

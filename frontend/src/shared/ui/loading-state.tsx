@@ -21,7 +21,10 @@ export function LoadingState({ variant, rows = 3, className = "" }: LoadingState
     return (
       <div className={`space-y-2 ${className}`}>
         {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} className="h-4 bg-muted/20 rounded animate-pulse" />
+          <div
+            key={i}
+            className="h-4 bg-muted/20 rounded animate-pulse motion-reduce:animate-none"
+          />
         ))}
       </div>
     );
@@ -32,8 +35,8 @@ export function LoadingState({ variant, rows = 3, className = "" }: LoadingState
       <div className={`space-y-3 ${className}`}>
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="p-4 border rounded-lg space-y-3">
-            <div className="h-4 bg-muted/20 rounded animate-pulse w-1/3" />
-            <div className="h-3 bg-muted/20 rounded animate-pulse w-2/3" />
+            <div className="h-4 bg-muted/20 rounded animate-pulse motion-reduce:animate-none w-1/3" />
+            <div className="h-3 bg-muted/20 rounded animate-pulse motion-reduce:animate-none w-2/3" />
           </div>
         ))}
       </div>
@@ -43,7 +46,10 @@ export function LoadingState({ variant, rows = 3, className = "" }: LoadingState
   return (
     <div className={`space-y-2 ${className}`}>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-12 bg-muted/20 rounded animate-pulse" />
+        <div
+          key={i}
+          className="h-12 bg-muted/20 rounded animate-pulse motion-reduce:animate-none"
+        />
       ))}
     </div>
   );

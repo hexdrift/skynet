@@ -49,6 +49,7 @@ export function ParticleHero({ className }: { className?: string }) {
   const animRef = useRef(0);
   const particlesRef = useRef<Particle[]>([]);
   const pausedRef = useRef(false);
+  const reducedMotionRef = useRef(false);
 
   const initParticles = useCallback((w: number, h: number) => {
     const isMobile = w < 768;
@@ -76,20 +77,7 @@ export function ParticleHero({ className }: { className?: string }) {
 
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    // Reduced-motion: static dots with resize support
-    if (mql.matches) {
-      const rect = canvas.getBoundingClientRect();
-      initParticles(rect.width, rect.height);
-      drawStaticDots(canvas, particlesRef.current);
-
-      const ro = new ResizeObserver(() => {
-        const r = canvas.getBoundingClientRect();
-        initParticles(r.width, r.height);
-        drawStaticDots(canvas, particlesRef.current);
-      });
-      ro.observe(canvas);
-      return () => ro.disconnect();
-    }
+    reducedMotionRef.current = mql.matches;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -109,16 +97,21 @@ export function ParticleHero({ className }: { className?: string }) {
       if (particlesRef.current.length === 0) {
         initParticles(w, h);
       }
+      if (reducedMotionRef.current) {
+        drawStaticDots(canvas, particlesRef.current);
+      }
     };
 
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
     resize();
 
-    const isMobile = window.innerWidth < 768;
-    const maxLineDistance = isMobile ? 0 : 120;
-
     const draw = () => {
+      if (reducedMotionRef.current) {
+        drawStaticDots(canvas, particlesRef.current);
+        return;
+      }
+
       if (pausedRef.current) {
         animRef.current = requestAnimationFrame(draw);
         return;
@@ -136,6 +129,7 @@ export function ParticleHero({ className }: { className?: string }) {
         if (p.y > h + 10) p.y = -10;
       }
 
+      const maxLineDistance = w < 768 ? 0 : 120;
       if (maxLineDistance > 0) {
         for (let i = 0; i < particles.length; i++) {
           const pi = particles[i]!;
@@ -174,11 +168,14 @@ export function ParticleHero({ className }: { className?: string }) {
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
-    // Stop animation and draw static dots if reduced-motion changes
     const handleMotionChange = (e: MediaQueryListEvent) => {
+      reducedMotionRef.current = e.matches;
       if (e.matches) {
         cancelAnimationFrame(animRef.current);
         drawStaticDots(canvas, particlesRef.current);
+      } else {
+        resize();
+        animRef.current = requestAnimationFrame(draw);
       }
     };
     mql.addEventListener("change", handleMotionChange);
