@@ -229,6 +229,9 @@ class ProbeProgressTracker:
             fit = fit_scaling_law(self.points)
             scaling = fit.to_dict()
         except Exception:
+            # Curve-fit failures are best-effort; the trajectory event is still
+            # emitted with ``scaling=None`` so the frontend stays in sync.
+            logger.debug("scaling-law fit failed at step %s", step, exc_info=True)
             scaling = None
         self.event_queue.put(
             {

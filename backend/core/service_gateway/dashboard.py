@@ -43,9 +43,10 @@ def _fit_pca_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
 
     Returns ``[]`` when numpy isn't available or the matrix has fewer
     than two rows — the dashboard renders a welcoming empty state in
-    either case. A fixed sign convention (flip so the first coord is
-    positive in the largest-magnitude row) keeps the picture stable
-    across reruns when the same inputs are provided.
+    either case. A fixed sign convention (flip each component so the
+    largest-magnitude entry in its column is positive) keeps the
+    picture stable across reruns: SVD's component sign is otherwise
+    arbitrary and would mirror the scatter on every recompute.
 
     Args:
         vectors: Embedding rows, each already L2-normalised.
@@ -65,6 +66,13 @@ def _fit_pca_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
         _, _, vh = np.linalg.svd(centered, full_matrices=False)
         components = vh[:2]
         coords = centered @ components.T
+        for axis in range(coords.shape[1]):
+            column = coords[:, axis]
+            if column.size == 0:
+                continue
+            anchor_idx = int(np.argmax(np.abs(column)))
+            if column[anchor_idx] < 0:
+                coords[:, axis] = -column
         scale = float(np.max(np.abs(coords))) or 1.0
         normalised = coords / scale
         return [(float(x), float(y)) for x, y in normalised]

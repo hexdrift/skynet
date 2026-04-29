@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -31,8 +32,11 @@ from ...models import (
     OptimizerStatsItem,
     OptimizerStatsResponse,
 )
+from ...models.common import OptimizationStatus
 from ..converters import parse_overview
 from ._helpers import build_summary
+
+logger = logging.getLogger(__name__)
 
 
 def _summary_to_analytics_job(s: OptimizationSummaryResponse) -> DashboardAnalyticsJob:
@@ -44,7 +48,7 @@ def _summary_to_analytics_job(s: OptimizationSummaryResponse) -> DashboardAnalyt
     Returns:
         A :class:`DashboardAnalyticsJob` populated from ``s``.
     """
-    status_value = str(s.status).rsplit(".", 1)[-1]
+    status_value = s.status.value if isinstance(s.status, OptimizationStatus) else str(s.status)
     created_at_str: str | None = None
     if s.created_at is not None:
         created_at_str = s.created_at.isoformat() if isinstance(s.created_at, datetime) else str(s.created_at)
@@ -67,6 +71,11 @@ def _summary_to_analytics_job(s: OptimizationSummaryResponse) -> DashboardAnalyt
 
 _ACTIVE_STATUSES = frozenset({"pending", "validating", "running"})
 _TERMINAL_SUCCESS_OR_FAILED = frozenset({"success", "failed"})
+
+# Hard cap on jobs scanned per analytics request. Past this size the
+# response surfaces ``truncated=True`` so the frontend can warn the user
+# the aggregation is incomplete.
+_ANALYTICS_JOB_HARD_CAP = 10000
 
 
 def create_analytics_router(*, job_store) -> APIRouter:
@@ -99,7 +108,8 @@ def create_analytics_router(*, job_store) -> APIRouter:
     ) -> AnalyticsSummaryResponse:
         """Return aggregated KPIs across optimizations.
 
-        Hard cap: 10,000 optimizations. ``running_count`` folds in
+        Caps at :data:`_ANALYTICS_JOB_HARD_CAP` jobs per request and surfaces
+        ``truncated=True`` when the cap is hit. ``running_count`` folds in
         ``validating`` status. For grid searches the ``best_pair`` is used
         as the representative result.
 
@@ -115,9 +125,10 @@ def create_analytics_router(*, job_store) -> APIRouter:
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
-            limit=10000,
+            limit=_ANALYTICS_JOB_HARD_CAP,
             offset=0,
         )
+        truncated = len(all_jobs) >= _ANALYTICS_JOB_HARD_CAP
 
         filtered_jobs = []
         for job_data in all_jobs:
@@ -212,6 +223,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
             total_pairs=total_pairs,
             completed_pairs=completed_pairs,
             failed_pairs=failed_pairs,
+            truncated=truncated,
         )
 
     @router.get(
@@ -243,9 +255,10 @@ def create_analytics_router(*, job_store) -> APIRouter:
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
-            limit=10000,
+            limit=_ANALYTICS_JOB_HARD_CAP,
             offset=0,
         )
+        truncated = len(all_jobs) >= _ANALYTICS_JOB_HARD_CAP
 
         # optimizer_name -> {total, success, improvements, runtimes}
         optimizer_data: dict[str, dict[str, Any]] = {}
@@ -323,7 +336,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
         items.sort(key=lambda x: x.total_jobs, reverse=True)
 
-        return OptimizerStatsResponse(items=items)
+        return OptimizerStatsResponse(items=items, truncated=truncated)
 
     @router.get(
         "/analytics/models",
@@ -352,9 +365,10 @@ def create_analytics_router(*, job_store) -> APIRouter:
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
-            limit=10000,
+            limit=_ANALYTICS_JOB_HARD_CAP,
             offset=0,
         )
+        truncated = len(all_jobs) >= _ANALYTICS_JOB_HARD_CAP
 
         # model_name -> {total, success, improvements, use_count}
         model_data: dict[str, dict[str, Any]] = {}
@@ -423,7 +437,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
         model_items.sort(key=lambda x: x.use_count, reverse=True)
 
-        return ModelStatsResponse(items=model_items)
+        return ModelStatsResponse(items=model_items, truncated=truncated)
 
     @router.get(
         "/analytics/dashboard",
@@ -440,8 +454,9 @@ def create_analytics_router(*, job_store) -> APIRouter:
     ) -> DashboardAnalyticsResponse:
         """Return a pre-shaped payload for the whole analytics dashboard.
 
-        Hard cap: 10,000 optimizations. Improvements are raw floats; the
-        frontend normalizes ratios.
+        Caps at :data:`_ANALYTICS_JOB_HARD_CAP` jobs per request and surfaces
+        ``truncated=True`` when the cap is hit. Improvements are raw floats;
+        the frontend normalizes ratios.
 
         Args:
             optimizer: Exact-match optimizer name filter.
@@ -457,9 +472,10 @@ def create_analytics_router(*, job_store) -> APIRouter:
         all_jobs_raw = job_store.list_jobs(
             status=status,
             username=username,
-            limit=10000,
+            limit=_ANALYTICS_JOB_HARD_CAP,
             offset=0,
         )
+        truncated = len(all_jobs_raw) >= _ANALYTICS_JOB_HARD_CAP
 
         # Build summaries up front so every downstream filter and
         # aggregation works against the same view the dashboard would
@@ -470,7 +486,14 @@ def create_analytics_router(*, job_store) -> APIRouter:
         for job_data in all_jobs_raw:
             try:
                 summary = build_summary(job_data)
-            except Exception:  # isolation boundary: skip unparseable job rows so one bad row can't break the dashboard
+            except Exception:
+                # Isolation boundary: skip unparseable job rows so one bad row
+                # can't break the dashboard. Log so silent corruption is visible.
+                logger.warning(
+                    "analytics dashboard skipped unparseable job %s",
+                    job_data.get("optimization_id", "<unknown>"),
+                    exc_info=True,
+                )
                 continue
             if summary.optimizer_name:
                 available_optimizers.add(summary.optimizer_name)
@@ -495,17 +518,15 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
         status_counts: dict[str, int] = {}
         for s in summaries:
-            key = str(s.status)
-            if "." in key:  # OptimizationStatus enum repr falls back to e.g. "OptimizationStatus.success"
-                key = key.rsplit(".", 1)[-1]
+            key = s.status.value if isinstance(s.status, OptimizationStatus) else str(s.status)
             status_counts[key] = status_counts.get(key, 0) + 1
 
-        success_items = [s for s in summaries if str(s.status).endswith("success")]
-        failed_items = [s for s in summaries if str(s.status).endswith("failed")]
-        running_count = sum(1 for s in summaries if str(s.status).rsplit(".", 1)[-1] in _ACTIVE_STATUSES)
+        success_items = [s for s in summaries if s.status == OptimizationStatus.success]
+        failed_items = [s for s in summaries if s.status == OptimizationStatus.failed]
+        running_count = sum(1 for s in summaries if s.status in _ACTIVE_STATUSES)
         success_count = len(success_items)
         failed_count = len(failed_items)
-        terminal_count = sum(1 for s in summaries if str(s.status).rsplit(".", 1)[-1] in _TERMINAL_SUCCESS_OR_FAILED)
+        terminal_count = sum(1 for s in summaries if s.status in _TERMINAL_SUCCESS_OR_FAILED)
 
         optimizer_counts: dict[str, int] = {}
         job_type_counts: dict[str, int] = {}
@@ -591,7 +612,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 delta = delta * 100
             efficiency = (delta / s.elapsed_seconds) * 60.0
             eff_items.append((efficiency, s))
-        eff_items.sort(key=lambda t: t[0], reverse=True)
+        eff_items.sort(key=lambda pair: pair[0], reverse=True)
         efficiency = [_summary_to_analytics_job(s) for _, s in eff_items[:10]]
 
         ranked = sorted(
@@ -639,6 +660,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
             timeline=timeline,
             available_optimizers=sorted(available_optimizers),
             available_models=sorted(available_models),
+            truncated=truncated,
         )
 
     return router

@@ -547,6 +547,10 @@ def _build_schema_from_query_schema(schema: dict[str, Any] | None) -> str:
             lines.append(f"{name} ({role}, {dtype})")
         return "\n".join(lines)
     try:
-        return json.dumps(schema, ensure_ascii=False, sort_keys=True)[:1000]
+        rendered = json.dumps(schema, ensure_ascii=False, sort_keys=True)
     except TypeError:
         return ""
+    if len(rendered) > 1000:
+        logger.debug("schema digest truncated from %d chars to 1000", len(rendered))
+        return rendered[:1000] + "…"
+    return rendered

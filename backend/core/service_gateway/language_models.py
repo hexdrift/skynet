@@ -10,7 +10,7 @@ from ..exceptions import ServiceError
 from ..models import ModelConfig
 
 
-def build_language_model(config: ModelConfig) -> dspy.LM:
+def build_language_model(config: ModelConfig, *, disable_cache: bool = False) -> dspy.LM:
     """Construct a DSPy language model from a ModelConfig.
 
     Only non-None optional fields (temperature, base_url, max_tokens, top_p) are
@@ -19,6 +19,9 @@ def build_language_model(config: ModelConfig) -> dspy.LM:
 
     Args:
         config: Provider-agnostic model configuration.
+        disable_cache: When True, force ``cache=False`` so retries always hit
+            the provider. Used for user-facing surfaces (agents, serve) where
+            replaying a cached response would defeat the regenerate action.
 
     Returns:
         A configured ``dspy.LM`` ready for use by an optimizer.
@@ -38,6 +41,8 @@ def build_language_model(config: ModelConfig) -> dspy.LM:
     if config.top_p is not None:
         lm_kwargs["top_p"] = config.top_p
     lm_kwargs.update(config.extra)
+    if disable_cache:
+        lm_kwargs["cache"] = False
     try:
         language_model = dspy.LM(**lm_kwargs)
     except ValueError as exc:

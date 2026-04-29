@@ -12,12 +12,16 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 import litellm
 from pydantic import BaseModel, Field
+
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +203,12 @@ def get_catalog() -> ModelCatalogResponse:
     cost: dict[str, dict] = litellm.model_cost
     try:
         valid_set: set[str] = set(litellm.get_valid_models())
-    except Exception as exc:
+    except (OSError, RuntimeError, KeyError, ValueError, AttributeError, TypeError) as exc:
+        # LiteLLM probes provider env vars + endpoints; the failure surface is
+        # network-shaped (OSError, RuntimeError) or shape-shaped (Key/Value/
+        # Attribute/Type). Catching the union avoids hiding real bugs while
+        # still letting the catalog degrade gracefully when one provider
+        # misbehaves.
         logger.warning("litellm.get_valid_models() failed: %s; marking none as available", exc)
         valid_set = set()
 
@@ -282,20 +291,37 @@ def get_catalog() -> ModelCatalogResponse:
 
 
 _cached_response: ModelCatalogResponse | None = None
+_cached_at_monotonic: float = 0.0
+_cache_lock = Lock()
 
 
 def get_catalog_cached() -> ModelCatalogResponse:
-    """Return the catalog, computing it once and caching forever.
+    """Return the catalog, refreshing it after ``model_catalog_ttl_seconds``.
+
+    A TTL of ``0`` disables caching (every call rebuilds). The lock makes
+    concurrent first-call requests share a single rebuild instead of all
+    racing into the same probe.
 
     Returns:
-        The cached ``ModelCatalogResponse``, built lazily on first call.
+        The cached ``ModelCatalogResponse``, rebuilt when stale.
     """
-    global _cached_response
-    if _cached_response is None:
+    global _cached_response, _cached_at_monotonic
+    ttl = float(settings.model_catalog_ttl_seconds)
+    now = time.monotonic()
+    if ttl > 0.0 and _cached_response is not None and (now - _cached_at_monotonic) < ttl:
+        return _cached_response
+
+    with _cache_lock:
+        # Re-check under the lock so we don't rebuild twice when callers
+        # race in during the first miss.
+        now = time.monotonic()
+        if ttl > 0.0 and _cached_response is not None and (now - _cached_at_monotonic) < ttl:
+            return _cached_response
         _cached_response = get_catalog()
+        _cached_at_monotonic = now
         logger.info(
             "Model catalog built: %d providers, %d models",
             len(_cached_response.providers),
             len(_cached_response.models),
         )
-    return _cached_response
+        return _cached_response

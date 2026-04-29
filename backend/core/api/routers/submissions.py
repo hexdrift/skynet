@@ -56,7 +56,7 @@ from ...service_gateway.safe_exec import validate_signature_code
 from ...worker.engine import get_worker
 from ..errors import DomainError
 from ..model_catalog import get_catalog_cached
-from ._helpers import compute_task_fingerprint, enforce_user_quota, strip_api_key
+from ._helpers import compute_task_fingerprint, enforce_user_quota, stable_seed, strip_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         optimization_id = str(uuid4())
         # Ensure a deterministic seed so dataset splits are reproducible
         if payload.seed is None:
-            payload.seed = hash(optimization_id) % (2**31)
+            payload.seed = stable_seed(optimization_id)
 
         task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
 
@@ -317,7 +317,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
 
         optimization_id = str(uuid4())
         if payload.seed is None:
-            payload.seed = hash(optimization_id) % (2**31)
+            payload.seed = stable_seed(optimization_id)
         total_pairs = len(payload.generation_models) * len(payload.reflection_models)
 
         task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)

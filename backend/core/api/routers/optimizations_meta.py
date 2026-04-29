@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -22,8 +23,46 @@ from ..response_limits import (
     clamp_limit,
     truncate_text,
 )
+from ._helpers import strip_api_key
 
 logger = logging.getLogger(__name__)
+
+_PAYLOAD_MODEL_CONFIG_FIELDS = (
+    "model_settings",
+    "reflection_model_settings",
+    "task_model_settings",
+)
+_PAYLOAD_MODEL_CONFIG_LISTS = (
+    "generation_models",
+    "reflection_models",
+)
+
+
+def _sanitize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a shallow copy of ``payload`` with every nested ``api_key`` scrubbed.
+
+    The stored submission payload echoes whatever the caller posted, including
+    inline ``model_settings.extra.api_key`` values that the operator never
+    intended to surface back through the read API. This sanitiser walks every
+    well-known ``ModelConfig`` slot — single-run model fields and grid-search
+    model lists — and runs each one through :func:`strip_api_key`.
+
+    Args:
+        payload: Raw payload dict pulled off the job row.
+
+    Returns:
+        A new dict safe to serialise to API consumers.
+    """
+    sanitised = dict(payload)
+    for field in _PAYLOAD_MODEL_CONFIG_FIELDS:
+        value = sanitised.get(field)
+        if isinstance(value, dict):
+            sanitised[field] = strip_api_key(value)
+    for field in _PAYLOAD_MODEL_CONFIG_LISTS:
+        value = sanitised.get(field)
+        if isinstance(value, list):
+            sanitised[field] = [strip_api_key(item) if isinstance(item, dict) else item for item in value]
+    return sanitised
 
 
 class RenameRequest(BaseModel):
@@ -122,9 +161,11 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         """Return the original submission payload for an optimization.
 
         Useful for re-running or duplicating an optimization. Includes the
-        full dataset, column mapping, code, and kwargs. Note: the stored
-        payload may include the original API key the user submitted inline.
-        404 if the optimization is unknown or the stored payload is missing.
+        full dataset, column mapping, code, and kwargs. Inline API keys on
+        every ``ModelConfig`` slot are scrubbed before the response leaves
+        the server — duplicating a job therefore requires the caller to
+        re-supply credentials. 404 if the optimization is unknown or the
+        stored payload is missing.
 
         Args:
             optimization_id: Optimization id whose payload should be returned.
@@ -153,7 +194,9 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
         return OptimizationPayloadResponse(
-            optimization_id=optimization_id, optimization_type=optimization_type, payload=payload
+            optimization_id=optimization_id,
+            optimization_type=optimization_type,
+            payload=_sanitize_payload(payload),
         )
 
     @router.patch(

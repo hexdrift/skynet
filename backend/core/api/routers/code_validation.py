@@ -74,6 +74,11 @@ def create_code_validation_router() -> APIRouter:
             A :class:`FormatCodeResponse` with the (possibly reformatted) code,
             a ``changed`` flag, and any error message.
         """
+        # ``delete=False`` keeps the file readable after the writer closes so
+        # ruff can pick it up via path. ``try/finally`` guarantees cleanup on
+        # every exit path — non-zero ruff exit, timeout, missing binary, etc.
+        # — so a long-lived API process can't leak /tmp space.
+        tmp_path: str | None = None
         try:
             with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                 f.write(payload.code)
@@ -88,9 +93,7 @@ def create_code_validation_router() -> APIRouter:
             )
             if result.returncode != 0:
                 return FormatCodeResponse(code=payload.code, changed=False, error=result.stderr.strip())
-            tmp = Path(tmp_path)
-            formatted = tmp.read_text()
-            tmp.unlink()
+            formatted = Path(tmp_path).read_text()
             return FormatCodeResponse(code=formatted, changed=formatted != payload.code)
         except FileNotFoundError:
             return FormatCodeResponse(code=payload.code, changed=False, error="ruff is not installed on the server")
@@ -98,6 +101,9 @@ def create_code_validation_router() -> APIRouter:
             return FormatCodeResponse(code=payload.code, changed=False, error="Formatting timed out")
         except (OSError, subprocess.SubprocessError) as exc:
             return FormatCodeResponse(code=payload.code, changed=False, error=str(exc))
+        finally:
+            if tmp_path is not None:
+                Path(tmp_path).unlink(missing_ok=True)
 
     @router.post(
         "/validate-code",

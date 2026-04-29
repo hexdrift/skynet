@@ -27,8 +27,30 @@ from typing import Any
 import dspy
 
 from ...config import settings
+from ...models import ModelConfig
+from ..language_models import build_language_model
 
 logger = logging.getLogger(__name__)
+
+
+def _truncate(value: str, limit: int, *, label: str) -> str:
+    """Truncate ``value`` to ``limit`` chars, appending ``…`` and logging when cut.
+
+    Args:
+        value: The string to bound.
+        limit: Maximum length before truncation kicks in.
+        label: Short identifier logged when truncation happens, so debug
+            output points at the offending field.
+
+    Returns:
+        ``value`` unchanged when within ``limit``; otherwise the first
+        ``limit`` characters with a single-character ``…`` marker so the
+        downstream LLM (and any future log reader) can see the cut.
+    """
+    if len(value) <= limit:
+        return value
+    logger.debug("summariser truncated %s from %d chars to %d", label, len(value), limit)
+    return value[:limit] + "…"
 
 
 class _TaskSummary(dspy.Signature):
@@ -87,6 +109,10 @@ def _heuristic_summary(
 def _build_lm() -> dspy.LM | None:
     """Build the LM used for summarisation, preferring the dedicated setting.
 
+    Routes through :func:`build_language_model` so the summariser obeys
+    the same provider/base-url/extra-kwargs handling as the optimization
+    path — keeps one factory in charge of LiteLLM idiosyncrasies.
+
     Returns:
         A :class:`dspy.LM` instance configured with
         ``recommendations_summary_model`` (or ``code_agent_model`` as
@@ -97,7 +123,9 @@ def _build_lm() -> dspy.LM | None:
     if not model_id:
         return None
     try:
-        return dspy.LM(model=model_id, max_tokens=1024, temperature=0.0)
+        return build_language_model(
+            ModelConfig(name=model_id, max_tokens=1024, temperature=0.0)
+        )
     except Exception as exc:
         logger.warning("Could not build summariser LM (%s): %s", model_id, exc)
         return None
@@ -136,10 +164,14 @@ def summarize_task(
         predictor = dspy.Predict(_TaskSummary)
         with dspy.context(lm=lm):
             out = predictor(
-                signature_code=(signature_code or "").strip()[:4000],
-                metric_code=(metric_code or "").strip()[:4000],
-                column_mapping=json.dumps(column_mapping or {}, ensure_ascii=False)[:1000],
-                dataset_sample=json.dumps(sample_rows, ensure_ascii=False)[:2000],
+                signature_code=_truncate((signature_code or "").strip(), 4000, label="signature_code"),
+                metric_code=_truncate((metric_code or "").strip(), 4000, label="metric_code"),
+                column_mapping=_truncate(
+                    json.dumps(column_mapping or {}, ensure_ascii=False), 1000, label="column_mapping"
+                ),
+                dataset_sample=_truncate(
+                    json.dumps(sample_rows, ensure_ascii=False), 2000, label="dataset_sample"
+                ),
             )
         text = (out.task_description or "").strip()
         return text or fallback

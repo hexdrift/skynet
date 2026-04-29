@@ -200,6 +200,15 @@ def _coerce_image(value: Any) -> Any:
 def load_signature_from_code(code: str) -> type[dspy.Signature]:
     """Execute user-provided code and return the single DSPy signature class it defines.
 
+    Trust boundary: the body of ``code`` runs in-process via ``exec``. Optimization
+    runs (``DspyService.run`` / ``run_grid_search``) reach this through
+    ``backend/core/worker/subprocess_runner.py``, which sandboxes per-job execution
+    in a separate process. Validation paths (the ``code_validation`` router,
+    ``validate_payload``, the code agent) intentionally exec in the API process
+    so the user gets fast feedback — anyone who can call those endpoints already
+    has authenticated arbitrary-code-execution rights against the gateway. Do not
+    expose those endpoints beyond the optimization team without sandboxing first.
+
     Args:
         code: User-authored signature source code.
 
@@ -237,6 +246,12 @@ def load_signature_from_code(code: str) -> type[dspy.Signature]:
 
 def load_metric_from_code(code: str) -> Callable[..., Any]:
     """Execute user-provided code and return the metric callable it defines.
+
+    Same trust boundary as :func:`load_signature_from_code`: the metric body
+    runs in-process via ``exec``. Optimization runs route through the per-job
+    subprocess sandbox (``worker/subprocess_runner.py``); validation calls
+    intentionally exec in the API process. Treat callers as having full code
+    execution against the gateway.
 
     Args:
         code: User-authored metric source code.

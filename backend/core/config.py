@@ -93,6 +93,40 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
 
+    # Air-gap deploys legitimately probe internal LiteLLM gateways on RFC1918
+    # ranges, but the default has to fail closed: an unauthenticated caller
+    # otherwise gets a /v1/models scan of the deploy network (incl. cloud
+    # metadata services). Operators flip this on once their gateway address
+    # range is well-defined.
+    discover_allow_private: bool = Field(
+        default=False,
+        description=(
+            "Allow POST /models/discover to probe link-local / RFC1918 / "
+            "ULA / reserved / multicast addresses. Default off blocks "
+            "SSRF-style scans of the deploy network. Loopback (127.0.0.0/8, "
+            "::1) is always allowed so Ollama-on-localhost works without a "
+            "flag. Cloud metadata service IPs (169.254.169.254 / "
+            "fd00:ec2::254) are blocked unconditionally regardless."
+        ),
+    )
+    program_cache_max_entries: int = Field(
+        default=128,
+        ge=1,
+        description=(
+            "Maximum number of compiled DSPy programs held in the in-process "
+            "LRU cache. Each entry is roughly the size of one optimized "
+            "program; set to bound the API process resident set."
+        ),
+    )
+    model_catalog_ttl_seconds: float = Field(
+        default=1800.0,
+        ge=0.0,
+        description=(
+            "How long the curated model catalog stays cached before "
+            "re-evaluating provider key availability. 0 disables caching."
+        ),
+    )
+
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
 
     code_agent_model: str = Field(
@@ -156,6 +190,24 @@ class Settings(BaseSettings):
         description=(
             "MRL-truncated dimension stored in job_embeddings.embedding_*. "
             "Must match the schema; changing requires a migration."
+        ),
+    )
+    # Vendored snapshots ship a `modeling_*.py` (the Jina embedder is one such
+    # case) that sentence-transformers loads via transformers' AutoModel —
+    # which requires `trust_remote_code=True`. The vendored path under
+    # backend/vendor/models is part of our trusted supply chain, so allow it
+    # implicitly. For arbitrary HF model identifiers the operator must opt in
+    # by flipping this flag, which keeps drive-by remote-code execution off
+    # by default.
+    recommendations_embedding_trust_remote_code: bool = Field(
+        default=False,
+        description=(
+            "Allow `trust_remote_code=True` when the embedding model id is "
+            "an HF Hub identifier rather than the vendored snapshot path. "
+            "Vendored local snapshots always run with trust_remote_code=True "
+            "(they ship the model code in the trusted bundle). Leave False "
+            "in air-gapped deployments unless you have audited the remote "
+            "modeling code yourself."
         ),
     )
     # TODO: On-prem / air-gap — leave RECOMMENDATIONS_SUMMARY_MODEL empty so the

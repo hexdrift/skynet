@@ -20,6 +20,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
     PAYLOAD_OVERVIEW_USERNAME,
 )
+from ...i18n import t
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ..model_catalog import CatalogModel, ModelCatalogResponse
@@ -555,7 +556,7 @@ def test_submit_grid_search_use_all_generation_models_returns_400_when_catalog_e
     resp = client.post("/grid-search", json=payload)
 
     assert resp.status_code == 400
-    assert "אין מודלים זמינים בקטלוג" in resp.json()["detail"]
+    assert resp.json()["detail"] == t("submit.no_models_available")
 
 
 def test_submit_grid_search_use_all_reflection_models_returns_400_when_catalog_empty(
@@ -572,7 +573,7 @@ def test_submit_grid_search_use_all_reflection_models_returns_400_when_catalog_e
     resp = client.post("/grid-search", json=payload)
 
     assert resp.status_code == 400
-    assert "אין מודלים זמינים בקטלוג" in resp.json()["detail"]
+    assert resp.json()["detail"] == t("submit.no_models_available")
 
 
 _VISION_SIG_CODE = (

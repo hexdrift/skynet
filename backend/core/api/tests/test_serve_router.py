@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ...i18n import t
 from ...models import ProgramArtifact
 
 # noinspection PyProtectedMember
@@ -290,7 +291,7 @@ def test_serve_program_returns_400_for_no_input_fields(serve_client: TestClient,
         resp = serve_client.post("/serve/nif", json={"inputs": {"question": "hi"}})
 
     assert resp.status_code == 400
-    assert "אין שדות קלט מוצהרים" in resp.json()["detail"]
+    assert resp.json()["detail"] == t("serve.no_declared_inputs")
 
 
 def test_serve_program_returns_400_for_missing_input_fields(
@@ -303,7 +304,9 @@ def test_serve_program_returns_400_for_missing_input_fields(
         resp = serve_client.post("/serve/mif", json={"inputs": {"wrong_key": "hi"}})
 
     assert resp.status_code == 400
-    assert "חסרים שדות קלט נדרשים" in resp.json()["detail"]
+    # ``serve.missing_inputs`` interpolates ``{missing}`` and ``{input_fields}``;
+    # the static prefix is enough to confirm the right key was raised.
+    assert resp.json()["detail"].startswith(t("serve.missing_inputs").split("{")[0].rstrip(": "))
 
 
 def test_serve_program_output_todict_fallback(serve_client: TestClient, serve_store: _FakeJobStore) -> None:
@@ -401,7 +404,9 @@ def test_serve_pair_returns_400_for_missing_inputs(
         resp = grid_client.post("/serve/grid1/pair/0", json={"inputs": {"wrong": "hi"}})
 
     assert resp.status_code == 400
-    assert "חסרים שדות קלט נדרשים" in resp.json()["detail"]
+    # ``serve.missing_inputs`` interpolates ``{missing}`` and ``{input_fields}``;
+    # the static prefix is enough to confirm the right key was raised.
+    assert resp.json()["detail"].startswith(t("serve.missing_inputs").split("{")[0].rstrip(": "))
 
 
 def test_serve_pair_uses_override_model(

@@ -8,10 +8,12 @@ task without the user having to guess.
 
 from __future__ import annotations
 
+import ipaddress
 import json as _json
 import logging
 import queue
 import random
+import socket
 import threading
 import time
 import urllib.error
@@ -21,12 +23,14 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from functools import partial
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import dspy
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ...config import settings
 from ...exceptions import ServiceError
 from ...models import ColumnMapping, ModelConfig
 from ...registry import ResolverError, resolve_module_factory, resolve_optimizer_factory
@@ -56,6 +60,57 @@ from ._probe import (
 logger = logging.getLogger(__name__)
 
 _PROBE_MAX_WORKERS = 4
+
+_DISCOVER_ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+# Cloud metadata service addresses that we never probe, even when the
+# operator has explicitly opted in to private-range discovery — these are
+# the canonical credential-exfil paths in EC2/GCE/Azure/IBM.
+_DISCOVER_BLOCKED_HOSTS = frozenset(
+    {
+        ipaddress.ip_address("169.254.169.254"),
+        ipaddress.ip_address("fd00:ec2::254"),
+    }
+)
+
+
+def _validate_discover_url(raw_url: str) -> tuple[str, str | None]:
+    """Validate ``raw_url`` for use as a /models/discover probe target.
+
+    Args:
+        raw_url: The user-supplied base URL to validate.
+
+    Returns:
+        A ``(normalised_url, error)`` tuple. ``error`` is ``None`` when the
+        URL passed every check; otherwise a short reason string suitable
+        for surfacing in the response (without echoing the URL itself).
+    """
+    parsed = urlparse(raw_url)
+    if parsed.scheme.lower() not in _DISCOVER_ALLOWED_SCHEMES:
+        return raw_url, "Only http/https schemes are allowed"
+    host = parsed.hostname
+    if not host:
+        return raw_url, "URL is missing a hostname"
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return raw_url, "Hostname could not be resolved"
+    addresses = {ipaddress.ip_address(info[4][0]) for info in infos}
+    for addr in addresses:
+        if addr in _DISCOVER_BLOCKED_HOSTS:
+            return raw_url, "Address is on the blocked metadata-service list"
+    if not settings.discover_allow_private:
+        for addr in addresses:
+            if addr.is_loopback:
+                continue
+            if (
+                addr.is_link_local
+                or addr.is_private
+                or addr.is_reserved
+                or addr.is_multicast
+            ):
+                return raw_url, "Refusing to probe link-local/private/reserved address"
+    return raw_url, None
 
 
 class DiscoverModelsRequest(BaseModel):
@@ -115,7 +170,7 @@ class ModelProbeRequest(BaseModel):
 
 
 def create_models_router() -> APIRouter:
-    """Build the models' router.
+    """Build the models router.
 
     Returns:
         A FastAPI ``APIRouter`` exposing ``/models``, ``/models/discover``,
@@ -161,6 +216,13 @@ def create_models_router() -> APIRouter:
             error message when the endpoint is unreachable.
         """
         base = payload.base_url.rstrip("/")
+        _, validation_error = _validate_discover_url(base)
+        if validation_error is not None:
+            return DiscoverModelsResponse(
+                models=[],
+                base_url=base,
+                error=truncate_text(validation_error, AGENT_MAX_TEXT),
+            )
         candidates = [f"{base}/v1/models", f"{base}/models"]
         headers = {"Accept": "application/json"}
         if payload.api_key:

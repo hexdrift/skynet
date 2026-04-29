@@ -648,7 +648,7 @@ def _build_agent_lm() -> dspy.LM:
         max_tokens=4000,
         extra=extra,
     )
-    return build_language_model(config)
+    return build_language_model(config, disable_cache=True)
 
 
 async def _pump_seed_stream(
@@ -1206,7 +1206,9 @@ async def _run_code_agent_orchestration(
                 initial_metric=initial_metric,
                 queue=queue,
             )
-        await queue.put({"event": "done", "data": dict(results)})
+        payload = dict(results)
+        payload.setdefault("model", settings.code_agent_model)
+        await queue.put({"event": "done", "data": payload})
     except Exception as exc:
         logger.exception("Code agent failed")
         await queue.put({"event": "error", "data": {"error": _format_agent_error(exc)}})

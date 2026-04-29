@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import pickle
+from collections import OrderedDict
 from collections.abc import AsyncIterable, AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
@@ -49,10 +50,65 @@ from .constants import TERMINAL_STATUSES
 
 logger = logging.getLogger(__name__)
 
+class _BoundedProgramCache(OrderedDict[str, Any]):
+    """OrderedDict-backed LRU for deserialized DSPy programs.
+
+    A plain dict here grew without bound — every served optimization pinned
+    its compiled module in process memory until the API restarted. This
+    bounded variant evicts the least-recently-used entry once
+    ``settings.program_cache_max_entries`` is exceeded so a long-lived API
+    process can't be DoS'd by serving many distinct optimizations.
+    """
+
+    def __init__(self) -> None:
+        """Initialise an empty cache; capacity is read lazily from settings."""
+        super().__init__()
+
+    @property
+    def _max_entries(self) -> int:
+        """Resolve the live cache ceiling from application settings.
+
+        Reading on every mutation lets test fixtures override the cap by
+        tweaking ``settings.program_cache_max_entries`` between cases without
+        re-importing this module.
+        """
+        return max(int(settings.program_cache_max_entries), 1)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Insert ``value`` at most-recently-used and evict if past capacity.
+
+        Args:
+            key: Cache key (optimization id or pair-scoped key).
+            value: Deserialized DSPy program object.
+        """
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        while len(self) > self._max_entries:
+            self.popitem(last=False)
+
+    def __getitem__(self, key: str) -> Any:
+        """Return the cached program and mark it most-recently-used.
+
+        Args:
+            key: Cache key to look up.
+
+        Returns:
+            The previously stored program object.
+
+        Raises:
+            KeyError: When ``key`` is not present in the cache.
+        """
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+
 # Cache deserialized programs to avoid repeated pickle loads.
 # Keyed by optimization_id (for single runs + grid-search best pair) or
-# f"{optimization_id}_pair_{pair_index}" (for per-pair serving).
-_program_cache: dict[str, Any] = {}
+# f"{optimization_id}_pair_{pair_index}" (for per-pair serving). Bounded by
+# ``settings.program_cache_max_entries`` to cap process resident memory.
+_program_cache: _BoundedProgramCache = _BoundedProgramCache()
 
 
 def clear_program_cache() -> None:
@@ -100,6 +156,28 @@ def strip_api_key(d: dict) -> dict:
     if isinstance(extra, dict) and "api_key" in extra:
         result["extra"] = {k: v for k, v in extra.items() if k != "api_key"}
     return result
+
+
+def stable_seed(optimization_id: str) -> int:
+    """Derive a process-stable 31-bit RNG seed from an optimization id.
+
+    Python's built-in :func:`hash` is salted per process via
+    ``PYTHONHASHSEED``, so the same id maps to a different int in every
+    worker. Read paths (``/dataset``, ``/test-results``,
+    ``/pair/{i}/test-results``) recompute the train/val/test split with
+    this seed when the payload's stored seed is missing — using
+    :func:`hash` there silently desyncs splits across workers and breaks
+    UI index remapping. SHA256 truncated to 31 bits keeps the same numeric
+    shape but is byte-stable across processes.
+
+    Args:
+        optimization_id: Optimization identifier to derive a seed from.
+
+    Returns:
+        A non-negative ``int`` strictly less than ``2 ** 31``.
+    """
+    digest = hashlib.sha256(optimization_id.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % (2**31)
 
 
 def compute_task_fingerprint(
@@ -308,6 +386,12 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
 
     if optimization_id not in _program_cache:
         program_bytes = base64.b64decode(artifact.program_pickle_base64)
+        # pickle.loads is RCE if an attacker can write to the jobs table.
+        # The artifact bytes are produced by our own worker and never
+        # accepted from API input, so today the only attacker who reaches
+        # this branch already has DB write — at which point they own the
+        # process anyway. Follow-up tracked under "signed payloads": HMAC
+        # the pickle at worker-write time and verify here before loading.
         _program_cache[optimization_id] = pickle.loads(program_bytes)
 
     return _program_cache[optimization_id], result, overview
@@ -391,6 +475,8 @@ def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple
     cache_key = f"{optimization_id}_pair_{pair_index}"
     if cache_key not in _program_cache:
         program_bytes = base64.b64decode(artifact.program_pickle_base64)
+        # See ``load_program`` for the full pickle.loads safety story; same
+        # signed-payload follow-up applies here.
         _program_cache[cache_key] = pickle.loads(program_bytes)
 
     return _program_cache[cache_key], pair, overview
