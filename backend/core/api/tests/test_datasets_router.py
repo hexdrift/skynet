@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from core.exceptions import AppError
+from core.i18n import t
 
 from ..routers.datasets import create_datasets_router
 
@@ -75,7 +76,7 @@ def test_profile_empty_dataset_returns_400(datasets_client: TestClient) -> None:
     resp = datasets_client.post("/datasets/profile", json=payload)
 
     assert resp.status_code == 400
-    assert "at least one row" in resp.json()["detail"]
+    assert resp.json()["detail"] == t("dataset.profile.empty")
 
 
 def test_profile_missing_column_mapping_returns_422(datasets_client: TestClient) -> None:

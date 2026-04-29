@@ -3,8 +3,10 @@
   "title": "Skynet shared i18n catalog",
   "type": "object",
   "required": ["locale", "terms", "messages", "backend"],
+  "additionalProperties": false,
   "properties": {
-    "locale": { "type": "string" },
+    "$schema": { "type": "string" },
+    "locale": { "type": "string", "enum": ["he"] },
     "terms": {
       "type": "object",
       "additionalProperties": { "type": "string" }
@@ -16,14 +18,63 @@
     "backend": {
       "type": "object",
       "required": ["constants", "sampleDatasets"],
+      "additionalProperties": false,
       "properties": {
         "constants": {
           "type": "object",
           "additionalProperties": { "type": "string" }
         },
         "sampleDatasets": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/sampleDataset" }
         }
+      }
+    }
+  },
+  "$defs": {
+    "sampleDataset": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "task_type",
+        "dataset_filename",
+        "rows",
+        "input_columns",
+        "output_columns",
+        "signature_field_inputs",
+        "signature_field_outputs",
+        "signature_code",
+        "metric_code"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "task_type": { "type": "string" },
+        "dataset_filename": { "type": "string" },
+        "rows": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "input_columns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "output_columns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "signature_field_inputs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "signature_field_outputs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "signature_code": { "type": "string" },
+        "metric_code": { "type": "string" }
       }
     }
   }

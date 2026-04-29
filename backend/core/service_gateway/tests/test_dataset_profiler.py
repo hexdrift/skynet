@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from core.exceptions import ValidationError
+from core.i18n import t
 from core.models import ColumnMapping, ProfileWarningCode
 from core.service_gateway.datasets.profiler import profile_dataset
 
@@ -24,8 +25,9 @@ def _rows(pairs: list[tuple[str, str]]) -> list[dict[str, str]]:
 
 def test_profile_dataset_empty_raises() -> None:
     """An empty dataset raises ``ValidationError``."""
-    with pytest.raises(ValidationError, match="at least one row"):
+    with pytest.raises(ValidationError) as exc_info:
         profile_dataset([], _mapping())
+    assert str(exc_info.value) == t("dataset.profile.empty")
 
 
 def test_profile_dataset_reports_basic_shape() -> None:
