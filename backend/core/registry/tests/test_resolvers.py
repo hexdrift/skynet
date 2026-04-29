@@ -1,8 +1,8 @@
 """Tests for resolver helpers.
 
-DSPy-alias paths (predict, cot, gepa) exercise real DSPy imports and are
-covered only partially here — see "Coverage gaps" in the report.  All
-other behaviors are exercised without touching DSPy.
+The DSPy-alias paths (``predict``, ``cot``, ``gepa``) hit real DSPy imports
+when not mocked, so most cases here patch ``_load_callable`` via
+``patch_loader`` to keep the suite fast and dependency-free.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from typing import Any
 import pytest
 
 from core.registry.resolvers import (
+    AUTO_SIGNATURE_PATHS,
+    DSPY_PREFIX,
     MODULE_ALIASES,
     OPTIMIZER_ALIASES,
     ResolverError,
@@ -224,3 +226,37 @@ def test_resolve_module_factory_alias_all_paths_fail_error_mentions_name() -> No
         resolve_module_factory(REAL_MODULE_NAME)
 
     assert REAL_MODULE_NAME in str(exc_info.value)
+
+
+def test_module_alias_paths_all_use_dspy_prefix() -> None:
+    """Every ``MODULE_ALIASES`` path is a ``dspy.*`` dotted path."""
+    for alias in MODULE_ALIASES.values():
+        for path in alias.paths:
+            assert path.startswith(DSPY_PREFIX), path
+
+
+def test_optimizer_alias_paths_all_use_dspy_prefix() -> None:
+    """Every ``OPTIMIZER_ALIASES`` value is a ``dspy.*`` dotted path."""
+    for path in OPTIMIZER_ALIASES.values():
+        assert path.startswith(DSPY_PREFIX), path
+
+
+def test_resolve_module_factory_unaliased_dspy_path_in_auto_signature_set() -> None:
+    """An un-aliased dspy path that matches ``AUTO_SIGNATURE_PATHS`` flips auto_signature on."""
+    auto_path = next(iter(AUTO_SIGNATURE_PATHS))
+
+    with patch_loader(return_value=fake_dspy_module()):
+        _, auto_sig = resolve_module_factory(auto_path)
+
+    assert auto_sig is True
+
+
+def test_resolve_module_factory_unaliased_dspy_path_outside_auto_signature_set() -> None:
+    """An un-aliased dspy path NOT in ``AUTO_SIGNATURE_PATHS`` defaults auto_signature off."""
+    arbitrary_path = "dspy.SomeOtherClass"
+    assert arbitrary_path not in AUTO_SIGNATURE_PATHS
+
+    with patch_loader(return_value=fake_dspy_module()):
+        _, auto_sig = resolve_module_factory(arbitrary_path)
+
+    assert auto_sig is False

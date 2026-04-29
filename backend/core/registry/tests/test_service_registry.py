@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from core.registry.core import (
@@ -11,37 +13,54 @@ from core.registry.core import (
 )
 
 
+def _module_factory(**_kwargs: Any) -> object:
+    """Return a placeholder module instance for registry tests."""
+    return object()
+
+
+def _metric(_gold: object, _pred: object, _trace: object = None) -> float:
+    """Return a fixed metric score for registry tests."""
+    return 1.0
+
+
+def _optimizer_factory(**_kwargs: Any) -> object:
+    """Return a placeholder optimizer instance for registry tests."""
+    return object()
+
+
+def _noop() -> None:
+    """No-op factory used when the test only inspects identity."""
+
+
 @pytest.fixture
 def registry() -> ServiceRegistry:
-    """Yield a fresh empty ``ServiceRegistry`` for each test."""
+    """Yield a fresh empty ``ServiceRegistry`` for each test.
+
+    Returns:
+        A new ``ServiceRegistry`` instance with no entries.
+    """
     return ServiceRegistry()
 
 
 def test_register_module_then_get_returns_factory(registry: ServiceRegistry) -> None:
     """Register module then get returns factory."""
-    factory = lambda **kw: None  # noqa: E731
+    registry.register_module("my_module", _module_factory)
 
-    registry.register_module("my_module", factory)
-
-    assert registry.get_module("my_module") is factory
+    assert registry.get_module("my_module") is _module_factory
 
 
 def test_register_metric_then_get_returns_callable(registry: ServiceRegistry) -> None:
     """Register metric then get returns callable."""
-    metric = lambda gold, pred, trace=None: 1.0  # noqa: E731
+    registry.register_metric("exact_match", _metric)
 
-    registry.register_metric("exact_match", metric)
-
-    assert registry.get_metric("exact_match") is metric
+    assert registry.get_metric("exact_match") is _metric
 
 
 def test_register_optimizer_then_get_returns_factory(registry: ServiceRegistry) -> None:
     """Register optimizer then get returns factory."""
-    opt_factory = lambda **kw: object()  # noqa: E731
+    registry.register_optimizer("bootstrap", _optimizer_factory)
 
-    registry.register_optimizer("bootstrap", opt_factory)
-
-    assert registry.get_optimizer("bootstrap") is opt_factory
+    assert registry.get_optimizer("bootstrap") is _optimizer_factory
 
 
 @pytest.mark.parametrize(
@@ -59,11 +78,10 @@ def test_duplicate_registration_raises(
     get: str,
 ) -> None:
     """Duplicate registration raises."""
-    fn = lambda: None  # noqa: E731
-    getattr(registry, register)("name", fn)
+    getattr(registry, register)("name", _noop)
 
     with pytest.raises(DuplicateRegistrationError, match="already registered"):
-        getattr(registry, register)("name", fn)
+        getattr(registry, register)("name", _noop)
 
 
 @pytest.mark.parametrize(
@@ -86,24 +104,24 @@ def test_snapshot_empty_registry_returns_empty_lists(registry: ServiceRegistry) 
 
 def test_snapshot_reflects_registered_names(registry: ServiceRegistry) -> None:
     """Snapshot reflects registered names."""
-    registry.register_module("mod_b", lambda: None)
-    registry.register_module("mod_a", lambda: None)
-    registry.register_metric("f1", lambda g, p: 0.0)
-    registry.register_optimizer("fake_opt", lambda: None)
+    registry.register_module("mod_b", _noop)
+    registry.register_module("mod_a", _noop)
+    registry.register_metric("f1", _metric)
+    registry.register_optimizer("fake_opt", _noop)
 
     snap = registry.snapshot()
 
-    assert snap["modules"] == ["mod_a", "mod_b"]  # sorted
+    assert snap["modules"] == ["mod_a", "mod_b"]
     assert snap["metrics"] == ["f1"]
     assert snap["optimizers"] == ["fake_opt"]
 
 
 def test_snapshot_updates_after_new_registration(registry: ServiceRegistry) -> None:
     """Snapshot updates after new registration."""
-    registry.register_module("first", lambda: None)
+    registry.register_module("first", _noop)
     snap_before = registry.snapshot()
 
-    registry.register_module("second", lambda: None)
+    registry.register_module("second", _noop)
     snap_after = registry.snapshot()
 
     assert "second" not in snap_before["modules"]
@@ -114,9 +132,8 @@ def test_two_registries_do_not_share_state() -> None:
     """Two registries do not share state."""
     reg_a = ServiceRegistry()
     reg_b = ServiceRegistry()
-    factory = lambda: None  # noqa: E731
 
-    reg_a.register_module("shared_name", factory)
+    reg_a.register_module("shared_name", _noop)
 
     with pytest.raises(UnknownRegistrationError):
         reg_b.get_module("shared_name")
@@ -126,10 +143,8 @@ def test_duplicate_check_is_per_instance_not_global() -> None:
     """Duplicate check is per instance not global."""
     reg_a = ServiceRegistry()
     reg_b = ServiceRegistry()
-    factory = lambda: None  # noqa: E731
 
-    reg_a.register_module("name", factory)
-    # Should not raise even though reg_a already has "name"
-    reg_b.register_module("name", factory)
+    reg_a.register_module("name", _noop)
+    reg_b.register_module("name", _noop)
 
-    assert reg_b.get_module("name") is factory
+    assert reg_b.get_module("name") is _noop
