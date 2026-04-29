@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Loader2, MessageSquare, Pencil, XCircle } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
 import type { ServeInfoResponse } from "@/shared/types/api";
-import { CopyButton } from "./ui-primitives";
+import { MessageActions } from "@/shared/ui/agent";
 import { formatOutput } from "@/shared/lib";
 import { msg } from "@/shared/lib/messages";
 
@@ -205,15 +205,24 @@ export function ServeChat({
                       </span>
                     </div>
                   ))}
-                  <div className="flex items-center gap-0.5 mt-1 -ms-1">
-                    <CopyButton
+                  <div className="mt-1">
+                    <MessageActions
                       text={serveInfo.output_fields
                         .map((k) => `${k}: ${formatOutput(run.outputs[k])}`)
                         .join("\n")}
+                      model={run.model}
+                      onRegenerate={
+                        serveLoading
+                          ? undefined
+                          : () => {
+                              const inputs: Record<string, string> = {};
+                              for (const f of serveInfo.input_fields)
+                                inputs[f] = run.inputs[f] ?? "";
+                              setRunHistory((prev) => prev.filter((r) => r.ts !== run.ts));
+                              handleServe(inputs);
+                            }
+                      }
                     />
-                    <span className="text-[9px] text-muted-foreground/30 ms-1 font-mono" dir="ltr">
-                      {run.model}
-                    </span>
                   </div>
                 </div>
               )}

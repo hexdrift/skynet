@@ -25,6 +25,7 @@ export interface GeneralistAgentState {
   error: string | null;
   pendingApproval: PendingApprovalPayload | null;
   send: (message: string) => void;
+  editAndResend: (messageIndex: number, content: string) => void;
   stop: () => void;
   reset: () => void;
   confirmApproval: (approved: boolean) => Promise<void>;
@@ -257,6 +258,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
               next[next.length - 1] = {
                 ...last,
                 content: result.assistant_message || fallback,
+                model: result.model,
               };
               return next;
             });
@@ -285,6 +287,20 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
       const trimmed = message.trim();
       if (!trimmed) return;
       runAgent(trimmed, messagesRef.current);
+    },
+    [runAgent],
+  );
+
+  const editAndResend = React.useCallback(
+    (messageIndex: number, content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed) return;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      const truncated = messagesRef.current.slice(0, messageIndex);
+      setMessages(truncated);
+      messagesRef.current = truncated;
+      runAgent(trimmed, truncated);
     },
     [runAgent],
   );
@@ -331,6 +347,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     error,
     pendingApproval,
     send,
+    editAndResend,
     stop,
     reset,
     confirmApproval,

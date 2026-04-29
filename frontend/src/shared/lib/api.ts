@@ -792,6 +792,7 @@ export interface CodeAgentHandlers {
     signature_code: string;
     metric_code: string;
     assistant_message: string;
+    model: string | null;
   }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
@@ -870,10 +871,12 @@ export async function streamCodeAgent(
         });
       }
     } else if (event === "done") {
+      const rawModel = data.model;
       handlers.onDone({
         signature_code: String(data.signature_code ?? ""),
         metric_code: String(data.metric_code ?? ""),
         assistant_message: String(data.assistant_message ?? ""),
+        model: typeof rawModel === "string" && rawModel.length > 0 ? rawModel : null,
       });
     } else if (event === "error") {
       handlers.onError(String(data.error ?? msg("auto.shared.lib.api.literal.12")));

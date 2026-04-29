@@ -205,6 +205,13 @@ export const MESSAGES = {
   "shared.agent.edit_and_resend": "ערוך ושלח שוב",
   "shared.agent.cancel": "ביטול",
   "shared.agent.send": "שלח",
+  "shared.agent.copy": "העתק",
+  "shared.agent.copied": "הועתק",
+  "shared.agent.copy_code": "העתק קוד",
+  "shared.agent.run_code": "בדוק את הקוד הזה",
+  "shared.agent.run_code_prompt":
+    "אנא בדוק את קטע הקוד הבא ({language}) באמצעות הכלי validate_code והחזר את התוצאות:\n\n```{language}\n{code}\n```",
+  "shared.agent.regenerate": "נסה שנית",
   "submit.rec.label": TERMS.recommendation,
   "submit.rec.match_suffix": "התאמה",
   "submit.rec.apply": TERMS.apply,
@@ -294,8 +301,6 @@ export const MESSAGES = {
   "auto.features.agent.panel.components.firstrunhint.2": "נסה —",
   "auto.features.agent.panel.components.firstrunhint.3": "Ctrl+J",
   "auto.features.agent.panel.components.generalistpanel.1": "שלום, איך אפשר לעזור?",
-  "auto.features.agent.panel.components.generalistpanel.2":
-    "סוכן שיודע לקרוא את המערכת ולפעול בשמך. כתוב מה אתה מחפש.",
   "auto.features.agent.panel.components.generalistpanel.3": "סוכן",
   "auto.features.agent.panel.components.generalistpanel.4": "מה אני יודע לעשות",
   "auto.features.agent.panel.components.generalistpanel.5": "איפוס שיחה",

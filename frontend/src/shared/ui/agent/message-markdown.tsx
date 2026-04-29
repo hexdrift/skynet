@@ -1,10 +1,82 @@
 "use client";
 
 import * as React from "react";
+import { Check, Clipboard, Play } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
+
+interface RunCodeContextValue {
+  onRunCode?: (code: string, language: string) => void;
+}
+
+const RunCodeContext = React.createContext<RunCodeContextValue>({});
+
+function extractCodeText(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractCodeText).join("");
+  if (React.isValidElement(node)) {
+    const props = node.props as { children?: React.ReactNode };
+    return extractCodeText(props.children);
+  }
+  return "";
+}
+
+interface CodeBlockProps {
+  language: string;
+  rawCode: string;
+  children: React.ReactNode;
+}
+
+function CodeBlock({ language, rawCode, children }: CodeBlockProps) {
+  const { onRunCode } = React.useContext(RunCodeContext);
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = React.useCallback(() => {
+    void navigator.clipboard.writeText(rawCode);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }, [rawCode]);
+  const langLabel = language || "code";
+  return (
+    <div
+      dir="ltr"
+      className="my-2 overflow-hidden rounded-xl bg-black/[0.06] text-left ring-1 ring-black/[0.04]"
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] px-3 py-1.5">
+        <span className="text-[10px] uppercase tracking-wider font-mono text-foreground/50">
+          {langLabel}
+        </span>
+        <div className="flex items-center gap-0.5">
+          {onRunCode && (
+            <button
+              type="button"
+              onClick={() => onRunCode(rawCode, language)}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
+              title={msg("shared.agent.run_code")}
+              aria-label={msg("shared.agent.run_code")}
+            >
+              <Play className="size-3" />
+              <span>{msg("shared.agent.run_code")}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center gap-1 rounded-md p-1 text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
+            title={msg("shared.agent.copy_code")}
+            aria-label={msg("shared.agent.copy_code")}
+          >
+            {copied ? <Check className="size-3" /> : <Clipboard className="size-3" />}
+          </button>
+        </div>
+      </div>
+      <pre className="overflow-x-auto p-3">{children}</pre>
+    </div>
+  );
+}
 
 const COMPONENTS: Components = {
   p: ({ children, ...rest }) => (
@@ -101,15 +173,21 @@ const COMPONENTS: Components = {
       </code>
     );
   },
-  pre: ({ children, ...rest }) => (
-    <pre
-      dir="ltr"
-      className="my-2 overflow-x-auto rounded-xl bg-black/[0.06] p-3 text-left"
-      {...rest}
-    >
-      {children}
-    </pre>
-  ),
+  pre: ({ children }) => {
+    const child = React.Children.toArray(children).find(
+      (c): c is React.ReactElement<{ className?: string; children?: React.ReactNode }> =>
+        React.isValidElement(c),
+    );
+    const className = child?.props.className ?? "";
+    const langMatch = /language-([\w-]+)/.exec(className);
+    const language = langMatch?.[1] ?? "";
+    const rawCode = extractCodeText(child?.props.children).replace(/\n$/, "");
+    return (
+      <CodeBlock language={language} rawCode={rawCode}>
+        {children}
+      </CodeBlock>
+    );
+  },
   hr: ({ ...rest }) => <hr className="my-3 border-current/15" {...rest} />,
   table: ({ children, ...rest }) => (
     <div className="my-2 overflow-x-auto">
@@ -135,12 +213,21 @@ const COMPONENTS: Components = {
   ),
 };
 
-export function MessageMarkdown({ content, className }: { content: string; className?: string }) {
+export interface MessageMarkdownProps {
+  content: string;
+  className?: string;
+  onRunCode?: (code: string, language: string) => void;
+}
+
+export function MessageMarkdown({ content, className, onRunCode }: MessageMarkdownProps) {
+  const ctx = React.useMemo<RunCodeContextValue>(() => ({ onRunCode }), [onRunCode]);
   return (
-    <div className={cn("break-words", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
-        {content}
-      </ReactMarkdown>
-    </div>
+    <RunCodeContext.Provider value={ctx}>
+      <div className={cn("break-words", className)}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    </RunCodeContext.Provider>
   );
 }
