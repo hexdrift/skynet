@@ -2,16 +2,10 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { AppShell } from "@/shared/layout/app-shell";
 import { TooltipProvider } from "@/shared/ui/primitives/tooltip";
-import { Providers } from "@/shared/providers/theme-provider";
-import { SessionProvider } from "@/shared/providers/session-provider";
-import { ToastContainer } from "@/shared/providers/toast-container";
+import { SessionProvider, ThemeProvider, ToastContainer } from "@/shared/providers";
 import { SplashScreen } from "@/shared/layout/splash-screen";
 import { TutorialOverlay, TutorialMenu, TutorialProvider } from "@/features/tutorial";
-import {
-  UserPrefsProvider,
-  SettingsModalProvider,
-  SettingsModal,
-} from "@/features/settings";
+import { UserPrefsProvider, SettingsModalProvider, SettingsModal } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
 import { getServerRuntimeEnv, serializeRuntimeEnv } from "@/shared/lib/runtime-env";
 import { SentryInit } from "@/shared/observability/sentry-init";
@@ -104,7 +98,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SentryInit />
         <SessionProvider>
           <UserPrefsProvider>
-            <Providers>
+            <ThemeProvider>
               <TooltipProvider>
                 <SplashScreen />
                 <TutorialProvider>
@@ -116,7 +110,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <TutorialMenu />
                 </TutorialProvider>
               </TooltipProvider>
-            </Providers>
+            </ThemeProvider>
           </UserPrefsProvider>
         </SessionProvider>
         <ToastContainer />
