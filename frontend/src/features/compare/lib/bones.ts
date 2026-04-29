@@ -1,124 +1,169 @@
+import type { Bone, ResponsiveBones, SkeletonResult } from "boneyard-js";
+
+const PERCENT_WIDTH = 100;
+
+function pct(px: number, viewportWidth: number): number {
+  return (px / viewportWidth) * 100;
+}
+
 /**
- * Boneyard skeleton bones for the compare page.
- * Matches: breadcrumb + two side-by-side metric cards + result sections.
+ * Create a boneyard skeleton bone.
+ *
+ * `x` and `w` are percentages of the rendered container width. `y`, `h`, and
+ * `r` remain pixels, matching boneyard-js runtime rendering semantics.
  */
-
-import type { Bone, ResponsiveBones } from "boneyard-js";
-
 function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {
-  return container ? { x, y, w, h, r, c: true } : { x, y, w, h, r };
+  return { x, y, w, h, r, ...(container ? { c: true } : {}) };
+}
+
+function rightAnchoredBone(
+  viewportWidth: number,
+  rightOffsetPx: number,
+  y: number,
+  widthPx: number,
+  h: number,
+  r: number,
+): Bone {
+  return bone(
+    pct(viewportWidth - rightOffsetPx - widthPx, viewportWidth),
+    y,
+    pct(widthPx, viewportWidth),
+    h,
+    r,
+  );
+}
+
+function cardBones(
+  viewportWidth: number,
+  xPx: number,
+  yPx: number,
+  widthPx: number,
+  heightPx: number,
+  paddingPx: number,
+  titleWidthPx: number,
+  scoreWidthPx: number,
+): Bone[] {
+  const right = xPx + widthPx - paddingPx;
+  return [
+    bone(pct(xPx, viewportWidth), yPx, pct(widthPx, viewportWidth), heightPx, 12, true),
+    bone(
+      pct(right - titleWidthPx, viewportWidth),
+      yPx + 16,
+      pct(titleWidthPx, viewportWidth),
+      16,
+      4,
+    ),
+    bone(
+      pct(right - scoreWidthPx, viewportWidth),
+      yPx + 42,
+      pct(scoreWidthPx, viewportWidth),
+      40,
+      4,
+    ),
+    bone(pct(right - 120, viewportWidth), yPx + 92, pct(120, viewportWidth), 12, 4),
+    bone(pct(right - 100, viewportWidth), yPx + 114, pct(100, viewportWidth), 12, 4),
+    bone(pct(right - 80, viewportWidth), yPx + 136, pct(80, viewportWidth), 12, 4),
+  ];
+}
+
+function tableRows(
+  viewportWidth: number,
+  yStart: number,
+  rowGap: number,
+  firstWidthPx: number,
+  valueWidthPx: number,
+  rows: number,
+): Bone[] {
+  return Array.from({ length: rows }, (_, index) => {
+    const y = yStart + index * rowGap;
+    return [
+      bone(pct(16, viewportWidth), y, pct(firstWidthPx, viewportWidth), 14, 4),
+      bone(40, y, pct(valueWidthPx, viewportWidth), 14, 4),
+      bone(70, y, pct(valueWidthPx, viewportWidth), 14, 4),
+    ];
+  }).flat();
+}
+
+function mobileTableRows(viewportWidth: number): Bone[] {
+  return [434, 460, 486].flatMap((y) => [
+    bone(pct(12, viewportWidth), y, pct(100, viewportWidth), 12, 4),
+    bone(pct(150, viewportWidth), y, pct(60, viewportWidth), 12, 4),
+  ]);
+}
+
+function validateResult(result: SkeletonResult): void {
+  for (const b of result.bones) {
+    if (b.x < 0 || b.w < 0 || b.x + b.w > 100) {
+      throw new Error(`compareBones has out-of-bounds horizontal geometry: x=${b.x}, w=${b.w}`);
+    }
+  }
 }
 
 const dW = 1000;
-const halfW = (dW - 16) / 2;
+const desktopCardWidth = Math.floor((dW - 16) / 2);
 
 const desktopBones: Bone[] = [
-  bone(dW - 100, 0, 48, 14, 4),
-  bone(dW - 170, 0, 56, 14, 4),
-
-  bone(dW - 200, 32, 180, 24, 4),
-
-  bone(0, 72, halfW, 180, 12, true),
-  bone(halfW - 16, 88, -200, 16, 4),
-  bone(halfW - 16, 114, -60, 40, 4),
-  bone(halfW - 16, 164, -120, 12, 4),
-  bone(halfW - 16, 186, -100, 12, 4),
-  bone(halfW - 16, 208, -80, 12, 4),
-
-  bone(halfW + 16, 72, halfW, 180, 12, true),
-  bone(halfW + 16 + halfW - 16, 88, -200, 16, 4),
-  bone(halfW + 16 + halfW - 16, 114, -60, 40, 4),
-  bone(halfW + 16 + halfW - 16, 164, -120, 12, 4),
-  bone(halfW + 16 + halfW - 16, 186, -100, 12, 4),
-  bone(halfW + 16 + halfW - 16, 208, -80, 12, 4),
-
-  bone(0, 276, dW, 220, 12, true),
-  bone(16, 292, dW - 32, 28, 4, true),
-  bone(16, 336, dW * 0.3, 14, 4),
-  bone(dW * 0.4, 336, 80, 14, 4),
-  bone(dW * 0.7, 336, 80, 14, 4),
-  bone(16, 366, dW * 0.3, 14, 4),
-  bone(dW * 0.4, 366, 80, 14, 4),
-  bone(dW * 0.7, 366, 80, 14, 4),
-  bone(16, 396, dW * 0.3, 14, 4),
-  bone(dW * 0.4, 396, 80, 14, 4),
-  bone(dW * 0.7, 396, 80, 14, 4),
-  bone(16, 426, dW * 0.3, 14, 4),
-  bone(dW * 0.4, 426, 80, 14, 4),
-  bone(dW * 0.7, 426, 80, 14, 4),
-  bone(16, 456, dW * 0.3, 14, 4),
-  bone(dW * 0.4, 456, 80, 14, 4),
-  bone(dW * 0.7, 456, 80, 14, 4),
+  rightAnchoredBone(dW, 52, 0, 48, 14, 4),
+  rightAnchoredBone(dW, 114, 0, 56, 14, 4),
+  rightAnchoredBone(dW, 20, 32, 180, 24, 4),
+  ...cardBones(dW, 0, 72, desktopCardWidth, 180, 16, 200, 60),
+  ...cardBones(dW, desktopCardWidth + 16, 72, desktopCardWidth, 180, 16, 200, 60),
+  bone(0, 276, PERCENT_WIDTH, 220, 12, true),
+  bone(pct(16, dW), 292, pct(dW - 32, dW), 28, 4, true),
+  ...tableRows(dW, 336, 30, 300, 80, 5),
 ];
 
 const mW = 343;
+
 const mobileBones: Bone[] = [
-  bone(mW - 80, 0, 40, 12, 4),
-  bone(mW - 136, 0, 44, 12, 4),
-  bone(mW - 160, 24, 140, 20, 4),
-
-  bone(0, 56, mW, 150, 12, true),
-  bone(mW - 12, 68, -160, 14, 4),
-  bone(mW - 12, 92, -50, 32, 4),
-  bone(mW - 12, 132, -100, 10, 4),
-  bone(mW - 12, 150, -80, 10, 4),
-
-  bone(0, 218, mW, 150, 12, true),
-  bone(mW - 12, 230, -160, 14, 4),
-  bone(mW - 12, 254, -50, 32, 4),
-  bone(mW - 12, 294, -100, 10, 4),
-  bone(mW - 12, 312, -80, 10, 4),
-
-  bone(0, 382, mW, 180, 12, true),
-  bone(12, 396, mW - 24, 24, 4, true),
-  bone(12, 434, 100, 12, 4),
-  bone(150, 434, 60, 12, 4),
-  bone(12, 460, 100, 12, 4),
-  bone(150, 460, 60, 12, 4),
-  bone(12, 486, 100, 12, 4),
-  bone(150, 486, 60, 12, 4),
+  rightAnchoredBone(mW, 40, 0, 40, 12, 4),
+  rightAnchoredBone(mW, 92, 0, 44, 12, 4),
+  rightAnchoredBone(mW, 20, 24, 140, 20, 4),
+  ...cardBones(mW, 0, 56, mW, 150, 12, 160, 50),
+  ...cardBones(mW, 0, 218, mW, 150, 12, 160, 50),
+  bone(0, 382, PERCENT_WIDTH, 180, 12, true),
+  bone(pct(12, mW), 396, pct(mW - 24, mW), 24, 4, true),
+  ...mobileTableRows(mW),
 ];
 
 const tW = 700;
-const tHalf = (tW - 16) / 2;
+const tabletCardWidth = Math.floor((tW - 16) / 2);
 
 const tabletBones: Bone[] = [
-  bone(tW - 100, 0, 48, 14, 4),
-  bone(tW - 168, 0, 56, 14, 4),
-  bone(tW - 180, 28, 160, 22, 4),
-
-  bone(0, 64, tHalf, 160, 12, true),
-  bone(tHalf - 16, 80, -180, 14, 4),
-  bone(tHalf - 16, 104, -50, 36, 4),
-  bone(tHalf - 16, 148, -100, 10, 4),
-  bone(tHalf - 16, 168, -80, 10, 4),
-
-  bone(tHalf + 16, 64, tHalf, 160, 12, true),
-  bone(tHalf + 16 + tHalf - 16, 80, -180, 14, 4),
-  bone(tHalf + 16 + tHalf - 16, 104, -50, 36, 4),
-  bone(tHalf + 16 + tHalf - 16, 148, -100, 10, 4),
-  bone(tHalf + 16 + tHalf - 16, 168, -80, 10, 4),
-
-  bone(0, 248, tW, 200, 12, true),
-  bone(16, 264, tW - 32, 26, 4, true),
-  bone(16, 304, tW * 0.3, 14, 4),
-  bone(tW * 0.4, 304, 70, 14, 4),
-  bone(tW * 0.7, 304, 70, 14, 4),
-  bone(16, 332, tW * 0.3, 14, 4),
-  bone(tW * 0.4, 332, 70, 14, 4),
-  bone(tW * 0.7, 332, 70, 14, 4),
-  bone(16, 360, tW * 0.3, 14, 4),
-  bone(tW * 0.4, 360, 70, 14, 4),
-  bone(tW * 0.7, 360, 70, 14, 4),
-  bone(16, 388, tW * 0.3, 14, 4),
-  bone(tW * 0.4, 388, 70, 14, 4),
-  bone(tW * 0.7, 388, 70, 14, 4),
+  rightAnchoredBone(tW, 52, 0, 48, 14, 4),
+  rightAnchoredBone(tW, 112, 0, 56, 14, 4),
+  rightAnchoredBone(tW, 20, 28, 160, 22, 4),
+  ...cardBones(tW, 0, 64, tabletCardWidth, 160, 16, 180, 50),
+  ...cardBones(tW, tabletCardWidth + 16, 64, tabletCardWidth, 160, 16, 180, 50),
+  bone(0, 248, PERCENT_WIDTH, 200, 12, true),
+  bone(pct(16, tW), 264, pct(tW - 32, tW), 26, 4, true),
+  ...tableRows(tW, 304, 28, 210, 70, 4),
 ];
 
 export const compareBones: ResponsiveBones = {
   breakpoints: {
-    375: { name: "compare", viewportWidth: 375, width: mW, height: 580, bones: mobileBones },
-    768: { name: "compare", viewportWidth: 768, width: tW, height: 470, bones: tabletBones },
-    1280: { name: "compare", viewportWidth: 1280, width: dW, height: 510, bones: desktopBones },
+    375: {
+      name: "compare",
+      viewportWidth: 375,
+      width: PERCENT_WIDTH,
+      height: 580,
+      bones: mobileBones,
+    },
+    768: {
+      name: "compare",
+      viewportWidth: 768,
+      width: PERCENT_WIDTH,
+      height: 470,
+      bones: tabletBones,
+    },
+    1280: {
+      name: "compare",
+      viewportWidth: 1280,
+      width: PERCENT_WIDTH,
+      height: 510,
+      bones: desktopBones,
+    },
   },
 };
+
+Object.values(compareBones.breakpoints).forEach(validateResult);
