@@ -12,6 +12,7 @@ class HealthResponse(BaseModel):
 
     status: str = Field(default=HEALTH_STATUS_OK)
     registered_assets: dict[str, list[str]]
+    vector_search_enabled: bool | None = None
 
 
 class QueueStatusResponse(BaseModel):

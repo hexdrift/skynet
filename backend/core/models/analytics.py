@@ -25,6 +25,9 @@ class AnalyticsSummaryResponse(BaseModel):
     total_pairs: int = 0
     completed_pairs: int = 0
     failed_pairs: int = 0
+    # True when the underlying scan hit the per-request job cap and the
+    # aggregation may be incomplete; the dashboard surfaces a banner.
+    truncated: bool = False
 
 
 class OptimizerStatsItem(BaseModel):
@@ -42,6 +45,8 @@ class OptimizerStatsResponse(BaseModel):
     """Response payload for /analytics/optimizers endpoint."""
 
     items: list[OptimizerStatsItem] = Field(default_factory=list)
+    # See AnalyticsSummaryResponse.truncated.
+    truncated: bool = False
 
 
 class ModelStatsItem(BaseModel):
@@ -59,6 +64,8 @@ class ModelStatsResponse(BaseModel):
     """Response payload for /analytics/models endpoint."""
 
     items: list[ModelStatsItem] = Field(default_factory=list)
+    # See AnalyticsSummaryResponse.truncated.
+    truncated: bool = False
 
 
 class DashboardAnalyticsJob(BaseModel):
@@ -149,3 +156,6 @@ class DashboardAnalyticsResponse(BaseModel):
     # paginated jobs table first).
     available_optimizers: list[str] = Field(default_factory=list)
     available_models: list[str] = Field(default_factory=list)
+
+    # See AnalyticsSummaryResponse.truncated.
+    truncated: bool = False

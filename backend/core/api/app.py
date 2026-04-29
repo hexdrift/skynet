@@ -34,7 +34,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from scalar_fastapi import AgentScalarConfig, DocumentDownloadType, get_scalar_api_reference
+
+try:
+    from scalar_fastapi import AgentScalarConfig, DocumentDownloadType, get_scalar_api_reference
+except ImportError:  # Optional dep: tests/CI can run without the Scalar docs UI installed.
+    AgentScalarConfig = None  # type: ignore[assignment, misc]
+    DocumentDownloadType = None  # type: ignore[assignment, misc]
+    get_scalar_api_reference = None  # type: ignore[assignment]
 
 from ..exceptions import AppError
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
@@ -58,7 +64,7 @@ from .routers.recommendations import create_recommendations_router
 from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
 from .routers.submissions import create_submissions_router
-from .routers.templates import create_templates_router
+from .routers.templates import create_templates_router, ensure_template_schema
 from .routers.wizard import create_wizard_router
 
 logger = logging.getLogger(__name__)
@@ -537,6 +543,10 @@ def create_app(
             ``None`` once the worker is running; stops the worker on exit.
         """
         nonlocal worker
+        # DDL belongs at startup, not router construction — keeps the
+        # router factory side-effect-free and concentrates schema setup
+        # in a single observable place.
+        ensure_template_schema(job_store)
         # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
         # this only fails rows whose ``lease_expires_at`` is in the past — a
         # peer pod's in-flight job is not orphaned and is left alone.
@@ -635,7 +645,12 @@ def create_app(
 
         Returns:
             An :class:`HTMLResponse` with the patched Scalar reference page.
+
+        Raises:
+            HTTPException: 503 when ``scalar-fastapi`` is not installed.
         """
+        if get_scalar_api_reference is None:
+            raise HTTPException(status_code=503, detail="scalar-fastapi is not installed")
         base = get_scalar_api_reference(
             openapi_url="/openapi.public.json",
             title=f"{app.title} API",
@@ -811,7 +826,11 @@ def create_app(
 
         snapshot = registry.snapshot()
         logger.debug("Health check requested; registered assets: %s", snapshot)
-        return HealthResponse(status=HEALTH_STATUS_OK, registered_assets=snapshot)
+        return HealthResponse(
+            status=HEALTH_STATUS_OK,
+            registered_assets=snapshot,
+            vector_search_enabled=getattr(job_store, "vector_search_enabled", None),
+        )
 
     @app.middleware("http")
     async def add_cache_headers(

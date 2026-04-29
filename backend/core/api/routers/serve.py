@@ -455,7 +455,7 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         return ServeResponse(
             optimization_id=optimization_id,
-            outputs=outputs,
+            outputs=_cap_serve_outputs(outputs),
             input_fields=input_fields,
             output_fields=output_fields,
             model_used=model_config.normalized_identifier(),

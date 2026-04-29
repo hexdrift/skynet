@@ -60,6 +60,14 @@ async def stream_dashboard_snapshots(job_store) -> AsyncIterator[dict[str, Any]]
     loop = asyncio.get_running_loop()
 
     def _fetch(status: str) -> list[dict]:
+        """List up to 100 jobs in the given status from ``job_store``.
+
+        Args:
+            status: The job-store status bucket to enumerate.
+
+        Returns:
+            Raw ``job_store`` rows for the requested status (capped at 100).
+        """
         return job_store.list_jobs(status=status, limit=100)
 
     while True:
@@ -170,7 +178,9 @@ def clone_payload(
     copy = dict(source_payload)
     if new_name is not None:
         copy["name"] = new_name
-    request_cls = GridSearchRequest if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH else RunRequest
+    request_cls: type[GridSearchRequest] | type[RunRequest] = (
+        GridSearchRequest if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH else RunRequest
+    )
     try:
         payload = request_cls.model_validate(copy)
     except ValidationError as exc:

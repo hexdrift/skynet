@@ -28,6 +28,11 @@ class GenLMTimingCallback(BaseCallback):
                 captured so unrelated LMs sharing the same context are
                 excluded from the duration list.
         """
+        # ``id()`` is safe here because the optimization driver keeps
+        # ``target_lm`` alive for the entire timing window — the callback
+        # is registered before the first call and unregistered after the
+        # last. No weakref is needed; the LM cannot be garbage-collected
+        # and reissued under the same id() during the window.
         self._target_id = id(target_lm)
         self._starts: dict[str, float] = {}
         self.durations_ms: list[float] = []

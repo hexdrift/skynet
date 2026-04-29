@@ -63,7 +63,6 @@ def compile_program(
     if COMPILE_TRAINSET_KEY not in kwargs:
         kwargs[COMPILE_TRAINSET_KEY] = splits.train
 
-    # Only pass valset if the optimizer's compile method accepts it
     if splits.val and _compile_accepts_valset(optimizer):
         kwargs.setdefault(COMPILE_VALSET_KEY, splits.val)
 

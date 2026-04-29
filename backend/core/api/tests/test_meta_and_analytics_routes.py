@@ -150,14 +150,14 @@ def test_analytics_optimizers_empty(client: TestClient) -> None:
     """An empty job store returns an empty optimizers list."""
     r = client.get("/analytics/optimizers")
     assert r.status_code == 200
-    assert r.json() == {"items": []}
+    assert r.json() == {"items": [], "truncated": False}
 
 
 def test_analytics_models_empty(client: TestClient) -> None:
     """An empty job store returns an empty models list."""
     r = client.get("/analytics/models")
     assert r.status_code == 200
-    assert r.json() == {"items": []}
+    assert r.json() == {"items": [], "truncated": False}
 
 
 def test_analytics_summary_running_and_validating_fold_into_running_count(

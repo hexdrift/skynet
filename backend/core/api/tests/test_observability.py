@@ -101,10 +101,15 @@ def test_context_filter_attaches_pod_and_request_id() -> None:
         exc_info=None,
     )
     assert _ContextFilter().filter(record) is True
-    assert isinstance(record.pod, str)
-    assert record.pod
-    assert isinstance(record.request_id, str)
-    assert record.request_id  # default sentinel "-" outside requests
+    # ``_ContextFilter`` injects these attributes onto every record at runtime;
+    # they aren't on ``LogRecord``'s static type, so go through ``getattr``.
+    pod = getattr(record, "pod", None)
+    request_id = getattr(record, "request_id", None)
+    assert isinstance(pod, str)
+    assert pod
+    # ``request_id`` defaults to the sentinel ``"-"`` outside an inbound request.
+    assert isinstance(request_id, str)
+    assert request_id
 
 
 def test_request_id_middleware_mints_and_echoes_id() -> None:

@@ -54,7 +54,7 @@ def _format_prompt_string(
                 field_obj = signature.input_fields.get(field_name)
                 if field_obj and hasattr(field_obj, "json_schema_extra"):
                     desc = field_obj.json_schema_extra.get("desc", "")
-            except Exception:
+            except (AttributeError, TypeError):
                 logger.debug("Could not extract description for input field '%s'", field_name)
             if desc:
                 field_lines.append(f"[Input] {field_name}: {desc}")
@@ -67,7 +67,7 @@ def _format_prompt_string(
                 field_obj = signature.output_fields.get(field_name)
                 if field_obj and hasattr(field_obj, "json_schema_extra"):
                     desc = field_obj.json_schema_extra.get("desc", "")
-            except Exception:
+            except (AttributeError, TypeError):
                 logger.debug("Could not extract description for output field '%s'", field_name)
             if desc:
                 field_lines.append(f"[Output] {field_name}: {desc}")
@@ -128,7 +128,7 @@ def extract_optimized_prompt(program: Any) -> OptimizedPredictor | None:
         try:
             input_fields = list(signature.input_fields.keys())
             output_fields = list(signature.output_fields.keys())
-        except Exception:
+        except (AttributeError, TypeError):
             logger.debug("Could not extract field names from signature")
 
         demos: list[OptimizedDemo] = []
@@ -138,7 +138,7 @@ def extract_optimized_prompt(program: Any) -> OptimizedPredictor | None:
                 demo_inputs = {field: getattr(demo, field, None) for field in input_fields if hasattr(demo, field)}
                 demo_outputs = {field: getattr(demo, field, None) for field in output_fields if hasattr(demo, field)}
                 demos.append(OptimizedDemo(inputs=demo_inputs, outputs=demo_outputs))
-            except Exception as demo_exc:
+            except (AttributeError, TypeError, ValueError) as demo_exc:
                 logger.debug("Could not extract demo: %s", demo_exc)
 
         formatted_prompt = _format_prompt_string(instructions, input_fields, output_fields, demos, signature)

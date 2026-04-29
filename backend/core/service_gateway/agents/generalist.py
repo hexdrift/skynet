@@ -108,7 +108,7 @@ def _build_generalist_lm() -> dspy.LM:
         max_tokens=max_tokens,
         extra=extra,
     )
-    return build_language_model(config)
+    return build_language_model(config, disable_cache=True)
 
 
 logger = logging.getLogger(__name__)
@@ -748,7 +748,7 @@ async def run_generalist_agent(
     * ``tool_start`` / ``tool_end`` — wrap each MCP tool call
     * ``status_patch`` — human-readable progress from ``StatusMessageProvider``
     * ``message_patch`` — per-token assistant reply
-    * ``done`` — terminal event with the final assistant message
+    * ``done`` — terminal event with the final assistant message and the model id used
     * ``error`` — terminal event carrying a user-facing error string
 
     On caller-side cancellation (SSE stream dropped) the orchestration task
@@ -772,6 +772,7 @@ async def run_generalist_agent(
     """
     url = mcp_url or settings.generalist_agent_mcp_url
     registry = approval_registry or get_approval_registry()
+    model_name = model_config.name if model_config else settings.generalist_agent_model
     try:
         lm = build_language_model(model_config) if model_config else _build_generalist_lm()
     except ServiceError as exc:
@@ -808,7 +809,7 @@ async def run_generalist_agent(
             if drive_task in done and out_queue.empty():
                 break
         reply = await drive_task
-        yield {"event": "done", "data": {"assistant_message": reply}}
+        yield {"event": "done", "data": {"assistant_message": reply, "model": model_name}}
     except asyncio.CancelledError:
         drive_task.cancel()
         raise

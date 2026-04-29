@@ -45,7 +45,7 @@ from ...converters import (
     status_to_job_status,
 )
 from ...errors import DomainError
-from .._helpers import _program_cache, build_summary
+from .._helpers import _program_cache, build_summary, stable_seed
 from ..constants import TERMINAL_STATUSES
 from ._local import remap_test_indices
 
@@ -60,6 +60,12 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         job_store: Job-store the routes read from.
     """
 
+    # ``response_model`` is kept for the OpenAPI schema, but the handler
+    # returns ``JSONResponse`` directly so it can emit a 304 path and attach
+    # ETag / Cache-Control headers. FastAPI skips response_model validation
+    # whenever the handler returns a Response instance, so the model class is
+    # documentation-only here — every code path still constructs an
+    # ``OptimizationStatusResponse`` before serialising.
     @router.get(
         "/optimizations/{optimization_id}",
         response_model=OptimizationStatusResponse,
@@ -78,8 +84,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             request: Starlette request used to check ``If-None-Match``.
 
         Returns:
-            A ``JSONResponse`` carrying the serialized
-            ``OptimizationStatusResponse`` (or a 304 when the ETag matches).
+            A :class:`fastapi.responses.JSONResponse` whose body is a
+            serialized :class:`OptimizationStatusResponse` (or a bare 304
+            with no body when ``If-None-Match`` matches the current ETag).
 
         Raises:
             DomainError: 404 when the optimization id is unknown.
@@ -252,7 +259,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         # Replicates the service_gateway/data.py split algorithm. When seed
         # is None, derive a stable seed from optimization_id so repeated
         # calls produce the same shuffle (needed for index remapping).
-        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+        effective_seed = seed if seed is not None else stable_seed(optimization_id)
         total = len(dataset)
         indices = list(range(total))
         if shuffle:
@@ -369,6 +376,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
                 raise DomainError("optimization.no_program_artifact", status=409)
             if optimization_id not in _program_cache:
                 program_bytes = base64.b64decode(artifact.program_pickle_base64)
+                # pickle.loads safety: artifact bytes are written by our own
+                # worker; see _helpers.load_program for the signed-payload
+                # follow-up note.
                 _program_cache[optimization_id] = pickle.loads(program_bytes)
             program = _program_cache[optimization_id]
 
@@ -456,7 +466,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         fractions = SplitFractions.model_validate(fractions_raw)
         shuffle = payload.get("shuffle", True)
         seed = payload.get("seed")
-        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+        effective_seed = seed if seed is not None else stable_seed(optimization_id)
 
         ordered = list(range(total))
         if shuffle:
@@ -641,7 +651,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         fractions = SplitFractions.model_validate(fractions_raw)
         shuffle = payload.get("shuffle", True)
         seed = payload.get("seed")
-        effective_seed = seed if seed is not None else hash(optimization_id) % (2**31)
+        effective_seed = seed if seed is not None else stable_seed(optimization_id)
 
         ordered = list(range(total))
         if shuffle:

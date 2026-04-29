@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 
 from ...config import settings
 
@@ -76,15 +77,28 @@ class _JinaEmbedder:
             )
             self._failed = True
             return
+        # Air-gap policy: a vendored absolute path under backend/vendor/models
+        # is part of the trusted supply chain (tracked via git-lfs), so we run
+        # it with local_files_only=True (no implicit network fetch on a missing
+        # weight) and trust_remote_code=True (the model code ships alongside
+        # the weights). For an arbitrary HF Hub identifier we keep
+        # trust_remote_code off unless the operator explicitly opted in via
+        # RECOMMENDATIONS_EMBEDDING_TRUST_REMOTE_CODE.
+        model_id = settings.recommendations_embedding_model
+        is_local_snapshot = bool(model_id) and Path(model_id).is_absolute() and Path(model_id).exists()
+        allow_remote_code = is_local_snapshot or settings.recommendations_embedding_trust_remote_code
         try:
             self._model = SentenceTransformer(
-                settings.recommendations_embedding_model,
-                trust_remote_code=True,
+                model_id,
+                trust_remote_code=allow_remote_code,
+                local_files_only=is_local_snapshot,
             )
             logger.info(
-                "Loaded embedder %s (truncating to %d dims)",
-                settings.recommendations_embedding_model,
+                "Loaded embedder %s (truncating to %d dims, local_only=%s, trust_remote_code=%s)",
+                model_id,
                 self._dim,
+                is_local_snapshot,
+                allow_remote_code,
             )
         except Exception as exc:
             logger.warning(

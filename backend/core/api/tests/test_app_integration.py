@@ -284,7 +284,7 @@ def test_cache_headers_health_differs_from_models(app_client):
     assert health_cc != models_cc
 
 
-def test_sigterm_handler_calls_worker_stop():
+def test_sigterm_handler_calls_worker_stop() -> None:
     """SIGTERM triggers a clean worker shutdown via ``worker.stop``."""
     registry = ServiceRegistry()
     mock_js = _make_mock_job_store()
@@ -337,7 +337,7 @@ def test_openapi_public_hides_hidden_paths(app_client):
         assert hidden not in paths, f"Hidden path {hidden!r} leaked into public spec"
 
 
-def test_openapi_public_removes_empty_tag_groups(app_client):
+def test_openapi_public_removes_empty_tag_groups(app_client) -> None:
     """Tags with no remaining operations are pruned from the public spec."""
     client, _, _ = app_client
     body = client.get("/openapi.public.json").json()

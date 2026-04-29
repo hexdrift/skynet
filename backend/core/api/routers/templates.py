@@ -1,8 +1,9 @@
 """Routes for CRUD on reusable job-configuration templates.
 
-Templates let users save and reload submission configurations. This router
-also ensures the backing table exists by calling
-``StorageBase.metadata.create_all(job_store.engine)`` on construction.
+Templates let users save and reload submission configurations. The backing
+``templates`` table is created by ``ensure_template_schema`` at app startup
+(see :mod:`backend.core.api.app`); the router itself is side-effect-free
+on construction.
 """
 
 from __future__ import annotations
@@ -102,23 +103,28 @@ class ApplyTemplateResponse(BaseModel):
     wizard_state: dict[str, Any]
 
 
-def create_templates_router(*, job_store) -> APIRouter:
-    """Build the templates' router.
+def ensure_template_schema(job_store) -> None:
+    """Create the ``templates`` table on ``job_store.engine`` if missing.
 
-    Also triggers ``StorageBase.metadata.create_all`` so the backing
-    ``templates`` table is guaranteed to exist before any request hits
-    the router — safe on repeat calls because ``create_all`` is a no-op
-    when the table is already present.
+    Safe to call repeatedly: ``create_all`` is a no-op when every table
+    already exists. Called once from the app lifespan so the router
+    factory itself stays side-effect-free.
 
     Args:
-        job_store: Job-store instance whose ``engine`` backs the templates
-            table.
+        job_store: Job-store instance whose ``engine`` is used for DDL.
+    """
+    StorageBase.metadata.create_all(job_store.engine)
+
+
+def create_templates_router(*, job_store) -> APIRouter:
+    """Build the templates router.
+
+    Args:
+        job_store: Job-store instance whose ORM session backs the routes.
 
     Returns:
         A FastAPI ``APIRouter`` exposing the template CRUD routes.
     """
-    StorageBase.metadata.create_all(job_store.engine)
-
     router = APIRouter()
 
     @router.post(

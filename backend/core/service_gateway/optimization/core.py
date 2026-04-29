@@ -248,8 +248,8 @@ def _run_grid_pair(
             "Grid pair %d/%d completed: baseline=%.4f optimized=%.4f (%.1fs)",
             i + 1,
             ctx.total_pairs,
-            baseline or 0,
-            optimized or 0,
+            baseline if baseline is not None else float("nan"),
+            optimized if optimized is not None else float("nan"),
             pair_runtime,
         )
         if ctx.progress_callback:
@@ -656,8 +656,11 @@ class DspyService:
                 pair_results[idx] = future.result()
 
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
-        # successful is filtered above so optimized_test_metric is never None here.
-        best_pair = max(successful, key=lambda p: p.optimized_test_metric or 0.0) if successful else None
+        best_pair = (
+            max(successful, key=lambda p: p.optimized_test_metric if p.optimized_test_metric is not None else float("-inf"))
+            if successful
+            else None
+        )
 
         grid_runtime = (datetime.now(UTC) - grid_start).total_seconds()
         completed_count = len([p for p in pair_results if p.error is None])

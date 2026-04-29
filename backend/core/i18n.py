@@ -182,11 +182,13 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def t(key: str, **params: Any) -> str:
+def t(key: str, /, **params: Any) -> str:
     """Look up and format a Hebrew user-facing string by stable semantic key.
 
     Returns the key itself when missing, surfacing catalog drift as an obvious
-    development artifact rather than a silent blank.
+    development artifact rather than a silent blank. ``key`` is positional-only
+    so callers can pass an unrelated ``key=...`` template parameter (e.g. from
+    :class:`DomainError` kwargs) without colliding with the lookup argument.
 
     Args:
         key: Catalog identifier for the message template.
