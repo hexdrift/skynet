@@ -12,7 +12,6 @@ import { useUserPrefs } from "@/features/settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
-
 import { ParticleHero } from "@/shared/ui/particle-hero";
 import {
   GeneralistPanel,
@@ -20,30 +19,60 @@ import {
   WizardStateProvider,
   isGeneralistAgentEnabled,
 } from "@/features/agent-panel";
+
 const Sidebar = dynamic(() => import("@/features/sidebar").then((m) => m.Sidebar), { ssr: false });
 
+const HEADER_HEIGHT_PX = 53;
+const SIDEBAR_ID = "app-sidebar";
+const DESKTOP_BP = "(min-width: 768px)";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  if (pathname === "/login") {
+    return (
+      <div className="flex min-h-screen flex-col relative">
+        <ParticleHero />
+        <main className="flex-1 relative z-[1]" dir="rtl">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
+  return <ShellChrome>{children}</ShellChrome>;
+}
+
+function ShellChrome({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [isDesktop, setIsDesktop] = React.useState(false);
   const { data: session } = useSession();
   const pathname = usePathname();
   const { startDeepDive } = useTutorialContext();
   const { prefs } = useUserPrefs();
-  const scalarDocsUrl = `${getRuntimeEnv().apiUrl}/scalar`;
+  const generalistEnabled = isGeneralistAgentEnabled();
+  const scalarDocsUrl = React.useMemo(() => `${getRuntimeEnv().apiUrl}/scalar`, []);
+  const progressRef = React.useRef<HTMLDivElement>(null);
 
-  // Close mobile sidebar on route change
   React.useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
 
-  // Close mobile sidebar on Escape key
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && sidebarOpen) setSidebarOpen(false);
+      if (e.key === "Escape") setSidebarOpen(false);
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [sidebarOpen]);
-  const progressRef = React.useRef<HTMLDivElement>(null);
+  }, []);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_BP);
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   React.useEffect(() => {
     const el = progressRef.current;
@@ -56,30 +85,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       el.style.setProperty("--scroll-progress", String(Math.min(progress, 1)));
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const isLoginPage = pathname === "/login";
-  const generalistEnabled = isGeneralistAgentEnabled();
-
-  // Login page renders without shell chrome (no header, sidebar, orbs)
-  if (isLoginPage) {
-    return (
-      <div className="flex min-h-screen flex-col relative">
-        <ParticleHero />
-        <main className="flex-1 relative z-[1]" dir="rtl">
-          {children}
-        </main>
-      </div>
-    );
-  }
+  const sidebarHidden = !isDesktop && !sidebarOpen;
 
   const shell = (
-    <div className="flex min-h-screen flex-col">
-      {/* Scroll progress indicator */}
+    <div
+      className="flex min-h-screen flex-col"
+      style={{ ["--header-height" as string]: `${HEADER_HEIGHT_PX}px` }}
+    >
       <div ref={progressRef} className="scroll-progress" aria-hidden="true" />
 
-      {/* Animated gradient background orbs */}
       <div className="ambient-bg" aria-hidden="true">
         <div className="orb orb-1" />
         <div className="orb orb-2" />
@@ -87,7 +105,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="orb orb-4" />
       </div>
 
-      {/* Top navbar with logo on the LEFT */}
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -99,7 +116,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             "linear-gradient(to right, transparent, var(--border) 20%, var(--border) 80%, transparent) 1",
         }}
       >
-        {/* Logo wordmark — pinned LEFT */}
         <div className="flex items-center gap-1.5 cursor-default">
           <div className="hidden sm:block">
             <AnimatedWordmark size={16} />
@@ -145,7 +161,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        {/* Right side: user + logout + mobile hamburger */}
         <div className="flex items-center gap-1.5">
           {session?.user && (
             <>
@@ -168,22 +183,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg p-2 hover:bg-accent/80 active:scale-95 transition-all duration-200 md:hidden"
             aria-label={msg("app.shell.menu")}
+            aria-expanded={sidebarOpen}
+            aria-controls={SIDEBAR_ID}
           >
             <Menu className="size-5" />
           </button>
         </div>
       </motion.header>
 
-      {/* dir="ltr" forces: main on LEFT, sidebar on RIGHT */}
       <div className="flex flex-1" dir="ltr">
-        {/* Mobile overlay with fade transition */}
-        <div
-          className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden transition-all duration-300 ease-out ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        <button
+          type="button"
+          aria-label={msg("app.shell.menu_close")}
           onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
+          className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden transition-all duration-300 ease-out ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          tabIndex={sidebarOpen ? 0 : -1}
+          aria-hidden={!sidebarOpen}
         />
 
-        {/* Main content — restore RTL for Hebrew */}
         <main className="flex-1 overflow-auto min-w-0 page-gradient grid-pattern" dir="rtl">
           <div
             className="relative z-[1] mx-auto max-w-7xl py-6 md:py-8"
@@ -193,15 +210,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
 
-        {/* Sidebar — pinned RIGHT */}
         <div
-          className={`fixed inset-y-0 right-0 z-50 transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:sticky md:inset-auto md:top-[53px] md:self-start md:h-[calc(100dvh-53px)] md:z-10 md:translate-x-0 md:shadow-none ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}
+          id={SIDEBAR_ID}
+          className={`fixed inset-y-0 right-0 z-50 transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:sticky md:inset-auto md:top-[var(--header-height)] md:self-start md:h-[calc(100dvh-var(--header-height))] md:z-10 md:translate-x-0 md:shadow-none ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}
+          aria-hidden={sidebarHidden ? true : undefined}
         >
           <Sidebar />
         </div>
       </div>
-
-      {generalistEnabled && <GeneralistPanel />}
     </div>
   );
 
@@ -209,7 +225,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <WizardStateProvider>
-      <GeneralistPanelProvider>{shell}</GeneralistPanelProvider>
+      <GeneralistPanelProvider>
+        {shell}
+        <GeneralistPanel />
+      </GeneralistPanelProvider>
     </WizardStateProvider>
   );
 }
