@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial, update_wrapper
+from types import MappingProxyType
 from typing import Any
 
 from ..constants import RESOLUTION_HINT
@@ -27,22 +28,28 @@ class ModuleAlias:
     auto_signature: bool = False
 
 
-MODULE_ALIASES: dict[str, ModuleAlias] = {
-    "predict": ModuleAlias(("dspy.Predict",), auto_signature=True),
-    "cot": ModuleAlias(
-        (
-            "dspy.modules.ChainOfThought",
-            "dspy.ChainOfThought",
+MODULE_ALIASES: Mapping[str, ModuleAlias] = MappingProxyType(
+    {
+        "predict": ModuleAlias(("dspy.Predict",), auto_signature=True),
+        "cot": ModuleAlias(
+            (
+                "dspy.modules.ChainOfThought",
+                "dspy.ChainOfThought",
+            ),
+            auto_signature=True,
         ),
-        auto_signature=True,
-    ),
-}
+    }
+)
 
-OPTIMIZER_ALIASES: dict[str, str] = {
-    "gepa": "dspy.teleprompt.GEPA",
-}
+OPTIMIZER_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "gepa": "dspy.teleprompt.GEPA",
+    }
+)
 
-AUTO_SIGNATURE_PATHS = {path for alias in MODULE_ALIASES.values() if alias.auto_signature for path in alias.paths}
+AUTO_SIGNATURE_PATHS = frozenset(
+    path for alias in MODULE_ALIASES.values() if alias.auto_signature for path in alias.paths
+)
 
 
 class ResolverError(RuntimeError):
@@ -95,7 +102,7 @@ def resolve_module_factory(name: str) -> tuple[Callable[..., Any], bool]:
             try:
                 target = _load_callable(path)
                 return _wrap_callable(target), spec.auto_signature
-            except ResolverError as exc:  # pragma: no cover - best effort fallbacks
+            except ResolverError as exc:
                 last_error = exc
                 continue
         raise ResolverError(f"Unknown module '{name}'. {RESOLUTION_HINT}") from last_error
@@ -146,6 +153,9 @@ def _load_callable(path: str) -> Callable[..., Any]:
     try:
         module = importlib.import_module(module_path)
     except ModuleNotFoundError as exc:
+        # Catch only ``ModuleNotFoundError`` (a subclass of ``ImportError``):
+        # bad alias paths surface as ``ResolverError`` while a corrupt
+        # install raising plain ``ImportError`` propagates and fails fast.
         raise ResolverError(f"Unable to import '{module_path}': {exc}") from exc
     try:
         target = getattr(module, attribute)
@@ -180,5 +190,7 @@ def _wrap_callable(target: Callable[..., Any]) -> Callable[..., Any]:
     wrapper = partial(target)
     update_wrapper(wrapper, target, updated=())
     if signature is not None:
-        wrapper.__signature__ = signature  # type: ignore[attr-defined]
+        # ``partial`` accepts arbitrary attributes at runtime; ``setattr``
+        # avoids the static-type complaint about ``__signature__``.
+        setattr(wrapper, "__signature__", signature)  # noqa: B010
     return wrapper

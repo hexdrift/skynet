@@ -6,11 +6,12 @@ service code and tests can register and look up factories by name.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import dspy
+if TYPE_CHECKING:
+    import dspy
 
 ModuleFactory = Callable[..., "dspy.Module"]
 MetricFn = Callable[..., float]
@@ -33,9 +34,9 @@ class UnknownRegistrationError(RegistryError):
 class ServiceRegistry:
     """Holds user-defined factories for modules, metrics, and optimizers."""
 
-    modules: MutableMapping[str, ModuleFactory] = field(default_factory=dict)
-    metrics: MutableMapping[str, MetricFn] = field(default_factory=dict)
-    optimizers: MutableMapping[str, OptimizerFactory] = field(default_factory=dict)
+    modules: dict[str, ModuleFactory] = field(default_factory=dict)
+    metrics: dict[str, MetricFn] = field(default_factory=dict)
+    optimizers: dict[str, OptimizerFactory] = field(default_factory=dict)
 
     def register_module(self, name: str, factory: ModuleFactory) -> None:
         """Register a DSPy module factory under a short name.
@@ -129,8 +130,12 @@ class ServiceRegistry:
         }
 
     @staticmethod
-    def _register(store: MutableMapping[str, Any], name: str, value: Any) -> None:
+    def _register(store: dict[str, Any], name: str, value: Any) -> None:
         """Insert ``value`` into ``store`` under ``name``, raising on duplicates.
+
+        Registration is expected at process startup (single-threaded). The
+        check-then-set is intentionally lock-free; callers must not
+        register concurrently from request-serving threads.
 
         Args:
             store: Mapping to mutate in place.
