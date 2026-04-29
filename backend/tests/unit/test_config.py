@@ -20,6 +20,8 @@ _SETTINGS_ENV_VARS = (
     "WORKER_CONCURRENCY",
     "WORKER_POLL_INTERVAL",
     "WORKER_STALE_THRESHOLD",
+    "PROGRESS_EVENTS_PER_JOB_CAP",
+    "LOG_ENTRIES_PER_JOB_CAP",
     "CANCEL_POLL_INTERVAL",
     "JOB_RUN_START_METHOD",
     "ARTIFACTS_DIR",
@@ -70,6 +72,14 @@ def test_settings_defaults_worker_stale_threshold() -> None:
     s = Settings(_env_file=None)
 
     assert s.worker_stale_threshold == 600.0
+
+
+def test_settings_defaults_storage_retention_caps() -> None:
+    """Default storage retention caps are 5000 rows per job."""
+    s = Settings(_env_file=None)
+
+    assert s.progress_events_per_job_cap == 5000
+    assert s.log_entries_per_job_cap == 5000
 
 
 def test_settings_defaults_cancel_poll_interval() -> None:
@@ -151,6 +161,17 @@ def test_settings_env_override_worker_threads(monkeypatch: pytest.MonkeyPatch) -
     s = Settings(_env_file=None)
 
     assert s.worker_threads == 8
+
+
+def test_settings_env_override_storage_retention_caps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Storage retention caps are configurable via environment."""
+    monkeypatch.setenv("PROGRESS_EVENTS_PER_JOB_CAP", "123")
+    monkeypatch.setenv("LOG_ENTRIES_PER_JOB_CAP", "456")
+
+    s = Settings(_env_file=None)
+
+    assert s.progress_events_per_job_cap == 123
+    assert s.log_entries_per_job_cap == 456
 
 
 def test_settings_env_override_port(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -472,3 +493,57 @@ def test_settings_empty_quota_overrides_json_returns_empty(monkeypatch: pytest.M
     s = Settings(_env_file=None)
 
     assert s.get_user_quota("any_user") == s.max_jobs_per_user
+
+
+def test_settings_quota_overrides_rejects_array_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A JSON array is rejected — overrides must be an object."""
+    monkeypatch.setenv("QUOTA_OVERRIDES", "[1, 2, 3]")
+
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)
+
+
+def test_settings_quota_overrides_rejects_string_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-int, non-null value is rejected by the validator."""
+    monkeypatch.setenv("QUOTA_OVERRIDES", '{"alice": "unlimited"}')
+
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)
+
+
+def test_settings_quota_overrides_rejects_bool_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bool value is rejected (``True``/``False`` would silently coerce to 1/0)."""
+    monkeypatch.setenv("QUOTA_OVERRIDES", '{"alice": true}')
+
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)
+
+
+def test_get_user_quota_lookup_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Override lookup matches regardless of casing in either env or query."""
+    monkeypatch.setenv("QUOTA_OVERRIDES", '{"PowerUser": 500}')
+
+    s = Settings(_env_file=None)
+
+    assert s.get_user_quota("PowerUser") == 500
+    assert s.get_user_quota("poweruser") == 500
+    assert s.get_user_quota("POWERUSER") == 500
+
+
+def test_quota_overrides_property_parses_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``quota_overrides`` is cached: repeated reads return the same dict instance."""
+    monkeypatch.setenv("QUOTA_OVERRIDES", '{"alice": 50}')
+
+    s = Settings(_env_file=None)
+
+    assert s.quota_overrides is s.quota_overrides
+
+
+def test_settings_default_agent_models_use_minimax_constant() -> None:
+    """Both agents default to ``MINIMAX_MODEL_ID`` so a single swap covers both."""
+    from core.config import MINIMAX_MODEL_ID
+
+    s = Settings(_env_file=None)
+
+    assert s.code_agent_model == MINIMAX_MODEL_ID
+    assert s.generalist_agent_model == MINIMAX_MODEL_ID

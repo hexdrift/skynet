@@ -4,6 +4,8 @@ The source of truth is ``i18n/locales/he.json``. This script emits:
 
 * ``frontend/src/shared/lib/generated/i18n-catalog.ts`` for TypeScript callers.
 * ``backend/core/i18n_keys.py`` for Python callers.
+* ``backend/core/i18n_locales/he.json`` — in-package copy so wheel installs
+  ship the catalog inside ``core`` without depending on the repo-root file.
 
 It intentionally does not extract or translate copy. It only turns the shared
 catalog into stable, typo-resistant constants for both runtimes.
@@ -13,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +24,19 @@ CATALOG_PATH = ROOT / "i18n" / "locales" / "he.json"
 TS_OUT = ROOT / "frontend" / "src" / "shared" / "lib" / "generated" / "i18n-catalog.ts"
 PY_OUT = ROOT / "backend" / "core" / "i18n_keys.py"
 KEYS_OUT = ROOT / "i18n" / "keys.json"
+PY_CATALOG_OUT = ROOT / "backend" / "core" / "i18n_locales" / "he.json"
 
 
 def _load_catalog() -> dict[str, Any]:
+    """Read and structurally validate the catalog file.
+
+    Returns:
+        Parsed catalog mapping with ``terms`` and ``messages`` confirmed to
+        exist as dicts.
+
+    Raises:
+        ValueError: When either section is missing or wrongly typed.
+    """
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     for section in ("terms", "messages"):
         if not isinstance(catalog.get(section), dict):
@@ -32,12 +45,28 @@ def _load_catalog() -> dict[str, Any]:
 
 
 def _enum_name(key: str) -> str:
+    """Convert a catalog key to a SCREAMING_SNAKE_CASE Python enum identifier.
+
+    Args:
+        key: Catalog key (camelCase or dotted, e.g. ``"jobs.notFound"``).
+
+    Returns:
+        Identifier suitable for a ``StrEnum`` member (always at least ``KEY``).
+    """
     key = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key)
     name = re.sub(r"[^0-9A-Za-z]+", "_", key).strip("_").upper()
     return name or "KEY"
 
 
 def _ts_object(values: dict[str, str]) -> str:
+    """Render a flat string mapping as a TypeScript object literal.
+
+    Args:
+        values: Mapping rendered as ``{ key: "value", ... }``.
+
+    Returns:
+        Multi-line TS source for an object literal.
+    """
     lines = ["{"]
     for key, value in values.items():
         prop = key if re.fullmatch(r"[A-Za-z_$][0-9A-Za-z_$]*", key) else json.dumps(key)
@@ -47,6 +76,11 @@ def _ts_object(values: dict[str, str]) -> str:
 
 
 def _write_ts(catalog: dict[str, Any]) -> None:
+    """Emit the frontend TS catalog (terms, messages, enum-style key tables).
+
+    Args:
+        catalog: Parsed catalog.
+    """
     terms_ts = _ts_object(catalog["terms"])
     messages_ts = _ts_object(catalog["messages"])
     message_key_ts = _ts_object({_enum_name(key): key for key in sorted(catalog["messages"])})
@@ -75,12 +109,21 @@ def _write_ts(catalog: dict[str, Any]) -> None:
 
 
 def _write_py(catalog: dict[str, Any]) -> None:
+    """Emit ``backend/core/i18n_keys.py`` with two ``StrEnum`` key tables.
+
+    Args:
+        catalog: Parsed catalog with ``messages`` and ``terms`` sections.
+    """
     message_lines = [f"    {_enum_name(key)} = {key!r}" for key in sorted(catalog["messages"])]
     term_lines = [f"    {_enum_name(key)} = {key!r}" for key in sorted(catalog["terms"])]
     PY_OUT.write_text(
         "\n".join(
             [
-                '"""Generated i18n key constants. Do not edit by hand."""',
+                '"""Generated i18n key constants. Do not edit by hand.',
+                "",
+                "Run ``python scripts/generate_i18n.py`` to regenerate after editing",
+                "``i18n/locales/he.json``.",
+                '"""',
                 "",
                 "from __future__ import annotations",
                 "",
@@ -88,10 +131,14 @@ def _write_py(catalog: dict[str, Any]) -> None:
                 "",
                 "",
                 "class I18nKey(StrEnum):",
+                '    """Stable identifiers for catalog ``messages`` entries (formatted via ``t()``)."""',
+                "",
                 *message_lines,
                 "",
                 "",
                 "class TermKey(StrEnum):",
+                '    """Stable identifiers for catalog ``terms`` entries (resolved via ``term()``)."""',
+                "",
                 *term_lines,
                 "",
             ]
@@ -101,6 +148,11 @@ def _write_py(catalog: dict[str, Any]) -> None:
 
 
 def _write_keys(catalog: dict[str, Any]) -> None:
+    """Emit the canonical sorted-key index used by tests and tooling.
+
+    Args:
+        catalog: Parsed catalog.
+    """
     KEYS_OUT.write_text(
         json.dumps(
             {
@@ -115,11 +167,24 @@ def _write_keys(catalog: dict[str, Any]) -> None:
     )
 
 
+def _copy_py_catalog() -> None:
+    """Mirror the canonical catalog into the backend package for wheel installs.
+
+    The backend's ``core.i18n`` resolver prefers this in-package copy over the
+    repo-root canonical so air-gap installs of the wheel ship the catalog
+    inside the package.
+    """
+    PY_CATALOG_OUT.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(CATALOG_PATH, PY_CATALOG_OUT)
+
+
 def main() -> None:
+    """Regenerate the TS, Python, and JSON artefacts from the catalog."""
     catalog = _load_catalog()
     _write_ts(catalog)
     _write_py(catalog)
     _write_keys(catalog)
+    _copy_py_catalog()
 
 
 if __name__ == "__main__":

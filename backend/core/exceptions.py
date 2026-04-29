@@ -40,12 +40,14 @@ class AppError(Exception):
 class ServiceError(AppError):
     """Raised when the service_gateway cannot fulfill a request."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 500 / ``SERVICE_ERROR`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context attached to the response body.
+                Keyword-only to match :class:`AppError` and avoid accidentally
+                passing a dict in a positional slot.
         """
         super().__init__(
             message,
@@ -58,12 +60,13 @@ class ServiceError(AppError):
 class NotFoundError(AppError):
     """Resource not found (HTTP 404)."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 404 / ``NOT_FOUND`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context (e.g. ``{"id": ...}``).
+                Keyword-only to match :class:`AppError`.
         """
         super().__init__(
             message,
@@ -76,12 +79,13 @@ class NotFoundError(AppError):
 class ValidationError(AppError):
     """Request validation failed (HTTP 400)."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 400 / ``VALIDATION_ERROR`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context (e.g. offending field name).
+                Keyword-only to match :class:`AppError`.
         """
         super().__init__(
             message,
@@ -94,12 +98,13 @@ class ValidationError(AppError):
 class UnauthorizedError(AppError):
     """Authentication required (HTTP 401)."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 401 / ``UNAUTHORIZED`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context. Keyword-only to match
+                :class:`AppError`.
         """
         super().__init__(
             message,
@@ -112,12 +117,13 @@ class UnauthorizedError(AppError):
 class ForbiddenError(AppError):
     """Access forbidden (HTTP 403)."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 403 / ``FORBIDDEN`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context. Keyword-only to match
+                :class:`AppError`.
         """
         super().__init__(
             message,
@@ -130,12 +136,13 @@ class ForbiddenError(AppError):
 class ConflictError(AppError):
     """Resource conflict (HTTP 409)."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 409 / ``CONFLICT`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context (e.g. conflicting resource id).
+                Keyword-only to match :class:`AppError`.
         """
         super().__init__(
             message,
@@ -148,12 +155,13 @@ class ConflictError(AppError):
 class RateLimitError(AppError):
     """Rate limit exceeded (HTTP 429)."""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         """Initialise with HTTP 429 / ``RATE_LIMIT`` defaults.
 
         Args:
             message: Human-readable error description.
-            details: Optional structured context.
+            details: Optional structured context (e.g. ``{"retry_after": 30}``).
+                Keyword-only to match :class:`AppError`.
         """
         super().__init__(
             message,

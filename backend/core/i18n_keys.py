@@ -1,4 +1,8 @@
-"""Generated i18n key constants. Do not edit by hand."""
+"""Generated i18n key constants. Do not edit by hand.
+
+Run ``python scripts/generate_i18n.py`` to regenerate after editing
+``i18n/locales/he.json``.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,8 @@ from enum import StrEnum
 
 
 class I18nKey(StrEnum):
+    """Stable identifiers for catalog ``messages`` entries (formatted via ``t()``)."""
+
     AGENT_APPROVAL_UNKNOWN_CALL_ID = 'agent.approval.unknown_call_id'
     AGENT_STATUS_TOOL_END = 'agent.status.tool_end'
     AGENT_STATUS_TOOL_START = 'agent.status.tool_start'
@@ -120,6 +126,8 @@ class I18nKey(StrEnum):
 
 
 class TermKey(StrEnum):
+    """Stable identifiers for catalog ``terms`` entries (resolved via ``term()``)."""
+
     API_KEY = 'apiKey'
     APPLY = 'apply'
     BASELINE = 'baseline'
