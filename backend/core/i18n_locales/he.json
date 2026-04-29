@@ -1,0 +1,431 @@
+{
+  "$schema": "./schema.json",
+  "locale": "he",
+  "terms": {
+    "optimization": "אופטימיזציה",
+    "optimizationPlural": "אופטימיזציות",
+    "optimizationTypeRun": "ריצה",
+    "optimizationTypeRunPlural": "ריצות",
+    "optimizationTypeGrid": "סריקה",
+    "pair": "זוג",
+    "program": "תוכנית",
+    "task": "משימה",
+    "statusPending": "ממתינה",
+    "statusValidating": "באימות",
+    "statusRunning": "רצה",
+    "statusSuccess": "הצליחה",
+    "statusFailed": "נכשלה",
+    "statusCancelled": "בוטלה",
+    "cancellationReason": "בוטלה על ידי המשתמש",
+    "dataset": "דאטאסט",
+    "row": "שורה",
+    "example": "דוגמה",
+    "column": "עמודה",
+    "inputColumn": "עמודת קלט",
+    "outputColumn": "עמודת פלט",
+    "ignoredColumn": "עמודה שמחוץ לשימוש",
+    "columnRole": "תפקיד העמודה",
+    "split": "חלוקה",
+    "splitTrain": "אימון",
+    "splitVal": "אימות",
+    "splitTest": "בדיקה",
+    "baseline": "בסיס",
+    "baselineResults": "תוצאות בסיס",
+    "signature": "פרומפט התחלתי",
+    "signatureField": "שדה בפרומפט ההתחלתי",
+    "module": "מודול",
+    "optimizer": "אופטימייזר",
+    "optimizerPlural": "אופטימייזרים",
+    "metric": "פונקציית מדידה",
+    "score": "ציון",
+    "scorePlural": "ציונים",
+    "prediction": "תשובה",
+    "model": "מודל",
+    "provider": "ספק",
+    "winningModel": "מודל מנצח",
+    "winningPair": "זוג מנצח",
+    "reflectionModel": "מודל רפלקציה",
+    "generationModel": "מודל מג׳נרט",
+    "generationModelShort": "מג׳נרט",
+    "generationModelPlural": "מודלי ג׳ינרוט",
+    "modelConfig": "הגדרות מודל",
+    "apiKey": "API key",
+    "modelCatalog": "קטלוג מודלים",
+    "baselineScore": "ציון בסיס",
+    "optimizedScore": "ציון סופי",
+    "scoreImprovement": "שיפור",
+    "expectedScore": "ציון צפוי",
+    "observedScore": "ציון בפועל",
+    "qualityThreshold": "רף האיכות",
+    "recommendation": "המלצה",
+    "recommendable": "מומלצת",
+    "belowThreshold": "מתחת לסף",
+    "similarRun": "ריצה דומה",
+    "apply": "החל",
+    "dismiss": "סגור המלצה",
+    "exploreTitle": "מפת אופטימיזציות",
+    "exploreField": "שדה",
+    "explorePoint": "נקודה",
+    "exploreDetailPanel": "פרטי ריצה",
+    "exploreCluster": "אשכול",
+    "exploreNeighbour": "שכן",
+    "exploreFocus": "התמקדות",
+    "exploreFilter": "סינון",
+    "notificationNewOpt": "אופטימיזציה חדשה",
+    "notificationCompleted": "אופטימיזציה הושלמה בהצלחה",
+    "notificationCancelled": "אופטימיזציה בוטלה",
+    "notificationFailed": "אופטימיזציה נכשלה",
+    "user": "משתמש",
+    "type": "סוג",
+    "error": "שגיאה",
+    "followOptimization": "מעקב אחר האופטימיזציה",
+    "viewResults": "צפייה בתוצאות",
+    "optimizationDetails": "פרטי האופטימיזציה",
+    "examplePlural": "דוגמאות",
+    "rowPlural": "שורות",
+    "inputColumns": "עמודות הקלט",
+    "outputColumnTarget": "עמודת היעד",
+    "finalScore": "הציון הסופי",
+    "modelPlural": "מודלים",
+    "pairPlural": "זוגות"
+  },
+  "messages": {
+    "analytics.other_bucket": "אחר",
+    "optimization.not_found": "{term.optimization} לא נמצאה: '{optimization_id}'.",
+    "optimization.not_finished": "ה{term.optimization} עדיין לא הסתיימה.",
+    "optimization.no_result": "ל{term.optimization} אין נתוני תוצאה.",
+    "optimization.no_result_pending": "ל{term.optimization} עדיין אין תוצאה.",
+    "optimization.no_result_for_artifact": "ל{term.optimization} אין תוצאה.",
+    "optimization.no_payload": "ל{term.optimization} אין מטען.",
+    "optimization.payload_unavailable": "המטען של ה{term.optimization} אינו זמין.",
+    "optimization.dataset_unavailable": "ה{term.dataset} של ה{term.optimization} אינו זמין.",
+    "optimization.no_metric_code": "ל{term.optimization} אין קוד {term.metric}.",
+    "optimization.no_model_config": "לא נמצאה הגדרת {term.model}.",
+    "optimization.no_program_artifact": "אין תוצר {term.program}.",
+    "optimization.no_program_artifact_scoped": "ל{term.optimization} אין תוצר {term.program}.",
+    "optimization.no_artifact_generic": "ה{term.optimization} לא ייצרה תוצר.",
+    "optimization.corrupt_result": "נתוני תוצאת ה{term.optimization} פגומים.",
+    "optimization.corrupt_column_mapping": "מיפוי העמודות השמור אינו תקין.",
+    "optimization.not_success_status_for_serve": "ה{term.optimization} במצב '{status}' — רק {term.optimizationPlural} שהושלמו בהצלחה ניתנות להגשה.",
+    "optimization.not_success_status_for_test_results": "ה{term.optimization} במצב '{status}' — רק ל{term.optimizationPlural} שהושלמו בהצלחה יש תוצאות {term.splitTest}.",
+    "optimization.cancelled_no_artifact": "ה{term.optimization} בוטלה ולא ייצרה תוצר.",
+    "optimization.failed_no_artifact": "ה{term.optimization} נכשלה ולא ייצרה תוצר. שגיאה: {error}",
+    "optimization.already_terminal": "ה{term.optimization} כבר במצב סופי '{status}'.",
+    "optimization.cannot_delete": "לא ניתן למחוק {term.optimization} במצב '{status}'. יש לבטל אותה קודם.",
+    "optimization.clone_no_payload": "לאופטימיזציית המקור אין מטען שמור לשכפול.",
+    "optimization.retry_no_payload": "לאופטימיזציית המקור אין מטען שמור להרצה חוזרת.",
+    "optimization.retry_wrong_status": "ניתן להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. יש לשכפל במקום.",
+    "optimization.cannot_resubmit_payload": "לא ניתן לשלוח מחדש את המטען השמור: {error}",
+    "optimization.pairs_label": "{count} {term.pairPlural}",
+    "grid_search.no_best_pair": "לסריקה אין זוג מוצלח.",
+    "grid_search.no_best_program_artifact": "לזוג המוביל אין תוצר {term.program}.",
+    "grid_search.pair_position_missing": "אין זוג במיקום {pair_index} בתוצאות הסריקה.",
+    "grid_search.pair_failed_error": "הזוג במיקום {pair_index} נכשל: {error}",
+    "grid_search.pair_no_artifact": "לזוג במיקום {pair_index} אין תוצר {term.program}.",
+    "grid_search.pair_submission_grid_only": "הגשה לפי זוג זמינה רק בריצות של סריקה.",
+    "grid_search.pair_test_results_grid_only": "תוצאות {term.splitTest} לפי זוג זמינות רק בריצות של סריקה.",
+    "grid_search.not_a_grid_search": "ה{term.optimization} אינה סריקה.",
+    "grid_search.artifact_per_pair_redirect": "ריצות של סריקה מייצרות תוצרים לכל זוג. יש להשתמש ב-GET /optimizations/{{optimization_id}}/grid-result במקום.",
+    "grid_search.failed_no_result": "הסריקה נכשלה ולא הפיקה תוצאה. שגיאה: {error}",
+    "grid_search.cancelled_no_result": "הסריקה בוטלה ולא הפיקה תוצאה.",
+    "grid_search.no_result_available": "אין תוצאה זמינה לסריקה.",
+    "grid_search.corrupt_result": "נתוני תוצאת הסריקה פגומים.",
+    "grid_search.no_result_to_modify": "לסריקה אין תוצאה לשנות.",
+    "grid_search.cannot_delete_pair": "לא ניתן למחוק זוג בזמן שה{term.optimization} במצב '{status}'. יש לבטל את ה{term.optimization} קודם.",
+    "filter.invalid_status": "סינון סטטוס לא תקין '{value}'. ערכים חוקיים: {allowed}",
+    "filter.invalid_optimization_type": "סינון סוג {term.optimization} לא תקין '{value}'. ערכים חוקיים: {allowed}",
+    "quota.reached": "הגעת למגבלת {quota} {term.optimizationPlural} לכל משתמש. מחק {term.optimizationPlural} ישנות כדי ליצור חדשות.",
+    "submit.no_models_available": "אין {term.modelPlural} זמינים בקטלוג — יש להגדיר API key של ספק קודם.",
+    "submission.validation_failed": "אימות המטען נכשל: {error}",
+    "submission.module_resolve_failed": "טעינת ה{term.module} נכשלה: {error}",
+    "submission.vision_required": "ה{term.dataset} מכיל עמודות תמונה ({fields}) אך ה{term.model} שנבחר ('{model}') אינו תומך בקלט תמונות. בחרו {term.model} עם תמיכה ב־vision.",
+    "code_agent.upstream_failed": "שגיאה בסוכן הקוד: {error}",
+    "health.workers_dead": "שרשורי העבודה אינם פועלים.",
+    "health.workers_stuck": "שרשורי העבודה תקועים כבר {seconds} שניות.",
+    "wizard.field_non_empty_string": "{field} חייב להיות מחרוזת לא ריקה.",
+    "wizard.model_not_json_object": "{field} חייב להיות אובייקט JSON.",
+    "wizard.model_name_non_empty_string": "{field}.name חייב להיות מחרוזת לא ריקה.",
+    "wizard.model_base_url_not_string": "{field}.base_url חייב להיות מחרוזת.",
+    "wizard.model_number_required": "{field}.{key} חייב להיות מספר.",
+    "wizard.model_max_tokens_int": "{field}.max_tokens חייב להיות מספר שלם.",
+    "wizard.model_extra_not_object": "{field}.extra חייב להיות אובייקט.",
+    "wizard.optimizer_kwargs_not_object": "optimizer_kwargs חייב להיות אובייקט.",
+    "dataset.sample_unknown": "{term.dataset} {term.example} לא ידוע '{sample_id}'. יש לקרוא ל-GET /datasets/samples לרשימת מזהים חוקיים.",
+    "dataset.column_roles_unknown": "תפקידי עמודות מפנים לעמודות שלא קיימות ב-dataset_columns: {unknown}",
+    "dataset.column_roles_invalid": "ערכי תפקיד לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
+    "dataset.column_roles_need_input": "לפחות עמודה אחת חייבת להיות בתפקיד 'input'.",
+    "dataset.column_roles_need_output": "לפחות עמודה אחת חייבת להיות בתפקיד 'output'.",
+    "dataset.profile.empty": "Dataset must contain at least one row.",
+    "dataset.profile.too_small": "ה{term.dataset} מכיל {row_count} {term.examplePlural} — מעט מכדי להעריך שיפור אמיתי. כדאי להוסיף עוד {term.examplePlural} כדי לקבל ציונים יציבים.",
+    "dataset.profile.duplicates": "זוהו {duplicate_count} {term.rowPlural} כפולות לפי {term.inputColumns}. כפילויות עלולות לגרום לאותן {term.examplePlural} להופיע גם ב{term.splitTrain} וגם ב{term.splitTest}.",
+    "dataset.profile.missing_target": "{missing} {term.rowPlural} חסרות ערך ב{term.outputColumnTarget} '{column_name}'. מומלץ להסיר או למלא אותן לפני הריצה.",
+    "dataset.profile.rare_class": "עמודת '{column_name}' מכילה קטגוריות נדירות ({rare_classes}) — חלקן עלולות להיעדר מסטי ה{term.splitVal} וה{term.splitTest}.",
+    "dataset.profile.class_imbalance": "חוסר איזון בקטגוריות של '{column_name}' (יחס {ratio}:1). כדאי להוסיף {term.examplePlural} לקטגוריות החלשות.",
+    "dataset.split.rationale.micro": "ה{term.dataset} קטן מאוד ({total} {term.examplePlural}) — הציונים יהיו רועשים. ב{term.optimization} DSPy סט ה{term.splitVal} הוא שדה החיפוש של ה{term.optimizer}, ולכן הקצנו אליו את רוב ה{term.examplePlural}.",
+    "dataset.split.rationale.small": "{term.dataset} קטן ({total} {term.examplePlural}). ב{term.optimization} DSPy סט ה{term.splitVal} הוא שדה החיפוש של ה{term.optimizer}, אז אליו הולכות רוב ה{term.examplePlural}, וסט ה{term.splitTrain} משמש רק כמאגר {term.examplePlural}.",
+    "dataset.split.rationale.medium": "{term.dataset} בגודל בינוני ({total} {term.examplePlural}) — {term.splitTrain} ו{term.splitVal} דומים בגודלם, ו{term.splitTest} 15% נותנת מספיק {term.examplePlural} למדידה אמינה.",
+    "dataset.split.rationale.large": "{term.dataset} גדול ({total} {term.examplePlural}) — ה{term.splitTrain} מקבל את הרוב, ועדיין נשארות מספיק {term.examplePlural} ל{term.splitVal} ול{term.splitTest}.",
+    "dataset.split.rationale.huge": "{term.dataset} גדול מאוד ({total} {term.examplePlural}). הגבלנו את ה{term.splitVal} ל-{val_count} ואת ה{term.splitTest} ל-{test_count} {term.examplePlural} — מספיק לציונים יציבים, בלי לבזבז זמן {term.optimization} על {term.examplePlural} מיותרות.",
+    "dataset.split.rationale.test_floor": "הגדלנו את סט ה{term.splitTest} ל-{minimum} {term.examplePlural} לפחות — מספר קטן מזה נותן רעש סטטיסטי גבוה מדי על {term.finalScore}.",
+    "dataset.split.rationale.shuffle": "ה{term.rowPlural} מעורבבות לפני הפיצול עם ערך התחלתי קבוע — ניתן לשחזר את התוצאה.",
+    "dataset.split.rationale.stratify": "החלוקה תשמור על יחס הקטגוריות מעמודת '{stratify_column}' בכל שלושת הסטים, כדי שקטגוריה נדירה לא תיעלם מה{term.splitVal} או מה{term.splitTest}.",
+    "dataset.split.rationale.categorical_target": "עמודת '{target_name}' קטגוריאלית: {preview}.",
+    "agent.approval.unknown_call_id": "אין אישור ממתין ל-call_id שצויין.",
+    "agent.status.tool_start": "הסוכן מפעיל כלי…",
+    "agent.status.tool_end": "הכלי סיים לפעול.",
+    "wizard.column_roles_not_object": "column_roles חייב להיות אובייקט.",
+    "wizard.invalid_role_values": "ערכי תפקיד לא תקינים (חייבים להיות אחד מ-{allowed}): {bad}",
+    "wizard.field_must_be_list": "{field} חייב להיות רשימה.",
+    "wizard.split_fractions_not_object": "split_fractions חייב להיות אובייקט עם המפתחות train/val/test.",
+    "wizard.split_fractions_not_number": "ערכי split_fractions חייבים להיות מספרים: {error}",
+    "wizard.split_fractions_negative": "split_fractions חייב להיות לא שלילי.",
+    "wizard.split_fractions_sum": "split_fractions חייב להסתכם ל-1.0, התקבל {total}",
+    "serve.no_model_config": "לא נמצאה הגדרת {term.model} לריצה. יש לספק model_config_override.",
+    "serve.no_declared_inputs": "לתוצר אין שדות קלט מוצהרים; לא ניתן לאמת בבטחה את הקלטים.",
+    "serve.missing_inputs": "חסרים שדות קלט נדרשים: {missing}. ציפינו ל: {input_fields}",
+    "template.not_found": "התבנית לא נמצאה.",
+    "template.cannot_delete_others": "ניתן למחוק רק תבניות של המשתמש עצמו.",
+    "template.cannot_update_others": "ניתן לעדכן רק תבניות של המשתמש עצמו.",
+    "template.update_requires_field": "יש לספק לפחות אחד מ-'name', 'description' או 'config' לעדכון.",
+    "notifier.title.new": "{term.optimization} חדשה",
+    "notifier.title.completed": "{term.optimization} הושלמה בהצלחה",
+    "notifier.title.cancelled": "{term.optimization} בוטלה",
+    "notifier.title.failed": "{term.optimization} נכשלה",
+    "notifier.label.user": "משתמש",
+    "notifier.label.type": "סוג",
+    "notifier.label.module": "מודול",
+    "notifier.label.optimizer": "{term.optimizer}",
+    "notifier.label.model": "{term.model}",
+    "notifier.label.score": "{term.score}",
+    "notifier.label.error": "שגיאה",
+    "notifier.link.follow": "מעקב אחר ה{term.optimization}",
+    "notifier.link.results": "צפייה בתוצאות",
+    "notifier.link.details": "פרטי ה{term.optimization}"
+  },
+  "backend": {
+    "constants": {
+      "cancellationReason": "בוטלה על ידי המשתמש",
+      "cloneNamePrefix": "עותק של",
+      "retryNamePrefix": "ניסיון חוזר של",
+      "gridSearchLabel": "סריקה",
+      "gridSearchLabelDefinite": "הסריקה",
+      "runLabel": "ריצה"
+    },
+    "sampleDatasets": {
+      "sentiment-he": {
+        "name": "ניתוח רגש בעברית",
+        "description": "סיווג ביקורות לקוח לחיובי, שלילי או נייטרלי. 12 דוגמאות.",
+        "task_type": "classification",
+        "dataset_filename": "sentiment-he.csv",
+        "rows": [
+          {
+            "text": "המוצר הגיע מהר ועובד מצוין, ממליץ בחום",
+            "label": "חיובי"
+          },
+          {
+            "text": "האריזה הייתה קרועה והמוצר לא עבד בכלל",
+            "label": "שלילי"
+          },
+          {
+            "text": "המשלוח הגיע בזמן, המוצר סביר לגמרי",
+            "label": "נייטרלי"
+          },
+          {
+            "text": "שירות הלקוחות עזר מאוד ומהר, תודה",
+            "label": "חיובי"
+          },
+          {
+            "text": "חיכיתי שבועיים ולא קיבלתי עדכון, ממש מאכזב",
+            "label": "שלילי"
+          },
+          {
+            "text": "האפליקציה נוחה לשימוש ואני חוזר אליה יום יום",
+            "label": "חיובי"
+          },
+          {
+            "text": "יש כמה באגים קטנים אבל בסך הכל סביר",
+            "label": "נייטרלי"
+          },
+          {
+            "text": "הצוות לא ענה לפניות שלי במשך שבוע שלם",
+            "label": "שלילי"
+          },
+          {
+            "text": "ממשק יפה, תכונות מעולות, מחיר סביר",
+            "label": "חיובי"
+          },
+          {
+            "text": "חוויית המשתמש בסדר גמור, לא משהו מיוחד",
+            "label": "נייטרלי"
+          },
+          {
+            "text": "הכי גרוע שקניתי, לא שווה את הכסף",
+            "label": "שלילי"
+          },
+          {
+            "text": "עובד מעולה גם במכשיר ישן, הפתעה נעימה",
+            "label": "חיובי"
+          }
+        ],
+        "input_columns": [
+          "text"
+        ],
+        "output_columns": [
+          "label"
+        ],
+        "signature_field_inputs": {
+          "text": "text"
+        },
+        "signature_field_outputs": {
+          "label": "label"
+        },
+        "signature_code": "import dspy\n\n\nclass ClassifySentiment(dspy.Signature):\n    \"\"\"סווג את הטקסט לאחת משלוש קטגוריות: חיובי, שלילי, נייטרלי.\"\"\"\n\n    text: str = dspy.InputField(desc=\"טקסט הביקורת\")\n    label: str = dspy.OutputField(desc=\"חיובי / שלילי / נייטרלי\")\n",
+        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בדוק אם התשובה של המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"label\", \"\")).strip().lower()\n    expected = str(getattr(example, \"label\", \"\")).strip().lower()\n    return predicted == expected\n"
+      },
+      "email-triage-he": {
+        "name": "מיון פניות מייל",
+        "description": "סיווג פניות דוא\"ל לתמיכה, חיוב או מכירות. 10 דוגמאות.",
+        "task_type": "classification",
+        "dataset_filename": "email-triage-he.csv",
+        "rows": [
+          {
+            "subject": "חשבונית לא התקבלה",
+            "body": "לא קיבלתי את החשבונית של אתמול",
+            "category": "תמיכה"
+          },
+          {
+            "subject": "ביטול מנוי",
+            "body": "אני רוצה לבטל את המנוי החודשי שלי",
+            "category": "חיוב"
+          },
+          {
+            "subject": "הצעת שיתוף פעולה",
+            "body": "שלום, אני מייצגת חברה שיכולה לקדם אתכם",
+            "category": "מכירות"
+          },
+          {
+            "subject": "לא מצליח להיכנס",
+            "body": "הסיסמה שלי לא עובדת יותר, איך לאפס?",
+            "category": "תמיכה"
+          },
+          {
+            "subject": "החזר כספי",
+            "body": "חויבתי פעמיים על אותה הזמנה",
+            "category": "חיוב"
+          },
+          {
+            "subject": "שאלה לפני רכישה",
+            "body": "האם המוצר תומך באפליקציה של אנדרואיד?",
+            "category": "מכירות"
+          },
+          {
+            "subject": "לא מגיעות התראות",
+            "body": "הפסקתי לקבל התראות בדוא\"ל כבר שבוע",
+            "category": "תמיכה"
+          },
+          {
+            "subject": "עדכון כרטיס אשראי",
+            "body": "איך אני מעדכן את פרטי האשראי שלי?",
+            "category": "חיוב"
+          },
+          {
+            "subject": "דמו למנהל שלי",
+            "body": "נשמח לקבוע דמו לצוות שלנו בשבוע הבא",
+            "category": "מכירות"
+          },
+          {
+            "subject": "הגדרות חשבון",
+            "body": "איפה אני משנה את שפת הממשק?",
+            "category": "תמיכה"
+          }
+        ],
+        "input_columns": [
+          "subject",
+          "body"
+        ],
+        "output_columns": [
+          "category"
+        ],
+        "signature_field_inputs": {
+          "subject": "subject",
+          "body": "body"
+        },
+        "signature_field_outputs": {
+          "category": "category"
+        },
+        "signature_code": "import dspy\n\n\nclass ClassifyEmail(dspy.Signature):\n    \"\"\"סווג את הפנייה לפי המחלקה המתאימה: תמיכה, חיוב, או מכירות.\"\"\"\n\n    subject: str = dspy.InputField(desc=\"נושא ההודעה\")\n    body: str = dspy.InputField(desc=\"גוף ההודעה\")\n    category: str = dspy.OutputField(desc=\"תמיכה / חיוב / מכירות\")\n",
+        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בדוק אם התשובה של המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"category\", \"\")).strip().lower()\n    expected = str(getattr(example, \"category\", \"\")).strip().lower()\n    return predicted == expected\n"
+      },
+      "qa-general-he": {
+        "name": "שאלות ותשובות כלליות",
+        "description": "מענה על שאלות טריוויה קצרות בעברית. 12 דוגמאות.",
+        "task_type": "qa",
+        "dataset_filename": "qa-general-he.csv",
+        "rows": [
+          {
+            "question": "מהי בירת צרפת?",
+            "answer": "פריז"
+          },
+          {
+            "question": "כמה שעות ביממה?",
+            "answer": "24"
+          },
+          {
+            "question": "מי כתב את הספר 'עוץ לי גוץ לי'?",
+            "answer": "לאה גולדברג"
+          },
+          {
+            "question": "מה היסוד הכימי עם הסמל O?",
+            "answer": "חמצן"
+          },
+          {
+            "question": "באיזו שנה נוסדה מדינת ישראל?",
+            "answer": "1948"
+          },
+          {
+            "question": "מהי עיר הבירה של יפן?",
+            "answer": "טוקיו"
+          },
+          {
+            "question": "כמה צלעות יש למשולש?",
+            "answer": "3"
+          },
+          {
+            "question": "מי כתב את 'הרומיאו ויוליה'?",
+            "answer": "שייקספיר"
+          },
+          {
+            "question": "מה הכוכב הקרוב ביותר לכדור הארץ?",
+            "answer": "השמש"
+          },
+          {
+            "question": "מהו הים הכי גדול בעולם?",
+            "answer": "האוקיינוס השקט"
+          },
+          {
+            "question": "כמה יבשות יש בעולם?",
+            "answer": "7"
+          },
+          {
+            "question": "מי המציא את הטלפון?",
+            "answer": "אלכסנדר גרהם בל"
+          }
+        ],
+        "input_columns": [
+          "question"
+        ],
+        "output_columns": [
+          "answer"
+        ],
+        "signature_field_inputs": {
+          "question": "question"
+        },
+        "signature_field_outputs": {
+          "answer": "answer"
+        },
+        "signature_code": "import dspy\n\n\nclass AnswerQuestion(dspy.Signature):\n    \"\"\"ענה על השאלה בתשובה קצרה ומדויקת.\"\"\"\n\n    question: str = dspy.InputField(desc=\"השאלה\")\n    answer: str = dspy.OutputField(desc=\"תשובה קצרה\")\n",
+        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בדוק אם התשובה של המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"answer\", \"\")).strip().lower()\n    expected = str(getattr(example, \"answer\", \"\")).strip().lower()\n    return predicted == expected\n"
+      }
+    }
+  }
+}

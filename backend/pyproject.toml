@@ -11,6 +11,7 @@ include = ["core*"]
     "static/scalar/*.svg",
     "static/scalar/fonts/*.woff2",
 ]
+"core.i18n_locales" = ["*.json"]
 
 [project]
 name = "skynet"
@@ -59,7 +60,10 @@ recommendations = [
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-extend-exclude = ["usage_guide"]
+# Notebook cells get rewritten by Jupyter and have non-standard import order
+# from kernel context; skip them. ``skynet_client.py`` is regular Python and
+# stays in scope.
+extend-exclude = ["usage_guide/*.ipynb"]
 
 [tool.ruff.lint]
 # Lean modern set: PEP 8 errors/style + naming + import order + pyupgrade,
@@ -100,7 +104,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["core"]
+known-first-party = ["core", "skynet_client"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests intentionally violate some rules for clarity:
@@ -141,15 +145,13 @@ exclude = ["usage_guide/", ".venv/"]
 #
 #   pytest core/ -v                          # fast CI gate, no credentials
 #   pytest tests/test_llm_integration.py -v  # nightly paid tier
-#   pytest tests/ -m smoke -v               # quick smoke pass (subset)
-#   pytest tests/ -m "not slow" -v          # skip long-running LLM tests
+#   pytest tests/ -m "not slow" -v           # skip long-running LLM tests
 #
 testpaths = ["core", "tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = ["--strict-markers"]
 markers = [
-    "smoke: quick sanity checks — no LLM calls, just server availability and validation",
     "e2e: full end-to-end tests requiring a live LLM (slow, costs API credits)",
     "slow: tests that take > 30 s to complete",
     "load: concurrency / latency stress tests",
