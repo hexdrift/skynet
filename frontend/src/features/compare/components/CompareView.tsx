@@ -81,6 +81,10 @@ import {
   type RunInfo,
 } from "./compare-model";
 
+const WINNER_TINT = "rgba(61, 46, 34, 0.085)";
+// Cubic-bezier matches the snappy curve in globals.css (`--ease-snappy`).
+const EASE_SNAPPY = [0.2, 0.8, 0.2, 1] as const;
+
 function VerdictBlock({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
   const winner = winnerIdx != null ? runs[winnerIdx] : null;
 
@@ -333,7 +337,6 @@ function RunsHeaderRow({
   stickyFirst: string;
   firstLabel: string;
 }) {
-  const WINNER_TINT = "rgba(61, 46, 34, 0.085)";
   const winnerBg = (i: number) => (i === winnerIdx ? WINNER_TINT : undefined);
   return (
     <tr>
@@ -551,7 +554,6 @@ function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
     },
   ];
 
-  const WINNER_TINT = "rgba(61, 46, 34, 0.085)";
   const winnerBg = (i: number) => (i === winnerIdx ? WINNER_TINT : undefined);
   const stickyFirst = "sticky start-0 bg-card z-10 border-e border-border/30";
 
@@ -968,20 +970,29 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
       return null;
     })();
 
-    void Promise.all([resultsPromise, datasetPromise]).then(([list, ds]) => {
-      if (!alive) return;
-      const next: Record<string, Map<number, EvalExampleResult>> = {};
-      list.forEach((arr, i) => {
-        const id = runs[i]!.job.optimization_id;
-        if (!arr) return;
-        const m = new Map<number, EvalExampleResult>();
-        arr.forEach((r) => m.set(r.index, r));
-        next[id] = m;
+    void Promise.all([resultsPromise, datasetPromise])
+      .then(([list, ds]) => {
+        if (!alive) return;
+        const next: Record<string, Map<number, EvalExampleResult>> = {};
+        list.forEach((arr, i) => {
+          const run = runs[i];
+          if (!run || !arr) return;
+          const m = new Map<number, EvalExampleResult>();
+          arr.forEach((r) => m.set(r.index, r));
+          next[run.job.optimization_id] = m;
+        });
+        setByRun(next);
+        setDataset(ds);
+      })
+      .catch((err) => {
+        // resultsPromise/datasetPromise individually swallow errors, but a
+        // future edit could surface a rejection here — leave the spinner
+        // would-spin-forever bug behind.
+        console.warn("PerExampleSection: failed to load examples", err);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
       });
-      setByRun(next);
-      setDataset(ds);
-      setLoading(false);
-    });
     return () => {
       alive = false;
     };
@@ -1203,9 +1214,10 @@ export function CompareView() {
     [searchParams],
   );
 
-  // Consume the tutorial's one-shot demo in a useState initializer (runs once
-  // per mount-lifecycle, so React strict-mode's double-invoked effects don't
-  // cause the second run to see a null and fall through to the real API).
+  // Consume the tutorial's one-shot demo via a useState initializer because
+  // `consumePendingCompareDemo` mutates module-level state (see
+  // features/tutorial/lib/bridge.ts) — calling it from an effect would race
+  // with the real-API fallback and could miss the injected payload entirely.
   const [injectedDemo] = useState(() => consumePendingCompareDemo());
   const [jobs, setJobs] = useState<OptimizationStatusResponse[] | null>(() =>
     injectedDemo && injectedDemo.length >= 2 ? injectedDemo : null,
@@ -1224,13 +1236,14 @@ export function CompareView() {
       setLoading(false);
       return;
     }
+    setLoading(true);
     void Promise.allSettled(optimizationIds.map((id) => getJob(id)))
       .then((results) => {
         const ok: OptimizationStatusResponse[] = [];
         const failed: string[] = [];
         results.forEach((r, i) => {
           if (r.status === "fulfilled") ok.push(r.value);
-          else failed.push(optimizationIds[i]!);
+          else failed.push(optimizationIds[i] ?? "unknown");
         });
         if (ok.length < 2) {
           setError(msg("compare.load_error"));
@@ -1242,8 +1255,7 @@ export function CompareView() {
         setFailedIds(failed);
       })
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [optimizationIds, injectedDemo]);
 
   const runs = useMemo(() => (jobs ? jobs.map(deriveRunInfo) : []), [jobs]);
   const winnerIdx = useMemo(() => winnerIndexOf(runs), [runs]);
@@ -1283,7 +1295,7 @@ export function CompareView() {
     initial: { opacity: 0, y: 8 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -8 },
-    transition: { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] as const },
+    transition: { duration: 0.2, ease: EASE_SNAPPY },
   };
 
   return (
@@ -1291,7 +1303,7 @@ export function CompareView() {
       className="space-y-6 pb-16"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+      transition={{ duration: 0.4, ease: EASE_SNAPPY }}
     >
       <FadeIn>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
