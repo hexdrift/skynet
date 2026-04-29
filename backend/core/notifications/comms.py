@@ -1,12 +1,12 @@
 """Internal communications service client.
 
-Placeholder for sending messages to the organization's internal messaging
-platform (e.g., Rocket.Chat, Slack, Teams, etc.).
+Sends notifications to an operator-supplied webhook for the organization's
+internal messaging platform.
 
 To integrate:
     1. Set COMMS_WEBHOOK_URL in backend/.env
-    2. Implement _post_message() with your platform's webhook/API format
-    3. Optionally set COMMS_CHANNEL for the target channel/room
+    2. Optionally set COMMS_CHANNEL for the target channel/room
+    3. Adjust the JSON payload if your webhook format requires different keys
 """
 
 import logging
@@ -38,31 +38,19 @@ def send_message(text: str, channel: str | None = None) -> bool:
         ``True`` when the webhook accepted the payload, ``False`` when
         delivery was skipped or any error occurred.
     """
-    if not ENABLED:
+    if not ENABLED or not WEBHOOK_URL:
         logger.debug("Comms not configured (COMMS_WEBHOOK_URL not set), skipping: %s", text[:80])
         return False
 
     target = channel or CHANNEL
-
     try:
-        # Adapt this payload to your messaging platform:
-        #
-        # Rocket.Chat:
-        #   {"text": "...", "channel": "#room"}
-        #
-        # Slack:
-        #   {"text": "...", "channel": "#room"}
-        #
-        # Teams:
-        #   {"text": "..."}  (channel set in webhook URL)
-        #
         payload = {
             "text": text,
             "channel": target,
         }
 
         resp = requests.post(
-            WEBHOOK_URL,  # type: ignore[arg-type]
+            WEBHOOK_URL,
             json=payload,
             timeout=10,
         )
@@ -70,6 +58,6 @@ def send_message(text: str, channel: str | None = None) -> bool:
         logger.info("Comms message sent to %s", target)
         return True
 
-    except Exception as exc:
+    except requests.RequestException as exc:
         logger.warning("Failed to send comms message: %s", exc)
         return False
