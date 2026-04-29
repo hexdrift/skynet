@@ -14,6 +14,7 @@ import {
 } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
 import { getServerRuntimeEnv, serializeRuntimeEnv } from "@/shared/lib/runtime-env";
+import { SentryInit } from "@/shared/observability/sentry-init";
 import "@fontsource-variable/heebo/index.css";
 import "@fontsource-variable/inter/index.css";
 import "react-toastify/dist/ReactToastify.css";
@@ -100,6 +101,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body suppressHydrationWarning>
+        <SentryInit />
         <SessionProvider>
           <UserPrefsProvider>
             <Providers>

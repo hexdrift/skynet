@@ -1,0 +1,20 @@
+name: i18n
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Generated artefacts in sync with catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jsonschema
+        run: pip install jsonschema
+      - name: Verify codegen drift, naming regex, schema
+        run: python scripts/generate_i18n.py --check
