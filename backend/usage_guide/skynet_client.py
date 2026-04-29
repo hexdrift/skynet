@@ -14,6 +14,11 @@ from typing import Any
 import dspy
 import requests
 
+# All HTTP calls to the service share the same generous timeout: long enough
+# to absorb a slow grid-search detail fetch, short enough to fail fast if the
+# server is unreachable rather than letting a notebook hang forever.
+_REQUEST_TIMEOUT = 30
+
 
 class DSPyServiceClient:
     """HTTP client for the Skynet optimization service."""
@@ -32,7 +37,9 @@ class DSPyServiceClient:
         Returns:
             The ``GET /health`` response payload.
         """
-        return requests.get(f"{self.base_url}/health").json()
+        resp = requests.get(f"{self.base_url}/health", timeout=_REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
 
     def queue(self) -> dict:
         """Fetch the worker queue state.
@@ -40,7 +47,9 @@ class DSPyServiceClient:
         Returns:
             The ``GET /queue`` response payload (running/pending counts, workers).
         """
-        return requests.get(f"{self.base_url}/queue").json()
+        resp = requests.get(f"{self.base_url}/queue", timeout=_REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
 
     def submit(self, payload: dict) -> str:
         """Submit a single optimization job.
@@ -105,10 +114,10 @@ class DSPyServiceClient:
         Returns:
             A list of log-entry dicts from ``GET /optimizations/{id}/logs``.
         """
-        params = {}
+        params: dict[str, str | int] = {}
         if level:
             params["level"] = level
-        if limit:
+        if limit is not None:
             params["limit"] = limit
         resp = requests.get(f"{self.base_url}/optimizations/{optimization_id}/logs", params=params)
         resp.raise_for_status()
@@ -179,14 +188,18 @@ class DSPyServiceClient:
         resp.raise_for_status()
         return resp.json()
 
-    def delete(self, optimization_id: str) -> None:
+    def delete(self, optimization_id: str) -> dict:
         """Delete a terminal optimization record.
 
         Args:
             optimization_id: The optimization job identifier.
+
+        Returns:
+            The ``DELETE /optimizations/{id}`` acknowledgement payload.
         """
         resp = requests.delete(f"{self.base_url}/optimizations/{optimization_id}")
         resp.raise_for_status()
+        return resp.json()
 
     def validate_code(self, payload: dict) -> dict:
         """Validate a signature/metric code snippet without running it.
@@ -236,6 +249,12 @@ class DSPyServiceClient:
 
         Returns:
             The live ``dspy.Module`` instance ready for inference.
+
+        Security:
+            This unpickles bytes returned by the configured Skynet service.
+            ``pickle.loads`` runs arbitrary code during deserialization, so
+            only call this against a service whose artifact store you trust.
+            Treat a shared/multi-tenant Skynet instance as untrusted.
         """
         art = self.artifact(optimization_id)
         pickle_b64 = art["program_artifact"]["program_pickle_base64"]
@@ -261,7 +280,9 @@ class DSPyServiceClient:
         Returns:
             The ``GET /models`` response payload.
         """
-        return requests.get(f"{self.base_url}/models").json()
+        resp = requests.get(f"{self.base_url}/models", timeout=_REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
 
 
 class JobMonitor:
@@ -306,13 +327,17 @@ class JobMonitor:
     def _print_update(self, data: dict, elapsed: float) -> None:
         """Print a single progress line plus any new events/logs.
 
+        Advances ``self._printed_events`` and ``self._printed_logs`` so each
+        subsequent call only emits the unseen tail — calling twice on the same
+        snapshot is therefore safe and produces no duplicate output.
+
         Args:
             data: The latest job detail dict from ``client.status``.
             elapsed: Seconds since polling started, used in the status line.
         """
         ts = time.strftime("%H:%M:%S")
         metrics = data.get("latest_metrics") or {}
-        parts = [f"[{ts}] {data['status'].upper():<12} | {int(elapsed)}s"]
+        parts = [f"[{ts}] {data.get('status', '?').upper():<12} | {int(elapsed)}s"]
         if "tqdm_percent" in metrics:
             parts.append(f"{metrics['tqdm_percent']:.0f}%")
         if "baseline_test_metric" in metrics:
@@ -331,8 +356,7 @@ class JobMonitor:
         logs = data.get("logs", [])
         for log in logs[self._printed_logs :]:
             level = log.get("level", "INFO")
-            if level in {"INFO", "WARNING", "ERROR"}:
-                print(f"    [{level}] {log.get('message', '')[:100]}")
+            print(f"    [{level}] {log.get('message', '')[:100]}")
         self._printed_logs = len(logs)
 
 
@@ -352,15 +376,19 @@ def serialize_source(obj: Any) -> str:
     """
     if isinstance(obj, type) and issubclass(obj, dspy.Signature):
         doc = obj.__doc__ or ""
+        # ``repr()`` produces a quoted, escaped Python string literal — safe
+        # for docstrings/descs that contain quotes or backslashes, which a
+        # naive f-string-with-double-quotes would corrupt.
         lines = [
             f"class {obj.__name__}(dspy.Signature):",
-            f'    """{doc}"""',
+            f"    {doc!r}",
         ]
         for name, field in obj.model_fields.items():
             extra = field.json_schema_extra or {}
             ftype = "InputField" if extra.get("__dspy_field_type") == "input" else "OutputField"
             desc = extra.get("desc", "")
-            lines.append(f'    {name}: str = dspy.{ftype}(desc="{desc}")')
+            type_name = inspect.formatannotation(field.annotation) if field.annotation else "str"
+            lines.append(f"    {name}: {type_name} = dspy.{ftype}(desc={desc!r})")
         return "\n".join(lines)
 
     if hasattr(obj, "__source_code__"):

@@ -1,8 +1,21 @@
-# TODO: On-premise - Configure pip to use local artifactory by creating pip.conf or using --index-url
-# Example pip.conf:
-#   [global]
-#   index-url = https://artifactory.your-company.com/api/pypi/pypi-remote/simple
-#   trusted-host = artifactory.your-company.com
+# On-prem / air-gap install: point pip at your Artifactory mirror via pip.conf,
+# environment, or uv index. Pick the one your runtime uses:
+#
+#   1) ~/.pip/pip.conf (or %APPDATA%\pip\pip.ini on Windows):
+#        [global]
+#        index-url = https://artifactory.your-company.com/api/pypi/pypi-remote/simple
+#        trusted-host = artifactory.your-company.com
+#
+#   2) Per-shell:
+#        export PIP_INDEX_URL=https://artifactory.your-company.com/api/pypi/pypi-remote/simple
+#        export PIP_TRUSTED_HOST=artifactory.your-company.com
+#
+#   3) Uncomment the [[tool.uv.index]] block below if you install with `uv pip`.
+
+# [[tool.uv.index]]
+# name = "artifactory"
+# url = "https://artifactory.your-company.com/api/pypi/pypi-remote/simple"
+# default = true
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
