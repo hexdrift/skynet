@@ -9,18 +9,18 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 
-def fake_service_registry() -> MagicMock:
+def _fake_service_registry() -> MagicMock:
     """Return a labelled ``MagicMock`` standing in for ``ServiceRegistry``."""
     return MagicMock(name="ServiceRegistry_instance")
 
 
-def fake_fastapi_app() -> MagicMock:
+def _fake_fastapi_app() -> MagicMock:
     """Return a labelled ``MagicMock`` standing in for the FastAPI app."""
     return MagicMock(name="FastAPI_app")
 
 
 @contextmanager
-def patch_main_dependencies(registry: Any = None, app: Any = None):
+def _patch_main_dependencies(registry: Any = None, app: Any = None):
     """Patch heavy side-effects (dotenv, DB, uvicorn) that fire at ``main.py`` import time.
 
     Args:
@@ -31,9 +31,9 @@ def patch_main_dependencies(registry: Any = None, app: Any = None):
         ``None`` while all four patches are active.
     """
     if registry is None:
-        registry = fake_service_registry()
+        registry = _fake_service_registry()
     if app is None:
-        app = fake_fastapi_app()
+        app = _fake_fastapi_app()
 
     with (
         patch("dotenv.load_dotenv"),
@@ -55,5 +55,5 @@ def import_main_fresh(registry: Any = None, app: Any = None):
         The freshly-imported ``main`` module.
     """
     sys.modules.pop("main", None)
-    with patch_main_dependencies(registry=registry, app=app):
+    with _patch_main_dependencies(registry=registry, app=app):
         return importlib.import_module("main")
