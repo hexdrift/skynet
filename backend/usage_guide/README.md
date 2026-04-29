@@ -43,9 +43,11 @@ instead of public PyPI, see the snippet at the top of `pyproject.toml`
 
 | # | Notebook | Dataset | What it teaches |
 |---|----------|---------|-----------------|
-| 1 | [01_quickstart.ipynb](01_quickstart.ipynb) | GSM8K (math) | End-to-end: submit, monitor, results, load & test optimized program |
-| 2 | [02_grid_search.ipynb](02_grid_search.ipynb) | HotPotQA (multi-hop QA) | Compare model pairs via grid search, analyze per-pair results |
-| 3 | [03_creative_tasks.ipynb](03_creative_tasks.ipynb) | TMDB Movies (taglines) | Multi-field signatures, LLM-as-judge metrics, code validation, serve API |
+| 1 | [01_quickstart.ipynb](01_quickstart.ipynb) | `math_problems.json` (math) | End-to-end: submit, monitor, results, load & test optimized program |
+| 2 | [02_grid_search.ipynb](02_grid_search.ipynb) | `wikidata_qa.json` (general QA) | Compare model pairs via grid search, analyze per-pair results |
+| 3 | [03_creative_tasks.ipynb](03_creative_tasks.ipynb) | `nasa_missions.json` (multi-output) | Multi-field signatures, LLM-as-judge metrics, code validation, serve API |
+| 4 | [04_advanced.ipynb](04_advanced.ipynb) | `uspto_patents.json` (multi-input + multi-label) | Multi-input fusion + multi-label outputs, composite Jaccard / macro-F1 metrics |
+| 5 | [05_gepa_showcase.ipynb](05_gepa_showcase.ipynb) | `logic_puzzles.json` (constraint reasoning) | Structured reasoning, GEPA-driven prompt optimisation on a hard task |
 
 Start with notebook 1. Each notebook builds on new concepts — not just different data.
 
@@ -58,15 +60,19 @@ All notebooks import from `skynet_client.py`:
 
 ## Datasets
 
+All five datasets are fully permissive — self-generated or distilled from public-domain factual sources. See [`data/SOURCES.md`](../../data/SOURCES.md) for licensing details and per-file provenance.
+
 | File | Rows | Task | Structure |
 |------|------|------|-----------|
-| `data/gsm8k.json` | 100 | Math reasoning | question → answer |
-| `data/hotpotqa.json` | 100 | Multi-hop QA | question → answer |
-| `data/tmdb_movies_150.json` | 150 | Tagline generation | overview + keywords + genres → tagline |
+| `data/math_problems.json` | 100 | Math word problems | question → answer (numeric) |
+| `data/wikidata_qa.json` | 100 | General-domain factual QA | question → answer |
+| `data/nasa_missions.json` | 100 | Multi-output structured prediction | name + description → year + type + destination + status |
+| `data/uspto_patents.json` | 100 | Multi-input + multi-label classification | title + abstract → category + subcategories + inventors + decade |
+| `data/logic_puzzles.json` | 100 | Constraint-satisfaction reasoning | entities + attributes + clues → solution |
 
 Datasets live at the repo root in `data/`. From a notebook:
 ```python
-with open(Path("../../data/gsm8k.json")) as f:
+with open(Path("../../data/math_problems.json")) as f:
     dataset = json.load(f)
 ```
 

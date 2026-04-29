@@ -40,7 +40,7 @@ import requests  # type: ignore[import-untyped]
 from .conftest import requires_llm, requires_server, wait_for_terminal
 
 BASE_URL = "http://localhost:8000"
-DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "gsm8k.json"
+DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "math_problems.json"
 
 SIGNATURE_CODE = (
     "import dspy\n"
@@ -53,7 +53,7 @@ SIGNATURE_CODE = (
 # Submitted as user-code to the worker, which exec()s it in a fresh namespace —
 # the inline `import dspy, re` is intentional, not a §9 import-style violation.
 METRIC_CODE = """
-def gsm8k_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
+def math_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
     import dspy, re
     def extract(text):
         nums = re.findall(r'-?[\\d,]+\\.?\\d*', (text or '').replace(',', ''))
@@ -71,7 +71,7 @@ MODEL = {
 
 
 def _load_dataset(rows: int = 12) -> list[dict]:
-    """Read the GSM8K fixture and return the first ``rows`` rows."""
+    """Read the math-problems fixture and return the first ``rows`` rows."""
     with DATASET_PATH.open() as f:
         return json.load(f)[:rows]
 

@@ -14,7 +14,7 @@ Canonical job fixtures (each has `.detail.json`, `.summary.json`, `.logs.json`):
     jobs/cancelled_mid_run          — cancelled after dataset_splits_ready
 
 Datasets:
-    datasets/gsm8k_small.json       — 20-row head of data/gsm8k.json
+    datasets/math_small.json        — 20-row head of data/math_problems.json
 
 All raw captures (14 existing DB jobs + 4 new recordings) live under `jobs/raw/`.
 Anything in `jobs/*.json` at the top level is a copy of a raw file, not a derivative.
@@ -24,7 +24,7 @@ Usage:
 
     detail = load_fixture("jobs/success_single_gepa.detail.json")
     summary = load_fixture("jobs/success_single_gepa.summary.json")
-    dataset = load_fixture("datasets/gsm8k_small.json")
+    dataset = load_fixture("datasets/math_small.json")
 """
 
 from __future__ import annotations

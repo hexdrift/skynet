@@ -1,0 +1,802 @@
+[
+  {
+    "name": "Mercury-Redstone 3",
+    "description": "First American crewed spaceflight, a suborbital flight piloted by Alan Shepard.",
+    "launch_year": 1961,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Mercury-Atlas 6",
+    "description": "First American crewed orbital flight, piloted by John Glenn for three orbits.",
+    "launch_year": 1962,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Gemini 4",
+    "description": "First American spacewalk, performed by Ed White during a four-day flight.",
+    "launch_year": 1965,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Gemini 7",
+    "description": "14-day endurance flight that served as rendezvous target for Gemini 6A.",
+    "launch_year": 1965,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Gemini 8",
+    "description": "First docking of two spacecraft in orbit, cut short by a stuck thruster.",
+    "launch_year": 1966,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "partial_success"
+  },
+  {
+    "name": "Gemini 12",
+    "description": "Final Gemini mission, demonstrating sustained EVA work by Buzz Aldrin.",
+    "launch_year": 1966,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 1",
+    "description": "Pre-flight test ended in a launchpad cabin fire that killed all three crew members.",
+    "launch_year": 1967,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "failure"
+  },
+  {
+    "name": "Apollo 7",
+    "description": "First crewed Apollo flight, an 11-day Earth-orbital shakedown of the Command Module.",
+    "launch_year": 1968,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 8",
+    "description": "First crewed mission to leave Earth orbit and orbit the Moon.",
+    "launch_year": 1968,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 9",
+    "description": "Earth-orbit test of the Lunar Module rendezvous and docking procedures.",
+    "launch_year": 1969,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 10",
+    "description": "Lunar-orbit dress rehearsal that descended to within 15 km of the Moon's surface.",
+    "launch_year": 1969,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 11",
+    "description": "First crewed mission to land humans on the Moon, with Armstrong and Aldrin on the surface.",
+    "launch_year": 1969,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 12",
+    "description": "Second crewed Moon landing, touching down near the Surveyor 3 robotic lander.",
+    "launch_year": 1969,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 13",
+    "description": "Aborted lunar landing after an oxygen tank explosion; the crew returned safely using the LM as a lifeboat.",
+    "launch_year": 1970,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "partial_success"
+  },
+  {
+    "name": "Apollo 14",
+    "description": "Third crewed Moon landing, exploring the Fra Mauro highlands.",
+    "launch_year": 1971,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 15",
+    "description": "First mission to use the Lunar Roving Vehicle, exploring Hadley-Apennine.",
+    "launch_year": 1971,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 16",
+    "description": "Crewed landing in the Descartes Highlands with extensive geology traverses.",
+    "launch_year": 1972,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Apollo 17",
+    "description": "Final and longest crewed Moon landing, including the only geologist astronaut.",
+    "launch_year": 1972,
+    "mission_type": "crewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Skylab 2",
+    "description": "First crewed mission to Skylab; repaired thermal damage sustained during launch.",
+    "launch_year": 1973,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Skylab 4",
+    "description": "84-day record-setting Skylab mission and final visit to the station.",
+    "launch_year": 1973,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Apollo-Soyuz Test Project",
+    "description": "First crewed international docking, between an Apollo capsule and a Soviet Soyuz.",
+    "launch_year": 1975,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Mariner 2",
+    "description": "First spacecraft to fly past another planet, returning Venus atmospheric data.",
+    "launch_year": 1962,
+    "mission_type": "uncrewed",
+    "destination": "venus",
+    "status": "success"
+  },
+  {
+    "name": "Mariner 4",
+    "description": "First successful Mars flyby, returning the first close-up images of another planet.",
+    "launch_year": 1964,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Mariner 9",
+    "description": "First spacecraft to enter orbit around another planet, mapping Mars from above.",
+    "launch_year": 1971,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Mariner 10",
+    "description": "First spacecraft to use a gravity assist and to visit Mercury, with three flybys.",
+    "launch_year": 1973,
+    "mission_type": "uncrewed",
+    "destination": "mercury",
+    "status": "success"
+  },
+  {
+    "name": "Pioneer 10",
+    "description": "First spacecraft to traverse the asteroid belt and to fly past Jupiter.",
+    "launch_year": 1972,
+    "mission_type": "uncrewed",
+    "destination": "jupiter",
+    "status": "success"
+  },
+  {
+    "name": "Pioneer 11",
+    "description": "Second spacecraft to fly past Jupiter and the first to visit Saturn.",
+    "launch_year": 1973,
+    "mission_type": "uncrewed",
+    "destination": "saturn",
+    "status": "success"
+  },
+  {
+    "name": "Viking 1",
+    "description": "First successful Mars lander, returning images and biological experiment data.",
+    "launch_year": 1975,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Viking 2",
+    "description": "Second Mars lander, paired with an orbiter studying the planet's surface.",
+    "launch_year": 1975,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Voyager 1",
+    "description": "Outer-planets probe that reached interstellar space and remains operational.",
+    "launch_year": 1977,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "active"
+  },
+  {
+    "name": "Voyager 2",
+    "description": "Only spacecraft to visit all four outer planets, now in interstellar space.",
+    "launch_year": 1977,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "active"
+  },
+  {
+    "name": "STS-1",
+    "description": "First Space Shuttle flight, an orbital test of Columbia piloted by Young and Crippen.",
+    "launch_year": 1981,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "STS-7",
+    "description": "First American woman in space, Sally Ride, aboard Challenger.",
+    "launch_year": 1983,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "STS-51-L",
+    "description": "Challenger broke apart 73 seconds after launch, killing all seven crew members.",
+    "launch_year": 1986,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "failure"
+  },
+  {
+    "name": "STS-31",
+    "description": "Deployed the Hubble Space Telescope into low Earth orbit.",
+    "launch_year": 1990,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "STS-61",
+    "description": "First Hubble servicing mission, correcting the telescope's spherical aberration.",
+    "launch_year": 1993,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "STS-71",
+    "description": "First docking of a Space Shuttle with the Russian space station Mir.",
+    "launch_year": 1995,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "STS-88",
+    "description": "First Shuttle mission to assemble the International Space Station.",
+    "launch_year": 1998,
+    "mission_type": "crewed",
+    "destination": "iss",
+    "status": "success"
+  },
+  {
+    "name": "STS-107",
+    "description": "Columbia broke apart on re-entry, killing all seven crew members.",
+    "launch_year": 2003,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "failure"
+  },
+  {
+    "name": "STS-125",
+    "description": "Final Hubble servicing mission, extending the telescope's lifetime.",
+    "launch_year": 2009,
+    "mission_type": "crewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "STS-135",
+    "description": "Final flight of the Space Shuttle program.",
+    "launch_year": 2011,
+    "mission_type": "crewed",
+    "destination": "iss",
+    "status": "success"
+  },
+  {
+    "name": "Magellan",
+    "description": "Venus orbiter that radar-mapped 98 percent of the planet's surface.",
+    "launch_year": 1989,
+    "mission_type": "uncrewed",
+    "destination": "venus",
+    "status": "success"
+  },
+  {
+    "name": "Galileo",
+    "description": "First spacecraft to orbit Jupiter and the first to drop a probe into its atmosphere.",
+    "launch_year": 1989,
+    "mission_type": "uncrewed",
+    "destination": "jupiter",
+    "status": "success"
+  },
+  {
+    "name": "Cassini-Huygens",
+    "description": "Saturn orbiter that delivered the Huygens probe to the surface of Titan.",
+    "launch_year": 1997,
+    "mission_type": "uncrewed",
+    "destination": "saturn",
+    "status": "success"
+  },
+  {
+    "name": "Juno",
+    "description": "Jupiter polar orbiter studying the planet's gravity field, magnetosphere, and origin.",
+    "launch_year": 2011,
+    "mission_type": "uncrewed",
+    "destination": "jupiter",
+    "status": "active"
+  },
+  {
+    "name": "Mars Pathfinder",
+    "description": "Mars lander that delivered the small Sojourner rover, the first wheels on Mars.",
+    "launch_year": 1996,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Mars Global Surveyor",
+    "description": "Long-running Mars orbiter that mapped the planet at high resolution for nine years.",
+    "launch_year": 1996,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Mars Climate Orbiter",
+    "description": "Lost on Mars arrival due to a unit-conversion error between metric and imperial.",
+    "launch_year": 1998,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "failure"
+  },
+  {
+    "name": "Mars Polar Lander",
+    "description": "Crashed during landing on Mars due to a premature engine shutdown.",
+    "launch_year": 1999,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "failure"
+  },
+  {
+    "name": "2001 Mars Odyssey",
+    "description": "Mars orbiter still operational and the longest-running spacecraft at Mars.",
+    "launch_year": 2001,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "active"
+  },
+  {
+    "name": "Spirit",
+    "description": "Mars Exploration Rover that operated for over six years before becoming stuck in soft soil.",
+    "launch_year": 2003,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Opportunity",
+    "description": "Mars Exploration Rover that traveled over 45 km and lasted nearly 15 years on Mars.",
+    "launch_year": 2003,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Mars Reconnaissance Orbiter",
+    "description": "High-resolution Mars orbiter providing imaging and communications relay.",
+    "launch_year": 2005,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "active"
+  },
+  {
+    "name": "Phoenix",
+    "description": "Mars polar lander that confirmed the presence of water ice in the regolith.",
+    "launch_year": 2007,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Curiosity",
+    "description": "Car-sized Mars rover studying habitability in Gale Crater, still active.",
+    "launch_year": 2011,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "active"
+  },
+  {
+    "name": "MAVEN",
+    "description": "Mars orbiter studying the upper atmosphere and the loss of the planet's air to space.",
+    "launch_year": 2013,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "active"
+  },
+  {
+    "name": "InSight",
+    "description": "Mars stationary lander that studied seismic activity and the planet's interior.",
+    "launch_year": 2018,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "success"
+  },
+  {
+    "name": "Mars 2020 Perseverance",
+    "description": "Mars rover collecting rock samples for future return and supporting the Ingenuity helicopter.",
+    "launch_year": 2020,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "active"
+  },
+  {
+    "name": "Clementine",
+    "description": "Joint NASA-DoD lunar orbiter that produced the first global topographic map of the Moon.",
+    "launch_year": 1994,
+    "mission_type": "uncrewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Lunar Prospector",
+    "description": "Polar lunar orbiter that detected hydrogen, suggesting water ice in permanently shadowed craters.",
+    "launch_year": 1998,
+    "mission_type": "uncrewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "LCROSS",
+    "description": "Lunar impactor that confirmed water in a permanently shadowed crater near the south pole.",
+    "launch_year": 2009,
+    "mission_type": "uncrewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Lunar Reconnaissance Orbiter",
+    "description": "High-resolution lunar mapping orbiter, still active.",
+    "launch_year": 2009,
+    "mission_type": "uncrewed",
+    "destination": "moon",
+    "status": "active"
+  },
+  {
+    "name": "GRAIL",
+    "description": "Twin lunar orbiters that produced a high-resolution gravity map of the Moon.",
+    "launch_year": 2011,
+    "mission_type": "uncrewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "NEAR Shoemaker",
+    "description": "First spacecraft to orbit and then land on an asteroid (Eros).",
+    "launch_year": 1996,
+    "mission_type": "uncrewed",
+    "destination": "asteroid",
+    "status": "success"
+  },
+  {
+    "name": "Stardust",
+    "description": "Comet sample-return mission that captured dust from comet Wild 2.",
+    "launch_year": 1999,
+    "mission_type": "uncrewed",
+    "destination": "comet",
+    "status": "success"
+  },
+  {
+    "name": "Genesis",
+    "description": "Solar wind sample-return mission whose capsule crashed on landing but yielded usable samples.",
+    "launch_year": 2001,
+    "mission_type": "uncrewed",
+    "destination": "sun",
+    "status": "partial_success"
+  },
+  {
+    "name": "Deep Impact",
+    "description": "Comet mission that fired a copper impactor into comet Tempel 1 to study its interior.",
+    "launch_year": 2005,
+    "mission_type": "uncrewed",
+    "destination": "comet",
+    "status": "success"
+  },
+  {
+    "name": "Dawn",
+    "description": "Ion-propulsion mission that orbited the asteroid Vesta and the dwarf planet Ceres.",
+    "launch_year": 2007,
+    "mission_type": "uncrewed",
+    "destination": "asteroid",
+    "status": "success"
+  },
+  {
+    "name": "OSIRIS-REx",
+    "description": "Asteroid sample-return mission that delivered material from Bennu to Earth in 2023.",
+    "launch_year": 2016,
+    "mission_type": "uncrewed",
+    "destination": "asteroid",
+    "status": "success"
+  },
+  {
+    "name": "Lucy",
+    "description": "Multi-target mission to visit several Jupiter Trojan asteroids.",
+    "launch_year": 2021,
+    "mission_type": "uncrewed",
+    "destination": "asteroid",
+    "status": "active"
+  },
+  {
+    "name": "DART",
+    "description": "Kinetic-impactor planetary-defense test that altered the orbit of asteroid Dimorphos.",
+    "launch_year": 2021,
+    "mission_type": "uncrewed",
+    "destination": "asteroid",
+    "status": "success"
+  },
+  {
+    "name": "New Horizons",
+    "description": "First spacecraft to fly past Pluto and the Kuiper Belt object Arrokoth.",
+    "launch_year": 2006,
+    "mission_type": "uncrewed",
+    "destination": "pluto",
+    "status": "active"
+  },
+  {
+    "name": "SOHO",
+    "description": "Joint NASA-ESA solar observatory at the L1 Lagrange point.",
+    "launch_year": 1995,
+    "mission_type": "uncrewed",
+    "destination": "sun",
+    "status": "active"
+  },
+  {
+    "name": "STEREO",
+    "description": "Twin spacecraft providing stereoscopic views of solar activity.",
+    "launch_year": 2006,
+    "mission_type": "uncrewed",
+    "destination": "sun",
+    "status": "active"
+  },
+  {
+    "name": "Solar Dynamics Observatory",
+    "description": "Geostationary observatory imaging the Sun in multiple wavelengths.",
+    "launch_year": 2010,
+    "mission_type": "uncrewed",
+    "destination": "sun",
+    "status": "active"
+  },
+  {
+    "name": "Parker Solar Probe",
+    "description": "Closest-ever solar approach, designed to fly through the Sun's corona.",
+    "launch_year": 2018,
+    "mission_type": "uncrewed",
+    "destination": "sun",
+    "status": "active"
+  },
+  {
+    "name": "Hubble Space Telescope",
+    "description": "Long-running optical space telescope launched by Shuttle and serviced five times.",
+    "launch_year": 1990,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "Compton Gamma Ray Observatory",
+    "description": "Gamma-ray space telescope that operated for nine years before controlled deorbit.",
+    "launch_year": 1991,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "success"
+  },
+  {
+    "name": "Chandra X-ray Observatory",
+    "description": "X-ray space telescope in a highly elliptical Earth orbit.",
+    "launch_year": 1999,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "active"
+  },
+  {
+    "name": "Spitzer Space Telescope",
+    "description": "Infrared space telescope in an Earth-trailing solar orbit.",
+    "launch_year": 2003,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "success"
+  },
+  {
+    "name": "Kepler",
+    "description": "Exoplanet-hunting space telescope that monitored the same field for transits.",
+    "launch_year": 2009,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "success"
+  },
+  {
+    "name": "TESS",
+    "description": "Transiting Exoplanet Survey Satellite scanning the whole sky for nearby exoplanets.",
+    "launch_year": 2018,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "active"
+  },
+  {
+    "name": "James Webb Space Telescope",
+    "description": "Large infrared observatory at the Sun-Earth L2 Lagrange point.",
+    "launch_year": 2021,
+    "mission_type": "uncrewed",
+    "destination": "deep_space",
+    "status": "active"
+  },
+  {
+    "name": "Terra",
+    "description": "Flagship Earth-observing satellite carrying five remote-sensing instruments.",
+    "launch_year": 1999,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "Aqua",
+    "description": "Earth-observing satellite focused on the planet's water cycle.",
+    "launch_year": 2002,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "Aura",
+    "description": "Earth-observing satellite measuring atmospheric chemistry and ozone.",
+    "launch_year": 2004,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "OCO-2",
+    "description": "Orbiting Carbon Observatory measuring atmospheric carbon dioxide.",
+    "launch_year": 2014,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "ICESat-2",
+    "description": "Earth-orbiting altimeter measuring ice-sheet mass changes with a laser.",
+    "launch_year": 2018,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "Landsat 9",
+    "description": "Land-imaging satellite continuing the longest-running Earth-observation program.",
+    "launch_year": 2021,
+    "mission_type": "uncrewed",
+    "destination": "low_earth_orbit",
+    "status": "active"
+  },
+  {
+    "name": "Expedition 1",
+    "description": "First long-duration crew aboard the International Space Station.",
+    "launch_year": 2000,
+    "mission_type": "crewed",
+    "destination": "iss",
+    "status": "success"
+  },
+  {
+    "name": "SpaceX Demo-2",
+    "description": "First crewed flight of the Crew Dragon and first US commercial-crew mission to the ISS.",
+    "launch_year": 2020,
+    "mission_type": "crewed",
+    "destination": "iss",
+    "status": "success"
+  },
+  {
+    "name": "Crew-1",
+    "description": "First operational SpaceX Crew Dragon rotation mission to the ISS.",
+    "launch_year": 2020,
+    "mission_type": "crewed",
+    "destination": "iss",
+    "status": "success"
+  },
+  {
+    "name": "Boeing CFT",
+    "description": "First crewed flight test of Boeing's Starliner capsule to the ISS.",
+    "launch_year": 2024,
+    "mission_type": "crewed",
+    "destination": "iss",
+    "status": "partial_success"
+  },
+  {
+    "name": "Artemis I",
+    "description": "Uncrewed test flight of the Space Launch System rocket and Orion capsule around the Moon.",
+    "launch_year": 2022,
+    "mission_type": "uncrewed",
+    "destination": "moon",
+    "status": "success"
+  },
+  {
+    "name": "Pioneer Venus 1",
+    "description": "Venus orbiter that radar-mapped the planet at low resolution.",
+    "launch_year": 1978,
+    "mission_type": "uncrewed",
+    "destination": "venus",
+    "status": "success"
+  },
+  {
+    "name": "Pioneer Venus 2",
+    "description": "Venus multiprobe mission that delivered four atmospheric probes.",
+    "launch_year": 1978,
+    "mission_type": "uncrewed",
+    "destination": "venus",
+    "status": "success"
+  },
+  {
+    "name": "Ulysses",
+    "description": "Joint NASA-ESA mission that flew over the Sun's poles via a Jupiter gravity assist.",
+    "launch_year": 1990,
+    "mission_type": "uncrewed",
+    "destination": "sun",
+    "status": "success"
+  },
+  {
+    "name": "MESSENGER",
+    "description": "First spacecraft to orbit Mercury, mapping its surface and composition.",
+    "launch_year": 2004,
+    "mission_type": "uncrewed",
+    "destination": "mercury",
+    "status": "success"
+  },
+  {
+    "name": "Mars Observer",
+    "description": "Mars orbiter lost just before orbit insertion due to a propulsion failure.",
+    "launch_year": 1992,
+    "mission_type": "uncrewed",
+    "destination": "mars",
+    "status": "failure"
+  },
+  {
+    "name": "CONTOUR",
+    "description": "Comet flyby mission lost shortly after a solid-rocket-motor burn.",
+    "launch_year": 2002,
+    "mission_type": "uncrewed",
+    "destination": "comet",
+    "status": "failure"
+  }
+]
