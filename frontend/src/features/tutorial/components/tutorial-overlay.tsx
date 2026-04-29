@@ -32,6 +32,7 @@ export function TutorialOverlay() {
   const [showSplash, setShowSplash] = React.useState(false);
   const [stepReady, setStepReady] = React.useState(false);
   const stepPathRef = React.useRef<string | null>(null);
+  const splashTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
 
   // Register splash trigger + client-side navigation with the typed
@@ -39,18 +40,26 @@ export function TutorialOverlay() {
   React.useEffect(() => {
     const unregisterSplash = registerTutorialHook("showTutorialSplash", () => {
       setShowSplash(true);
-      // Auto-dismiss: match real submit splash (1.5s) + buffer for navigation
-      setTimeout(() => setShowSplash(false), 1500);
+      // Auto-dismiss: match real submit splash (1.5s) + buffer for navigation.
+      // Track via ref so unmount or a second splash cancels the previous timer.
+      if (splashTimerRef.current) clearTimeout(splashTimerRef.current);
+      splashTimerRef.current = setTimeout(() => {
+        splashTimerRef.current = null;
+        setShowSplash(false);
+      }, 1500);
     });
     const unregisterPush = registerTutorialHook("routerPush", (path: string) => router.push(path));
     return () => {
       unregisterSplash();
       unregisterPush();
+      if (splashTimerRef.current) {
+        clearTimeout(splashTimerRef.current);
+        splashTimerRef.current = null;
+      }
     };
   }, [router]);
 
   const targetRef = React.useRef<Element | null>(null);
-  const rafRef = React.useRef<number>(0);
   const lastRectRef = React.useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   const autoPlayTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -105,7 +114,7 @@ export function TutorialOverlay() {
   const updatePositions = React.useCallback(() => {
     if (!currentStep) return;
 
-    const el = document.querySelector(currentStep.target);
+    const el = targetRef.current ?? document.querySelector(currentStep.target);
     if (!el) {
       // Keep last-known rect so the spotlight doesn't flash to full-dark
       // mid-transition. Popover is already hidden via stepReady gate.
@@ -116,7 +125,7 @@ export function TutorialOverlay() {
     const rect = el.getBoundingClientRect();
 
     // Skip state updates when rect hasn't meaningfully changed — avoids
-    // re-renders at 60fps when nothing moved.
+    // re-renders when an observer fires but nothing moved.
     const prev = lastRectRef.current;
     if (
       prev &&
@@ -133,18 +142,18 @@ export function TutorialOverlay() {
     setPopoverPosition(calculatePosition(rect, currentStep.placement || "auto"));
   }, [currentStep, calculatePosition]);
 
-  const trackPosition = React.useCallback(() => {
-    updatePositions();
-    rafRef.current = requestAnimationFrame(trackPosition);
-  }, [updatePositions]);
-
   React.useEffect(() => {
     if (!state.isVisible || !currentStep) return;
     setStepReady(false);
     lastRectRef.current = null;
     stepPathRef.current = null;
+    targetRef.current = null;
 
     let cancelled = false;
+    let waitRaf = 0;
+    let resizeObserver: ResizeObserver | null = null;
+    const onWindowChange = () => updatePositions();
+
     const init = async () => {
       if (currentStep.beforeShow) {
         await currentStep.beforeShow();
@@ -152,20 +161,33 @@ export function TutorialOverlay() {
       if (cancelled) return;
 
       // Wait for the target to mount (handles route transitions and
-      // late-mounting React subtrees). If still missing, skip the step so a
-      // broken anchor never stalls the tour. Window must exceed the longest
+      // late-mounting React subtrees). Window must exceed the longest
       // beforeShow waitForElement so steps that navigate to a slow-mounting
       // route (e.g. /compare with demo data, /optimizations/[id]) aren't
       // auto-skipped while their anchor is still hydrating.
-      let el = document.querySelector(currentStep.target);
-      if (!el) {
-        const start = Date.now();
-        while (!el && Date.now() - start < 5000) {
-          await new Promise((r) => requestAnimationFrame(r));
-          if (cancelled) return;
-          el = document.querySelector(currentStep.target);
+      const el = await new Promise<Element | null>((resolve) => {
+        const found = document.querySelector(currentStep.target);
+        if (found) {
+          resolve(found);
+          return;
         }
-      }
+        const start = Date.now();
+        const tick = () => {
+          if (cancelled) {
+            resolve(null);
+            return;
+          }
+          const next = document.querySelector(currentStep.target);
+          if (next || Date.now() - start > 5000) {
+            resolve(next);
+            return;
+          }
+          waitRaf = requestAnimationFrame(tick);
+        };
+        waitRaf = requestAnimationFrame(tick);
+      });
+      if (cancelled) return;
+
       if (!el) {
         // Skip in the SAME direction the user was navigating. Without this,
         // Backspace on a step whose anchor is gone (e.g. wizard remounted)
@@ -188,10 +210,16 @@ export function TutorialOverlay() {
         await new Promise((r) => setTimeout(r, 250));
         if (cancelled) return;
       }
-      // Seed positions immediately so the popover mounts at the right spot.
+
+      targetRef.current = el;
       updatePositions();
-      // Start rAF tracking — handles resize, scroll, layout shifts
-      rafRef.current = requestAnimationFrame(trackPosition);
+      // Observe size changes on the target itself; scroll/resize cover
+      // viewport-driven shifts. This replaces a 60fps rAF poll that ran
+      // even when nothing moved.
+      resizeObserver = new ResizeObserver(() => updatePositions());
+      resizeObserver.observe(el);
+      window.addEventListener("scroll", onWindowChange, { passive: true, capture: true });
+      window.addEventListener("resize", onWindowChange);
       stepPathRef.current = window.location.pathname;
       setStepReady(true);
     };
@@ -200,7 +228,10 @@ export function TutorialOverlay() {
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(rafRef.current);
+      if (waitRaf) cancelAnimationFrame(waitRaf);
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener("scroll", onWindowChange, { capture: true } as EventListenerOptions);
+      window.removeEventListener("resize", onWindowChange);
       // Best-effort per-step cleanup. Closure captures the OLD step, which
       // is what we want — clean up the step we're leaving before the next
       // one's beforeShow runs. Fire-and-forget; UI undo doesn't need await.
@@ -212,7 +243,6 @@ export function TutorialOverlay() {
     state.isVisible,
     state.lastDirection,
     currentStep,
-    trackPosition,
     updatePositions,
     nextStep,
     prevStep,
@@ -289,11 +319,22 @@ export function TutorialOverlay() {
     if (!state.isVisible) return;
 
     const onKey = (e: KeyboardEvent) => {
+      // Skip when the user is typing into an editable surface — otherwise
+      // Enter/Backspace/arrow-keys hijack the tutorial when the user just
+      // wants to type into the demo's signature/metric editors or the
+      // wizard's name field.
       const tgt = e.target as HTMLElement | null;
-      const tgtDesc = tgt
-        ? `${tgt.tagName}${tgt.id ? `#${tgt.id}` : ""}.${(tgt.className || "").toString().slice(0, 30)}`
-        : "?";
-      console.warn(`[tut-key] ${e.key} target=${tgtDesc} default=${e.defaultPrevented}`);
+      if (tgt) {
+        const tag = tgt.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          tgt.isContentEditable
+        ) {
+          return;
+        }
+      }
       if (e.key === "Enter" || e.key === "ArrowLeft") {
         e.preventDefault();
         nextStep();

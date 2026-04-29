@@ -15,7 +15,10 @@ import type {
   EvalExampleResult,
   OptimizationDatasetResponse,
   DatasetRow,
+  PaginatedJobsResponse,
+  OptimizationSummaryResponse,
 } from "@/shared/types/api";
+import type { DashboardAnalytics, DashboardAnalyticsJob } from "@/shared/lib/api";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -509,20 +512,26 @@ export interface DemoCallbacks {
  *   2.5s+ — optimizing (trials appear every ~275ms)
  *   5.25s — done (success)
  */
-/** Cached completed state — once the simulation finishes, revisits skip straight to done. */
-let _cachedDoneState: OptimizationStatusResponse | null = null;
+const DEMO_SIMULATION_DURATION_MS = 5250;
 
-/** Reset the cached state so the next visit re-runs the simulation. */
+/** Once the simulation finishes, revisits skip straight to done. */
+let _simulationCompleted = false;
+
+/** Reset the completed flag so the next visit re-runs the simulation. */
 export function resetDemoSimulation() {
-  _cachedDoneState = null;
+  _simulationCompleted = false;
 }
 
 export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
   const { setJob, setLoading } = callbacks;
 
-  if (_cachedDoneState) {
+  if (_simulationCompleted) {
     setLoading(false);
-    setJob(() => _cachedDoneState!);
+    // Synthesize a `start` shifted into the past so wall-clock fields
+    // (completed_at, elapsed_seconds, log/event timestamps) reflect the
+    // current revisit instead of being frozen at the original run.
+    const fakeStart = new Date(Date.now() - DEMO_SIMULATION_DURATION_MS);
+    setJob(() => buildDone(fakeStart));
     return () => {};
   }
 
@@ -548,17 +557,13 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
 
   timers.push(
     setTimeout(() => {
-      const done = buildDone(start);
-      _cachedDoneState = done;
-      set(done);
-    }, 5250),
+      _simulationCompleted = true;
+      set(buildDone(start));
+    }, DEMO_SIMULATION_DURATION_MS),
   );
 
   return () => timers.forEach(clearTimeout);
 }
-
-import type { PaginatedJobsResponse, OptimizationSummaryResponse } from "@/shared/types/api";
-import type { DashboardAnalytics, DashboardAnalyticsJob } from "@/shared/lib/api";
 
 function daysAgo(n: number): string {
   const d = new Date();
