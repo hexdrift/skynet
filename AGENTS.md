@@ -71,12 +71,12 @@
 │   │   ├── test_llm_integration.py  Integration tests (real API)
 │   │   ├── test_load.py             Load/stress tests
 │   │   ├── locustfile.py            Sustained load testing
-│   │   └── unit/                    Unit tests
-│   │       ├── test_helpers.py
-│   │       ├── test_models.py
-│   │       ├── test_quota.py
-│   │       ├── test_routers.py
-│   │       └── test_validators.py
+│   │   └── unit/                    Unit tests (no DB / no LLM / no live server)
+│   │       ├── test_config.py
+│   │       ├── test_constants.py
+│   │       ├── test_exceptions.py
+│   │       ├── test_i18n_catalog_boundary.py
+│   │       └── test_main_importable.py
 │   └── usage_guide/             Notebooks + API client examples
 │
 ├── frontend/                    Next.js 16 + shadcn/ui
