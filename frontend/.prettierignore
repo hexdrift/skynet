@@ -12,3 +12,4 @@ package-lock.json
 *.min.js
 *.min.css
 public
+src/shared/lib/generated

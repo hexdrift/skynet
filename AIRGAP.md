@@ -70,7 +70,7 @@ Before pointing production traffic at the deployment:
 
 For reference, the audit confirmed these are already safe:
 
-- **Scalar API docs** — vendored under `backend/core/api/static/scalar/`, fonts rewritten to local paths by `scripts/update_scalar.sh`. Telemetry and agent panel disabled.
+- **Scalar API docs** — vendored under `backend/core/api/static/scalar/`, fonts rewritten to local paths. Telemetry and agent panel disabled.
 - **Fonts** — `@fontsource-variable/heebo` and `inter` are npm packages bundled at build (no Google Fonts CDN).
 - **Embedder model** — `jina-code-embeddings-0.5b` vendored under `backend/vendor/models/` via Git LFS; loaded from disk, no runtime download.
 - **Telemetry** — no Sentry, GA, PostHog, Datadog, OTLP, Segment, or pixel trackers anywhere. `litellm.telemetry` is forced off.

@@ -114,7 +114,7 @@
 │   │   └── components/ui/       shadcn/ui primitives (button, card, dialog, etc.)
 │
 ├── scripts/
-│   └── update_scalar.sh         Rebuild bundled Scalar API docs
+│   └── generate_i18n.py         Regenerate typed i18n constants from i18n/locales/he.json
 ├── Justfile                     Task runner (just <recipe>)
 └── README.md                    Full project documentation
 ```
