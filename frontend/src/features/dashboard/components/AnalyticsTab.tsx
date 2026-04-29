@@ -1,3 +1,4 @@
+import type { KeyboardEvent, MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
@@ -70,6 +71,29 @@ type AnalyticsTabProps = {
   filters: UseAnalyticsFiltersReturn;
 };
 
+function activateOnKey(e: KeyboardEvent, action: () => void) {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    action();
+  }
+}
+
+function fmtPct(n: number | undefined | null): string {
+  if (n == null) return "—";
+  return `${(n > 1 ? n : n * 100).toFixed(1)}%`;
+}
+
+function toPctScale(n: number): number {
+  return Math.abs(n) > 1 ? n : n * 100;
+}
+
+function copyToClipboard(text: string) {
+  void navigator.clipboard
+    .writeText(text)
+    .then(() => toast.success(msg("clipboard.copied_short"), { autoClose: 1000 }))
+    .catch(() => {});
+}
+
 export function AnalyticsTab({
   analyticsLoading,
   analyticsData,
@@ -103,7 +127,9 @@ export function AnalyticsTab({
   }
 
   if ((analyticsData?.filtered_total ?? 0) === 0) {
-    const hasFilters = jobId || date || optimizer !== "all" || model !== "all" || status !== "all";
+    const hasFilters = Boolean(
+      jobId || date || optimizer !== "all" || model !== "all" || status !== "all",
+    );
     if (hasFilters) {
       return (
         <AnalyticsEmpty
@@ -403,13 +429,16 @@ export function AnalyticsTab({
                       <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase tracking-widest">
                         {msg("auto.features.dashboard.components.analyticstab.22")}
                       </p>
-                      {chartData.status.map((s, i) => {
-                        const total = chartData.status.reduce((a, b) => a + b.value, 0);
-                        return (
+                      {(() => {
+                        const statusTotal = chartData.status.reduce((a, b) => a + b.value, 0);
+                        return chartData.status.map((s) => (
                           <div
-                            key={i}
-                            className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                            key={s.key}
+                            role="button"
+                            tabIndex={0}
+                            className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
                             onClick={() => setStatus(s.key)}
+                            onKeyDown={(e) => activateOnKey(e, () => setStatus(s.key))}
                           >
                             <div className="flex items-center justify-between text-sm">
                               <span className="flex items-center gap-2">
@@ -427,14 +456,14 @@ export function AnalyticsTab({
                               <div
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{
-                                  width: `${(s.value / total) * 100}%`,
+                                  width: `${statusTotal > 0 ? (s.value / statusTotal) * 100 : 0}%`,
                                   backgroundColor: s.fill,
                                 }}
                               />
                             </div>
                           </div>
-                        );
-                      })}
+                        ));
+                      })()}
                     </div>
 
                     <div className="border-t border-border" />
@@ -444,14 +473,20 @@ export function AnalyticsTab({
                         {TERMS.optimizer}
                         {msg("auto.features.dashboard.components.analyticstab.23")}
                       </p>
-                      {chartData.optimizer.map((o, i) => {
-                        const total = chartData.optimizer.reduce((a, b) => a + b.value, 0);
-                        return (
+                      {(() => {
+                        const optimizerTotal = chartData.optimizer.reduce(
+                          (a, b) => a + b.value,
+                          0,
+                        );
+                        return chartData.optimizer.map((o, i) => (
                           <div
-                            key={i}
-                            className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                            key={o.name}
+                            role="button"
+                            tabIndex={0}
+                            className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
                             dir="ltr"
                             onClick={() => setOptimizer(o.name)}
+                            onKeyDown={(e) => activateOnKey(e, () => setOptimizer(o.name))}
                           >
                             <div className="flex items-center justify-between text-sm">
                               <span className="flex items-center gap-2">
@@ -471,14 +506,14 @@ export function AnalyticsTab({
                               <div
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{
-                                  width: `${(o.value / total) * 100}%`,
+                                  width: `${optimizerTotal > 0 ? (o.value / optimizerTotal) * 100 : 0}%`,
                                   backgroundColor: `var(--color-chart-${(i % 5) + 1})`,
                                 }}
                               />
                             </div>
                           </div>
-                        );
-                      })}
+                        ));
+                      })()}
                     </div>
 
                     {chartData.jobTypeData.length > 0 && (
@@ -489,10 +524,13 @@ export function AnalyticsTab({
                             {msg("auto.features.dashboard.components.analyticstab.24")}
                             {TERMS.optimization}
                           </p>
-                          {chartData.jobTypeData.map((d, i) => {
-                            const total = chartData.jobTypeData.reduce((a, b) => a + b.value, 0);
-                            return (
-                              <div key={i} className="space-y-1">
+                          {(() => {
+                            const jobTypeTotal = chartData.jobTypeData.reduce(
+                              (a, b) => a + b.value,
+                              0,
+                            );
+                            return chartData.jobTypeData.map((d) => (
+                              <div key={d.name} className="space-y-1">
                                 <div className="flex items-center justify-between text-sm">
                                   <span>{d.name}</span>
                                   <span className="tabular-nums font-medium">{d.value}</span>
@@ -501,13 +539,13 @@ export function AnalyticsTab({
                                   <div
                                     className="h-full rounded-full bg-primary/70 transition-all"
                                     style={{
-                                      width: `${(d.value / total) * 100}%`,
+                                      width: `${jobTypeTotal > 0 ? (d.value / jobTypeTotal) * 100 : 0}%`,
                                     }}
                                   />
                                 </div>
                               </div>
-                            );
-                          })}
+                            ));
+                          })()}
                         </div>
                       </>
                     )}
@@ -631,13 +669,16 @@ export function AnalyticsTab({
                       </div>
                       {chartData.modelUsage.length > 0 ? (
                         <div className="space-y-3">
-                          {chartData.modelUsage.map((m, i) => {
+                          {(() => {
                             const maxCount = chartData.modelUsage[0]?.count ?? 1;
-                            return (
+                            return chartData.modelUsage.map((m) => (
                               <div
-                                key={i}
-                                className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                                key={m.name}
+                                role="button"
+                                tabIndex={0}
+                                className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
                                 onClick={() => setModel(m.name)}
+                                onKeyDown={(e) => activateOnKey(e, () => setModel(m.name))}
                               >
                                 <div
                                   className="flex items-center justify-between text-sm"
@@ -655,13 +696,13 @@ export function AnalyticsTab({
                                   <div
                                     className="h-full rounded-full bg-primary/60 transition-all"
                                     style={{
-                                      width: `${(m.count / maxCount) * 100}%`,
+                                      width: `${maxCount > 0 ? (m.count / maxCount) * 100 : 0}%`,
                                     }}
                                   />
                                 </div>
                               </div>
-                            );
-                          })}
+                            ));
+                          })()}
                         </div>
                       ) : (
                         <div className="flex h-[150px] items-center justify-center">
@@ -721,31 +762,15 @@ export function AnalyticsTab({
                         </TableHeader>
                         <TableBody>
                           {chartData.topJobs.slice(0, leaderboardLimit).map((j, i) => {
-                            const fmt = (n: number | undefined | null) => {
-                              if (n == null) return "\u2014";
-                              return `${(n > 1 ? n : n * 100).toFixed(1)}%`;
-                            };
-                            const imp = j.metric_improvement!;
-                            const impPct = Math.abs(imp) > 1 ? imp : imp * 100;
+                            const impPct = toPctScale(j.metric_improvement ?? 0);
                             const baseline =
-                              j.baseline_test_metric != null
-                                ? j.baseline_test_metric > 1
-                                  ? j.baseline_test_metric
-                                  : j.baseline_test_metric * 100
-                                : null;
+                              j.baseline_test_metric != null ? toPctScale(j.baseline_test_metric) : null;
                             const optimized =
-                              j.optimized_test_metric != null
-                                ? j.optimized_test_metric > 1
-                                  ? j.optimized_test_metric
-                                  : j.optimized_test_metric * 100
-                                : null;
+                              j.optimized_test_metric != null ? toPctScale(j.optimized_test_metric) : null;
 
-                            const copyCell = (text: string) => (e: React.MouseEvent) => {
+                            const onCopy = (text: string) => (e: MouseEvent) => {
                               e.stopPropagation();
-                              void navigator.clipboard.writeText(text);
-                              toast.success(msg("clipboard.copied_short"), {
-                                autoClose: 1000,
-                              });
+                              copyToClipboard(text);
                             };
                             const copyCls =
                               "cursor-pointer hover:bg-stone-500/[0.04] transition-colors";
@@ -771,7 +796,7 @@ export function AnalyticsTab({
                                 </TableCell>
                                 <TableCell
                                   className={`py-3 text-start ${copyCls}`}
-                                  onClick={copyCell(j.optimizer_name ?? "")}
+                                  onClick={onCopy(j.optimizer_name ?? "")}
                                 >
                                   <span
                                     className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-stone-500/[0.06] text-[0.75rem] font-medium text-stone-700"
@@ -782,17 +807,17 @@ export function AnalyticsTab({
                                 </TableCell>
                                 <TableCell
                                   className={`text-center py-3 ${copyCls}`}
-                                  onClick={copyCell(fmt(j.baseline_test_metric))}
+                                  onClick={onCopy(fmtPct(j.baseline_test_metric))}
                                 >
                                   <div className="flex flex-col items-center gap-1">
                                     <span className="font-mono tabular-nums text-[0.75rem] text-stone-400">
-                                      {fmt(j.baseline_test_metric)}
+                                      {fmtPct(j.baseline_test_metric)}
                                     </span>
                                     <div className="w-14 h-1 rounded-full bg-stone-200/60 overflow-hidden">
                                       <div
                                         className="h-full rounded-full bg-stone-400/40 transition-all"
                                         style={{
-                                          width: `${baseline != null ? (baseline / 100) * 100 : 0}%`,
+                                          width: `${baseline ?? 0}%`,
                                         }}
                                       />
                                     </div>
@@ -800,17 +825,17 @@ export function AnalyticsTab({
                                 </TableCell>
                                 <TableCell
                                   className={`text-center py-3 ${copyCls}`}
-                                  onClick={copyCell(fmt(j.optimized_test_metric))}
+                                  onClick={onCopy(fmtPct(j.optimized_test_metric))}
                                 >
                                   <div className="flex flex-col items-center gap-1">
                                     <span className="font-mono tabular-nums text-[0.75rem] font-semibold text-stone-700">
-                                      {fmt(j.optimized_test_metric)}
+                                      {fmtPct(j.optimized_test_metric)}
                                     </span>
                                     <div className="w-14 h-1 rounded-full bg-stone-200/60 overflow-hidden">
                                       <div
                                         className="h-full rounded-full bg-stone-600/50 transition-all"
                                         style={{
-                                          width: `${optimized != null ? (optimized / 100) * 100 : 0}%`,
+                                          width: `${optimized ?? 0}%`,
                                         }}
                                       />
                                     </div>
@@ -818,7 +843,7 @@ export function AnalyticsTab({
                                 </TableCell>
                                 <TableCell
                                   className={`text-center py-3 ${copyCls}`}
-                                  onClick={copyCell(
+                                  onClick={onCopy(
                                     `${impPct >= 0 ? "+" : ""}${impPct.toFixed(1)}%`,
                                   )}
                                 >
@@ -848,12 +873,8 @@ export function AnalyticsTab({
 
                     <div className="sm:hidden space-y-3">
                       {chartData.topJobs.slice(0, leaderboardLimit).map((j, i) => {
-                        const fmt = (n: number | undefined | null) => {
-                          if (n == null) return "—";
-                          return `${(n > 1 ? n : n * 100).toFixed(1)}%`;
-                        };
-                        const imp = j.metric_improvement!;
-                        const impPct = Math.abs(imp) > 1 ? imp : imp * 100;
+                        const imp = j.metric_improvement ?? 0;
+                        const impPct = toPctScale(imp);
 
                         return (
                           <Card
@@ -893,7 +914,7 @@ export function AnalyticsTab({
                                     {msg("auto.features.dashboard.components.analyticstab.40")}
                                   </p>
                                   <p className="font-mono text-sm text-stone-500">
-                                    {fmt(j.baseline_test_metric)}
+                                    {fmtPct(j.baseline_test_metric)}
                                   </p>
                                 </div>
                                 <div>
@@ -901,7 +922,7 @@ export function AnalyticsTab({
                                     {msg("auto.features.dashboard.components.analyticstab.41")}
                                   </p>
                                   <p className="font-mono text-sm font-semibold">
-                                    {fmt(j.optimized_test_metric)}
+                                    {fmtPct(j.optimized_test_metric)}
                                   </p>
                                 </div>
                                 <div>

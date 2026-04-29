@@ -18,7 +18,7 @@ export const dashboardMessages = {
   "auto.features.dashboard.components.analyticstab.4": "אחוז הצלחה",
   "auto.features.dashboard.components.analyticstab.5": "פרוט נוסף:",
   "auto.features.dashboard.components.analyticstab.6": "הצליחו:",
-  "auto.features.dashboard.components.analyticstab.7": 'סה"כ הסתיימו:',
+  "auto.features.dashboard.components.analyticstab.7": "סה״כ הסתיימו:",
   "auto.features.dashboard.components.analyticstab.8": "שיפור ממוצע",
   "auto.features.dashboard.components.analyticstab.9": "פרוט נוסף:",
   "auto.features.dashboard.components.analyticstab.10": "שיפור ממוצע בציון הבדיקה לאחר ",

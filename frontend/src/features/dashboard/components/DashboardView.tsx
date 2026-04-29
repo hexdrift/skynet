@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { BarChart3, Compass, TableIcon } from "lucide-react";
-import { Skeleton } from "boneyard-js/react";
+import { Skeleton as BoneyardSkeleton } from "boneyard-js/react";
 import { toast } from "react-toastify";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
@@ -12,7 +12,7 @@ import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { useColumnFilters, useColumnResize, type SortDir } from "@/shared/ui/excel-filter";
 import { getJobTypeLabel, getStatusLabel } from "@/shared/constants/job-status";
-import type { PaginatedJobsResponse } from "@/shared/types/api";
+import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
 import type { DashboardAnalytics } from "@/shared/lib/api";
 import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
 import { ExploreView } from "@/features/explore";
@@ -20,12 +20,13 @@ import { useUserPrefs } from "@/features/settings";
 import { dashboardBones } from "../lib/bones";
 import { transformChartData } from "../lib/transform-chart-data";
 import { useQueueStatus } from "../hooks/use-queue-status";
-import { useDashboardStats } from "../hooks/use-dashboard-stats";
+import { getDashboardStats } from "../lib/get-dashboard-stats";
 import { useAnalyticsFilters } from "../hooks/use-analytics-filters";
 import { useJobsList } from "../hooks/use-jobs-list";
 import { useDashboardAnalytics } from "../hooks/use-dashboard-analytics";
 import { useJobsRealtime } from "../hooks/use-jobs-realtime";
 import { useBulkDelete } from "../hooks/use-bulk-delete";
+import { COMPARE_MAX } from "../constants";
 import { DashboardHeader } from "./DashboardHeader";
 import { QueueStatusAlert } from "./QueueStatusAlert";
 import { BulkActionBar } from "./BulkActionBar";
@@ -33,14 +34,26 @@ import { DeleteDialogs } from "./DeleteDialogs";
 import { JobsTab } from "./JobsTab";
 import { AnalyticsTab } from "./AnalyticsTab";
 
-const COMPARE_MAX = 8;
+function getJobField(job: OptimizationSummaryResponse, key: string): unknown {
+  return (job as unknown as Record<string, unknown>)[key];
+}
+
+function compareJobValues(av: unknown, bv: unknown): number {
+  const aMissing = av == null || av === "";
+  const bMissing = bv == null || bv === "";
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return -1;
+  if (bMissing) return 1;
+  if (typeof av === "number" && typeof bv === "number") return av - bv;
+  return String(av).localeCompare(String(bv), "he", { numeric: true });
+}
 
 export function DashboardView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const sessionUser = session?.user?.name ?? "";
-  const isAdmin = (session?.user as Record<string, unknown> | undefined)?.role === "admin";
+  const isAdmin = session?.user?.role === "admin";
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -60,6 +73,17 @@ export function DashboardView() {
   useEffect(() => {
     if (!advancedMode && activeTab === "explore") setActiveTab("jobs");
   }, [advancedMode, activeTab]);
+  // Mirror the active tab back into ?tab= so reload / share-link / back-button
+  // round-trip the user to the same tab they were on.
+  const handleTabChange = useCallback(
+    (next: string) => {
+      setActiveTab(next);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", next);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
   // Expose for tutorial beforeShow
   useEffect(() => registerTutorialHook("setTab", setActiveTab), []);
 
@@ -195,15 +219,13 @@ export function DashboardView() {
     const items = effectiveData.items.filter((job) => {
       for (const [col, allowed] of Object.entries(filters)) {
         if (allowed.size === 0) continue;
-        const val = String((job as unknown as Record<string, unknown>)[col] ?? "");
+        const val = String(getJobField(job, col) ?? "");
         if (!allowed.has(val)) return false;
       }
       return true;
     });
     items.sort((a, b) => {
-      const av = (a as unknown as Record<string, unknown>)[sortKey];
-      const bv = (b as unknown as Record<string, unknown>)[sortKey];
-      const cmp = String(av ?? "").localeCompare(String(bv ?? ""), "he", { numeric: true });
+      const cmp = compareJobValues(getJobField(a, sortKey), getJobField(b, sortKey));
       return sortDir === "asc" ? cmp : -cmp;
     });
     return items;
@@ -236,9 +258,7 @@ export function DashboardView() {
     if (!effectiveData) return {} as Record<string, Array<{ value: string; label: string }>>;
     const items = effectiveData.items;
     const unique = (key: string, labelFn?: (v: string) => string) => {
-      const vals = [
-        ...new Set(items.map((j) => String((j as unknown as Record<string, unknown>)[key] ?? ""))),
-      ]
+      const vals = [...new Set(items.map((j) => String(getJobField(j, key) ?? "")))]
         .filter(Boolean)
         .sort();
       return vals.map((v) => ({ value: v, label: labelFn ? labelFn(v) : v }));
@@ -254,16 +274,20 @@ export function DashboardView() {
 
   const chartData = useMemo(() => transformChartData(effectiveAnalytics), [effectiveAnalytics]);
 
-  const stats = useDashboardStats({
-    data: effectiveData,
-    filteredItems,
-    counts,
-    analyticsData: effectiveAnalytics,
-    activeTab,
-  });
+  const stats = useMemo(
+    () =>
+      getDashboardStats({
+        data: effectiveData,
+        filteredItems,
+        counts,
+        analyticsData: effectiveAnalytics,
+        activeTab,
+      }),
+    [effectiveData, filteredItems, counts, effectiveAnalytics, activeTab],
+  );
 
   return (
-    <Skeleton
+    <BoneyardSkeleton
       name="dashboard"
       loading={initialLoad && !effectiveData}
       initialBones={dashboardBones}
@@ -276,7 +300,7 @@ export function DashboardView() {
 
         <FadeIn delay={0.2}>
           {mounted && (
-            <Tabs value={activeTab} dir="rtl" onValueChange={setActiveTab}>
+            <Tabs value={activeTab} dir="rtl" onValueChange={handleTabChange}>
               <TabsList className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto">
                 <div
                   className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
@@ -394,6 +418,6 @@ export function DashboardView() {
           selectedCount={selectedIds.size}
         />
       </div>
-    </Skeleton>
+    </BoneyardSkeleton>
   );
 }

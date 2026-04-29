@@ -22,7 +22,19 @@ export function AnalyticsSection({
 
   return (
     <Card className={className}>
-      <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setIsOpen(!isOpen)}>
+      <CardHeader
+        role="button"
+        tabIndex={0}
+        aria-expanded={isOpen}
+        className="pb-3 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
+        onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen((open) => !open);
+          }
+        }}
+      >
         <CardTitle className="text-base font-semibold flex items-center justify-between">
           <span>{title}</span>
           <motion.div

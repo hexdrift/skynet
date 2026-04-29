@@ -122,15 +122,12 @@ export function useBulkDelete({
           .map((j) => j.optimization_id)
       : [];
 
-    setData((prev) =>
-      prev
-        ? {
-            ...prev,
-            items: prev.items.filter((j) => !idSet.has(j.optimization_id)),
-            total: Math.max(0, prev.total - ids.length),
-          }
-        : prev,
-    );
+    setData((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.filter((j) => !idSet.has(j.optimization_id));
+      const removed = prev.items.length - items.length;
+      return { ...prev, items, total: Math.max(0, prev.total - removed) };
+    });
     setSelectedIds(new Set());
     setBulkDeleteOpen(false);
     // Jump back to page 1 so the user lands on the freshly-reduced

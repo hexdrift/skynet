@@ -15,8 +15,9 @@ export type UseAnalyticsFiltersReturn = AnalyticsFilters & {
   setStatus: (v: string) => void;
   setJobId: (v: string | null) => void;
   setDate: (v: string | null) => void;
-  setLeaderboardLimit: (v: number) => void;
 };
+
+const LEADERBOARD_LIMIT = 5;
 
 export function useAnalyticsFilters(): UseAnalyticsFiltersReturn {
   const [optimizer, setOptimizer] = useState<string>("all");
@@ -24,7 +25,6 @@ export function useAnalyticsFilters(): UseAnalyticsFiltersReturn {
   const [status, setStatus] = useState<string>("all");
   const [jobId, setJobId] = useState<string | null>(null);
   const [date, setDate] = useState<string | null>(null);
-  const [leaderboardLimit, setLeaderboardLimit] = useState<number>(5);
 
   return {
     optimizer,
@@ -32,12 +32,11 @@ export function useAnalyticsFilters(): UseAnalyticsFiltersReturn {
     status,
     jobId,
     date,
-    leaderboardLimit,
+    leaderboardLimit: LEADERBOARD_LIMIT,
     setOptimizer,
     setModel,
     setStatus,
     setJobId,
     setDate,
-    setLeaderboardLimit,
   };
 }
