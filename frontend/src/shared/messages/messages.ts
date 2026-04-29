@@ -11,6 +11,7 @@ export const sharedMessages = {
   "model.generation.new": `${TERMS.generationModel} חדש`,
   "clipboard.copied": "הועתק בהצלחה",
   "clipboard.copied_short": "הועתק",
+  "clipboard.copy_failed": "ההעתקה נכשלה",
   "app.meta.description": 
     "מערכת אופטימיזציית פרומפטים מבוססת DSPy — שפרו ביצועי מודלי שפה באופן אוטומטי",
   "app.shell.tour_aria": "סיור במערכת",
