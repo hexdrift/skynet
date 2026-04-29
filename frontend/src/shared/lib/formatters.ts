@@ -6,11 +6,8 @@ import { formatMsg, msg } from "@/shared/lib/messages";
  * @example "2026-04-11T12:30:00" → "11/04/2026, 12:30:00"
  */
 export function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("he-IL");
-  } catch {
-    return iso;
-  }
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString("he-IL");
 }
 
 /**
@@ -60,7 +57,7 @@ export function logTimeBucket(ts: string): string {
  * @example 3665 → "1:01:05", 125 → "2:05"
  */
 export function formatDuration(seconds: number | undefined | null): string {
-  if (seconds == null) return "—";
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
@@ -93,7 +90,13 @@ export function formatImprovement(v: number | undefined | null): string {
 
 export function jsonPreview(v: unknown): string {
   if (v == null) return "—";
-  if (typeof v === "object") return JSON.stringify(v, null, 2);
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v, null, 2);
+    } catch {
+      return String(v);
+    }
+  }
   return String(v);
 }
 

@@ -37,19 +37,16 @@ export const MESSAGES = {
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;
+type MessageParams = Record<string, string | number>;
 
 /**
- * Look up a user-facing string by key. Silently returns the key
- * itself if not found so missing messages surface as a dev-visible
- * "key not translated" artifact instead of a silent blank.
+ * Look up a user-facing string by key and optionally interpolate placeholders.
  */
-export function msg(key: MessageKey): string {
-  return MESSAGES[key] ?? key;
+export function msg(key: MessageKey, params?: MessageParams): string {
+  const template = MESSAGES[key];
+  return params ? formatTemplate(template, params) : template;
 }
 
-export function formatMsg(
-  key: MessageKey,
-  params: Record<string, string | number>,
-): string {
-  return formatTemplate(msg(key), params);
+export function formatMsg(key: MessageKey, params: MessageParams): string {
+  return msg(key, params);
 }
