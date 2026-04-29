@@ -1,0 +1,402 @@
+[
+  {
+    "question": "James has 43 magnets. Sarah has 39 magnets. How many magnets do they have altogether?",
+    "answer": "82"
+  },
+  {
+    "question": "Priya had 66 magnets. Priya gave 48 magnets to Li. How many magnets does Priya have left?",
+    "answer": "18"
+  },
+  {
+    "question": "Elena has 9 shelves of books. Each shelf contains 5 books. How many books does Elena have in total?",
+    "answer": "45"
+  },
+  {
+    "question": "Sarah has 44 books to divide equally among 4 friends. How many books does each friend receive?",
+    "answer": "11"
+  },
+  {
+    "question": "Ravi has 32 candies. Sarah has 5 times as many candies as Ravi. Sarah gives 6 candies to each of 5 friends. How many candies does Sarah have left?",
+    "answer": "130"
+  },
+  {
+    "question": "Kenji buys 2 cards at $4 each and pays with $13. How much change does Kenji receive?",
+    "answer": "5"
+  },
+  {
+    "question": "A train travels at 60 miles per hour for 6 hours. How many miles does it travel?",
+    "answer": "360"
+  },
+  {
+    "question": "Li makes 13 stickers every hour. How many stickers does Li make in 2 hours?",
+    "answer": "26"
+  },
+  {
+    "question": "Maria has 100 books and gives 60% of them to Marcus. How many books does Maria have left?",
+    "answer": "40"
+  },
+  {
+    "question": "Amara buys 8 packs of apples, with 9 apples in each pack. Amara gives 2 apples to each of 5 friends, and Aisha gives Amara an extra 2 apples. How many apples does Amara have after sharing but before Aisha's gift?",
+    "answer": "62"
+  },
+  {
+    "question": "Elena has 87 stamps. Yuki has 54 stamps. How many stamps do they have altogether?",
+    "answer": "141"
+  },
+  {
+    "question": "Kenji had 57 magnets. Kenji gave 7 magnets to Carlos. How many magnets does Kenji have left?",
+    "answer": "50"
+  },
+  {
+    "question": "Priya has 6 boxes of cards. Each box contains 7 cards. How many cards does Priya have in total?",
+    "answer": "42"
+  },
+  {
+    "question": "Marcus has 90 cards to divide equally among 6 friends. How many cards does each friend receive?",
+    "answer": "15"
+  },
+  {
+    "question": "Ana has 33 coins. Olivia has 4 times as many coins as Ana. Olivia gives 4 coins to each of 6 friends. How many coins does Olivia have left?",
+    "answer": "108"
+  },
+  {
+    "question": "Ana buys 5 candies at $4 each and pays with $28. How much change does Ana receive?",
+    "answer": "8"
+  },
+  {
+    "question": "A train travels at 65 miles per hour for 6 hours. How many miles does it travel?",
+    "answer": "390"
+  },
+  {
+    "question": "Elena makes 13 stickers every hour. How many stickers does Elena make in 8 hours?",
+    "answer": "104"
+  },
+  {
+    "question": "Tom has 120 apples and gives 60% of them to Priya. How many apples does Tom have left?",
+    "answer": "48"
+  },
+  {
+    "question": "Aisha buys 7 packs of stickers, with 11 stickers in each pack. Aisha gives 4 stickers to each of 3 friends, and Maria gives Aisha an extra 7 stickers. How many stickers does Aisha have after sharing but before Maria's gift?",
+    "answer": "65"
+  },
+  {
+    "question": "Zara has 66 stamps. Marcus has 26 stamps. How many stamps do they have altogether?",
+    "answer": "92"
+  },
+  {
+    "question": "Aisha had 183 stickers. Aisha gave 142 stickers to Li. How many stickers does Aisha have left?",
+    "answer": "41"
+  },
+  {
+    "question": "Aisha has 9 shelves of magnets. Each shelf contains 22 magnets. How many magnets does Aisha have in total?",
+    "answer": "198"
+  },
+  {
+    "question": "Marcus has 32 coins to divide equally among 4 friends. How many coins does each friend receive?",
+    "answer": "8"
+  },
+  {
+    "question": "Ravi has 68 books. Zara has 2 times as many books as Ravi. Zara gives 4 books to each of 3 friends. How many books does Zara have left?",
+    "answer": "124"
+  },
+  {
+    "question": "Ana buys 8 stamps at $3 each and pays with $28. How much change does Ana receive?",
+    "answer": "4"
+  },
+  {
+    "question": "A train travels at 65 miles per hour for 9 hours. How many miles does it travel?",
+    "answer": "585"
+  },
+  {
+    "question": "Ravi makes 3 cards every hour. How many cards does Ravi make in 7 hours?",
+    "answer": "21"
+  },
+  {
+    "question": "James has 40 cards and gives 60% of them to Elena. How many cards does James have left?",
+    "answer": "16"
+  },
+  {
+    "question": "Yuki buys 6 packs of marbles, with 6 marbles in each pack. Yuki gives 4 marbles to each of 3 friends, and Fatima gives Yuki an extra 6 marbles. How many marbles does Yuki have after sharing but before Fatima's gift?",
+    "answer": "24"
+  },
+  {
+    "question": "James has 72 stamps. Yuki has 85 stamps. How many stamps do they have altogether?",
+    "answer": "157"
+  },
+  {
+    "question": "Carlos had 81 coins. Carlos gave 74 coins to Li. How many coins does Carlos have left?",
+    "answer": "7"
+  },
+  {
+    "question": "Ravi has 8 shelves of apples. Each shelf contains 19 apples. How many apples does Ravi have in total?",
+    "answer": "152"
+  },
+  {
+    "question": "Sarah has 65 books to divide equally among 5 friends. How many books does each friend receive?",
+    "answer": "13"
+  },
+  {
+    "question": "Priya has 76 stickers. Tom has 2 times as many stickers as Priya. Tom gives 4 stickers to each of 5 friends. How many stickers does Tom have left?",
+    "answer": "132"
+  },
+  {
+    "question": "Maria buys 4 candies at $4 each and pays with $23. How much change does Maria receive?",
+    "answer": "7"
+  },
+  {
+    "question": "A train travels at 75 miles per hour for 4 hours. How many miles does it travel?",
+    "answer": "300"
+  },
+  {
+    "question": "Aisha makes 16 candies every hour. How many candies does Aisha make in 3 hours?",
+    "answer": "48"
+  },
+  {
+    "question": "Elena has 120 magnets and gives 50% of them to Carlos. How many magnets does Elena have left?",
+    "answer": "60"
+  },
+  {
+    "question": "Olivia buys 6 packs of candies, with 6 candies in each pack. Olivia gives 3 candies to each of 3 friends, and Noah gives Olivia an extra 2 candies. How many candies does Olivia have after sharing but before Noah's gift?",
+    "answer": "27"
+  },
+  {
+    "question": "Diego has 78 ribbons. Sarah has 37 ribbons. How many ribbons do they have altogether?",
+    "answer": "115"
+  },
+  {
+    "question": "Kenji had 58 apples. Kenji gave 50 apples to Priya. How many apples does Kenji have left?",
+    "answer": "8"
+  },
+  {
+    "question": "Tom has 3 boxes of stickers. Each box contains 14 stickers. How many stickers does Tom have in total?",
+    "answer": "42"
+  },
+  {
+    "question": "Maria has 48 candies to divide equally among 4 friends. How many candies does each friend receive?",
+    "answer": "12"
+  },
+  {
+    "question": "Zara has 28 candies. Carlos has 5 times as many candies as Zara. Carlos gives 6 candies to each of 5 friends. How many candies does Carlos have left?",
+    "answer": "110"
+  },
+  {
+    "question": "Fatima buys 3 stickers at $3 each and pays with $13. How much change does Fatima receive?",
+    "answer": "4"
+  },
+  {
+    "question": "A train travels at 60 miles per hour for 8 hours. How many miles does it travel?",
+    "answer": "480"
+  },
+  {
+    "question": "Fatima makes 4 oranges every hour. How many oranges does Fatima make in 7 hours?",
+    "answer": "28"
+  },
+  {
+    "question": "James has 40 pens and gives 60% of them to Tom. How many pens does James have left?",
+    "answer": "16"
+  },
+  {
+    "question": "Priya buys 7 packs of stickers, with 9 stickers in each pack. Priya gives 3 stickers to each of 5 friends, and Carlos gives Priya an extra 3 stickers. How many stickers does Priya have after sharing but before Carlos's gift?",
+    "answer": "48"
+  },
+  {
+    "question": "Aisha has 17 stickers. Noah has 64 stickers. How many stickers do they have altogether?",
+    "answer": "81"
+  },
+  {
+    "question": "Elena had 178 apples. Elena gave 8 apples to James. How many apples does Elena have left?",
+    "answer": "170"
+  },
+  {
+    "question": "Maria has 9 baskets of stickers. Each basket contains 19 stickers. How many stickers does Maria have in total?",
+    "answer": "171"
+  },
+  {
+    "question": "Zara has 144 stickers to divide equally among 9 friends. How many stickers does each friend receive?",
+    "answer": "16"
+  },
+  {
+    "question": "Tom has 20 pens. Ana has 5 times as many pens as Tom. Ana gives 7 pens to each of 5 friends. How many pens does Ana have left?",
+    "answer": "65"
+  },
+  {
+    "question": "Yuki buys 10 pens at $9 each and pays with $96. How much change does Yuki receive?",
+    "answer": "6"
+  },
+  {
+    "question": "A train travels at 50 miles per hour for 6 hours. How many miles does it travel?",
+    "answer": "300"
+  },
+  {
+    "question": "Carlos makes 4 apples every hour. How many apples does Carlos make in 7 hours?",
+    "answer": "28"
+  },
+  {
+    "question": "Diego has 200 apples and gives 80% of them to Tom. How many apples does Diego have left?",
+    "answer": "40"
+  },
+  {
+    "question": "Ravi buys 7 packs of apples, with 6 apples in each pack. Ravi gives 3 apples to each of 2 friends, and Ana gives Ravi an extra 6 apples. How many apples does Ravi have after sharing but before Ana's gift?",
+    "answer": "36"
+  },
+  {
+    "question": "Maria has 23 pens. Priya has 80 pens. How many pens do they have altogether?",
+    "answer": "103"
+  },
+  {
+    "question": "Priya had 50 ribbons. Priya gave 44 ribbons to Kenji. How many ribbons does Priya have left?",
+    "answer": "6"
+  },
+  {
+    "question": "Maria has 12 jars of pens. Each jar contains 22 pens. How many pens does Maria have in total?",
+    "answer": "264"
+  },
+  {
+    "question": "Ravi has 50 coins to divide equally among 5 friends. How many coins does each friend receive?",
+    "answer": "10"
+  },
+  {
+    "question": "Diego has 45 cards. Priya has 3 times as many cards as Diego. Priya gives 7 cards to each of 5 friends. How many cards does Priya have left?",
+    "answer": "100"
+  },
+  {
+    "question": "Diego buys 2 books at $9 each and pays with $24. How much change does Diego receive?",
+    "answer": "6"
+  },
+  {
+    "question": "A train travels at 40 miles per hour for 3 hours. How many miles does it travel?",
+    "answer": "120"
+  },
+  {
+    "question": "Elena makes 11 stickers every hour. How many stickers does Elena make in 3 hours?",
+    "answer": "33"
+  },
+  {
+    "question": "Olivia has 80 stickers and gives 60% of them to Maria. How many stickers does Olivia have left?",
+    "answer": "32"
+  },
+  {
+    "question": "Ana buys 8 packs of candies, with 8 candies in each pack. Ana gives 2 candies to each of 4 friends, and Noah gives Ana an extra 7 candies. How many candies does Ana have after sharing but before Noah's gift?",
+    "answer": "56"
+  },
+  {
+    "question": "James has 22 cards. Li has 21 cards. How many cards do they have altogether?",
+    "answer": "43"
+  },
+  {
+    "question": "Elena had 112 cards. Elena gave 82 cards to Li. How many cards does Elena have left?",
+    "answer": "30"
+  },
+  {
+    "question": "Carlos has 6 drawers of magnets. Each drawer contains 25 magnets. How many magnets does Carlos have in total?",
+    "answer": "150"
+  },
+  {
+    "question": "Aisha has 72 candies to divide equally among 6 friends. How many candies does each friend receive?",
+    "answer": "12"
+  },
+  {
+    "question": "Tom has 47 stamps. Maria has 4 times as many stamps as Tom. Maria gives 3 stamps to each of 2 friends. How many stamps does Maria have left?",
+    "answer": "182"
+  },
+  {
+    "question": "Diego buys 12 marbles at $6 each and pays with $76. How much change does Diego receive?",
+    "answer": "4"
+  },
+  {
+    "question": "A train travels at 70 miles per hour for 8 hours. How many miles does it travel?",
+    "answer": "560"
+  },
+  {
+    "question": "Elena makes 6 apples every hour. How many apples does Elena make in 2 hours?",
+    "answer": "12"
+  },
+  {
+    "question": "Li has 200 apples and gives 60% of them to Elena. How many apples does Li have left?",
+    "answer": "80"
+  },
+  {
+    "question": "Li buys 3 packs of marbles, with 8 marbles in each pack. Li gives 4 marbles to each of 2 friends, and Fatima gives Li an extra 4 marbles. How many marbles does Li have after sharing but before Fatima's gift?",
+    "answer": "16"
+  },
+  {
+    "question": "Carlos has 21 stamps. Priya has 53 stamps. How many stamps do they have altogether?",
+    "answer": "74"
+  },
+  {
+    "question": "Elena had 79 ribbons. Elena gave 35 ribbons to Fatima. How many ribbons does Elena have left?",
+    "answer": "44"
+  },
+  {
+    "question": "Ana has 3 bags of marbles. Each bag contains 9 marbles. How many marbles does Ana have in total?",
+    "answer": "27"
+  },
+  {
+    "question": "Diego has 99 pens to divide equally among 9 friends. How many pens does each friend receive?",
+    "answer": "11"
+  },
+  {
+    "question": "Aisha has 26 magnets. Ana has 5 times as many magnets as Aisha. Ana gives 3 magnets to each of 5 friends. How many magnets does Ana have left?",
+    "answer": "115"
+  },
+  {
+    "question": "Priya buys 9 stickers at $7 each and pays with $67. How much change does Priya receive?",
+    "answer": "4"
+  },
+  {
+    "question": "A train travels at 50 miles per hour for 5 hours. How many miles does it travel?",
+    "answer": "250"
+  },
+  {
+    "question": "Sarah makes 9 stamps every hour. How many stamps does Sarah make in 5 hours?",
+    "answer": "45"
+  },
+  {
+    "question": "Diego has 100 books and gives 50% of them to Aisha. How many books does Diego have left?",
+    "answer": "50"
+  },
+  {
+    "question": "Ravi buys 7 packs of stamps, with 8 stamps in each pack. Ravi gives 2 stamps to each of 2 friends, and Marcus gives Ravi an extra 4 stamps. How many stamps does Ravi have after sharing but before Marcus's gift?",
+    "answer": "52"
+  },
+  {
+    "question": "Ana has 12 cards. Kenji has 21 cards. How many cards do they have altogether?",
+    "answer": "33"
+  },
+  {
+    "question": "Amara had 120 coins. Amara gave 60 coins to Fatima. How many coins does Amara have left?",
+    "answer": "60"
+  },
+  {
+    "question": "Amara has 9 boxes of candies. Each box contains 22 candies. How many candies does Amara have in total?",
+    "answer": "198"
+  },
+  {
+    "question": "Carlos has 51 cards to divide equally among 3 friends. How many cards does each friend receive?",
+    "answer": "17"
+  },
+  {
+    "question": "Sarah has 63 candies. Ravi has 3 times as many candies as Sarah. Ravi gives 8 candies to each of 5 friends. How many candies does Ravi have left?",
+    "answer": "149"
+  },
+  {
+    "question": "Maria buys 7 stamps at $7 each and pays with $50. How much change does Maria receive?",
+    "answer": "1"
+  },
+  {
+    "question": "A train travels at 55 miles per hour for 6 hours. How many miles does it travel?",
+    "answer": "330"
+  },
+  {
+    "question": "Fatima makes 15 coins every hour. How many coins does Fatima make in 7 hours?",
+    "answer": "105"
+  },
+  {
+    "question": "Yuki has 120 marbles and gives 40% of them to Elena. How many marbles does Yuki have left?",
+    "answer": "72"
+  },
+  {
+    "question": "Marcus buys 7 packs of ribbons, with 8 ribbons in each pack. Marcus gives 5 ribbons to each of 2 friends, and Ana gives Marcus an extra 4 ribbons. How many ribbons does Marcus have after sharing but before Ana's gift?",
+    "answer": "46"
+  }
+]

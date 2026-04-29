@@ -1,0 +1,1032 @@
+[
+  {
+    "title": "Improvement in telegraphy",
+    "abstract": "An apparatus for transmitting signals over wires using an electromagnet to mark intelligible characters at a distance.",
+    "primary_category": "communication",
+    "subcategories": [
+      "telegraphy"
+    ],
+    "inventor_count": 1,
+    "decade": "1840s"
+  },
+  {
+    "title": "Improvement in sewing-machines",
+    "abstract": "A machine for stitching cloth using a continuously moving needle paired with a shuttle bobbin.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "textile"
+    ],
+    "inventor_count": 1,
+    "decade": "1840s"
+  },
+  {
+    "title": "Improvement in telegraphy (lock-and-key)",
+    "abstract": "A method of multiplexing telegraphic messages so that several can share a single wire.",
+    "primary_category": "communication",
+    "subcategories": [
+      "telegraphy"
+    ],
+    "inventor_count": 1,
+    "decade": "1850s"
+  },
+  {
+    "title": "Improvement in sewing-machines (Singer)",
+    "abstract": "A foot-pedal-driven sewing machine with a vertical needle and a horizontal feed mechanism for domestic use.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "textile"
+    ],
+    "inventor_count": 1,
+    "decade": "1850s"
+  },
+  {
+    "title": "Process of vulcanizing rubber",
+    "abstract": "A process of treating rubber with sulphur under heat to produce a stable elastic material suitable for industrial use.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "polymer"
+    ],
+    "inventor_count": 1,
+    "decade": "1840s"
+  },
+  {
+    "title": "Improvement in dynamo-electric machines",
+    "abstract": "A direct-current generator using a ring-wound armature for producing electrical power from rotational motion.",
+    "primary_category": "energy",
+    "subcategories": [
+      "electric_power"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "Improvement in telephony (Bell)",
+    "abstract": "An apparatus for transmitting vocal sounds telegraphically by varying the resistance of a circuit in proportion to acoustic vibrations.",
+    "primary_category": "communication",
+    "subcategories": [
+      "telephony"
+    ],
+    "inventor_count": 1,
+    "decade": "1870s"
+  },
+  {
+    "title": "Improvement in carbon-button telephone transmitters",
+    "abstract": "A microphone for telephone use that varies electrical resistance in proportion to acoustic pressure on a carbon button.",
+    "primary_category": "communication",
+    "subcategories": [
+      "telephony"
+    ],
+    "inventor_count": 1,
+    "decade": "1870s"
+  },
+  {
+    "title": "Phonograph or speaking machine",
+    "abstract": "A device that records and reproduces sound by inscribing acoustic vibrations onto a rotating cylinder of tinfoil.",
+    "primary_category": "entertainment",
+    "subcategories": [
+      "audio"
+    ],
+    "inventor_count": 1,
+    "decade": "1870s"
+  },
+  {
+    "title": "Electric lamp",
+    "abstract": "An incandescent electric lamp using a high-resistance carbonized filament in an evacuated glass bulb.",
+    "primary_category": "energy",
+    "subcategories": [
+      "lighting"
+    ],
+    "inventor_count": 1,
+    "decade": "1870s"
+  },
+  {
+    "title": "Improvement in incandescent lamps",
+    "abstract": "An improved long-lived filament lamp using a treated bamboo filament for general illumination.",
+    "primary_category": "energy",
+    "subcategories": [
+      "lighting"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "Improvement in electric distribution systems",
+    "abstract": "A three-wire direct-current distribution system that reduces conductor weight in commercial-scale electric power networks.",
+    "primary_category": "energy",
+    "subcategories": [
+      "electric_power"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "Electric transmission of power",
+    "abstract": "An alternating-current induction motor driven by a polyphase rotating magnetic field.",
+    "primary_category": "energy",
+    "subcategories": [
+      "electric_power"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "System of electrical distribution",
+    "abstract": "A polyphase alternating-current system for the long-distance transmission of electrical power.",
+    "primary_category": "energy",
+    "subcategories": [
+      "electric_power"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "Improvement in elevators",
+    "abstract": "A safety brake mechanism that automatically arrests an elevator car if the hoist cable fails.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "machining"
+    ],
+    "inventor_count": 1,
+    "decade": "1860s"
+  },
+  {
+    "title": "Improvement in pneumatic tires",
+    "abstract": "An inflatable rubber tire mounted on a metal rim for use on bicycles and carriages.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "Internal-combustion engine (Diesel)",
+    "abstract": "A high-compression engine in which fuel is ignited by the heat of the compressed air alone, without a spark.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 1,
+    "decade": "1890s"
+  },
+  {
+    "title": "Method of and apparatus for controlling mechanism of moving vessels",
+    "abstract": "An automatic remote control system for guided vehicles using radio signals.",
+    "primary_category": "communication",
+    "subcategories": [
+      "radio"
+    ],
+    "inventor_count": 1,
+    "decade": "1890s"
+  },
+  {
+    "title": "Apparatus for transmitting electrical signals",
+    "abstract": "A wireless telegraphy apparatus using a coherer and an antenna for receiving Hertzian waves at a distance.",
+    "primary_category": "communication",
+    "subcategories": [
+      "radio",
+      "telegraphy"
+    ],
+    "inventor_count": 1,
+    "decade": "1890s"
+  },
+  {
+    "title": "Flying machine",
+    "abstract": "A heavier-than-air flying machine controlled by warping the wings to maintain lateral balance in flight.",
+    "primary_category": "aerospace",
+    "subcategories": [
+      "aviation"
+    ],
+    "inventor_count": 2,
+    "decade": "1900s"
+  },
+  {
+    "title": "Device for amplifying feeble electrical currents",
+    "abstract": "A three-electrode vacuum tube that amplifies electrical signals by controlling current flow with a grid.",
+    "primary_category": "communication",
+    "subcategories": [
+      "radio"
+    ],
+    "inventor_count": 1,
+    "decade": "1900s"
+  },
+  {
+    "title": "Process of manufacturing aluminum",
+    "abstract": "An electrolytic process for reducing aluminum oxide dissolved in molten cryolite.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "alloy"
+    ],
+    "inventor_count": 1,
+    "decade": "1880s"
+  },
+  {
+    "title": "Process for making phenol-formaldehyde resins (Bakelite)",
+    "abstract": "A method of making a hard thermosetting plastic by condensing phenol with formaldehyde under heat and pressure.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "polymer"
+    ],
+    "inventor_count": 1,
+    "decade": "1900s"
+  },
+  {
+    "title": "Aspirin",
+    "abstract": "A process for the synthesis of acetylsalicylic acid as a stable orally administered analgesic.",
+    "primary_category": "medical",
+    "subcategories": [
+      "pharmaceutical",
+      "synthesis"
+    ],
+    "inventor_count": 1,
+    "decade": "1900s"
+  },
+  {
+    "title": "Cathode-ray tube",
+    "abstract": "A vacuum tube in which a beam of electrons is deflected by magnetic or electric fields to form an image on a phosphor screen.",
+    "primary_category": "entertainment",
+    "subcategories": [
+      "display",
+      "video"
+    ],
+    "inventor_count": 1,
+    "decade": "1900s"
+  },
+  {
+    "title": "Television system",
+    "abstract": "A method of electronically scanning an image into a sequence of electrical signals using an image-dissector tube.",
+    "primary_category": "communication",
+    "subcategories": [
+      "television",
+      "video"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "Direct-view storage tube (Iconoscope)",
+    "abstract": "A camera tube that converts an optical image into an electrical signal using a mosaic of photoelectric cells.",
+    "primary_category": "communication",
+    "subcategories": [
+      "television",
+      "video"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "Synthetic linear condensation polymers (Nylon)",
+    "abstract": "A process for producing strong synthetic fibers from polyamides by melt-spinning under tension.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "polymer",
+      "textile"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "Direct-lift aircraft (helicopter)",
+    "abstract": "A single-rotor helicopter using a tail rotor for torque compensation and cyclic pitch for control.",
+    "primary_category": "aerospace",
+    "subcategories": [
+      "aviation"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "Frequency modulation system",
+    "abstract": "A method of transmitting audio signals by varying the frequency of a carrier wave to reduce noise.",
+    "primary_category": "communication",
+    "subcategories": [
+      "radio"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "High-frequency oscillator",
+    "abstract": "A regenerative oscillator that uses positive feedback to produce stable radio-frequency oscillations.",
+    "primary_category": "communication",
+    "subcategories": [
+      "radio"
+    ],
+    "inventor_count": 1,
+    "decade": "1910s"
+  },
+  {
+    "title": "Refrigeration apparatus",
+    "abstract": "A vapor-compression refrigeration cycle using a non-flammable, non-toxic chlorofluorocarbon refrigerant.",
+    "primary_category": "household",
+    "subcategories": [
+      "hvac",
+      "appliance"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "Air-conditioning system",
+    "abstract": "An apparatus for treating air to control its temperature, humidity, and circulation in indoor spaces.",
+    "primary_category": "household",
+    "subcategories": [
+      "hvac",
+      "appliance"
+    ],
+    "inventor_count": 1,
+    "decade": "1900s"
+  },
+  {
+    "title": "Light-amplification by stimulated emission of radiation (laser)",
+    "abstract": "A device that produces a coherent beam of light by stimulated emission in a resonant optical cavity.",
+    "primary_category": "energy",
+    "subcategories": [
+      "optics"
+    ],
+    "inventor_count": 2,
+    "decade": "1960s"
+  },
+  {
+    "title": "Maser apparatus",
+    "abstract": "A device that amplifies microwave radiation by stimulated emission from an inverted-population gas medium.",
+    "primary_category": "energy",
+    "subcategories": [
+      "optics"
+    ],
+    "inventor_count": 2,
+    "decade": "1950s"
+  },
+  {
+    "title": "Junction transistor",
+    "abstract": "A solid-state amplifier using a thin layer of semiconductor sandwiched between two regions of opposite type.",
+    "primary_category": "computing",
+    "subcategories": [
+      "semiconductor"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Three-electrode circuit element using semiconductive materials",
+    "abstract": "A point-contact transistor amplifier consisting of two metal contacts on a germanium crystal.",
+    "primary_category": "computing",
+    "subcategories": [
+      "semiconductor"
+    ],
+    "inventor_count": 2,
+    "decade": "1940s"
+  },
+  {
+    "title": "Integrated circuit (Kilby)",
+    "abstract": "A miniature electronic circuit in which all components are formed in and on a single piece of semiconductor material.",
+    "primary_category": "computing",
+    "subcategories": [
+      "semiconductor"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Planar integrated circuit (Noyce)",
+    "abstract": "A monolithic integrated circuit fabricated using a planar oxide-masking process for interconnections.",
+    "primary_category": "computing",
+    "subcategories": [
+      "semiconductor"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Memory system using magnetic cores",
+    "abstract": "A random-access memory using arrays of toroidal magnetic cores threaded by drive and sense wires.",
+    "primary_category": "computing",
+    "subcategories": [
+      "memory"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Drum memory device",
+    "abstract": "A magnetic data-storage device using a rotating cylinder coated with ferromagnetic material.",
+    "primary_category": "computing",
+    "subcategories": [
+      "memory"
+    ],
+    "inventor_count": 1,
+    "decade": "1940s"
+  },
+  {
+    "title": "Random-access dynamic memory (DRAM)",
+    "abstract": "A single-transistor memory cell that stores a bit as charge on a capacitor and refreshes periodically.",
+    "primary_category": "computing",
+    "subcategories": [
+      "memory",
+      "semiconductor"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Memory system having direct random access (Forrester)",
+    "abstract": "A coincident-current core memory permitting parallel readout of multi-bit words.",
+    "primary_category": "computing",
+    "subcategories": [
+      "memory"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Microprogrammed CPU on a chip (Intel 4004)",
+    "abstract": "A 4-bit microprocessor integrating arithmetic, control, and memory interface on a single MOS chip.",
+    "primary_category": "computing",
+    "subcategories": [
+      "microprocessor",
+      "semiconductor"
+    ],
+    "inventor_count": 3,
+    "decade": "1970s"
+  },
+  {
+    "title": "Single-chip microcomputer",
+    "abstract": "A single integrated circuit combining processor, memory, and input/output for embedded control applications.",
+    "primary_category": "computing",
+    "subcategories": [
+      "microprocessor",
+      "semiconductor"
+    ],
+    "inventor_count": 2,
+    "decade": "1970s"
+  },
+  {
+    "title": "Method of optical character recognition",
+    "abstract": "A scanning method for converting printed alphanumeric characters into digital codes by template matching.",
+    "primary_category": "computing",
+    "subcategories": [
+      "software",
+      "imaging"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Bar-code identification system",
+    "abstract": "A pattern of parallel bars of varying widths that encode product identifiers for optical scanning at point of sale.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "printing"
+    ],
+    "inventor_count": 2,
+    "decade": "1950s"
+  },
+  {
+    "title": "Polaroid one-step photographic process",
+    "abstract": "A self-developing instant photographic film that produces a finished print within one minute of exposure.",
+    "primary_category": "entertainment",
+    "subcategories": [
+      "photography"
+    ],
+    "inventor_count": 1,
+    "decade": "1940s"
+  },
+  {
+    "title": "Xerographic copier",
+    "abstract": "An electrostatic dry-imaging process for duplicating documents onto plain paper using a photoconductive drum.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "printing"
+    ],
+    "inventor_count": 1,
+    "decade": "1940s"
+  },
+  {
+    "title": "Microwave cooking apparatus",
+    "abstract": "An oven that heats food by exposing it to high-frequency electromagnetic radiation generated by a magnetron.",
+    "primary_category": "household",
+    "subcategories": [
+      "appliance"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Hook-and-loop fastener (Velcro)",
+    "abstract": "A fastening tape consisting of two strips, one with stiff hooks and the other with soft loops that mesh on contact.",
+    "primary_category": "household",
+    "subcategories": [
+      "textile"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Disposable diaper",
+    "abstract": "A multi-layer absorbent disposable diaper with a moisture-impermeable backing and adhesive tabs.",
+    "primary_category": "household",
+    "subcategories": [
+      "textile"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Integrated stereo headphone",
+    "abstract": "A high-fidelity dynamic stereo headphone with foam ear cushions for personal listening.",
+    "primary_category": "entertainment",
+    "subcategories": [
+      "audio"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Radial keratotomy",
+    "abstract": "A surgical method of correcting myopia by making radial incisions in the cornea.",
+    "primary_category": "medical",
+    "subcategories": [
+      "surgery"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Implantable cardiac pacemaker",
+    "abstract": "A self-contained, battery-powered electronic device implanted to regulate the heartbeat by delivering pulses to the myocardium.",
+    "primary_category": "medical",
+    "subcategories": [
+      "prosthetic"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Computed tomography apparatus",
+    "abstract": "A medical imaging system that reconstructs cross-sectional images of the body from a rotating array of X-ray projections.",
+    "primary_category": "medical",
+    "subcategories": [
+      "imaging"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Apparatus and method for nuclear-magnetic-resonance imaging",
+    "abstract": "A medical imaging system that uses nuclear-magnetic-resonance signals to produce sectional images of soft tissue.",
+    "primary_category": "medical",
+    "subcategories": [
+      "imaging"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Process for amplifying nucleic acid sequences (PCR)",
+    "abstract": "A method of exponentially amplifying specific DNA segments using thermostable polymerase and primer pairs.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "synthesis",
+      "pharmaceutical"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Recombinant DNA cloning vehicle",
+    "abstract": "A method of producing recombinant DNA molecules by inserting foreign genes into a plasmid vector for bacterial expression.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "synthesis",
+      "pharmaceutical"
+    ],
+    "inventor_count": 2,
+    "decade": "1980s"
+  },
+  {
+    "title": "Genetically modified bacterium",
+    "abstract": "A bacterium genetically engineered to digest crude-oil hydrocarbons, the first patentable life form upheld in Diamond v. Chakrabarty.",
+    "primary_category": "chemistry",
+    "subcategories": [
+      "synthesis"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Inkjet printing apparatus",
+    "abstract": "A printer that forms images by ejecting droplets of ink from a thermally driven nozzle array onto paper.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "printing"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Liquid-crystal display device",
+    "abstract": "A flat-panel display that modulates light by controlling the orientation of liquid-crystal molecules between polarizers.",
+    "primary_category": "computing",
+    "subcategories": [
+      "display"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Light-emitting diode device",
+    "abstract": "A semiconductor diode that emits visible light when current is passed across its junction.",
+    "primary_category": "energy",
+    "subcategories": [
+      "lighting",
+      "semiconductor"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Compact disc digital audio system",
+    "abstract": "A digital audio storage medium that encodes sound as pits on a reflective optical disc read by a laser.",
+    "primary_category": "entertainment",
+    "subcategories": [
+      "audio"
+    ],
+    "inventor_count": 2,
+    "decade": "1980s"
+  },
+  {
+    "title": "Magnetic resonance imaging gradient coil",
+    "abstract": "A gradient-coil assembly producing spatially varying magnetic fields for slice selection in MRI scanners.",
+    "primary_category": "medical",
+    "subcategories": [
+      "imaging"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Mouse for use with a computer system",
+    "abstract": "A hand-held pointing device that controls a screen cursor by detecting motion in two orthogonal axes.",
+    "primary_category": "computing",
+    "subcategories": [
+      "software"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Method and apparatus for graphical user interfaces",
+    "abstract": "A windowed graphical user interface for personal computers using overlapping windows, icons, and menus.",
+    "primary_category": "computing",
+    "subcategories": [
+      "software"
+    ],
+    "inventor_count": 3,
+    "decade": "1980s"
+  },
+  {
+    "title": "Electronic spreadsheet program",
+    "abstract": "A computer program that arranges numerical data in a grid of formula-linked cells for interactive recalculation.",
+    "primary_category": "computing",
+    "subcategories": [
+      "software"
+    ],
+    "inventor_count": 2,
+    "decade": "1970s"
+  },
+  {
+    "title": "Public-key cryptographic apparatus and method (RSA)",
+    "abstract": "A cryptographic system that uses a public encryption key and a private decryption key derived from large prime numbers.",
+    "primary_category": "computing",
+    "subcategories": [
+      "software"
+    ],
+    "inventor_count": 3,
+    "decade": "1980s"
+  },
+  {
+    "title": "Method for transmitting data using packet switching",
+    "abstract": "A method of transmitting digital messages by breaking them into independently routed packets across a shared network.",
+    "primary_category": "communication",
+    "subcategories": [
+      "networking"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Hypertext document linking system (Web)",
+    "abstract": "A method of linking documents across a distributed network using uniform resource identifiers and a hypertext protocol.",
+    "primary_category": "communication",
+    "subcategories": [
+      "internet",
+      "networking"
+    ],
+    "inventor_count": 1,
+    "decade": "1990s"
+  },
+  {
+    "title": "Method for arranging frames in a continuously rolling display",
+    "abstract": "A scrolling method for displaying ranked search results within a paged web interface.",
+    "primary_category": "communication",
+    "subcategories": [
+      "internet",
+      "software"
+    ],
+    "inventor_count": 2,
+    "decade": "1990s"
+  },
+  {
+    "title": "PageRank ranking method",
+    "abstract": "A method of ranking documents in a hyperlinked corpus based on the eigenvector of the link-citation matrix.",
+    "primary_category": "communication",
+    "subcategories": [
+      "internet",
+      "software"
+    ],
+    "inventor_count": 1,
+    "decade": "1990s"
+  },
+  {
+    "title": "Direct-broadcast satellite television receiver",
+    "abstract": "A consumer receiver for decoding digital television signals broadcast directly from geostationary satellites.",
+    "primary_category": "communication",
+    "subcategories": [
+      "television",
+      "spacecraft"
+    ],
+    "inventor_count": 1,
+    "decade": "1990s"
+  },
+  {
+    "title": "Cellular mobile telephone system",
+    "abstract": "A radiotelephone system that hands off calls between geographic cells as the mobile unit moves.",
+    "primary_category": "communication",
+    "subcategories": [
+      "telephony",
+      "radio"
+    ],
+    "inventor_count": 2,
+    "decade": "1970s"
+  },
+  {
+    "title": "Code division multiple access (CDMA) system",
+    "abstract": "A spread-spectrum digital cellular system that distinguishes simultaneous users by orthogonal code sequences.",
+    "primary_category": "communication",
+    "subcategories": [
+      "telephony",
+      "radio"
+    ],
+    "inventor_count": 2,
+    "decade": "1990s"
+  },
+  {
+    "title": "Wireless local area network (Wi-Fi)",
+    "abstract": "A method of providing high-rate wireless data networking using orthogonal frequency-division multiplexing in unlicensed bands.",
+    "primary_category": "communication",
+    "subcategories": [
+      "networking",
+      "radio"
+    ],
+    "inventor_count": 4,
+    "decade": "1990s"
+  },
+  {
+    "title": "Bluetooth short-range radio system",
+    "abstract": "A short-range, low-power radio protocol for ad-hoc data and audio links between consumer devices.",
+    "primary_category": "communication",
+    "subcategories": [
+      "networking",
+      "radio"
+    ],
+    "inventor_count": 3,
+    "decade": "1990s"
+  },
+  {
+    "title": "Lithium-ion rechargeable battery",
+    "abstract": "A rechargeable battery cell using a lithium-intercalation cathode and a carbonaceous anode in a non-aqueous electrolyte.",
+    "primary_category": "energy",
+    "subcategories": [
+      "battery"
+    ],
+    "inventor_count": 2,
+    "decade": "1980s"
+  },
+  {
+    "title": "Nickel-metal-hydride storage battery",
+    "abstract": "A rechargeable battery cell using a hydrogen-absorbing alloy as the negative electrode for high energy density.",
+    "primary_category": "energy",
+    "subcategories": [
+      "battery"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Photovoltaic solar cell",
+    "abstract": "A silicon photovoltaic cell that converts sunlight directly into electrical current at usable efficiencies.",
+    "primary_category": "energy",
+    "subcategories": [
+      "solar",
+      "semiconductor"
+    ],
+    "inventor_count": 3,
+    "decade": "1950s"
+  },
+  {
+    "title": "Wind turbine with variable-speed control",
+    "abstract": "A horizontal-axis wind turbine with electronic variable-speed control for maximum power extraction.",
+    "primary_category": "energy",
+    "subcategories": [
+      "electric_power"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Catalytic converter",
+    "abstract": "An automotive exhaust aftertreatment device that converts pollutants into harmless gases over a noble-metal catalyst.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Anti-lock braking system",
+    "abstract": "An automotive braking system that prevents wheel lockup by modulating brake pressure under threshold detection.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 1,
+    "decade": "1970s"
+  },
+  {
+    "title": "Airbag restraint system",
+    "abstract": "A vehicle safety system that rapidly inflates a fabric cushion in response to a collision-detection accelerometer.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Three-point safety belt",
+    "abstract": "A vehicle restraint that crosses both the chest and lap of an occupant from a single retractor anchor.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Hybrid electric vehicle drivetrain",
+    "abstract": "A drivetrain combining an internal-combustion engine with an electric motor and battery pack for improved fuel economy.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "automotive"
+    ],
+    "inventor_count": 2,
+    "decade": "1990s"
+  },
+  {
+    "title": "Jet propulsion engine",
+    "abstract": "A turbojet engine using a gas-turbine compressor to provide reaction thrust for high-speed aircraft propulsion.",
+    "primary_category": "aerospace",
+    "subcategories": [
+      "propulsion",
+      "aviation"
+    ],
+    "inventor_count": 1,
+    "decade": "1930s"
+  },
+  {
+    "title": "Liquid-fueled rocket engine",
+    "abstract": "A rocket motor that burns a liquid oxidizer and a liquid fuel in a regeneratively-cooled combustion chamber.",
+    "primary_category": "aerospace",
+    "subcategories": [
+      "propulsion",
+      "spacecraft"
+    ],
+    "inventor_count": 1,
+    "decade": "1910s"
+  },
+  {
+    "title": "Communication satellite system",
+    "abstract": "A geostationary communications satellite that relays radio signals between widely separated ground stations.",
+    "primary_category": "communication",
+    "subcategories": [
+      "spacecraft",
+      "radio"
+    ],
+    "inventor_count": 1,
+    "decade": "1960s"
+  },
+  {
+    "title": "Global positioning system receiver",
+    "abstract": "A receiver that determines its position by measuring the time-of-arrival of signals from a constellation of satellites.",
+    "primary_category": "transportation",
+    "subcategories": [
+      "spacecraft"
+    ],
+    "inventor_count": 2,
+    "decade": "1980s"
+  },
+  {
+    "title": "Industrial robot manipulator",
+    "abstract": "A computer-controlled multi-axis robotic arm capable of performing repetitive industrial tasks with high precision.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "robotics"
+    ],
+    "inventor_count": 2,
+    "decade": "1960s"
+  },
+  {
+    "title": "Numerical control system for machine tools",
+    "abstract": "A system for controlling a machine tool by reading numerical instructions from a punched tape.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "machining"
+    ],
+    "inventor_count": 1,
+    "decade": "1950s"
+  },
+  {
+    "title": "Three-dimensional printing apparatus",
+    "abstract": "A method of producing solid objects by selectively depositing or solidifying successive layers of material.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "printing"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Stereolithography apparatus",
+    "abstract": "A method of forming three-dimensional objects by selectively photopolymerizing successive layers of liquid resin.",
+    "primary_category": "manufacturing",
+    "subcategories": [
+      "printing"
+    ],
+    "inventor_count": 1,
+    "decade": "1980s"
+  },
+  {
+    "title": "Fiber-optic transmission cable",
+    "abstract": "A communication cable using ultra-pure glass fibers as low-loss waveguides for modulated light signals.",
+    "primary_category": "communication",
+    "subcategories": [
+      "networking",
+      "optics"
+    ],
+    "inventor_count": 3,
+    "decade": "1970s"
+  },
+  {
+    "title": "Erbium-doped fiber amplifier",
+    "abstract": "An optical amplifier that boosts signals in fiber-optic networks using a rare-earth-doped fiber pumped by a diode laser.",
+    "primary_category": "communication",
+    "subcategories": [
+      "networking",
+      "optics"
+    ],
+    "inventor_count": 2,
+    "decade": "1980s"
+  },
+  {
+    "title": "Photolithographic stepper",
+    "abstract": "A semiconductor manufacturing apparatus that exposes patterns onto a wafer one die at a time using projection optics.",
+    "primary_category": "computing",
+    "subcategories": [
+      "semiconductor"
+    ],
+    "inventor_count": 2,
+    "decade": "1970s"
+  },
+  {
+    "title": "Electroencephalograph (EEG) machine",
+    "abstract": "A medical instrument that records the electrical activity of the brain by amplifying scalp-electrode signals.",
+    "primary_category": "medical",
+    "subcategories": [
+      "imaging"
+    ],
+    "inventor_count": 1,
+    "decade": "1920s"
+  },
+  {
+    "title": "Process for producing penicillin in deep tank fermentation",
+    "abstract": "A submerged-fermentation process for the large-scale production of penicillin from Penicillium chrysogenum cultures.",
+    "primary_category": "medical",
+    "subcategories": [
+      "pharmaceutical",
+      "synthesis"
+    ],
+    "inventor_count": 2,
+    "decade": "1940s"
+  }
+]

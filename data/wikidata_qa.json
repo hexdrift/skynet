@@ -1,0 +1,402 @@
+[
+  {
+    "question": "What is the capital of Australia?",
+    "answer": "Canberra"
+  },
+  {
+    "question": "What is the longest river in the world?",
+    "answer": "Nile"
+  },
+  {
+    "question": "On which continent is the Atacama Desert located?",
+    "answer": "South America"
+  },
+  {
+    "question": "Which country has Reykjavik as its capital?",
+    "answer": "Iceland"
+  },
+  {
+    "question": "What is the highest mountain on Earth?",
+    "answer": "Mount Everest"
+  },
+  {
+    "question": "In which country is the city of Marrakesh located?",
+    "answer": "Morocco"
+  },
+  {
+    "question": "What is the smallest country in the world by area?",
+    "answer": "Vatican City"
+  },
+  {
+    "question": "Which sea separates Europe from Africa?",
+    "answer": "Mediterranean Sea"
+  },
+  {
+    "question": "What is the capital of New Zealand?",
+    "answer": "Wellington"
+  },
+  {
+    "question": "Through which two countries does the Iguazu Falls border run?",
+    "answer": "Argentina and Brazil"
+  },
+  {
+    "question": "What is the largest lake in Africa by area?",
+    "answer": "Lake Victoria"
+  },
+  {
+    "question": "Which strait separates Asia from North America?",
+    "answer": "Bering Strait"
+  },
+  {
+    "question": "What is the deepest ocean trench?",
+    "answer": "Mariana Trench"
+  },
+  {
+    "question": "Which country has the most natural lakes?",
+    "answer": "Canada"
+  },
+  {
+    "question": "What is the capital of Mongolia?",
+    "answer": "Ulaanbaatar"
+  },
+  {
+    "question": "Which mountain range forms the spine of South America?",
+    "answer": "Andes"
+  },
+  {
+    "question": "What is the largest island in the Mediterranean Sea?",
+    "answer": "Sicily"
+  },
+  {
+    "question": "Which African country was formerly known as Abyssinia?",
+    "answer": "Ethiopia"
+  },
+  {
+    "question": "What is the capital of Kazakhstan?",
+    "answer": "Astana"
+  },
+  {
+    "question": "Which river flows through Baghdad?",
+    "answer": "Tigris"
+  },
+  {
+    "question": "Who proposed the theory of general relativity?",
+    "answer": "Albert Einstein"
+  },
+  {
+    "question": "What is the chemical symbol for gold?",
+    "answer": "Au"
+  },
+  {
+    "question": "Which scientist is credited with discovering penicillin?",
+    "answer": "Alexander Fleming"
+  },
+  {
+    "question": "What is the speed of light in a vacuum, in metres per second?",
+    "answer": "299792458"
+  },
+  {
+    "question": "Which planet has the largest moon in the solar system?",
+    "answer": "Jupiter"
+  },
+  {
+    "question": "Who developed the first successful polio vaccine?",
+    "answer": "Jonas Salk"
+  },
+  {
+    "question": "What is the SI unit of electric current?",
+    "answer": "ampere"
+  },
+  {
+    "question": "Which gas is most abundant in Earth's atmosphere?",
+    "answer": "nitrogen"
+  },
+  {
+    "question": "Who formulated the laws of planetary motion?",
+    "answer": "Johannes Kepler"
+  },
+  {
+    "question": "What is the powerhouse of the cell?",
+    "answer": "mitochondrion"
+  },
+  {
+    "question": "Which element has the atomic number 1?",
+    "answer": "hydrogen"
+  },
+  {
+    "question": "Who is credited with discovering the structure of DNA's double helix alongside Francis Crick?",
+    "answer": "James Watson"
+  },
+  {
+    "question": "What is the largest organ in the human body?",
+    "answer": "skin"
+  },
+  {
+    "question": "Which physicist won the 1921 Nobel Prize for explaining the photoelectric effect?",
+    "answer": "Albert Einstein"
+  },
+  {
+    "question": "What is the hardest naturally occurring substance?",
+    "answer": "diamond"
+  },
+  {
+    "question": "Which scientist proposed natural selection as the mechanism of evolution?",
+    "answer": "Charles Darwin"
+  },
+  {
+    "question": "What is the chemical formula of table salt?",
+    "answer": "NaCl"
+  },
+  {
+    "question": "Who invented the periodic table of elements?",
+    "answer": "Dmitri Mendeleev"
+  },
+  {
+    "question": "Which planet rotates on its side, with an axial tilt of about 98 degrees?",
+    "answer": "Uranus"
+  },
+  {
+    "question": "What is the unit of frequency named after Heinrich Hertz?",
+    "answer": "hertz"
+  },
+  {
+    "question": "In what year did World War II end?",
+    "answer": "1945"
+  },
+  {
+    "question": "Who was the first President of the United States?",
+    "answer": "George Washington"
+  },
+  {
+    "question": "In which year did the Berlin Wall fall?",
+    "answer": "1989"
+  },
+  {
+    "question": "Which empire did Genghis Khan found?",
+    "answer": "Mongol Empire"
+  },
+  {
+    "question": "Who was the longest-reigning British monarch?",
+    "answer": "Elizabeth II"
+  },
+  {
+    "question": "In what year did the French Revolution begin?",
+    "answer": "1789"
+  },
+  {
+    "question": "Which civilization built Machu Picchu?",
+    "answer": "Inca"
+  },
+  {
+    "question": "Who was the Pharaoh whose tomb was discovered by Howard Carter in 1922?",
+    "answer": "Tutankhamun"
+  },
+  {
+    "question": "In what year did the Soviet Union dissolve?",
+    "answer": "1991"
+  },
+  {
+    "question": "Who wrote the United States Declaration of Independence?",
+    "answer": "Thomas Jefferson"
+  },
+  {
+    "question": "Which treaty formally ended World War I?",
+    "answer": "Treaty of Versailles"
+  },
+  {
+    "question": "Who led the Indian independence movement through nonviolent resistance?",
+    "answer": "Mahatma Gandhi"
+  },
+  {
+    "question": "In what year did the Titanic sink?",
+    "answer": "1912"
+  },
+  {
+    "question": "Which queen ruled England during the defeat of the Spanish Armada in 1588?",
+    "answer": "Elizabeth I"
+  },
+  {
+    "question": "Who was the first emperor of Rome?",
+    "answer": "Augustus"
+  },
+  {
+    "question": "In what year was the Magna Carta signed?",
+    "answer": "1215"
+  },
+  {
+    "question": "Who painted the Sistine Chapel ceiling?",
+    "answer": "Michelangelo"
+  },
+  {
+    "question": "Which Soviet leader was in power during the Cuban Missile Crisis?",
+    "answer": "Nikita Khrushchev"
+  },
+  {
+    "question": "Who was the first female Prime Minister of the United Kingdom?",
+    "answer": "Margaret Thatcher"
+  },
+  {
+    "question": "In what year did Christopher Columbus first reach the Americas?",
+    "answer": "1492"
+  },
+  {
+    "question": "Who wrote the play 'Hamlet'?",
+    "answer": "William Shakespeare"
+  },
+  {
+    "question": "Who painted the Mona Lisa?",
+    "answer": "Leonardo da Vinci"
+  },
+  {
+    "question": "Who composed the opera 'The Magic Flute'?",
+    "answer": "Wolfgang Amadeus Mozart"
+  },
+  {
+    "question": "Which Russian author wrote 'War and Peace'?",
+    "answer": "Leo Tolstoy"
+  },
+  {
+    "question": "Who painted 'The Starry Night'?",
+    "answer": "Vincent van Gogh"
+  },
+  {
+    "question": "Who wrote the novel 'One Hundred Years of Solitude'?",
+    "answer": "Gabriel García Márquez"
+  },
+  {
+    "question": "Which composer wrote the 'Brandenburg Concertos'?",
+    "answer": "Johann Sebastian Bach"
+  },
+  {
+    "question": "Who is the author of 'The Great Gatsby'?",
+    "answer": "F. Scott Fitzgerald"
+  },
+  {
+    "question": "Who painted 'The Persistence of Memory'?",
+    "answer": "Salvador Dalí"
+  },
+  {
+    "question": "Which playwright wrote 'A Streetcar Named Desire'?",
+    "answer": "Tennessee Williams"
+  },
+  {
+    "question": "Who composed the ballet 'The Nutcracker'?",
+    "answer": "Pyotr Ilyich Tchaikovsky"
+  },
+  {
+    "question": "Who wrote 'Pride and Prejudice'?",
+    "answer": "Jane Austen"
+  },
+  {
+    "question": "Which artist created the 'Campbell's Soup Cans' series?",
+    "answer": "Andy Warhol"
+  },
+  {
+    "question": "Who wrote the dystopian novel '1984'?",
+    "answer": "George Orwell"
+  },
+  {
+    "question": "Who sculpted 'David' between 1501 and 1504?",
+    "answer": "Michelangelo"
+  },
+  {
+    "question": "Which Greek poet is credited with the 'Iliad' and the 'Odyssey'?",
+    "answer": "Homer"
+  },
+  {
+    "question": "Who wrote the children's book 'The Little Prince'?",
+    "answer": "Antoine de Saint-Exupéry"
+  },
+  {
+    "question": "Which Norwegian artist painted 'The Scream'?",
+    "answer": "Edvard Munch"
+  },
+  {
+    "question": "Who composed the 'Ninth Symphony' that contains 'Ode to Joy'?",
+    "answer": "Ludwig van Beethoven"
+  },
+  {
+    "question": "Who is the author of the 'Harry Potter' novel series?",
+    "answer": "J. K. Rowling"
+  },
+  {
+    "question": "Which country won the 2018 FIFA World Cup?",
+    "answer": "France"
+  },
+  {
+    "question": "Who directed the film 'Pulp Fiction'?",
+    "answer": "Quentin Tarantino"
+  },
+  {
+    "question": "In which city were the 2020 Summer Olympics held?",
+    "answer": "Tokyo"
+  },
+  {
+    "question": "Who is the lead singer of the band Queen?",
+    "answer": "Freddie Mercury"
+  },
+  {
+    "question": "Which film won the Academy Award for Best Picture in 1994?",
+    "answer": "Schindler's List"
+  },
+  {
+    "question": "Which tennis player has won the most Grand Slam singles titles in the men's open era as of 2024?",
+    "answer": "Novak Djokovic"
+  },
+  {
+    "question": "Who composed the score for the original 'Star Wars' film?",
+    "answer": "John Williams"
+  },
+  {
+    "question": "Which country hosts the Wimbledon tennis championships?",
+    "answer": "United Kingdom"
+  },
+  {
+    "question": "Who directed the 1972 film 'The Godfather'?",
+    "answer": "Francis Ford Coppola"
+  },
+  {
+    "question": "Which English football club is nicknamed 'The Red Devils'?",
+    "answer": "Manchester United"
+  },
+  {
+    "question": "Who wrote and recorded the 1971 song 'Imagine'?",
+    "answer": "John Lennon"
+  },
+  {
+    "question": "In which year did Usain Bolt set the men's 100m world record at 9.58 seconds?",
+    "answer": "2009"
+  },
+  {
+    "question": "Which Pixar film features a clownfish named Marlin?",
+    "answer": "Finding Nemo"
+  },
+  {
+    "question": "Who is the all-time leading scorer in NBA history as of 2024?",
+    "answer": "LeBron James"
+  },
+  {
+    "question": "Which film won the Academy Award for Best Picture in 2020?",
+    "answer": "Parasite"
+  },
+  {
+    "question": "Which country has won the most Olympic gold medals in history?",
+    "answer": "United States"
+  },
+  {
+    "question": "Who painted the album cover for the Beatles' 'Sgt. Pepper's Lonely Hearts Club Band'?",
+    "answer": "Peter Blake"
+  },
+  {
+    "question": "Which director made the 2010 film 'Inception'?",
+    "answer": "Christopher Nolan"
+  },
+  {
+    "question": "Which Formula 1 driver has won the most World Championships as of 2024?",
+    "answer": "Lewis Hamilton"
+  },
+  {
+    "question": "Who created the animated television series 'The Simpsons'?",
+    "answer": "Matt Groening"
+  }
+]
