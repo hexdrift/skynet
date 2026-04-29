@@ -1,9 +1,14 @@
 """HTTP errors that carry semantic i18n codes.
 
 Routes should raise :class:`DomainError` instead of ``HTTPException(detail=t(...))``.
-The response envelope then exposes both the rendered message (for legacy clients
-and logs) and the semantic ``code``/``params`` pair (for clients that prefer to
-render copy with their own i18n layer).
+The response envelope exposes a stable ``code`` + ``params`` pair (the
+authoritative payload — frontends render localised copy from these via their
+own i18n layer) plus an English ``detail`` string rendered from
+:mod:`core.i18n_en` for legacy clients, server logs, and OpenAPI examples.
+
+Per PER-83 (Phase 2), ``detail`` is intentionally English: Hebrew lives only on
+the frontend so backend logs stay grep-friendly and copy ownership belongs to
+one runtime.
 """
 
 from __future__ import annotations
@@ -12,7 +17,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from ..i18n import t
+from ..i18n_en import t_en
 from ..i18n_keys import I18nKey
 
 
@@ -55,5 +60,5 @@ class DomainError(HTTPException):
         merged.update(kwargs)
         self.code: str = key
         self.params: dict[str, Any] = merged
-        detail = t(key, **merged)
+        detail = t_en(key, **merged)
         super().__init__(status_code=status, detail=detail)

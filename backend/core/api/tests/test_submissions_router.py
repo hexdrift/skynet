@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from ...constants import (
@@ -20,7 +21,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
     PAYLOAD_OVERVIEW_USERNAME,
 )
-from ...i18n import t
+from ...i18n_keys import I18nKey
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ..model_catalog import CatalogModel, ModelCatalogResponse
@@ -197,6 +198,16 @@ def _make_client(
 
     app = FastAPI()
     app.include_router(create_submissions_router(service=service, job_store=store))
+
+    @app.exception_handler(HTTPException)
+    async def _http_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+        content: dict[str, object] = {"detail": exc.detail}
+        code = getattr(exc, "code", None)
+        if code:
+            content["code"] = code
+            content["params"] = getattr(exc, "params", None) or {}
+        return JSONResponse(status_code=exc.status_code, content=content, headers=getattr(exc, "headers", None))
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -556,7 +567,7 @@ def test_submit_grid_search_use_all_generation_models_returns_400_when_catalog_e
     resp = client.post("/grid-search", json=payload)
 
     assert resp.status_code == 400
-    assert resp.json()["detail"] == t("submit.no_models_available")
+    assert resp.json()["code"] == I18nKey.SUBMIT_NO_MODELS_AVAILABLE.value
 
 
 def test_submit_grid_search_use_all_reflection_models_returns_400_when_catalog_empty(
@@ -573,7 +584,7 @@ def test_submit_grid_search_use_all_reflection_models_returns_400_when_catalog_e
     resp = client.post("/grid-search", json=payload)
 
     assert resp.status_code == 400
-    assert resp.json()["detail"] == t("submit.no_models_available")
+    assert resp.json()["code"] == I18nKey.SUBMIT_NO_MODELS_AVAILABLE.value
 
 
 _VISION_SIG_CODE = (
