@@ -7,11 +7,12 @@
 
 import type { Bone, ResponsiveBones } from "boneyard-js";
 
-function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {
-  return container ? { x, y, w, h, r, c: true } : { x, y, w, h, r };
+function bone(x: number, y: number, w: number, h: number, r: number): Bone {
+  return { x, y, w, h, r };
 }
 
-const W = 208; // sidebar inner width (~224px column minus ps-2/pe-2 padding)
+// Inner width = sidebar column (~224px) minus ps-2/pe-2 padding (8px each side).
+const W = 208;
 const ROW_HEIGHT = 30;
 const ROW_GAP = 4;
 const ROW_COUNT = 3;

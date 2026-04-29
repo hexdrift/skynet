@@ -42,7 +42,7 @@ import {
   togglePinOptimization,
 } from "@/shared/lib/api";
 import type { SidebarJobItem } from "@/shared/lib/api";
-import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
+import { isActiveStatus } from "@/shared/constants/job-status";
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
 import { groupJobsByRecency, matchesJobSearch } from "@/features/sidebar";
@@ -67,10 +67,11 @@ export function Sidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activePairParam = searchParams.get("pair");
-  const activePairIndex = activePairParam != null ? parseInt(activePairParam, 10) : null;
+  const parsedPair = activePairParam != null ? parseInt(activePairParam, 10) : NaN;
+  const activePairIndex = Number.isFinite(parsedPair) ? parsedPair : null;
   const { data: session } = useSession();
   const sessionUser = session?.user?.name ?? "";
-  const isAdmin = (session?.user as Record<string, unknown> | undefined)?.role === "admin";
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const [collapsed, setCollapsed] = React.useState(false);
 
   // Listen for external collapse requests (e.g. submit splash transition)
@@ -103,6 +104,9 @@ export function Sidebar() {
   // back to page 1. The ref lives outside React state so fetchData doesn't
   // need to be re-created when the loaded count changes.
   const loadedItemsRef = React.useRef(0);
+  // Synchronous in-flight guard: setLoadingMore is async, so the observer
+  // can fire twice before React re-renders. The ref blocks the second call.
+  const loadingMoreRef = React.useRef(false);
   const listRef = React.useRef<HTMLDivElement>(null);
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -116,11 +120,11 @@ export function Sidebar() {
         offset: 0,
       });
       setJobs(res.items);
-      setActiveCount(res.items.filter((j) => ACTIVE_STATUSES.has(j.status as never)).length);
+      setActiveCount(res.items.filter((j) => isActiveStatus(j.status)).length);
       setLoadedAll(res.items.length >= res.total);
       loadedItemsRef.current = res.items.length;
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn("sidebar fetch failed:", err);
     }
   }, [sessionUser, isAdmin]);
 
@@ -129,18 +133,27 @@ export function Sidebar() {
     // starts fresh at one page.
     loadedItemsRef.current = 0;
     void fetchData();
-    const interval = setInterval(fetchData, 30000);
-    // Listen for cross-component invalidation (dashboard delete, etc.)
+    const tick = () => {
+      if (document.visibilityState === "visible") void fetchData();
+    };
+    const interval = setInterval(tick, 30000);
+    // Catch up immediately when the tab becomes visible after being hidden.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void fetchData();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     const onJobsChanged = () => fetchData();
     window.addEventListener("optimizations-changed", onJobsChanged);
     return () => {
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("optimizations-changed", onJobsChanged);
     };
   }, [fetchData]);
 
   const loadMore = React.useCallback(async () => {
-    if (loadingMore || loadedAll) return;
+    if (loadingMoreRef.current || loadedAll) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const res = await listJobsSidebar({
@@ -158,12 +171,13 @@ export function Sidebar() {
         setLoadedAll(merged.length >= res.total);
         return merged;
       });
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn("sidebar loadMore failed:", err);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [loadingMore, loadedAll, isAdmin, sessionUser, jobs.length]);
+  }, [loadedAll, isAdmin, sessionUser, jobs.length]);
 
   // Infinite-scroll sentinel. The sidebar scrolls in its own container
   // (``listRef``), so the observer's root must point at that element — not
@@ -173,7 +187,7 @@ export function Sidebar() {
     const node = sentinelRef.current;
     const root = listRef.current;
     if (!node || !root) return;
-    if (loadedAll || loadingMore) return;
+    if (loadedAll) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) void loadMore();
@@ -182,16 +196,16 @@ export function Sidebar() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [loadedAll, loadingMore, loadMore, jobs.length]);
+  }, [loadedAll, loadMore, jobs.length]);
 
   const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
 
-  const handleDelete = (e: React.MouseEvent, optimizationId: string) => {
+  const handleDelete = React.useCallback((e: React.MouseEvent, optimizationId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setDeleteConfirm(optimizationId);
-  };
+  }, []);
 
   const confirmDelete = async () => {
     const optimizationId = deleteConfirm;
@@ -218,6 +232,17 @@ export function Sidebar() {
   );
   const groupedJobs = React.useMemo(() => groupJobsByRecency(filteredJobs), [filteredJobs]);
 
+  const deleteJobInfo = React.useMemo(() => {
+    if (!deleteConfirm) return null;
+    const job = jobs.find((j) => j.optimization_id === deleteConfirm);
+    if (!job) return { name: deleteConfirm, id: deleteConfirm };
+    const name =
+      job.name ||
+      [job.module_name, job.optimizer_name].filter(Boolean).join(" · ") ||
+      job.optimization_id.slice(0, 8);
+    return { name, id: job.optimization_id };
+  }, [deleteConfirm, jobs]);
+
   return (
     <aside
       className={cn(
@@ -243,7 +268,7 @@ export function Sidebar() {
           <PanelRightOpen className="size-4 text-muted-foreground" />
         </button>
         <div className="w-6 h-px bg-border/40 my-1" />
-        {NAV_ITEMS.map(({ href, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
@@ -256,8 +281,8 @@ export function Sidebar() {
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",
               )}
-              title={NAV_ITEMS.find((n) => n.href === href)?.label}
-              aria-label={NAV_ITEMS.find((n) => n.href === href)?.label}
+              title={label}
+              aria-label={label}
             >
               <Icon className="size-4" />
             </Link>
@@ -436,8 +461,8 @@ export function Sidebar() {
             <DialogDescription>
               {msg("auto.features.sidebar.components.sidebar.4")}
               {TERMS.optimization}{" "}
-              <span className="font-mono font-medium text-foreground break-all">
-                {deleteConfirm}
+              <span className="font-medium text-foreground break-words" dir="auto">
+                {deleteJobInfo?.name}
               </span>
               ?
             </DialogDescription>
@@ -506,14 +531,26 @@ function JobRow({
 
   React.useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
       if (menuRef.current?.contains(target)) return;
       if (dropdownRef.current?.contains(target)) return;
       setMenuOpen(false);
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        btnRef.current?.focus();
+      }
+    };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [menuOpen]);
 
   React.useEffect(() => {
@@ -522,8 +559,10 @@ function JobRow({
 
   const handleShare = () => {
     const url = `${window.location.origin}/optimizations/${job.optimization_id}`;
-    void navigator.clipboard.writeText(url);
-    toast.success(msg("sidebar.link.copied"));
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success(msg("sidebar.link.copied")))
+      .catch(() => toast.error(msg("clipboard.copy_failed")));
     setMenuOpen(false);
   };
 
@@ -532,10 +571,16 @@ function JobRow({
     router.push(`/submit?clone=${job.optimization_id}`);
   };
 
+  // Enter triggers handleRename, then setRenaming(false) blurs the input,
+  // which fires onBlur → handleRename again. Guard against the double-fire.
+  const renameSubmittedRef = React.useRef(false);
   const handleRename = async () => {
+    if (renameSubmittedRef.current) return;
+    renameSubmittedRef.current = true;
     const newName = renameValue.trim();
-    if (!newName) {
+    if (!newName || newName === (job.name ?? "")) {
       setRenaming(false);
+      renameSubmittedRef.current = false;
       return;
     }
     try {
@@ -552,6 +597,7 @@ function JobRow({
       toast.error(msg("sidebar.rename.failed"));
     }
     setRenaming(false);
+    renameSubmittedRef.current = false;
   };
 
   const handlePin = async () => {
@@ -580,10 +626,18 @@ function JobRow({
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void handleRename();
-            if (e.key === "Escape") setRenaming(false);
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void handleRename();
+            }
+            if (e.key === "Escape") {
+              renameSubmittedRef.current = true;
+              setRenaming(false);
+              renameSubmittedRef.current = false;
+            }
           }}
           onBlur={handleRename}
+          maxLength={120}
           className="w-full text-[0.6875rem] bg-sidebar-accent/30 border border-primary/30 rounded-md px-2 py-1 outline-none font-medium"
           dir="auto"
         />
@@ -655,8 +709,20 @@ function JobRow({
               e.stopPropagation();
               if (!menuOpen && btnRef.current) {
                 const rect = btnRef.current.getBoundingClientRect();
-                // Menu's right edge aligns with button's right edge
-                setMenuPos({ top: rect.bottom + 4, left: rect.right - 140 });
+                const menuWidth = 140;
+                const menuHeightEstimate = 200;
+                const margin = 8;
+                // Right-align by default; clamp to viewport so the menu
+                // never overflows the screen edge on narrow windows.
+                const left = Math.max(
+                  margin,
+                  Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - margin),
+                );
+                const top =
+                  rect.bottom + menuHeightEstimate + margin > window.innerHeight
+                    ? Math.max(margin, rect.top - menuHeightEstimate - 4)
+                    : rect.bottom + 4;
+                setMenuPos({ top, left });
               }
               setMenuOpen((o) => !o);
             }}
@@ -682,7 +748,7 @@ function JobRow({
             className="overflow-hidden"
           >
             <div className="ps-6 pe-2 pb-1">
-              {Array.from({ length: job.total_pairs! }, (_, i) => {
+              {Array.from({ length: job.total_pairs ?? 0 }, (_, i) => {
                 const isPairActive = isActive && activePair === i;
                 return (
                   <Link
@@ -792,7 +858,7 @@ function JobRow({
 }
 
 function StatusDot({ status }: { status: string }) {
-  const isRunning = ACTIVE_STATUSES.has(status as never);
+  const isRunning = isActiveStatus(status);
   return (
     <span className="relative flex size-2 shrink-0">
       {isRunning && (

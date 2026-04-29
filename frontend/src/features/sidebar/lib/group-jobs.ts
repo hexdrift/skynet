@@ -1,5 +1,5 @@
 import type { SidebarJobItem } from "@/shared/lib/api";
-import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
+import { isActiveStatus } from "@/shared/constants/job-status";
 import { msg } from "@/shared/lib/messages";
 
 export interface JobGroup {
@@ -45,10 +45,11 @@ export function groupJobsByRecency(jobs: SidebarJobItem[], now: Date = new Date(
       pinned.push(job);
       continue;
     }
-    if (ACTIVE_STATUSES.has(job.status as never)) {
+    if (isActiveStatus(job.status)) {
       active.push(job);
       continue;
     }
+    // Missing created_at falls through epoch (1970) → "older" bucket.
     const created = new Date(job.created_at ?? 0);
     if (created >= todayStart) today.push(job);
     else if (created >= yesterdayStart) yesterday.push(job);
