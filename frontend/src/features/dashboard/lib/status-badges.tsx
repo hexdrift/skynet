@@ -62,10 +62,6 @@ export function typeBadge(jobType: string) {
   return <Badge variant="secondary">{msg("auto.features.dashboard.lib.status.badges.2")}</Badge>;
 }
 
-/**
- * Renders a job's baseline -> optimized score with percentage improvement.
- * Colour-codes by sign of improvement; shows best-pair label for grid searches.
- */
 export function formatScore(job: OptimizationSummaryResponse): React.ReactNode {
   const baseline = job.baseline_test_metric;
   const optimized = job.optimized_test_metric;

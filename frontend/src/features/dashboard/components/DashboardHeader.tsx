@@ -2,7 +2,7 @@ import { Activity, CheckCircle2, Layers, XCircle } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { AnimatedNumber, FadeIn, TiltCard } from "@/shared/ui/motion";
 import { TERMS } from "@/shared/lib/terms";
-import type { DashboardStats } from "../hooks/use-dashboard-stats";
+import type { DashboardStats } from "../lib/get-dashboard-stats";
 import { msg } from "@/shared/lib/messages";
 
 type DashboardHeaderProps = {

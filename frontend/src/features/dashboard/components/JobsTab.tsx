@@ -4,7 +4,14 @@ import { ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2 } from "lucide-re
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
-import { Table, TableBody, TableCell, TableRow } from "@/shared/ui/primitives/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/shared/ui/primitives/table";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
@@ -142,9 +149,9 @@ export function JobsTab({
         {filteredItems.length > 0 && (
           <div className="overflow-x-auto" data-tutorial="dashboard-table">
             <Table style={{ minWidth: "800px" }}>
-              <thead className="bg-muted/30 [&_tr]:border-b [&_tr]:border-border/50">
-                <tr>
-                  <th className="w-10 px-3">
+              <TableHeader className="bg-muted/30">
+                <TableRow>
+                  <TableHead className="w-10 px-3">
                     <input
                       type="checkbox"
                       aria-label={msg("auto.features.dashboard.components.jobstab.literal.1")}
@@ -157,7 +164,7 @@ export function JobsTab({
                       onChange={togglePageSelection}
                       onClick={(e) => e.stopPropagation()}
                     />
-                  </th>
+                  </TableHead>
                   <ColumnHeader
                     label={formatMsg("auto.features.dashboard.components.jobstab.template.1", {
                       p1: TERMS.optimization,
@@ -271,9 +278,9 @@ export function JobsTab({
                     width={colResize.widths["optimized_test_metric"]}
                     onResize={colResize.setColumnWidth}
                   />
-                  <th className="w-16" />
-                </tr>
-              </thead>
+                  <TableHead className="w-16" />
+                </TableRow>
+              </TableHeader>
               <TableBody className="transition-opacity duration-200">
                 {filteredItems.map((job, idx) => {
                   const isSelected = selectedIds.has(job.optimization_id);
@@ -286,16 +293,19 @@ export function JobsTab({
                         animation: `fadeSlideIn 0.25s ease-out ${idx * 0.03}s both`,
                       }}
                       onClick={(e) => {
-                        const td = (e.target as HTMLElement).closest("td");
+                        const target = e.target as HTMLElement;
+                        if (target.closest("button, a, input")) return;
+                        const td = target.closest("td");
                         if (!td) return;
                         const parent = td.parentElement;
                         if (td === parent?.lastElementChild) return;
                         if (td === parent?.firstElementChild) return;
                         const text = td.textContent?.trim();
-                        if (text) {
-                          void navigator.clipboard.writeText(text);
-                          toast.success(msg("clipboard.copied"));
-                        }
+                        if (!text) return;
+                        navigator.clipboard
+                          .writeText(text)
+                          .then(() => toast.success(msg("clipboard.copied")))
+                          .catch(() => {});
                       }}
                       data-tutorial="job-link"
                     >

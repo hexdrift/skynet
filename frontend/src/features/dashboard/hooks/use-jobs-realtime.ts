@@ -12,10 +12,10 @@ type UseJobsRealtimeArgs = {
 
 export function useJobsRealtime({ data, fetchJobs }: UseJobsRealtimeArgs) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasActive = data?.items.some((j) => ACTIVE_STATUSES.has(j.status)) ?? false;
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    const hasActive = data?.items.some((j) => ACTIVE_STATUSES.has(j.status));
     if (!hasActive) return;
 
     const API = getRuntimeEnv().apiUrl;
@@ -43,5 +43,5 @@ export function useJobsRealtime({ data, fetchJobs }: UseJobsRealtimeArgs) {
       eventSource?.close();
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [data, fetchJobs]);
+  }, [hasActive, fetchJobs]);
 }

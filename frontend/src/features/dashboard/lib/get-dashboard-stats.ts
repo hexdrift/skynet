@@ -9,7 +9,7 @@ export type DashboardStats = {
   failed: number;
 } | null;
 
-type UseDashboardStatsArgs = {
+type GetDashboardStatsArgs = {
   data: PaginatedJobsResponse | null;
   filteredItems: OptimizationSummaryResponse[];
   counts: OptimizationCounts | null;
@@ -17,13 +17,13 @@ type UseDashboardStatsArgs = {
   activeTab: string;
 };
 
-export function useDashboardStats({
+export function getDashboardStats({
   data,
   filteredItems,
   counts,
   analyticsData,
   activeTab,
-}: UseDashboardStatsArgs): DashboardStats {
+}: GetDashboardStatsArgs): DashboardStats {
   if (!data) return null;
 
   if (activeTab === "analytics" && analyticsData) {

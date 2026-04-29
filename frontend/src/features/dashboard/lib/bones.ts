@@ -1,8 +1,3 @@
-/**
- * Hand-crafted boneyard skeleton bones for the dashboard.
- * These match the actual dashboard layout: 4 stat cards + table rows.
- */
-
 import type { Bone, ResponsiveBones } from "boneyard-js";
 
 function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {

@@ -1,7 +1,6 @@
-import type { DashboardAnalytics } from "@/shared/lib/api";
+import type { DashboardAnalytics, DashboardAnalyticsJob } from "@/shared/lib/api";
 import { getStatusLabel } from "@/shared/constants/job-status";
 import { TERMS } from "@/shared/lib/terms";
-import type { OptimizationSummaryResponse } from "@/shared/types/api";
 import { STATUS_COLORS } from "../constants";
 import { msg } from "@/shared/lib/messages";
 
@@ -28,9 +27,8 @@ export type ChartData = {
     bestImprovement: number;
   };
   avgByOptimizer: Array<{ name: string; avgImprovement: number; count: number }>;
-  runtimeByOptimizer: Array<{ name: string; avgRuntime: number; count: number }>;
   modelUsage: Array<{ name: string; count: number }>;
-  topJobs: OptimizationSummaryResponse[];
+  topJobs: DashboardAnalyticsJob[];
   jobTypeData: Array<{ name: string; value: number }>;
   runtimeDistribution: Array<{ name: string; runtimeMinutes: number }>;
   runtimeDistributionJobIds: string[];
@@ -49,7 +47,6 @@ const EMPTY_CHART_DATA: ChartData = {
   optimizer: [],
   kpis: null,
   avgByOptimizer: [],
-  runtimeByOptimizer: [],
   modelUsage: [],
   topJobs: [],
   jobTypeData: [],
@@ -117,18 +114,12 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
     count: o.count,
   }));
 
-  const runtimeByOptimizer = analyticsData.runtime_minutes_by_optimizer.map((o) => ({
-    name: o.name,
-    avgRuntime: o.average,
-    count: o.count,
-  }));
-
   const modelUsage = analyticsData.model_usage.map((m) => ({
     name: m.name,
     count: m.value,
   }));
 
-  const topJobs = analyticsData.top_jobs_by_improvement as unknown as OptimizationSummaryResponse[];
+  const topJobs = analyticsData.top_jobs_by_improvement;
 
   const jobTypeData = Object.entries(analyticsData.job_type_counts).map(([key, value]) => ({
     name:
@@ -179,7 +170,6 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
     optimizer,
     kpis,
     avgByOptimizer,
-    runtimeByOptimizer,
     modelUsage,
     topJobs,
     jobTypeData,

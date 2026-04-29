@@ -93,7 +93,7 @@ export const { handlers, auth } = NextAuth({
     session({ session, token }) {
       if (typeof token.name === "string") session.user.name = token.name;
       if (typeof token.email === "string") session.user.email = token.email;
-      (session.user as unknown as Record<string, unknown>).role = token.role ?? "user";
+      session.user.role = token.role ?? "user";
       return session;
     },
   },
