@@ -72,40 +72,51 @@ export function ModelPicker({
     };
   }, [catalog]);
 
-  const runDiscover = React.useCallback(async () => {
-    if (!discoverUrl) {
-      setDiscovered([]);
+  const runDiscover = React.useCallback(
+    async (signal?: AbortSignal) => {
+      if (!discoverUrl) {
+        setDiscovered([]);
+        setDiscoveryError(null);
+        return;
+      }
+      setDiscovering(true);
       setDiscoveryError(null);
-      return;
-    }
-    setDiscovering(true);
-    setDiscoveryError(null);
-    try {
-      const res = await discoverModels(discoverUrl, discoverApiKey);
-      setDiscovered(res.models);
-      if (res.error) setDiscoveryError(res.error);
-    } catch (e) {
-      setDiscoveryError(
-        e instanceof Error
-          ? e.message
-          : msg("auto.features.submit.components.modelpicker.literal.2"),
-      );
-    } finally {
-      setDiscovering(false);
-    }
-  }, [discoverUrl, discoverApiKey]);
+      try {
+        const res = await discoverModels(discoverUrl, discoverApiKey, signal);
+        if (signal?.aborted) return;
+        setDiscovered(res.models);
+        if (res.error) setDiscoveryError(res.error);
+      } catch (e) {
+        if (signal?.aborted) return;
+        setDiscoveryError(
+          e instanceof Error
+            ? e.message
+            : msg("auto.features.submit.components.modelpicker.literal.2"),
+        );
+      } finally {
+        if (!signal?.aborted) setDiscovering(false);
+      }
+    },
+    [discoverUrl, discoverApiKey],
+  );
 
-  // Auto-run discovery when URL stabilizes
+  // Auto-run discovery when URL stabilizes. The AbortController fires on
+  // unmount or URL change so an in-flight fetch can't clobber state of a
+  // newer URL (or a freshly mounted instance).
   React.useEffect(() => {
     if (!discoverUrl) {
       setDiscovered([]);
       setDiscoveryError(null);
       return;
     }
+    const controller = new AbortController();
     const t = setTimeout(() => {
-      void runDiscover();
+      void runDiscover(controller.signal);
     }, 400);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [discoverUrl, runDiscover]);
 
   React.useEffect(() => {
@@ -242,7 +253,7 @@ export function ModelPicker({
             {discoverUrl && (
               <button
                 type="button"
-                onClick={runDiscover}
+                onClick={() => void runDiscover()}
                 disabled={discovering}
                 className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title={msg("auto.features.submit.components.modelpicker.literal.3")}

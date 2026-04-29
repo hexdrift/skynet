@@ -20,9 +20,7 @@ export function buildSignatureTemplate(
   const inputType = (col: string) => (kinds[col] === "image" ? "dspy.Image" : "str");
   const inLines =
     inputs.length > 0
-      ? inputs
-          .map((c) => `    ${toId(c)}: ${inputType(c)} = dspy.InputField(desc="")`)
-          .join("\n")
+      ? inputs.map((c) => `    ${toId(c)}: ${inputType(c)} = dspy.InputField(desc="")`).join("\n")
       : `    input_field: str = dspy.InputField(desc="")`;
   const outLines =
     outputs.length > 0

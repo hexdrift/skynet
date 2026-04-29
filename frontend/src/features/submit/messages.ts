@@ -38,11 +38,11 @@ export const submitMessages = {
   "submit.split.label_test": TERMS.splitTest,
   "submit.probe.asymptote_label": TERMS.expectedScore,
   "submit.probe.observed_label": TERMS.observedScore,
-  "submit.probe.observed_hint": 
+  "submit.probe.observed_hint":
     "לא ניתן היה להכין חיזוי אמין — מוצג הציון הגבוה ביותר שנמדד בפועל במהלך הריצה.",
   "submit.probe.score_label": TERMS.observedScore,
   "submit.probe.signal_weak": "לא ניתן לקבוע",
-  "submit.probe.signal_weak_hint": 
+  "submit.probe.signal_weak_hint":
     "לא נאסף מספיק מידע כדי לחזות את הציון של המודל הזה. מוצג הציון האחרון בפועל.",
   "submit.probe.details.title": `פרטי ${TERMS.optimizationTypeRun}`,
   "submit.probe.details.trajectory": "מסלול ציונים",
@@ -67,7 +67,7 @@ export const submitMessages = {
   "submit.rec.dismiss": TERMS.dismiss,
   "submit.rec.applied": "הוחל",
   "submit.rec.cold_title": `אין עדיין ${TERMS.similarRun} — הנה נקודת פתיחה טובה`,
-  "submit.rec.cold_body": 
+  "submit.rec.cold_body":
     "הגדרות שעובדות טוב על משימות מהסוג הזה בממוצע. אפשר להחיל ולהמשיך לכוונן.",
   "submit.rec.recommendability_tooltip": `מוצגות רק ריצות שעברו את ${TERMS.qualityThreshold}: תוצאה סופית 50+ ו${TERMS.scoreImprovement} של לפחות 5 נק׳ (או 10% מה${TERMS.baseline}).`,
   "submit.rec.apply_failed": "לא ניתן להחיל את ההגדרות",
@@ -122,7 +122,7 @@ export const submitMessages = {
   "auto.features.submit.components.modelprobedialog.31": "ממתינה",
   "auto.features.submit.components.modelprobedialog.32": "s",
   "auto.features.submit.components.modelprobedialog.33": "בחר",
-  "auto.features.submit.components.splitrecommendationcard.1": 
+  "auto.features.submit.components.splitrecommendationcard.1":
     "אפשר להיצמד להמלצה או להגדיר חלוקה משלך בשדות שלמטה.",
   "auto.features.submit.components.submitnav.1": "הקודם",
   "auto.features.submit.components.submitnav.2": "הבא",
@@ -163,10 +163,10 @@ export const submitMessages = {
   "auto.features.submit.components.steps.modelstep.9": "ניתן להשאיר ריק — יוגדר אוטומטית לפי הספק",
   "auto.features.submit.components.steps.modelstep.10": "API key",
   "auto.features.submit.components.steps.modelstep.11": "אופציונאלי- API key ילקח ממשתנה סביבה",
-  "auto.features.submit.components.steps.modelstep.12": 
+  "auto.features.submit.components.steps.modelstep.12":
     "חיבור לא מוצפן — API key יישלח ללא הצפנה. השתמשו ב-HTTPS בסביבת ייצור.",
   "auto.features.submit.components.steps.modelstep.13": "מודלים",
-  "auto.features.submit.components.steps.modelstep.14": 
+  "auto.features.submit.components.steps.modelstep.14":
     "אין מודלים זמינים בקטלוג — הגדר API key של ספק כדי להפעיל סריקה.",
   "auto.features.submit.components.steps.modelstep.15": "מודלי רפלקציה",
   "auto.features.submit.components.steps.paramsstep.1": "פרמטרים",
@@ -213,7 +213,7 @@ export const submitMessages = {
   "auto.features.submit.components.steps.modelstep.literal.3": "צפה בתוצאות הבדיקה",
   "auto.features.submit.components.steps.modelstep.literal.4": "לא בטוח איזה מודל לבחור?",
   "auto.features.submit.components.steps.modelstep.literal.5": "לחץ כדי לראות את ההתקדמות",
-  "auto.features.submit.components.steps.modelstep.literal.6": 
+  "auto.features.submit.components.steps.modelstep.literal.6":
     "לחץ כדי לצפות או לבחור מודל מהתוצאות",
   "auto.features.submit.components.steps.modelstep.literal.7": "הוסף",
   "auto.features.submit.components.steps.modelstep.literal.8": "הוסף",
@@ -226,7 +226,7 @@ export const submitMessages = {
   "auto.features.submit.hooks.use.code.agent.literal.6": "עורך Metric…",
   "auto.features.submit.hooks.use.code.agent.literal.7": "סיים",
   "auto.features.submit.hooks.use.code.agent.literal.8": "שגיאה",
-  "auto.features.submit.hooks.use.code.agent.literal.9": 
+  "auto.features.submit.hooks.use.code.agent.literal.9":
     "עברת למצב ידני. אפשר לחזור למצב אוטומטי מהכפתור למעלה.",
   "auto.features.submit.components.steps.basicsstep.literal.1": "לדוגמא: ניתוח שאלות מתמטיקה",
   "auto.features.submit.constants.literal.1": "פרטים בסיסיים",
@@ -251,7 +251,7 @@ export const submitMessages = {
   "auto.features.submit.components.modelpicker.literal.1": "בחר מודל...",
   "auto.features.submit.components.modelpicker.literal.2": "שגיאה בגילוי מודלים",
   "auto.features.submit.components.modelpicker.literal.3": "רענן מודלים מהשרת",
-  "auto.features.submit.components.steps.datasetstep.literal.1": 
+  "auto.features.submit.components.steps.datasetstep.literal.1":
     "לחץ להעלאת קובץ CSV, JSON, או Excel",
   "auto.features.submit.components.steps.datasetstep.literal.2": "קלט",
   "auto.features.submit.components.steps.datasetstep.literal.3": "פלט",
@@ -265,7 +265,7 @@ export const submitMessages = {
   "auto.features.submit.components.steps.codestep.literal.1": "הגדר תפקידי עמודות תחילה (קלט ופלט)",
   "auto.features.submit.components.steps.codestep.literal.2": "כתיבת הקוד ידנית",
   "auto.features.submit.components.steps.codeagentpanel.literal.1": "בקש שינוי בקוד…",
-  "auto.features.submit.components.steps.codeagentpanel.literal.2": 
+  "auto.features.submit.components.steps.codeagentpanel.literal.2":
     "התחל שיחה חדשה — מנקה את ההודעות וגרסאות הקוד",
   "auto.features.submit.components.steps.codeagentpanel.literal.3": "התחל שיחה חדשה",
   "auto.features.submit.components.steps.codeagentpanel.literal.4": "לא זמין",
@@ -296,33 +296,33 @@ export const submitMessages = {
   "auto.features.submit.components.steps.summarystep.literal.13": "מעמיקה",
   "auto.features.submit.components.steps.summarystep.literal.14": "כן",
   "auto.features.submit.components.steps.summarystep.literal.15": "לא",
-  "auto.features.submit.components.modelconfigmodal.template.1": 
+  "auto.features.submit.components.modelconfigmodal.template.1":
     "ירוץ {p1} לכל {p2} בקטלוג · {p3} כרגע",
   "auto.features.submit.components.modelpicker.template.1": "מהשרת ({p1})",
   "auto.features.submit.components.modelprobedialog.template.1": "חסר קוד {p1}",
-  "auto.features.submit.components.modelprobedialog.template.2": 
+  "auto.features.submit.components.modelprobedialog.template.2":
     "נדרשות לפחות {p1} שורות (יש {p2})",
-  "auto.features.submit.components.steps.basicsstep.template.1": 
+  "auto.features.submit.components.steps.basicsstep.template.1":
     "תיאור קצר של מטרת ה{p1} (אופציונלי)",
   "auto.features.submit.components.steps.basicsstep.template.2": "{p1} עם {p2} יחיד",
-  "auto.features.submit.components.steps.basicsstep.template.3": 
+  "auto.features.submit.components.steps.basicsstep.template.3":
     "{p1} זוגות מודלים למציאת השילוב הטוב ביותר",
   "auto.features.submit.components.steps.codeagentpanel.template.1": "קורא {p1}",
-  "auto.features.submit.components.steps.codeagentpanel.template.2": 
+  "auto.features.submit.components.steps.codeagentpanel.template.2":
     "הסוכן יקרא את ה{p1} ויציע {p2} ו{p3}. אפשר לאשר כמו שזה, או לבקש שינויים.",
   "auto.features.submit.components.steps.codestep.template.1": "העלה {p1} תחילה",
-  "auto.features.submit.components.steps.codestep.template.2": 
+  "auto.features.submit.components.steps.codestep.template.2":
     "הסוכן כתב את הקוד לפי ה{p1} שלך. אפשר לבקש שינוי בצ'אט או לעבור למצב ידני.",
-  "auto.features.submit.components.steps.codestep.template.3": 
+  "auto.features.submit.components.steps.codestep.template.3":
     "הגדר את ה{p1} של המשימה ו{p2} באופן ידני.",
   "auto.features.submit.components.steps.codestep.template.4": "הסוכן יכתוב את הקוד לפי ה{p1} שלך",
-  "auto.features.submit.components.steps.modelstep.template.1": 
+  "auto.features.submit.components.steps.modelstep.template.1":
     "מצא את ה{p1} האופטימלי ל{p2} ולהגדרות שלך",
   "auto.features.submit.components.steps.modelstep.template.2": "{p1} חדש",
-  "auto.features.submit.hooks.use.code.agent.template.1": 
+  "auto.features.submit.hooks.use.code.agent.template.1":
     "תסתכל ב{p1} שלי ותכתוב Signature ו-Metric שיתאימו לו.",
   "auto.features.submit.hooks.use.code.agent.template.2": "הסוכן קורא את ה{p1}…",
-  "auto.features.submit.hooks.use.code.agent.template.3": 
+  "auto.features.submit.hooks.use.code.agent.template.3":
     "האימות מצא שגיאות בקוד שנכתב. תקן את ה-Signature ואת ה-Metric כדי שיעברו אימות, תוך שמירה שהשדות ממופים לעמודות של ה{p1}.",
   "auto.features.submit.hooks.use.submit.wizard.template.1": "נטען {p1} שורות מ-{p2}",
 } as const;

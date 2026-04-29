@@ -63,11 +63,13 @@ export function cachedCatalog(): ModelCatalogResponse | null {
 export async function discoverModels(
   baseUrl: string,
   apiKey?: string,
+  signal?: AbortSignal,
 ): Promise<DiscoverModelsResponse> {
   const res = await fetch(`${API}/models/discover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ base_url: baseUrl, api_key: apiKey || undefined }),
+    signal,
   });
   if (!res.ok) throw new Error(`Server error: ${res.status}`);
   return res.json();

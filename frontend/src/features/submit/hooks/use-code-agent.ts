@@ -337,6 +337,12 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
       const { signatureVersions: sigVers, metricVersions: metVers } = versionsRef.current;
       const initialSignature = sigVers[0]?.code ?? snapshot.signatureCode;
       const initialMetric = metVers[0]?.code ?? snapshot.metricCode;
+      // Track the prevCode for replace callbacks within this run. The outer
+      // `snapshot` is captured at run-start, so reading it on the second
+      // replace would diff against the run's starting code instead of the
+      // previous version — the tool-call card would show a stale diff.
+      let lastSignatureCode = snapshot.signatureCode;
+      let lastMetricCode = snapshot.metricCode;
       const chatHistory = history
         .filter((m) => m.content.trim().length > 0)
         .map((m) => ({ role: m.role, content: m.content }));
@@ -423,7 +429,8 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
             else setMetricStatus("done");
           },
           onSignatureReplace: (code) => {
-            const prevCode = snapshot.signatureCode;
+            const prevCode = lastSignatureCode;
+            lastSignatureCode = code;
             setSignatureCode(code);
             setSignatureManuallyEdited(false);
             attachCodeToLatestRunningToolCall("edit_signature", prevCode, code);
@@ -444,7 +451,8 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
             });
           },
           onMetricReplace: (code) => {
-            const prevCode = snapshot.metricCode;
+            const prevCode = lastMetricCode;
+            lastMetricCode = code;
             setMetricCode(code);
             setMetricManuallyEdited(false);
             attachCodeToLatestRunningToolCall("edit_metric", prevCode, code);
@@ -523,16 +531,19 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
             const pending = pendingValidationsRef.current;
             pendingValidationsRef.current = [];
             if (pending.length === 0) return;
-            let results: unknown[];
-            try {
-              results = await Promise.all(pending.map((e) => e.promise));
-            } catch {
-              return;
-            }
+            // allSettled so a single failed validation doesn't suppress
+            // auto-fix for the other kind. A rejection here means the
+            // validation request itself errored (network/server) — there
+            // is nothing concrete for the agent to patch in that case, so
+            // we skip just that entry rather than aborting the whole run.
+            const settled = await Promise.allSettled(pending.map((e) => e.promise));
+            const responses: Array<ValidateCodeResponse | null> = settled.map((r) =>
+              r.status === "fulfilled" ? ((r.value as ValidateCodeResponse | null) ?? null) : null,
+            );
             for (let i = 0; i < pending.length; i++) {
               const entry = pending[i];
               if (!entry) continue;
-              const resp = (results[i] as ValidateCodeResponse | null) ?? null;
+              const resp = responses[i] ?? null;
               if (entry.kind === "signature") {
                 snapshotRef.current = {
                   ...snapshotRef.current,
@@ -545,10 +556,9 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
                 };
               }
             }
-            const hasErrors = results.some((r) => {
-              const resp = r as ValidateCodeResponse | null;
-              return !!resp && !resp.valid && resp.errors.length > 0;
-            });
+            const hasErrors = responses.some(
+              (resp) => !!resp && !resp.valid && resp.errors.length > 0,
+            );
             if (!hasErrors) return;
             if (controller.signal.aborted) return;
             if (autoFixAttemptsRef.current >= MAX_AUTO_FIX) return;
@@ -556,9 +566,9 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
             const fixMessage = formatMsg("auto.features.submit.hooks.use.code.agent.template.3", {
               p1: TERMS.dataset,
             });
-            setTimeout(() => {
+            queueMicrotask(() => {
               runAgentRef.current?.(fixMessage, messagesRef.current);
-            }, 0);
+            });
           },
           onError: (message) => {
             if (controller.signal.aborted) return;
