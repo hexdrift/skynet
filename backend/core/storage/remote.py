@@ -6,14 +6,15 @@ Provides RemoteDBJobStore for persisting job state to a PostgreSQL database.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from sqlalchemy import Engine, create_engine, func, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..config import settings
 from ..constants import STRUCTURAL_PROGRESS_EVENTS
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
 from .models import Base, JobModel, LogEntryModel, ProgressEventModel
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PROGRESS_EVENTS = 5000
 MAX_LOG_ENTRIES = 5000
+_IMMUTABLE_JOB_COLUMNS = frozenset({"optimization_id"})
 
 
 class RemoteDBJobStore:
@@ -33,49 +35,48 @@ class RemoteDBJobStore:
     def __init__(self, db_url: str) -> None:
         """Build the SQLAlchemy engine, bootstrap pgvector, and create tables.
 
-        Pool sizing is read from the environment so total connections can be
-        sized against ``replicas × concurrency`` without a redeploy of code.
-        Set ``DB_POOL_SIZE`` / ``DB_POOL_MAX_OVERFLOW`` / ``DB_POOL_TIMEOUT``
-        / ``DB_POOL_RECYCLE`` in Helm values to tune per-pod budget.
+        Pool sizing follows ``settings.worker_threads`` with a conservative
+        floor so a configured worker pool has enough connections available.
 
         Args:
             db_url: PostgreSQL DSN to connect to.
         """
-        pool_size = int(os.environ.get("DB_POOL_SIZE", "10"))
-        max_overflow = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "20"))
-        pool_timeout = float(os.environ.get("DB_POOL_TIMEOUT", "30"))
-        pool_recycle = int(os.environ.get("DB_POOL_RECYCLE", "3600"))
+        pool_size = max(settings.worker_threads, 10)
+        max_overflow = max(settings.worker_threads, 20)
+        self.vector_search_enabled = False
+        self._max_progress_events = settings.progress_events_per_job_cap
+        self._max_log_entries = settings.log_entries_per_job_cap
         self._engine = create_engine(
             db_url,
             echo=False,
             pool_pre_ping=True,
             pool_size=pool_size,
             max_overflow=max_overflow,
-            pool_recycle=pool_recycle,
-            pool_timeout=pool_timeout,
+            pool_recycle=3600,
+            pool_timeout=30,
         )
-        self._bootstrap_pgvector()
+        vector_extension_ready = self._bootstrap_pgvector()
         Base.metadata.create_all(self._engine)
-        self._bootstrap_vector_indexes()
+        vector_indexes_ready = self._bootstrap_vector_indexes()
+        self.vector_search_enabled = vector_extension_ready and vector_indexes_ready
         self._session_factory = sessionmaker(bind=self._engine)
-        logger.info("Initialized PostgreSQL database at %s", db_url.split("@")[-1] if "@" in db_url else db_url)
+        parsed_url = urlparse(db_url)
+        db_location = parsed_url.hostname or "<masked>"
+        if parsed_url.port:
+            db_location = f"{db_location}:{parsed_url.port}"
+        logger.info("Initialized PostgreSQL database at %s", db_location)
 
-        with self._engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'job_logs' AND column_name = 'pair_index'"
-                )
-            )
-            if result.fetchone() is None:
-                conn.execute(text("ALTER TABLE job_logs ADD COLUMN pair_index INTEGER"))
-                conn.commit()
-                logger.info("Migration: added 'pair_index' column to job_logs table")
+    @property
+    def _progress_events_cap(self) -> int:
+        """Return the per-job progress-event retention cap."""
+        return getattr(self, "_max_progress_events", MAX_PROGRESS_EVENTS)
 
-        self._migrate_job_embeddings_columns()
-        self._migrate_jobs_claim_columns()
+    @property
+    def _log_entries_cap(self) -> int:
+        """Return the per-job log-entry retention cap."""
+        return getattr(self, "_max_log_entries", MAX_LOG_ENTRIES)
 
-    def _bootstrap_pgvector(self) -> None:
+    def _bootstrap_pgvector(self) -> bool:
         """Ensure the pgvector extension exists before creating Vector columns.
 
         Safe to call repeatedly. If the database role lacks the privilege
@@ -86,6 +87,7 @@ class RemoteDBJobStore:
             with self._engine.connect() as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 conn.commit()
+            return True
         except SQLAlchemyError as exc:
             logger.warning(
                 "pgvector extension bootstrap failed (%s). "
@@ -93,66 +95,9 @@ class RemoteDBJobStore:
                 "'CREATE EXTENSION vector' on the database.",
                 exc,
             )
+            return False
 
-    def _migrate_job_embeddings_columns(self) -> None:
-        """Add Phase 2 columns (quality gate + dashboard projection) on warm databases.
-
-        ``create_all`` adds columns for fresh installs; this fills the gap for
-        anyone who has an older ``job_embeddings`` table from Phase 1. Each
-        ADD COLUMN is IF NOT EXISTS so the migration is idempotent.
-        """
-        migrations = [
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS is_recommendable BOOLEAN NOT NULL DEFAULT FALSE",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS baseline_metric DOUBLE PRECISION",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS optimized_metric DOUBLE PRECISION",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS summary_text TEXT",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS signature_code TEXT",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS metric_name VARCHAR(255)",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS optimizer_name VARCHAR(64)",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS optimizer_kwargs JSON",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS module_name VARCHAR(128)",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS task_name VARCHAR(255)",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS projection_x DOUBLE PRECISION",
-            "ALTER TABLE job_embeddings ADD COLUMN IF NOT EXISTS projection_y DOUBLE PRECISION",
-            (
-                "CREATE INDEX IF NOT EXISTS ix_job_embeddings_recommendable "
-                "ON job_embeddings (is_recommendable) WHERE is_recommendable = TRUE"
-            ),
-        ]
-        try:
-            with self._engine.connect() as conn:
-                for stmt in migrations:
-                    conn.execute(text(stmt))
-                conn.commit()
-        except SQLAlchemyError as exc:
-            logger.warning("job_embeddings Phase-2 migration skipped: %s", exc)
-
-    def _migrate_jobs_claim_columns(self) -> None:
-        """Add the multi-pod claim columns + indexes on warm databases.
-
-        The DB-backed work queue (Wave 2) requires three new columns on
-        ``jobs``: ``claimed_by``, ``claimed_at``, ``lease_expires_at``. Fresh
-        installs get them via ``Base.metadata.create_all``; this method backfills
-        existing deployments with idempotent ``ADD COLUMN IF NOT EXISTS`` /
-        ``CREATE INDEX IF NOT EXISTS`` statements so an in-place upgrade is a
-        no-op restart away.
-        """
-        migrations = [
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS claimed_by VARCHAR(64)",
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP",
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP",
-            "CREATE INDEX IF NOT EXISTS ix_jobs_status_created_at ON jobs (status, created_at)",
-            "CREATE INDEX IF NOT EXISTS ix_jobs_lease_expires_at ON jobs (lease_expires_at)",
-        ]
-        try:
-            with self._engine.connect() as conn:
-                for stmt in migrations:
-                    conn.execute(text(stmt))
-                conn.commit()
-        except SQLAlchemyError as exc:
-            logger.warning("jobs claim-column migration skipped: %s", exc)
-
-    def _bootstrap_vector_indexes(self) -> None:
+    def _bootstrap_vector_indexes(self) -> bool:
         """Create HNSW cosine indexes on the job_embeddings vector columns.
 
         SQLAlchemy's create_all can't express HNSW, and we don't want to
@@ -178,8 +123,10 @@ class RemoteDBJobStore:
                 for stmt in statements:
                     conn.execute(text(stmt))
                 conn.commit()
+            return True
         except SQLAlchemyError as exc:
             logger.warning("HNSW index bootstrap skipped: %s", exc)
+            return False
 
     @property
     def engine(self) -> Engine:
@@ -225,6 +172,8 @@ class RemoteDBJobStore:
                 "result": job.result,
                 "payload_overview": job.payload_overview or {},
                 "payload": job.payload,
+                "username": job.username,
+                "optimization_type": job.optimization_type,
             },
         )
 
@@ -272,14 +221,22 @@ class RemoteDBJobStore:
             ValueError: When ``kwargs`` contains a column name absent from ``JobModel``.
         """
         datetime_fields = {"created_at", "started_at", "completed_at"}
+        mutable_columns = set(JobModel.__table__.columns.keys()) - _IMMUTABLE_JOB_COLUMNS
+        invalid_fields = sorted(set(kwargs) - mutable_columns)
+        if invalid_fields:
+            raise ValueError(f"Unknown field '{invalid_fields[0]}' on JobModel")
+
         session = self._get_session()
         try:
-            job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
+            job = (
+                session.query(JobModel)
+                .filter(JobModel.optimization_id == optimization_id)
+                .with_for_update()
+                .first()
+            )
             if not job:
                 raise KeyError(f"Job '{optimization_id}' not found")
             for key, value in kwargs.items():
-                if not hasattr(job, key):
-                    raise ValueError(f"Unknown field '{key}' on JobModel")
                 if key in datetime_fields and isinstance(value, str):
                     value = datetime.fromisoformat(value)
                 if key == "latest_metrics" and job.latest_metrics:
@@ -636,7 +593,10 @@ class RemoteDBJobStore:
             job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
             if job:
                 job.payload_overview = overview or {}  # type: ignore[assignment]
-                job.username = (overview or {}).get("username")  # type: ignore[assignment]
+                if "username" in (overview or {}):
+                    job.username = (overview or {}).get("username")  # type: ignore[assignment]
+                if "optimization_type" in (overview or {}):
+                    job.optimization_type = (overview or {}).get("optimization_type")  # type: ignore[assignment]
                 session.commit()
         finally:
             session.close()
@@ -644,7 +604,7 @@ class RemoteDBJobStore:
     def record_progress(self, optimization_id: str, message: str | None, metrics: dict[str, Any]) -> None:
         """Record a progress event and merge metrics into the job's ``latest_metrics``.
 
-        When the per-job event count hits ``MAX_PROGRESS_EVENTS``,
+        When the per-job event count hits the configured retention cap,
         evicts the oldest non-structural event first so UI phase
         markers (baseline, pair-started, etc.) survive the cap on
         long runs. Silent no-op if the job has been deleted.
@@ -657,14 +617,19 @@ class RemoteDBJobStore:
         now = datetime.now(UTC)
         session = self._get_session()
         try:
-            job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).first()
+            job = (
+                session.query(JobModel)
+                .filter(JobModel.optimization_id == optimization_id)
+                .with_for_update()
+                .first()
+            )
             if not job:
                 return
 
             event_count = (
                 session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
             )
-            if event_count >= MAX_PROGRESS_EVENTS:
+            if event_count >= self._progress_events_cap:
                 # Evict the oldest non-structural event first — keep phase
                 # markers (grid_pair_started, baseline_evaluated, etc.) so
                 # the UI can still determine pipeline stage on long runs.
@@ -673,14 +638,14 @@ class RemoteDBJobStore:
                     session.query(ProgressEventModel)
                     .filter(ProgressEventModel.optimization_id == optimization_id)
                     .filter(ProgressEventModel.event.notin_(STRUCTURAL_PROGRESS_EVENTS))
-                    .order_by(ProgressEventModel.timestamp.asc())
+                    .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
                     .first()
                 )
                 if oldest is None:
                     oldest = (
                         session.query(ProgressEventModel)
                         .filter(ProgressEventModel.optimization_id == optimization_id)
-                        .order_by(ProgressEventModel.timestamp.asc())
+                        .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
                         .first()
                     )
                 if oldest:
@@ -714,7 +679,7 @@ class RemoteDBJobStore:
             events = (
                 session.query(ProgressEventModel)
                 .filter(ProgressEventModel.optimization_id == optimization_id)
-                .order_by(ProgressEventModel.timestamp.asc())
+                .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
                 .all()
             )
             return [
@@ -762,7 +727,7 @@ class RemoteDBJobStore:
 
         Silently discards the entry if the job no longer exists (a
         late log from a cleaned-up run is not an error). When the
-        per-job log count reaches ``MAX_LOG_ENTRIES``, the oldest
+        per-job log count reaches the configured retention cap, the oldest
         entry is evicted before the new one is inserted.
 
         Args:
@@ -776,15 +741,18 @@ class RemoteDBJobStore:
         ts = timestamp or datetime.now(UTC)
         session = self._get_session()
         try:
-            exists = (
-                session.query(JobModel.optimization_id).filter(JobModel.optimization_id == optimization_id).scalar()
-                is not None
+            job = (
+                session.query(JobModel)
+                .filter(JobModel.optimization_id == optimization_id)
+                .with_for_update()
+                .first()
             )
-            if not exists:
+            if job is None:
+                logger.warning("Discarding log entry for missing job %s", optimization_id)
                 return
 
             log_count = session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).count()
-            if log_count >= MAX_LOG_ENTRIES:
+            if log_count >= self._log_entries_cap:
                 oldest = (
                     session.query(LogEntryModel)
                     .filter(LogEntryModel.optimization_id == optimization_id)
@@ -907,7 +875,7 @@ class RemoteDBJobStore:
             if username:
                 q = q.filter(JobModel.username == username)
             if optimization_type:
-                q = q.filter(JobModel.payload_overview["optimization_type"].as_string() == optimization_type)
+                q = q.filter(JobModel.optimization_type == optimization_type)
             jobs = q.offset(offset).limit(limit).all()
             optimization_ids = [j.optimization_id for j in jobs]
 
@@ -966,7 +934,7 @@ class RemoteDBJobStore:
             if username:
                 q = q.filter(JobModel.username == username)
             if optimization_type:
-                q = q.filter(JobModel.payload_overview["optimization_type"].as_string() == optimization_type)
+                q = q.filter(JobModel.optimization_type == optimization_type)
             return q.scalar() or 0
         finally:
             session.close()
