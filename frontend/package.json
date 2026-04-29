@@ -7,8 +7,12 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=22 <23"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",

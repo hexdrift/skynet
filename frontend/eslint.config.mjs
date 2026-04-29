@@ -56,20 +56,19 @@ export default defineConfig([
     },
   },
   {
-    // Existing React Compiler findings predate this i18n gate. Keep the new
-    // `npm run lint` script focused on the Next/TS baseline plus literal-copy
-    // enforcement; tighten these separately when those components are refactored.
     rules: {
-      "react-hooks/immutability": "off",
-      "react-hooks/preserve-manual-memoization": "warn",
-      "react-hooks/purity": "warn",
-      "react-hooks/refs": "warn",
-      "react-hooks/rules-of-hooks": "warn",
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/static-components": "warn",
-      "@next/next/no-html-link-for-pages": "warn",
-      "prefer-const": "warn",
-      "react/no-unescaped-entities": "warn",
+      "react-hooks/immutability": "error",
+      "react-hooks/preserve-manual-memoization": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/refs": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/static-components": "error",
+      // 39 violations across 25 files. Promote to error after they're fixed
+      // — tracked separately so this commit doesn't churn unrelated code.
+      "react-hooks/set-state-in-effect": "warn",
+      "@next/next/no-html-link-for-pages": "error",
+      "prefer-const": "error",
+      "react/no-unescaped-entities": "error",
     },
   },
   {
