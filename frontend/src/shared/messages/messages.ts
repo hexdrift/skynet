@@ -251,7 +251,6 @@ export const sharedMessages = {
   "auto.shared.charts.optimizer.chart.literal.1": "שיפור ממוצע באחוזים",
   "auto.shared.charts.optimizer.chart.literal.2": "שיפור ממוצע באחוזים",
   "auto.shared.charts.scores.chart.literal.1": "ציון באחוזים",
-  "auto.shared.hooks.use.api.call.literal.1": "אירעה שגיאה",
   "auto.shared.charts.timeline.chart.literal.1": "תאריך",
   "auto.shared.charts.dataset.vs.improvement.chart.literal.1": "שיפור באחוזים",
   "auto.shared.charts.chart.utils.literal.1": "אין עדיין נתונים",
