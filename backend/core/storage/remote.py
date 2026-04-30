@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..config import settings
 from ..constants import STRUCTURAL_PROGRESS_EVENTS
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
-from .models import Base, JobModel, LogEntryModel, ProgressEventModel
+from .models import Base, JobModel, LogEntryModel, ProgressEventModel, UserQuotaAuditModel, UserQuotaOverrideModel
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +359,182 @@ class RemoteDBJobStore:
             )
             session.commit()
             return int(deleted or 0)
+        finally:
+            session.close()
+
+    def get_user_quota_override(self, username: str) -> tuple[bool, int | None]:
+        """Return the live quota override row for ``username`` if present.
+
+        Args:
+            username: User identifier to resolve case-insensitively.
+
+        Returns:
+            ``(False, None)`` when no row exists, otherwise ``(True, quota)``.
+            A present ``None`` quota means unlimited.
+        """
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            return False, None
+        session = self._get_session()
+        try:
+            row = session.get(UserQuotaOverrideModel, normalized_username)
+            if row is None:
+                return False, None
+            return True, row.quota
+        finally:
+            session.close()
+
+    def get_effective_user_quota(self, username: str) -> int | None:
+        """Resolve a user's quota from live DB override, then static config.
+
+        Args:
+            username: User identifier to resolve.
+
+        Returns:
+            The numeric quota, or ``None`` for unlimited.
+        """
+        has_override, quota = self.get_user_quota_override(username)
+        if has_override:
+            return quota
+        return settings.get_user_quota(username)
+
+    def set_user_quota_override(self, username: str, quota: int | None, updated_by: str | None = None) -> None:
+        """Create or update the live quota override for a user.
+
+        Args:
+            username: User identifier to store case-insensitively.
+            quota: Numeric quota, or ``None`` for unlimited.
+            updated_by: Optional operator identifier for audit context.
+
+        Raises:
+            ValueError: When ``username`` is blank or ``quota`` is below one.
+        """
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            raise ValueError("username must not be blank")
+        if quota is not None and quota < 1:
+            raise ValueError("quota must be at least 1")
+        session = self._get_session()
+        try:
+            row = session.get(UserQuotaOverrideModel, normalized_username)
+            if row is None:
+                row = UserQuotaOverrideModel(username=normalized_username)
+                session.add(row)
+            row.quota = quota
+            row.updated_at = datetime.now(UTC)
+            row.updated_by = updated_by
+            session.commit()
+        finally:
+            session.close()
+
+    def delete_user_quota_override(self, username: str) -> bool:
+        """Delete a live quota override so config fallback applies again.
+
+        Args:
+            username: User identifier to clear case-insensitively.
+
+        Returns:
+            Whether a row was deleted.
+        """
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            return False
+        session = self._get_session()
+        try:
+            deleted = (
+                session.query(UserQuotaOverrideModel)
+                .filter(UserQuotaOverrideModel.username == normalized_username)
+                .delete()
+            )
+            session.commit()
+            return bool(deleted)
+        finally:
+            session.close()
+
+    def list_user_quota_overrides(self) -> list[dict[str, Any]]:
+        """Return all live quota overrides ordered by username.
+
+        Returns:
+            A list of override rows with ISO-formatted ``updated_at`` values.
+        """
+        session = self._get_session()
+        try:
+            rows = session.query(UserQuotaOverrideModel).order_by(UserQuotaOverrideModel.username.asc()).all()
+            return [
+                {
+                    "username": row.username,
+                    "quota": row.quota,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    "updated_by": row.updated_by,
+                }
+                for row in rows
+            ]
+        finally:
+            session.close()
+
+    def record_user_quota_audit(
+        self,
+        *,
+        actor: str,
+        target_username: str,
+        action: str,
+        old_quota: int | None,
+        new_quota: int | None,
+    ) -> None:
+        """Record a quota administration audit event.
+
+        Args:
+            actor: Admin user who made the change.
+            target_username: User whose quota changed.
+            action: Operation name such as ``set`` or ``delete``.
+            old_quota: Previous live quota, or ``None`` for unlimited/no row.
+            new_quota: New live quota, or ``None`` for unlimited/default fallback.
+        """
+        session = self._get_session()
+        try:
+            session.add(
+                UserQuotaAuditModel(
+                    actor=actor.strip().lower(),
+                    target_username=target_username.strip().lower(),
+                    action=action,
+                    old_quota=old_quota,
+                    new_quota=new_quota,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    def list_user_quota_audit_events(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Return recent quota administration audit events.
+
+        Args:
+            limit: Maximum number of recent events to return.
+
+        Returns:
+            Recent audit events ordered newest-first.
+        """
+        session = self._get_session()
+        try:
+            rows = (
+                session.query(UserQuotaAuditModel)
+                .order_by(UserQuotaAuditModel.created_at.desc(), UserQuotaAuditModel.id.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "id": row.id,
+                    "actor": row.actor,
+                    "target_username": row.target_username,
+                    "action": row.action,
+                    "old_quota": row.old_quota,
+                    "new_quota": row.new_quota,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in rows
+            ]
         finally:
             session.close()
 

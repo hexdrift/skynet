@@ -14,12 +14,7 @@ import { msg } from "@/shared/lib/messages";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { Separator } from "@/shared/ui/primitives/separator";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { cn } from "@/shared/lib/utils";
@@ -320,26 +315,21 @@ export function GridServeTab({ job }: { job: OptimizationStatusResponse }) {
           {runHistory.length > 0 && (
             <FadeIn>
               <div className="flex items-center justify-end pb-3 border-b border-border/60">
-                <TooltipProvider>
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={handleClearHistory}
-                        aria-label={msg(
-                          "auto.features.optimizations.components.gridservetab.literal.1",
-                        )}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      {msg("auto.features.optimizations.components.gridservetab.6")}
-                    </TooltipContent>
-                  </UiTooltip>
-                </TooltipProvider>
+                <TooltipButton
+                  tooltip={msg("auto.features.optimizations.components.gridservetab.6")}
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={handleClearHistory}
+                    aria-label={msg(
+                      "auto.features.optimizations.components.gridservetab.literal.1",
+                    )}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </TooltipButton>
               </div>
             </FadeIn>
           )}

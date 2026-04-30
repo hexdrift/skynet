@@ -12,7 +12,6 @@ import {
   Sparkles,
   Trash2,
   Trophy,
-  X,
   XCircle,
 } from "lucide-react";
 
@@ -26,6 +25,7 @@ import {
 import { Button } from "@/shared/ui/primitives/button";
 import { Label } from "@/shared/ui/primitives/label";
 import { Input } from "@/shared/ui/primitives/input";
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import { cn } from "@/shared/lib/utils";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -475,24 +475,12 @@ export function ModelProbeDialog({
           </DialogDescription>
         </DialogHeader>
         {errorMessage && (
-          <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-[0.75rem] text-destructive">
-            <XCircle className="size-4 shrink-0 mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">
-                {msg("auto.features.submit.components.modelprobedialog.3")}
-              </p>
-              <p className="mt-0.5 break-all" dir="ltr">
-                {errorMessage}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setErrorMessage(null)}
-              className="shrink-0 rounded-md p-0.5 text-destructive/60 hover:text-destructive transition-colors cursor-pointer"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
+          <InlineErrorRow
+            title={msg("auto.features.submit.components.modelprobedialog.3")}
+            message={errorMessage}
+            onDismiss={() => setErrorMessage(null)}
+            className="mx-6 mt-4"
+          />
         )}
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
           {phase === "idle" && hasCatalog && (

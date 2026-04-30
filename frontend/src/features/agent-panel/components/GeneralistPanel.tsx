@@ -9,11 +9,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/primitives/
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 
 import { AgentThread } from "@/shared/ui/agent/agent-thread";
-import { AgentBubble } from "@/shared/ui/agent/agent-bubble";
+import { ChatTranscript } from "@/shared/ui/agent/chat-transcript";
 import { Composer } from "@/shared/ui/agent/composer";
-import { MessageActions } from "@/shared/ui/agent/message-actions";
-import { UserBubble, UserBubbleEditor } from "@/shared/ui/agent/user-bubble";
-import type { AgentMessage, AgentThinking, AgentToolCall } from "@/shared/ui/agent/types";
+import type { AgentThinking, AgentToolCall } from "@/shared/ui/agent/types";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { cn } from "@/shared/lib/utils";
 import { formatMsg } from "@/shared/lib/messages";
 
@@ -52,12 +51,6 @@ interface GeneralistPanelProps {
   /** Optional wizard-state override. Defaults to the shared context. */
   wizardState?: WizardState;
 }
-
-type Pair = {
-  key: string;
-  user: { msg: AgentMessage; index: number } | null;
-  agent: AgentMessage | null;
-};
 
 /**
  * Docked generalist agent panel. Renders as a left-anchored aside that
@@ -136,35 +129,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   });
   const streaming = agent.status === "streaming";
 
-  const pairs = React.useMemo<Pair[]>(() => {
-    const result: Pair[] = [];
-    let currentUser: { msg: AgentMessage; index: number } | null = null;
-    let seq = 0;
-    agent.messages.forEach((m, idx) => {
-      if (m.role === "user") {
-        if (currentUser) {
-          result.push({ key: `g-${seq++}`, user: currentUser, agent: null });
-        }
-        currentUser = { msg: m, index: idx };
-      } else {
-        result.push({ key: `g-${seq++}`, user: currentUser, agent: m });
-        currentUser = null;
-      }
-    });
-    if (currentUser) {
-      result.push({ key: `g-${seq++}`, user: currentUser, agent: null });
-    }
-    return result;
-  }, [agent.messages]);
-
-  const latestAgentKey = React.useMemo(() => {
-    for (let i = pairs.length - 1; i >= 0; i--) {
-      const p = pairs[i];
-      if (p && p.agent) return p.key;
-    }
-    return null;
-  }, [pairs]);
-
   const thinking: AgentThinking = {
     reasoning: agent.reasoning,
     startedAt: agent.reasoningStartedAt,
@@ -173,9 +137,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   };
 
   const [draft, setDraft] = React.useState("");
-  const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
-  const [editDraft, setEditDraft] = React.useState("");
-  const isEditingAny = editingIndex !== null;
 
   const handleSubmit = React.useCallback(() => {
     const trimmed = draft.trim();
@@ -183,23 +144,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     agent.send(trimmed);
     setDraft("");
   }, [agent, draft]);
-
-  const startEdit = (index: number, content: string) => {
-    setEditingIndex(index);
-    setEditDraft(content);
-  };
-  const cancelEdit = () => {
-    setEditingIndex(null);
-    setEditDraft("");
-  };
-  const submitEdit = () => {
-    if (editingIndex === null) return;
-    const trimmed = editDraft.trim();
-    if (!trimmed) return;
-    agent.editAndResend(editingIndex, trimmed);
-    setEditingIndex(null);
-    setEditDraft("");
-  };
 
   const handleRunCode = React.useCallback(
     (code: string, language: string) => {
@@ -209,14 +153,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
         code,
       });
       agent.send(prompt);
-    },
-    [agent, streaming],
-  );
-
-  const handleRegenerate = React.useCallback(
-    (userIndex: number, userContent: string) => {
-      if (streaming) return;
-      agent.editAndResend(userIndex, userContent);
     },
     [agent, streaming],
   );
@@ -251,14 +187,12 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   }, []);
 
   const emptyState = (
-    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-      <span className="inline-flex size-10 items-center justify-center rounded-full bg-[#3D2E22]/10 text-[#3D2E22]">
-        <Sparkles className="size-5" />
-      </span>
-      <p className="mt-3 text-sm text-foreground">
-        {msg("auto.features.agent.panel.components.generalistpanel.1")}
-      </p>
-    </div>
+    <EmptyState
+      icon={Sparkles}
+      iconWrap="circle"
+      variant="compact"
+      title={msg("auto.features.agent.panel.components.generalistpanel.1")}
+    />
   );
 
   return (
@@ -377,82 +311,29 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   agent.pendingApproval?.id ?? "",
                 ]}
               >
-                {pairs.map((pair) => {
-                  const isEditing = pair.user !== null && editingIndex === pair.user.index;
-                  const isAfterEdit =
-                    isEditingAny &&
-                    pair.user !== null &&
-                    editingIndex !== null &&
-                    pair.user.index > editingIndex;
-                  if (isAfterEdit) return null;
-                  const agentMsg = pair.agent;
-                  const agentText = agentMsg?.content.trim() ?? "";
-                  const isStreamingThisPair = streaming && pair.key === latestAgentKey;
-                  const showActions =
-                    !isEditing &&
-                    agentMsg !== null &&
-                    !isStreamingThisPair &&
-                    (agentText.length > 0 || Boolean(agentMsg.model));
-                  return (
-                    <div key={pair.key} className="space-y-1.5">
-                      {pair.user &&
-                        (isEditing ? (
-                          <UserBubbleEditor
-                            value={editDraft}
-                            onChange={setEditDraft}
-                            onSubmit={submitEdit}
-                            onCancel={cancelEdit}
-                            disabled={streaming}
-                          />
-                        ) : (
-                          <UserBubble
-                            content={pair.user.msg.content}
-                            editable={!streaming}
-                            onEdit={() =>
-                              pair.user && startEdit(pair.user.index, pair.user.msg.content)
-                            }
-                          />
-                        ))}
-
-                      {agentMsg && !isEditing && (
-                        <div className="flex justify-end">
-                          <div className="flex flex-col items-end gap-1 max-w-[88%]">
-                            <AgentBubble
-                              msg={agentMsg}
-                              thinking={pair.key === latestAgentKey ? thinking : undefined}
-                              renderToolCall={renderToolCall}
-                              onRunCode={handleRunCode}
-                              className="max-w-full"
-                            />
-                            {showActions && (
-                              <MessageActions
-                                text={agentMsg.content}
-                                model={agentMsg.model}
-                                onRegenerate={
-                                  pair.user
-                                    ? () =>
-                                        pair.user &&
-                                        handleRegenerate(pair.user.index, pair.user.msg.content)
-                                    : undefined
-                                }
-                              />
-                            )}
-                          </div>
+                <ChatTranscript
+                  messages={agent.messages}
+                  streaming={streaming}
+                  editAndResend={agent.editAndResend}
+                  thinking={thinking}
+                  renderToolCall={renderToolCall}
+                  onRunCode={handleRunCode}
+                  trailing={() => (
+                    <>
+                      {agent.pendingApproval && (
+                        <ApprovalCard
+                          payload={agent.pendingApproval}
+                          onResolve={agent.confirmApproval}
+                        />
+                      )}
+                      {agent.error && (
+                        <div className="text-[0.75rem] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                          {agent.error}
                         </div>
                       )}
-                    </div>
-                  );
-                })}
-
-                {agent.pendingApproval && (
-                  <ApprovalCard payload={agent.pendingApproval} onResolve={agent.confirmApproval} />
-                )}
-
-                {agent.error && (
-                  <div className="text-[0.75rem] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    {agent.error}
-                  </div>
-                )}
+                    </>
+                  )}
+                />
               </AgentThread>
 
               <Composer

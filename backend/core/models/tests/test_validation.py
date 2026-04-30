@@ -77,10 +77,12 @@ def test_validate_code_request_rejects_invalid_column_mapping() -> None:
         )
 
 
-def test_validate_code_request_rejects_when_both_code_blocks_missing() -> None:
-    """Verify ValidateCodeRequest rejects payloads with neither signature nor metric code."""
-    with pytest.raises(ValidationError, match="At least one of signature_code or metric_code"):
-        ValidateCodeRequest.model_validate({"column_mapping": _column_mapping()})
+def test_validate_code_request_accepts_missing_code_blocks() -> None:
+    """Verify route-level validation can report missing code as a normal response."""
+    req = ValidateCodeRequest.model_validate({"column_mapping": _column_mapping()})
+
+    assert req.signature_code is None
+    assert req.metric_code is None
 
 
 def test_validate_code_response_valid_true_defaults() -> None:

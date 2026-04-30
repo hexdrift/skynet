@@ -15,6 +15,10 @@ import {
   Sparkles,
   User,
   Info,
+  RefreshCw,
+  Save,
+  Trash2,
+  Users,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,9 +37,17 @@ import {
 } from "@/shared/ui/primitives/select";
 import { Switch } from "@/shared/ui/primitives/switch";
 import { Button } from "@/shared/ui/primitives/button";
+import { Input } from "@/shared/ui/primitives/input";
+import { NumberInput } from "@/shared/ui/number-input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
+import {
+  deleteUserQuotaOverride,
+  getUserQuotaOverrides,
+  setUserQuotaOverride,
+  type UserQuotaOverride,
+} from "@/shared/lib/api";
 
 import { useUserPrefs } from "../hooks/use-user-prefs";
 import { useSettingsModal } from "../hooks/use-settings-modal";
@@ -193,6 +205,201 @@ function AccountTab() {
   );
 }
 
+function AdminTab() {
+  const { data: session } = useSession();
+  const [username, setUsername] = React.useState("");
+  const [quota, setQuota] = React.useState<number | "">("");
+  const [defaultQuota, setDefaultQuota] = React.useState<number | null>(null);
+  const [overrides, setOverrides] = React.useState<UserQuotaOverride[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const loadQuotas = React.useCallback(async () => {
+    if (!session?.backendAccessToken) return;
+    setLoading(true);
+    try {
+      const data = await getUserQuotaOverrides();
+      setDefaultQuota(data.default_quota);
+      setOverrides(data.overrides);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.backendAccessToken]);
+
+  React.useEffect(() => {
+    void loadQuotas();
+  }, [loadQuotas]);
+
+  const handleSave = React.useCallback(async () => {
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername) {
+      toast.error(msg("settings.admin.quotas.username_required"));
+      return;
+    }
+    if (quota === "") {
+      toast.error(msg("settings.admin.quotas.quota_required"));
+      return;
+    }
+    if (!Number.isFinite(quota) || quota < 1) {
+      toast.error(msg("settings.admin.quotas.quota_invalid"));
+      return;
+    }
+    setSaving(true);
+    try {
+      await setUserQuotaOverride(normalizedUsername, quota);
+      toast.success(msg("settings.admin.quotas.saved"));
+      setUsername("");
+      setQuota("");
+      await loadQuotas();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [loadQuotas, quota, username]);
+
+  const handleDelete = React.useCallback(
+    async (targetUsername: string) => {
+      setSaving(true);
+      try {
+        await deleteUserQuotaOverride(targetUsername);
+        toast.success(msg("settings.admin.quotas.deleted"));
+        await loadQuotas();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [loadQuotas],
+  );
+
+  return (
+    <div className="space-y-4">
+      {!session?.backendAccessToken && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {msg("settings.admin.quotas.auth_missing")}
+        </div>
+      )}
+
+      <SettingsRow
+        icon={Users}
+        label={msg("settings.admin.quotas.title")}
+      >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => void loadQuotas()}
+              disabled={loading}
+              aria-label={msg("settings.admin.quotas.refresh")}
+            >
+              <RefreshCw className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{msg("settings.admin.quotas.refresh")}</TooltipContent>
+        </Tooltip>
+      </SettingsRow>
+
+      <div className="grid gap-3 rounded-lg border border-border/50 bg-muted/20 p-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] sm:items-end">
+        <label className="space-y-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {msg("settings.admin.quotas.username")}
+          </span>
+          <Input
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder={msg("settings.admin.quotas.username_placeholder")}
+            dir="ltr"
+          />
+        </label>
+        <label className="space-y-1.5">
+          <span className="flex items-baseline justify-between gap-2 text-xs font-medium text-muted-foreground">
+            <span>{msg("settings.admin.quotas.quota")}</span>
+            {defaultQuota != null && (
+              <span className="font-mono tabular-nums text-muted-foreground/70" dir="ltr">
+                {msg("settings.admin.quotas.default")}: {defaultQuota}
+              </span>
+            )}
+          </span>
+          <NumberInput
+            value={quota}
+            onChange={setQuota}
+            min={1}
+          />
+        </label>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="default"
+              size="icon"
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="size-9 rounded-xl"
+              aria-label={msg("settings.admin.quotas.save")}
+            >
+              <Save className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{msg("settings.admin.quotas.save")}</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border/50">
+        {overrides.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            {loading ? msg("settings.admin.quotas.refresh") : msg("settings.admin.quotas.empty")}
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {overrides.map((item) => (
+              <div
+                key={item.username}
+                className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.7fr_0.9fr_auto] sm:items-center"
+              >
+                <span className="min-w-0 truncate font-mono text-xs text-foreground" dir="ltr">
+                  {item.username}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {item.quota == null ? msg("settings.admin.quotas.unlimited_label") : item.quota}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {msg("settings.admin.quotas.current")}:{" "}
+                  <span className="font-mono tabular-nums" dir="ltr">
+                    {item.job_count}
+                  </span>
+                </span>
+                <span className="min-w-0 truncate text-xs text-muted-foreground" dir="ltr">
+                  {item.updated_by || msg("settings.admin.quotas.default")}
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => void handleDelete(item.username)}
+                      disabled={saving}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={msg("settings.admin.quotas.delete")}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{msg("settings.admin.quotas.delete")}</TooltipContent>
+                </Tooltip>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
 function AboutTab() {
   const { resetAll } = useUserPrefs();
   const { apiUrl, appVersion: version } = getRuntimeEnv();
@@ -262,6 +469,7 @@ function AboutTab() {
 const SETTINGS_TAB_ORDER = [
   "wizard",
   "agent",
+  "admin",
   "account",
   "about",
 ] as const;
@@ -272,12 +480,22 @@ const SETTINGS_TAB_TRIGGER_CLASS =
 
 export function SettingsModal() {
   const { open, setOpen } = useSettingsModal();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const [activeTab, setActiveTab] = React.useState<SettingsTab>("wizard");
-  const tabIndex = SETTINGS_TAB_ORDER.indexOf(activeTab);
+  const tabs = React.useMemo(
+    () => SETTINGS_TAB_ORDER.filter((tab) => isAdmin || tab !== "admin"),
+    [isAdmin],
+  );
+  React.useEffect(() => {
+    if (!tabs.includes(activeTab)) setActiveTab("wizard");
+  }, [activeTab, tabs]);
+  const tabIndex = tabs.indexOf(activeTab);
+  const tabCount = tabs.length;
   const indicatorOffset =
     tabIndex <= 0
       ? "4px"
-      : `calc(${((tabIndex * 100) / SETTINGS_TAB_ORDER.length).toFixed(3)}% + ${(4 - (tabIndex * 4) / SETTINGS_TAB_ORDER.length).toFixed(3)}px)`;
+      : `calc(${((tabIndex * 100) / tabCount).toFixed(3)}% + ${(4 - (tabIndex * 4) / tabCount).toFixed(3)}px)`;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -293,11 +511,14 @@ export function SettingsModal() {
           dir="rtl"
           className="px-6 pb-6 pt-2"
         >
-          <TabsList className="relative grid grid-cols-4 w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto items-stretch">
+          <TabsList
+            className="relative grid w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto items-stretch"
+            style={{ gridTemplateColumns: `repeat(${tabCount}, minmax(0, 1fr))` }}
+          >
             <div
               className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
               style={{
-                width: "calc(25% - 5px)",
+                width: `calc(${(100 / tabCount).toFixed(3)}% - 5px)`,
                 insetInlineStart: indicatorOffset,
               }}
             />
@@ -307,6 +528,11 @@ export function SettingsModal() {
             <TabsTrigger value="agent" className={SETTINGS_TAB_TRIGGER_CLASS}>
               {msg("settings.tab.agent")}
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="admin" className={SETTINGS_TAB_TRIGGER_CLASS}>
+                {msg("settings.tab.admin")}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="account" className={SETTINGS_TAB_TRIGGER_CLASS}>
               {msg("settings.tab.account")}
             </TabsTrigger>
@@ -322,6 +548,11 @@ export function SettingsModal() {
             <TabsContent value="agent">
               <AgentTab />
             </TabsContent>
+            {isAdmin && (
+              <TabsContent value="admin">
+                <AdminTab />
+              </TabsContent>
+            )}
             <TabsContent value="account">
               <AccountTab />
             </TabsContent>

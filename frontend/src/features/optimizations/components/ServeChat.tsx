@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Loader2, MessageSquare, Pencil, XCircle } from "lucide-react";
+import { Loader2, MessageSquare, Pencil } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import type { ServeInfoResponse } from "@/shared/types/api";
-import { MessageActions } from "@/shared/ui/agent";
+import { autoResizeTextarea, MessageActions } from "@/shared/ui/agent";
 import { formatOutput } from "@/shared/lib";
 import { msg } from "@/shared/lib/messages";
 
@@ -59,18 +61,13 @@ export function ServeChat({
     <div className="flex flex-col max-h-[560px] pt-2">
       <div ref={chatScrollRef} className="flex-1 overflow-y-auto pb-4 space-y-6">
         {runHistory.length === 0 && !streamingRun && (
-          <div className="flex flex-col items-center justify-center py-16 gap-5 text-center">
-            <div className="size-12 rounded-2xl bg-[#3D2E22]/8 flex items-center justify-center">
-              <MessageSquare className="size-5 text-[#3D2E22]/35" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground/60">
-                {msg("auto.features.optimizations.components.servechat.1")}
-              </p>
-              <p className="text-xs text-muted-foreground/50 max-w-xs leading-relaxed">
-                {msg("auto.features.optimizations.components.servechat.2")}
-              </p>
-            </div>
+          <EmptyState
+            icon={MessageSquare}
+            iconWrap="tile"
+            variant="compact"
+            title={msg("auto.features.optimizations.components.servechat.1")}
+            description={msg("auto.features.optimizations.components.servechat.2")}
+          >
             {demos.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md w-full mt-2">
                 {demos.slice(0, 4).map((demo, i) => (
@@ -81,8 +78,7 @@ export function ServeChat({
                         const el = textareaRefs.current[f];
                         if (el) {
                           el.value = String(demo.inputs[f] ?? "");
-                          el.style.height = "auto";
-                          el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                          autoResizeTextarea(el);
                         }
                       }
                     }}
@@ -108,7 +104,7 @@ export function ServeChat({
                 ))}
               </div>
             )}
-          </div>
+          </EmptyState>
         )}
         {[...runHistory].reverse().map((run) => {
           const isEditing = editingRunTs === run.ts;
@@ -130,16 +126,12 @@ export function ServeChat({
                         <textarea
                           ref={(el) => {
                             editTextareaRefs.current[field] = el;
-                            if (el) {
-                              el.style.height = "auto";
-                              el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-                            }
+                            autoResizeTextarea(el);
                           }}
                           dir="auto"
                           defaultValue={run.inputs[field] ?? ""}
                           onChange={(e) => {
-                            e.target.style.height = "auto";
-                            e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                            autoResizeTextarea(e.target);
                           }}
                           className="w-full bg-white border border-[#DDD4C8] rounded-xl px-3 py-2 text-sm font-mono resize-none outline-none focus:border-[#C8A882] transition-colors min-h-[40px] max-h-[120px]"
                           rows={1}
@@ -288,19 +280,12 @@ export function ServeChat({
 
       <div className="border-t border-border/40 pt-3">
         {serveError && (
-          <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-2.5 py-1.5 mb-2 max-w-2xl mx-auto">
-            <XCircle className="size-3 shrink-0" />
-            <span className="flex-1 break-words min-w-0">{serveError}</span>
-            <button
-              onClick={() => setServeError(null)}
-              className="ms-auto p-0.5 hover:bg-red-100 rounded"
-            >
-              <span className="sr-only">
-                {msg("auto.features.optimizations.components.servechat.7")}
-              </span>
-              ×
-            </button>
-          </div>
+          <InlineErrorRow
+            message={serveError}
+            onDismiss={() => setServeError(null)}
+            dismissLabel={msg("auto.features.optimizations.components.servechat.7")}
+            className="mb-2 max-w-2xl mx-auto"
+          />
         )}
         <form
           onSubmit={(e) => {
@@ -357,8 +342,7 @@ export function ServeChat({
                     placeholder={field}
                     defaultValue=""
                     onChange={(e) => {
-                      e.target.style.height = "auto";
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                      autoResizeTextarea(e.target);
                       if (serveError) setServeError(null);
                     }}
                     onKeyDown={(e) => {

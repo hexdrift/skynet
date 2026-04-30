@@ -2,13 +2,8 @@
 
 import * as React from "react";
 import { Boxes } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Button } from "@/shared/ui/primitives/button";
 import { Label } from "@/shared/ui/primitives/label";
 import { Switch } from "@/shared/ui/primitives/switch";
@@ -90,9 +85,7 @@ export function ModelConfigModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{roleLabel}</DialogTitle>
-        </DialogHeader>
+        <DialogTitleRow title={roleLabel} />
 
         <div className="space-y-4">
           {onSelectAllAvailable &&

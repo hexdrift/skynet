@@ -1,14 +1,26 @@
 "use client";
 
+import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 
 interface LoadingStateProps {
-  variant: "table" | "card" | "chart" | "text";
+  variant: "table" | "card" | "chart" | "text" | "block";
   rows?: number;
   className?: string;
 }
 
 export function LoadingState({ variant, rows = 3, className = "" }: LoadingStateProps) {
+  if (variant === "block") {
+    return (
+      <div
+        className={cn(
+          "rounded-lg border border-border/40 bg-muted/20 animate-pulse motion-reduce:animate-none",
+          className,
+        )}
+      />
+    );
+  }
+
   if (variant === "chart") {
     return (
       <div className={`h-[300px] flex items-center justify-center ${className}`}>

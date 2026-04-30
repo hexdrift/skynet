@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
+import { readServerSentEvents } from "@/shared/lib/sse";
 
 const API = getRuntimeEnv().apiUrl;
 
@@ -64,23 +65,7 @@ export async function streamGeneralistAgent(
     );
     return;
   }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  const processEvent = (raw: string) => {
-    let event = "message";
-    const dataLines: string[] = [];
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("event:")) event = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-    }
-    if (!dataLines.length) return;
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(dataLines.join("\n"));
-    } catch {
-      return;
-    }
+  const processEvent = ({ event, data }: { event: string; data: Record<string, unknown> }) => {
     switch (event) {
       case "reasoning_patch":
         handlers.onReasoningPatch?.(String(data.chunk ?? ""));
@@ -137,20 +122,7 @@ export async function streamGeneralistAgent(
     }
   };
   try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) {
-        if (buf.trim()) processEvent(buf);
-        break;
-      }
-      buf += decoder.decode(value, { stream: true });
-      let sepIdx: number;
-      while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
-        const raw = buf.slice(0, sepIdx);
-        buf = buf.slice(sepIdx + 2);
-        processEvent(raw);
-      }
-    }
+    await readServerSentEvents(res.body, processEvent);
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
       handlers.onError(

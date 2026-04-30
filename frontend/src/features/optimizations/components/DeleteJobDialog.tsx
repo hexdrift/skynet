@@ -4,20 +4,9 @@ import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { deleteJob } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -46,40 +35,38 @@ export function DeleteJobDialog({
   };
   return (
     <>
-      <TooltipProvider>
-        <UiTooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground hover:text-red-600"
-              onClick={() => setOpen(true)}
-              aria-label={msg("auto.features.optimizations.components.deletejobdialog.literal.1")}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {msg("auto.features.optimizations.components.deletejobdialog.1")}
-          </TooltipContent>
-        </UiTooltip>
-      </TooltipProvider>
+      <TooltipButton tooltip={msg("auto.features.optimizations.components.deletejobdialog.1")}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground hover:text-red-600"
+          onClick={() => setOpen(true)}
+          aria-label={msg("auto.features.optimizations.components.deletejobdialog.literal.1")}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </TooltipButton>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {msg("auto.features.optimizations.components.deletejobdialog.2")}
-              {TERMS.optimization}
-            </DialogTitle>
-            <DialogDescription>
-              {msg("auto.features.optimizations.components.deletejobdialog.3")}
-              {TERMS.optimization}{" "}
-              <span className="font-mono font-medium text-foreground break-all">
-                {optimizationId}
-              </span>
-              ?
-            </DialogDescription>
-          </DialogHeader>
+          <DialogTitleRow
+            title={
+              <>
+                {msg("auto.features.optimizations.components.deletejobdialog.2")}
+                {TERMS.optimization}
+              </>
+            }
+            description={
+              <>
+                {msg("auto.features.optimizations.components.deletejobdialog.3")}
+                {TERMS.optimization}{" "}
+                <span className="font-mono font-medium text-foreground break-all">
+                  {optimizationId}
+                </span>
+                ?
+              </>
+            }
+          />
+
           <DialogFooter className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"

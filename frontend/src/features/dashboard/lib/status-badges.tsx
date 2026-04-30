@@ -2,54 +2,9 @@
 
 import type React from "react";
 import { Badge } from "@/shared/ui/primitives/badge";
-import { STATUS_LABELS } from "@/shared/constants/job-status";
-import type { OptimizationSummaryResponse, JobStatus } from "@/shared/types/api";
+import type { OptimizationSummaryResponse } from "@/shared/types/api";
 import { formatPercent } from "@/shared/lib";
 import { msg } from "@/shared/lib/messages";
-
-export function statusBadge(status: JobStatus) {
-  const label = STATUS_LABELS[status] ?? status;
-  switch (status) {
-    case "pending":
-      return (
-        <Badge variant="outline" className="status-pill-pending">
-          {label}
-        </Badge>
-      );
-    case "validating":
-      return (
-        <Badge variant="outline" className="status-pill-running">
-          {label}
-        </Badge>
-      );
-    case "running":
-      return (
-        <Badge variant="outline" className="status-pill-running animate-pulse">
-          {label}
-        </Badge>
-      );
-    case "success":
-      return (
-        <Badge variant="outline" className="status-pill-success">
-          {label}
-        </Badge>
-      );
-    case "failed":
-      return (
-        <Badge variant="outline" className="status-pill-failed">
-          {label}
-        </Badge>
-      );
-    case "cancelled":
-      return (
-        <Badge variant="outline" className="status-pill-cancelled">
-          {label}
-        </Badge>
-      );
-    default:
-      return <Badge variant="outline">{status}</Badge>;
-  }
-}
 
 export function typeBadge(jobType: string) {
   if (jobType === "grid_search") {

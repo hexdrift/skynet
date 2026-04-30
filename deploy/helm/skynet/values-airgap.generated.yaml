@@ -16,13 +16,18 @@ backend:
     CODE_AGENT_MODEL: "gpt-5"
     GENERALIST_AGENT_BASE_URL: "https://llm-gateway.internal/v1"
     GENERALIST_AGENT_MODEL: "gpt-5"
+
     # TODO: On-premise - set to the public frontend route.
     FRONTEND_URL: "https://skynet.apps.internal"
     # TODO: On-premise - list every browser origin allowed to call the backend.
     ALLOWED_ORIGINS: "https://skynet.apps.internal"
+    ADMIN_GROUPS: ""
+    ADMIN_USERNAMES: ""
+    COMMS_WEBHOOK_URL: ""
   secrets:
-    # TODO: On-premise - prefer an externally managed secret in production.
+    # TODO: On-premise - must contain OPENAI_API_KEY and BACKEND_AUTH_SECRET.
     existingSecret: "skynet-backend-secrets"
+
 
 frontend:
   image:
@@ -34,12 +39,16 @@ frontend:
     # TODO: On-premise - point at your internal OIDC issuer.
     AUTH_SSO_ISSUER: "https://idp.internal/realms/skynet"
     AUTH_SSO_CLIENT_ID: "skynet"
-    AUTH_SSO_SCOPE: "openid profile email"
+    AUTH_SSO_SCOPE: "openid profile email groups"
+    AUTH_GROUP_CLAIM: "groups"
+    AUTH_ADMIN_GROUPS: ""
+    AUTH_ADMINS: ""
     # TODO: On-premise - set when your IdP uses a private CA mounted in the pod.
     NODE_EXTRA_CA_CERTS: ""
   secrets:
-    # TODO: On-premise - must contain AUTH_SECRET and AUTH_SSO_CLIENT_SECRET.
+    # TODO: On-premise - must contain AUTH_SECRET, AUTH_SSO_CLIENT_SECRET, and BACKEND_AUTH_SECRET.
     existingSecret: "skynet-frontend-secrets"
+
 
 externalDatabase:
   enabled: true
@@ -71,6 +80,7 @@ networkPolicy:
   # TODO: On-premise - use the exact IdP / internal service CIDRs for your cluster.
   egressCidrs:
     - "10.0.6.0/24"
+
   # TODO: On-premise - use the exact LLM gateway CIDRs and ports.
   llmEgress:
     - cidr: "10.0.5.0/24"
