@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import {
   ArrowLeft,
@@ -7,19 +8,30 @@ import {
   ChevronRight,
   Clock,
   Code2,
+  CopyPlus,
   Cpu,
   Crown,
   Database,
   Lightbulb,
+  Loader2,
   MessageSquare,
   Send,
   Terminal,
   Timer,
   Trash2,
   TrendingUp,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/ui/primitives/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import {
   Tooltip as UiTooltip,
@@ -44,11 +56,14 @@ import { PipelineStages, computeStageTimestamps } from "./PipelineStages";
 import { detectPairStage } from "../lib/detect-stage";
 import type { PipelineStage } from "../constants";
 import { formatDuration, formatImprovement, formatPercent } from "@/shared/lib";
+import { deleteGridPair } from "@/shared/lib/api";
 import { tip } from "@/shared/lib/tooltips";
 import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import type { ScorePoint } from "../lib/extract-scores";
-import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-status";
+import { pairLabel } from "./grid-overview-helpers";
+import { toast } from "react-toastify";
 
 const ScoreChart = dynamic(() => import("@/shared/ui/score-chart").then((m) => m.ScoreChart), {
   ssr: false,
@@ -76,8 +91,11 @@ export interface PairDetailViewProps {
   onBack: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onClone: () => void;
+  onCancel: () => void;
   onClearHistory: () => void;
   onStageClick: (stage: PipelineStage) => void;
+  onDeleted: () => void;
 }
 
 export function PairDetailView({
@@ -101,9 +119,14 @@ export function PairDetailView({
   onBack,
   onPrev,
   onNext,
+  onClone,
+  onCancel,
   onClearHistory,
   onStageClick,
+  onDeleted,
 }: PairDetailViewProps) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const isBest = job.grid_result?.best_pair?.pair_index === activePair.pair_index;
   const pairPrompt = activePair.program_artifact?.optimized_prompt;
   const pairStage = detectPairStage(job, activePair.pair_index);
@@ -126,10 +149,24 @@ export function PairDetailView({
     activePair.pair_index,
   );
   const jobActive = ACTIVE_STATUSES.has(job.status);
+  const jobTerminal = TERMINAL_STATUSES.has(job.status);
   const pairActive = jobActive && pairStage !== "done" && !activePair.error;
   const pairFailed = !!activePair.error || (!jobActive && pairStage !== "done");
   const tabCls =
     "relative px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200";
+  const handleDeletePair = async () => {
+    setDeleting(true);
+    try {
+      await deleteGridPair(job.optimization_id, activePair.pair_index);
+      setDeleteOpen(false);
+      window.dispatchEvent(new Event("optimizations-changed"));
+      onDeleted();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("optimization.delete.failed"));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-4" data-tutorial="pair-detail">
@@ -159,6 +196,65 @@ export function PairDetailView({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <TooltipProvider>
+              <UiTooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={onClone}
+                    aria-label={msg("auto.app.optimizations.id.page.literal.4")}
+                  >
+                    <CopyPlus className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {msg("auto.app.optimizations.id.page.4")}
+                </TooltipContent>
+              </UiTooltip>
+            </TooltipProvider>
+            {jobActive && (
+              <TooltipProvider>
+                <UiTooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
+                      onClick={onCancel}
+                      aria-label={msg("auto.app.optimizations.id.page.literal.5")}
+                    >
+                      <XCircle className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {msg("auto.app.optimizations.id.page.5")}
+                  </TooltipContent>
+                </UiTooltip>
+              </TooltipProvider>
+            )}
+            {jobTerminal && (
+              <TooltipProvider>
+                <UiTooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-red-600"
+                      onClick={() => setDeleteOpen(true)}
+                      aria-label={msg("auto.features.optimizations.components.gridoverview.literal.29")}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {msg("auto.features.optimizations.components.gridoverview.18")}
+                  </TooltipContent>
+                </UiTooltip>
+              </TooltipProvider>
+            )}
+            <span className="mx-1 h-5 w-px bg-[#C8A882]/30" />
             <button
               type="button"
               disabled={activePairIndex <= 0}
@@ -183,6 +279,45 @@ export function PairDetailView({
           </div>
         </div>
       </FadeIn>
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => !open && setDeleteOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {msg("auto.features.optimizations.components.gridoverview.19")}
+            </DialogTitle>
+            <DialogDescription>
+              {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
+              <span className="font-mono font-medium text-foreground break-all">
+                {pairLabel(activePair)}
+              </span>
+              {msg("auto.features.optimizations.components.gridoverview.21")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+              className="w-full justify-center"
+            >
+              {msg("auto.features.optimizations.components.gridoverview.22")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeletePair}
+              disabled={deleting}
+              className="w-full justify-center"
+            >
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("auto.features.optimizations.components.gridoverview.literal.30")
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {!activePair.error && activePair.program_artifact && (
         <FadeIn delay={0.05}>
@@ -249,118 +384,120 @@ export function PairDetailView({
             />
           </FadeIn>
 
-          {!activePair.error && (
-            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StaggerItem>
-                <TiltCard className="rounded-xl border border-border/50 bg-card p-6 text-center">
-                  <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
-                    <HelpTip text={tip("score.baseline")}>{TERMS.baselineScore}</HelpTip>
-                  </p>
-                  <p className="text-3xl font-mono font-bold tabular-nums">
-                    {formatPercent(pairBaseline)}
-                  </p>
-                </TiltCard>
-              </StaggerItem>
-              <StaggerItem>
-                <TiltCard className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.08)]">
-                  <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
-                    <HelpTip text={tip("score.optimized")}>{TERMS.optimizedScore}</HelpTip>
-                  </p>
-                  <p className="text-3xl font-mono font-bold text-primary tabular-nums">
-                    {formatPercent(pairOptimized)}
-                  </p>
-                </TiltCard>
-              </StaggerItem>
-              <StaggerItem>
-                <TiltCard
-                  className={`rounded-xl border p-6 text-center ${(pairImprovement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
-                >
-                  <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
-                    <HelpTip text={tip("score.improvement")}>
-                      {msg("auto.features.optimizations.components.pairdetailview.9")}
-                    </HelpTip>
-                  </p>
-                  <p
-                    className={`text-3xl font-mono font-bold tabular-nums ${(pairImprovement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
+          <div data-tutorial="pair-detail-summary" className="space-y-6">
+            {!activePair.error && (
+              <StaggerContainer className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <StaggerItem>
+                  <TiltCard className="rounded-xl border border-border/50 bg-card p-6 text-center">
+                    <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
+                      <HelpTip text={tip("score.baseline")}>{TERMS.baselineScore}</HelpTip>
+                    </p>
+                    <p className="text-3xl font-mono font-bold tabular-nums">
+                      {formatPercent(pairBaseline)}
+                    </p>
+                  </TiltCard>
+                </StaggerItem>
+                <StaggerItem>
+                  <TiltCard className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.08)]">
+                    <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
+                      <HelpTip text={tip("score.optimized")}>{TERMS.optimizedScore}</HelpTip>
+                    </p>
+                    <p className="text-3xl font-mono font-bold text-primary tabular-nums">
+                      {formatPercent(pairOptimized)}
+                    </p>
+                  </TiltCard>
+                </StaggerItem>
+                <StaggerItem>
+                  <TiltCard
+                    className={`rounded-xl border p-6 text-center ${(pairImprovement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
                   >
-                    {formatImprovement(pairImprovement)}
-                  </p>
-                </TiltCard>
-              </StaggerItem>
-            </StaggerContainer>
-          )}
+                    <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
+                      <HelpTip text={tip("score.improvement")}>
+                        {msg("auto.features.optimizations.components.pairdetailview.9")}
+                      </HelpTip>
+                    </p>
+                    <p
+                      className={`text-3xl font-mono font-bold tabular-nums ${(pairImprovement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
+                    >
+                      {formatImprovement(pairImprovement)}
+                    </p>
+                  </TiltCard>
+                </StaggerItem>
+              </StaggerContainer>
+            )}
 
-          <FadeIn delay={0.1}>
-            <div className="space-y-2.5">
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
-                <InfoCard
-                  label={
-                    <HelpTip text={tip("model.generation")}>
-                      {msg("model.generation.label")}
-                    </HelpTip>
-                  }
-                  value={
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="truncate">
-                        {activePair.generation_model.split("/").pop()}
-                      </span>
-                      <ReasoningPill value={activePair.generation_reasoning_effort} />
-                    </span>
-                  }
-                  icon={<Cpu className="size-3.5" />}
-                />
-                <InfoCard
-                  label={<HelpTip text={tip("model.reflection")}>{TERMS.reflectionModel}</HelpTip>}
-                  value={
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="truncate">
-                        {activePair.reflection_model.split("/").pop()}
-                      </span>
-                      <ReasoningPill value={activePair.reflection_reasoning_effort} />
-                    </span>
-                  }
-                  icon={<Lightbulb className="size-3.5" />}
-                />
-                {activePair.runtime_seconds != null && (
+            <FadeIn delay={0.1}>
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
                   <InfoCard
                     label={
-                      <HelpTip text={tip("pair.runtime")}>
-                        {msg("auto.features.optimizations.components.pairdetailview.10")}
+                      <HelpTip text={tip("model.generation")}>
+                        {msg("model.generation.label")}
                       </HelpTip>
                     }
-                    value={formatDuration(activePair.runtime_seconds)}
-                    icon={<Clock className="size-3.5" />}
+                    value={
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="truncate">
+                          {activePair.generation_model.split("/").pop()}
+                        </span>
+                        <ReasoningPill value={activePair.generation_reasoning_effort} />
+                      </span>
+                    }
+                    icon={<Cpu className="size-3.5" />}
                   />
-                )}
-              </div>
-              {(activePair.num_lm_calls != null || activePair.avg_response_time_ms != null) && (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {activePair.num_lm_calls != null && (
+                  <InfoCard
+                    label={<HelpTip text={tip("model.reflection")}>{TERMS.reflectionModel}</HelpTip>}
+                    value={
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="truncate">
+                          {activePair.reflection_model.split("/").pop()}
+                        </span>
+                        <ReasoningPill value={activePair.reflection_reasoning_effort} />
+                      </span>
+                    }
+                    icon={<Lightbulb className="size-3.5" />}
+                  />
+                  {activePair.runtime_seconds != null && (
                     <InfoCard
                       label={
-                        <HelpTip text={tip("lm.calls_count")}>
-                          {msg("auto.features.optimizations.components.pairdetailview.11")}
+                        <HelpTip text={tip("pair.runtime")}>
+                          {msg("auto.features.optimizations.components.pairdetailview.10")}
                         </HelpTip>
                       }
-                      value={String(activePair.num_lm_calls)}
-                      icon={<MessageSquare className="size-3.5" />}
-                    />
-                  )}
-                  {activePair.avg_response_time_ms != null && (
-                    <InfoCard
-                      label={
-                        <HelpTip text={tip("lm.avg_response_time")}>
-                          {msg("auto.features.optimizations.components.pairdetailview.12")}
-                        </HelpTip>
-                      }
-                      value={`${(activePair.avg_response_time_ms / 1000).toFixed(1)}s`}
-                      icon={<Timer className="size-3.5" />}
+                      value={formatDuration(activePair.runtime_seconds)}
+                      icon={<Clock className="size-3.5" />}
                     />
                   )}
                 </div>
-              )}
-            </div>
-          </FadeIn>
+                {(activePair.num_lm_calls != null || activePair.avg_response_time_ms != null) && (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {activePair.num_lm_calls != null && (
+                      <InfoCard
+                        label={
+                          <HelpTip text={tip("lm.calls_count")}>
+                            {msg("auto.features.optimizations.components.pairdetailview.11")}
+                          </HelpTip>
+                        }
+                        value={String(activePair.num_lm_calls)}
+                        icon={<MessageSquare className="size-3.5" />}
+                      />
+                    )}
+                    {activePair.avg_response_time_ms != null && (
+                      <InfoCard
+                        label={
+                          <HelpTip text={tip("lm.avg_response_time")}>
+                            {msg("auto.features.optimizations.components.pairdetailview.12")}
+                          </HelpTip>
+                        }
+                        value={`${(activePair.avg_response_time_ms / 1000).toFixed(1)}s`}
+                        icon={<Timer className="size-3.5" />}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            </FadeIn>
+          </div>
 
           {pairScorePoints.length > 1 && (
             <FadeIn delay={0.1}>

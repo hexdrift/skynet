@@ -10,7 +10,6 @@ import {
   XCircle,
   Trophy,
   Cpu,
-  Database,
   Layers,
   ListChecks,
   Sparkles,
@@ -48,6 +47,7 @@ import {
   getTestResults,
   getPairTestResults,
   getOptimizationDataset,
+  getOptimizationPayload,
 } from "@/shared/lib/api";
 import type {
   EvalExampleResult,
@@ -57,6 +57,8 @@ import type {
 } from "@/shared/types/api";
 import { Skeleton } from "boneyard-js/react";
 import { compareBones } from "../lib/bones";
+import { canCompareKeys, compareCompatibilityKey } from "../lib/compatibility";
+import { COMPARE_MAX } from "@/features/dashboard";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import {
@@ -629,12 +631,6 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
       label: msg("auto.app.compare.page.literal.15"),
       values: runs.map((r) => r.modelName ?? "—"),
     },
-    {
-      key: "dataset",
-      icon: Database,
-      label: formatMsg("auto.app.compare.page.template.2", { p1: TERMS.dataset }),
-      values: runs.map((r) => String(r.datasetRows ?? "—")),
-    },
   ];
 
   const stickyFirst = "sticky start-0 bg-card z-10 border-e border-border/30";
@@ -735,7 +731,11 @@ function PromptsSection({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: numbe
                 >
                   {runToken(i)}
                 </span>
-                <span className="font-mono tabular-nums truncate" dir="ltr">
+                <span
+                  className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono tabular-nums"
+                  dir="ltr"
+                  title={run.label}
+                >
                   {run.label}
                 </span>
               </TabsTrigger>
@@ -957,8 +957,9 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
     setLoading(true);
 
     const resultsPromise = Promise.all(runs.map(fetchPerExample));
-    // Datasets are shared across compared runs (same task_fingerprint). Try each
-    // run in order and use the first successful response.
+    // Datasets are shared across compared runs by the compare-page guard
+    // (same resolved test set). Try each run in order and use the first
+    // successful response.
     const datasetPromise = (async () => {
       for (const r of runs) {
         try {
@@ -1236,9 +1237,14 @@ export function CompareView() {
       setLoading(false);
       return;
     }
+    if (optimizationIds.length > COMPARE_MAX) {
+      setError(msg("compare.cap_reached"));
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     void Promise.allSettled(optimizationIds.map((id) => getJob(id)))
-      .then((results) => {
+      .then(async (results) => {
         const ok: OptimizationStatusResponse[] = [];
         const failed: string[] = [];
         results.forEach((r, i) => {
@@ -1248,7 +1254,29 @@ export function CompareView() {
         if (ok.length < 2) {
           setError(msg("compare.load_error"));
           setJobs(null);
+        } else if (ok.length > COMPARE_MAX) {
+          setError(msg("compare.cap_reached"));
+          setJobs(null);
         } else {
+          const keys = await Promise.all(
+            ok.map(async (job) => {
+              try {
+                const [payload, dataset] = await Promise.all([
+                  getOptimizationPayload(job.optimization_id),
+                  getOptimizationDataset(job.optimization_id),
+                ]);
+                return compareCompatibilityKey(payload, dataset);
+              } catch {
+                return null;
+              }
+            }),
+          );
+          if (!canCompareKeys(keys)) {
+            setError(msg("compare.mismatch"));
+            setJobs(null);
+            setFailedIds(failed);
+            return;
+          }
           setJobs(ok);
           setError(null);
         }

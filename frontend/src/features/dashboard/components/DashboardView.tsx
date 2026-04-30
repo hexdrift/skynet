@@ -34,6 +34,9 @@ import { DeleteDialogs } from "./DeleteDialogs";
 import { JobsTab } from "./JobsTab";
 import { AnalyticsTab } from "./AnalyticsTab";
 
+const DASHBOARD_TAB_CLASS =
+  "relative z-10 min-h-10 rounded-md px-3 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,background-color,transform] data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:px-4";
+
 function getJobField(job: OptimizationSummaryResponse, key: string): unknown {
   return (job as unknown as Record<string, unknown>)[key];
 }
@@ -189,20 +192,14 @@ export function DashboardView() {
     [setSelectedIds],
   );
 
-  // Compare-eligible subset of the current selection: status=success and a
-  // consistent task_fingerprint. Legacy jobs with a null fingerprint are let
-  // through so comparison still works on older data.
+  // Compare-eligible subset of the current selection. Exact metric/test-set
+  // compatibility is validated on the compare page after loading payloads.
   const compareEligibleIds = useMemo(() => {
     if (!effectiveData || selectedIds.size === 0) return [];
     const selectedItems = effectiveData.items.filter(
       (j) => selectedIds.has(j.optimization_id) && j.status === "success",
     );
-    if (selectedItems.length < 2) return selectedItems.map((j) => j.optimization_id);
-    const anchorFp = selectedItems.find((j) => j.task_fingerprint)?.task_fingerprint ?? null;
-    const matching = selectedItems.filter(
-      (j) => !anchorFp || !j.task_fingerprint || j.task_fingerprint === anchorFp,
-    );
-    return matching.map((j) => j.optimization_id);
+    return selectedItems.map((j) => j.optimization_id);
   }, [effectiveData, selectedIds]);
   const canCompare = compareEligibleIds.length >= 2;
   const onCompare = useCallback(() => {
@@ -301,30 +298,10 @@ export function DashboardView() {
         <FadeIn delay={0.2}>
           {mounted && (
             <Tabs value={activeTab} dir="rtl" onValueChange={handleTabChange}>
-              <TabsList className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto">
-                <div
-                  className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"
-                  style={
-                    advancedMode
-                      ? {
-                          width: "calc(33.333% - 5.333px)",
-                          insetInlineStart:
-                            activeTab === "jobs"
-                              ? 4
-                              : activeTab === "analytics"
-                                ? "calc(33.333% + 2.666px)"
-                                : "calc(66.666% + 1.333px)",
-                        }
-                      : {
-                          width: "calc(50% - 6px)",
-                          insetInlineStart:
-                            activeTab === "jobs" ? 4 : "calc(50% + 2px)",
-                        }
-                  }
-                />
+              <TabsList className="inline-flex h-auto w-full gap-1 rounded-lg border border-border/60 bg-muted/50 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
                 <TabsTrigger
                   value="jobs"
-                  className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
+                  className={DASHBOARD_TAB_CLASS}
                 >
                   <TableIcon className="size-3.5" />
                   {TERMS.optimizationPlural}
@@ -332,7 +309,7 @@ export function DashboardView() {
                 <TabsTrigger
                   value="analytics"
                   data-tutorial="analytics-tab"
-                  className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
+                  className={DASHBOARD_TAB_CLASS}
                 >
                   <BarChart3 className="size-3.5" />
                   {msg("auto.features.dashboard.components.dashboardview.1")}
@@ -340,7 +317,7 @@ export function DashboardView() {
                 {advancedMode && (
                   <TabsTrigger
                     value="explore"
-                    className="relative z-10 rounded-md px-4 py-2 text-sm font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5"
+                    className={DASHBOARD_TAB_CLASS}
                   >
                     <Compass className="size-3.5" />
                     {msg("auto.features.dashboard.components.dashboardview.2")}
@@ -379,7 +356,7 @@ export function DashboardView() {
                 />
               </TabsContent>
 
-              <TabsContent value="analytics" data-tutorial="dashboard-stats">
+              <TabsContent value="analytics">
                 <AnalyticsTab
                   analyticsLoading={analyticsLoading}
                   analyticsData={effectiveAnalytics}

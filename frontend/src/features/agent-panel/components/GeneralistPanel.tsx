@@ -268,7 +268,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
           <motion.aside
             key="generalist-panel"
             dir="ltr"
-            data-tutorial="agent-panel"
             initial={reduceMotion ? false : { x: -24, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { x: -24, opacity: 0 }}
@@ -281,7 +280,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             )}
             aria-label={msg("auto.features.agent.panel.components.generalistpanel.literal.1")}
           >
-            <div dir="rtl" className="relative flex min-w-0 flex-1 flex-col">
+            <div dir="rtl" className="relative flex min-w-0 flex-1 flex-col" data-tutorial="agent-panel">
               <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2.5 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <span

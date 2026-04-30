@@ -1,6 +1,6 @@
-# Air-gap operators: see deploy/ON_PREM_CHECKLIST.md (sections 1–3) for
-# REGISTRY_PREFIX / DEBIAN_MIRROR / PIP_INDEX_URL build-args. With those set
-# nothing in this file fetches from public mirrors.
+# Air-gap operators: see AIRGAP.md for
+# REGISTRY_PREFIX / DEBIAN_MIRROR / PIP_INDEX_URL / PIP_TRUSTED_HOST build-args.
+# With those set nothing in this file fetches from public mirrors.
 ARG REGISTRY_PREFIX=docker.io
 FROM ${REGISTRY_PREFIX}/python:3.11-slim
 
@@ -18,7 +18,8 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
 COPY pyproject.toml ./
 
 ARG PIP_INDEX_URL
-RUN pip install ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} -e .
+ARG PIP_TRUSTED_HOST
+RUN pip install ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} -e .
 
 COPY . .
 

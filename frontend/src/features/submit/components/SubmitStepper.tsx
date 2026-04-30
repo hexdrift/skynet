@@ -17,12 +17,13 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
           const reachable = i <= maxReachableStep;
           const completed = i < step && validateStep(i);
           const active = i === step;
+          const clickable = i <= step || reachable;
           return (
             <div key={s.id} className="flex flex-col items-center relative z-10 flex-1">
               <button
                 type="button"
                 onClick={() => handleTabClick(i)}
-                disabled={!reachable && i > step}
+                disabled={!clickable}
                 className={cn(
                   "relative flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer",
                   "size-9 sm:size-10 text-sm font-semibold",

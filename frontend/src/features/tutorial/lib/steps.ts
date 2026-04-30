@@ -14,6 +14,7 @@ import {
   DEMO_COMPARE_IDS,
   DEMO_COMPARE_EXAMPLES,
   DEMO_COMPARE_DATASET,
+  DEMO_EXPLORE_POINTS,
   DEMO_GRID_OPTIMIZATION_ID,
   DEMO_OPTIMIZATION_ID,
 } from "./demo-data";
@@ -59,6 +60,7 @@ import {
   waitForHook,
 } from "./bridge";
 import { isGeneralistAgentEnabled } from "@/features/agent-panel";
+import { readPref } from "@/features/settings";
 
 function navigateTo(path: string) {
   // Prefer in-app client navigation via the tutorial-overlay hook.
@@ -104,16 +106,10 @@ function showSubmitSplash(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 1500));
 }
 
-/**
- * Per-tour ephemeral flags. The dd-detail-header splash should fire ONCE
- * per tour run (the first time the user crosses from /submit to /detail),
- * not every time they PREV→NEXT through that step. Reset by the provider
- * via `resetTutorialOneShotState()` on START_TRACK.
- */
-let detailHeaderSplashShown = false;
-
 export function resetTutorialOneShotState(): void {
-  detailHeaderSplashShown = false;
+  // Reserved for future per-tour ephemeral flags. Currently a no-op:
+  // the submit splash now keys off path transition (not a one-shot flag),
+  // so nothing needs resetting between tour runs.
 }
 
 async function ensureDashboard() {
@@ -219,10 +215,19 @@ async function ensureTagger() {
 }
 
 async function ensureExplore() {
-  if (!window.location.pathname.startsWith("/explore")) {
-    navigateTo("/explore");
+  // Show /explore inside the dashboard's explore tab so the surrounding
+  // jobs/analytics tabs stay visible — feels more "I'm exploring inside
+  // the dashboard" than the bare /explore route. The deep-dive tour now
+  // only includes this step when advancedMode is already on (see the
+  // dynamic visibleSteps filter), so we no longer flip the pref silently.
+  if (window.location.pathname !== "/" || !window.location.search.includes("tab=explore")) {
+    navigateTo("/?tab=explore");
     await waitForElement("[data-tutorial='explore-canvas']");
   }
+  await waitForHook("setTab");
+  setTab("explore");
+  await waitForHook("setDemoExplorePoints");
+  callTutorialHook("setDemoExplorePoints", DEMO_EXPLORE_POINTS);
 }
 
 function setGeneralistPanelOpen(open: boolean) {
@@ -346,13 +351,14 @@ const tutorialSteps: TutorialStep[] = [
       p2: TERMS.optimizerPlural,
       p3: TERMS.optimization,
     }),
-    target: "[data-tutorial='dashboard-stats']",
-    placement: "auto",
+    target: "[data-tutorial='analytics-tab']",
+    placement: "bottom",
     beforeShow: async () => {
       await ensureDashboard();
       injectDemoDashboardData();
-      setTab("analytics");
-      await new Promise((r) => setTimeout(r, 100));
+      setTab("jobs");
+      await waitForElement("[data-tutorial='analytics-tab']");
+      await new Promise((r) => setTimeout(r, 250));
     },
     track: "deep-dive",
     readingTimeSec: 5,
@@ -372,6 +378,7 @@ const tutorialSteps: TutorialStep[] = [
       setTab("jobs");
       callTutorialHook("setSelectedJobIds", ["demo-001", "demo-002"]);
       await waitForElement("[data-tutorial='compare-button']");
+      await new Promise((r) => setTimeout(r, 450));
     },
     afterHide: () => {
       // Drop the demo selection so dashboard steps revisited via PREV
@@ -715,12 +722,12 @@ const tutorialSteps: TutorialStep[] = [
     target: "[data-tutorial='detail-header']",
     placement: "bottom",
     beforeShow: async () => {
-      const onDetail =
-        window.location.pathname === `/optimizations/${DEMO_OPTIMIZATION_ID}`;
-      // Splash should only fire on the first crossing from /submit → /detail
-      // per tour, not on every PREV→NEXT cycle through this step.
-      if (!onDetail && !detailHeaderSplashShown) {
-        detailHeaderSplashShown = true;
+      const onDetail = window.location.pathname === `/optimizations/${DEMO_OPTIMIZATION_ID}`;
+      // Splash plays whenever we cross into /detail from another route
+      // (typically /submit). When the user is already on /detail (e.g.
+      // PREV-then-NEXT cycling within the detail tabs), the splash is
+      // suppressed so the morph isn't gratuitously replayed.
+      if (!onDetail) {
         resetDemoSimulation();
         await showSubmitSplash();
       }
@@ -894,10 +901,11 @@ const tutorialSteps: TutorialStep[] = [
       p4: TERMS.pair,
       p5: TERMS.model,
     }),
-    target: "[data-tutorial='pair-detail']",
-    placement: "top",
+    target: "[data-tutorial='pair-detail-summary']",
+    placement: "auto",
     beforeShow: async () => {
       await ensureGridPairDetail();
+      await waitForElement("[data-tutorial='pair-detail-summary']");
     },
     track: "deep-dive",
     readingTimeSec: 11,
@@ -952,7 +960,7 @@ const tutorialSteps: TutorialStep[] = [
       await ensureExplore();
     },
     track: "deep-dive",
-    readingTimeSec: 8,
+    readingTimeSec: 11,
   },
   // Agent panel steps. Filtered out below when the generalist agent
   // feature flag is off so prod users without the panel don't get
@@ -1006,25 +1014,59 @@ const tutorialSteps: TutorialStep[] = [
 ];
 
 const AGENT_PANEL_STEP_IDS = new Set(["dd-agent-pill", "dd-agent-panel"]);
+// Steps that only run in advanced mode. A few of these have targets that
+// are physically only mounted in advanced (explore canvas, grid pair list,
+// signature/metric editors, deeper compare/detail tabs). The rest are
+// kept advanced-only to keep the basic tour focused on the essentials —
+// "click these few things to ship your first run" — while advanced gets
+// the full feature tour including grid search and power-user controls.
+const ADVANCED_ONLY_STEP_IDS = new Set([
+  "dd-compare-scores",
+  "dd-compare-config",
+  "dd-compare-prompts",
+  "dd-compare-examples",
+  "dd-splits",
+  "dd-auto-level",
+  "dd-model-probe",
+  "dd-score-chart",
+  "dd-playground",
+  "dd-serve",
+  "dd-logs",
+  "dd-config",
+  "dd-grid-overview",
+  "dd-grid-pair",
+  "dd-tagger-modes",
+  "dd-explore",
+  "dd-module",
+  "dd-gepa",
+]);
+const BASIC_ONLY_STEP_IDS = new Set<string>();
 
-const visibleSteps: TutorialStep[] = isGeneralistAgentEnabled()
-  ? tutorialSteps
-  : tutorialSteps.filter((s) => !AGENT_PANEL_STEP_IDS.has(s.id));
+function getVisibleSteps(): TutorialStep[] {
+  const advanced = readPref("advancedMode");
+  const generalist = isGeneralistAgentEnabled();
+  return tutorialSteps.filter((s) => {
+    if (!generalist && AGENT_PANEL_STEP_IDS.has(s.id)) return false;
+    if (advanced && BASIC_ONLY_STEP_IDS.has(s.id)) return false;
+    if (!advanced && ADVANCED_ONLY_STEP_IDS.has(s.id)) return false;
+    return true;
+  });
+}
 
-export const TUTORIAL_TRACKS: TutorialTrackDefinition[] = [
-  {
+export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | undefined {
+  if (trackId !== "deep-dive") return undefined;
+  const steps = getVisibleSteps();
+  return {
     id: "deep-dive",
     name: msg("auto.features.tutorial.lib.steps.literal.34"),
     description: msg("auto.features.tutorial.lib.steps.literal.35"),
     icon: "deep-dive",
-    stepCount: visibleSteps.length,
-    steps: visibleSteps,
-  },
-];
-
-export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | undefined {
-  return TUTORIAL_TRACKS.find((t) => t.id === trackId);
+    stepCount: steps.length,
+    steps,
+  };
 }
+
+export const TUTORIAL_TRACKS: TutorialTrackDefinition[] = [getTrack("deep-dive")!];
 
 export function getStep(trackId: TutorialTrack, stepId: string): TutorialStep | undefined {
   const track = getTrack(trackId);

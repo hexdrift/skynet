@@ -47,6 +47,7 @@ export function useSubmitWizard() {
 
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
+  const [furthestReachedStep, setFurthestReachedStep] = useState(0);
   const [summaryTab, setSummaryTab] = useState(0);
   const [summaryCodeTab, setSummaryCodeTab] = useState<string>("signature");
 
@@ -545,10 +546,17 @@ export function useSubmitWizard() {
     const cloneId = searchParams.get("clone");
     if (!cloneId || cloneRan.current) return;
     cloneRan.current = true;
+    const pairParam = searchParams.get("pair");
+    const clonePairIndex = pairParam == null ? null : Number(pairParam);
     setCloneLoading(true);
     Promise.all([getOptimizationPayload(cloneId), getJob(cloneId).catch(() => null)])
       .then(([{ optimization_type, payload }, jobData]) => {
-        setOptimizationType(optimization_type === "grid_search" ? "grid_search" : "run");
+        const clonePair =
+          Number.isInteger(clonePairIndex) && jobData?.grid_result
+            ? (jobData.grid_result.pair_results.find((p) => p.pair_index === clonePairIndex) ??
+              null)
+            : null;
+        setOptimizationType(clonePair ? "run" : optimization_type === "grid_search" ? "grid_search" : "run");
 
         const displayName = jobData?.name || payload.name;
         if (displayName) setJobName(String(displayName));
@@ -605,22 +613,58 @@ export function useSubmitWizard() {
         if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
         if (payload.seed != null) setSeed(Number(payload.seed));
 
-        const mc = payload.model_config as ModelConfig | undefined;
-        if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
+        if (clonePair) {
+          const findPairModel = (
+            models: ModelConfig[] | undefined,
+            name: string,
+            reasoningEffort?: string | null,
+          ) => {
+            const match = models?.find(
+              (model) =>
+                model.name === name &&
+                (!reasoningEffort || model.extra?.reasoning_effort === reasoningEffort),
+            );
+            if (match) return { ...emptyModelConfig(), ...match };
+            return {
+              ...emptyModelConfig(),
+              name,
+              extra: reasoningEffort ? { reasoning_effort: reasoningEffort } : undefined,
+            };
+          };
+          setModelConfig(
+            findPairModel(
+              payload.generation_models as ModelConfig[] | undefined,
+              clonePair.generation_model,
+              clonePair.generation_reasoning_effort,
+            ),
+          );
+          setSecondModelConfig(
+            findPairModel(
+              payload.reflection_models as ModelConfig[] | undefined,
+              clonePair.reflection_model,
+              clonePair.reflection_reasoning_effort,
+            ),
+          );
+          setUseAllGenerationModels(false);
+          setUseAllReflectionModels(false);
+        } else {
+          const mc = payload.model_config as ModelConfig | undefined;
+          if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
 
-        const smc = (payload.reflection_model_config ?? payload.task_model_config) as
-          | ModelConfig
-          | undefined;
-        if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
+          const smc = (payload.reflection_model_config ?? payload.task_model_config) as
+            | ModelConfig
+            | undefined;
+          if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
 
-        const gm = payload.generation_models as ModelConfig[] | undefined;
-        if (gm?.length) setGenerationModels(gm.map((m) => ({ ...emptyModelConfig(), ...m })));
+          const gm = payload.generation_models as ModelConfig[] | undefined;
+          if (gm?.length) setGenerationModels(gm.map((m) => ({ ...emptyModelConfig(), ...m })));
 
-        const rm = payload.reflection_models as ModelConfig[] | undefined;
-        if (rm?.length) setReflectionModels(rm.map((m) => ({ ...emptyModelConfig(), ...m })));
+          const rm = payload.reflection_models as ModelConfig[] | undefined;
+          if (rm?.length) setReflectionModels(rm.map((m) => ({ ...emptyModelConfig(), ...m })));
 
-        if (payload.use_all_available_generation_models) setUseAllGenerationModels(true);
-        if (payload.use_all_available_reflection_models) setUseAllReflectionModels(true);
+          if (payload.use_all_available_generation_models) setUseAllGenerationModels(true);
+          if (payload.use_all_available_reflection_models) setUseAllReflectionModels(true);
+        }
 
         const optKw = payload.optimizer_kwargs as Record<string, unknown> | undefined;
         if (optKw) {
@@ -643,7 +687,11 @@ export function useSubmitWizard() {
   const goNext = () => {
     if (step < STEPS.length - 1) {
       setDirection(1);
-      setStep((s) => s + 1);
+      setStep((s) => {
+        const next = s + 1;
+        setFurthestReachedStep((prev) => Math.max(prev, next));
+        return next;
+      });
     }
   };
   const goPrev = () => {
@@ -655,6 +703,7 @@ export function useSubmitWizard() {
   const goTo = (idx: number) => {
     setDirection(idx > step ? 1 : -1);
     setStep(idx);
+    setFurthestReachedStep((prev) => Math.max(prev, idx));
   };
 
   const currentColumnMapping = () => buildColumnMapping(columnRoles);
@@ -724,10 +773,10 @@ export function useSubmitWizard() {
           if (showToast) toast.error(msg("submit.validation.metric_required"));
           return false;
         }
-        if (signatureValidation && signatureValidation.errors.length > 0) {
+        if (!signatureValidation || signatureValidation.errors.length > 0) {
           return false;
         }
-        if (metricValidation && metricValidation.errors.length > 0) {
+        if (!metricValidation || metricValidation.errors.length > 0) {
           return false;
         }
         return true;
@@ -802,13 +851,7 @@ export function useSubmitWizard() {
     }
   };
 
-  // Highest reachable step — all prior steps must be valid.
-  const maxReachableStep = (() => {
-    for (let i = 0; i < STEPS.length; i++) {
-      if (!validateStep(i)) return i;
-    }
-    return STEPS.length - 1;
-  })();
+  const maxReachableStep = furthestReachedStep;
 
   const validateBlock = async (
     kind: "signature" | "metric",

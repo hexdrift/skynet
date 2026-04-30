@@ -807,8 +807,15 @@ export function OptimizationDetailView() {
             onBack={() => router.push(`/optimizations/${id}`)}
             onPrev={() => router.push(`/optimizations/${id}?pair=${activePairIndex - 1}`)}
             onNext={() => router.push(`/optimizations/${id}?pair=${activePairIndex + 1}`)}
+            onClone={() =>
+              router.push(
+                `/submit?clone=${effectiveJob.optimization_id}&pair=${activePair.pair_index}`,
+              )
+            }
+            onCancel={handleCancel}
             onClearHistory={handleClearHistory}
             onStageClick={setStageModal}
+            onDeleted={() => router.push(`/optimizations/${id}`)}
           />
         )}
 

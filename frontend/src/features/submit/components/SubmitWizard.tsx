@@ -11,7 +11,6 @@ import { slideVariants } from "../constants";
 import { SubmitStepper } from "./SubmitStepper";
 import { SubmitNav } from "./SubmitNav";
 import { SubmitSplash } from "./SubmitSplash";
-import { WizardRecommendationCard } from "./WizardRecommendationCard";
 import { BasicsStep } from "./steps/BasicsStep";
 import { DatasetStep } from "./steps/DatasetStep";
 import { ModelStep } from "./steps/ModelStep";
@@ -70,9 +69,6 @@ export function SubmitWizard() {
 
       {/* Submit splash overlay — portal to body so it covers sidebar + header */}
       <SubmitSplash w={w} />
-
-      {/* Only renders once the user has drafted a signature in the code step. */}
-      <WizardRecommendationCard w={w} />
     </div>
   );
 }
