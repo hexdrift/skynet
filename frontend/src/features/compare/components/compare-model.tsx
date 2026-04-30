@@ -52,7 +52,7 @@ export function RunChip({
   const fontSize = size === "md" ? "text-sm" : "text-xs";
   const tokenSize = size === "md" ? "size-6 text-[0.6875rem]" : "size-5 text-[0.625rem]";
   return (
-    <span className={`inline-flex items-center gap-1.5 ${fontSize}`}>
+    <span className={`inline-flex min-w-0 items-center gap-1.5 ${fontSize}`}>
       <span
         className={`${tokenSize} rounded-md flex items-center justify-center font-bold text-white tabular-nums shrink-0`}
         style={{ background: colorFor(index) }}
@@ -60,8 +60,11 @@ export function RunChip({
         {runToken(index)}
       </span>
       <span
-        className={`font-mono tabular-nums ${winner ? "text-primary font-bold" : ""}`}
+        className={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono tabular-nums ${
+          winner ? "text-primary font-bold" : ""
+        }`}
         dir="ltr"
+        title={label}
       >
         {label}
       </span>
@@ -98,7 +101,7 @@ export function fmtLatency(ms: number | null | undefined): string {
 }
 
 export function deriveRunInfo(job: OptimizationStatusResponse): RunInfo {
-  const label = job.optimization_id.slice(0, 8);
+  const label = job.optimization_id;
   if (job.grid_result) {
     const scoring = computePairScores(job.grid_result.pair_results);
     const winnerIdx = scoring.overallWinner;

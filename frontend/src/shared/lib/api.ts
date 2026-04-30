@@ -937,68 +937,32 @@ export async function deleteTemplate(templateId: string, username: string) {
   return result;
 }
 
-export interface SimilarJobsRequest {
-  signature_code?: string | null;
-  metric_code?: string | null;
-  dataset_schema?: {
-    columns: Array<{ name: string; role: "input" | "output" | "ignore"; dtype?: string }>;
-  } | null;
-  optimization_type?: string | null;
-  user_id?: string | null;
-  top_k?: number;
-}
-
-export interface SimilarJob {
-  optimization_id: string;
-  optimization_type: string | null;
-  winning_model: string | null;
-  winning_rank: number | null;
-  score: number;
-  baseline_metric: number | null;
-  optimized_metric: number | null;
-  summary_text: string | null;
-  signature_code: string | null;
-  metric_name: string | null;
-  optimizer_name: string | null;
-  optimizer_kwargs: Record<string, unknown>;
-  module_name: string | null;
-  task_name: string | null;
-}
-
-export async function fetchSimilarJobs(
-  payload: SimilarJobsRequest,
-  signal?: AbortSignal,
-): Promise<SimilarJob[]> {
-  const res = await request<{ results: SimilarJob[] }>("/recommendations/similar", {
-    method: "POST",
-    body: JSON.stringify(payload),
-    signal,
-  });
-  return res.results;
-}
-
 export interface PublicDashboardPoint {
   optimization_id: string;
   optimization_type: string | null;
   winning_model: string | null;
-  winning_rank: number | null;
-  is_recommendable: boolean;
   baseline_metric: number | null;
   optimized_metric: number | null;
   summary_text: string | null;
-  signature_code: string | null;
-  metric_name: string | null;
   task_name: string | null;
   module_name: string | null;
   optimizer_name: string | null;
-  optimizer_kwargs: Record<string, unknown>;
   created_at: string | null;
   x: number;
   y: number;
+  cluster_levels: number[];
 }
 
-export function getPublicDashboard(): Promise<{
+export interface PublicDashboardMeta {
+  count: number;
+  level_cluster_counts: number[];
+}
+
+export interface PublicDashboardResponse {
   points: PublicDashboardPoint[];
-}> {
+  meta: PublicDashboardMeta;
+}
+
+export function getPublicDashboard(): Promise<PublicDashboardResponse> {
   return cachedGet("/dashboard/public", 15000);
 }

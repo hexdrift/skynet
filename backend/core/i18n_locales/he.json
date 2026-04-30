@@ -96,13 +96,13 @@
     "optimization.no_result": "ל{term.optimization} אין נתוני תוצאה.",
     "optimization.no_result_pending": "ל{term.optimization} עדיין אין תוצאה.",
     "optimization.no_result_for_artifact": "ל{term.optimization} אין תוצאה.",
-    "optimization.no_payload": "ל{term.optimization} אין מטען.",
-    "optimization.payload_unavailable": "המטען של ה{term.optimization} אינו זמין.",
+    "optimization.no_payload": "ל{term.optimization} אין הגדרות שמורות.",
+    "optimization.payload_unavailable": "ההגדרות השמורות של ה{term.optimization} אינן זמינות.",
     "optimization.dataset_unavailable": "ה{term.dataset} של ה{term.optimization} אינו זמין.",
     "optimization.no_metric_code": "ל{term.optimization} אין קוד {term.metric}.",
     "optimization.no_model_config": "לא נמצאה הגדרת {term.model}.",
-    "optimization.no_program_artifact": "אין תוצר {term.program}.",
-    "optimization.no_program_artifact_scoped": "ל{term.optimization} אין תוצר {term.program}.",
+    "optimization.no_program_artifact": "אין תוצר של {term.program}.",
+    "optimization.no_program_artifact_scoped": "ל{term.optimization} אין תוצר של {term.program}.",
     "optimization.no_artifact_generic": "ה{term.optimization} לא ייצרה תוצר.",
     "optimization.corrupt_result": "נתוני תוצאת ה{term.optimization} פגומים.",
     "optimization.corrupt_column_mapping": "מיפוי העמודות השמור אינו תקין.",
@@ -112,10 +112,10 @@
     "optimization.failed_no_artifact": "ה{term.optimization} נכשלה ולא ייצרה תוצר. שגיאה: {error}",
     "optimization.already_terminal": "ה{term.optimization} כבר במצב סופי '{status}'.",
     "optimization.cannot_delete": "לא ניתן למחוק {term.optimization} במצב '{status}'. יש לבטל אותה קודם.",
-    "optimization.clone_no_payload": "לאופטימיזציית המקור אין מטען שמור לשכפול.",
-    "optimization.retry_no_payload": "לאופטימיזציית המקור אין מטען שמור להרצה חוזרת.",
+    "optimization.clone_no_payload": "לאופטימיזציית המקור אין הגדרות שמורות לשכפול.",
+    "optimization.retry_no_payload": "לאופטימיזציית המקור אין הגדרות שמורות להרצה חוזרת.",
     "optimization.retry_wrong_status": "ניתן להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. יש לשכפל במקום.",
-    "optimization.cannot_resubmit_payload": "לא ניתן לשלוח מחדש את המטען השמור: {error}",
+    "optimization.cannot_resubmit_payload": "לא ניתן לשלוח מחדש את ההגדרות השמורות: {error}",
     "optimization.pairs_label": "{count, plural, one {{term.pair} אחד} two {שני {term.pairPlural}} other {# {term.pairPlural}}}",
     "grid_search.no_best_pair": "לסריקה אין זוג מוצלח.",
     "grid_search.no_best_program_artifact": "לזוג המוביל אין תוצר {term.program}.",
@@ -134,9 +134,9 @@
     "grid_search.cannot_delete_pair": "לא ניתן למחוק זוג בזמן שה{term.optimization} במצב '{status}'. יש לבטל את ה{term.optimization} קודם.",
     "filter.invalid_status": "סינון סטטוס לא תקין '{value}'. ערכים חוקיים: {allowed}",
     "filter.invalid_optimization_type": "סינון סוג {term.optimization} לא תקין '{value}'. ערכים חוקיים: {allowed}",
-    "quota.reached": "הגעת למגבלת {quota} {term.optimizationPlural} לכל משתמש. מחק {term.optimizationPlural} ישנות כדי ליצור חדשות.",
-    "submit.no_models_available": "אין {term.modelPlural} זמינים בקטלוג — יש להגדיר API key של ספק קודם.",
-    "submission.validation_failed": "אימות המטען נכשל: {error}",
+    "quota.reached": "הגעתם למגבלת {quota} {term.optimizationPlural} לכל משתמש. מחקו {term.optimizationPlural} ישנות כדי ליצור חדשות.",
+    "submit.no_models_available": "אין {term.modelPlural} זמינים בקטלוג — צריך להגדיר קודם API key של ספק.",
+    "submission.validation_failed": "אימות ההגדרות נכשל: {error}",
     "submission.module_resolve_failed": "טעינת ה{term.module} נכשלה: {error}",
     "submission.vision_required": "ה{term.dataset} מכיל עמודות תמונה ({fields}) אך ה{term.model} שנבחר ('{model}') אינו תומך בקלט תמונות. בחרו {term.model} עם תמיכה ב־vision.",
     "code_agent.upstream_failed": "שגיאה בסוכן הקוד: {error}",
@@ -151,21 +151,21 @@
     "wizard.model_extra_not_object": "{field}.extra חייב להיות אובייקט.",
     "wizard.optimizer_kwargs_not_object": "optimizer_kwargs חייב להיות אובייקט.",
     "dataset.sample_unknown": "{term.dataset} {term.example} לא ידוע '{sample_id}'. יש לקרוא ל-GET /datasets/samples לרשימת מזהים חוקיים.",
-    "dataset.column_roles_unknown": "תפקידי עמודות מפנים לעמודות שלא קיימות ב-dataset_columns: {unknown}",
-    "dataset.column_roles_invalid": "ערכי תפקיד לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
+    "dataset.column_roles_unknown": "תפקידי העמודות מפנים לעמודות שלא קיימות ב-dataset_columns: {unknown}",
+    "dataset.column_roles_invalid": "תפקידי עמודות לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
     "dataset.column_roles_need_input": "לפחות עמודה אחת חייבת להיות בתפקיד 'input'.",
     "dataset.column_roles_need_output": "לפחות עמודה אחת חייבת להיות בתפקיד 'output'.",
     "dataset.profile.empty": "ה{term.dataset} חייב להכיל לפחות {term.row} אחת.",
-    "dataset.profile.too_small": "ה{term.dataset} מכיל {row_count} {term.examplePlural} — מעט מכדי להעריך שיפור אמיתי. כדאי להוסיף עוד {term.examplePlural} כדי לקבל ציונים יציבים.",
+    "dataset.profile.too_small": "ה{term.dataset} מכיל {row_count} {term.examplePlural} — מעט מדי כדי למדוד שיפור בצורה אמינה. כדאי להוסיף עוד {term.examplePlural} כדי לקבל ציונים יציבים.",
     "dataset.profile.duplicates": "זוהו {duplicate_count} {term.rowPlural} כפולות לפי {term.inputColumns}. כפילויות עלולות לגרום לאותן {term.examplePlural} להופיע גם ב{term.splitTrain} וגם ב{term.splitTest}.",
     "dataset.profile.missing_target": "{missing} {term.rowPlural} חסרות ערך ב{term.outputColumnTarget} '{column_name}'. מומלץ להסיר או למלא אותן לפני הריצה.",
     "dataset.profile.rare_class": "עמודת '{column_name}' מכילה קטגוריות נדירות ({rare_classes}) — חלקן עלולות להיעדר מסטי ה{term.splitVal} וה{term.splitTest}.",
     "dataset.profile.class_imbalance": "חוסר איזון בקטגוריות של '{column_name}' (יחס {ratio}:1). כדאי להוסיף {term.examplePlural} לקטגוריות החלשות.",
-    "dataset.split.rationale.tiny": "ה{term.dataset} קטן מאוד ({total} {term.examplePlural}). אין מספיק {term.examplePlural} ליצירת סט {term.splitVal} או {term.splitTest} נפרד — GEPA יאומן על כל ה{term.examplePlural} וישתמש בהן גם לשיפוט במהלך ה{term.optimization}.",
+    "dataset.split.rationale.tiny": "ה{term.dataset} קטן מאוד ({total} {term.examplePlural}). אין מספיק {term.examplePlural} לסט {term.splitVal} או {term.splitTest} נפרד — GEPA ישתמש בכל הדוגמאות גם ללמידה וגם לשיפוט במהלך ה{term.optimization}.",
     "dataset.split.rationale.small": "ה{term.dataset} קטן ({total} {term.examplePlural}). הקצנו 80% ל{term.splitTrain} ו-20% ל{term.splitVal} כדי שיהיה ל-GEPA ציון יציב לכל מועמד, אך אין מספיק {term.examplePlural} לסט {term.splitTest} נפרד.",
     "dataset.split.rationale.medium": "ה{term.dataset} בגודל בינוני ({total} {term.examplePlural}). חלוקת 60/20/20 — מספיק {term.examplePlural} לכל אחד משלושת הסטים.",
     "dataset.split.rationale.large": "ה{term.dataset} גדול ({total} {term.examplePlural}). הגבלנו את ה{term.splitVal} ל-{val_count} ואת ה{term.splitTest} ל-{test_count} {term.examplePlural} — מספיק לציונים יציבים בלי לבזבז זמן {term.optimization} על {term.examplePlural} מיותרות.",
-    "agent.approval.unknown_call_id": "אין אישור ממתין ל-call_id שצויין.",
+    "agent.approval.unknown_call_id": "אין אישור ממתין ל-call_id שצוין.",
     "agent.status.tool_start": "הסוכן מפעיל כלי…",
     "agent.status.tool_end": "הכלי סיים לפעול.",
     "wizard.column_roles_not_object": "column_roles חייב להיות אובייקט.",
@@ -175,7 +175,7 @@
     "wizard.split_fractions_not_number": "ערכי split_fractions חייבים להיות מספרים: {error}",
     "wizard.split_fractions_negative": "split_fractions חייב להיות לא שלילי.",
     "wizard.split_fractions_sum": "split_fractions חייב להסתכם ל-1.0, התקבל {total}",
-    "serve.no_model_config": "לא נמצאה הגדרת {term.model} לריצה. יש לספק model_config_override.",
+    "serve.no_model_config": "לא נמצאו הגדרות {term.model} לריצה. צריך לספק model_config_override.",
     "serve.no_declared_inputs": "לתוצר אין שדות קלט מוצהרים; לא ניתן לאמת בבטחה את הקלטים.",
     "serve.missing_inputs": "חסרים שדות קלט נדרשים: {missing}. ציפינו ל: {input_fields}",
     "template.not_found": "התבנית לא נמצאה.",
@@ -274,7 +274,7 @@
           "label": "label"
         },
         "signature_code": "import dspy\n\n\nclass ClassifySentiment(dspy.Signature):\n    \"\"\"סווג את הטקסט לאחת משלוש קטגוריות: חיובי, שלילי, נייטרלי.\"\"\"\n\n    text: str = dspy.InputField(desc=\"טקסט הביקורת\")\n    label: str = dspy.OutputField(desc=\"חיובי / שלילי / נייטרלי\")\n",
-        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בדוק אם התשובה של המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"label\", \"\")).strip().lower()\n    expected = str(getattr(example, \"label\", \"\")).strip().lower()\n    return predicted == expected\n"
+        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בודקת אם תשובת המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"label\", \"\")).strip().lower()\n    expected = str(getattr(example, \"label\", \"\")).strip().lower()\n    return predicted == expected\n"
       },
       "email-triage-he": {
         "name": "מיון פניות מייל",
@@ -348,7 +348,7 @@
           "category": "category"
         },
         "signature_code": "import dspy\n\n\nclass ClassifyEmail(dspy.Signature):\n    \"\"\"סווג את הפנייה לפי המחלקה המתאימה: תמיכה, חיוב, או מכירות.\"\"\"\n\n    subject: str = dspy.InputField(desc=\"נושא ההודעה\")\n    body: str = dspy.InputField(desc=\"גוף ההודעה\")\n    category: str = dspy.OutputField(desc=\"תמיכה / חיוב / מכירות\")\n",
-        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בדוק אם התשובה של המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"category\", \"\")).strip().lower()\n    expected = str(getattr(example, \"category\", \"\")).strip().lower()\n    return predicted == expected\n"
+        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בודקת אם תשובת המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"category\", \"\")).strip().lower()\n    expected = str(getattr(example, \"category\", \"\")).strip().lower()\n    return predicted == expected\n"
       },
       "qa-general-he": {
         "name": "שאלות ותשובות כלליות",
@@ -418,7 +418,7 @@
           "answer": "answer"
         },
         "signature_code": "import dspy\n\n\nclass AnswerQuestion(dspy.Signature):\n    \"\"\"ענה על השאלה בתשובה קצרה ומדויקת.\"\"\"\n\n    question: str = dspy.InputField(desc=\"השאלה\")\n    answer: str = dspy.OutputField(desc=\"תשובה קצרה\")\n",
-        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בדוק אם התשובה של המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"answer\", \"\")).strip().lower()\n    expected = str(getattr(example, \"answer\", \"\")).strip().lower()\n    return predicted == expected\n"
+        "metric_code": "def metric(example, prediction, trace=None):\n    \"\"\"בודקת אם תשובת המודל זהה לתגית האמת.\"\"\"\n    predicted = str(getattr(prediction, \"answer\", \"\")).strip().lower()\n    expected = str(getattr(example, \"answer\", \"\")).strip().lower()\n    return predicted == expected\n"
       }
     }
   }

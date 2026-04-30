@@ -18,7 +18,11 @@ import type {
   PaginatedJobsResponse,
   OptimizationSummaryResponse,
 } from "@/shared/types/api";
-import type { DashboardAnalytics, DashboardAnalyticsJob } from "@/shared/lib/api";
+import type {
+  DashboardAnalytics,
+  DashboardAnalyticsJob,
+  PublicDashboardPoint,
+} from "@/shared/lib/api";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -90,7 +94,7 @@ function buildValidating(start: Date): OptimizationStatusResponse {
         timestamp: ts(start, 400),
         level: "INFO",
         logger: "dspy.validators",
-        message: "Validating signature and metric code...",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.19"),
         pair_index: null,
       },
     ],
@@ -109,7 +113,7 @@ function buildSplitting(start: Date): OptimizationStatusResponse {
       {
         timestamp: ts(start, 1500),
         event: "validation_passed",
-        metrics: { message: "All checks passed" },
+        metrics: { message: msg("auto.features.tutorial.lib.demo.data.literal.20") },
       },
     ],
     logs: [
@@ -124,21 +128,21 @@ function buildSplitting(start: Date): OptimizationStatusResponse {
         timestamp: ts(start, 400),
         level: "INFO",
         logger: "dspy.validators",
-        message: "Validating signature and metric code...",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.19"),
         pair_index: null,
       },
       {
         timestamp: ts(start, 1500),
         level: "INFO",
         logger: "dspy.validators",
-        message: "Validation passed ✓",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.21"),
         pair_index: null,
       },
       {
         timestamp: ts(start, 1800),
         level: "INFO",
         logger: "dspy.datasets",
-        message: "Splitting 200 examples into train/val/test...",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.22"),
         pair_index: null,
       },
     ],
@@ -174,35 +178,35 @@ function buildBaseline(start: Date): OptimizationStatusResponse {
         timestamp: ts(start, 400),
         level: "INFO",
         logger: "dspy.validators",
-        message: "Validating signature and metric code...",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.19"),
         pair_index: null,
       },
       {
         timestamp: ts(start, 1500),
         level: "INFO",
         logger: "dspy.validators",
-        message: "Validation passed ✓",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.21"),
         pair_index: null,
       },
       {
         timestamp: ts(start, 1800),
         level: "INFO",
         logger: "dspy.datasets",
-        message: "Splitting 200 examples into train/val/test...",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.22"),
         pair_index: null,
       },
       {
         timestamp: ts(start, 2800),
         level: "INFO",
         logger: "dspy.datasets",
-        message: "Dataset split: train=120, val=40, test=40",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.23"),
         pair_index: null,
       },
       {
         timestamp: ts(start, 3000),
         level: "INFO",
         logger: "dspy.runners",
-        message: "Evaluating default program on test set...",
+        message: msg("auto.features.tutorial.lib.demo.data.literal.24"),
         pair_index: null,
       },
     ],
@@ -243,42 +247,42 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
       timestamp: ts(start, 400),
       level: "INFO",
       logger: "dspy.validators",
-      message: "Validating signature and metric code...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.19"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 1500),
       level: "INFO",
       logger: "dspy.validators",
-      message: "Validation passed ✓",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.21"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 1800),
       level: "INFO",
       logger: "dspy.datasets",
-      message: "Splitting 200 examples into train/val/test...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.22"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 2800),
       level: "INFO",
       logger: "dspy.datasets",
-      message: "Dataset split: train=120, val=40, test=40",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.23"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 3000),
       level: "INFO",
       logger: "dspy.runners",
-      message: "Evaluating default program on test set...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.24"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 4200),
       level: "INFO",
       logger: "dspy.runners",
-      message: "Default program score: 62.0",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.25"),
       pair_index: null,
     },
     {
@@ -364,42 +368,42 @@ function buildDone(start: Date): OptimizationStatusResponse {
       timestamp: ts(start, 400),
       level: "INFO",
       logger: "dspy.validators",
-      message: "Validating signature and metric code...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.19"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 1500),
       level: "INFO",
       logger: "dspy.validators",
-      message: "Validation passed ✓",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.21"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 1800),
       level: "INFO",
       logger: "dspy.datasets",
-      message: "Splitting 200 examples into train/val/test...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.22"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 2800),
       level: "INFO",
       logger: "dspy.datasets",
-      message: "Dataset split: train=120, val=40, test=40",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.23"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 3000),
       level: "INFO",
       logger: "dspy.runners",
-      message: "Evaluating default program on test set...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.24"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 4200),
       level: "INFO",
       logger: "dspy.runners",
-      message: "Default program score: 62.0",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.25"),
       pair_index: null,
     },
     {
@@ -436,28 +440,28 @@ function buildDone(start: Date): OptimizationStatusResponse {
       timestamp: ts(start, 9200),
       level: "INFO",
       logger: "dspy.gepa",
-      message: "Best program found with score: 0.84",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.26"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 9500),
       level: "INFO",
       logger: "dspy.runners",
-      message: "Evaluating optimized program on test set...",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.27"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 10200),
       level: "INFO",
       logger: "dspy.runners",
-      message: "Optimized program score: 84.0",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.28"),
       pair_index: null,
     },
     {
       timestamp: ts(start, 10500),
       level: "INFO",
       logger: "skynet.worker",
-      message: "Optimization complete ✓",
+      message: msg("auto.features.tutorial.lib.demo.data.literal.29"),
       pair_index: null,
     },
   );
@@ -630,9 +634,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     optimizer_name: "GEPA",
     model_name: "gpt-4o-mini",
     dataset_rows: 150,
-    baseline_test_metric: 0.55,
-    optimized_test_metric: 0.82,
-    metric_improvement: 0.27,
+    baseline_test_metric: 0.48,
+    optimized_test_metric: 0.86,
+    metric_improvement: 0.38,
     username: "demo",
     total_pairs: 4,
     completed_pairs: 4,
@@ -651,7 +655,7 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     model_name: "gpt-4o",
     dataset_rows: 80,
     username: "demo",
-    message: "Metric function raised an exception",
+    message: msg("auto.features.tutorial.lib.demo.data.literal.30"),
   },
   {
     optimization_id: "demo-005",
@@ -669,6 +673,82 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = [
     baseline_test_metric: 0.48,
     username: "demo",
     latest_metrics: { tqdm_percent: 45, tqdm_n: 4, tqdm_total: 9 },
+  },
+  {
+    optimization_id: "demo-006",
+    optimization_type: "run",
+    status: "success",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.9"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.10"),
+    created_at: daysAgo(12),
+    completed_at: daysAgo(12),
+    elapsed: "3:28",
+    elapsed_seconds: 208,
+    module_name: "Predict",
+    optimizer_name: "MIPROv2",
+    model_name: "claude-sonnet-4",
+    dataset_rows: 280,
+    baseline_test_metric: 0.66,
+    optimized_test_metric: 0.83,
+    metric_improvement: 0.17,
+    username: "demo",
+  },
+  {
+    optimization_id: "demo-007",
+    optimization_type: "run",
+    status: "success",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.12"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.13"),
+    created_at: daysAgo(9),
+    completed_at: daysAgo(9),
+    elapsed: "5:50",
+    elapsed_seconds: 350,
+    module_name: "ChainOfThought",
+    optimizer_name: "BootstrapFewShot",
+    model_name: "claude-haiku-4",
+    dataset_rows: 180,
+    baseline_test_metric: 0.51,
+    optimized_test_metric: 0.74,
+    metric_improvement: 0.23,
+    username: "demo",
+  },
+  {
+    optimization_id: "demo-008",
+    optimization_type: "run",
+    status: "success",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.14"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.15"),
+    created_at: daysAgo(7),
+    completed_at: daysAgo(7),
+    elapsed: "4:36",
+    elapsed_seconds: 276,
+    module_name: "Predict",
+    optimizer_name: "MIPROv2",
+    model_name: "gemini-2.0-pro",
+    dataset_rows: 220,
+    baseline_test_metric: 0.58,
+    optimized_test_metric: 0.79,
+    metric_improvement: 0.21,
+    username: "demo",
+  },
+  {
+    optimization_id: "demo-009",
+    optimization_type: "run",
+    status: "success",
+    name: msg("auto.features.tutorial.lib.demo.data.literal.7"),
+    description: msg("auto.features.tutorial.lib.demo.data.literal.8"),
+    created_at: daysAgo(15),
+    completed_at: daysAgo(15),
+    elapsed: "2:08",
+    elapsed_seconds: 128,
+    module_name: "ChainOfThought",
+    optimizer_name: "BootstrapFewShot",
+    model_name: "claude-sonnet-4",
+    dataset_rows: 250,
+    baseline_test_metric: 0.6,
+    optimized_test_metric: 0.78,
+    metric_improvement: 0.18,
+    username: "demo",
   },
 ];
 
@@ -698,27 +778,38 @@ export const DEMO_DASHBOARD_JOBS: PaginatedJobsResponse = {
 
 export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = {
   filtered_total: DEMO_JOBS.length,
-  status_counts: { success: 3, failed: 1, running: 1 },
-  optimizer_counts: { GEPA: 5 },
-  job_type_counts: { run: 4, grid_search: 1 },
+  status_counts: { success: 7, failed: 1, running: 1 },
+  optimizer_counts: { GEPA: 5, MIPROv2: 2, BootstrapFewShot: 2 },
+  job_type_counts: { run: 8, grid_search: 1 },
   model_usage: [
     { name: "gpt-4o-mini", value: 3 },
     { name: "gpt-4o", value: 2 },
+    { name: "claude-sonnet-4", value: 2 },
+    { name: "claude-haiku-4", value: 1 },
+    { name: "gemini-2.0-pro", value: 1 },
   ],
-  success_count: 3,
+  success_count: 7,
   failed_count: 1,
   running_count: 1,
-  terminal_count: 4,
-  success_rate: 75,
-  avg_improvement: 0.21,
-  avg_runtime_seconds: 309,
-  total_dataset_rows: 900,
+  terminal_count: 8,
+  success_rate: 87.5,
+  avg_improvement: 0.22,
+  avg_runtime_seconds: 222,
+  total_dataset_rows: 1830,
   total_pairs_run: 4,
   grid_search_count: 1,
-  single_run_count: 4,
-  best_improvement: 0.23,
-  improvement_by_optimizer: [{ name: "GEPA", average: 0.21, count: 3 }],
-  runtime_minutes_by_optimizer: [{ name: "GEPA", average: 3.71, count: 5 }],
+  single_run_count: 8,
+  best_improvement: 0.38,
+  improvement_by_optimizer: [
+    { name: "GEPA", average: 0.26, count: 3 },
+    { name: "MIPROv2", average: 0.19, count: 2 },
+    { name: "BootstrapFewShot", average: 0.205, count: 2 },
+  ],
+  runtime_minutes_by_optimizer: [
+    { name: "GEPA", average: 3.45, count: 5 },
+    { name: "MIPROv2", average: 4.03, count: 2 },
+    { name: "BootstrapFewShot", average: 3.98, count: 2 },
+  ],
   top_improvement: DEMO_JOBS.filter((j) => j.metric_improvement).map(toAnalyticsJob),
   runtime_distribution: DEMO_JOBS.filter((j) => j.elapsed_seconds).map(toAnalyticsJob),
   dataset_vs_improvement: DEMO_JOBS.filter((j) => j.metric_improvement).map(toAnalyticsJob),
@@ -727,14 +818,24 @@ export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = {
     .sort((a, b) => (b.metric_improvement ?? 0) - (a.metric_improvement ?? 0))
     .map(toAnalyticsJob),
   timeline: [
+    { date: daysAgo(15).slice(0, 10), count: 1 },
+    { date: daysAgo(12).slice(0, 10), count: 1 },
+    { date: daysAgo(9).slice(0, 10), count: 1 },
+    { date: daysAgo(7).slice(0, 10), count: 1 },
     { date: daysAgo(5).slice(0, 10), count: 1 },
     { date: daysAgo(3).slice(0, 10), count: 1 },
     { date: daysAgo(2).slice(0, 10), count: 1 },
     { date: daysAgo(1).slice(0, 10), count: 1 },
     { date: daysAgo(0).slice(0, 10), count: 1 },
   ],
-  available_optimizers: ["GEPA"],
-  available_models: ["gpt-4o-mini", "gpt-4o"],
+  available_optimizers: ["GEPA", "MIPROv2", "BootstrapFewShot"],
+  available_models: [
+    "gpt-4o-mini",
+    "gpt-4o",
+    "claude-sonnet-4",
+    "claude-haiku-4",
+    "gemini-2.0-pro",
+  ],
 };
 
 /**
@@ -1020,7 +1121,9 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
     }),
   ];
 
-  const best = pairs[0]!;
+  const best = pairs.reduce((a, b) =>
+    (b.optimized_test_metric ?? -Infinity) > (a.optimized_test_metric ?? -Infinity) ? b : a,
+  );
   const grid: GridSearchResult = {
     module_name: "ChainOfThought",
     optimizer_name: "GEPA",
@@ -1218,3 +1321,120 @@ export const DEMO_COMPARE_DATASET: OptimizationDatasetResponse = {
   },
   split_counts: { train: 0, val: 0, test: COMPARE_DATASET_ROWS.length },
 };
+
+// Tasks are ordered to match the cluster hierarchy below: pairs of two
+// share a level-1 parent (4 parents = 4 broad themes), and the first 4 vs
+// last 4 split the level-0 halves. So when the granularity slider walks
+// from 2 → 4 → 8 the dominant label per cluster sharpens predictably.
+const EXPLORE_TASKS = [
+  msg("auto.features.tutorial.lib.demo.data.literal.1"),
+  msg("auto.features.tutorial.lib.demo.data.literal.9"),
+  msg("auto.features.tutorial.lib.demo.data.literal.12"),
+  msg("auto.features.tutorial.lib.demo.data.literal.31"),
+  msg("auto.features.tutorial.lib.demo.data.literal.32"),
+  msg("auto.features.tutorial.lib.demo.data.literal.33"),
+  msg("auto.features.tutorial.lib.demo.data.literal.14"),
+  msg("auto.features.tutorial.lib.demo.data.literal.34"),
+];
+
+// Maps each of the 32 leaf clusters to one of the 8 task indices above.
+// Within each level-1 group of 8 leaves, 5 take the primary task and 3
+// take the secondary — that 5/3 skew picks a clear modal at level 1, and
+// each level-2 group of 4 leaves contains either all-primary or 1/3 mix
+// (modal is the secondary), giving 8 distinct labels at level 2.
+const EXPLORE_LEAF_TASK = [
+  0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7,
+];
+
+const EXPLORE_MODELS = [
+  "gpt-4o",
+  "gpt-4o-mini",
+  "claude-sonnet-4",
+  "claude-haiku-4",
+  "gemini-2.0-pro",
+];
+
+const EXPLORE_OPTIMIZERS = ["GEPA", "MIPROv2", "BootstrapFewShot", "GridSearch"];
+
+const EXPLORE_DEMO_TOTAL = 1000;
+const EXPLORE_CLUSTER_ROWS = 4;
+const EXPLORE_CLUSTER_COLS = 8;
+const EXPLORE_CLUSTER_TOTAL = EXPLORE_CLUSTER_ROWS * EXPLORE_CLUSTER_COLS;
+
+function buildExploreDemoPoints(): PublicDashboardPoint[] {
+  // Deterministic LCG so the layout is stable across reloads — keeps the
+  // tutorial screenshot-friendly and means cluster colors don't shift each
+  // time the user re-opens the explore step.
+  let seed = 0x6a09e667;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x1_0000_0000;
+  };
+  const gauss = () => {
+    const u1 = Math.max(1e-9, rand());
+    const u2 = rand();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+
+  const cellW = 1.7 / EXPLORE_CLUSTER_COLS;
+  const cellH = 1.7 / EXPLORE_CLUSTER_ROWS;
+  const centers: Array<{ cx: number; cy: number }> = [];
+  for (let r = 0; r < EXPLORE_CLUSTER_ROWS; r++) {
+    for (let c = 0; c < EXPLORE_CLUSTER_COLS; c++) {
+      centers.push({
+        cx: -0.85 + cellW / 2 + c * cellW,
+        cy: 0.85 - cellH / 2 - r * cellH,
+      });
+    }
+  }
+
+  const now = Date.now();
+  const points: PublicDashboardPoint[] = [];
+  for (let i = 0; i < EXPLORE_DEMO_TOTAL; i++) {
+    const c32 = i % EXPLORE_CLUSTER_TOTAL;
+    const center = centers[c32]!;
+    const noise = 0.075;
+    const x = Math.max(-0.98, Math.min(0.98, center.cx + gauss() * noise));
+    const y = Math.max(-0.98, Math.min(0.98, center.cy + gauss() * noise));
+
+    const baseline = 0.38 + rand() * 0.32;
+    const lift = 0.04 + rand() * 0.22;
+    const optimized = Math.min(0.97, baseline + lift);
+
+    const isGrid = i % 7 === 0;
+    const type: "run" | "grid_search" = isGrid ? "grid_search" : "run";
+    const modelIdx = (c32 + Math.floor(i / EXPLORE_CLUSTER_TOTAL)) % EXPLORE_MODELS.length;
+    const optimizerIdx = isGrid
+      ? EXPLORE_OPTIMIZERS.indexOf("GridSearch")
+      : i % (EXPLORE_OPTIMIZERS.length - 1);
+    const taskIdx = EXPLORE_LEAF_TASK[c32] ?? 0;
+    const daysAgo = Math.floor((i / EXPLORE_DEMO_TOTAL) * 30) + (i % 5);
+
+    points.push({
+      optimization_id: `tutorial-explore-${i.toString().padStart(4, "0")}`,
+      optimization_type: type,
+      winning_model: EXPLORE_MODELS[modelIdx] ?? null,
+      baseline_metric: Number((baseline * 100).toFixed(1)),
+      optimized_metric: Number((optimized * 100).toFixed(1)),
+      summary_text: null,
+      task_name: EXPLORE_TASKS[taskIdx] ?? null,
+      module_name: "Predict",
+      optimizer_name: EXPLORE_OPTIMIZERS[optimizerIdx] ?? null,
+      created_at: new Date(now - daysAgo * 86400_000).toISOString(),
+      x,
+      y,
+      // Hierarchical IDs — cluster k=32 is the leaf, coarser levels collapse
+      // adjacent clusters in pairs so the slider walks 2 → 4 → 8 → 16 → 32.
+      cluster_levels: [
+        Math.floor(c32 / 16),
+        Math.floor(c32 / 8),
+        Math.floor(c32 / 4),
+        Math.floor(c32 / 2),
+        c32,
+      ],
+    });
+  }
+  return points;
+}
+
+export const DEMO_EXPLORE_POINTS: PublicDashboardPoint[] = buildExploreDemoPoints();

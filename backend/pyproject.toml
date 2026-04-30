@@ -54,6 +54,7 @@ load = [
 recommendations = [
     "sentence-transformers>=2.5",
     "numpy>=1.24",
+    "umap-learn>=0.5",
 ]
 
 [tool.ruff]

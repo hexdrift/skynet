@@ -1,10 +1,17 @@
 /**
  * Aggregated Hebrew UI catalog for the application.
  *
- * Per-feature slices live in ``features/<name>/messages.ts``; this
- * file just re-exports the union and provides ``msg`` / ``formatMsg``
- * helpers. ESLint blocks new inline Hebrew literals outside the
- * slice files and ``i18n/locales/he.json`` (PER-83 phase 4).
+ * Per-feature slices live in ``features/<name>/messages.ts`` (and
+ * ``shared/messages/messages.ts`` for cross-feature copy) and are
+ * hand-edited — there is no codegen step for UI strings. This file
+ * just re-exports the union and provides ``msg`` / ``formatMsg``
+ * helpers. ESLint blocks inline Hebrew literals outside the slice
+ * files and ``i18n/locales/he.json``.
+ *
+ * Backend i18n codes (errors, validations) take a different path:
+ * they live in ``i18n/locales/he.json``, are regenerated into
+ * ``shared/lib/generated/i18n-catalog.ts`` by
+ * ``scripts/generate_i18n.py``, and are resolved via ``tI18n``.
  */
 
 import { formatTemplate } from "@/shared/lib/i18n";

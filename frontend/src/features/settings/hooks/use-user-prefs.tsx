@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "react-toastify";
 import { msg } from "@/shared/lib/messages";
+import { registerTutorialHook } from "@/features/tutorial";
 import {
   DEFAULT_PREFS,
   PREF_KEYS,
@@ -50,6 +51,18 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
       writePref(key, value);
       toast.success(msg("settings.saved"), { autoClose: 1500, toastId: "settings-saved" });
     },
+    [],
+  );
+
+  // Tutorial bridge — flips advancedMode silently (no settings-saved toast)
+  // so the deep-dive tour can reveal /explore without leaking a "settings
+  // saved" affordance the user never asked for.
+  React.useEffect(
+    () =>
+      registerTutorialHook("setAdvancedMode", (enabled) => {
+        setPrefs((prev) => ({ ...prev, advancedMode: enabled }));
+        writePref("advancedMode", enabled);
+      }),
     [],
   );
 

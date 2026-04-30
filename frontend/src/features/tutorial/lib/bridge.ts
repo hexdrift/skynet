@@ -26,7 +26,7 @@ import type {
   EvalExampleResult,
   OptimizationDatasetResponse,
 } from "@/shared/types/api";
-import type { DashboardAnalytics } from "@/shared/lib/api";
+import type { DashboardAnalytics, PublicDashboardPoint } from "@/shared/lib/api";
 
 /**
  * The set of hooks the tutorial system can invoke. Every hook is a
@@ -64,12 +64,21 @@ export interface TutorialHooks {
   setSelectedJobIds: (ids: string[]) => void;
   /** Inject demo analytics into the dashboard charts when empty. */
   setDemoAnalytics: (data: DashboardAnalytics) => void;
+  /** Inject demo points into the explore scatter canvas when empty. */
+  setDemoExplorePoints: (points: PublicDashboardPoint[]) => void;
   /** Jump the tagger setup wizard to a specific step. */
   setTaggerStep: (step: number) => void;
   /** Inject demo rows into the tagger setup. */
   setTaggerDemoData: (data: { rows: unknown[]; cols: string[]; textCol: string }) => void;
   /** Open or close the generalist agent panel (left-anchored aside). */
   setGeneralistPanelOpen: (open: boolean) => void;
+  /**
+   * Toggle the advancedMode user preference. The deep-dive tour uses this
+   * to surface advanced-only features (like /explore) without the user
+   * having to flip the setting first; the prefs page is the canonical
+   * place to revert.
+   */
+  setAdvancedMode: (enabled: boolean) => void;
 }
 
 /**

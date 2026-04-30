@@ -1,17 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { RotateCcw } from "lucide-react";
+import { LocateFixed, Minus, Plus, RotateCcw } from "lucide-react";
 import type { PublicDashboardPoint } from "@/shared/lib/api";
 import { getJobTypeLabel } from "@/shared/constants/job-status";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/shared/ui/primitives/tooltip";
+import {
   BASE_RADIUS,
+  CLUSTER_LABEL_MAX_CHARS,
+  CLUSTER_LABEL_MIN_POINTS,
   DRAG_THRESHOLD_PX,
   FOCUS_RING_COLOR,
   FOCUS_RING_OFFSET,
   GRID_AXIS_COLOR,
+  GRID_LINE_COLOR,
   HOVER_RADIUS,
   MAX_SCALE,
   MIN_SCALE,
@@ -24,7 +32,16 @@ import {
   ZOOM_DOUBLECLICK_OUT,
   ZOOM_WHEEL_FACTOR,
 } from "../constants";
-import { clampNorm, clampView, colorForPoint, formatScore, type View } from "../lib/format";
+import {
+  clampNorm,
+  clampView,
+  colorForCluster,
+  computeClusterHulls,
+  computeClusterLabels,
+  formatScore,
+  pointInPolygon,
+  type View,
+} from "../lib/format";
 
 export type ExploreFilter = "all" | "run" | "grid_search";
 
@@ -33,6 +50,13 @@ interface ScatterCanvasProps {
   filter: ExploreFilter;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  // Index into each point's cluster_levels array. The backend returns
+  // a fixed number of levels (typically 5), and the slider in ExploreView
+  // chooses which one drives the coloring.
+  granularityLevel: number;
+  // The number of clusters present at the current granularity level —
+  // used to spread colors evenly around the hue wheel.
+  clusterCount: number;
   dimmed?: boolean;
   hideResetButton?: boolean;
   heightClass?: string;
@@ -48,11 +72,68 @@ interface ProjectedPoint {
   color: string;
 }
 
+const GRID_STEP = 44;
+// Pushes hull vertices outward from the cluster centroid by this many
+// screen pixels so the boundary sits clear of the point markers (whose
+// radius is BASE_RADIUS / HOVER_RADIUS) at any zoom level.
+const HULL_PIXEL_PADDING = 8;
+
+interface HullShape {
+  clusterId: number;
+  color: string;
+  vertices: ReadonlyArray<{ bx: number; by: number }>;
+  centroid: { cx: number; cy: number };
+}
+
+function projectHullToScreen(
+  hull: HullShape,
+  view: View,
+): Array<{ x: number; y: number }> {
+  const cx = hull.centroid.cx * view.k + view.tx;
+  const cy = hull.centroid.cy * view.k + view.ty;
+  return hull.vertices.map((v) => {
+    const sx = v.bx * view.k + view.tx;
+    const sy = v.by * view.k + view.ty;
+    const dx = sx - cx;
+    const dy = sy - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    return {
+      x: sx + (dx / len) * HULL_PIXEL_PADDING,
+      y: sy + (dy / len) * HULL_PIXEL_PADDING,
+    };
+  });
+}
+
+function drawCanvasGrid(
+  ctx: CanvasRenderingContext2D,
+  size: { w: number; h: number },
+  view: View,
+) {
+  const step = GRID_STEP * view.k;
+  const offsetX = ((view.tx % step) + step) % step;
+  const offsetY = ((view.ty % step) + step) % step;
+
+  ctx.strokeStyle = GRID_LINE_COLOR;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = offsetX; x <= size.w; x += step) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, size.h);
+  }
+  for (let y = offsetY; y <= size.h; y += step) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(size.w, y);
+  }
+  ctx.stroke();
+}
+
 export function ScatterCanvas({
   points,
   filter,
   selectedId,
   onSelect,
+  granularityLevel,
+  clusterCount,
   dimmed = false,
   hideResetButton = false,
   heightClass = "h-[64vh] min-h-[420px]",
@@ -62,6 +143,7 @@ export function ScatterCanvas({
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [size, setSize] = React.useState({ w: 0, h: 0 });
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
+  const [hoveredClusterId, setHoveredClusterId] = React.useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = React.useState<{ x: number; y: number } | null>(null);
   const [view, setView] = React.useState<View>({ k: 1, tx: 0, ty: 0 });
   const [isDragging, setIsDragging] = React.useState(false);
@@ -94,16 +176,75 @@ export function ScatterCanvas({
       const match = filter === "all" || point.optimization_type === filter;
       const normX = (clampNorm(point.x) + 1) / 2;
       const normY = 1 - (clampNorm(point.y) + 1) / 2;
+      // cluster_levels is required by the DTO but defensively fall back to 0
+      // if the field is absent (older backend, half-rolled-back deploy) or
+      // the slider points past the array — the page stays useful either way.
+      const clusterId = (point.cluster_levels ?? [])[granularityLevel] ?? 0;
       return {
         point,
         basePx: PADDING + normX * plotW,
         basePy: PADDING + normY * plotH,
         radius: match ? BASE_RADIUS : BASE_RADIUS - 1,
         match,
-        color: colorForPoint(match),
+        color: colorForCluster(clusterId, clusterCount, match),
       };
     });
-  }, [points, filter, size]);
+  }, [points, filter, size, granularityLevel, clusterCount]);
+
+  const projectedLabels = React.useMemo(() => {
+    if (size.w < 2 || size.h < 2) return [];
+    const plotW = Math.max(1, size.w - PADDING * 2);
+    const plotH = Math.max(1, size.h - PADDING * 2);
+    return computeClusterLabels(points, granularityLevel, CLUSTER_LABEL_MIN_POINTS).map((cl) => {
+      const normX = (clampNorm(cl.cx) + 1) / 2;
+      const normY = 1 - (clampNorm(cl.cy) + 1) / 2;
+      const text =
+        cl.label.length > CLUSTER_LABEL_MAX_CHARS
+          ? `${cl.label.slice(0, CLUSTER_LABEL_MAX_CHARS - 1)}…`
+          : cl.label;
+      return {
+        clusterId: cl.clusterId,
+        text,
+        basePx: PADDING + normX * plotW,
+        basePy: PADDING + normY * plotH,
+        color: colorForCluster(cl.clusterId, clusterCount, true),
+      };
+    });
+  }, [points, granularityLevel, clusterCount, size]);
+
+  // Boundary outlines per cluster, in canvas-base pixel coordinates
+  // (pre-view-transform). The drawing pass and the hover hit-test apply
+  // the current pan/zoom on top. Vertices include a centroid push-out so
+  // the line sits a few pixels outside the actual point markers.
+  const clusterHulls = React.useMemo(() => {
+    if (size.w < 2 || size.h < 2) return [];
+    const plotW = Math.max(1, size.w - PADDING * 2);
+    const plotH = Math.max(1, size.h - PADDING * 2);
+    return computeClusterHulls(points, granularityLevel, CLUSTER_LABEL_MIN_POINTS).map((h) => {
+      const vertices = h.hull.map((v) => {
+        const normX = (v.x + 1) / 2;
+        const normY = 1 - (v.y + 1) / 2;
+        return {
+          bx: PADDING + normX * plotW,
+          by: PADDING + normY * plotH,
+        };
+      });
+      let cxSum = 0;
+      let cySum = 0;
+      for (const v of vertices) {
+        cxSum += v.bx;
+        cySum += v.by;
+      }
+      const cx = cxSum / vertices.length;
+      const cy = cySum / vertices.length;
+      return {
+        clusterId: h.clusterId,
+        color: colorForCluster(h.clusterId, clusterCount, true),
+        vertices,
+        centroid: { cx, cy },
+      };
+    });
+  }, [points, granularityLevel, clusterCount, size]);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -117,6 +258,7 @@ export function ScatterCanvas({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
+    drawCanvasGrid(ctx, size, view);
 
     const cx = (size.w / 2) * view.k + view.tx;
     const cy = (size.h / 2) * view.k + view.ty;
@@ -129,22 +271,52 @@ export function ScatterCanvas({
     ctx.lineTo(size.w - PADDING, cy);
     ctx.stroke();
 
+    for (const hull of clusterHulls) {
+      const polygon = projectHullToScreen(hull, view);
+      if (polygon.length < 3) continue;
+      const isHovered = hull.clusterId === hoveredClusterId;
+      ctx.beginPath();
+      for (let i = 0; i < polygon.length; i++) {
+        const v = polygon[i]!;
+        if (i === 0) ctx.moveTo(v.x, v.y);
+        else ctx.lineTo(v.x, v.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = hull.color;
+      ctx.globalAlpha = dimmed ? 0.04 : isHovered ? 0.14 : 0.06;
+      ctx.fill();
+      ctx.strokeStyle = hull.color;
+      ctx.lineWidth = isHovered ? 2 : 1;
+      ctx.globalAlpha = dimmed ? 0.3 : isHovered ? 0.85 : 0.45;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Viewport-cull before sorting — at 100k points only a fraction is
+    // ever on screen, and the per-frame sort is what dominates otherwise.
+    const cullMargin = HOVER_RADIUS + FOCUS_RING_OFFSET + 4;
+    const visible: Array<{ p: ProjectedPoint; sx: number; sy: number }> = [];
+    for (const p of projected) {
+      const sx = p.basePx * view.k + view.tx;
+      const sy = p.basePy * view.k + view.ty;
+      if (sx < -cullMargin || sx > size.w + cullMargin) continue;
+      if (sy < -cullMargin || sy > size.h + cullMargin) continue;
+      visible.push({ p, sx, sy });
+    }
+
     const rank = (p: ProjectedPoint) => {
       if (selectedId === p.point.optimization_id || hoveredId === p.point.optimization_id) return 2;
       return p.match ? 1 : 0;
     };
-    const sorted = [...projected].sort((a, b) => rank(a) - rank(b));
+    visible.sort((a, b) => rank(a.p) - rank(b.p));
 
-    for (const p of sorted) {
+    for (const { p, sx, sy } of visible) {
       const isHovered = hoveredId === p.point.optimization_id;
       const isSelected = selectedId === p.point.optimization_id;
       const isActive = isHovered || isSelected;
 
       let alpha = p.match ? 1 : 0.35;
       if (dimmed && !isActive) alpha *= 0.35;
-
-      const sx = p.basePx * view.k + view.tx;
-      const sy = p.basePy * view.k + view.ty;
 
       ctx.beginPath();
       ctx.fillStyle = p.color;
@@ -167,7 +339,50 @@ export function ScatterCanvas({
       }
     }
     ctx.globalAlpha = 1;
-  }, [projected, size, hoveredId, selectedId, dimmed, view]);
+
+    if (hoveredClusterId !== null && projectedLabels.length > 0) {
+      const lbl = projectedLabels.find((l) => l.clusterId === hoveredClusterId);
+      if (lbl) {
+        const sx = lbl.basePx * view.k + view.tx;
+        const sy = lbl.basePy * view.k + view.ty;
+        if (sx >= -120 && sx <= size.w + 120 && sy >= -40 && sy <= size.h + 40) {
+          ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const padX = 7;
+          const padY = 3;
+          const textH = 12;
+          const labelAlpha = dimmed ? 0.6 : 1;
+          const textW = ctx.measureText(lbl.text).width;
+          const pillX = sx - textW / 2 - padX;
+          const pillY = sy - textH / 2 - padY;
+          const pillW = textW + padX * 2;
+          const pillH = textH + padY * 2;
+          ctx.globalAlpha = labelAlpha;
+          ctx.fillStyle = "oklch(0.99 0.003 50)";
+          ctx.beginPath();
+          ctx.roundRect(pillX, pillY, pillW, pillH, 6);
+          ctx.fill();
+          ctx.strokeStyle = "oklch(0.85 0.01 50)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = lbl.color;
+          ctx.fillText(lbl.text, sx, sy + 0.5);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }, [
+    projected,
+    projectedLabels,
+    clusterHulls,
+    size,
+    hoveredId,
+    hoveredClusterId,
+    selectedId,
+    dimmed,
+    view,
+  ]);
 
   const pickNearest = React.useCallback(
     (clientX: number, clientY: number): ProjectedPoint | null => {
@@ -176,18 +391,40 @@ export function ScatterCanvas({
       const rect = canvas.getBoundingClientRect();
       const x = clientX - rect.left;
       const y = clientY - rect.top;
+      // Bounding-box prefilter so the hover loop scales — at 100k points
+      // checking distance against every one would block pointermove.
+      const radius = HOVER_RADIUS + 4;
       let best: { p: ProjectedPoint; d: number } | null = null;
       for (const p of projected) {
         const sx = p.basePx * view.k + view.tx;
+        if (sx < x - radius || sx > x + radius) continue;
         const sy = p.basePy * view.k + view.ty;
+        if (sy < y - radius || sy > y + radius) continue;
         const d = Math.hypot(sx - x, sy - y);
-        if (d < HOVER_RADIUS + 4 && (best === null || d < best.d)) {
+        if (d < radius && (best === null || d < best.d)) {
           best = { p, d };
         }
       }
       return best ? best.p : null;
     },
     [projected, view],
+  );
+
+  const pickClusterAt = React.useCallback(
+    (clientX: number, clientY: number): number | null => {
+      const canvas = canvasRef.current;
+      if (!canvas || clusterHulls.length === 0) return null;
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      for (const hull of clusterHulls) {
+        const polygon = projectHullToScreen(hull, view);
+        if (polygon.length < 3) continue;
+        if (pointInPolygon(x, y, polygon)) return hull.clusterId;
+      }
+      return null;
+    },
+    [clusterHulls, view],
   );
 
   const zoomAt = React.useCallback(
@@ -204,21 +441,17 @@ export function ScatterCanvas({
   );
 
   React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!container) return;
     const onWheel = (e: WheelEvent) => {
-      // Only intercept clear zoom intent: ctrl/meta-held (pinch-zoom on
-      // trackpads) or vertical scroll past a threshold. Otherwise let the
-      // page scroll naturally so the canvas isn't a scroll trap.
-      const isZoomIntent = e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > 5;
-      if (!isZoomIntent) return;
       e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
+      e.stopPropagation();
+      const rect = container.getBoundingClientRect();
       const factor = Math.exp(-e.deltaY * ZOOM_WHEEL_FACTOR);
       zoomAt(e.clientX - rect.left, e.clientY - rect.top, factor);
     };
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheel);
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -244,6 +477,7 @@ export function ScatterCanvas({
         setIsDragging(true);
         setHoveredId(null);
         setTooltipPos(null);
+        setHoveredClusterId(null);
       }
       if (ps.moved) {
         setView((v) => clampView({ k: v.k, tx: ps.startTx + dx, ty: ps.startTy + dy }, size));
@@ -257,9 +491,12 @@ export function ScatterCanvas({
       const sy = hit.basePy * view.k + view.ty;
       setHoveredId(hit.point.optimization_id);
       setTooltipPos({ x: sx, y: sy });
+      const cid = (hit.point.cluster_levels ?? [])[granularityLevel];
+      setHoveredClusterId(cid ?? null);
     } else {
       setHoveredId(null);
       setTooltipPos(null);
+      setHoveredClusterId(pickClusterAt(e.clientX, e.clientY));
     }
   };
 
@@ -292,12 +529,14 @@ export function ScatterCanvas({
     }
     setHoveredId(null);
     setTooltipPos(null);
+    setHoveredClusterId(null);
   };
 
   const handlePointerLeave = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.pointerType !== "mouse") return;
     setHoveredId(null);
     setTooltipPos(null);
+    setHoveredClusterId(null);
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -309,16 +548,17 @@ export function ScatterCanvas({
   };
 
   const resetView = () => setView({ k: 1, tx: 0, ty: 0 });
+  const zoomFromCenter = (factor: number) => zoomAt(size.w / 2, size.h / 2, factor);
   const isTransformed = view.k !== 1 || view.tx !== 0 || view.ty !== 0;
 
   const hovered = projected.find((p) => p.point.optimization_id === hoveredId)?.point ?? null;
-  const cursor = isDragging ? "cursor-grabbing" : hoveredId ? "cursor-pointer" : "cursor-grab";
+  const cursor = isDragging ? "cursor-grabbing" : "cursor-grab";
   const ariaLabel = formatMsg("explore.canvas.aria_label", { count: points.length });
 
   return (
     <div
       ref={containerRef}
-      className={`relative ${heightClass} w-full overflow-hidden rounded-lg border border-border/50 bg-background`}
+      className={`relative ${heightClass} w-full overflow-hidden rounded-lg border border-border/50 bg-[radial-gradient(circle_at_50%_42%,hsl(var(--muted))_0,hsl(var(--background))_58%)]`}
     >
       <canvas
         ref={canvasRef}
@@ -333,21 +573,61 @@ export function ScatterCanvas({
         className={`absolute inset-0 select-none touch-none ${cursor}`}
       />
       {children}
-      {isTransformed && !hideResetButton && (
-        <button
-          type="button"
-          onClick={resetView}
-          aria-label={msg("explore.map.reset")}
-          className="absolute top-3 end-3 z-20 inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-background/90 px-2.5 py-1.5 text-[0.75rem] font-medium text-foreground backdrop-blur-sm transition-colors cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
-        >
-          <RotateCcw className="size-3.5" aria-hidden="true" />
-          <span>{msg("explore.map.reset")}</span>
-        </button>
+      {!hideResetButton && (
+        <div className="absolute top-3 end-3 z-20 flex overflow-hidden rounded-lg border border-border/70 bg-background/90 shadow-sm backdrop-blur-sm">
+          <MapControlButton
+            label={msg("explore.map.zoom_in")}
+            onClick={() => zoomFromCenter(1.25)}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+          </MapControlButton>
+          <MapControlButton
+            label={msg("explore.map.zoom_out")}
+            onClick={() => zoomFromCenter(0.8)}
+          >
+            <Minus className="size-3.5" aria-hidden="true" />
+          </MapControlButton>
+          <MapControlButton label={msg("explore.map.reset")} onClick={resetView}>
+            {isTransformed ? (
+              <RotateCcw className="size-3.5" aria-hidden="true" />
+            ) : (
+              <LocateFixed className="size-3.5" aria-hidden="true" />
+            )}
+          </MapControlButton>
+        </div>
       )}
       {hovered && tooltipPos && !isDragging && (
         <Tooltip point={hovered} x={tooltipPos.x} y={tooltipPos.y} containerWidth={size.w} />
       )}
     </div>
+  );
+}
+
+function MapControlButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <UiTooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={label}
+          className="inline-flex size-9 items-center justify-center border-s border-border/60 text-foreground transition-[background-color,color] first:border-s-0 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8A882]/45"
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </UiTooltip>
   );
 }
 
@@ -387,7 +667,7 @@ function Tooltip({
   return (
     <div
       dir="rtl"
-      className="pointer-events-none absolute z-10 rounded-xl border border-border/70 bg-background/95 p-3 shadow-lg backdrop-blur-sm"
+      className="pointer-events-none absolute z-10 rounded-lg border border-border/70 bg-background/95 p-3 shadow-xl shadow-foreground/10 backdrop-blur-sm"
       style={style}
     >
       <p
@@ -424,7 +704,7 @@ function Tooltip({
           </div>
         )}
       </div>
-      <p className="mt-2 border-t border-border/50 pt-1.5 text-[0.6875rem] text-muted-foreground/80">
+      <p className="mt-2 border-t border-border/50 pt-1.5 text-[0.6875rem] font-medium text-muted-foreground/80">
         {msg("explore.tooltip.open_hint")}
       </p>
     </div>

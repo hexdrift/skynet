@@ -1,7 +1,10 @@
 /**
  * Canonical Hebrew vocabulary for Skynet.
  *
- * Source of truth: i18n/locales/he.json and i18n/glossary.yml.
+ * Source of truth for the TERMS map: ``i18n/locales/he.json`` (under
+ * ``terms``) and ``i18n/glossary.yml``. UI message strings are NOT
+ * sourced from here — they live in the per-feature slice files under
+ * ``frontend/src/features/<name>/messages.ts`` and are hand-edited.
  *
  * Hebrew copy should use gender-neutral plural imperatives: "לחצו", "בחרו",
  * "ראו". Avoid slash forms such as "לחצ/י" or "ראי/ה".

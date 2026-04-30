@@ -1,88 +1,327 @@
 # Air-Gap Deployment Guide
 
-How to deploy Skynet on an on-premise, internet-isolated network.
+This is the operator path for moving Skynet into an internet-isolated
+environment when you already have the required internal mirrors, images,
+secrets, IdP, LLM gateway, and Postgres available.
 
-This guide is **a navigator, not a how-to.** Every value you need to substitute for your environment is marked in-code with a `TODO: On-premise` comment next to a placeholder. Read this once, then drive the rollout from `git grep`.
+The goal is to make migration boring:
+
+1. Build or import images into your internal registry.
+2. Generate a reviewed Helm values file.
+3. Let the Helm migration hook run `alembic upgrade head`.
+4. Smoke test without any public internet egress.
+
+## Operator Script
+
+The repo includes a migration helper:
+
+```bash
+scripts/airgap_migrate.sh configure
+scripts/airgap_migrate.sh check
+scripts/airgap_migrate.sh values
+scripts/airgap_migrate.sh render
+scripts/airgap_migrate.sh install
+scripts/airgap_migrate.sh status
+```
+
+Start with `configure` if you want a guided setup. It asks for registry,
+image tags, hosts, IdP, database, and egress CIDRs, then writes the Helm
+values file and offers to run `check`, `render`, and `install`.
+
+Most installs should use environment overrides instead of editing the
+script:
+
+```bash
+RELEASE=skynet \
+NAMESPACE=skynet \
+REGISTRY=artifactory.example.com/skynet \
+IMAGE_TAG=2026.04.30 \
+PULL_SECRET=artifactory-pull-secret \
+EXTERNAL_DB_HOST=pgvector.internal \
+EXTERNAL_DB_SECRET=skynet-db-password \
+LLM_BASE_URL=https://llm-gateway.internal/v1 \
+OIDC_ISSUER=https://idp.internal/realms/skynet \
+OIDC_CLIENT_ID=skynet \
+FRONTEND_HOST=skynet.apps.internal \
+BACKEND_HOST=skynet-api.apps.internal \
+LLM_EGRESS_CIDR=10.0.5.0/24 \
+IDP_EGRESS_CIDR=10.0.6.0/24 \
+scripts/airgap_migrate.sh all
+```
+
+`values` writes:
+
+```text
+deploy/helm/skynet/values-airgap.generated.yaml
+```
+
+That generated file intentionally contains `TODO: On-premise` comments.
+Review them before `install`.
 
 ---
 
-## Step 1 — Find every placeholder
+## Pre-Transfer Checklist
+
+Run this before moving the repo or release bundle into the air gap:
+
+```bash
+git lfs install
+git lfs pull
+scripts/airgap_migrate.sh check
+```
+
+Confirm:
+
+- `backend/vendor/models/jina-code-embeddings-0.5b/model.safetensors`
+  is a real file, not a Git LFS pointer.
+- `frontend/package-lock.json` is present.
+- `backend/uv.lock` is present.
+- `backend/alembic/versions/` is present.
+- Backend, frontend, and pgvector images are available in the internal
+  registry you will reference from Helm.
+
+Recommended release bundle contents:
+
+- Git checkout or source archive.
+- `backend` image tar or internal registry image.
+- `frontend` image tar or internal registry image.
+- `pgvector/pgvector:pg16` mirror, unless using an external managed DB.
+- Helm chart under `deploy/helm/skynet`.
+- Secrets material handled by your secret-management process, not committed
+  into the bundle.
+
+---
+
+## Build Images Against Internal Mirrors
+
+Replace `artifactory.example.com` with your actual registry host. The
+examples assume your registry exposes Docker Hub, Debian, PyPI, and npm
+mirrors.
+
+Backend:
+
+```bash
+docker build backend \
+  -t artifactory.example.com/skynet/skynet/backend:2026.04.30 \
+  --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote \
+  --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
+  --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
+  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
+```
+
+Frontend:
+
+```bash
+docker build frontend \
+  -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 \
+  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
+  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
+```
+
+Push or import the images according to your registry process:
+
+```bash
+docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
+docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30
+```
+
+TODO: On-premise - if your registry does not expose Docker Hub mirrors as
+`docker-remote/python`, `docker-remote/node`, and `pgvector/pgvector`,
+document the exact internal image names in your site runbook.
+
+Mirror notes:
+
+- Container base images: pass `REGISTRY_PREFIX` for backend and
+  `BASE_IMAGE` for frontend. You can also pre-bake internal
+  `skynet/python-base` and `skynet/node-base` images.
+- Debian packages: pass `DEBIAN_MIRROR`, or pre-bake `build-essential` and
+  `curl` into the Python base image.
+- Python packages: pass `PIP_INDEX_URL` and `PIP_TRUSTED_HOST`.
+- npm packages: pass `NPM_REGISTRY`; the Dockerfile sets
+  `replace-registry-host=always` so lockfile tarball hosts are rewritten to
+  the mirror.
+- Helm images: set `global.imageRegistry` and `global.imagePullSecrets` in
+  the generated values file. That prefixes backend, frontend, and
+  `pgvector/pgvector` images.
+
+---
+
+## Required Kubernetes Secrets
+
+Create these before running the Helm install. Names match the generated
+values file; change them there if your platform uses different names.
+
+```bash
+kubectl -n skynet create secret docker-registry artifactory-pull-secret \
+  --docker-server=artifactory.example.com \
+  --docker-username="$REGISTRY_USER" \
+  --docker-password="$REGISTRY_PASSWORD"
+
+kubectl -n skynet create secret generic skynet-db-password \
+  --from-literal=password="$POSTGRES_PASSWORD"
+
+kubectl -n skynet create secret generic skynet-backend-secrets \
+  --from-literal=OPENAI_API_KEY="$INTERNAL_LLM_API_KEY"
+
+kubectl -n skynet create secret generic skynet-frontend-secrets \
+  --from-literal=AUTH_SECRET="$(openssl rand -base64 32)" \
+  --from-literal=AUTH_SSO_CLIENT_SECRET="$OIDC_CLIENT_SECRET"
+```
+
+TODO: On-premise - replace inline `kubectl create secret` commands with
+your secret-store flow if you use ExternalSecrets, SealedSecrets, Vault, or
+OpenShift GitOps.
+
+---
+
+## TLS Certificates
+
+By default the chart uses the OpenShift router's wildcard certificate. To
+serve a custom certificate:
+
+```bash
+helm upgrade --install skynet deploy/helm/skynet \
+  -n skynet --create-namespace \
+  -f deploy/helm/skynet/values-airgap.generated.yaml \
+  --set-file openshift.routes.frontend.tls.certificate=./tls/frontend.crt \
+  --set-file openshift.routes.frontend.tls.key=./tls/frontend.key \
+  --set-file openshift.routes.frontend.tls.caCertificate=./tls/ca-bundle.crt
+```
+
+For `reencrypt` termination, also set
+`openshift.routes.frontend.tls.destinationCACertificate`.
+
+---
+
+## Database Migration
+
+The Helm chart runs a pre-install/pre-upgrade Job:
+
+```yaml
+migration:
+  enabled: true
+  command: ["alembic", "upgrade", "head"]
+```
+
+The migration Job uses the same backend image and the same `REMOTE_DB_URL`
+composition as backend pods. Helm waits for the Job to succeed before
+starting new backend pods.
+
+First install or upgrade:
+
+```bash
+scripts/airgap_migrate.sh install
+```
+
+Check migration logs:
+
+```bash
+kubectl -n skynet logs job/skynet-skynet-migrate
+```
+
+If you are adopting a database that already has the baseline schema created
+outside Alembic, do a one-time stamp instead:
+
+```bash
+helm upgrade --install skynet deploy/helm/skynet \
+  -n skynet --create-namespace \
+  -f deploy/helm/skynet/values-airgap.generated.yaml \
+  --set-json 'migration.command=["alembic","stamp","0001"]'
+```
+
+Then revert to `["alembic", "upgrade", "head"]` for the next upgrade.
+
+TODO: On-premise - capture your DB backup/restore process and RPO/RTO. The
+chart does not take Postgres backups for you.
+
+---
+
+## Runtime Egress
+
+Known intended runtime egress:
+
+- Frontend to internal OIDC issuer.
+- Backend to internal LLM gateway.
+- Backend and frontend to Postgres only through the cluster/service network
+  or managed DB endpoint.
+- Optional notifications webhook if configured.
+
+Known risky endpoint by design:
+
+- `POST /models/discover` accepts a user-supplied `base_url` so operators
+  can discover models from an internal OpenAI-compatible gateway. In an
+  air gap, enforce egress with NetworkPolicy/firewall rules.
+
+The generated values file sets `networkPolicy.egressCidrs` and
+`networkPolicy.llmEgress` to placeholders. Tighten those to exact internal
+CIDRs.
+
+TODO: On-premise - record the exact CIDRs for IdP, LLM gateway, notification
+webhook, and managed Postgres in your environment-specific values file.
+
+---
+
+## Smoke Test
+
+After install:
+
+```bash
+kubectl -n skynet rollout status deploy/skynet-skynet-backend
+kubectl -n skynet rollout status deploy/skynet-skynet-frontend
+
+curl -k https://skynet.apps.internal/
+curl -k https://skynet-api.apps.internal/health
+```
+
+From the UI:
+
+- Sign in through SSO.
+- Submit a tiny optimization.
+- Confirm worker logs show the job moving through validation, dataset split,
+  optimization, and final evaluation.
+- Confirm no pod attempts DNS resolution for public hosts.
+
+Runtime-env check:
+
+```bash
+kubectl -n skynet exec deploy/skynet-skynet-frontend -- \
+  curl -sf http://localhost:3001/ \
+  | grep -o 'window.__SKYNET_ENV__=[^<]*' \
+  | head -c 500
+```
+
+The `apiUrl` should match `frontend.env.API_URL` in the generated values
+file. Changing `API_URL` should take effect after a frontend pod restart
+without rebuilding the image.
+
+---
+
+## What Is Already Air-Gap Clean
+
+- Scalar API docs are vendored under `backend/core/api/static/scalar/`.
+- Fonts are bundled through npm packages, not Google Fonts.
+- The recommendations embedder is vendored under `backend/vendor/models/`.
+- Sentry is gated so builds without a DSN do not ship it.
+- LiteLLM telemetry is disabled in backend configuration.
+- Storage is Postgres; there is no S3/GCS/Azure Blob dependency.
+- Auth is Credentials plus generic OIDC; no Google/GitHub OAuth provider is
+  configured.
+
+---
+
+## Audit TODOs
+
+Run this regularly:
 
 ```bash
 git grep -n "TODO: On-premise"
 ```
 
-Each hit is a single substitution: replace `artifactory.your-company.com`, `your-company.com`, or the placeholder URL with the real value for your network. Hits live in:
+Current intentional TODO locations:
 
-- `backend/Dockerfile`, `backend/pyproject.toml`, `backend/docker-compose.yml`
-- `frontend/Dockerfile`, `frontend/.npmrc`
-- `backend/.env.example`, `frontend/.env.example`
+- `AIRGAP.md`
+- `deploy/helm/skynet/values-airgap.generated.yaml` after generation
+- `frontend/.env.example`
 
-Copy the example envs into real ones first:
-
-```bash
-cp backend/.env.example  backend/.env
-cp frontend/.env.example frontend/.env.local
-```
-
-Then walk the TODOs in those files too.
-
-## Step 2 — Pull LFS artifacts
-
-The recommendations embedder model (`jina-code-embeddings-0.5b`, ~942 MB) is vendored under `backend/vendor/models/` and tracked via Git LFS so it ships with the repo. After cloning:
-
-```bash
-git lfs install        # one-time per machine
-git lfs pull           # fetches the model weights
-```
-
-The embedder loads from this local path by default — no Hugging Face download at runtime. Override with `RECOMMENDATIONS_EMBEDDING_MODEL=/path/to/other/model` if needed, or set `RECOMMENDATIONS_ENABLED=false` to skip the feature entirely.
-
-## Step 3 — Verify the build is hermetic
-
-After substituting placeholders:
-
-```bash
-# In a network-isolated build host, this must succeed without any DNS
-# resolution to the public internet:
-docker compose -f backend/docker-compose.yml build
-docker build -t skynet-frontend frontend/
-```
-
-If a build step fails reaching the public internet, that's a TODO you missed.
-
-## Step 4 — Pre-flight checklist
-
-Before pointing production traffic at the deployment:
-
-- [ ] `git grep "TODO: On-premise"` returns zero hits in your fork (or every remaining hit is intentional).
-- [ ] `git lfs ls-files` shows `model.safetensors` is fetched (not a pointer file).
-- [ ] Both Docker images build inside the air-gapped network.
-- [ ] Postgres reachable; `pgvector` extension installed (`CREATE EXTENSION vector;`).
-- [ ] OIDC IdP reachable from the frontend container; SSO round-trip works.
-- [ ] LLM gateway reachable from the backend container; one test job completes end-to-end.
-- [ ] Network egress firewall in place (defense-in-depth — see Caveats below).
-- [ ] Smoke test: load `/`, sign in via SSO, submit a tiny optimization job, watch worker logs for any outbound DNS attempts.
-
----
-
-## What's already air-gap-clean (no action needed)
-
-For reference, the audit confirmed these are already safe:
-
-- **Scalar API docs** — vendored under `backend/core/api/static/scalar/`, fonts rewritten to local paths. Telemetry and agent panel disabled.
-- **Fonts** — `@fontsource-variable/heebo` and `inter` are npm packages bundled at build (no Google Fonts CDN).
-- **Embedder model** — `jina-code-embeddings-0.5b` vendored under `backend/vendor/models/` via Git LFS; loaded from disk, no runtime download.
-- **Telemetry** — no Sentry, GA, PostHog, Datadog, OTLP, Segment, or pixel trackers anywhere. `litellm.telemetry` is forced off.
-- **Storage** — Postgres only, no S3 / GCS / Azure Blob / Redis.
-- **MCP** — `FastMCP` mounts at `/mcp`, loopback only. Generalist agent's MCP client defaults to `http://localhost:8000/mcp/`.
-- **Auth providers** — only NextAuth Credentials and a generic OIDC client. No Google / GitHub / external OAuth.
-- **JSON-LD `@context: schema.org`** — static identifier string, never fetched.
-
----
-
-## Caveats
-
-- **`POST /models/discover`** (`backend/core/api/routers/models.py:175-176`) calls `urlopen()` with a user-supplied `base_url`. Behaves as designed for internal model discovery, but it is an exfiltration vector if egress is not firewalled at the network layer.
-- **`litellm` provider URLs** — `model_catalog.py` lists public-provider hostnames (OpenAI, Anthropic, etc.) for display, but a job only contacts the URL implied by the model id the user picks. Block public egress at the firewall as defense-in-depth, in case a user pastes a public-provider key into the model catalog.
-- **First-run model downloads** — the recommendations embedder is the only model used at runtime, and it ships vendored under `backend/vendor/models/`. If you later add a feature that needs a different model, vendor it the same way (drop under `backend/vendor/models/<name>/`, point `RECOMMENDATIONS_EMBEDDING_MODEL` or a new setting at it) so the air-gap story stays clean.
+If new external services are added, add them to this file, the Helm values,
+and `scripts/airgap_migrate.sh`.

@@ -64,10 +64,36 @@ def test_fit_pca_2d_survives_degenerate_matrix() -> None:
         assert abs(y) < 1e-6
 
 
-def test_invalidate_projection_cache_resets_timestamp() -> None:
-    """``invalidate_projection_cache`` zeros the timestamp and clears stored points."""
-    dashboard._PROJECTION_CACHE["at"] = 9e18
-    dashboard._PROJECTION_CACHE["points"] = [{"optimization_id": "stale"}]
+def test_invalidate_projection_cache_resets_state() -> None:
+    """``invalidate_projection_cache`` clears the fingerprint, timestamp, and payload."""
+    dashboard._CACHE["fingerprint"] = "stale"
+    dashboard._CACHE["at"] = 9e18
+    dashboard._CACHE["payload"] = {"points": [{"optimization_id": "stale"}], "meta": {}}
     dashboard.invalidate_projection_cache()
-    assert dashboard._PROJECTION_CACHE["at"] == 0.0
-    assert dashboard._PROJECTION_CACHE["points"] == []
+    assert dashboard._CACHE["fingerprint"] is None
+    assert dashboard._CACHE["at"] == 0.0
+    assert dashboard._CACHE["payload"] is None
+
+
+def test_compute_cluster_levels_empty() -> None:
+    """An empty input yields one empty list per granularity level."""
+    levels = dashboard._compute_cluster_levels([])
+    assert len(levels) == dashboard.CLUSTER_LEVELS
+    assert all(level == [] for level in levels)
+
+
+def test_compute_cluster_levels_assigns_dense_ids() -> None:
+    """Each level produces zero-indexed cluster IDs of the same length as the input."""
+    coords = [
+        (-1.0, -1.0),
+        (-0.9, -1.0),
+        (1.0, 1.0),
+        (1.1, 0.9),
+        (0.0, 0.0),
+        (0.05, -0.1),
+    ]
+    levels = dashboard._compute_cluster_levels(coords)
+    assert len(levels) == dashboard.CLUSTER_LEVELS
+    for level in levels:
+        assert len(level) == len(coords)
+        assert all(isinstance(cid, int) and cid >= 0 for cid in level)

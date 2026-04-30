@@ -14,13 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/ui/primitives/table";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
-import { AnimatedNumber, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
+import { AnimatedNumber, StaggerContainer, StaggerItem } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { formatElapsed } from "@/shared/lib";
 import type { DashboardAnalytics } from "@/shared/lib/api";
@@ -161,240 +155,135 @@ export function AnalyticsTab({
             {chartData.kpis && (
               <StaggerItem>
                 <div
+                  data-tutorial="dashboard-stats"
                   className="grid gap-3 sm:gap-4"
                   style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
                 >
-                  <TooltipProvider>
-                    <UiTooltip>
-                      <TooltipTrigger asChild>
-                        <TiltCard>
-                          <Card className="relative overflow-hidden group/kpi border-border/40 hover:border-border/70 transition-colors duration-300">
-                            <CardContent className="p-5 sm:p-6 relative">
-                              <div className="flex items-start justify-between">
-                                <div className="space-y-3">
-                                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    {msg("auto.features.dashboard.components.analyticstab.4")}
-                                  </p>
-                                  <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums">
-                                    <AnimatedNumber
-                                      value={Math.round(chartData.kpis.successRate)}
-                                      suffix="%"
-                                    />
-                                  </p>
-                                </div>
-                                <div className="size-9 rounded-lg bg-stone-500/[0.07] flex items-center justify-center">
-                                  <CheckCircle2 className="size-4 text-stone-500" />
-                                </div>
-                              </div>
-                              <div className="mt-3 flex items-center gap-2">
-                                <div className="flex-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-stone-500/40 transition-all duration-700"
-                                    style={{
-                                      width: `${chartData.kpis.successRate}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span className="text-[0.625rem] tabular-nums text-muted-foreground/60 shrink-0">
-                                  <AnimatedNumber value={chartData.kpis.successCount} />
-                                  /
-                                  <AnimatedNumber value={chartData.kpis.terminalCount} />
-                                </span>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </TiltCard>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">
-                            {msg("auto.features.dashboard.components.analyticstab.5")}
+                  <Card className="relative overflow-hidden border-border/40">
+                    <CardContent className="p-5 sm:p-6 relative">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-3">
+                          <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
+                            {msg("auto.features.dashboard.components.analyticstab.4")}
                           </p>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span className="text-muted-foreground">
-                              {msg("auto.features.dashboard.components.analyticstab.6")}
-                            </span>
-                            <span className="font-mono tabular-nums">
-                              {chartData.kpis.successCount}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {msg("auto.features.dashboard.components.analyticstab.7")}
-                            </span>
-                            <span className="font-mono tabular-nums">
-                              {chartData.kpis.terminalCount}
-                            </span>
-                          </div>
-                        </div>
-                      </TooltipContent>
-                    </UiTooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <UiTooltip>
-                      <TooltipTrigger asChild>
-                        <TiltCard>
-                          <Card className="relative overflow-hidden group/kpi border-border/40 hover:border-border/70 transition-colors duration-300">
-                            <CardContent className="p-5 sm:p-6 relative">
-                              <div className="flex items-start justify-between">
-                                <div className="space-y-3">
-                                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    {msg("auto.features.dashboard.components.analyticstab.8")}
-                                  </p>
-                                  <p
-                                    className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${chartData.kpis.avgImprovement > 0 ? "text-emerald-700" : chartData.kpis.avgImprovement < 0 ? "text-red-600" : ""}`}
-                                  >
-                                    <AnimatedNumber
-                                      value={parseFloat(chartData.kpis.avgImprovement.toFixed(1))}
-                                      decimals={1}
-                                      prefix={chartData.kpis.avgImprovement >= 0 ? "+" : ""}
-                                      suffix="%"
-                                    />
-                                  </p>
-                                </div>
-                                <div
-                                  className={`size-9 rounded-lg flex items-center justify-center ${chartData.kpis.avgImprovement > 0 ? "bg-emerald-500/[0.07]" : chartData.kpis.avgImprovement < 0 ? "bg-red-500/[0.07]" : "bg-stone-500/[0.07]"}`}
-                                >
-                                  <TrendingUp
-                                    className={`size-4 ${chartData.kpis.avgImprovement > 0 ? "text-emerald-600" : chartData.kpis.avgImprovement < 0 ? "text-red-500" : "text-stone-500"}`}
-                                  />
-                                </div>
-                              </div>
-                              <div className="mt-3 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-700 ${chartData.kpis.avgImprovement > 0 ? "bg-emerald-500/40" : chartData.kpis.avgImprovement < 0 ? "bg-red-500/40" : "bg-stone-400/40"}`}
-                                  style={{
-                                    width: `${Math.min(Math.abs(chartData.kpis.avgImprovement), 100)}%`,
-                                  }}
-                                />
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </TiltCard>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">
-                            {msg("auto.features.dashboard.components.analyticstab.9")}
-                          </p>
-                          <p className="text-muted-foreground">
-                            {msg("auto.features.dashboard.components.analyticstab.10")}
-                            {TERMS.optimization}
+                          <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums">
+                            <AnimatedNumber
+                              value={Math.round(chartData.kpis.successRate)}
+                              suffix="%"
+                            />
                           </p>
                         </div>
-                      </TooltipContent>
-                    </UiTooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <UiTooltip>
-                      <TooltipTrigger asChild>
-                        <TiltCard>
-                          <Card className="relative overflow-hidden group/kpi border-border/40 hover:border-border/70 transition-colors duration-300">
-                            <CardContent className="p-5 sm:p-6 relative">
-                              <div className="flex items-start justify-between">
-                                <div className="space-y-3">
-                                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    {msg("auto.features.dashboard.components.analyticstab.11")}
-                                  </p>
-                                  <p
-                                    className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums"
-                                    dir="ltr"
-                                  >
-                                    {formatElapsed(chartData.kpis.avgRuntime)}
-                                  </p>
-                                </div>
-                                <div className="size-9 rounded-lg bg-stone-500/[0.07] flex items-center justify-center">
-                                  <Clock className="size-4 text-stone-500" />
-                                </div>
-                              </div>
-                              <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
-                                {msg("auto.features.dashboard.components.analyticstab.12")}
-                                {TERMS.optimization}
-                              </p>
-                            </CardContent>
-                          </Card>
-                        </TiltCard>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">
-                            {msg("auto.features.dashboard.components.analyticstab.13")}
-                          </p>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span className="text-muted-foreground">
-                              {msg("auto.features.dashboard.components.analyticstab.14")}
-                            </span>
-                            <span className="font-mono tabular-nums">
-                              {chartData.kpis.totalPairsRun}
-                            </span>
-                          </div>
+                        <div className="size-9 rounded-lg bg-stone-500/[0.07] flex items-center justify-center">
+                          <CheckCircle2 className="size-4 text-stone-500" />
                         </div>
-                      </TooltipContent>
-                    </UiTooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <UiTooltip>
-                      <TooltipTrigger asChild>
-                        <TiltCard>
-                          <Card className="relative overflow-hidden group/kpi border-border/40 hover:border-border/70 transition-colors duration-300">
-                            <CardContent className="p-5 sm:p-6 relative">
-                              <div className="flex items-start justify-between">
-                                <div className="space-y-3">
-                                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                                    {msg("auto.features.dashboard.components.analyticstab.15")}
-                                  </p>
-                                  <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums text-amber-700">
-                                    <AnimatedNumber
-                                      value={parseFloat(chartData.kpis.bestImprovement.toFixed(1))}
-                                      decimals={1}
-                                      prefix="+"
-                                      suffix="%"
-                                    />
-                                  </p>
-                                </div>
-                                <div className="size-9 rounded-lg bg-amber-500/[0.07] flex items-center justify-center">
-                                  <Zap className="size-4 text-amber-600" />
-                                </div>
-                              </div>
-                              <div className="mt-3 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-amber-500/40 transition-all duration-700"
-                                  style={{
-                                    width: `${Math.min(chartData.kpis.bestImprovement, 100)}%`,
-                                  }}
-                                />
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </TiltCard>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <div className="space-y-1.5 text-xs">
-                          <p className="font-semibold">
-                            {msg("auto.features.dashboard.components.analyticstab.16")}
-                          </p>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span className="text-muted-foreground">
-                              {msg("auto.features.dashboard.components.analyticstab.17")}
-                            </span>
-                            <span className="font-mono tabular-nums">
-                              {chartData.kpis.totalRows.toLocaleString("he-IL")}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {msg("auto.features.dashboard.components.analyticstab.18")}
-                            </span>
-                            <span className="font-mono tabular-nums">
-                              {chartData.kpis.gridSearchCount}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {msg("auto.features.dashboard.components.analyticstab.19")}
-                            </span>
-                            <span className="font-mono tabular-nums">
-                              {chartData.kpis.singleRunCount}
-                            </span>
-                          </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-stone-500/40 transition-all duration-700"
+                            style={{
+                              width: `${chartData.kpis.successRate}%`,
+                            }}
+                          />
                         </div>
-                      </TooltipContent>
-                    </UiTooltip>
-                  </TooltipProvider>
+                        <span className="text-[0.625rem] tabular-nums text-muted-foreground/60 shrink-0">
+                          <AnimatedNumber value={chartData.kpis.successCount} />
+                          /
+                          <AnimatedNumber value={chartData.kpis.terminalCount} />
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="relative overflow-hidden border-border/40">
+                    <CardContent className="p-5 sm:p-6 relative">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-3">
+                          <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
+                            {msg("auto.features.dashboard.components.analyticstab.8")}
+                          </p>
+                          <p
+                            className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${chartData.kpis.avgImprovement > 0 ? "text-emerald-700" : chartData.kpis.avgImprovement < 0 ? "text-red-600" : ""}`}
+                          >
+                            <AnimatedNumber
+                              value={parseFloat(chartData.kpis.avgImprovement.toFixed(1))}
+                              decimals={1}
+                              prefix={chartData.kpis.avgImprovement >= 0 ? "+" : ""}
+                              suffix="%"
+                            />
+                          </p>
+                        </div>
+                        <div
+                          className={`size-9 rounded-lg flex items-center justify-center ${chartData.kpis.avgImprovement > 0 ? "bg-emerald-500/[0.07]" : chartData.kpis.avgImprovement < 0 ? "bg-red-500/[0.07]" : "bg-stone-500/[0.07]"}`}
+                        >
+                          <TrendingUp
+                            className={`size-4 ${chartData.kpis.avgImprovement > 0 ? "text-emerald-600" : chartData.kpis.avgImprovement < 0 ? "text-red-500" : "text-stone-500"}`}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${chartData.kpis.avgImprovement > 0 ? "bg-emerald-500/40" : chartData.kpis.avgImprovement < 0 ? "bg-red-500/40" : "bg-stone-400/40"}`}
+                          style={{
+                            width: `${Math.min(Math.abs(chartData.kpis.avgImprovement), 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="relative overflow-hidden border-border/40">
+                    <CardContent className="p-5 sm:p-6 relative">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-3">
+                          <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
+                            {msg("auto.features.dashboard.components.analyticstab.11")}
+                          </p>
+                          <p
+                            className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums"
+                            dir="ltr"
+                          >
+                            {formatElapsed(chartData.kpis.avgRuntime)}
+                          </p>
+                        </div>
+                        <div className="size-9 rounded-lg bg-stone-500/[0.07] flex items-center justify-center">
+                          <Clock className="size-4 text-stone-500" />
+                        </div>
+                      </div>
+                      <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
+                        {msg("auto.features.dashboard.components.analyticstab.12")}
+                        {TERMS.optimization}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="relative overflow-hidden border-border/40">
+                    <CardContent className="p-5 sm:p-6 relative">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-3">
+                          <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
+                            {msg("auto.features.dashboard.components.analyticstab.15")}
+                          </p>
+                          <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums text-amber-700">
+                            <AnimatedNumber
+                              value={parseFloat(chartData.kpis.bestImprovement.toFixed(1))}
+                              decimals={1}
+                              prefix="+"
+                              suffix="%"
+                            />
+                          </p>
+                        </div>
+                        <div className="size-9 rounded-lg bg-amber-500/[0.07] flex items-center justify-center">
+                          <Zap className="size-4 text-amber-600" />
+                        </div>
+                      </div>
+                      <div className="mt-3 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-amber-500/40 transition-all duration-700"
+                          style={{
+                            width: `${Math.min(chartData.kpis.bestImprovement, 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </StaggerItem>
             )}
@@ -474,10 +363,7 @@ export function AnalyticsTab({
                         {msg("auto.features.dashboard.components.analyticstab.23")}
                       </p>
                       {(() => {
-                        const optimizerTotal = chartData.optimizer.reduce(
-                          (a, b) => a + b.value,
-                          0,
-                        );
+                        const optimizerTotal = chartData.optimizer.reduce((a, b) => a + b.value, 0);
                         return chartData.optimizer.map((o, i) => (
                           <div
                             key={o.name}
@@ -764,9 +650,13 @@ export function AnalyticsTab({
                           {chartData.topJobs.slice(0, leaderboardLimit).map((j, i) => {
                             const impPct = toPctScale(j.metric_improvement ?? 0);
                             const baseline =
-                              j.baseline_test_metric != null ? toPctScale(j.baseline_test_metric) : null;
+                              j.baseline_test_metric != null
+                                ? toPctScale(j.baseline_test_metric)
+                                : null;
                             const optimized =
-                              j.optimized_test_metric != null ? toPctScale(j.optimized_test_metric) : null;
+                              j.optimized_test_metric != null
+                                ? toPctScale(j.optimized_test_metric)
+                                : null;
 
                             const onCopy = (text: string) => (e: MouseEvent) => {
                               e.stopPropagation();
@@ -843,9 +733,7 @@ export function AnalyticsTab({
                                 </TableCell>
                                 <TableCell
                                   className={`text-center py-3 ${copyCls}`}
-                                  onClick={onCopy(
-                                    `${impPct >= 0 ? "+" : ""}${impPct.toFixed(1)}%`,
-                                  )}
+                                  onClick={onCopy(`${impPct >= 0 ? "+" : ""}${impPct.toFixed(1)}%`)}
                                 >
                                   <div className="flex flex-col items-center gap-1">
                                     <span

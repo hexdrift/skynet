@@ -4,17 +4,34 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, CircleDot, Grid2x2, Layers, Plus } from "lucide-react";
 import type { PublicDashboardPoint } from "@/shared/lib/api";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/shared/ui/primitives/tooltip";
 import { usePublicDashboard } from "../hooks/use-public-dashboard";
 import { ScatterCanvas, type ExploreFilter } from "./ScatterCanvas";
 import { ExploreDetailPanel } from "./ExploreDetailPanel";
-import { formatMsg, msg } from "@/shared/lib/messages";
+import { GranularitySlider } from "./GranularitySlider";
+import { deriveLevelCounts } from "../lib/format";
+import { msg } from "@/shared/lib/messages";
+import { registerTutorialHook } from "@/features/tutorial";
 
-const FILTERS: Array<{ value: ExploreFilter; labelKey: Parameters<typeof msg>[0] }> = [
-  { value: "all", labelKey: "explore.filter.all" },
-  { value: "run", labelKey: "explore.filter.run" },
-  { value: "grid_search", labelKey: "explore.filter.grid" },
+// Default slider position when ?cluster= is absent. Index 1 corresponds to
+// the second-coarsest cut (typically 4 clusters) — coarse enough to read
+// at a glance, fine enough to see structure.
+const DEFAULT_GRANULARITY_LEVEL = 1;
+
+const FILTERS: Array<{
+  value: ExploreFilter;
+  labelKey: Parameters<typeof msg>[0];
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" }>;
+}> = [
+  { value: "all", labelKey: "explore.filter.all", icon: Layers },
+  { value: "run", labelKey: "explore.filter.run", icon: CircleDot },
+  { value: "grid_search", labelKey: "explore.filter.grid", icon: Grid2x2 },
 ];
 
 function isExploreFilter(v: string | null): v is ExploreFilter {
@@ -31,13 +48,7 @@ function FilterTabs({
   counts: Record<ExploreFilter, number>;
 }) {
   const buttonRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
-  const selectableIndices = React.useMemo(
-    () =>
-      FILTERS.map((f, i) => ({ f, i })).filter(
-        ({ f }) => !(counts[f.value] === 0 && f.value !== value),
-      ),
-    [counts, value],
-  );
+  const selectableIndices = React.useMemo(() => FILTERS.map((f, i) => ({ f, i })), []);
 
   const handleKeyDown = (e: React.KeyboardEvent, currentIdx: number) => {
     let delta = 0;
@@ -73,84 +84,62 @@ function FilterTabs({
     buttonRefs.current[nextEntry.i]?.focus();
   };
 
-  const showing = value !== "all";
-  const showingText = showing
-    ? formatMsg("explore.filter.showing", { count: counts[value], total: counts.all })
-    : "";
-
   return (
-    <div className="flex items-end justify-between gap-4 border-b border-border/50">
+    <aside
+      className="pointer-events-auto flex h-full w-14 shrink-0 flex-col border-e border-border/60 bg-background/90 shadow-sm backdrop-blur-sm"
+      aria-label={msg("explore.filter.aria")}
+    >
       <div
         role="radiogroup"
         aria-label={msg("explore.filter.aria")}
-        className="flex items-end gap-7"
+        className="flex flex-1 flex-col items-center gap-1 p-2"
       >
         {FILTERS.map((f, idx) => {
           const active = f.value === value;
           const count = counts[f.value];
-          const empty = count === 0 && !active;
+          const Icon = f.icon;
+          const label = `${msg(f.labelKey)} · ${count}`;
           return (
-            <button
-              key={f.value}
-              ref={(el) => {
-                buttonRefs.current[idx] = el;
-              }}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              tabIndex={active ? 0 : -1}
-              disabled={empty}
-              onClick={() => onChange(f.value)}
-              onKeyDown={(e) => handleKeyDown(e, idx)}
-              className={`group relative -mb-px pb-2 pt-0.5 cursor-pointer transition-colors disabled:cursor-default focus-visible:outline-none focus-visible:after:absolute focus-visible:after:-inset-x-2 focus-visible:after:-inset-y-1 focus-visible:after:rounded-sm focus-visible:after:ring-2 focus-visible:after:ring-foreground/25 focus-visible:after:content-[''] ${
-                active
-                  ? "text-foreground"
-                  : empty
-                    ? "text-muted-foreground/60"
-                    : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="text-[12px] font-medium tracking-tight">{msg(f.labelKey)}</span>
-                <span
-                  className={`tabular-nums text-[10px] ${
+            <Tooltip key={f.value}>
+              <TooltipTrigger asChild>
+                <button
+                  ref={(el) => {
+                    buttonRefs.current[idx] = el;
+                  }}
+                  type="button"
+                  role="radio"
+                  aria-label={label}
+                  aria-checked={active}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => onChange(f.value)}
+                  onKeyDown={(e) => handleKeyDown(e, idx)}
+                  className={`group relative inline-flex size-10 items-center justify-center rounded-md transition-[background-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
                     active
-                      ? "text-foreground/55"
-                      : empty
-                        ? "text-muted-foreground/60"
-                        : "text-muted-foreground"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "cursor-pointer text-muted-foreground hover:bg-background/60 hover:text-foreground"
                   }`}
-                  dir="ltr"
                 >
-                  {count}
-                </span>
-              </span>
-              {active ? (
-                <motion.span
-                  layoutId="filter-tab-underline"
-                  aria-hidden="true"
-                  className="absolute inset-x-0 -bottom-px h-[2px] bg-foreground"
-                  transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-                />
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-x-0 -bottom-px h-[2px] bg-transparent transition-colors group-hover:bg-foreground/20 group-disabled:group-hover:bg-transparent"
-                />
-              )}
-            </button>
+                  <Icon className="size-4" aria-hidden="true" />
+                  <span
+                    className={`absolute -end-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full border border-background px-1 text-[9px] font-bold tabular-nums ${
+                      active
+                        ? "bg-[#3D2E22] text-background"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                    dir="ltr"
+                  >
+                    {count}
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left" sideOffset={8}>
+                {label}
+              </TooltipContent>
+            </Tooltip>
           );
         })}
       </div>
-      <p
-        aria-live="polite"
-        className={`pb-2 text-[11px] text-muted-foreground transition-opacity ${
-          showing ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        {showingText}
-      </p>
-    </div>
+    </aside>
   );
 }
 
@@ -182,15 +171,40 @@ export function ExploreView() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { points, loading, error } = usePublicDashboard();
+  const { points: realPoints, meta, loading, error } = usePublicDashboard();
+  const [demoPoints, setDemoPoints] = React.useState<PublicDashboardPoint[] | null>(null);
+  const points = demoPoints ?? realPoints;
+
+  React.useEffect(() => registerTutorialHook("setDemoExplorePoints", setDemoPoints), []);
+  React.useEffect(() => {
+    const onExit = () => setDemoPoints(null);
+    window.addEventListener("tutorial-exited", onExit);
+    return () => window.removeEventListener("tutorial-exited", onExit);
+  }, []);
+
+  const levelCounts = React.useMemo(
+    () => meta?.level_cluster_counts ?? deriveLevelCounts(points),
+    [meta, points],
+  );
+  const maxLevelIdx = Math.max(0, levelCounts.length - 1);
 
   const urlFilter = searchParams.get("filter");
   const urlFocus = searchParams.get("focus");
+  const urlCluster = searchParams.get("cluster");
   const filter: ExploreFilter = isExploreFilter(urlFilter) ? urlFilter : "all";
   const selectedId = urlFocus ?? null;
+  const parsedCluster = urlCluster !== null ? parseInt(urlCluster, 10) : NaN;
+  const granularityLevel = Number.isFinite(parsedCluster)
+    ? Math.max(0, Math.min(maxLevelIdx, parsedCluster))
+    : Math.min(DEFAULT_GRANULARITY_LEVEL, maxLevelIdx);
+  const clusterCount = levelCounts[granularityLevel] ?? 1;
 
   const updateQuery = React.useCallback(
-    (patch: { filter?: ExploreFilter | null; focus?: string | null }) => {
+    (patch: {
+      filter?: ExploreFilter | null;
+      focus?: string | null;
+      cluster?: number | null;
+    }) => {
       // Read URL state from the live address bar so back-to-back updates in the
       // same render don't clobber each other (the searchParams hook value is
       // only refreshed between renders).
@@ -204,6 +218,10 @@ export function ExploreView() {
       if (patch.focus !== undefined) {
         if (patch.focus) params.set("focus", patch.focus);
         else params.delete("focus");
+      }
+      if (patch.cluster !== undefined) {
+        if (patch.cluster !== null) params.set("cluster", String(patch.cluster));
+        else params.delete("cluster");
       }
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -241,6 +259,11 @@ export function ExploreView() {
     (next: string | null) => updateQuery({ focus: next }),
     [updateQuery],
   );
+  const setGranularity = React.useCallback(
+    (next: number) =>
+      updateQuery({ cluster: next === DEFAULT_GRANULARITY_LEVEL ? null : next }),
+    [updateQuery],
+  );
 
   React.useEffect(() => {
     if (loading) return;
@@ -253,7 +276,8 @@ export function ExploreView() {
   const isTrulyEmpty = !loading && !error && corpusTotal === 0;
 
   return (
-    <div dir="rtl" className="space-y-10 pb-16" data-tutorial="explore-canvas">
+    <div dir="rtl" className="pb-16">
+      <div className="space-y-6" data-tutorial="explore-canvas">
       {error && (
         <div
           className="flex items-start gap-3 rounded-lg border border-border bg-accent-muted/50 px-4 py-3 text-xs text-foreground"
@@ -279,14 +303,29 @@ export function ExploreView() {
           </Link>
         </div>
       ) : (
-        <section className="space-y-3">
-          <FilterTabs value={filter} onChange={setFilter} counts={counts} />
-          <div className="relative">
+        <section className="space-y-4">
+          <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card/70 p-2 shadow-sm">
+            <AnimatePresence>
+              {!selected && (
+                <motion.div
+                  key="filter-rail"
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 8 }}
+                  transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="absolute inset-y-2 start-2 z-20 overflow-hidden rounded-lg"
+                >
+                  <FilterTabs value={filter} onChange={setFilter} counts={counts} />
+                </motion.div>
+              )}
+            </AnimatePresence>
             <ScatterCanvas
               points={points}
               filter={filter}
               selectedId={selectedId}
               onSelect={setSelected}
+              granularityLevel={granularityLevel}
+              clusterCount={clusterCount}
               dimmed={selected !== null}
             >
               <AnimatePresence>
@@ -294,19 +333,34 @@ export function ExploreView() {
                   <FilteredEmptyOverlay onClear={() => setFilter("all")} />
                 )}
               </AnimatePresence>
+              {!selected && levelCounts.length >= 2 && (
+                <GranularitySlider
+                  value={granularityLevel}
+                  onChange={setGranularity}
+                  levels={levelCounts}
+                />
+              )}
             </ScatterCanvas>
             <AnimatePresence>
               {selected && (
-                <div className="pointer-events-none absolute inset-y-3 start-3 z-10 w-[min(340px,calc(100%-1.5rem))]">
+                <motion.div
+                  key="detail-panel"
+                  initial={{ opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 12 }}
+                  transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="pointer-events-none absolute inset-y-3 start-3 z-20 w-[min(340px,calc(100%-1.5rem))]"
+                >
                   <div className="pointer-events-auto h-full">
                     <ExploreDetailPanel point={selected} onClose={() => setSelected(null)} />
                   </div>
-                </div>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
         </section>
       )}
+      </div>
     </div>
   );
 }

@@ -145,12 +145,20 @@ export function TutorialOverlay() {
   React.useEffect(() => {
     if (!state.isVisible || !currentStep) return;
     setStepReady(false);
+    // Drop the previous step's rect so the spotlight goes dark for the
+    // brief transition rather than animating from the OLD anchor across
+    // the screen — moving backward in particular looked broken because
+    // the spring kept chasing a stale target while the new step's
+    // beforeShow ran.
+    setTargetRect(null);
+    setPopoverPosition(null);
     lastRectRef.current = null;
     stepPathRef.current = null;
     targetRef.current = null;
 
     let cancelled = false;
     let waitRaf = 0;
+    let trackRaf = 0;
     let resizeObserver: ResizeObserver | null = null;
     const onWindowChange = () => updatePositions();
 
@@ -202,24 +210,47 @@ export function TutorialOverlay() {
         return;
       }
 
-      // Scroll target into view only if off-screen
+      // Always center the target in the viewport when it fits — otherwise
+      // the spotlight reads as "off-center" whenever a step's anchor sits
+      // near the top of a tall page (most wizard / detail / compare steps).
+      // Skip centering for elements that span (or exceed) the viewport;
+      // those have no useful "centered" position. Use "instant" so the rect
+      // we measure right after is the final position — "smooth" left the
+      // spotlight chasing a moving target during the 500ms+ animation.
       const rect = el.getBoundingClientRect();
-      const offScreen = rect.top < 0 || rect.bottom > window.innerHeight;
-      if (offScreen) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        await new Promise((r) => setTimeout(r, 250));
+      const fitsViewport = rect.height <= window.innerHeight - 32;
+      if (fitsViewport) {
+        el.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "center" });
+        await new Promise((r) => setTimeout(r, 60));
+        if (cancelled) return;
+      } else if (rect.top < 0 || rect.bottom > window.innerHeight) {
+        el.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "start" });
+        await new Promise((r) => setTimeout(r, 60));
         if (cancelled) return;
       }
 
       targetRef.current = el;
       updatePositions();
-      // Observe size changes on the target itself; scroll/resize cover
-      // viewport-driven shifts. This replaces a 60fps rAF poll that ran
-      // even when nothing moved.
+      // Observe size changes on the target; scroll/resize cover
+      // viewport-driven shifts. The 100ms rAF poll is the safety net for
+      // layout shifts that no observer fires for — e.g. surrounding
+      // content above the target finishing async loads and pushing it
+      // down. updatePositions is a no-op when the rect didn't move
+      // ≥0.5px, so the poll is cheap.
       resizeObserver = new ResizeObserver(() => updatePositions());
       resizeObserver.observe(el);
       window.addEventListener("scroll", onWindowChange, { passive: true, capture: true });
       window.addEventListener("resize", onWindowChange);
+      let lastTrack = 0;
+      const trackTick = (t: number) => {
+        if (cancelled) return;
+        if (t - lastTrack >= 100) {
+          lastTrack = t;
+          updatePositions();
+        }
+        trackRaf = requestAnimationFrame(trackTick);
+      };
+      trackRaf = requestAnimationFrame(trackTick);
       stepPathRef.current = window.location.pathname;
       setStepReady(true);
     };
@@ -229,6 +260,7 @@ export function TutorialOverlay() {
     return () => {
       cancelled = true;
       if (waitRaf) cancelAnimationFrame(waitRaf);
+      if (trackRaf) cancelAnimationFrame(trackRaf);
       if (resizeObserver) resizeObserver.disconnect();
       window.removeEventListener("scroll", onWindowChange, { capture: true } as EventListenerOptions);
       window.removeEventListener("resize", onWindowChange);
@@ -382,6 +414,7 @@ export function TutorialOverlay() {
   if (!track) return splashPortal;
 
   const stepNumber = state.currentStepIndex + 1;
+  const totalSteps = Math.max(track.steps.length, stepNumber);
   const isFirst = state.currentStepIndex === 0;
   const isLast = state.currentStepIndex === track.steps.length - 1;
 
@@ -403,7 +436,7 @@ export function TutorialOverlay() {
                 key={currentStep.id}
                 step={currentStep}
                 stepNumber={stepNumber}
-                totalSteps={track.stepCount}
+                totalSteps={totalSteps}
                 position={popoverPosition}
                 onNext={handleNext}
                 onPrev={prevStep}

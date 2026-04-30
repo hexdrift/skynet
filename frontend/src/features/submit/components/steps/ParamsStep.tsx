@@ -13,6 +13,7 @@ import { Separator } from "@/shared/ui/primitives/separator";
 import { Switch } from "@/shared/ui/primitives/switch";
 import { NumberInput } from "@/shared/ui/number-input";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { useUserPrefs } from "@/features/settings";
 import { cn } from "@/shared/lib/utils";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
@@ -22,6 +23,8 @@ import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 import { SplitRecommendationCard } from "../SplitRecommendationCard";
 
 export function ParamsStep({ w }: { w: SubmitWizardContext }) {
+  const { prefs } = useUserPrefs();
+  const advancedMode = prefs.advancedMode;
   const {
     moduleName,
     setModuleName,
@@ -55,41 +58,45 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="space-y-2" data-tutorial="module-selector">
-          <Label>
-            <HelpTip text={tip("module.choice")}>
-              {msg("auto.features.submit.components.steps.paramsstep.3")}
-            </HelpTip>
-          </Label>
-          <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
-            <div
-              className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
-              style={{ insetInlineStart: moduleName === "predict" ? 4 : "calc(50% + 2px)" }}
-            />
-            {(
-              [
-                ["predict", "Predict"],
-                ["cot", "CoT"],
-              ] as const
-            ).map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => setModuleName(val)}
-                className={cn(
-                  "relative z-10 flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 text-center cursor-pointer",
-                  moduleName === val
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {advancedMode && (
+          <>
+            <div className="space-y-2" data-tutorial="module-selector">
+              <Label>
+                <HelpTip text={tip("module.choice")}>
+                  {msg("auto.features.submit.components.steps.paramsstep.3")}
+                </HelpTip>
+              </Label>
+              <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
+                <div
+                  className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
+                  style={{ insetInlineStart: moduleName === "predict" ? 4 : "calc(50% + 2px)" }}
+                />
+                {(
+                  [
+                    ["predict", "Predict"],
+                    ["cot", "CoT"],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setModuleName(val)}
+                    className={cn(
+                      "relative z-10 flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 text-center cursor-pointer",
+                      moduleName === val
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <Separator />
+            <Separator />
+          </>
+        )}
 
         <div className="space-y-3" data-tutorial="data-splits">
           <div className="flex items-center justify-between">
@@ -191,11 +198,15 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
             </Label>
             <Switch id="shuffle" checked={shuffle} onCheckedChange={setShuffle} />
           </div>
-          <Separator />
-          <Label className="font-semibold text-xs text-muted-foreground">
-            {msg("auto.features.submit.components.steps.paramsstep.11")}
-            {TERMS.optimizer}
-          </Label>
+          {advancedMode && (
+            <>
+              <Separator />
+              <Label className="font-semibold text-xs text-muted-foreground">
+                {msg("auto.features.submit.components.steps.paramsstep.11")}
+                {TERMS.optimizer}
+              </Label>
+            </>
+          )}
 
           <div className="space-y-2" data-tutorial="auto-level">
             <Label className="text-sm">
@@ -237,45 +248,47 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3" data-tutorial="gepa-params">
-            <div className="space-y-1.5">
-              <Label className="text-xs">
-                <HelpTip text={tip("submit.reflection_minibatch")}>
-                  {msg("auto.features.submit.components.steps.paramsstep.13")}
-                </HelpTip>
-              </Label>
-              <NumberInput
-                min={1}
-                max={20}
-                step={1}
-                value={reflectionMinibatchSize ? parseInt(reflectionMinibatchSize, 10) : ""}
-                onChange={(v) => setReflectionMinibatchSize(String(v))}
-              />
+          {advancedMode && (
+            <div className="grid grid-cols-2 gap-3" data-tutorial="gepa-params">
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  <HelpTip text={tip("submit.reflection_minibatch")}>
+                    {msg("auto.features.submit.components.steps.paramsstep.13")}
+                  </HelpTip>
+                </Label>
+                <NumberInput
+                  min={1}
+                  max={20}
+                  step={1}
+                  value={reflectionMinibatchSize ? parseInt(reflectionMinibatchSize, 10) : ""}
+                  onChange={(v) => setReflectionMinibatchSize(String(v))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className={cn("text-xs", autoLevel && "text-muted-foreground/50")}>
+                  <HelpTip text={tip("submit.eval_rounds")}>
+                    {msg("auto.features.submit.components.steps.paramsstep.14")}
+                  </HelpTip>
+                </Label>
+                <NumberInput
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={maxFullEvals ? parseInt(maxFullEvals, 10) : ""}
+                  onChange={(v) => setMaxFullEvals(String(v))}
+                  disabled={!!autoLevel}
+                />
+              </div>
+              <div className="col-span-2 flex items-center justify-between">
+                <Label className="text-sm cursor-pointer">
+                  <HelpTip text={tip("submit.merge")}>
+                    {msg("auto.features.submit.components.steps.paramsstep.15")}
+                  </HelpTip>
+                </Label>
+                <Switch checked={useMerge} onCheckedChange={setUseMerge} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className={cn("text-xs", autoLevel && "text-muted-foreground/50")}>
-                <HelpTip text={tip("submit.eval_rounds")}>
-                  {msg("auto.features.submit.components.steps.paramsstep.14")}
-                </HelpTip>
-              </Label>
-              <NumberInput
-                min={1}
-                max={50}
-                step={1}
-                value={maxFullEvals ? parseInt(maxFullEvals, 10) : ""}
-                onChange={(v) => setMaxFullEvals(String(v))}
-                disabled={!!autoLevel}
-              />
-            </div>
-            <div className="col-span-2 flex items-center justify-between">
-              <Label className="text-sm cursor-pointer">
-                <HelpTip text={tip("submit.merge")}>
-                  {msg("auto.features.submit.components.steps.paramsstep.15")}
-                </HelpTip>
-              </Label>
-              <Switch checked={useMerge} onCheckedChange={setUseMerge} />
-            </div>
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-# On-prem mirrors / artifactory: see deploy/ON_PREM_CHECKLIST.md (sections 1, 4).
+# On-prem mirrors / artifactory: see AIRGAP.md.
 #
 # Build args:
 #   BASE_IMAGE   — node:22-alpine compatible image; override with internal mirror.
@@ -16,7 +16,9 @@ ARG NPM_REGISTRY
 WORKDIR /app
 
 COPY package.json package-lock.json .npmrc* ./
-RUN npm config set registry "$NPM_REGISTRY" && npm ci
+RUN npm config set registry "$NPM_REGISTRY" \
+    && npm config set replace-registry-host always \
+    && npm ci
 
 FROM base AS build
 WORKDIR /app
