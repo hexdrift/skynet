@@ -90,7 +90,13 @@
     "pairPlural": "זוגות"
   },
   "messages": {
+    "admin.forbidden": "רק מנהלים יכולים לבצע את הפעולה הזו.",
+    "admin.invalid_username": "צריך להזין שם משתמש.",
+    "admin.quota_save_failed": "לא הצלחנו לשמור את מגבלת המשתמש.",
     "analytics.other_bucket": "אחר",
+    "auth.invalid_token": "פג תוקף ההתחברות או שהאסימון אינו תקין.",
+    "auth.missing_token": "צריך להתחבר כדי לבצע את הפעולה הזו.",
+    "auth.not_configured": "אימות מול השרת עדיין לא הוגדר.",
     "optimization.not_found": "{term.optimization} לא נמצאה: '{optimization_id}'.",
     "optimization.not_finished": "ה{term.optimization} עדיין לא הסתיימה.",
     "optimization.no_result": "ל{term.optimization} אין נתוני תוצאה.",

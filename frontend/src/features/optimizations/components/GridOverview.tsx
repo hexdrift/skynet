@@ -28,20 +28,9 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationStatusResponse, PairResult } from "@/shared/types/api";
@@ -866,29 +855,24 @@ export function GridOverview({
                   </span>
                 )}
 
-                <TooltipProvider>
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground/50 hover:text-red-600 shrink-0"
-                        aria-label={msg(
-                          "auto.features.optimizations.components.gridoverview.literal.29",
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPendingDelete(pr);
-                        }}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      {msg("auto.features.optimizations.components.gridoverview.18")}
-                    </TooltipContent>
-                  </UiTooltip>
-                </TooltipProvider>
+                <TooltipButton
+                  tooltip={msg("auto.features.optimizations.components.gridoverview.18")}
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-muted-foreground/50 hover:text-red-600 shrink-0"
+                    aria-label={msg(
+                      "auto.features.optimizations.components.gridoverview.literal.29",
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingDelete(pr);
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </TooltipButton>
 
                 <ChevronLeft className="size-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
               </div>
@@ -912,18 +896,18 @@ export function GridOverview({
 
       <Dialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {msg("auto.features.optimizations.components.gridoverview.19")}
-            </DialogTitle>
-            <DialogDescription>
-              {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
-              <span className="font-mono font-medium text-foreground break-all">
-                {pendingDelete ? pairLabel(pendingDelete) : ""}
-              </span>
-              {msg("auto.features.optimizations.components.gridoverview.21")}
-            </DialogDescription>
-          </DialogHeader>
+          <DialogTitleRow
+            title={msg("auto.features.optimizations.components.gridoverview.19")}
+            description={
+              <>
+                {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
+                <span className="font-mono font-medium text-foreground break-all">
+                  {pendingDelete ? pairLabel(pendingDelete) : ""}
+                </span>
+                {msg("auto.features.optimizations.components.gridoverview.21")}
+              </>
+            }
+          />
           <DialogFooter className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"

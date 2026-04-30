@@ -1,13 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { TERMS } from "@/shared/lib/terms";
 import type { DeleteTarget } from "../hooks/use-bulk-delete";
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -44,18 +38,18 @@ export function DeleteDialogs({
         }}
       >
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedCount === 1
+          <DialogTitleRow
+            title={
+              selectedCount === 1
                 ? formatMsg("auto.features.dashboard.components.deletedialogs.template.1", {
                     p1: TERMS.optimization,
                   })
                 : formatMsg("auto.features.dashboard.components.deletedialogs.template.2", {
                     p1: TERMS.optimizationPlural,
-                  })}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedCount === 1 ? (
+                  })
+            }
+            description={
+              selectedCount === 1 ? (
                 <>
                   {msg("auto.features.dashboard.components.deletedialogs.1")}
                   {TERMS.optimization}
@@ -67,9 +61,9 @@ export function DeleteDialogs({
                   <span className="font-semibold">{selectedCount}</span> {TERMS.optimizationPlural}
                   {msg("auto.features.dashboard.components.deletedialogs.4")}
                 </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
+              )
+            }
+          />
           <DialogFooter className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
@@ -102,20 +96,24 @@ export function DeleteDialogs({
         }}
       >
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {msg("auto.features.dashboard.components.deletedialogs.6")}
-              {TERMS.optimization}
-            </DialogTitle>
-            <DialogDescription>
-              {msg("auto.features.dashboard.components.deletedialogs.7")}
-              {TERMS.optimization}{" "}
-              <span className="font-mono font-medium text-foreground break-all">
-                {deleteTarget?.id}
-              </span>
-              ?
-            </DialogDescription>
-          </DialogHeader>
+          <DialogTitleRow
+            title={
+              <>
+                {msg("auto.features.dashboard.components.deletedialogs.6")}
+                {TERMS.optimization}
+              </>
+            }
+            description={
+              <>
+                {msg("auto.features.dashboard.components.deletedialogs.7")}
+                {TERMS.optimization}{" "}
+                <span className="font-mono font-medium text-foreground break-all">
+                  {deleteTarget?.id}
+                </span>
+                ?
+              </>
+            }
+          />
           <DialogFooter className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"

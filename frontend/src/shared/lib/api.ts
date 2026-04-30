@@ -20,6 +20,7 @@ import type {
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { tI18n } from "@/shared/lib/i18n";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
+import { readNdjsonStream, readServerSentEvents, type ServerSentEvent } from "@/shared/lib/sse";
 
 const API = getRuntimeEnv().apiUrl;
 const JOB_CACHE_MS = 1000;
@@ -47,6 +48,11 @@ const GET_CACHE_MS = 2000;
 // post-invalidation dedup — otherwise callers that fetch right after a
 // mutation can get pre-mutation data via a still-resolving in-flight promise.
 let _cacheGen = 0;
+let _authToken: string | undefined;
+
+export function setApiAuthToken(token: string | undefined) {
+  _authToken = token;
+}
 
 function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
   const key = path;
@@ -103,7 +109,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${API}${path}`, {
       ...init,
-      headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
+      headers: {
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        ...(_authToken ? { Authorization: `Bearer ${_authToken}` } : {}),
+        ...init?.headers,
+      },
     });
   } catch (err) {
     throw new Error(msg("auto.shared.lib.api.literal.1"), { cause: err });
@@ -191,11 +201,54 @@ export interface OptimizationCounts {
   cancelled: number;
 }
 
+export interface UserQuotaOverride {
+  username: string;
+  quota: number | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  effective_quota?: number | null;
+  job_count: number;
+  last_action?: string | null;
+}
+
+export interface UserQuotaAuditEvent {
+  id: number;
+  actor: string;
+  target_username: string;
+  action: string;
+  old_quota: number | null;
+  new_quota: number | null;
+  created_at?: string | null;
+}
+
+export interface UserQuotaOverridesResponse {
+  default_quota: number;
+  overrides: UserQuotaOverride[];
+  audit_events: UserQuotaAuditEvent[];
+}
+
 export function getOptimizationCounts(username?: string) {
   const q = new URLSearchParams();
   if (username) q.set("username", username);
   const qs = q.toString();
   return cachedGet<OptimizationCounts>(`/optimizations/counts${qs ? `?${qs}` : ""}`);
+}
+
+export function getUserQuotaOverrides() {
+  return request<UserQuotaOverridesResponse>("/admin/quotas");
+}
+
+export function setUserQuotaOverride(username: string, quota: number | null) {
+  return request<UserQuotaOverride>("/admin/quotas", {
+    method: "PUT",
+    body: JSON.stringify({ username, quota }),
+  });
+}
+
+export function deleteUserQuotaOverride(username: string) {
+  return request<UserQuotaOverride>(`/admin/quotas/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+  });
 }
 
 export interface DashboardAnalyticsJob {
@@ -460,63 +513,6 @@ export interface ModelProbeHandlers {
   signal?: AbortSignal;
 }
 
-interface ServerSentEvent {
-  event: string;
-  data: Record<string, unknown>;
-}
-
-function normalizeStreamChunk(chunk: string): string {
-  return chunk.replace(/\r\n/g, "\n");
-}
-
-function dispatchNdjsonLine(raw: string, dispatch: (line: string) => void) {
-  const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
-  dispatch(line);
-}
-
-function parseServerSentEvent(raw: string): ServerSentEvent | null {
-  let event = "message";
-  const dataLines: string[] = [];
-  for (const line of normalizeStreamChunk(raw).split("\n")) {
-    if (line.startsWith("event:")) event = line.slice(6).trim();
-    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-  }
-  if (dataLines.length === 0) return null;
-  try {
-    return { event, data: JSON.parse(dataLines.join("\n")) as Record<string, unknown> };
-  } catch {
-    return null;
-  }
-}
-
-async function readServerSentEvents(
-  body: ReadableStream<Uint8Array>,
-  processEvent: (event: ServerSentEvent) => void,
-) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) {
-      buf += decoder.decode();
-      if (buf.trim()) {
-        const event = parseServerSentEvent(buf);
-        if (event) processEvent(event);
-      }
-      break;
-    }
-    buf += normalizeStreamChunk(decoder.decode(value, { stream: true }));
-    let sepIdx: number;
-    while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
-      const raw = buf.slice(0, sepIdx);
-      buf = buf.slice(sepIdx + 2);
-      const event = parseServerSentEvent(raw);
-      if (event) processEvent(event);
-    }
-  }
-}
-
 /** Stream per-model probe scores via POST /models/probe (NDJSON). */
 export async function probeModels(
   payload: ModelProbeRequest,
@@ -542,7 +538,6 @@ export async function probeModels(
     );
     return;
   }
-  let buf = "";
   const dispatch = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) return;
@@ -561,23 +556,7 @@ export async function probeModels(
     else if (data.event === "error") handlers.onError?.(data.message);
   };
   try {
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) {
-        buf += decoder.decode();
-        if (buf.length) dispatch(buf);
-        break;
-      }
-      buf += normalizeStreamChunk(decoder.decode(value, { stream: true }));
-      let newlineIdx: number;
-      while ((newlineIdx = buf.indexOf("\n")) !== -1) {
-        const raw = buf.slice(0, newlineIdx);
-        buf = buf.slice(newlineIdx + 1);
-        dispatchNdjsonLine(raw, dispatch);
-      }
-    }
+    await readNdjsonStream(res.body, dispatch);
   } catch (err) {
     if ((err as Error)?.name !== "AbortError") {
       handlers.onError?.(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.3"));

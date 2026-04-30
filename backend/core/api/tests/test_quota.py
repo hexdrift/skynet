@@ -44,6 +44,31 @@ class _FakeJobStore:
         return self._counts.get(username or "", 0)
 
 
+class _FakeLiveQuotaJobStore(_FakeJobStore):
+    """Fake store that exposes the live quota resolver used by Postgres."""
+
+    def __init__(self, counts: dict[str, int], quota: int | None) -> None:
+        """Capture canned counts and an effective quota.
+
+        Args:
+            counts: Mapping of username to the number of jobs for that user.
+            quota: Effective quota to return, or ``None`` for unlimited.
+        """
+        super().__init__(counts)
+        self._quota = quota
+
+    def get_effective_user_quota(self, username: str) -> int | None:
+        """Return the canned live quota.
+
+        Args:
+            username: Username being resolved.
+
+        Returns:
+            The quota configured for this fake store.
+        """
+        return self._quota
+
+
 def test_get_user_quota_returns_default_for_unknown_user() -> None:
     """Unknown users fall back to the default per-user job cap."""
     s = Settings(max_jobs_per_user=100)
@@ -51,19 +76,19 @@ def test_get_user_quota_returns_default_for_unknown_user() -> None:
     assert s.get_user_quota("random_user") == 100
 
 
-def test_get_user_quota_admin_returns_none() -> None:
-    """Admin usernames receive an unlimited quota (``None``)."""
+def test_get_user_quota_admin_uses_default_quota() -> None:
+    """Admin usernames do not bypass normal quota enforcement."""
     s = Settings(admin_usernames="admin,superuser", max_jobs_per_user=100)
 
-    assert s.get_user_quota("admin") is None
-    assert s.get_user_quota("superuser") is None
+    assert s.get_user_quota("admin") == 100
+    assert s.get_user_quota("superuser") == 100
 
 
-def test_get_user_quota_admin_check_is_case_insensitive() -> None:
-    """The admin allow-list is matched case-insensitively."""
+def test_get_user_quota_admin_check_does_not_override_case_insensitively() -> None:
+    """Admin casing has no effect on quota resolution."""
     s = Settings(admin_usernames="Admin", max_jobs_per_user=100)
 
-    assert s.get_user_quota("admin") is None
+    assert s.get_user_quota("admin") == 100
 
 
 def test_get_user_quota_override_int_takes_precedence() -> None:
@@ -81,15 +106,15 @@ def test_get_user_quota_override_none_means_unlimited() -> None:
     assert s.get_user_quota("researcher") is None
 
 
-def test_get_user_quota_admin_wins_over_override() -> None:
-    """Admin status wins over a numeric override."""
+def test_get_user_quota_override_wins_over_admin_status() -> None:
+    """Quota overrides are independent from admin authorization."""
     s = Settings(
         admin_usernames="alice",
         QUOTA_OVERRIDES='{"alice": 50}',
         max_jobs_per_user=100,
     )
 
-    assert s.get_user_quota("alice") is None
+    assert s.get_user_quota("alice") == 50
 
 
 def test_get_user_quota_non_overridden_user_gets_default() -> None:
@@ -155,3 +180,17 @@ def test_enforce_user_quota_override_still_rejects_at_new_cap(monkeypatch: pytes
         enforce_user_quota(store, "power")
     assert exc.value.status_code == 409
     assert "500" in exc.value.detail
+
+
+def test_enforce_user_quota_uses_live_store_quota_before_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A DB-backed live quota can raise the cap without changing config."""
+    monkeypatch.setattr(_h.settings.__class__, "get_user_quota", lambda self, u: 100)
+    store = _FakeLiveQuotaJobStore({"power": 250}, quota=500)
+    enforce_user_quota(store, "power")
+
+
+def test_enforce_user_quota_live_none_bypasses_config_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A DB-backed ``None`` quota gives a user unlimited quota immediately."""
+    monkeypatch.setattr(_h.settings.__class__, "get_user_quota", lambda self, u: 100)
+    store = _FakeLiveQuotaJobStore({"researcher": 9999}, quota=None)
+    enforce_user_quota(store, "researcher")

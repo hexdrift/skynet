@@ -3,27 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Check, ChevronDown, Clipboard } from "lucide-react";
-import { Badge } from "@/shared/ui/primitives/badge";
-import { getStatusLabel } from "@/shared/constants/job-status";
-import { STATUS_COLORS } from "../constants";
 import { msg } from "@/shared/lib/messages";
-
-export function StatusBadge({ status }: { status: string }) {
-  return (
-    <Badge
-      variant="outline"
-      className={`text-[0.8125rem] px-3 py-1 font-bold tracking-wide ${STATUS_COLORS[status] ?? ""}`}
-    >
-      {status === "running" && (
-        <span className="relative flex size-2 me-1">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-          <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
-        </span>
-      )}
-      {getStatusLabel(status)}
-    </Badge>
-  );
-}
 
 export function InfoCard({
   label,

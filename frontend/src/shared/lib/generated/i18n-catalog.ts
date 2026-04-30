@@ -90,10 +90,16 @@ export const TERMS = {
 } as const;
 
 export const I18N_MESSAGES = {
+  "admin.forbidden": "רק מנהלים יכולים לבצע את הפעולה הזו.",
+  "admin.invalid_username": "צריך להזין שם משתמש.",
+  "admin.quota_save_failed": "לא הצלחנו לשמור את מגבלת המשתמש.",
   "agent.approval.unknown_call_id": "אין אישור ממתין ל-call_id שצוין.",
   "agent.status.tool_end": "הכלי סיים לפעול.",
   "agent.status.tool_start": "הסוכן מפעיל כלי…",
   "analytics.other_bucket": "אחר",
+  "auth.invalid_token": "פג תוקף ההתחברות או שהאסימון אינו תקין.",
+  "auth.missing_token": "צריך להתחבר כדי לבצע את הפעולה הזו.",
+  "auth.not_configured": "אימות מול השרת עדיין לא הוגדר.",
   "code_agent.upstream_failed": "שגיאה בסוכן הקוד: {error}",
   "dataset.column_roles_invalid": "תפקידי עמודות לא תקינים (חייבים להיות 'input', 'output' או 'ignore'): {bad}",
   "dataset.column_roles_need_input": "לפחות עמודה אחת חייבת להיות בתפקיד 'input'.",
@@ -203,10 +209,16 @@ export type I18nMessageKey = keyof typeof I18N_MESSAGES;
 export type ErrorCode = I18nMessageKey;
 
 export const I18N_KEY = {
+  ADMIN_FORBIDDEN: "admin.forbidden",
+  ADMIN_INVALID_USERNAME: "admin.invalid_username",
+  ADMIN_QUOTA_SAVE_FAILED: "admin.quota_save_failed",
   AGENT_APPROVAL_UNKNOWN_CALL_ID: "agent.approval.unknown_call_id",
   AGENT_STATUS_TOOL_END: "agent.status.tool_end",
   AGENT_STATUS_TOOL_START: "agent.status.tool_start",
   ANALYTICS_OTHER_BUCKET: "analytics.other_bucket",
+  AUTH_INVALID_TOKEN: "auth.invalid_token",
+  AUTH_MISSING_TOKEN: "auth.missing_token",
+  AUTH_NOT_CONFIGURED: "auth.not_configured",
   CODE_AGENT_UPSTREAM_FAILED: "code_agent.upstream_failed",
   DATASET_COLUMN_ROLES_INVALID: "dataset.column_roles_invalid",
   DATASET_COLUMN_ROLES_NEED_INPUT: "dataset.column_roles_need_input",

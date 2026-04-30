@@ -1,12 +1,15 @@
 "use client";
 
 import { Badge } from "@/shared/ui/primitives/badge";
+import { PingDot } from "@/shared/ui/ping-dot";
 import { getStatusLabel } from "@/shared/constants/job-status";
 import type { JobStatus } from "@/shared/types/api";
 
 interface StatusBadgeProps {
   status: JobStatus | string;
   className?: string;
+  /** Compact variant for table rows: smaller text, no PingDot. */
+  compact?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -18,22 +21,18 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "status-pill-cancelled",
 };
 
-export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
+export function StatusBadge({ status, className = "", compact = false }: StatusBadgeProps) {
   const label = getStatusLabel(status);
   const colorClass = STATUS_COLORS[status] ?? "";
   const isRunning = status === "running";
+  const sizeClass = compact ? "" : "text-[0.8125rem] px-3 py-1 font-bold tracking-wide";
 
   return (
     <Badge
       variant="outline"
-      className={`text-[0.8125rem] px-3 py-1 font-bold tracking-wide ${colorClass} ${isRunning ? "animate-pulse motion-reduce:animate-none" : ""} ${className}`}
+      className={`${sizeClass} ${colorClass} ${isRunning ? "animate-pulse motion-reduce:animate-none" : ""} ${className}`.trim()}
     >
-      {isRunning && (
-        <span className="relative flex size-2 me-1">
-          <span className="animate-ping motion-reduce:animate-none absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-          <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
-        </span>
-      )}
+      {isRunning && !compact && <PingDot className="me-1" />}
       {label}
     </Badge>
   );

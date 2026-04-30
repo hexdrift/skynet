@@ -42,7 +42,7 @@ from ...exceptions import ServiceError
 from ...i18n import t
 from ...models import ModelConfig
 from ..language_models import build_language_model
-from .code import ReasoningStreamListener
+from .code import ReasoningStreamListener, _format_agent_error
 from .constants import REASONING_FIELD
 
 
@@ -393,7 +393,7 @@ class _ApprovalGatedTool:
                         "id": call_id,
                         "tool": self._tool_name,
                         "status": "error",
-                        "result": f"{type(exc).__name__}: {exc}",
+                        "result": _format_agent_error(exc),
                     },
                 }
             )
@@ -815,4 +815,4 @@ async def run_generalist_agent(
         raise
     except Exception as exc:
         logger.exception("generalist agent failed")
-        yield {"event": "error", "data": {"error": f"{type(exc).__name__}: {exc}"}}
+        yield {"event": "error", "data": {"error": _format_agent_error(exc)}}

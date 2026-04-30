@@ -12,12 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/ui/primitives/table";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
+import { PingDot } from "@/shared/ui/ping-dot";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import type { useColumnResize } from "@/shared/ui/excel-filter";
 import { ColumnHeader, ResetColumnsButton, type SortDir } from "@/shared/ui/excel-filter";
 import { formatDate, formatElapsed, formatId, formatRelativeTime } from "@/shared/lib";
@@ -26,7 +24,8 @@ import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/share
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { FETCH_PAGE_SIZE } from "../constants";
-import { formatScore, statusBadge, typeBadge } from "../lib/status-badges";
+import { formatScore, typeBadge } from "../lib/status-badges";
+import { StatusBadge } from "@/shared/ui/status-badge";
 import type { DeleteTarget } from "../hooks/use-bulk-delete";
 
 type ColResize = ReturnType<typeof useColumnResize>;
@@ -116,34 +115,20 @@ export function JobsTab({
           )}
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-dim)] py-3 px-4 text-sm text-[var(--danger)] mb-4">
-            {error}
-          </div>
-        )}
+        {error && <InlineErrorRow message={error} className="mb-4" />}
 
         {!loading && data && filteredItems.length === 0 && data.total === 0 && (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <p className="text-base font-medium">
-              {msg("auto.features.dashboard.components.jobstab.4")}
-              {TERMS.optimizationPlural}
-            </p>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              {msg("auto.features.dashboard.components.jobstab.5")}
-              {TERMS.dataset}
-              {msg("auto.features.dashboard.components.jobstab.6")}
-              {TERMS.signature}
-              {msg("auto.features.dashboard.components.jobstab.7")}
-              {TERMS.metric}
-              {msg("auto.features.dashboard.components.jobstab.8")}
-            </p>
+          <EmptyState
+            title={`${msg("auto.features.dashboard.components.jobstab.4")}${TERMS.optimizationPlural}`}
+            description={`${msg("auto.features.dashboard.components.jobstab.5")}${TERMS.dataset}${msg("auto.features.dashboard.components.jobstab.6")}${TERMS.signature}${msg("auto.features.dashboard.components.jobstab.7")}${TERMS.metric}${msg("auto.features.dashboard.components.jobstab.8")}`}
+          >
             <Button asChild className="group mt-2 gap-2">
               <Link href="/submit">
                 <Plus className="size-4 transition-transform duration-200 group-hover:rotate-90" />
                 {TERMS.notificationNewOpt}
               </Link>
             </Button>
-          </div>
+          </EmptyState>
         )}
 
         {filteredItems.length > 0 && (
@@ -327,12 +312,7 @@ export function JobsTab({
                         title={job.optimization_id}
                       >
                         <div className="flex items-center gap-1.5">
-                          {ACTIVE_STATUSES.has(job.status) && (
-                            <span className="relative flex size-2 shrink-0">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-                              <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
-                            </span>
-                          )}
+                          {ACTIVE_STATUSES.has(job.status) && <PingDot className="shrink-0" />}
                           <span className="font-mono text-xs text-primary truncate">
                             {formatId(job.optimization_id)}
                           </span>
@@ -342,7 +322,7 @@ export function JobsTab({
                         {typeBadge(job.optimization_type)}
                       </TableCell>
                       <TableCell className="truncate overflow-hidden">
-                        {statusBadge(job.status)}
+                        <StatusBadge status={job.status} compact />
                       </TableCell>
                       <TableCell
                         className="text-sm truncate overflow-hidden"
@@ -377,53 +357,43 @@ export function JobsTab({
                       <TableCell className="truncate overflow-hidden">{formatScore(job)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-0.5">
-                          <TooltipProvider>
-                            <UiTooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenJob(job.optimization_id)}
-                                  className="p-1 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-                                  aria-label={formatMsg(
-                                    "auto.features.dashboard.components.jobstab.template.3",
-                                    { p1: TERMS.optimization },
-                                  )}
-                                >
-                                  <ExternalLink className="size-3.5" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                {msg("auto.features.dashboard.components.jobstab.9")}
-                              </TooltipContent>
-                            </UiTooltip>
-                          </TooltipProvider>
+                          <TooltipButton
+                            tooltip={msg("auto.features.dashboard.components.jobstab.9")}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => onOpenJob(job.optimization_id)}
+                              className="p-1 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                              aria-label={formatMsg(
+                                "auto.features.dashboard.components.jobstab.template.3",
+                                { p1: TERMS.optimization },
+                              )}
+                            >
+                              <ExternalLink className="size-3.5" />
+                            </button>
+                          </TooltipButton>
                           {isAdmin && (
-                            <TooltipProvider>
-                              <UiTooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onRequestDelete({
-                                        id: job.optimization_id,
-                                        status: job.status,
-                                      });
-                                    }}
-                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all cursor-pointer"
-                                    aria-label={formatMsg(
-                                      "auto.features.dashboard.components.jobstab.template.4",
-                                      { p1: TERMS.optimization },
-                                    )}
-                                  >
-                                    <Trash2 className="size-3.5" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom">
-                                  {msg("auto.features.dashboard.components.jobstab.10")}
-                                </TooltipContent>
-                              </UiTooltip>
-                            </TooltipProvider>
+                            <TooltipButton
+                              tooltip={msg("auto.features.dashboard.components.jobstab.10")}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRequestDelete({
+                                    id: job.optimization_id,
+                                    status: job.status,
+                                  });
+                                }}
+                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all cursor-pointer"
+                                aria-label={formatMsg(
+                                  "auto.features.dashboard.components.jobstab.template.4",
+                                  { p1: TERMS.optimization },
+                                )}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </TooltipButton>
                           )}
                         </div>
                       </TableCell>

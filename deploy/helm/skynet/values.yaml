@@ -43,6 +43,19 @@ backend:
       cpu: "2000m"
       memory: 6Gi
 
+  # Optional mounts for internal CA bundles or site-specific runtime files.
+  # Example:
+  # extraVolumes:
+  #   - name: internal-ca
+  #     secret:
+  #       secretName: skynet-internal-ca
+  # extraVolumeMounts:
+  #   - name: internal-ca
+  #     mountPath: /etc/skynet/ca
+  #     readOnly: true
+  extraVolumes: []
+  extraVolumeMounts: []
+
   # Non-secret env (rendered into ConfigMap). Secrets go in `secrets` below.
   env:
     LOG_LEVEL: INFO
@@ -73,6 +86,9 @@ backend:
     COMMS_WEBHOOK_URL: ""
     COMMS_CHANNEL: ""
     FRONTEND_URL: ""
+    # Prefer IdP groups for admin authorization. ADMIN_USERNAMES is break-glass only.
+    ADMIN_GROUPS: ""
+    ADMIN_USERNAMES: ""
 
   # Extra envFrom entries (existing ConfigMaps/Secrets) — appended verbatim.
   envFrom: []
@@ -92,6 +108,8 @@ backend:
       OPENAI_API_KEY: ""
       ANTHROPIC_API_KEY: ""
       FIREWORKS_AI_API_KEY: ""
+      # Must match frontend.secrets.data.BACKEND_AUTH_SECRET.
+      BACKEND_AUTH_SECRET: ""
       # REMOTE_DB_URL is composed below — see externalDatabase / postgres stanzas.
       # Override here only if you want to bypass the composer.
       REMOTE_DB_URL: ""
@@ -172,6 +190,10 @@ frontend:
       cpu: 500m
       memory: 512Mi
 
+  # Optional mounts for internal CA bundles or site-specific runtime files.
+  extraVolumes: []
+  extraVolumeMounts: []
+
   env:
     NODE_ENV: production
     PORT: "3001"
@@ -180,7 +202,10 @@ frontend:
     API_URL: ""  # auto-defaults to http://<release>-skynet-backend:8000 if empty
     AUTH_SSO_ISSUER: ""
     AUTH_SSO_CLIENT_ID: ""
-    AUTH_SSO_SCOPE: "openid profile email"
+    AUTH_SSO_SCOPE: "openid profile email groups"
+    AUTH_GROUP_CLAIM: "groups"
+    AUTH_ADMIN_GROUPS: ""
+    # Break-glass admin users only. Prefer AUTH_ADMIN_GROUPS for normal admin assignment.
     AUTH_ADMINS: ""
     NODE_EXTRA_CA_CERTS: ""
     # DEV_AUTH=false to disable login in non-prod previews. Leave empty otherwise.
@@ -193,6 +218,8 @@ frontend:
     data:
       AUTH_SECRET: ""
       AUTH_SSO_CLIENT_SECRET: ""
+      # Must match backend.secrets.data.BACKEND_AUTH_SECRET.
+      BACKEND_AUTH_SECRET: ""
 
   podSecurityContext:
     runAsNonRoot: true

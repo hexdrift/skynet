@@ -21,6 +21,7 @@ import { autocompletion, acceptCompletion, type CompletionResult } from "@codemi
 import { indentWithTab } from "@codemirror/commands";
 import { Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
+import { linkifyMessage } from "@/shared/lib/linkify";
 import {
   Copy,
   Check,
@@ -525,21 +526,7 @@ export function CodeEditor({
             <div key={`e${i}`} className="flex items-start gap-2 text-xs">
               <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />
               <span className="text-red-700">
-                {err.split(/(https?:\/\/[^\s]+)/g).map((part, j) =>
-                  /^https?:\/\//.test(part) ? (
-                    <a
-                      key={j}
-                      href={part}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-red-900 transition-colors"
-                    >
-                      {part}
-                    </a>
-                  ) : (
-                    part
-                  ),
-                )}
+                {linkifyMessage(err, "underline hover:text-red-900 transition-colors")}
               </span>
             </div>
           ))}

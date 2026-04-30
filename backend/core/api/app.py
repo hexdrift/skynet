@@ -51,6 +51,7 @@ from ..worker.engine import BackgroundWorker, get_worker
 from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
 from .observability import get_request_id, install_metrics, install_request_id_middleware
+from .routers.admin import create_admin_router
 from .routers.analytics import create_analytics_router
 from .routers.code_agent import create_code_agent_router
 from .routers.code_validation import create_code_validation_router
@@ -936,6 +937,7 @@ def create_app(
         )
 
     app.include_router(create_models_router(), tags=["Models"])
+    app.include_router(create_admin_router(job_store=job_store), tags=["Admin"])
     app.include_router(create_registry_router(registry=registry), tags=["Registry"])
     app.include_router(create_code_validation_router(), tags=["Code Validation"])
     app.include_router(create_code_agent_router(), tags=["Code Validation"])

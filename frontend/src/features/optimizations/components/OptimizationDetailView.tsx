@@ -24,13 +24,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { Separator } from "@/shared/ui/primitives/separator";
+import { PingDot } from "@/shared/ui/ping-dot";
 import { FadeIn } from "@/shared/ui/motion";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
   getJob,
   cancelJob,
@@ -64,7 +60,8 @@ import { DataTab } from "./DataTab";
 import { LogsTab } from "./LogsTab";
 import { ExportMenu } from "./ExportMenu";
 import { DeleteJobDialog } from "./DeleteJobDialog";
-import { StatusBadge, CopyButton } from "./ui-primitives";
+import { CopyButton } from "./ui-primitives";
+import { StatusBadge } from "@/shared/ui/status-badge";
 import { ServeCodeSnippets } from "./ServeCodeSnippets";
 import { ServeChat } from "./ServeChat";
 import { ConfigTab } from "./ConfigTab";
@@ -73,38 +70,8 @@ import { StageInfoModal } from "./StageInfoModal";
 import { PairDetailView } from "./PairDetailView";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
-
-const URL_RE = /https?:\/\/[^\s<>"]+/g;
-const URL_TRAILING_RE = /[.,;:!?)\]}'"]+$/;
-
-/**
- * Linkify URLs inside a string, keeping trailing sentence punctuation
- * (`.`, `,`, `)`, `]`, …) outside the anchor href so links like
- * `https://example.com).` don't render with a broken trailing `).`
- * inside the underline.
- */
-function linkifyMessage(text: string, anchorClass: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  let lastIdx = 0;
-  let key = 0;
-  for (const m of text.matchAll(URL_RE)) {
-    const matchIdx = m.index ?? 0;
-    if (matchIdx > lastIdx) nodes.push(text.slice(lastIdx, matchIdx));
-    const raw = m[0];
-    const trailingMatch = URL_TRAILING_RE.exec(raw);
-    const trailing = trailingMatch ? trailingMatch[0] : "";
-    const url = trailing ? raw.slice(0, raw.length - trailing.length) : raw;
-    nodes.push(
-      <a key={key++} href={url} target="_blank" rel="noopener noreferrer" className={anchorClass}>
-        {url}
-      </a>,
-    );
-    if (trailing) nodes.push(trailing);
-    lastIdx = matchIdx + raw.length;
-  }
-  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
-  return nodes;
-}
+import { linkifyMessage } from "@/shared/lib/linkify";
+import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
 
 export function OptimizationDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -219,83 +186,48 @@ export function OptimizationDetailView() {
   useEffect(() => {
     if (isAnyDemoMode) return;
     void fetchJob();
-
-    const API = getRuntimeEnv().apiUrl;
-    let eventSource: EventSource | null = null;
-    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
-
-    try {
-      eventSource = new EventSource(`${API}/optimizations/${encodeURIComponent(id)}/stream`);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const sseData = JSON.parse(event.data);
-          const logCount = sseData.log_count ?? 0;
-          const progressCount = sseData.progress_count ?? 0;
-          const prev = lastCountsRef.current;
-          // Full re-fetch when new logs/events arrive or status changes
-          if (
-            logCount > prev.logs ||
-            progressCount > prev.progress ||
-            sseData.status !== jobRef.current?.status
-          ) {
-            lastCountsRef.current = { logs: logCount, progress: progressCount };
-            void fetchJob();
-          } else {
-            // Lightweight merge for metrics-only updates
-            setJob((p) =>
-              p
-                ? {
-                    ...p,
-                    status: sseData.status ?? p.status,
-                    message: sseData.message ?? p.message,
-                    latest_metrics: sseData.latest_metrics ?? p.latest_metrics,
-                  }
-                : p,
-            );
-          }
-        } catch {
-          void fetchJob();
-        }
-      };
-
-      eventSource.addEventListener("done", () => {
-        eventSource?.close();
-        void fetchJob();
-      });
-
-      eventSource.onerror = () => {
-        // Only fall back to polling once the browser's built-in reconnect has
-        // given up (readyState === CLOSED). Transient blips set readyState to
-        // CONNECTING — leave EventSource alone so it auto-retries instead of
-        // locking the page into 5 s polling for the rest of the session.
-        if (eventSource?.readyState !== EventSource.CLOSED) return;
-        eventSource = null;
-        if (fallbackInterval) return;
-        fallbackInterval = setInterval(() => {
-          if (jobRef.current && TERMINAL_STATUSES.has(jobRef.current.status)) {
-            if (fallbackInterval) clearInterval(fallbackInterval);
-            return;
-          }
-          void fetchJob();
-        }, 5000);
-      };
-    } catch {
-      // SSE not supported — use polling
-      fallbackInterval = setInterval(() => {
-        if (jobRef.current && TERMINAL_STATUSES.has(jobRef.current.status)) {
-          if (fallbackInterval) clearInterval(fallbackInterval);
-          return;
-        }
-        void fetchJob();
-      }, 5000);
-    }
-
-    return () => {
-      eventSource?.close();
-      if (fallbackInterval) clearInterval(fallbackInterval);
-    };
   }, [id, isAnyDemoMode, fetchJob]);
+
+  const API = getRuntimeEnv().apiUrl;
+  useStreamWithPollFallback({
+    url: isAnyDemoMode ? "" : `${API}/optimizations/${encodeURIComponent(id)}/stream`,
+    enabled: !isAnyDemoMode,
+    onMessage: (event) => {
+      try {
+        const sseData = JSON.parse(event.data);
+        const logCount = sseData.log_count ?? 0;
+        const progressCount = sseData.progress_count ?? 0;
+        const prev = lastCountsRef.current;
+        if (
+          logCount > prev.logs ||
+          progressCount > prev.progress ||
+          sseData.status !== jobRef.current?.status
+        ) {
+          lastCountsRef.current = { logs: logCount, progress: progressCount };
+          void fetchJob();
+        } else {
+          setJob((p) =>
+            p
+              ? {
+                  ...p,
+                  status: sseData.status ?? p.status,
+                  message: sseData.message ?? p.message,
+                  latest_metrics: sseData.latest_metrics ?? p.latest_metrics,
+                }
+              : p,
+          );
+        }
+      } catch {
+        void fetchJob();
+      }
+    },
+    events: { done: () => void fetchJob() },
+    closeOnEvents: ["done"],
+    poll: () => void fetchJob(),
+    pollIntervalMs: 5000,
+    shouldStopPolling: () =>
+      !!jobRef.current && TERMINAL_STATUSES.has(jobRef.current.status),
+  });
 
   useEffect(() => {
     if (isAnyDemoMode) return;
@@ -642,43 +574,29 @@ export function OptimizationDetailView() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <TooltipProvider>
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={() => router.push(`/submit?clone=${job.optimization_id}`)}
-                        aria-label={msg("auto.app.optimizations.id.page.literal.4")}
-                      >
-                        <CopyPlus className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      {msg("auto.app.optimizations.id.page.4")}
-                    </TooltipContent>
-                  </UiTooltip>
-                </TooltipProvider>
+                <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => router.push(`/submit?clone=${job.optimization_id}`)}
+                    aria-label={msg("auto.app.optimizations.id.page.literal.4")}
+                  >
+                    <CopyPlus className="size-4" />
+                  </Button>
+                </TooltipButton>
                 {isActive && (
-                  <TooltipProvider>
-                    <UiTooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
-                          onClick={handleCancel}
-                          aria-label={msg("auto.app.optimizations.id.page.literal.5")}
-                        >
-                          <XCircle className="size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {msg("auto.app.optimizations.id.page.5")}
-                      </TooltipContent>
-                    </UiTooltip>
-                  </TooltipProvider>
+                  <TooltipButton tooltip={msg("auto.app.optimizations.id.page.5")}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
+                      onClick={handleCancel}
+                      aria-label={msg("auto.app.optimizations.id.page.literal.5")}
+                    >
+                      <XCircle className="size-4" />
+                    </Button>
+                  </TooltipButton>
                 )}
                 {isTerminal && (
                   <DeleteJobDialog
@@ -833,12 +751,7 @@ export function OptimizationDetailView() {
                 <TabsTrigger value="overview" className={tabCls}>
                   <TrendingUp className="size-3.5" />
                   {msg("auto.app.optimizations.id.page.14")}
-                  {isActive && (
-                    <span className="relative flex size-2 ms-1">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-                      <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
-                    </span>
-                  )}
+                  {isActive && <PingDot className="ms-1" />}
                 </TabsTrigger>
                 {job.status === "success" &&
                   (job.optimization_type === "grid_search" || serveInfo) && (
@@ -865,12 +778,7 @@ export function OptimizationDetailView() {
                   <TabsTrigger value="logs" className={tabCls} data-tutorial="logs-tab-trigger">
                     <Terminal className="size-3.5" />
                     {msg("auto.app.optimizations.id.page.18")}
-                    {isActive && (
-                      <span className="relative flex size-2 ms-1">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-                        <span className="relative inline-flex rounded-full size-2 bg-[var(--warning)]" />
-                      </span>
-                    )}
+                    {isActive && <PingDot className="ms-1" />}
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="config" className={tabCls} data-tutorial="config-tab-trigger">
@@ -922,24 +830,17 @@ export function OptimizationDetailView() {
                         {msg("auto.app.optimizations.id.page.20")}
                       </p>
                       {runHistory.length > 0 && (
-                        <TooltipProvider>
-                          <UiTooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={handleClearHistory}
-                                aria-label={msg("auto.app.optimizations.id.page.literal.6")}
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                              {msg("auto.app.optimizations.id.page.21")}
-                            </TooltipContent>
-                          </UiTooltip>
-                        </TooltipProvider>
+                        <TooltipButton tooltip={msg("auto.app.optimizations.id.page.21")}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            onClick={handleClearHistory}
+                            aria-label={msg("auto.app.optimizations.id.page.literal.6")}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </TooltipButton>
                       )}
                     </div>
                   </FadeIn>
