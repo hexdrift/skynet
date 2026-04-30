@@ -16,13 +16,8 @@ export { DataTab } from "./components/DataTab";
 export { LogsTab } from "./components/LogsTab";
 export { ExportMenu, exportPromptAsJson, exportLogsAsCsv } from "./components/ExportMenu";
 export { DeleteJobDialog } from "./components/DeleteJobDialog";
-export {
-  StatusBadge,
-  InfoCard,
-  LangPicker,
-  CopyButton,
-  ReasoningPill,
-} from "./components/ui-primitives";
+export { InfoCard, LangPicker, CopyButton, ReasoningPill } from "./components/ui-primitives";
+export { StatusBadge } from "@/shared/ui/status-badge";
 export { ServeCodeSnippets } from "./components/ServeCodeSnippets";
 export { ServeChat, type ServeChatProps } from "./components/ServeChat";
 export { ConfigTab } from "./components/ConfigTab";

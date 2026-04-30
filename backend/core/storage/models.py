@@ -97,6 +97,31 @@ class TemplateModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
+class UserQuotaOverrideModel(Base):
+    """SQLAlchemy model for live per-user quota overrides."""
+
+    __tablename__ = "user_quota_overrides"
+
+    username: Mapped[str] = mapped_column(String(255), primary_key=True)
+    quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class UserQuotaAuditModel(Base):
+    """SQLAlchemy model for quota administration audit events."""
+
+    __tablename__ = "user_quota_audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    target_username: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    old_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    new_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+
 class JobEmbeddingModel(Base):
     """Per-job embedding row backing the recommendation service.
 

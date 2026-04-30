@@ -1,9 +1,15 @@
 {
   "messages": [
+    "admin.forbidden",
+    "admin.invalid_username",
+    "admin.quota_save_failed",
     "agent.approval.unknown_call_id",
     "agent.status.tool_end",
     "agent.status.tool_start",
     "analytics.other_bucket",
+    "auth.invalid_token",
+    "auth.missing_token",
+    "auth.not_configured",
     "code_agent.upstream_failed",
     "dataset.column_roles_invalid",
     "dataset.column_roles_need_input",

@@ -208,8 +208,8 @@ def compute_task_fingerprint(
 def enforce_user_quota(job_store, username: str) -> None:
     """Raise if ``username`` is at or over their job quota.
 
-    Admins and users with an explicit ``None`` override bypass the check
-    entirely.
+    Live DB overrides take precedence over static config. Admins and users
+    with an explicit ``None`` override bypass the check entirely.
 
     Args:
         job_store: The job store used to count the user's existing jobs.
@@ -218,7 +218,8 @@ def enforce_user_quota(job_store, username: str) -> None:
     Raises:
         DomainError: When the user already has at least ``quota`` jobs (HTTP 409).
     """
-    quota = settings.get_user_quota(username)
+    live_quota_resolver = getattr(job_store, "get_effective_user_quota", None)
+    quota = live_quota_resolver(username) if callable(live_quota_resolver) else settings.get_user_quota(username)
     if quota is None:
         return
     current = job_store.count_jobs(username=username)

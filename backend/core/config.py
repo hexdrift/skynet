@@ -256,9 +256,17 @@ class Settings(BaseSettings):
     )
 
     max_jobs_per_user: int = Field(default=100, ge=1, description="Default per-user job cap")
+    backend_auth_secret: SecretStr | None = Field(
+        default=None,
+        description="Shared HS256 secret used by the frontend to sign backend API tokens",
+    )
     admin_usernames: str = Field(
         default="",
-        description="Comma-separated usernames that bypass job quota entirely",
+        description="Break-glass comma-separated usernames that grant backend admin access",
+    )
+    admin_groups: str = Field(
+        default="",
+        description="Comma-separated IdP groups that grant backend admin access",
     )
     quota_overrides_json: str = Field(
         default="{}",
@@ -319,8 +327,13 @@ class Settings(BaseSettings):
 
     @property
     def admin_usernames_set(self) -> frozenset[str]:
-        """Return admin usernames as a lowercase frozenset for O(1) membership tests."""
+        """Return break-glass admin usernames as a lowercase frozenset."""
         return frozenset(s.strip().lower() for s in self.admin_usernames.split(",") if s.strip())
+
+    @property
+    def admin_groups_set(self) -> frozenset[str]:
+        """Return admin IdP groups as a lowercase frozenset."""
+        return frozenset(s.strip().lower() for s in self.admin_groups.split(",") if s.strip())
 
     @cached_property
     def quota_overrides(self) -> dict[str, int | None]:
@@ -335,10 +348,10 @@ class Settings(BaseSettings):
     def get_user_quota(self, username: str) -> int | None:
         """Return the effective job quota for a user.
 
-        Admin users and users with a ``null`` override receive ``None`` (unlimited).
-        Per-user overrides in ``quota_overrides_json`` take precedence over
-        ``max_jobs_per_user`` for non-admin users. Lookup is case-insensitive
-        to match how ``admin_usernames_set`` stores names.
+        Users with a ``null`` override receive ``None`` (unlimited). Per-user
+        overrides in ``quota_overrides_json`` take precedence over
+        ``max_jobs_per_user``. Lookup is case-insensitive to match how override
+        keys are stored.
 
         Args:
             username: The username to look up.
@@ -347,8 +360,6 @@ class Settings(BaseSettings):
             Maximum number of allowed jobs, or ``None`` for unlimited access.
         """
         normalised = (username or "").strip().lower()
-        if normalised and normalised in self.admin_usernames_set:
-            return None
         if normalised in self.quota_overrides:
             return self.quota_overrides[normalised]
         return self.max_jobs_per_user

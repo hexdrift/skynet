@@ -12,10 +12,16 @@ from enum import StrEnum
 class I18nKey(StrEnum):
     """Stable identifiers for catalog ``messages`` entries (formatted via ``t()``)."""
 
+    ADMIN_FORBIDDEN = 'admin.forbidden'
+    ADMIN_INVALID_USERNAME = 'admin.invalid_username'
+    ADMIN_QUOTA_SAVE_FAILED = 'admin.quota_save_failed'
     AGENT_APPROVAL_UNKNOWN_CALL_ID = 'agent.approval.unknown_call_id'
     AGENT_STATUS_TOOL_END = 'agent.status.tool_end'
     AGENT_STATUS_TOOL_START = 'agent.status.tool_start'
     ANALYTICS_OTHER_BUCKET = 'analytics.other_bucket'
+    AUTH_INVALID_TOKEN = 'auth.invalid_token'
+    AUTH_MISSING_TOKEN = 'auth.missing_token'
+    AUTH_NOT_CONFIGURED = 'auth.not_configured'
     CODE_AGENT_UPSTREAM_FAILED = 'code_agent.upstream_failed'
     DATASET_COLUMN_ROLES_INVALID = 'dataset.column_roles_invalid'
     DATASET_COLUMN_ROLES_NEED_INPUT = 'dataset.column_roles_need_input'

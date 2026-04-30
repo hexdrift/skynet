@@ -7,6 +7,8 @@ import { msg } from "@/shared/lib/messages";
 import { Button } from "@/shared/ui/primitives/button";
 import { cn } from "@/shared/lib/utils";
 
+import { autoResizeTextarea } from "./auto-resize";
+
 interface ComposerProps {
   value: string;
   onChange: (v: string) => void;
@@ -32,12 +34,6 @@ export function Composer({
 }: ComposerProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
-  const autosize = (el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (disabled || streaming || !value.trim()) return;
@@ -61,12 +57,13 @@ export function Composer({
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
-            autosize(e.target);
+            autoResizeTextarea(e.target);
           }}
           onKeyDown={handleKeyDown}
           disabled={disabled || streaming}
           rows={1}
           placeholder={placeholder}
+          dir="auto"
           className={cn(
             "block flex-1 bg-muted/20 rounded-2xl border border-[#DDD4C8] px-4 py-[11px] text-sm leading-[20px] resize-none overflow-hidden",
             "h-[42px] max-h-[120px] outline-none ring-0 shadow-none",

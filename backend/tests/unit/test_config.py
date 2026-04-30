@@ -352,25 +352,22 @@ def test_get_user_quota_unknown_user_returns_default() -> None:
     assert result == s.max_jobs_per_user
 
 
-def test_get_user_quota_admin_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Admin usernames receive ``None`` (unlimited) quota."""
+def test_get_user_quota_admin_uses_default_quota(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Admin usernames do not bypass quota enforcement."""
     monkeypatch.setenv("ADMIN_USERNAMES", "superadmin")
 
     s = Settings(_env_file=None)
 
-    assert s.get_user_quota("superadmin") is None
+    assert s.get_user_quota("superadmin") == 100
 
 
-def test_get_user_quota_admin_case_insensitive_lower_stored(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Admin matching is case-insensitive through the lower-cased frozenset."""
-    # admin_usernames_set stores lowercase, so lookup must match
+def test_get_user_quota_admin_case_does_not_change_quota(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Admin username casing has no effect on quota resolution."""
     monkeypatch.setenv("ADMIN_USERNAMES", "Admin")
 
     s = Settings(_env_file=None)
 
-    # "Admin" is stored as "admin" — exact string "Admin" won't match
-    # This exposes a case-sensitivity issue in get_user_quota (see bug report below)
-    assert s.get_user_quota("admin") is None
+    assert s.get_user_quota("admin") == 100
 
 
 def test_get_user_quota_override_int_returns_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -391,14 +388,14 @@ def test_get_user_quota_override_none_returns_none(monkeypatch: pytest.MonkeyPat
     assert s.get_user_quota("researcher") is None
 
 
-def test_get_user_quota_admin_wins_over_int_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Admin status takes precedence over a per-user integer override."""
+def test_get_user_quota_override_independent_from_admin_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per-user quota overrides apply independently from admin authorization."""
     monkeypatch.setenv("ADMIN_USERNAMES", "alice")
     monkeypatch.setenv("QUOTA_OVERRIDES", json.dumps({"alice": 50}))
 
     s = Settings(_env_file=None)
 
-    assert s.get_user_quota("alice") is None
+    assert s.get_user_quota("alice") == 50
 
 
 def test_get_user_quota_non_admin_user_with_no_override_returns_max(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -415,12 +412,12 @@ def test_get_user_quota_non_admin_user_with_no_override_returns_max(monkeypatch:
     ("username", "quota_json", "admin_csv", "expected"),
     [
         ("regular", "{}", "", 100),
-        ("admin1", "{}", "admin1", None),
+        ("admin1", "{}", "admin1", 100),
         ("power", '{"power": 500}', "", 500),
         ("unlim", '{"unlim": null}', "", None),
-        ("admin1", '{"admin1": 50}', "admin1", None),  # admin wins
+        ("admin1", '{"admin1": 50}', "admin1", 50),
     ],
-    ids=["regular_default", "admin_unlimited", "override_int", "override_none", "admin_over_override"],
+    ids=["regular_default", "admin_default", "override_int", "override_none", "admin_with_override"],
 )
 def test_get_user_quota_parametrized(
     monkeypatch: pytest.MonkeyPatch,
@@ -429,7 +426,7 @@ def test_get_user_quota_parametrized(
     admin_csv: str,
     expected: int | None,
 ) -> None:
-    """Parametrized check that admin/override/default precedence holds for each scenario."""
+    """Parametrized check for override/default quota precedence."""
     monkeypatch.setenv("QUOTA_OVERRIDES", quota_json)
     monkeypatch.setenv("ADMIN_USERNAMES", admin_csv)
 

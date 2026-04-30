@@ -23,14 +23,13 @@ import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip } from "@/shared/ui/model-chip";
+import { LoadingState } from "@/shared/ui/loading-state";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
-  loading: () => (
-    <div className="h-[200px] rounded-lg border border-border/40 bg-muted/20 animate-pulse" />
-  ),
+  loading: () => <LoadingState variant="block" className="h-[200px]" />,
 });
 
 const SUMMARY_TABS = [

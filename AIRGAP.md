@@ -2,31 +2,52 @@
 
 This is the operator path for moving Skynet into an internet-isolated
 environment when you already have the required internal mirrors, images,
-secrets, IdP, LLM gateway, and Postgres available.
+secrets, IdP, LLM gateway, CA bundle, and Postgres available.
 
-The goal is to make migration boring:
+## Migration Plan
 
-1. Build or import images into your internal registry.
-2. Generate a reviewed Helm values file.
-3. Let the Helm migration hook run `alembic upgrade head`.
-4. Smoke test without any public internet egress.
+The flow assumes you cloned the repo onto a host inside the air gap and
+have an internal Artifactory + OpenShift cluster ready. Each step has a
+matching `scripts/airgap_migrate.sh` command — none of them need internet.
+
+| # | Step | Command |
+|---|------|---------|
+| 1 | Clone the repo + `git lfs pull` (vendored embedder weights) | `git lfs install && git lfs pull` |
+| 2 | List every URL/secret/CIDR you must change | `scripts/airgap_migrate.sh todos` |
+| 3 | Edit the lines emitted in step 2 (LLM gateway, ADFS issuer, DB, CIDRs) | (editor) |
+| 4 | Verify lockfiles, vendored model, alembic dir | `scripts/airgap_migrate.sh check` |
+| 5 | Offline alembic dump — review schema delta without touching a DB | `scripts/airgap_migrate.sh validate-migrations` |
+| 6 | Build the two Docker images against your internal mirrors | `scripts/airgap_migrate.sh build-images` |
+| 7 | Push them to your Artifactory | `scripts/airgap_migrate.sh push-images` |
+| 8 | Generate the Helm values file (review the `TODO: On-premise` lines) | `scripts/airgap_migrate.sh values` |
+| 9 | Lint + render the chart so you can diff before applying | `scripts/airgap_migrate.sh render` |
+| 10 | Install/upgrade — the migration Job runs `alembic upgrade head` first | `scripts/airgap_migrate.sh install` |
+| 11 | Smoke test rollout + ADFS callback | `scripts/airgap_migrate.sh status` |
+
+`scripts/airgap_migrate.sh all` runs steps 4, 5, 8, 9, 10, 11 in sequence
+once you have your env vars set. Step 2 stays manual because edits don't
+script themselves; step 3 is yours.
 
 ## Operator Script
 
-The repo includes a migration helper:
-
 ```bash
-scripts/airgap_migrate.sh configure
-scripts/airgap_migrate.sh check
-scripts/airgap_migrate.sh values
-scripts/airgap_migrate.sh render
-scripts/airgap_migrate.sh install
-scripts/airgap_migrate.sh status
+scripts/airgap_migrate.sh configure              # guided values setup
+scripts/airgap_migrate.sh todos                  # every TODO marker, in one list
+scripts/airgap_migrate.sh check                  # repo artefacts present
+scripts/airgap_migrate.sh validate-migrations    # offline alembic --sql, no DB
+scripts/airgap_migrate.sh build-images           # docker build BE + FE
+scripts/airgap_migrate.sh push-images            # docker push BE + FE
+scripts/airgap_migrate.sh values                 # write values-airgap.generated.yaml
+scripts/airgap_migrate.sh render                 # helm lint + helm template
+scripts/airgap_migrate.sh install                # helm upgrade --install
+scripts/airgap_migrate.sh status                 # rollout + smoke commands
+scripts/airgap_migrate.sh all                    # check → ... → status
 ```
 
 Start with `configure` if you want a guided setup. It asks for registry,
-image tags, hosts, IdP, database, and egress CIDRs, then writes the Helm
-values file and offers to run `check`, `render`, and `install`.
+image tags, hosts, IdP, database, optional internal CA Secret,
+notifications webhook, and egress CIDRs, then writes the Helm values file
+and offers to run `check`, `render`, and `install`.
 
 Most installs should use environment overrides instead of editing the
 script:
@@ -42,10 +63,17 @@ EXTERNAL_DB_SECRET=skynet-db-password \
 LLM_BASE_URL=https://llm-gateway.internal/v1 \
 OIDC_ISSUER=https://idp.internal/realms/skynet \
 OIDC_CLIENT_ID=skynet \
+OIDC_SCOPE="openid profile email groups" \
+AUTH_GROUP_CLAIM=groups \
+AUTH_ADMIN_GROUPS=Skynet-Admins \
+AUTH_ADMINS=break-glass-admin@example.com \
 FRONTEND_HOST=skynet.apps.internal \
 BACKEND_HOST=skynet-api.apps.internal \
 LLM_EGRESS_CIDR=10.0.5.0/24 \
 IDP_EGRESS_CIDR=10.0.6.0/24 \
+INTERNAL_CA_SECRET=skynet-internal-ca \
+COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet \
+COMMS_EGRESS_CIDR=10.0.7.0/24 \
 scripts/airgap_migrate.sh all
 ```
 
@@ -68,6 +96,8 @@ Run this before moving the repo or release bundle into the air gap:
 git lfs install
 git lfs pull
 scripts/airgap_migrate.sh check
+scripts/airgap_migrate.sh validate-migrations
+scripts/airgap_migrate.sh todos          # one place to see every URL/secret/CIDR you must change
 ```
 
 Confirm:
@@ -77,8 +107,12 @@ Confirm:
 - `frontend/package-lock.json` is present.
 - `backend/uv.lock` is present.
 - `backend/alembic/versions/` is present.
+- `migration.sql` (from `validate-migrations`) reflects the schema you
+  expect.
 - Backend, frontend, and pgvector images are available in the internal
   registry you will reference from Helm.
+- If your IdP, LLM gateway, Postgres, or webhook uses a private CA, a
+  Kubernetes Secret containing the CA bundle is ready.
 
 Recommended release bundle contents:
 
@@ -98,7 +132,27 @@ Replace `artifactory.example.com` with your actual registry host. The
 examples assume your registry exposes Docker Hub, Debian, PyPI, and npm
 mirrors.
 
-Backend:
+The script wraps the two `docker build` invocations into one command:
+
+```bash
+REGISTRY=artifactory.example.com/skynet \
+IMAGE_TAG=2026.04.30 \
+REGISTRY_PREFIX=artifactory.example.com/docker-remote \
+DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
+PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
+PIP_TRUSTED_HOST=artifactory.example.com \
+BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
+NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
+scripts/airgap_migrate.sh build-images
+
+# Then push:
+scripts/airgap_migrate.sh push-images
+```
+
+Set `DOCKER=podman` to run on Podman / OpenShift Buildah-compatible
+hosts.
+
+The equivalent raw commands (if you prefer to run them directly):
 
 ```bash
 docker build backend \
@@ -107,23 +161,20 @@ docker build backend \
   --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
   --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
   --build-arg PIP_TRUSTED_HOST=artifactory.example.com
-```
 
-Frontend:
-
-```bash
 docker build frontend \
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 \
   --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
   --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
-```
 
-Push or import the images according to your registry process:
-
-```bash
 docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
 docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30
 ```
+
+The frontend `package.json` pins `next build --webpack` so the production
+build never silently switches to Turbopack. Webpack is reproducible inside
+restrictive sandboxes (Turbopack spawns helper processes that bind a local
+port and trip restricted-egress / sandboxed CI environments).
 
 TODO: On-premise - if your registry does not expose Docker Hub mirrors as
 `docker-remote/python`, `docker-remote/node`, and `pgvector/pgvector`,
@@ -152,6 +203,8 @@ Create these before running the Helm install. Names match the generated
 values file; change them there if your platform uses different names.
 
 ```bash
+export BACKEND_AUTH_SECRET="$(openssl rand -base64 32)"
+
 kubectl -n skynet create secret docker-registry artifactory-pull-secret \
   --docker-server=artifactory.example.com \
   --docker-username="$REGISTRY_USER" \
@@ -161,16 +214,98 @@ kubectl -n skynet create secret generic skynet-db-password \
   --from-literal=password="$POSTGRES_PASSWORD"
 
 kubectl -n skynet create secret generic skynet-backend-secrets \
-  --from-literal=OPENAI_API_KEY="$INTERNAL_LLM_API_KEY"
+  --from-literal=OPENAI_API_KEY="$INTERNAL_LLM_API_KEY" \
+  --from-literal=BACKEND_AUTH_SECRET="$BACKEND_AUTH_SECRET"
 
 kubectl -n skynet create secret generic skynet-frontend-secrets \
   --from-literal=AUTH_SECRET="$(openssl rand -base64 32)" \
-  --from-literal=AUTH_SSO_CLIENT_SECRET="$OIDC_CLIENT_SECRET"
+  --from-literal=AUTH_SSO_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
+  --from-literal=BACKEND_AUTH_SECRET="$BACKEND_AUTH_SECRET"
+
+# Only needed when internal endpoints use a private CA.
+kubectl -n skynet create secret generic skynet-internal-ca \
+  --from-file=ca-bundle.pem=./internal-ca-bundle.pem
 ```
 
 TODO: On-premise - replace inline `kubectl create secret` commands with
 your secret-store flow if you use ExternalSecrets, SealedSecrets, Vault, or
 OpenShift GitOps.
+
+---
+
+## Internal ADFS / OIDC Setup
+
+The frontend uses Auth.js/NextAuth with a generic OIDC provider whose id is
+`adfs`. In production, configure ADFS and set these frontend env vars through
+the generated Helm values and `skynet-frontend-secrets`:
+
+```yaml
+frontend:
+  env:
+    AUTH_SSO_ISSUER: "https://adfs.example.internal/adfs"
+    AUTH_SSO_CLIENT_ID: "skynet"
+    AUTH_SSO_SCOPE: "openid profile email groups"
+    AUTH_GROUP_CLAIM: "groups"
+    AUTH_ADMIN_GROUPS: "Skynet-Admins"
+    AUTH_ADMINS: "break-glass-admin@example.internal"
+  secrets:
+    existingSecret: "skynet-frontend-secrets"
+
+backend:
+  env:
+    ADMIN_GROUPS: "Skynet-Admins"
+    ADMIN_USERNAMES: "break-glass-admin@example.internal"
+  secrets:
+    existingSecret: "skynet-backend-secrets"
+```
+
+The Secret must contain:
+
+```text
+AUTH_SECRET
+AUTH_SSO_CLIENT_SECRET
+BACKEND_AUTH_SECRET
+```
+
+`BACKEND_AUTH_SECRET` must be the same value in the backend and frontend
+Secrets. The frontend signs short-lived backend bearer tokens with it, and the
+backend verifies the signature, issuer, audience, and expiry before allowing
+admin API calls.
+
+Register Skynet in ADFS as an OpenID Connect web application:
+
+- Redirect URI:
+  `https://<frontend-host>/api/auth/callback/adfs`
+- Issuer:
+  `https://<adfs-host>/adfs`
+- Client authentication:
+  confidential client with client secret
+- Scopes:
+  `openid profile email groups` if your ADFS release supports group scope.
+- Claims:
+  include at least one stable user identifier. The app accepts `name`,
+  `unique_name`, `upn`, `preferred_username`, `email`, or `sub`.
+- Groups:
+  emit the admin group in the claim named by `AUTH_GROUP_CLAIM` (default
+  `groups`). Put that same group name in frontend `AUTH_ADMIN_GROUPS` and
+  backend `ADMIN_GROUPS`. Use `AUTH_ADMINS` / `ADMIN_USERNAMES` only as a
+  break-glass path for named operators.
+
+For the default generated host, the callback is:
+
+```text
+https://skynet.apps.internal/api/auth/callback/adfs
+```
+
+If ADFS uses an internal/private CA, create `skynet-internal-ca` and set
+`INTERNAL_CA_SECRET` when generating values. This mounts the CA and sets
+`NODE_EXTRA_CA_CERTS`, which is required for the server-side OIDC discovery
+request to `/.well-known/openid-configuration`.
+
+TODO: On-premise - confirm the exact ADFS issuer URL. Some ADFS deployments
+publish OIDC metadata at `https://host/adfs/.well-known/openid-configuration`;
+the issuer value should be the issuer advertised by that metadata document,
+usually `https://host/adfs`.
 
 ---
 
@@ -194,6 +329,24 @@ For `reencrypt` termination, also set
 ---
 
 ## Database Migration
+
+### Offline schema review (no DB required)
+
+Before pushing the backend image, you can dump the exact SQL the in-cluster
+migration Job will execute. This is the path to use when your build host
+has no Postgres reachable (e.g., sandboxed CI):
+
+```bash
+scripts/airgap_migrate.sh validate-migrations
+# wrote offline migration SQL: ./migration.sql
+```
+
+Under the hood this calls `alembic upgrade head --sql` against the same
+`alembic/env.py` the Job uses, so the offline output is byte-for-byte the
+DDL the cluster will run. Review `./migration.sql`, then proceed to
+`build-images` / `install`.
+
+### In-cluster migration Job
 
 The Helm chart runs a pre-install/pre-upgrade Job:
 
@@ -261,6 +414,30 @@ webhook, and managed Postgres in your environment-specific values file.
 
 ---
 
+## Private TLS / CA Bundles
+
+If internal endpoints use a private CA, set `INTERNAL_CA_SECRET` while
+running `scripts/airgap_migrate.sh configure` or `values`. The generated
+values file will:
+
+- mount the CA Secret into backend and frontend pods,
+- set `NODE_EXTRA_CA_CERTS` for NextAuth/OIDC in the frontend,
+- set `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` for Python HTTP clients in
+  the backend and migration Job.
+
+Example:
+
+```bash
+INTERNAL_CA_SECRET=skynet-internal-ca \
+INTERNAL_CA_FILENAME=ca-bundle.pem \
+scripts/airgap_migrate.sh values
+```
+
+TODO: On-premise - confirm whether your internal LLM gateway uses a public
+or private CA. If private, include the CA Secret in your release runbook.
+
+---
+
 ## Smoke Test
 
 After install:
@@ -296,6 +473,26 @@ without rebuilding the image.
 
 ---
 
+## Live User Quotas
+
+The default optimization cap is `MAX_JOBS_PER_USER=100`. Static env values
+still work for broad defaults:
+
+- `QUOTA_OVERRIDES`: JSON map such as `{"power@example.com": 500}` or
+  `{"researcher@example.com": null}`.
+
+For day-to-day changes, use the admin tab in the settings modal. Admins can
+set a numeric quota, set a user to unlimited, or remove a live override so the
+user falls back to the default/static config.
+
+Deploy the migration once so `user_quota_overrides` and
+`user_quota_audit_events` exist. After that, backend quota enforcement reads
+the override table on each submission/clone/retry, so updates take effect
+immediately without a backend restart. The admin tab also shows the latest
+quota audit events.
+
+---
+
 ## What Is Already Air-Gap Clean
 
 - Scalar API docs are vendored under `backend/core/api/static/scalar/`.
@@ -309,19 +506,43 @@ without rebuilding the image.
 
 ---
 
+## Remaining Operator Responsibilities
+
+The repo cannot automate these site-specific pieces:
+
+- Mirroring/pushing images and package repositories into your internal
+  Artifactory/registry.
+- Creating Kubernetes Secrets and rotating credentials.
+- Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, webhook, and DB.
+- Backing up and restoring Postgres.
+- Choosing internal model IDs exposed by your LLM gateway. The generated
+  values default `CODE_AGENT_MODEL` and `GENERALIST_AGENT_MODEL` to `gpt-5`;
+  change them if your gateway exposes different names.
+- Deciding whether to enable recommendations. The app runs without
+  `sentence-transformers`; recommendations degrade to an empty/no-op
+  feature unless the backend image includes the `[recommendations]` extra.
+
+---
+
 ## Audit TODOs
 
 Run this regularly:
 
 ```bash
-git grep -n "TODO: On-premise"
+scripts/airgap_migrate.sh todos
+# or, equivalently:
+git grep -n "TODO: On-premise\|TODO: On-prem"
 ```
 
 Current intentional TODO locations:
 
-- `AIRGAP.md`
-- `deploy/helm/skynet/values-airgap.generated.yaml` after generation
-- `frontend/.env.example`
+- `AIRGAP.md` — context for each on-prem decision.
+- `deploy/helm/skynet/values-airgap.generated.yaml` — after `values`.
+- `scripts/airgap_migrate.sh` — defaults emitted into the values file.
+- `frontend/.env.example` — frontend dev/runtime env template.
+- `frontend/.npmrc` — internal npm registry mirror config (commented out).
+- `backend/core/config.py` — model id, agent base URLs, embedder path.
 
 If new external services are added, add them to this file, the Helm values,
-and `scripts/airgap_migrate.sh`.
+and `scripts/airgap_migrate.sh`. Then `todos` will pick them up
+automatically.

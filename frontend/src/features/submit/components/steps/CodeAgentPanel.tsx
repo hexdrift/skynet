@@ -1,14 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   Bot,
   XCircle,
   RotateCcw,
   Check,
-  ChevronRight,
-  ChevronLeft,
   Ruler,
   FileCode2,
   Loader2,
@@ -18,18 +15,13 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
-import {
-  AgentThread,
-  AgentBubble,
-  Composer,
-  MessageActions,
-  UserBubble,
-  UserBubbleEditor,
-} from "@/shared/ui/agent";
+import { AgentThread, ChatTranscript, Composer } from "@/shared/ui/agent";
 import type { AgentToolCall as SharedAgentToolCall } from "@/shared/ui/agent";
+import { EmptyState as SharedEmptyState } from "@/shared/ui/empty-state";
+import { IndexPager } from "@/shared/ui/index-pager";
 import { ToolCallRow } from "@/features/agent-panel";
 
-import type { AgentMessage, AgentToolCall, CodeAgentState } from "../../hooks/use-code-agent";
+import type { AgentToolCall, CodeAgentState } from "../../hooks/use-code-agent";
 
 interface Props {
   agent: CodeAgentState;
@@ -38,74 +30,17 @@ interface Props {
   className?: string;
 }
 
-type Pair = {
-  key: string;
-  user: { msg: AgentMessage; index: number } | null;
-  agent: AgentMessage | null;
-};
-
 const COMPOSER_PLACEHOLDER = msg("auto.features.submit.components.steps.codeagentpanel.literal.1");
 
 export function CodeAgentPanel({ agent, disabled, disabledReason, className }: Props) {
   const [draft, setDraft] = React.useState("");
-  const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
-  const [editDraft, setEditDraft] = React.useState("");
 
   const streaming = agent.status === "streaming";
-  const isEditingAny = editingIndex !== null;
-
-  const pairs = React.useMemo<Pair[]>(() => {
-    const result: Pair[] = [];
-    let currentUser: { msg: AgentMessage; index: number } | null = null;
-    let seq = 0;
-    agent.messages.forEach((msg, i) => {
-      if (msg.role === "user") {
-        if (currentUser) {
-          result.push({ key: `p-${seq++}`, user: currentUser, agent: null });
-        }
-        currentUser = { msg, index: i };
-      } else {
-        result.push({ key: `p-${seq++}`, user: currentUser, agent: msg });
-        currentUser = null;
-      }
-    });
-    if (currentUser) {
-      result.push({ key: `p-${seq++}`, user: currentUser, agent: null });
-    }
-    return result;
-  }, [agent.messages]);
-
-  const latestAgentKey = React.useMemo(() => {
-    for (let i = pairs.length - 1; i >= 0; i--) {
-      const p = pairs[i];
-      if (p && p.agent) return p.key;
-    }
-    return null;
-  }, [pairs]);
 
   const handleSend = () => {
     if (!agent.canSend || !draft.trim() || disabled) return;
     agent.send(draft);
     setDraft("");
-  };
-
-  const startEdit = (index: number, content: string) => {
-    setEditingIndex(index);
-    setEditDraft(content);
-  };
-
-  const cancelEdit = () => {
-    setEditingIndex(null);
-    setEditDraft("");
-  };
-
-  const submitEdit = () => {
-    if (editingIndex === null) return;
-    const trimmed = editDraft.trim();
-    if (!trimmed) return;
-    agent.editAndResend(editingIndex, trimmed);
-    setEditingIndex(null);
-    setEditDraft("");
   };
 
   const hasConversation =
@@ -117,8 +52,6 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
     if (!hasConversation || disabled) return;
     agent.reset();
     setDraft("");
-    setEditingIndex(null);
-    setEditDraft("");
   };
 
   const renderToolCall = React.useCallback(
@@ -163,121 +96,56 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
         isEmpty={agent.messages.length === 0 && !streaming}
         emptyState={<EmptyState disabled={disabled} disabledReason={disabledReason} />}
       >
-        <AnimatePresence initial={false}>
-          {pairs.map((pair) => {
-            const isEditing = pair.user !== null && editingIndex === pair.user.index;
-            const isAfterEdit =
-              isEditingAny &&
-              pair.user !== null &&
-              editingIndex !== null &&
-              pair.user.index > editingIndex;
-            if (isAfterEdit) return null;
-            return (
-              <motion.div
-                key={pair.key}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                className="space-y-1.5"
-              >
-                {pair.user &&
-                  (isEditing ? (
-                    <UserBubbleEditor
-                      value={editDraft}
-                      onChange={setEditDraft}
-                      onSubmit={submitEdit}
-                      onCancel={cancelEdit}
-                      disabled={streaming}
-                    />
-                  ) : (
-                    <UserBubble
-                      content={pair.user.msg.content}
-                      editable={!streaming}
-                      onEdit={() => pair.user && startEdit(pair.user.index, pair.user.msg.content)}
-                    />
-                  ))}
+        <ChatTranscript
+          messages={agent.messages}
+          streaming={streaming}
+          editAndResend={agent.editAndResend}
+          thinking={{
+            reasoning: agent.reasoning,
+            startedAt: agent.reasoningStartedAt,
+            endedAt: agent.reasoningEndedAt,
+            streaming,
+          }}
+          renderToolCall={renderToolCall}
+          animatePairs
+          trailing={({ isEditingAny }) => (
+            <>
+              {!isEditingAny && streaming && agent.mode === "seed" && (
+                <div className="flex items-center justify-center pt-1">
+                  <ActivityBreadcrumb agent={agent} />
+                </div>
+              )}
 
-                {pair.agent &&
-                  !isEditing &&
-                  (() => {
-                    const agentMsg = pair.agent;
-                    const agentText = agentMsg.content.trim();
-                    const isStreamingThisPair = streaming && pair.key === latestAgentKey;
-                    const showActions =
-                      !isStreamingThisPair && (agentText.length > 0 || Boolean(agentMsg.model));
-                    return (
-                      <div className="flex justify-end">
-                        <div className="flex flex-col items-end gap-1 max-w-[88%]">
-                          <AgentBubble
-                            msg={agentMsg}
-                            thinking={
-                              pair.key === latestAgentKey
-                                ? {
-                                    reasoning: agent.reasoning,
-                                    startedAt: agent.reasoningStartedAt,
-                                    endedAt: agent.reasoningEndedAt,
-                                    streaming,
-                                  }
-                                : undefined
-                            }
-                            renderToolCall={renderToolCall}
-                            className="max-w-full"
-                          />
-                          {showActions && (
-                            <MessageActions
-                              text={agentMsg.content}
-                              model={agentMsg.model}
-                              onRegenerate={
-                                pair.user
-                                  ? () =>
-                                      pair.user &&
-                                      agent.editAndResend(pair.user.index, pair.user.msg.content)
-                                  : undefined
-                              }
-                            />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        {!isEditingAny && streaming && agent.mode === "seed" && (
-          <div className="flex items-center justify-center pt-1">
-            <ActivityBreadcrumb agent={agent} />
-          </div>
-        )}
-
-        {agent.error && agent.status === "error" && (
-          <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-2 text-xs text-red-600 space-y-1.5">
-            <div className="flex items-start gap-1.5">
-              <XCircle className="size-3 shrink-0 mt-0.5" />
-              <span className="flex-1 break-words min-w-0" dir="auto">
-                {agent.error}
-              </span>
-            </div>
-            <div className="flex gap-1.5 ps-4">
-              <button
-                type="button"
-                onClick={agent.retry}
-                className="inline-flex items-center gap-1 text-[0.6875rem] text-red-700 bg-red-100 hover:bg-red-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
-              >
-                <RotateCcw className="size-3" />
-                {msg("auto.features.submit.components.steps.codeagentpanel.2")}
-              </button>
-              <button
-                type="button"
-                onClick={agent.fallbackToManual}
-                className="text-[0.6875rem] text-red-700 hover:bg-red-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
-              >
-                {msg("auto.features.submit.components.steps.codeagentpanel.3")}
-              </button>
-            </div>
-          </div>
-        )}
+              {agent.error && agent.status === "error" && (
+                <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-2 text-xs text-red-600 space-y-1.5">
+                  <div className="flex items-start gap-1.5">
+                    <XCircle className="size-3 shrink-0 mt-0.5" />
+                    <span className="flex-1 break-words min-w-0" dir="auto">
+                      {agent.error}
+                    </span>
+                  </div>
+                  <div className="flex gap-1.5 ps-4">
+                    <button
+                      type="button"
+                      onClick={agent.retry}
+                      className="inline-flex items-center gap-1 text-[0.6875rem] text-red-700 bg-red-100 hover:bg-red-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      <RotateCcw className="size-3" />
+                      {msg("auto.features.submit.components.steps.codeagentpanel.2")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={agent.fallbackToManual}
+                      className="text-[0.6875rem] text-red-700 hover:bg-red-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      {msg("auto.features.submit.components.steps.codeagentpanel.3")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        />
       </AgentThread>
 
       <Composer
@@ -309,38 +177,14 @@ export function VersionStepper({
   const versionIndex =
     artifact === "signature" ? agent.signatureVersionIndex : agent.metricVersionIndex;
   const goTo = artifact === "signature" ? agent.goToSignatureVersion : agent.goToMetricVersion;
-  if (versions.length < 2) return null;
-  const atFirst = versionIndex <= 0;
-  const atLast = versionIndex >= versions.length - 1;
   return (
-    <div
-      dir="ltr"
-      className="inline-flex items-center gap-0.5 rounded-full border border-border/50 bg-background/60 p-0.5 text-[0.75rem]"
-    >
-      <button
-        type="button"
-        onClick={() => goTo(versionIndex - 1)}
-        disabled={atFirst}
-        className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-        title="Previous version"
-        aria-label="Previous version"
-      >
-        <ChevronLeft className="size-4" />
-      </button>
-      <span className="font-mono tabular-nums px-1.5 min-w-[2.25rem] text-center text-foreground/80 select-none">
-        {versionIndex + 1}/{versions.length}
-      </span>
-      <button
-        type="button"
-        onClick={() => goTo(versionIndex + 1)}
-        disabled={atLast}
-        className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-        title="Next version"
-        aria-label="Next version"
-      >
-        <ChevronRight className="size-4" />
-      </button>
-    </div>
+    <IndexPager
+      currentIndex={versionIndex}
+      total={versions.length}
+      onChange={goTo}
+      prevLabel="Previous version"
+      nextLabel="Next version"
+    />
   );
 }
 
@@ -564,27 +408,25 @@ function DiffRow({ line }: { line: DiffLine }) {
 
 function EmptyState({ disabled, disabledReason }: { disabled?: boolean; disabledReason?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-      <div className="size-12 rounded-2xl bg-[#3D2E22]/8 flex items-center justify-center">
-        <Bot className="size-5 text-[#3D2E22]/40" />
-      </div>
-      <div className="space-y-1.5 max-w-[260px]">
-        <p className="text-sm font-medium text-foreground/70">
-          {disabled
-            ? msg("auto.features.submit.components.steps.codeagentpanel.literal.14")
-            : msg("auto.features.submit.components.steps.codeagentpanel.literal.15")}
-        </p>
-        <p className="text-xs text-muted-foreground/60 leading-relaxed">
-          {disabled
-            ? disabledReason ||
-              msg("auto.features.submit.components.steps.codeagentpanel.literal.16")
-            : formatMsg("auto.features.submit.components.steps.codeagentpanel.template.2", {
-                p1: TERMS.dataset,
-                p2: TERMS.signature,
-                p3: TERMS.metric,
-              })}
-        </p>
-      </div>
-    </div>
+    <SharedEmptyState
+      icon={Bot}
+      iconWrap="tile"
+      variant="compact"
+      title={
+        disabled
+          ? msg("auto.features.submit.components.steps.codeagentpanel.literal.14")
+          : msg("auto.features.submit.components.steps.codeagentpanel.literal.15")
+      }
+      description={
+        disabled
+          ? disabledReason ||
+            msg("auto.features.submit.components.steps.codeagentpanel.literal.16")
+          : formatMsg("auto.features.submit.components.steps.codeagentpanel.template.2", {
+              p1: TERMS.dataset,
+              p2: TERMS.signature,
+              p3: TERMS.metric,
+            })
+      }
+    />
   );
 }

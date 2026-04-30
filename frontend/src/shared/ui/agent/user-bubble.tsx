@@ -6,6 +6,8 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 
+import { autoResizeTextarea } from "./auto-resize";
+
 interface UserBubbleProps {
   content: string;
   onEdit?: () => void;
@@ -56,14 +58,8 @@ export function UserBubbleEditor({
 }: UserBubbleEditorProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
-  const autosize = (el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-  };
-
   React.useEffect(() => {
-    autosize(textareaRef.current);
+    autoResizeTextarea(textareaRef.current);
   }, [value]);
 
   return (
@@ -74,7 +70,7 @@ export function UserBubbleEditor({
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
-            autosize(e.target);
+            autoResizeTextarea(e.target);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -88,6 +84,7 @@ export function UserBubbleEditor({
           className="w-full bg-white border border-[#DDD4C8] rounded-xl px-3 py-2 text-sm resize-none outline-none focus:border-[#C8A882] transition-colors min-h-[40px] max-h-[120px]"
           rows={1}
           autoFocus
+          dir="auto"
         />
         <div className="flex justify-start gap-1.5">
           <button

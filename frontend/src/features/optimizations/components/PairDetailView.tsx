@@ -24,21 +24,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type {
@@ -196,63 +185,42 @@ export function PairDetailView({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <TooltipProvider>
-              <UiTooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    onClick={onClone}
-                    aria-label={msg("auto.app.optimizations.id.page.literal.4")}
-                  >
-                    <CopyPlus className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {msg("auto.app.optimizations.id.page.4")}
-                </TooltipContent>
-              </UiTooltip>
-            </TooltipProvider>
+            <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={onClone}
+                aria-label={msg("auto.app.optimizations.id.page.literal.4")}
+              >
+                <CopyPlus className="size-4" />
+              </Button>
+            </TooltipButton>
             {jobActive && (
-              <TooltipProvider>
-                <UiTooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
-                      onClick={onCancel}
-                      aria-label={msg("auto.app.optimizations.id.page.literal.5")}
-                    >
-                      <XCircle className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {msg("auto.app.optimizations.id.page.5")}
-                  </TooltipContent>
-                </UiTooltip>
-              </TooltipProvider>
+              <TooltipButton tooltip={msg("auto.app.optimizations.id.page.5")}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
+                  onClick={onCancel}
+                  aria-label={msg("auto.app.optimizations.id.page.literal.5")}
+                >
+                  <XCircle className="size-4" />
+                </Button>
+              </TooltipButton>
             )}
             {jobTerminal && (
-              <TooltipProvider>
-                <UiTooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-muted-foreground hover:text-red-600"
-                      onClick={() => setDeleteOpen(true)}
-                      aria-label={msg("auto.features.optimizations.components.gridoverview.literal.29")}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {msg("auto.features.optimizations.components.gridoverview.18")}
-                  </TooltipContent>
-                </UiTooltip>
-              </TooltipProvider>
+              <TooltipButton tooltip={msg("auto.features.optimizations.components.gridoverview.18")}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-red-600"
+                  onClick={() => setDeleteOpen(true)}
+                  aria-label={msg("auto.features.optimizations.components.gridoverview.literal.29")}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </TooltipButton>
             )}
             <span className="mx-1 h-5 w-px bg-[#C8A882]/30" />
             <button
@@ -282,18 +250,18 @@ export function PairDetailView({
 
       <Dialog open={deleteOpen} onOpenChange={(open) => !open && setDeleteOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {msg("auto.features.optimizations.components.gridoverview.19")}
-            </DialogTitle>
-            <DialogDescription>
-              {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
-              <span className="font-mono font-medium text-foreground break-all">
-                {pairLabel(activePair)}
-              </span>
-              {msg("auto.features.optimizations.components.gridoverview.21")}
-            </DialogDescription>
-          </DialogHeader>
+          <DialogTitleRow
+            title={msg("auto.features.optimizations.components.gridoverview.19")}
+            description={
+              <>
+                {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
+                <span className="font-mono font-medium text-foreground break-all">
+                  {pairLabel(activePair)}
+                </span>
+                {msg("auto.features.optimizations.components.gridoverview.21")}
+              </>
+            }
+          />
           <DialogFooter className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
@@ -591,26 +559,21 @@ export function PairDetailView({
                   {msg("auto.features.optimizations.components.pairdetailview.16")}
                 </p>
                 {runHistory.length > 0 && (
-                  <TooltipProvider>
-                    <UiTooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          onClick={onClearHistory}
-                          aria-label={msg(
-                            "auto.features.optimizations.components.pairdetailview.literal.3",
-                          )}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {msg("auto.features.optimizations.components.pairdetailview.17")}
-                      </TooltipContent>
-                    </UiTooltip>
-                  </TooltipProvider>
+                  <TooltipButton
+                    tooltip={msg("auto.features.optimizations.components.pairdetailview.17")}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={onClearHistory}
+                      aria-label={msg(
+                        "auto.features.optimizations.components.pairdetailview.literal.3",
+                      )}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TooltipButton>
                 )}
               </div>
             </FadeIn>
