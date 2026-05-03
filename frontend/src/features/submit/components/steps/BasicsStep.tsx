@@ -19,8 +19,16 @@ import { useUserPrefs } from "@/features/settings";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
 export function BasicsStep({ w }: { w: SubmitWizardContext }) {
-  const { jobName, setJobName, jobDescription, setJobDescription, jobType, setOptimizationType } =
-    w;
+  const {
+    jobName,
+    setJobName,
+    jobDescription,
+    setJobDescription,
+    jobType,
+    setOptimizationType,
+    isPrivate,
+    setIsPrivate,
+  } = w;
   const { prefs } = useUserPrefs();
   const advancedMode = prefs.advancedMode;
 
@@ -83,6 +91,51 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             rows={4}
             className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
           />
+        </div>
+        <div className="space-y-3">
+          <Label>{msg("submit.basics.privacy.label")}</Label>
+          <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
+            <div
+              className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
+              style={{ insetInlineStart: !isPrivate ? 4 : "calc(50% + 2px)" }}
+            />
+            {(
+              [
+                [
+                  false,
+                  msg("submit.basics.privacy.public"),
+                  msg("submit.basics.privacy.public_desc"),
+                ],
+                [
+                  true,
+                  msg("submit.basics.privacy.private"),
+                  msg("submit.basics.privacy.private_desc"),
+                ],
+              ] as const
+            ).map(([val, label, desc]) => (
+              <button
+                key={String(val)}
+                type="button"
+                onClick={() => setIsPrivate(val)}
+                className={cn(
+                  "relative z-10 flex-1 rounded-md px-4 py-2.5 cursor-pointer text-center transition-colors duration-200",
+                  isPrivate === val
+                    ? "text-foreground"
+                    : "text-foreground/60 hover:text-foreground",
+                )}
+              >
+                <span className="text-sm font-medium">{label}</span>
+                <span
+                  className={cn(
+                    "block text-[0.6875rem] mt-0.5 transition-colors duration-200",
+                    isPrivate === val ? "text-muted-foreground" : "text-foreground/40",
+                  )}
+                >
+                  {desc}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
         {advancedMode && (
           <>

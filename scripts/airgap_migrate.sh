@@ -376,8 +376,18 @@ $ca_backend_env
     ADMIN_GROUPS: "$AUTH_ADMIN_GROUPS"
     ADMIN_USERNAMES: "$AUTH_ADMINS"
     COMMS_WEBHOOK_URL: "$COMMS_WEBHOOK_URL"
+    # TODO: On-premise - set to enable Active Directory username autocomplete
+    # in the admin tab. Leave empty to keep the NullDirectoryClient fallback
+    # (DB-known users only). See AIRGAP.md "Internal LDAP / Active Directory
+    # User Search" for the full env contract.
+    AD_LDAP_URL: ""
+    AD_LDAP_BIND_DN: ""
+    AD_LDAP_SEARCH_BASE: ""
+    AD_LDAP_USER_FILTER: ""
+    AD_LDAP_USERNAME_ATTR: ""
   secrets:
     # TODO: On-premise - must contain OPENAI_API_KEY and BACKEND_AUTH_SECRET.
+    # Add AD_LDAP_BIND_PASSWORD when AD_LDAP_URL is set.
     existingSecret: "$BACKEND_SECRET"
 $ca_backend_mounts
 

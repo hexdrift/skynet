@@ -50,7 +50,7 @@ check-i18n:
     python3 scripts/generate_i18n.py --check
 
 info:
-    @echo "Project: Skynet (DSPy-as-a-Service)"
+    @echo "Project: Skynet"
     @echo "Branch: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'not a git repo')"
     @echo "Python: $(python3 --version 2>/dev/null || echo 'not installed')"
     @echo "Node: $(node --version 2>/dev/null || echo 'not installed')"

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ...config import settings
 from ..auth import AuthenticatedUser, get_authenticated_user, require_admin_user
+from ..directory_client import DirectoryClient, NullDirectoryClient
 from ..errors import DomainError
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
@@ -51,6 +52,21 @@ class UserQuotaOverrideListResponse(BaseModel):
     default_quota: int
     overrides: list[UserQuotaOverrideResponse]
     audit_events: list[UserQuotaAuditResponse]
+
+
+class DirectoryUserMatch(BaseModel):
+    """Single autocomplete suggestion for the admin user search."""
+
+    username: str
+    display_name: str | None = None
+    email: str | None = None
+    source: str
+
+
+class DirectoryUserSearchResponse(BaseModel):
+    """Envelope for the admin user-search endpoint."""
+
+    matches: list[DirectoryUserMatch]
 
 
 def _build_quota_response(row: dict[str, Any], *, job_store) -> UserQuotaOverrideResponse:
@@ -110,16 +126,23 @@ def _require_admin_dependency(user: AuthenticatedUserDep) -> AuthenticatedUser:
 AdminUserDep = Annotated[AuthenticatedUser, Depends(_require_admin_dependency)]
 
 
-def create_admin_router(*, job_store) -> APIRouter:
+def create_admin_router(
+    *,
+    job_store,
+    directory_client: DirectoryClient | None = None,
+) -> APIRouter:
     """Build admin operational routes.
 
     Args:
         job_store: Backing job store used for live quota override operations.
+        directory_client: Optional directory provider for network-wide user
+            search; defaults to :class:`NullDirectoryClient` when omitted.
 
     Returns:
         A configured :class:`APIRouter` exposing admin-only endpoints.
     """
     router = APIRouter(prefix="/admin")
+    resolved_directory_client: DirectoryClient = directory_client or NullDirectoryClient()
 
     @router.get(
         "/quotas",
@@ -233,5 +256,57 @@ def create_admin_router(*, job_store) -> APIRouter:
             job_count=job_store.count_jobs(username=normalized_username),
             last_action="delete",
         )
+
+    @router.get(
+        "/users/search",
+        response_model=DirectoryUserSearchResponse,
+        status_code=200,
+        summary="Autocomplete users by username, display name, or email",
+    )
+    def search_users(
+        admin_user: AdminUserDep,
+        q: Annotated[str, Query(description="Free-text fragment to match.")] = "",
+        limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    ) -> DirectoryUserSearchResponse:
+        """Return merged autocomplete matches from DB-known users + the directory.
+
+        Args:
+            admin_user: Authenticated admin user from the signed bearer token.
+            q: Free-text fragment.
+            limit: Maximum number of matches to return.
+
+        Returns:
+            Distinct matches with the source channel attached to each row.
+        """
+        del admin_user
+        query = q.strip()
+        if not query:
+            return DirectoryUserSearchResponse(matches=[])
+
+        matches: list[DirectoryUserMatch] = []
+        seen: set[str] = set()
+
+        for username in job_store.search_usernames(query, limit=limit):
+            normalized = (username or "").strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            matches.append(DirectoryUserMatch(username=normalized, source="db"))
+
+        for entry in resolved_directory_client.search_users(query, limit=limit):
+            normalized = entry.username.strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            matches.append(
+                DirectoryUserMatch(
+                    username=normalized,
+                    display_name=entry.display_name,
+                    email=entry.email,
+                    source="directory",
+                )
+            )
+
+        return DirectoryUserSearchResponse(matches=matches[:limit])
 
     return router

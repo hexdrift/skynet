@@ -18,7 +18,9 @@ Pipeline:
 
 No personal information is exposed. ``user_id`` is never projected.
 ``signature_code`` is dropped from the bulk response (it is not consumed
-by the explore page).
+by the explore page). Jobs flagged ``is_private`` are excluded from both
+the fingerprint and the bulk fetch, so they never appear on the map and
+do not invalidate the cache when added.
 """
 
 from __future__ import annotations
@@ -222,7 +224,7 @@ def _fetch_fingerprint(session: Session) -> str:
             text(
                 "SELECT COUNT(*) AS n, MAX(created_at) AS max_ts "
                 "FROM job_embeddings "
-                "WHERE embedding_summary IS NOT NULL"
+                "WHERE embedding_summary IS NOT NULL AND is_private = FALSE"
             )
         )
         .mappings()
@@ -259,7 +261,7 @@ def _fetch_projection_rows(session: Session) -> list[dict[str, Any]]:
                 "module_name, optimizer_name, created_at, "
                 "embedding_summary::text AS embedding_summary_text "
                 "FROM job_embeddings "
-                "WHERE embedding_summary IS NOT NULL "
+                "WHERE embedding_summary IS NOT NULL AND is_private = FALSE "
                 "ORDER BY created_at DESC "
                 f"LIMIT {MAX_POINTS}"
             )

@@ -39,6 +39,7 @@ PAYLOAD_OVERVIEW_SEED = "seed"
 PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS = "optimizer_kwargs"
 PAYLOAD_OVERVIEW_COMPILE_KWARGS = "compile_kwargs"
 PAYLOAD_OVERVIEW_TASK_FINGERPRINT = "task_fingerprint"
+PAYLOAD_OVERVIEW_IS_PRIVATE = "is_private"
 
 PROGRESS_SPLITS_READY = "dataset_splits_ready"
 PROGRESS_BASELINE = "baseline_evaluated"

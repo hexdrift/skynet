@@ -151,6 +151,7 @@ class JobEmbeddingModel(Base):
     is_recommendable: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false", index=True
     )
+    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)
     baseline_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
     optimized_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)

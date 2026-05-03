@@ -376,12 +376,12 @@ h3 {
   background: rgba(200, 168, 130, 0.7);
 }
 
-/* Close button — global style for all X dismiss buttons */
+/* Close button — global style for all X dismiss buttons. Positioning is
+   left to the consumer (e.g. ``absolute top-4 end-4`` for dialog corners,
+   nothing for inline table cells) so the same visual treatment applies in
+   both contexts. */
 .close-button {
   all: unset;
-  position: absolute;
-  top: 16px;
-  inset-inline-end: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
