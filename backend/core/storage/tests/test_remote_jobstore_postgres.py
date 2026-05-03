@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 from alembic import command
 from core.storage.remote import RemoteDBJobStore
@@ -37,6 +37,44 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _reset_legacy_schema(db_url: str) -> None:
+    """Drop ``public`` if the target DB holds pre-Alembic legacy tables.
+
+    The baseline migration uses ``CREATE TABLE IF NOT EXISTS`` for idempotency
+    on properly-versioned databases, but a target that was bootstrapped by
+    hand for an earlier release leaves stale, schema-incompatible tables
+    (e.g. an old ``job_logs`` keyed on ``job_id`` instead of
+    ``optimization_id``) that the guard skips over. Detect that legacy state
+    by the absence of ``alembic_version`` and a non-empty ``public`` schema,
+    and reset it so the upgrade runs against a clean slate. Properly-migrated
+    and empty databases are left untouched.
+
+    Args:
+        db_url: SQLAlchemy URL of the live Postgres test target.
+    """
+    engine = create_engine(db_url)
+    try:
+        with engine.connect() as conn:
+            already_versioned = conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'alembic_version'"
+                )
+            ).scalar()
+            if already_versioned:
+                return
+            has_legacy_tables = conn.execute(
+                text("SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' LIMIT 1")
+            ).scalar()
+            if not has_legacy_tables:
+                return
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture(scope="module")
 def store() -> Iterator[RemoteDBJobStore]:
     """Yield a single store backed by the real Postgres for the whole module.
@@ -45,6 +83,8 @@ def store() -> Iterator[RemoteDBJobStore]:
     such as new indexed columns are present before rows are inserted.
     The store is reused across tests to avoid repeating that setup work.
     """
+    _reset_legacy_schema(REMOTE_DB_URL or "")
+
     alembic_cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     alembic_cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     alembic_cfg.set_main_option("sqlalchemy.url", REMOTE_DB_URL or "")
