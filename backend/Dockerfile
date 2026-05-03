@@ -15,13 +15,25 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
-RUN pip install ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} -e .
+# Lockfile-pinned install via uv: every build resolves to the exact wheel
+# set captured in uv.lock, which `pip install -e .` cannot guarantee.
+# uv itself comes from the same internal PyPI mirror, so air-gap operators
+# only need their existing PIP_INDEX_URL / PIP_TRUSTED_HOST args.
+RUN pip install --no-cache-dir \
+        ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
+        ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
+        uv \
+    && UV_INDEX_URL=${PIP_INDEX_URL:-} \
+       UV_PYTHON_DOWNLOADS=never \
+       uv sync --frozen --no-install-project
 
 COPY . .
+
+RUN UV_PYTHON_DOWNLOADS=never uv sync --frozen
 
 # Use UID 1001 with GID 0 — works everywhere (Docker, Podman, OpenShift restricted-v2 SCC).
 # OpenShift assigns a random UID at runtime but always with GID 0, so /app must be
@@ -33,6 +45,7 @@ RUN groupadd -g 1001 appuser 2>/dev/null || true \
 
 USER 1001
 
+ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV WORKER_CONCURRENCY=2
 ENV WORKER_POLL_INTERVAL=2.0
@@ -40,6 +53,11 @@ ENV LOG_LEVEL=INFO
 # Containerized runs default to structured logs; override to "text" only
 # when running the image interactively for debugging.
 ENV LOG_FORMAT=json
+# huggingface_hub + transformers default to phoning home for model updates;
+# the embedder ships as a vendored snapshot under backend/vendor/models, so
+# force offline mode in the image to keep the runtime egress-clean.
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
 # REMOTE_DB_URL must be set at runtime (e.g., via docker-compose or -e flag)
 # ENV REMOTE_DB_URL=postgresql://user:password@host:5432/skynet
 

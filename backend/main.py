@@ -13,8 +13,9 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 
-from core import ServiceRegistry, create_app
+from core.api import create_app
 from core.api.observability import configure_logging
+from core.registry import ServiceRegistry
 
 load_dotenv(Path(__file__).parent / ".env")
 

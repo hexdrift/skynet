@@ -19,8 +19,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 from alembic import command
-from core import ServiceRegistry
 from core.config import settings
+from core.registry import ServiceRegistry
 from core.storage.models import Base
 from core.storage.remote import RemoteDBJobStore
 
