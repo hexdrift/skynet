@@ -52,6 +52,7 @@ export function useSubmitWizard() {
   const [summaryCodeTab, setSummaryCodeTab] = useState<string>("signature");
 
   const [jobType, setOptimizationType] = useState<"run" | "grid_search">("run");
+  const [isPrivate, setIsPrivate] = useState(false);
 
   const username = session?.user?.name ?? "";
   const [jobName, setJobName] = useState("");
@@ -276,6 +277,8 @@ export function useSubmitWizard() {
         setSeed(sharedState.seed);
       } else if (key === "shuffle" && typeof sharedState.shuffle === "boolean") {
         setShuffle(sharedState.shuffle);
+      } else if (key === "is_private" && typeof sharedState.is_private === "boolean") {
+        setIsPrivate(sharedState.is_private);
       } else if (key === "optimizer_kwargs" && sharedState.optimizer_kwargs) {
         const kw = sharedState.optimizer_kwargs as Record<string, unknown>;
         if (typeof kw.auto === "string") setAutoLevel(kw.auto);
@@ -388,6 +391,9 @@ export function useSubmitWizard() {
     if (s.shuffle !== shuffle) {
       wizardCtx.setField("shuffle", shuffle, "user");
     }
+    if (s.is_private !== isPrivate) {
+      wizardCtx.setField("is_private", isPrivate, "user");
+    }
   }, [
     jobDescription,
     jobType,
@@ -398,6 +404,7 @@ export function useSubmitWizard() {
     splitMode,
     seed,
     shuffle,
+    isPrivate,
     wizardCtx,
   ]);
 
@@ -612,6 +619,7 @@ export function useSubmitWizard() {
 
         if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
         if (payload.seed != null) setSeed(Number(payload.seed));
+        if (payload.is_private != null) setIsPrivate(Boolean(payload.is_private));
 
         if (clonePair) {
           const findPairModel = (
@@ -1062,6 +1070,7 @@ export function useSubmitWizard() {
         column_mapping: columnMapping,
         split_fractions: split,
         shuffle,
+        is_private: isPrivate,
         ...(seed != null && { seed }),
         ...(Object.keys(optKw).length > 0 && { optimizer_kwargs: optKw }),
       };
@@ -1188,6 +1197,8 @@ export function useSubmitWizard() {
     handleTabClick,
     jobType,
     setOptimizationType,
+    isPrivate,
+    setIsPrivate,
     username,
     jobName,
     setJobName,

@@ -22,6 +22,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_DATASET_ROWS,
     PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
+    PAYLOAD_OVERVIEW_IS_PRIVATE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
     PAYLOAD_OVERVIEW_MODULE_KWARGS,
@@ -238,6 +239,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS: dict(payload.optimizer_kwargs),
                 PAYLOAD_OVERVIEW_COMPILE_KWARGS: dict(payload.compile_kwargs),
                 PAYLOAD_OVERVIEW_TASK_FINGERPRINT: task_fingerprint,
+                PAYLOAD_OVERVIEW_IS_PRIVATE: payload.is_private,
             },
         )
 
@@ -345,6 +347,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_GENERATION_MODELS: [m.model_dump() for m in payload.generation_models],
                 PAYLOAD_OVERVIEW_REFLECTION_MODELS: [m.model_dump() for m in payload.reflection_models],
                 PAYLOAD_OVERVIEW_TASK_FINGERPRINT: task_fingerprint,
+                PAYLOAD_OVERVIEW_IS_PRIVATE: payload.is_private,
             },
         )
 

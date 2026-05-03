@@ -48,6 +48,7 @@ from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
 from ..storage import get_job_store
 from ..worker.engine import BackgroundWorker, get_worker
+from .directory_client import build_directory_client
 from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
 from .observability import get_request_id, install_metrics, install_request_id_middleware
@@ -594,8 +595,8 @@ def create_app(
         docs_url=None,
         redoc_url=None,
         description=(
-            "Backend API for **Skynet** — a DSPy-as-a-service platform for "
-            "submitting, comparing, and serving optimized language-model "
+            "Backend API for **Skynet** — a platform for submitting, "
+            "comparing, and serving optimized language-model "
             "programs. Submit optimization runs or grid searches, stream "
             "live progress and metrics, inspect per-example baselines vs. "
             "optimized predictions, and run inference against the final "
@@ -677,7 +678,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=[o.strip() for o in allowed_origins],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
 
@@ -937,7 +938,10 @@ def create_app(
         )
 
     app.include_router(create_models_router(), tags=["Models"])
-    app.include_router(create_admin_router(job_store=job_store), tags=["Admin"])
+    app.include_router(
+        create_admin_router(job_store=job_store, directory_client=build_directory_client()),
+        tags=["Admin"],
+    )
     app.include_router(create_registry_router(registry=registry), tags=["Registry"])
     app.include_router(create_code_validation_router(), tags=["Code Validation"])
     app.include_router(create_code_agent_router(), tags=["Code Validation"])

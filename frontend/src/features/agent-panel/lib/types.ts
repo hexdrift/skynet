@@ -41,6 +41,7 @@ export interface WizardState {
   split_mode?: "auto" | "manual";
   seed?: number;
   shuffle?: boolean;
+  is_private?: boolean;
   optimizer_kwargs?: Record<string, unknown>;
 }
 

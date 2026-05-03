@@ -216,6 +216,9 @@ kubectl -n skynet create secret generic skynet-db-password \
 kubectl -n skynet create secret generic skynet-backend-secrets \
   --from-literal=OPENAI_API_KEY="$INTERNAL_LLM_API_KEY" \
   --from-literal=BACKEND_AUTH_SECRET="$BACKEND_AUTH_SECRET"
+  # Append --from-literal=AD_LDAP_BIND_PASSWORD="$AD_LDAP_BIND_PASSWORD"
+  # when enabling LDAP autocomplete (see "Internal LDAP / Active Directory
+  # User Search").
 
 kubectl -n skynet create secret generic skynet-frontend-secrets \
   --from-literal=AUTH_SECRET="$(openssl rand -base64 32)" \
@@ -306,6 +309,94 @@ TODO: On-premise - confirm the exact ADFS issuer URL. Some ADFS deployments
 publish OIDC metadata at `https://host/adfs/.well-known/openid-configuration`;
 the issuer value should be the issuer advertised by that metadata document,
 usually `https://host/adfs`.
+
+---
+
+## Internal LDAP / Active Directory User Search
+
+ADFS handles **sign-in**. For the admin "set a quota for any network user"
+flow, the backend also needs to **search** Active Directory so admins can
+type a fragment and pick a real domain user from autocomplete.
+
+The lookup goes through `backend/core/api/directory_client.py`. When LDAP
+is not configured the backend uses `NullDirectoryClient`: the autocomplete
+combobox falls back to usernames already seen in the local job + override
+tables, which is enough for any user who has signed in or has an existing
+override. Admins can still type a brand-new username manually and save a
+quota for them — the field accepts free text. LDAP only adds **discovery**
+of users who have not yet touched the system.
+
+The Python client uses the `ldap3` package (already in
+`backend/pyproject.toml` and `backend/uv.lock`, so it ships in the airgap
+install bundle without extra wheels).
+
+### Backend env vars
+
+Set these in the generated Helm values under `backend.env` (with the bind
+password sourced from `skynet-backend-secrets`):
+
+```yaml
+backend:
+  env:
+    AD_LDAP_URL: "ldaps://dc1.example.internal:636"
+    AD_LDAP_BIND_DN: "CN=skynet-svc,OU=Service Accounts,DC=example,DC=internal"
+    AD_LDAP_SEARCH_BASE: "DC=example,DC=internal"
+    # Optional. Defaults shown match standard AD.
+    AD_LDAP_USER_FILTER: "(&(objectCategory=person)(objectClass=user))"
+    AD_LDAP_USERNAME_ATTR: "sAMAccountName"
+  secrets:
+    existingSecret: "skynet-backend-secrets"   # must also contain AD_LDAP_BIND_PASSWORD
+```
+
+| Variable | Required | Notes |
+|---|---|---|
+| `AD_LDAP_URL` | yes | `ldaps://host:636` recommended. `ldap://` only acceptable inside a trusted segment. |
+| `AD_LDAP_BIND_DN` | yes | Service-account distinguished name. Read-only is sufficient. |
+| `AD_LDAP_BIND_PASSWORD` | yes (Secret) | Lives in `skynet-backend-secrets`, never in values files or env literals. |
+| `AD_LDAP_SEARCH_BASE` | yes | Subtree to search; can be a specific OU to scope the lookup. |
+| `AD_LDAP_USER_FILTER` | no | LDAP filter ANDed with the username substring match. |
+| `AD_LDAP_USERNAME_ATTR` | no | Defaults to `sAMAccountName`. Use `userPrincipalName` if your AUTH_USERNAME_CLAIM is UPN-based. |
+
+When **any** of the required vars is unset, the backend silently keeps
+`NullDirectoryClient` and admins still see DB-backed suggestions.
+
+Update `skynet-backend-secrets` to include the bind password (see
+"Required Kubernetes Secrets" above):
+
+```bash
+kubectl -n skynet create secret generic skynet-backend-secrets \
+  --from-literal=OPENAI_API_KEY="$INTERNAL_LLM_API_KEY" \
+  --from-literal=BACKEND_AUTH_SECRET="$BACKEND_AUTH_SECRET" \
+  --from-literal=AD_LDAP_BIND_PASSWORD="$AD_LDAP_BIND_PASSWORD"
+```
+
+### Network + TLS
+
+- The backend pod must reach `AD_LDAP_URL` (typically TCP/636 for
+  `ldaps://`, TCP/389 for `ldap://`). Add the AD controller CIDR/port to
+  `networkPolicy.egressCidrs` in the generated values.
+- For `ldaps://` over a private CA, mount the CA exactly as the OIDC
+  setup does — see "Private TLS / CA Bundles". The same `SSL_CERT_FILE` /
+  `REQUESTS_CA_BUNDLE` mount that the backend already uses for the LLM
+  gateway and Postgres covers `ldap3` as well, since `ldap3` honours the
+  Python TLS trust store.
+
+### Username consistency
+
+Quotas, audit events, and admin lookups all key on the **lowercased**
+username string. Whatever attribute you set as `AD_LDAP_USERNAME_ATTR`
+should match the value the frontend stores in the session — that is the
+claim selected by `AUTH_USERNAME_CLAIM` (or its fallback chain `name` →
+`unique_name` → `upn` → `preferred_username` → `email` → `sub`). If you
+use `userPrincipalName` in ADFS claims, set
+`AD_LDAP_USERNAME_ATTR=userPrincipalName` so autocomplete returns the
+same string the user signs in as.
+
+TODO: On-premise - confirm the AD search base, the service-account DN,
+and the username attribute that matches your ADFS `AUTH_USERNAME_CLAIM`.
+Decide whether to scope `AD_LDAP_SEARCH_BASE` to a specific OU, and
+whether your security policy permits `ldap://` or requires `ldaps://`
+with the internal CA.
 
 ---
 
@@ -542,6 +633,8 @@ Current intentional TODO locations:
 - `frontend/.env.example` — frontend dev/runtime env template.
 - `frontend/.npmrc` — internal npm registry mirror config (commented out).
 - `backend/core/config.py` — model id, agent base URLs, embedder path.
+- `backend/core/api/directory_client.py` — placeholder for the LDAP-backed
+  Active Directory search client; activated by setting `AD_LDAP_*` env vars.
 
 If new external services are added, add them to this file, the Helm values,
 and `scripts/airgap_migrate.sh`. Then `todos` will pick them up

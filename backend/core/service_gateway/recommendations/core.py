@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from ...config import settings
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
+    PAYLOAD_OVERVIEW_IS_PRIVATE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_USERNAME,
@@ -281,6 +282,7 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> None:
     is_recommendable = _evaluate_quality(baseline, optimized)
     applyable = _extract_applyable_config(job)
     user_id = overview.get(PAYLOAD_OVERVIEW_USERNAME)
+    is_private = bool(overview.get(PAYLOAD_OVERVIEW_IS_PRIVATE, False))
 
     try:
         with Session(job_store.engine) as session:
@@ -296,6 +298,7 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> None:
                 "embedding_code": emb_code,
                 "embedding_schema": emb_schema,
                 "is_recommendable": is_recommendable,
+                "is_private": is_private,
                 "baseline_metric": baseline,
                 "optimized_metric": optimized,
                 "summary_text": summary_text or None,
@@ -343,9 +346,11 @@ def _weighted_fusion_sql(
     pgvector's ``<=>`` operator returns cosine *distance* (0 = identical,
     2 = opposite). We convert to similarity with ``1 - distance`` and
     weight each aspect. NULL embeddings are treated as 0 contribution.
-    Only rows with ``is_recommendable = TRUE`` are eligible — the quality
-    gate is enforced at query time so the ingest pipeline can keep
-    embedding every successful job (the dashboard needs the full set).
+    Only rows with ``is_recommendable = TRUE`` and ``is_private = FALSE``
+    are eligible — the quality gate is enforced at query time so the
+    ingest pipeline can keep embedding every successful job (the
+    dashboard needs the full set), and private jobs must never surface
+    to other users via recommendations.
 
     Args:
         has_summary: Whether the caller is supplying a summary embedding.
@@ -369,6 +374,7 @@ def _weighted_fusion_sql(
     score_expr = " + ".join(terms) if terms else "0"
     where_clauses = [
         "is_recommendable = TRUE",
+        "is_private = FALSE",
         "(embedding_summary IS NOT NULL OR embedding_code IS NOT NULL OR embedding_schema IS NOT NULL)",
     ]
     if filter_type:

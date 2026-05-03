@@ -251,6 +251,22 @@ export function deleteUserQuotaOverride(username: string) {
   });
 }
 
+export interface DirectoryUserMatch {
+  username: string;
+  display_name?: string | null;
+  email?: string | null;
+  source: "db" | "directory";
+}
+
+export interface DirectoryUserSearchResponse {
+  matches: DirectoryUserMatch[];
+}
+
+export function searchAdminUsers(query: string, limit = 10) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  return request<DirectoryUserSearchResponse>(`/admin/users/search?${params.toString()}`);
+}
+
 export interface DashboardAnalyticsJob {
   optimization_id: string;
   name?: string | null;

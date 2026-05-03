@@ -27,6 +27,7 @@ type WizardKey =
   | "split_mode"
   | "seed"
   | "shuffle"
+  | "is_private"
   | "optimizer_kwargs";
 type WriteSource = "user" | "agent";
 
@@ -261,6 +262,7 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
   }
   if (typeof wrap.seed === "number" && Number.isFinite(wrap.seed)) patch.seed = wrap.seed;
   if (typeof wrap.shuffle === "boolean") patch.shuffle = wrap.shuffle;
+  if (typeof wrap.is_private === "boolean") patch.is_private = wrap.is_private;
 
   if (
     wrap.optimizer_kwargs &&

@@ -1,16 +1,16 @@
 apiVersion: v2
 name: skynet
 description: |
-  Skynet (dspy_as_a_service) — FastAPI backend with embedded worker, Next.js
-  frontend, and optional bundled pgvector Postgres. Targets OpenShift, scales
-  horizontally via HPAs and a DB-backed worker claim queue.
+  Skynet — FastAPI backend with embedded worker, Next.js frontend, and
+  optional bundled pgvector Postgres. Targets OpenShift, scales horizontally
+  via HPAs and a DB-backed worker claim queue.
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.24.0-0"
-home: https://github.com/your-org/dspy_as_a_service
+home: https://github.com/your-org/skynet
 sources:
-  - https://github.com/your-org/dspy_as_a_service
+  - https://github.com/your-org/skynet
 maintainers:
   - name: skynet-platform
 keywords:

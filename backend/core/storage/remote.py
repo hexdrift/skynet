@@ -472,6 +472,46 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
+    def search_usernames(self, query: str, *, limit: int = 10) -> list[str]:
+        """Return distinct usernames known to the DB matching ``query``.
+
+        Searches both job submissions (``jobs.username``) and existing quota
+        overrides so admins can autocomplete previously-seen users without
+        an external directory lookup.
+
+        Args:
+            query: Case-insensitive substring to match.
+            limit: Maximum number of distinct usernames to return.
+
+        Returns:
+            Distinct lowercased usernames sorted alphabetically.
+        """
+        normalized = query.strip().lower()
+        if not normalized:
+            return []
+        pattern = f"%{normalized}%"
+        session = self._get_session()
+        try:
+            job_rows = (
+                session.query(JobModel.username)
+                .filter(JobModel.username.isnot(None))
+                .filter(func.lower(JobModel.username).like(pattern))
+                .distinct()
+                .all()
+            )
+            override_rows = (
+                session.query(UserQuotaOverrideModel.username)
+                .filter(func.lower(UserQuotaOverrideModel.username).like(pattern))
+                .all()
+            )
+            seen: set[str] = set()
+            for (username,) in (*job_rows, *override_rows):
+                if username:
+                    seen.add(username.strip().lower())
+            return sorted(seen)[:max(0, limit)]
+        finally:
+            session.close()
+
     def record_user_quota_audit(
         self,
         *,

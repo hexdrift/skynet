@@ -56,6 +56,7 @@ interface OptimizationRequestBase {
   split_fractions?: SplitFractions;
   shuffle?: boolean;
   seed?: number | null;
+  is_private?: boolean;
 }
 
 export interface RunRequest extends OptimizationRequestBase {

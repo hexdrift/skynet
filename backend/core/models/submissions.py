@@ -38,6 +38,10 @@ class _OptimizationRequestBase(BaseModel):
     shuffle: bool = True
     seed: int | None = None
     dataset_filename: str | None = Field(default=None, description="Original dataset file name.")
+    is_private: bool = Field(
+        default=False,
+        description="When true, the optimization is excluded from the public explore map.",
+    )
 
     @model_validator(mode="after")
     def _ensure_dataset(self) -> _OptimizationRequestBase:

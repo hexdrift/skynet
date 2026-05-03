@@ -1,9 +1,9 @@
 # Skynet Helm Chart
 
-Production-grade Helm chart for the Skynet (`dspy_as_a_service`) platform —
-FastAPI backend with embedded worker, Next.js frontend, and an optional
-bundled pgvector Postgres. Targets OpenShift; horizontally scalable via HPAs
-and a DB-backed worker claim queue (Wave 2).
+Production-grade Helm chart for the Skynet platform — FastAPI backend with
+embedded worker, Next.js frontend, and an optional bundled pgvector Postgres.
+Targets OpenShift; horizontally scalable via HPAs and a DB-backed worker
+claim queue (Wave 2).
 
 ## Quick install
 
