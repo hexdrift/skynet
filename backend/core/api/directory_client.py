@@ -128,11 +128,7 @@ class LdapDirectoryClient:
                 attributes=attributes,
                 size_limit=limit,
             )
-            return [
-                user
-                for entry in connection.entries
-                if (user := self._entry_to_user(entry)) is not None
-            ][:limit]
+            return [user for entry in connection.entries if (user := self._entry_to_user(entry)) is not None][:limit]
         except (LDAPException, OSError) as exc:
             logger.warning("LDAP user search failed: %s", exc)
             return []
@@ -141,7 +137,15 @@ class LdapDirectoryClient:
                 connection.unbind()
 
     def _entry_to_user(self, entry: object) -> DirectoryUser | None:
-        """Convert an LDAP entry object into a directory user."""
+        """Convert an LDAP entry object into a directory user.
+
+        Args:
+            entry: ldap3 entry-like object exposing ``entry_attributes_as_dict``.
+
+        Returns:
+            A populated DirectoryUser, or ``None`` when the username attribute
+            is missing or empty.
+        """
         attrs = getattr(entry, "entry_attributes_as_dict", {})
         username = _first_attr(attrs, self.username_attr)
         if not username:
@@ -154,7 +158,16 @@ class LdapDirectoryClient:
 
 
 def _first_attr(attrs: object, name: str) -> str | None:
-    """Return the first non-empty string value for an LDAP attribute."""
+    """Return the first non-empty string value for an LDAP attribute.
+
+    Args:
+        attrs: Mapping-like attribute container produced by ``ldap3``.
+        name: Attribute name to read from ``attrs``.
+
+    Returns:
+        The first non-empty trimmed string value, or ``None`` when the
+        attribute is missing, empty, or the container is not a dict.
+    """
     if not isinstance(attrs, dict):
         return None
     raw_values = attrs.get(name)
