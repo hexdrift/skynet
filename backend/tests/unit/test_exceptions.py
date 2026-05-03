@@ -6,12 +6,7 @@ import pytest
 
 from core.exceptions import (
     AppError,
-    ConflictError,
-    ForbiddenError,
-    NotFoundError,
-    RateLimitError,
     ServiceError,
-    UnauthorizedError,
     ValidationError,
 )
 
@@ -133,38 +128,6 @@ def test_service_error_can_be_raised_and_caught() -> None:
         raise ServiceError("service down")
 
 
-def test_not_found_error_status_code_is_404() -> None:
-    """``NotFoundError`` pins ``status_code=404``."""
-    exc = NotFoundError("item missing")
-
-    assert exc.status_code == 404
-
-
-def test_not_found_error_error_code() -> None:
-    """``NotFoundError`` pins ``error_code='NOT_FOUND'``."""
-    exc = NotFoundError("item missing")
-
-    assert exc.error_code == "NOT_FOUND"
-
-
-def test_not_found_error_message() -> None:
-    """``NotFoundError.message`` returns the constructor argument verbatim."""
-    exc = NotFoundError("job 42 not found")
-
-    assert exc.message == "job 42 not found"
-
-
-def test_not_found_error_is_app_error() -> None:
-    """``NotFoundError`` is a subclass of ``AppError``."""
-    assert isinstance(NotFoundError("x"), AppError)
-
-
-def test_not_found_error_can_be_raised_and_caught() -> None:
-    """``NotFoundError`` is raisable via ``pytest.raises``."""
-    with pytest.raises(NotFoundError):
-        raise NotFoundError("gone")
-
-
 def test_validation_error_status_code_is_400() -> None:
     """``ValidationError`` pins ``status_code=400``."""
     exc = ValidationError("bad input")
@@ -197,128 +160,13 @@ def test_validation_error_can_be_raised_and_caught() -> None:
         raise ValidationError("field required")
 
 
-def test_unauthorized_error_status_code_is_401() -> None:
-    """``UnauthorizedError`` pins ``status_code=401``."""
-    exc = UnauthorizedError("not logged in")
-
-    assert exc.status_code == 401
-
-
-def test_unauthorized_error_error_code() -> None:
-    """``UnauthorizedError`` pins ``error_code='UNAUTHORIZED'``."""
-    exc = UnauthorizedError("not logged in")
-
-    assert exc.error_code == "UNAUTHORIZED"
-
-
-def test_unauthorized_error_message() -> None:
-    """``UnauthorizedError.message`` returns the constructor argument verbatim."""
-    exc = UnauthorizedError("token expired")
-
-    assert exc.message == "token expired"
-
-
-def test_unauthorized_error_is_app_error() -> None:
-    """``UnauthorizedError`` is a subclass of ``AppError``."""
-    assert isinstance(UnauthorizedError("x"), AppError)
-
-
-def test_forbidden_error_status_code_is_403() -> None:
-    """``ForbiddenError`` pins ``status_code=403``."""
-    exc = ForbiddenError("no access")
-
-    assert exc.status_code == 403
-
-
-def test_forbidden_error_error_code() -> None:
-    """``ForbiddenError`` pins ``error_code='FORBIDDEN'``."""
-    exc = ForbiddenError("no access")
-
-    assert exc.error_code == "FORBIDDEN"
-
-
-def test_forbidden_error_message() -> None:
-    """``ForbiddenError.message`` returns the constructor argument verbatim."""
-    exc = ForbiddenError("you shall not pass")
-
-    assert exc.message == "you shall not pass"
-
-
-def test_forbidden_error_is_app_error() -> None:
-    """``ForbiddenError`` is a subclass of ``AppError``."""
-    assert isinstance(ForbiddenError("x"), AppError)
-
-
-def test_conflict_error_status_code_is_409() -> None:
-    """``ConflictError`` pins ``status_code=409``."""
-    exc = ConflictError("already exists")
-
-    assert exc.status_code == 409
-
-
-def test_conflict_error_error_code() -> None:
-    """``ConflictError`` pins ``error_code='CONFLICT'``."""
-    exc = ConflictError("already exists")
-
-    assert exc.error_code == "CONFLICT"
-
-
-def test_conflict_error_message() -> None:
-    """``ConflictError.message`` returns the constructor argument verbatim."""
-    exc = ConflictError("duplicate key")
-
-    assert exc.message == "duplicate key"
-
-
-def test_conflict_error_is_app_error() -> None:
-    """``ConflictError`` is a subclass of ``AppError``."""
-    assert isinstance(ConflictError("x"), AppError)
-
-
-def test_rate_limit_error_status_code_is_429() -> None:
-    """``RateLimitError`` pins ``status_code=429``."""
-    exc = RateLimitError("too many requests")
-
-    assert exc.status_code == 429
-
-
-def test_rate_limit_error_error_code() -> None:
-    """``RateLimitError`` pins ``error_code='RATE_LIMIT'``."""
-    exc = RateLimitError("too many requests")
-
-    assert exc.error_code == "RATE_LIMIT"
-
-
-def test_rate_limit_error_message() -> None:
-    """``RateLimitError.message`` returns the constructor argument verbatim."""
-    exc = RateLimitError("slow down")
-
-    assert exc.message == "slow down"
-
-
-def test_rate_limit_error_is_app_error() -> None:
-    """``RateLimitError`` is a subclass of ``AppError``."""
-    assert isinstance(RateLimitError("x"), AppError)
-
-
-def test_rate_limit_error_can_be_raised_and_caught() -> None:
-    """``RateLimitError`` is raisable and matchable via ``pytest.raises``."""
-    with pytest.raises(RateLimitError, match="slow down"):
-        raise RateLimitError("slow down")
-
-
 @pytest.mark.parametrize(
     ("exc_class", "expected_status", "expected_code"),
     [
         (ServiceError, 500, "SERVICE_ERROR"),
-        (NotFoundError, 404, "NOT_FOUND"),
         (ValidationError, 400, "VALIDATION_ERROR"),
-        (UnauthorizedError, 401, "UNAUTHORIZED"),
-        (ForbiddenError, 403, "FORBIDDEN"),
-        (ConflictError, 409, "CONFLICT"),
-        (RateLimitError, 429, "RATE_LIMIT"),
     ],
-    ids=["service", "not_found", "validation", "unauthorized", "forbidden", "conflict", "rate_limit"],
+    ids=["service", "validation"],
 )
 def test_exception_subclass_status_and_code(
     exc_class: type[AppError], expected_status: int, expected_code: str
@@ -332,8 +180,8 @@ def test_exception_subclass_status_and_code(
 
 @pytest.mark.parametrize(
     "exc_class",
-    [ServiceError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError, RateLimitError],
-    ids=["service", "not_found", "validation", "unauthorized", "forbidden", "conflict", "rate_limit"],
+    [ServiceError, ValidationError],
+    ids=["service", "validation"],
 )
 def test_exception_subclass_accepts_details(exc_class: type[AppError]) -> None:
     """Each ``AppError`` subclass accepts and stores a ``details`` mapping."""
@@ -344,8 +192,8 @@ def test_exception_subclass_accepts_details(exc_class: type[AppError]) -> None:
 
 @pytest.mark.parametrize(
     "exc_class",
-    [ServiceError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError, RateLimitError],
-    ids=["service", "not_found", "validation", "unauthorized", "forbidden", "conflict", "rate_limit"],
+    [ServiceError, ValidationError],
+    ids=["service", "validation"],
 )
 def test_exception_subclass_none_details_becomes_empty_dict(exc_class: type[AppError]) -> None:
     """Each ``AppError`` subclass normalises ``details=None`` to an empty dict."""
