@@ -374,7 +374,12 @@ kubectl -n skynet create secret generic skynet-backend-secrets \
 
 - The backend pod must reach `AD_LDAP_URL` (typically TCP/636 for
   `ldaps://`, TCP/389 for `ldap://`). Add the AD controller CIDR/port to
-  `networkPolicy.egressCidrs` in the generated values.
+  `networkPolicy.ldapEgress` in the generated values; that slot exists
+  precisely so the LDAP allowlist sits next to the LLM allowlist instead
+  of competing with the broader `egressCidrs` list. Set
+  `LDAP_EGRESS_CIDR` (and optionally `LDAP_EGRESS_PORT`, default `636`)
+  before running `scripts/airgap_migrate.sh values` to emit it
+  automatically.
 - For `ldaps://` over a private CA, mount the CA exactly as the OIDC
   setup does — see "Private TLS / CA Bundles". The same `SSL_CERT_FILE` /
   `REQUESTS_CA_BUNDLE` mount that the backend already uses for the LLM

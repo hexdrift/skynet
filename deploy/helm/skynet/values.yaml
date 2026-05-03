@@ -398,9 +398,9 @@ networkPolicy:
   # ("backend may reach api.openai.com on 443 only"). Use this when the
   # cluster default-denies egress; otherwise leave empty.
   #
-  # If BOTH egressCidrs AND llmEgress are empty, the chart falls back to
-  # wide-open egress (0.0.0.0/0 except link-local). The moment EITHER is
-  # set, the chart treats it as the explicit allowlist and removes the
+  # If egressCidrs, llmEgress, AND ldapEgress are all empty, the chart falls
+  # back to wide-open egress (0.0.0.0/0 except link-local). The moment ANY of
+  # them is set, the chart treats it as the explicit allowlist and removes the
   # wide-open fallback — anything you forget here will be denied.
   #
   # Example:
@@ -410,6 +410,16 @@ networkPolicy:
   #     - cidr: 10.0.5.0/24      # internal LLM gateway
   #       ports: [443, 8443]
   llmEgress: []
+  # Backend-only LDAP / Active Directory egress allowlist. Same shape as
+  # llmEgress; default port is 636 (ldaps). Set this when the admin-tab
+  # username autocomplete needs to reach a domain controller and the cluster
+  # default-denies egress.
+  #
+  # Example:
+  #   ldapEgress:
+  #     - cidr: 10.0.6.0/24      # AD controller subnet
+  #       ports: [636]           # 389 if you really must use ldap://
+  ldapEgress: []
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Migration job — runs `alembic upgrade head` as a Helm pre-install/upgrade hook.
