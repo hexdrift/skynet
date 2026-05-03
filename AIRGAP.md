@@ -469,14 +469,20 @@ kubectl -n skynet logs job/skynet-skynet-migrate
 ```
 
 If you are adopting a database that already has the baseline schema created
-outside Alembic, do a one-time stamp instead:
+outside Alembic, do a one-time stamp at the baseline revision so subsequent
+upgrades only apply the deltas:
 
 ```bash
 helm upgrade --install skynet deploy/helm/skynet \
   -n skynet --create-namespace \
   -f deploy/helm/skynet/values-airgap.generated.yaml \
-  --set-json 'migration.command=["alembic","stamp","0001"]'
+  --set-json 'migration.command=["alembic","stamp","342f7449be26"]'
 ```
+
+`342f7449be26` is the squashed baseline (all `jobs`, `job_*`, and quota
+tables). If your existing schema is fully current — including the
+`job_embeddings.is_private` column added in `a1b2c3d4e5f6` — stamp `head`
+instead. Run `alembic history` from `backend/` to see the chain.
 
 Then revert to `["alembic", "upgrade", "head"]` for the next upgrade.
 
