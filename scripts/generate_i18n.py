@@ -35,7 +35,6 @@ CATALOG_PATH = ROOT / "i18n" / "locales" / "he.json"
 SCHEMA_PATH = ROOT / "i18n" / "schema.json"
 TS_OUT = ROOT / "frontend" / "src" / "shared" / "lib" / "generated" / "i18n-catalog.ts"
 PY_OUT = ROOT / "backend" / "core" / "i18n_keys.py"
-KEYS_OUT = ROOT / "i18n" / "keys.json"
 PY_CATALOG_OUT = ROOT / "backend" / "core" / "i18n_locales" / "he.json"
 
 MESSAGE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
@@ -219,29 +218,6 @@ def _render_py(catalog: dict[str, Any]) -> str:
     )
 
 
-def _render_keys(catalog: dict[str, Any]) -> str:
-    """Build the canonical sorted-key index used by tests and tooling.
-
-    Args:
-        catalog: Parsed catalog.
-
-    Returns:
-        JSON document with sorted ``messages`` and ``terms`` lists, trailing
-        newline included.
-    """
-    return (
-        json.dumps(
-            {
-                "messages": sorted(catalog["messages"]),
-                "terms": sorted(catalog["terms"]),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n"
-    )
-
-
 def _write(path: Path, content: str) -> None:
     """Write ``content`` to ``path``, creating parent directories as needed.
 
@@ -298,7 +274,6 @@ def main(argv: list[str] | None = None) -> int:
     catalog = _load_catalog()
     ts_content = _render_ts(catalog)
     py_content = _render_py(catalog)
-    keys_content = _render_keys(catalog)
     py_catalog_content = CATALOG_PATH.read_text(encoding="utf-8")
 
     if args.check:
@@ -306,14 +281,12 @@ def main(argv: list[str] | None = None) -> int:
             [
                 (TS_OUT, ts_content),
                 (PY_OUT, py_content),
-                (KEYS_OUT, keys_content),
                 (PY_CATALOG_OUT, py_catalog_content),
             ]
         )
 
     _write(TS_OUT, ts_content)
     _write(PY_OUT, py_content)
-    _write(KEYS_OUT, keys_content)
     PY_CATALOG_OUT.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(CATALOG_PATH, PY_CATALOG_OUT)
     return 0

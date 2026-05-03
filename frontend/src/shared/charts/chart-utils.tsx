@@ -2,14 +2,6 @@
 
 import { msg } from "@/shared/lib/messages";
 
-export const chartColors = {
-  primary: "var(--color-chart-1)",
-  secondary: "var(--color-chart-2)",
-  tertiary: "var(--color-chart-3)",
-  quaternary: "var(--color-chart-4)",
-  quinary: "var(--color-chart-5)",
-};
-
 export function ChartTooltip({
   active,
   payload,
@@ -48,12 +40,6 @@ export function ChartTooltip({
     </div>
   );
 }
-
-export const formatAxisLabel = {
-  percent: (value: number) => `${value}%`,
-  minutes: (value: number) => `${value}m`,
-  count: (value: number) => value.toString(),
-};
 
 export function ChartEmptyState({ message }: { message?: string }) {
   return (

@@ -1,4 +1,3 @@
-import type { OptimizationSummaryResponse } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 /**
@@ -115,26 +114,3 @@ export function formatId(id: string): string {
   return id;
 }
 
-/**
- * Normalize improvement value to 0..100 range
- * Handles both normalized (0..1) and pre-scaled (>1) inputs
- */
-export function normalizeImprovement(improvement: number): number {
-  return Math.abs(improvement) > 1 ? improvement : improvement * 100;
-}
-
-export interface JobScoreParts {
-  baseline: number | null;
-  optimized: number | null;
-  improvement: number | null;
-  bestPairLabel: string | null;
-}
-
-export function extractScoreParts(job: OptimizationSummaryResponse): JobScoreParts {
-  return {
-    baseline: job.baseline_test_metric ?? null,
-    optimized: job.optimized_test_metric ?? null,
-    improvement: job.metric_improvement ?? null,
-    bestPairLabel: job.best_pair_label ?? null,
-  };
-}

@@ -35,11 +35,9 @@ export const TOOLTIPS = {
 
   "prompt.optimized": `הפרומפט שה${TERMS.optimizer} בנה: הנחיות משופרות ודוגמאות שנבחרו מתוך ה${TERMS.dataset}`,
   "prompt.demonstrations": `דוגמאות קלט-פלט שמוצגות ל${TERMS.model} כדי להראות לו את הפורמט והתשובה הרצויים`,
-  "prompt.instructions": `ההנחיות שה${TERMS.optimizer} כתב ל${TERMS.model}: מה המשימה ואיך כדאי לבצע אותה`,
 
   "module.choice": "איך להריץ את הפרומפט: Predict מבקש תשובה ישירה; CoT מוסיף שלב reasoning לפני התשובה",
   "optimizer.choice": `השיטה שמנסה לשפר את הפרומפט ולמצוא גרסה עם ${TERMS.score} גבוה יותר`,
-  "optimizer.gepa": `GEPA הוא ${TERMS.optimizer} שמשפר הוראות בעזרת ניתוח טעויות ורפלקציה`,
 
   "config.section.summary": `ה${TERMS.module}, ה${TERMS.optimizer}, והפרמטרים שנבחרו ל${TERMS.optimizationTypeRun} זו`,
   "config.section.models": `מודלי השפה שהוגדרו — ${TERMS.generationModelShort} לייצור תשובות, רפלקציה לניתוח שגיאות`,
@@ -85,10 +83,6 @@ export const TOOLTIPS = {
   "tagger.multiclass_categories": "הגדירו את הקטגוריות הזמינות לבחירה בזמן התיוג — לפחות שתיים",
   "tagger.freetext_instruction": "ההנחיה שתוצג מעל שדה הטקסט. הסבירו בקצרה מה צריך לכתוב",
 
-  "compare.detail": `השוואה מפורטת בין שתי ${TERMS.optimizationTypeRunPlural} — ציונים, הגדרות, ופרומפטים`,
-  "compare.scores_section": `ציוני המדידה לפני ואחרי ה${TERMS.optimization} לכל ${TERMS.optimizationTypeRun}`,
-  "compare.config_section": `השוואת ההגדרות שנבחרו לכל ${TERMS.optimizationTypeRun} — ${TERMS.model}, ${TERMS.optimizer}, ונתונים`,
-  "compare.per_example": "השוואה ברמת הדוגמה — לכל פריט בסט הבדיקה, מי עבר (ירוק) ומי נכשל (אדום)",
   "compare.winner_improvement": `אחוז ה${TERMS.scoreImprovement} של ה${TERMS.optimizationTypeRun} הזוכה — ההפרש בין ה${TERMS.optimizedScore} ל${TERMS.baselineScore}`,
   "compare.winner_runtime": `משך הזמן הכולל של ה${TERMS.optimizationTypeRun} הזוכה, מרגע השיגור ועד סיום ה${TERMS.optimization}`,
   "compare.winner_models": `זוג מודלי השפה של ה${TERMS.optimizationTypeRun} הזוכה — ${TERMS.generationModel} שמייצר פלט, ו${TERMS.reflectionModel} שמשפר את ההנחיות`,

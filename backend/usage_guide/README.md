@@ -60,7 +60,7 @@ All notebooks import from `skynet_client.py`:
 
 ## Datasets
 
-All five datasets are fully permissive — self-generated or distilled from public-domain factual sources. See [`data/SOURCES.md`](../../data/SOURCES.md) for licensing details and per-file provenance.
+All five datasets are fully permissive — self-generated or distilled from public-domain factual sources.
 
 | File | Rows | Task | Structure |
 |------|------|------|-----------|
