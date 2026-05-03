@@ -633,8 +633,8 @@ Current intentional TODO locations:
 - `frontend/.env.example` — frontend dev/runtime env template.
 - `frontend/.npmrc` — internal npm registry mirror config (commented out).
 - `backend/core/config.py` — model id, agent base URLs, embedder path.
-- `backend/core/api/directory_client.py` — placeholder for the LDAP-backed
-  Active Directory search client; activated by setting `AD_LDAP_*` env vars.
+- `backend/core/api/directory_client.py` — LDAP-backed Active Directory user
+  search; confirm `AD_LDAP_*` values against the target domain.
 
 If new external services are added, add them to this file, the Helm values,
 and `scripts/airgap_migrate.sh`. Then `todos` will pick them up

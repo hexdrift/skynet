@@ -13,6 +13,7 @@ from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
+    PAYLOAD_OVERVIEW_IS_PRIVATE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODULE_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
@@ -215,8 +216,10 @@ def test_submit_run_returns_201_with_optimization_id(monkeypatch: pytest.MonkeyP
     """A successful run submission returns 201 with a fresh optimization id."""
     store = _FakeJobStore()
     client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = _run_payload()
+    payload["is_private"] = True
 
-    resp = client.post("/run", json=_run_payload())
+    resp = client.post("/run", json=payload)
 
     assert resp.status_code == 201
     body = resp.json()
@@ -380,8 +383,10 @@ def test_submit_run_overview_contains_expected_keys(monkeypatch: pytest.MonkeyPa
     """The persisted run overview contains the expected canonical keys."""
     store = _FakeJobStore()
     client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = _run_payload()
+    payload["is_private"] = True
 
-    resp = client.post("/run", json=_run_payload())
+    resp = client.post("/run", json=payload)
 
     assert resp.status_code == 201
     opt_id = resp.json()["optimization_id"]
@@ -391,6 +396,7 @@ def test_submit_run_overview_contains_expected_keys(monkeypatch: pytest.MonkeyPa
     assert overview[PAYLOAD_OVERVIEW_USERNAME] == "alice"
     assert overview[PAYLOAD_OVERVIEW_MODULE_NAME] == "predict"
     assert overview[PAYLOAD_OVERVIEW_OPTIMIZER_NAME] == "gepa"
+    assert overview[PAYLOAD_OVERVIEW_IS_PRIVATE] is True
     assert PAYLOAD_OVERVIEW_MODEL_NAME in overview
 
 
@@ -400,6 +406,7 @@ def test_submit_grid_search_overview_contains_total_pairs(monkeypatch: pytest.Mo
     store = _FakeJobStore()
     client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
     payload = _grid_payload()
+    payload["is_private"] = True
     # 2 generation models × 1 reflection model = 2 pairs
     payload["generation_models"] = [{"name": "gpt-4o-mini"}, {"name": "gpt-4o"}]
     payload["reflection_models"] = [{"name": "gpt-4o"}]
@@ -412,6 +419,7 @@ def test_submit_grid_search_overview_contains_total_pairs(monkeypatch: pytest.Mo
 
     assert overview[PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE] == OPTIMIZATION_TYPE_GRID_SEARCH
     assert overview[PAYLOAD_OVERVIEW_TOTAL_PAIRS] == 2
+    assert overview[PAYLOAD_OVERVIEW_IS_PRIVATE] is True
 
 
 def test_submit_grid_search_skips_validation_when_service_lacks_method(
