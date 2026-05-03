@@ -1,21 +1,9 @@
 """Top-level package for the Skynet backend.
 
-Re-exports the small set of objects that callers outside ``core`` are expected
-to construct: the FastAPI app factory, the dependency-injection registry, the
-DSPy service gateway, the persistent job store, and the background worker.
+Subpackages are imported explicitly by callers (``core.api``,
+``core.registry``, ``core.service_gateway``, ``core.storage``,
+``core.worker``) so importing this package alone does not pull in the
+FastAPI app, the worker engine, or the service gateway. That keeps tools
+like Alembic — which only need ``core.storage.models`` — fast and free of
+unrelated heavy imports.
 """
-
-from .api import create_app
-from .registry import ServiceRegistry
-from .service_gateway import DspyService
-from .storage import RemoteDBJobStore
-from .worker.engine import BackgroundWorker, get_worker
-
-__all__ = [
-    "BackgroundWorker",
-    "DspyService",
-    "RemoteDBJobStore",
-    "ServiceRegistry",
-    "create_app",
-    "get_worker",
-]

@@ -374,7 +374,12 @@ kubectl -n skynet create secret generic skynet-backend-secrets \
 
 - The backend pod must reach `AD_LDAP_URL` (typically TCP/636 for
   `ldaps://`, TCP/389 for `ldap://`). Add the AD controller CIDR/port to
-  `networkPolicy.egressCidrs` in the generated values.
+  `networkPolicy.ldapEgress` in the generated values; that slot exists
+  precisely so the LDAP allowlist sits next to the LLM allowlist instead
+  of competing with the broader `egressCidrs` list. Set
+  `LDAP_EGRESS_CIDR` (and optionally `LDAP_EGRESS_PORT`, default `636`)
+  before running `scripts/airgap_migrate.sh values` to emit it
+  automatically.
 - For `ldaps://` over a private CA, mount the CA exactly as the OIDC
   setup does — see "Private TLS / CA Bundles". The same `SSL_CERT_FILE` /
   `REQUESTS_CA_BUNDLE` mount that the backend already uses for the LLM
@@ -464,14 +469,20 @@ kubectl -n skynet logs job/skynet-skynet-migrate
 ```
 
 If you are adopting a database that already has the baseline schema created
-outside Alembic, do a one-time stamp instead:
+outside Alembic, do a one-time stamp at the baseline revision so subsequent
+upgrades only apply the deltas:
 
 ```bash
 helm upgrade --install skynet deploy/helm/skynet \
   -n skynet --create-namespace \
   -f deploy/helm/skynet/values-airgap.generated.yaml \
-  --set-json 'migration.command=["alembic","stamp","0001"]'
+  --set-json 'migration.command=["alembic","stamp","342f7449be26"]'
 ```
+
+`342f7449be26` is the squashed baseline (all `jobs`, `job_*`, and quota
+tables). If your existing schema is fully current — including the
+`job_embeddings.is_private` column added in `a1b2c3d4e5f6` — stamp `head`
+instead. Run `alembic history` from `backend/` to see the chain.
 
 Then revert to `["alembic", "upgrade", "head"]` for the next upgrade.
 
