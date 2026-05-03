@@ -3,16 +3,16 @@ export interface ServerSentEvent {
   data: Record<string, unknown>;
 }
 
-export function normalizeStreamChunk(chunk: string): string {
+function normalizeStreamChunk(chunk: string): string {
   return chunk.replace(/\r\n/g, "\n");
 }
 
-export function dispatchNdjsonLine(raw: string, dispatch: (line: string) => void) {
+function dispatchNdjsonLine(raw: string, dispatch: (line: string) => void) {
   const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
   dispatch(line);
 }
 
-export function parseServerSentEvent(raw: string): ServerSentEvent | null {
+function parseServerSentEvent(raw: string): ServerSentEvent | null {
   let event = "message";
   const dataLines: string[] = [];
   for (const line of normalizeStreamChunk(raw).split("\n")) {

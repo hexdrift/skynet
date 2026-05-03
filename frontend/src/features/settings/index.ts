@@ -9,11 +9,5 @@ export {
   DEFAULT_AGENT_SHORTCUT,
   PREF_KEYS,
 } from "./lib/prefs";
-export type {
-  UserPrefs,
-  CodeAssistDefault,
-  SplitModeDefault,
-  TrustModeDefault,
-  AgentShortcut,
-} from "./lib/prefs";
+export type { AgentShortcut } from "./lib/prefs";
 export { formatShortcut, matchShortcut, recordShortcut } from "./lib/shortcuts";
