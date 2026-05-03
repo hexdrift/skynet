@@ -65,7 +65,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="close-button absolute top-4 end-4"
+            className="close-button absolute top-4 left-4"
           >
             <XIcon />
             <span className="sr-only">{msg("shared.dialog.close")}</span>
