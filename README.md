@@ -347,4 +347,4 @@ app = create_app(registry=registry)
 
 ## Client Usage Guide
 
-See `backend/usage_guide/README.md` for notebook examples and API client classes.
+See [`backend/usage_guide/index.html`](backend/usage_guide/index.html) for notebook examples and API client classes.

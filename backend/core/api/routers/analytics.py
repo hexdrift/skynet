@@ -1,4 +1,10 @@
-"""Routes for dashboard analytics and per-model / per-optimizer aggregation."""
+"""Routes for dashboard analytics and per-model / per-optimizer aggregation. [INTERNAL]
+
+All endpoints are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``). They power the in-app analytics dashboard
+only — a public dev re-implementing them client-side from /optimizations
+is more reliable than depending on the aggregation shapes we ship today.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# Air-gap operators: see AIRGAP.md for
+# Air-gap operators: see AIRGAP.html for
 # REGISTRY_PREFIX / DEBIAN_MIRROR / PIP_INDEX_URL / PIP_TRUSTED_HOST build-args.
 # With those set nothing in this file fetches from public mirrors.
 ARG REGISTRY_PREFIX=docker.io

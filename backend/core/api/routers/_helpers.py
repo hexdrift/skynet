@@ -29,6 +29,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
     PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
+    PAYLOAD_OVERVIEW_USERNAME,
 )
 from ...models import (
     GridSearchResponse,
@@ -37,6 +38,7 @@ from ...models import (
     PairResult,
     RunResponse,
 )
+from ..auth import AuthenticatedUser, is_admin
 from ..converters import (
     compute_elapsed,
     extract_estimated_remaining,
@@ -205,6 +207,63 @@ def compute_task_fingerprint(
     return hashlib.sha256(task_blob.encode("utf-8")).hexdigest()
 
 
+def job_owner(job_data: dict[str, Any]) -> str | None:
+    """Return the lowercased owner username for a job row, or ``None`` if absent.
+
+    Args:
+        job_data: Raw job row from the job store.
+
+    Returns:
+        The job owner's lowercased username, or ``None`` when neither the
+        payload nor the overview carry one.
+    """
+    payload = job_data.get("payload")
+    if isinstance(payload, dict):
+        raw = payload.get("username")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip().lower()
+    overview = parse_overview(job_data)
+    raw = overview.get(PAYLOAD_OVERVIEW_USERNAME)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip().lower()
+    return None
+
+
+def load_job_for_user(
+    job_store,
+    optimization_id: str,
+    user: AuthenticatedUser,
+) -> dict[str, Any]:
+    """Load a job row, enforcing ownership for non-admin callers.
+
+    Returns 404 (not 403) when a non-admin requests a job they do not own —
+    not leaking existence keeps unauthorized observers from confirming an
+    ID exists.
+
+    Args:
+        job_store: Job-store the row is read from.
+        optimization_id: Optimization id to load.
+        user: Authenticated caller.
+
+    Returns:
+        The raw job-row mapping.
+
+    Raises:
+        DomainError: 404 when the id is unknown or the caller is a
+            non-admin requesting somebody else's job.
+    """
+    try:
+        job_data = job_store.get_job(optimization_id)
+    except KeyError:
+        raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+    if is_admin(user):
+        return job_data
+    owner = job_owner(job_data)
+    if owner is None or owner != user.username:
+        raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id)
+    return job_data
+
+
 def enforce_user_quota(job_store, username: str) -> None:
     """Raise if ``username`` is at or over their job quota.
 
@@ -318,15 +377,21 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
     )
 
 
-def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dict]:
+def load_program(
+    job_store,
+    optimization_id: str,
+    user: AuthenticatedUser,
+) -> tuple[Any, RunResponse, dict]:
     """Load and cache an optimized program from a completed job.
 
     For grid-search jobs, loads the best pair's program automatically and
-    synthesizes a ``RunResponse`` from the grid result envelope.
+    synthesizes a ``RunResponse`` from the grid result envelope. Non-admin
+    callers requesting somebody else's job 404 — see :func:`load_job_for_user`.
 
     Args:
         job_store: The job store to read the job row from.
         optimization_id: The optimization to load.
+        user: Authenticated caller; non-admins are restricted to their own jobs.
 
     Returns:
         A ``(program, RunResponse, overview)`` tuple where ``program`` is the
@@ -334,17 +399,11 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
         and ``overview`` is the parsed payload-overview dict.
 
     Raises:
-        DomainError: 404 when the job is unknown; 409 when the job is not in
-            a success state, has no result, or lacks a serialized program artifact.
+        DomainError: 404 when the job is unknown or inaccessible; 409 when
+            the job is not in a success state, has no result, or lacks a
+            serialized program artifact.
     """
-    try:
-        job_data = job_store.get_job(optimization_id)
-    except KeyError:
-        raise DomainError(
-            "optimization.not_found",
-            status=404,
-            optimization_id=optimization_id,
-        ) from None
+    job_data = load_job_for_user(job_store, optimization_id, user)
 
     overview = parse_overview(job_data)
     optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
@@ -398,13 +457,22 @@ def load_program(job_store, optimization_id: str) -> tuple[Any, RunResponse, dic
     return _program_cache[optimization_id], result, overview
 
 
-def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple[Any, PairResult, dict]:
+def load_pair_program(
+    job_store,
+    optimization_id: str,
+    pair_index: int,
+    user: AuthenticatedUser,
+) -> tuple[Any, PairResult, dict]:
     """Load and cache the compiled program for a specific grid-search pair.
+
+    Non-admin callers requesting somebody else's job 404 — see
+    :func:`load_job_for_user`.
 
     Args:
         job_store: The job store to read the job row from.
         optimization_id: The grid-search optimization to load.
         pair_index: The index of the pair within the grid sweep.
+        user: Authenticated caller; non-admins are restricted to their own jobs.
 
     Returns:
         A ``(program, PairResult, overview)`` tuple where ``program`` is the
@@ -412,18 +480,12 @@ def load_pair_program(job_store, optimization_id: str, pair_index: int) -> tuple
         pair's outcome, and ``overview`` is the parsed payload-overview dict.
 
     Raises:
-        DomainError: 404 when the job or pair index is unknown; 409 when the
-            job is not a successful grid search, the pair failed, or the
-            program artifact is missing.
+        DomainError: 404 when the job or pair index is unknown or the
+            caller cannot access the job; 409 when the job is not a
+            successful grid search, the pair failed, or the program
+            artifact is missing.
     """
-    try:
-        job_data = job_store.get_job(optimization_id)
-    except KeyError:
-        raise DomainError(
-            "optimization.not_found",
-            status=404,
-            optimization_id=optimization_id,
-        ) from None
+    job_data = load_job_for_user(job_store, optimization_id, user)
 
     overview = parse_overview(job_data)
     optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)

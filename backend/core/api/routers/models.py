@@ -1,9 +1,13 @@
-"""Routes for model catalog, live discovery, and per-model probe ranking.
+"""Routes for model catalog, live discovery, and per-model probe ranking. [INTERNAL]
 
 ``GET /models`` returns the curated catalog. ``POST /models/discover`` probes
 an OpenAI-compatible endpoint for its available models. ``POST /models/probe``
 streams a per-model eval score so the UI can rank the catalog for a given
 task without the user having to guess.
+
+All endpoints are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``) — devs hitting ``/run`` directly pass model
+strings explicitly and don't need the catalog/discovery dance.
 """
 
 from __future__ import annotations

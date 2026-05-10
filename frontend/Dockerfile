@@ -1,4 +1,4 @@
-# On-prem mirrors / artifactory: see AIRGAP.md.
+# On-prem mirrors / artifactory: see AIRGAP.html.
 #
 # Build args:
 #   BASE_IMAGE   — node:22-alpine compatible image; override with internal mirror.

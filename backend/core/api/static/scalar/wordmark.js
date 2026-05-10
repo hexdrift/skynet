@@ -215,15 +215,6 @@
     return svg;
   }
 
-  function createBrandLogo() {
-    var img = document.createElement("img");
-    img.className = "skynet-brand-logo";
-    img.src = "/scalar-static/skynet_logo.svg";
-    img.alt = "";
-    img.setAttribute("aria-hidden", "true");
-    return img;
-  }
-
   function createToolbarBrand() {
     var btn = document.createElement("button");
     btn.type = "button";
@@ -234,7 +225,6 @@
     var icon = createSidebarIcon();
     icon.classList.add("skynet-toolbar-icon");
     btn.appendChild(icon);
-    btn.appendChild(createBrandLogo());
     btn.appendChild(createWordmark());
 
     btn.addEventListener("click", toggleSidebar);
@@ -249,7 +239,6 @@
     home.className = "skynet-sidebar-home";
     home.href = "#";
     home.setAttribute("aria-label", "Scroll to top");
-    home.appendChild(createBrandLogo());
     home.appendChild(createWordmark());
     home.addEventListener("click", function (e) {
       e.preventDefault();

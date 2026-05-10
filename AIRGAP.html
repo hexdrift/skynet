@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skynet · Air-Gap Deployment Guide</title>
+<style>
+  /* Palette and fonts mirror frontend/src/app/globals.css so this doc looks
+     consistent with the running app. Font names match the bundled
+     @fontsource-variable/heebo and @fontsource-variable/inter packages; if
+     those variable fonts aren't installed system-wide the fallback chain
+     resolves to system fonts (same chain the app uses). No CDN URLs. */
+  :root {
+    --background: #faf8f5;
+    --foreground: #1c1612;
+    --card: #ffffff;
+    --primary: #3d2e22;
+    --secondary: #f0ebe4;
+    --muted: #f0ebe4;
+    --muted-foreground: #8c7a6b;
+    --accent: #ede7dd;
+    --border: #ddd6cc;
+    --bg: #f5f1ec;
+    --surface-1: #ffffff;
+    --surface-3: #f0ebe4;
+    --text-1: #1c1612;
+    --text-2: #5c4d40;
+    --text-3: #a69585;
+    --blue: #7c6350;
+    --blue-light: rgba(124, 99, 80, 0.08);
+    --warning: #9a6a10;
+    --warning-dim: rgba(154, 106, 16, 0.1);
+    --warning-border: rgba(154, 106, 16, 0.35);
+    --shadow-sm: 0 1px 2px rgba(28, 22, 18, 0.05);
+    --shadow-card: 0 1px 3px rgba(28, 22, 18, 0.06), 0 1px 2px rgba(28, 22, 18, 0.04);
+    --radius: 0.5rem;
+    --code-bg: #1c1612;
+    --code-ink: #f0eadf;
+    --code-comment: #a69585;
+    --code-string: #c8a882;
+    --code-keyword: #d4b896;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+  body {
+    margin: 0;
+    font-family: "Heebo Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-1);
+    background: var(--bg);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    max-width: 1180px;
+    margin: 0 auto;
+    gap: 3rem;
+    padding: 2.5rem 1.5rem;
+  }
+  aside.toc {
+    position: sticky;
+    top: 1.5rem;
+    align-self: start;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    font-size: 13px;
+  }
+  aside.toc .toc-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted-foreground);
+    margin: 0 0 0.75rem;
+  }
+  aside.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+  aside.toc li { counter-increment: toc; margin: 0; }
+  aside.toc a {
+    display: block;
+    padding: 0.4rem 0.6rem 0.4rem 2rem;
+    color: var(--text-2);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    position: relative;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    transition: color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                background 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  aside.toc a::before {
+    content: counter(toc, decimal-leading-zero);
+    position: absolute;
+    left: 0.6rem;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  aside.toc a:hover { color: var(--text-1); background: var(--surface-1); }
+  aside.toc a.active {
+    color: var(--primary);
+    border-left-color: var(--blue);
+    background: var(--accent);
+  }
+  main { min-width: 0; }
+  header.doc-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  header.doc-header .eyebrow {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    margin: 0 0 0.5rem;
+  }
+  h1, h2, h3 {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-weight: 700;
+  }
+  header.doc-header h1 {
+    font-size: 2rem;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, #1c1612 0%, #3d2e22 50%, #7c6350 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  header.doc-header .lede {
+    color: var(--text-2);
+    margin: 0;
+    max-width: 60ch;
+  }
+  section { margin-bottom: 3rem; }
+  section > h2 {
+    font-size: 1.4rem;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.005em;
+  }
+  section > h2 .anchor {
+    color: var(--border);
+    text-decoration: none;
+    margin-right: 0.5rem;
+    font-weight: normal;
+  }
+  section > h2 .anchor:hover { color: var(--blue); }
+  section > .sub { color: var(--text-2); margin: 0 0 1.25rem; max-width: 60ch; }
+  h3 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
+  h4 {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 0.85rem;
+    margin: 1.25rem 0 0.4rem;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  p { margin: 0 0 0.85rem; }
+  ul, ol { margin: 0 0 0.85rem; padding-left: 1.4rem; }
+  li { margin: 0.2rem 0; }
+  a { color: var(--primary); }
+  a:hover { color: var(--blue); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0 1.25rem;
+    font-size: 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface-3);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-1);
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--accent); }
+  td code, th code {
+    font-size: 12.5px;
+    background: var(--blue-light);
+    color: var(--blue);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.95rem 1.1rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0.5rem 0 1.25rem;
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-ligatures: none;
+  }
+  pre .c { color: var(--code-comment); font-style: italic; }
+  pre .s { color: var(--code-string); }
+  pre .k { color: var(--code-keyword); }
+  code:not(pre code) {
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--surface-3);
+    color: var(--primary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-variant-ligatures: none;
+  }
+  .callout {
+    border-left: 3px solid var(--warning);
+    background: var(--warning-dim);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 14px;
+  }
+  .callout .label {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--warning);
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .arch {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin: 1rem 0 1.5rem;
+    box-shadow: var(--shadow-card);
+  }
+  .arch svg { width: 100%; height: auto; max-height: 380px; }
+  .arch figcaption {
+    font-size: 12px;
+    color: var(--text-2);
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .flow .step {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .flow .step:hover {
+    border-color: var(--blue);
+    box-shadow: var(--shadow-card);
+  }
+  .flow .step .num {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: 0.05em;
+  }
+  .flow .step .label {
+    font-size: 13px;
+    margin: 0.15rem 0 0.25rem;
+    line-height: 1.3;
+    color: var(--text-1);
+  }
+  .flow .step code {
+    font-size: 11.5px;
+    color: var(--text-2);
+    background: none;
+    padding: 0;
+  }
+  .flow .step.manual { border-style: dashed; }
+  .flow .step.manual::after {
+    content: "manual";
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-2);
+    background: var(--bg);
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2.5rem 0;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(200, 168, 130, 0.35); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(200, 168, 130, 0.6); }
+  ::selection { background: rgba(200, 168, 130, 0.25); }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 1.5rem; padding: 1.5rem 1rem; }
+    aside.toc {
+      position: static;
+      max-height: none;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="toc">
+  <p class="toc-title">Contents</p>
+  <ol>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#migration-plan">Migration Plan</a></li>
+    <li><a href="#operator-script">Operator Script</a></li>
+    <li><a href="#pre-transfer">Pre-Transfer Checklist</a></li>
+    <li><a href="#build-images">Build Images</a></li>
+    <li><a href="#secrets">Kubernetes Secrets</a></li>
+    <li><a href="#oidc">ADFS / OIDC Setup</a></li>
+    <li><a href="#ldap">LDAP / AD User Search</a></li>
+    <li><a href="#tls">TLS Certificates</a></li>
+    <li><a href="#db">Database Migration</a></li>
+    <li><a href="#egress">Runtime Egress</a></li>
+    <li><a href="#ca">Private TLS / CA Bundles</a></li>
+    <li><a href="#smoke">Smoke Test</a></li>
+    <li><a href="#quotas">Live User Quotas</a></li>
+    <li><a href="#clean">What Is Already Air-Gap Clean</a></li>
+    <li><a href="#operator-responsibilities">Operator Responsibilities</a></li>
+    <li><a href="#audit">Audit TODOs</a></li>
+  </ol>
+</aside>
+
+<main>
+
+<header class="doc-header">
+  <p class="eyebrow">Skynet · Operator Guide</p>
+  <h1>Air-Gap Deployment Guide</h1>
+  <p class="lede">
+    Operator path for moving Skynet into an internet-isolated environment when you already have the required internal mirrors, images, secrets, IdP, LLM gateway, CA bundle, and Postgres available.
+  </p>
+</header>
+
+<section id="overview">
+  <h2><a class="anchor" href="#overview">§</a>Overview</h2>
+  <p>Skynet runs as two pods (frontend + backend) plus an in-cluster migration Job, fronted by the OpenShift router. Every external dependency below resolves inside the air gap — your job is to point the chart at the right internal hosts.</p>
+
+  <figure class="arch">
+    <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Skynet air-gap architecture">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#5c4d40"/>
+        </marker>
+        <style>
+          .box { fill: #ffffff; stroke: #3d2e22; stroke-width: 1.5; }
+          .box-int { fill: #f0ebe4; stroke: #7c6350; stroke-width: 1.2; stroke-dasharray: 4 3; }
+          .lbl { font: 600 12px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
+          .sub { font: 11px "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
+          .grp { font: 700 10px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #3d2e22; letter-spacing: 0.08em; }
+          .edge { stroke: #5c4d40; stroke-width: 1.2; fill: none; marker-end: url(#arrow); }
+          .edge-soft { stroke: #a69585; stroke-width: 1; fill: none; stroke-dasharray: 3 3; marker-end: url(#arrow); }
+        </style>
+      </defs>
+
+      <text x="20" y="22" class="grp">CLUSTER</text>
+      <rect x="15" y="30" width="320" height="270" rx="8" fill="none" stroke="#ddd6cc" stroke-dasharray="3 3"/>
+
+      <rect class="box" x="40" y="60" width="130" height="60" rx="6"/>
+      <text x="105" y="85" class="lbl" text-anchor="middle">Frontend</text>
+      <text x="105" y="102" class="sub" text-anchor="middle">Next.js · NextAuth</text>
+
+      <rect class="box" x="180" y="60" width="130" height="60" rx="6"/>
+      <text x="245" y="85" class="lbl" text-anchor="middle">Backend</text>
+      <text x="245" y="102" class="sub" text-anchor="middle">FastAPI · workers</text>
+
+      <rect class="box" x="40" y="160" width="130" height="50" rx="6"/>
+      <text x="105" y="183" class="lbl" text-anchor="middle">Migration Job</text>
+      <text x="105" y="198" class="sub" text-anchor="middle">alembic upgrade</text>
+
+      <rect class="box" x="180" y="160" width="130" height="50" rx="6"/>
+      <text x="245" y="183" class="lbl" text-anchor="middle">Route / Ingress</text>
+      <text x="245" y="198" class="sub" text-anchor="middle">OpenShift router</text>
+
+      <rect class="box" x="40" y="240" width="270" height="50" rx="6"/>
+      <text x="175" y="262" class="lbl" text-anchor="middle">Helm chart · NetworkPolicy · Secrets</text>
+      <text x="175" y="277" class="sub" text-anchor="middle">deploy/helm/skynet</text>
+
+      <text x="370" y="22" class="grp">INTERNAL DEPENDENCIES</text>
+      <rect x="365" y="30" width="340" height="270" rx="8" fill="none" stroke="#ddd6cc" stroke-dasharray="3 3"/>
+
+      <rect class="box-int" x="385" y="50" width="130" height="44" rx="6"/>
+      <text x="450" y="68" class="lbl" text-anchor="middle">ADFS / OIDC</text>
+      <text x="450" y="83" class="sub" text-anchor="middle">SSO issuer</text>
+
+      <rect class="box-int" x="535" y="50" width="150" height="44" rx="6"/>
+      <text x="610" y="68" class="lbl" text-anchor="middle">LLM Gateway</text>
+      <text x="610" y="83" class="sub" text-anchor="middle">OpenAI-compatible</text>
+
+      <rect class="box-int" x="385" y="110" width="130" height="44" rx="6"/>
+      <text x="450" y="128" class="lbl" text-anchor="middle">Postgres</text>
+      <text x="450" y="143" class="sub" text-anchor="middle">pgvector</text>
+
+      <rect class="box-int" x="535" y="110" width="150" height="44" rx="6"/>
+      <text x="610" y="128" class="lbl" text-anchor="middle">AD / LDAP</text>
+      <text x="610" y="143" class="sub" text-anchor="middle">user search (optional)</text>
+
+      <rect class="box-int" x="385" y="170" width="130" height="44" rx="6"/>
+      <text x="450" y="188" class="lbl" text-anchor="middle">Notifications</text>
+      <text x="450" y="203" class="sub" text-anchor="middle">webhook (optional)</text>
+
+      <rect class="box-int" x="535" y="170" width="150" height="44" rx="6"/>
+      <text x="610" y="188" class="lbl" text-anchor="middle">Artifactory</text>
+      <text x="610" y="203" class="sub" text-anchor="middle">images · pip · npm · deb</text>
+
+      <rect class="box-int" x="385" y="230" width="300" height="50" rx="6"/>
+      <text x="535" y="252" class="lbl" text-anchor="middle">Internal CA bundle</text>
+      <text x="535" y="267" class="sub" text-anchor="middle">mounted as Secret · NODE_EXTRA_CA_CERTS · REQUESTS_CA_BUNDLE</text>
+
+      <path class="edge" d="M170 80 L380 70"/>
+      <path class="edge" d="M310 80 L530 70"/>
+      <path class="edge" d="M310 100 L380 130"/>
+      <path class="edge" d="M170 100 L380 130"/>
+      <path class="edge-soft" d="M310 110 L530 135"/>
+      <path class="edge-soft" d="M310 115 L380 190"/>
+      <path class="edge-soft" d="M170 250 L380 215"/>
+    </svg>
+    <figcaption>Solid arrows: required runtime egress. Dashed arrows: optional.</figcaption>
+  </figure>
+</section>
+
+<section id="migration-plan">
+  <h2><a class="anchor" href="#migration-plan">§</a>Migration Plan</h2>
+  <p>The flow assumes you cloned the repo onto a host inside the air gap and have an internal Artifactory + OpenShift cluster ready. Each step has a matching <code>scripts/airgap_migrate.sh</code> command — none of them need internet.</p>
+
+  <div class="flow">
+    <div class="step"><span class="num">STEP 01</span><div class="label">Clone repo + LFS pull</div><code>git lfs install &amp;&amp; git lfs pull</code></div>
+    <div class="step manual"><span class="num">STEP 02</span><div class="label">List URLs / secrets / CIDRs to change</div><code>airgap_migrate.sh todos</code></div>
+    <div class="step manual"><span class="num">STEP 03</span><div class="label">Edit emitted lines</div><code>(editor)</code></div>
+    <div class="step"><span class="num">STEP 04</span><div class="label">Verify lockfiles + alembic</div><code>airgap_migrate.sh check</code></div>
+    <div class="step"><span class="num">STEP 05</span><div class="label">Offline alembic dump</div><code>airgap_migrate.sh validate-migrations</code></div>
+    <div class="step"><span class="num">STEP 06</span><div class="label">Build BE + FE images</div><code>airgap_migrate.sh build-images</code></div>
+    <div class="step"><span class="num">STEP 07</span><div class="label">Push to Artifactory</div><code>airgap_migrate.sh push-images</code></div>
+    <div class="step"><span class="num">STEP 08</span><div class="label">Generate Helm values</div><code>airgap_migrate.sh values</code></div>
+    <div class="step"><span class="num">STEP 09</span><div class="label">Lint + render chart</div><code>airgap_migrate.sh render</code></div>
+    <div class="step"><span class="num">STEP 10</span><div class="label">Install / upgrade</div><code>airgap_migrate.sh install</code></div>
+    <div class="step"><span class="num">STEP 11</span><div class="label">Smoke + ADFS callback</div><code>airgap_migrate.sh status</code></div>
+  </div>
+
+  <p><code>scripts/airgap_migrate.sh all</code> runs steps 4, 5, 8, 9, 10, 11 in sequence once you have your env vars set. Step 2 stays manual because edits don't script themselves; step 3 is yours.</p>
+</section>
+
+<section id="operator-script">
+  <h2><a class="anchor" href="#operator-script">§</a>Operator Script</h2>
+<pre><span class="c"># guided values setup</span>
+scripts/airgap_migrate.sh configure
+<span class="c"># every TODO marker, in one list</span>
+scripts/airgap_migrate.sh todos
+<span class="c"># repo artefacts present</span>
+scripts/airgap_migrate.sh check
+<span class="c"># offline alembic --sql, no DB</span>
+scripts/airgap_migrate.sh validate-migrations
+<span class="c"># docker build BE + FE</span>
+scripts/airgap_migrate.sh build-images
+<span class="c"># docker push BE + FE</span>
+scripts/airgap_migrate.sh push-images
+<span class="c"># write values-airgap.generated.yaml</span>
+scripts/airgap_migrate.sh values
+<span class="c"># helm lint + helm template</span>
+scripts/airgap_migrate.sh render
+<span class="c"># helm upgrade --install</span>
+scripts/airgap_migrate.sh install
+<span class="c"># rollout + smoke commands</span>
+scripts/airgap_migrate.sh status
+<span class="c"># check → ... → status</span>
+scripts/airgap_migrate.sh all</pre>
+
+  <p>Start with <code>configure</code> if you want a guided setup. It asks for registry, image tags, hosts, IdP, database, optional internal CA Secret, notifications webhook, and egress CIDRs, then writes the Helm values file and offers to run <code>check</code>, <code>render</code>, and <code>install</code>.</p>
+
+  <p>Most installs should use environment overrides instead of editing the script:</p>
+
+<pre>RELEASE=skynet \
+NAMESPACE=skynet \
+REGISTRY=artifactory.example.com/skynet \
+IMAGE_TAG=2026.04.30 \
+PULL_SECRET=artifactory-pull-secret \
+EXTERNAL_DB_HOST=pgvector.internal \
+EXTERNAL_DB_SECRET=skynet-db-password \
+LLM_BASE_URL=https://llm-gateway.internal/v1 \
+OIDC_ISSUER=https://idp.internal/realms/skynet \
+OIDC_CLIENT_ID=skynet \
+OIDC_SCOPE=<span class="s">"openid profile email groups"</span> \
+AUTH_GROUP_CLAIM=groups \
+AUTH_ADMIN_GROUPS=Skynet-Admins \
+AUTH_ADMINS=break-glass-admin@example.com \
+FRONTEND_HOST=skynet.apps.internal \
+BACKEND_HOST=skynet-api.apps.internal \
+LLM_EGRESS_CIDR=10.0.5.0/24 \
+IDP_EGRESS_CIDR=10.0.6.0/24 \
+INTERNAL_CA_SECRET=skynet-internal-ca \
+COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet \
+COMMS_EGRESS_CIDR=10.0.7.0/24 \
+scripts/airgap_migrate.sh all</pre>
+
+  <p><code>values</code> writes <code>deploy/helm/skynet/values-airgap.generated.yaml</code>. That generated file intentionally contains <code>TODO: On-premise</code> comments. Review them before <code>install</code>.</p>
+</section>
+
+<section id="pre-transfer">
+  <h2><a class="anchor" href="#pre-transfer">§</a>Pre-Transfer Checklist</h2>
+  <p>Run this before moving the repo or release bundle into the air gap:</p>
+<pre>git lfs install
+git lfs pull
+scripts/airgap_migrate.sh check
+scripts/airgap_migrate.sh validate-migrations
+scripts/airgap_migrate.sh todos          <span class="c"># every URL/secret/CIDR you must change</span></pre>
+
+  <h4>Confirm</h4>
+  <ul>
+    <li><code>backend/vendor/models/jina-code-embeddings-0.5b/model.safetensors</code> is a real file, not a Git LFS pointer.</li>
+    <li><code>frontend/package-lock.json</code> is present.</li>
+    <li><code>backend/uv.lock</code> is present.</li>
+    <li><code>backend/alembic/versions/</code> is present.</li>
+    <li><code>migration.sql</code> (from <code>validate-migrations</code>) reflects the schema you expect.</li>
+    <li>Backend, frontend, and pgvector images are available in the internal registry you will reference from Helm.</li>
+    <li>If your IdP, LLM gateway, Postgres, or webhook uses a private CA, a Kubernetes Secret containing the CA bundle is ready.</li>
+  </ul>
+
+  <h4>Recommended release bundle contents</h4>
+  <ul>
+    <li>Git checkout or source archive.</li>
+    <li><code>backend</code> image tar or internal registry image.</li>
+    <li><code>frontend</code> image tar or internal registry image.</li>
+    <li><code>pgvector/pgvector:pg16</code> mirror, unless using an external managed DB.</li>
+    <li>Helm chart under <code>deploy/helm/skynet</code>.</li>
+    <li>Secrets material handled by your secret-management process, not committed into the bundle.</li>
+  </ul>
+</section>
+
+<section id="build-images">
+  <h2><a class="anchor" href="#build-images">§</a>Build Images Against Internal Mirrors</h2>
+  <p>Replace <code>artifactory.example.com</code> with your actual registry host. The examples assume your registry exposes Docker Hub, Debian, PyPI, and npm mirrors.</p>
+
+  <p>The script wraps the two <code>docker build</code> invocations into one command:</p>
+<pre>REGISTRY=artifactory.example.com/skynet \
+IMAGE_TAG=2026.04.30 \
+REGISTRY_PREFIX=artifactory.example.com/docker-remote \
+DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
+PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
+PIP_TRUSTED_HOST=artifactory.example.com \
+BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
+NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
+scripts/airgap_migrate.sh build-images
+
+<span class="c"># Then push:</span>
+scripts/airgap_migrate.sh push-images</pre>
+
+  <p>Set <code>DOCKER=podman</code> to run on Podman / OpenShift Buildah-compatible hosts.</p>
+
+  <p>The equivalent raw commands (if you prefer to run them directly):</p>
+<pre>docker build backend \
+  -t artifactory.example.com/skynet/skynet/backend:2026.04.30 \
+  --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote \
+  --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
+  --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
+  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
+
+docker build frontend \
+  -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 \
+  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
+  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
+
+docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
+docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</pre>
+
+  <p>The frontend <code>package.json</code> pins <code>next build --webpack</code> so the production build never silently switches to Turbopack. Webpack is reproducible inside restrictive sandboxes (Turbopack spawns helper processes that bind a local port and trip restricted-egress / sandboxed CI environments).</p>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>If your registry does not expose Docker Hub mirrors as <code>docker-remote/python</code>, <code>docker-remote/node</code>, and <code>pgvector/pgvector</code>, document the exact internal image names in your site runbook.</p>
+  </div>
+
+  <h4>Mirror notes</h4>
+  <ul>
+    <li><strong>Container base images:</strong> pass <code>REGISTRY_PREFIX</code> for backend and <code>BASE_IMAGE</code> for frontend. You can also pre-bake internal <code>skynet/python-base</code> and <code>skynet/node-base</code> images.</li>
+    <li><strong>Debian packages:</strong> pass <code>DEBIAN_MIRROR</code>, or pre-bake <code>build-essential</code> and <code>curl</code> into the Python base image.</li>
+    <li><strong>Python packages:</strong> pass <code>PIP_INDEX_URL</code> and <code>PIP_TRUSTED_HOST</code>.</li>
+    <li><strong>npm packages:</strong> pass <code>NPM_REGISTRY</code>; the Dockerfile sets <code>replace-registry-host=always</code> so lockfile tarball hosts are rewritten to the mirror.</li>
+    <li><strong>Helm images:</strong> set <code>global.imageRegistry</code> and <code>global.imagePullSecrets</code> in the generated values file. That prefixes backend, frontend, and <code>pgvector/pgvector</code> images.</li>
+  </ul>
+</section>
+
+<section id="secrets">
+  <h2><a class="anchor" href="#secrets">§</a>Required Kubernetes Secrets</h2>
+  <p>Create these before running the Helm install. Names match the generated values file; change them there if your platform uses different names.</p>
+<pre>export BACKEND_AUTH_SECRET=<span class="s">"$(openssl rand -base64 32)"</span>
+
+kubectl -n skynet create secret docker-registry artifactory-pull-secret \
+  --docker-server=artifactory.example.com \
+  --docker-username=<span class="s">"$REGISTRY_USER"</span> \
+  --docker-password=<span class="s">"$REGISTRY_PASSWORD"</span>
+
+kubectl -n skynet create secret generic skynet-db-password \
+  --from-literal=password=<span class="s">"$POSTGRES_PASSWORD"</span>
+
+kubectl -n skynet create secret generic skynet-backend-secrets \
+  --from-literal=OPENAI_API_KEY=<span class="s">"$INTERNAL_LLM_API_KEY"</span> \
+  --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$BACKEND_AUTH_SECRET"</span>
+  <span class="c"># Append --from-literal=AD_LDAP_BIND_PASSWORD="$AD_LDAP_BIND_PASSWORD"</span>
+  <span class="c"># when enabling LDAP autocomplete (see "Internal LDAP / Active Directory</span>
+  <span class="c"># User Search").</span>
+
+kubectl -n skynet create secret generic skynet-frontend-secrets \
+  --from-literal=AUTH_SECRET=<span class="s">"$(openssl rand -base64 32)"</span> \
+  --from-literal=AUTH_SSO_CLIENT_SECRET=<span class="s">"$OIDC_CLIENT_SECRET"</span> \
+  --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$BACKEND_AUTH_SECRET"</span>
+
+<span class="c"># Only needed when internal endpoints use a private CA.</span>
+kubectl -n skynet create secret generic skynet-internal-ca \
+  --from-file=ca-bundle.pem=./internal-ca-bundle.pem</pre>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>Replace inline <code>kubectl create secret</code> commands with your secret-store flow if you use ExternalSecrets, SealedSecrets, Vault, or OpenShift GitOps.</p>
+  </div>
+</section>
+
+<section id="oidc">
+  <h2><a class="anchor" href="#oidc">§</a>Internal ADFS / OIDC Setup</h2>
+  <p>The frontend uses Auth.js/NextAuth with a generic OIDC provider whose id is <code>adfs</code>. In production, configure ADFS and set these frontend env vars through the generated Helm values and <code>skynet-frontend-secrets</code>:</p>
+<pre>frontend:
+  env:
+    AUTH_SSO_ISSUER: <span class="s">"https://adfs.example.internal/adfs"</span>
+    AUTH_SSO_CLIENT_ID: <span class="s">"skynet"</span>
+    AUTH_SSO_SCOPE: <span class="s">"openid profile email groups"</span>
+    AUTH_GROUP_CLAIM: <span class="s">"groups"</span>
+    AUTH_ADMIN_GROUPS: <span class="s">"Skynet-Admins"</span>
+    AUTH_ADMINS: <span class="s">"break-glass-admin@example.internal"</span>
+  secrets:
+    existingSecret: <span class="s">"skynet-frontend-secrets"</span>
+
+backend:
+  env:
+    ADMIN_GROUPS: <span class="s">"Skynet-Admins"</span>
+    ADMIN_USERNAMES: <span class="s">"break-glass-admin@example.internal"</span>
+  secrets:
+    existingSecret: <span class="s">"skynet-backend-secrets"</span></pre>
+
+  <p>The Secret must contain:</p>
+<pre>AUTH_SECRET
+AUTH_SSO_CLIENT_SECRET
+BACKEND_AUTH_SECRET</pre>
+
+  <p><code>BACKEND_AUTH_SECRET</code> must be the same value in the backend and frontend Secrets. The frontend signs short-lived backend bearer tokens with it, and the backend verifies the signature, issuer, audience, and expiry before allowing admin API calls.</p>
+
+  <h4>Register Skynet in ADFS</h4>
+  <table>
+    <thead><tr><th style="width:25%">Field</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Redirect URI</td><td><code>https://&lt;frontend-host&gt;/api/auth/callback/adfs</code></td></tr>
+      <tr><td>Issuer</td><td><code>https://&lt;adfs-host&gt;/adfs</code></td></tr>
+      <tr><td>Client authentication</td><td>Confidential client with client secret</td></tr>
+      <tr><td>Scopes</td><td><code>openid profile email groups</code> if your ADFS release supports group scope</td></tr>
+      <tr><td>Claims</td><td>At least one stable user identifier. The app accepts <code>name</code>, <code>unique_name</code>, <code>upn</code>, <code>preferred_username</code>, <code>email</code>, or <code>sub</code></td></tr>
+      <tr><td>Groups</td><td>Emit the admin group in the claim named by <code>AUTH_GROUP_CLAIM</code> (default <code>groups</code>). Put that same group name in frontend <code>AUTH_ADMIN_GROUPS</code> and backend <code>ADMIN_GROUPS</code>. Use <code>AUTH_ADMINS</code> / <code>ADMIN_USERNAMES</code> only as a break-glass path for named operators.</td></tr>
+    </tbody>
+  </table>
+
+  <p>For the default generated host, the callback is:</p>
+<pre>https://skynet.apps.internal/api/auth/callback/adfs</pre>
+
+  <p>If ADFS uses an internal/private CA, create <code>skynet-internal-ca</code> and set <code>INTERNAL_CA_SECRET</code> when generating values. This mounts the CA and sets <code>NODE_EXTRA_CA_CERTS</code>, which is required for the server-side OIDC discovery request to <code>/.well-known/openid-configuration</code>.</p>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>Confirm the exact ADFS issuer URL. Some ADFS deployments publish OIDC metadata at <code>https://host/adfs/.well-known/openid-configuration</code>; the issuer value should be the issuer advertised by that metadata document, usually <code>https://host/adfs</code>.</p>
+  </div>
+</section>
+
+<section id="ldap">
+  <h2><a class="anchor" href="#ldap">§</a>Internal LDAP / Active Directory User Search</h2>
+  <p>ADFS handles <strong>sign-in</strong>. For the admin "set a quota for any network user" flow, the backend also needs to <strong>search</strong> Active Directory so admins can type a fragment and pick a real domain user from autocomplete.</p>
+
+  <p>The lookup goes through <code>backend/core/api/directory_client.py</code>. When LDAP is not configured the backend uses <code>NullDirectoryClient</code>: the autocomplete combobox falls back to usernames already seen in the local job + override tables, which is enough for any user who has signed in or has an existing override. Admins can still type a brand-new username manually and save a quota for them — the field accepts free text. LDAP only adds <strong>discovery</strong> of users who have not yet touched the system.</p>
+
+  <p>The Python client uses the <code>ldap3</code> package (already in <code>backend/pyproject.toml</code> and <code>backend/uv.lock</code>, so it ships in the airgap install bundle without extra wheels).</p>
+
+  <h3>Backend env vars</h3>
+  <p>Set these in the generated Helm values under <code>backend.env</code> (with the bind password sourced from <code>skynet-backend-secrets</code>):</p>
+<pre>backend:
+  env:
+    AD_LDAP_URL: <span class="s">"ldaps://dc1.example.internal:636"</span>
+    AD_LDAP_BIND_DN: <span class="s">"CN=skynet-svc,OU=Service Accounts,DC=example,DC=internal"</span>
+    AD_LDAP_SEARCH_BASE: <span class="s">"DC=example,DC=internal"</span>
+    <span class="c"># Optional. Defaults shown match standard AD.</span>
+    AD_LDAP_USER_FILTER: <span class="s">"(&amp;(objectCategory=person)(objectClass=user))"</span>
+    AD_LDAP_USERNAME_ATTR: <span class="s">"sAMAccountName"</span>
+  secrets:
+    existingSecret: <span class="s">"skynet-backend-secrets"</span>   <span class="c"># must also contain AD_LDAP_BIND_PASSWORD</span></pre>
+
+  <table>
+    <thead><tr><th>Variable</th><th>Required</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>AD_LDAP_URL</code></td><td>yes</td><td><code>ldaps://host:636</code> recommended. <code>ldap://</code> only acceptable inside a trusted segment.</td></tr>
+      <tr><td><code>AD_LDAP_BIND_DN</code></td><td>yes</td><td>Service-account distinguished name. Read-only is sufficient.</td></tr>
+      <tr><td><code>AD_LDAP_BIND_PASSWORD</code></td><td>yes (Secret)</td><td>Lives in <code>skynet-backend-secrets</code>, never in values files or env literals.</td></tr>
+      <tr><td><code>AD_LDAP_SEARCH_BASE</code></td><td>yes</td><td>Subtree to search; can be a specific OU to scope the lookup.</td></tr>
+      <tr><td><code>AD_LDAP_USER_FILTER</code></td><td>no</td><td>LDAP filter ANDed with the username substring match.</td></tr>
+      <tr><td><code>AD_LDAP_USERNAME_ATTR</code></td><td>no</td><td>Defaults to <code>sAMAccountName</code>. Use <code>userPrincipalName</code> if your AUTH_USERNAME_CLAIM is UPN-based.</td></tr>
+    </tbody>
+  </table>
+
+  <p>When <strong>any</strong> of the required vars is unset, the backend silently keeps <code>NullDirectoryClient</code> and admins still see DB-backed suggestions.</p>
+
+  <p>Update <code>skynet-backend-secrets</code> to include the bind password (see <a href="#secrets">Required Kubernetes Secrets</a>):</p>
+<pre>kubectl -n skynet create secret generic skynet-backend-secrets \
+  --from-literal=OPENAI_API_KEY=<span class="s">"$INTERNAL_LLM_API_KEY"</span> \
+  --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$BACKEND_AUTH_SECRET"</span> \
+  --from-literal=AD_LDAP_BIND_PASSWORD=<span class="s">"$AD_LDAP_BIND_PASSWORD"</span></pre>
+
+  <h3>Network + TLS</h3>
+  <ul>
+    <li>The backend pod must reach <code>AD_LDAP_URL</code> (typically TCP/636 for <code>ldaps://</code>, TCP/389 for <code>ldap://</code>). Add the AD controller CIDR/port to <code>networkPolicy.ldapEgress</code> in the generated values; that slot exists precisely so the LDAP allowlist sits next to the LLM allowlist instead of competing with the broader <code>egressCidrs</code> list. Set <code>LDAP_EGRESS_CIDR</code> (and optionally <code>LDAP_EGRESS_PORT</code>, default <code>636</code>) before running <code>scripts/airgap_migrate.sh values</code> to emit it automatically.</li>
+    <li>For <code>ldaps://</code> over a private CA, mount the CA exactly as the OIDC setup does — see <a href="#ca">Private TLS / CA Bundles</a>. The same <code>SSL_CERT_FILE</code> / <code>REQUESTS_CA_BUNDLE</code> mount that the backend already uses for the LLM gateway and Postgres covers <code>ldap3</code> as well, since <code>ldap3</code> honours the Python TLS trust store.</li>
+  </ul>
+
+  <h3>Username consistency</h3>
+  <p>Quotas, audit events, and admin lookups all key on the <strong>lowercased</strong> username string. Whatever attribute you set as <code>AD_LDAP_USERNAME_ATTR</code> should match the value the frontend stores in the session — that is the claim selected by <code>AUTH_USERNAME_CLAIM</code> (or its fallback chain <code>name</code> → <code>unique_name</code> → <code>upn</code> → <code>preferred_username</code> → <code>email</code> → <code>sub</code>). If you use <code>userPrincipalName</code> in ADFS claims, set <code>AD_LDAP_USERNAME_ATTR=userPrincipalName</code> so autocomplete returns the same string the user signs in as.</p>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>Confirm the AD search base, the service-account DN, and the username attribute that matches your ADFS <code>AUTH_USERNAME_CLAIM</code>. Decide whether to scope <code>AD_LDAP_SEARCH_BASE</code> to a specific OU, and whether your security policy permits <code>ldap://</code> or requires <code>ldaps://</code> with the internal CA.</p>
+  </div>
+</section>
+
+<section id="tls">
+  <h2><a class="anchor" href="#tls">§</a>TLS Certificates</h2>
+  <p>By default the chart uses the OpenShift router's wildcard certificate. To serve a custom certificate:</p>
+<pre>helm upgrade --install skynet deploy/helm/skynet \
+  -n skynet --create-namespace \
+  -f deploy/helm/skynet/values-airgap.generated.yaml \
+  --set-file openshift.routes.frontend.tls.certificate=./tls/frontend.crt \
+  --set-file openshift.routes.frontend.tls.key=./tls/frontend.key \
+  --set-file openshift.routes.frontend.tls.caCertificate=./tls/ca-bundle.crt</pre>
+  <p>For <code>reencrypt</code> termination, also set <code>openshift.routes.frontend.tls.destinationCACertificate</code>.</p>
+</section>
+
+<section id="db">
+  <h2><a class="anchor" href="#db">§</a>Database Migration</h2>
+
+  <h3>Offline schema review (no DB required)</h3>
+  <p>Before pushing the backend image, you can dump the exact SQL the in-cluster migration Job will execute. This is the path to use when your build host has no Postgres reachable (e.g., sandboxed CI):</p>
+<pre>scripts/airgap_migrate.sh validate-migrations
+<span class="c"># wrote offline migration SQL: ./migration.sql</span></pre>
+
+  <p>Under the hood this calls <code>alembic upgrade head --sql</code> against the same <code>alembic/env.py</code> the Job uses, so the offline output is byte-for-byte the DDL the cluster will run. Review <code>./migration.sql</code>, then proceed to <code>build-images</code> / <code>install</code>.</p>
+
+  <h3>In-cluster migration Job</h3>
+  <p>The Helm chart runs a pre-install/pre-upgrade Job:</p>
+<pre>migration:
+  enabled: true
+  command: [<span class="s">"alembic"</span>, <span class="s">"upgrade"</span>, <span class="s">"head"</span>]</pre>
+
+  <p>The migration Job uses the same backend image and the same <code>REMOTE_DB_URL</code> composition as backend pods. Helm waits for the Job to succeed before starting new backend pods.</p>
+
+  <p>First install or upgrade:</p>
+<pre>scripts/airgap_migrate.sh install</pre>
+
+  <p>Check migration logs:</p>
+<pre>kubectl -n skynet logs job/skynet-skynet-migrate</pre>
+
+  <p>If you are adopting a database that already has the baseline schema created outside Alembic, do a one-time stamp at the baseline revision so subsequent upgrades only apply the deltas:</p>
+<pre>helm upgrade --install skynet deploy/helm/skynet \
+  -n skynet --create-namespace \
+  -f deploy/helm/skynet/values-airgap.generated.yaml \
+  --set-json <span class="s">'migration.command=["alembic","stamp","342f7449be26"]'</span></pre>
+
+  <p><code>342f7449be26</code> is the squashed baseline (all <code>jobs</code>, <code>job_*</code>, and quota tables). If your existing schema is fully current — including the <code>job_embeddings.is_private</code> column added in <code>a1b2c3d4e5f6</code> — stamp <code>head</code> instead. Run <code>alembic history</code> from <code>backend/</code> to see the chain.</p>
+
+  <p>Then revert to <code>["alembic", "upgrade", "head"]</code> for the next upgrade.</p>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>Capture your DB backup/restore process and RPO/RTO. The chart does not take Postgres backups for you.</p>
+  </div>
+</section>
+
+<section id="egress">
+  <h2><a class="anchor" href="#egress">§</a>Runtime Egress</h2>
+  <h4>Known intended runtime egress</h4>
+  <ul>
+    <li>Frontend to internal OIDC issuer.</li>
+    <li>Backend to internal LLM gateway.</li>
+    <li>Backend and frontend to Postgres only through the cluster/service network or managed DB endpoint.</li>
+    <li>Optional notifications webhook if configured.</li>
+  </ul>
+
+  <h4>Known risky endpoint by design</h4>
+  <ul>
+    <li><code>POST /models/discover</code> accepts a user-supplied <code>base_url</code> so operators can discover models from an internal OpenAI-compatible gateway. In an air gap, enforce egress with NetworkPolicy/firewall rules.</li>
+  </ul>
+
+  <p>The generated values file sets <code>networkPolicy.egressCidrs</code> and <code>networkPolicy.llmEgress</code> to placeholders. Tighten those to exact internal CIDRs.</p>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>Record the exact CIDRs for IdP, LLM gateway, notification webhook, and managed Postgres in your environment-specific values file.</p>
+  </div>
+</section>
+
+<section id="ca">
+  <h2><a class="anchor" href="#ca">§</a>Private TLS / CA Bundles</h2>
+  <p>If internal endpoints use a private CA, set <code>INTERNAL_CA_SECRET</code> while running <code>scripts/airgap_migrate.sh configure</code> or <code>values</code>. The generated values file will:</p>
+  <ul>
+    <li>mount the CA Secret into backend and frontend pods,</li>
+    <li>set <code>NODE_EXTRA_CA_CERTS</code> for NextAuth/OIDC in the frontend,</li>
+    <li>set <code>SSL_CERT_FILE</code> and <code>REQUESTS_CA_BUNDLE</code> for Python HTTP clients in the backend and migration Job.</li>
+  </ul>
+
+  <p>Example:</p>
+<pre>INTERNAL_CA_SECRET=skynet-internal-ca \
+INTERNAL_CA_FILENAME=ca-bundle.pem \
+scripts/airgap_migrate.sh values</pre>
+
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>Confirm whether your internal LLM gateway uses a public or private CA. If private, include the CA Secret in your release runbook.</p>
+  </div>
+</section>
+
+<section id="smoke">
+  <h2><a class="anchor" href="#smoke">§</a>Smoke Test</h2>
+  <p>After install:</p>
+<pre>kubectl -n skynet rollout status deploy/skynet-skynet-backend
+kubectl -n skynet rollout status deploy/skynet-skynet-frontend
+
+curl -k https://skynet.apps.internal/
+curl -k https://skynet-api.apps.internal/health</pre>
+
+  <h4>From the UI</h4>
+  <ul>
+    <li>Sign in through SSO.</li>
+    <li>Submit a tiny optimization.</li>
+    <li>Confirm worker logs show the job moving through validation, dataset split, optimization, and final evaluation.</li>
+    <li>Confirm no pod attempts DNS resolution for public hosts.</li>
+  </ul>
+
+  <h4>Runtime-env check</h4>
+<pre>kubectl -n skynet exec deploy/skynet-skynet-frontend -- \
+  curl -sf http://localhost:3001/ \
+  | grep -o <span class="s">'window.__SKYNET_ENV__=[^&lt;]*'</span> \
+  | head -c 500</pre>
+
+  <p>The <code>apiUrl</code> should match <code>frontend.env.API_URL</code> in the generated values file. Changing <code>API_URL</code> should take effect after a frontend pod restart without rebuilding the image.</p>
+</section>
+
+<section id="quotas">
+  <h2><a class="anchor" href="#quotas">§</a>Live User Quotas</h2>
+  <p>The default optimization cap is <code>MAX_JOBS_PER_USER=100</code>. Static env values still work for broad defaults:</p>
+  <ul>
+    <li><code>QUOTA_OVERRIDES</code>: JSON map such as <code>{"power@example.com": 500}</code> or <code>{"researcher@example.com": null}</code>.</li>
+  </ul>
+
+  <p>For day-to-day changes, use the admin tab in the settings modal. Admins can set a numeric quota, set a user to unlimited, or remove a live override so the user falls back to the default/static config.</p>
+
+  <p>Deploy the migration once so <code>user_quota_overrides</code> and <code>user_quota_audit_events</code> exist. After that, backend quota enforcement reads the override table on each submission/clone/retry, so updates take effect immediately without a backend restart. The admin tab also shows the latest quota audit events.</p>
+</section>
+
+<section id="clean">
+  <h2><a class="anchor" href="#clean">§</a>What Is Already Air-Gap Clean</h2>
+  <ul>
+    <li>Scalar API docs are vendored under <code>backend/core/api/static/scalar/</code>.</li>
+    <li>Fonts are bundled through npm packages, not Google Fonts.</li>
+    <li>The recommendations embedder is vendored under <code>backend/vendor/models/</code>.</li>
+    <li>Sentry is gated so builds without a DSN do not ship it.</li>
+    <li>LiteLLM telemetry is disabled in backend configuration.</li>
+    <li>Storage is Postgres; there is no S3/GCS/Azure Blob dependency.</li>
+    <li>Auth is Credentials plus generic OIDC; no Google/GitHub OAuth provider is configured.</li>
+  </ul>
+</section>
+
+<section id="operator-responsibilities">
+  <h2><a class="anchor" href="#operator-responsibilities">§</a>Remaining Operator Responsibilities</h2>
+  <p>The repo cannot automate these site-specific pieces:</p>
+  <ul>
+    <li>Mirroring/pushing images and package repositories into your internal Artifactory/registry.</li>
+    <li>Creating Kubernetes Secrets and rotating credentials.</li>
+    <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, webhook, and DB.</li>
+    <li>Backing up and restoring Postgres.</li>
+    <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names.</li>
+    <li>Deciding whether to enable recommendations. The app runs without <code>sentence-transformers</code>; recommendations degrade to an empty/no-op feature unless the backend image includes the <code>[recommendations]</code> extra.</li>
+  </ul>
+</section>
+
+<section id="audit">
+  <h2><a class="anchor" href="#audit">§</a>Audit TODOs</h2>
+  <p>Run this regularly:</p>
+<pre>scripts/airgap_migrate.sh todos
+<span class="c"># or, equivalently:</span>
+git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></pre>
+
+  <h4>Current intentional TODO locations</h4>
+  <ul>
+    <li><code>AIRGAP.html</code> — context for each on-prem decision.</li>
+    <li><code>deploy/helm/skynet/values-airgap.generated.yaml</code> — after <code>values</code>.</li>
+    <li><code>scripts/airgap_migrate.sh</code> — defaults emitted into the values file.</li>
+    <li><code>frontend/.env.example</code> — frontend dev/runtime env template.</li>
+    <li><code>frontend/.npmrc</code> — internal npm registry mirror config (commented out).</li>
+    <li><code>backend/core/config.py</code> — model id, agent base URLs, embedder path.</li>
+    <li><code>backend/core/api/directory_client.py</code> — LDAP-backed Active Directory user search; confirm <code>AD_LDAP_*</code> values against the target domain.</li>
+  </ul>
+
+  <p>If new external services are added, add them to this file, the Helm values, and <code>scripts/airgap_migrate.sh</code>. Then <code>todos</code> will pick them up automatically.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  const links = document.querySelectorAll('aside.toc a');
+  const sections = Array.from(document.querySelectorAll('main section[id]'));
+  function setActive() {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + current.id));
+  }
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>

@@ -1,9 +1,12 @@
-"""SSE endpoint for the generalist agent that drives the Skynet wizard.
+"""SSE endpoint for the generalist agent that drives the Skynet wizard. [INTERNAL]
 
 Mirrors the ``code_agent`` router's shape: one streaming POST that emits
 reasoning / tool / message events, plus a companion confirm POST so the
 client can respond to ``pending_approval`` events (the SSE channel is
 server → client only).
+
+All endpoints are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``) — wizard-internal flow.
 """
 
 from __future__ import annotations

@@ -1,7 +1,10 @@
-"""Routes for code formatting and pre-submit validation.
+"""Routes for code formatting and pre-submit validation. [INTERNAL]
 
 Two POST endpoints used by the submit wizard to lint/format user-authored
-DSPy signature and metric code before a job is enqueued.
+DSPy signature and metric code before a job is enqueued. All endpoints
+are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``) — devs hitting ``/run`` directly should validate
+locally with ruff/mypy rather than depending on this surface.
 """
 
 from __future__ import annotations
