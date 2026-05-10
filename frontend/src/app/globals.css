@@ -440,6 +440,11 @@ table tbody tr td:not(:last-child):hover {
   text-decoration-color: black;
 }
 
+/* Concepts guide: tables are informational, not copyable. */
+table.guide-table tbody tr td:hover {
+  text-decoration: none !important;
+}
+
 /* Subtle hover lift on cards */
 [data-slot="card"] {
   transition:
