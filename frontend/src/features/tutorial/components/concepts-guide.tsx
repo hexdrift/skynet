@@ -1,10 +1,9 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   X,
-  Copy,
-  Check,
   BookOpen,
   Sparkles,
   Cog,
@@ -12,9 +11,13 @@ import {
   ListTree,
   Lightbulb,
   Compass,
-  ArrowLeft,
 } from "lucide-react";
 import { msg, formatMsg } from "@/shared/lib/messages";
+
+const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
+  ssr: false,
+  loading: () => <div className="my-3 h-[180px] rounded-xl border border-[#E5DDD4] bg-[#FAF6F0]" />,
+});
 
 interface ConceptsGuideProps {
   open: boolean;
@@ -293,7 +296,7 @@ function GuideSection({
       >
         {title}
       </h3>
-      <div className="prose-content text-[#3D2E22] text-[14.5px] leading-relaxed space-y-3">
+      <div className="prose-content text-[#3D2E22] text-[14.5px] leading-relaxed space-y-3 [&_td_code]:!rounded-none [&_td_code]:!bg-transparent [&_td_code]:!px-0 [&_td_code]:!py-0 [&_td_code]:font-medium">
         {children}
       </div>
     </section>
@@ -325,42 +328,24 @@ function InlineCode({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CodeBlock({ code, lang }: { code: string; lang?: string }) {
-  const [copied, setCopied] = React.useState(false);
-  const onCopy = () => {
-    void navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    });
-  };
-  const copiedLabel = msg("auto.features.tutorial.components.concepts.guide.literal.12");
-  const copyLabel = msg("auto.features.tutorial.components.concepts.guide.literal.13");
+function GuideCodeEditor({
+  code,
+  label,
+  height = "180px",
+}: {
+  code: string;
+  label: React.ReactNode;
+  height?: string;
+}) {
   return (
-    <div className="relative my-3 rounded-lg overflow-hidden border border-[#2A211B] shadow-[0_1px_3px_rgba(28,22,18,0.08)]" dir="ltr">
-      {lang && (
-        <div className="absolute top-2 right-2 text-[10px] uppercase tracking-wider text-[#A69585] font-semibold pointer-events-none">
-          {lang}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={onCopy}
-        className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-medium bg-[#2A211B] text-[#A69585] hover:text-[#F0EAE0] hover:bg-[#3D2E22] transition-colors cursor-pointer z-10"
-        aria-label={copied ? copiedLabel : copyLabel}
-      >
-        {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-        {copied ? copiedLabel : copyLabel}
-      </button>
-      <pre
-        className="px-4 py-3 pt-7 text-[12.5px] leading-relaxed text-[#F0EAE0] bg-[#1C1612] overflow-x-auto"
-        style={{
-          fontFamily:
-            '"JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-          fontVariantLigatures: "none",
-        }}
-      >
-        <code>{code}</code>
-      </pre>
+    <div className="my-3">
+      <CodeEditor
+        value={code}
+        onChange={() => undefined}
+        height={height}
+        readOnly
+        label={label}
+      />
     </div>
   );
 }
@@ -372,7 +357,7 @@ function ParamTable({
 }) {
   return (
     <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-      <table className="w-full text-[13.5px]">
+      <table className="w-full text-[13.5px] guide-table">
         <thead>
           <tr className="bg-[#F0EBE4] text-[#3D2E22]">
             <th
@@ -392,10 +377,10 @@ function ParamTable({
         <tbody>
           {rows.map((r, i) => (
             <tr key={r.name} className={i % 2 === 0 ? "bg-white" : "bg-[#FAF8F5]"}>
-              <td className="px-3 py-2 align-top border-t border-[#E5DDD4]" dir="ltr">
-                <InlineCode>{r.name}</InlineCode>
+              <td className="px-3 py-2 align-top" dir="auto">
+                <span className="font-medium text-[#3D2E22]">{r.name}</span>
               </td>
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+              <td className="px-3 py-2 align-top text-[#3D2E22]">
                 {r.desc}
               </td>
             </tr>
@@ -470,9 +455,6 @@ function SectionBackground() {
       <p>
         <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.36")}</strong>{" "}
         {msg("auto.features.tutorial.components.concepts.guide.literal.37")}
-        <InlineCode>
-          {msg("auto.features.tutorial.components.concepts.guide.literal.273")}
-        </InlineCode>
         {msg("auto.features.tutorial.components.concepts.guide.literal.38")}
       </p>
 
@@ -516,11 +498,11 @@ function SectionBackground() {
 
 function GepaLoopDiagram() {
   const stages = [
-    { i: 1, name: "Initialization", he: msg("auto.features.tutorial.components.concepts.guide.literal.57") },
-    { i: 2, name: "Evaluation", he: msg("auto.features.tutorial.components.concepts.guide.literal.58") },
-    { i: 3, name: "Reflection", he: msg("auto.features.tutorial.components.concepts.guide.literal.59") },
-    { i: 4, name: "Evolution", he: msg("auto.features.tutorial.components.concepts.guide.literal.60") },
-    { i: 5, name: "Selection", he: msg("auto.features.tutorial.components.concepts.guide.literal.61") },
+    { i: 1, name: msg("auto.features.tutorial.components.concepts.guide.literal.57") },
+    { i: 2, name: msg("auto.features.tutorial.components.concepts.guide.literal.58") },
+    { i: 3, name: msg("auto.features.tutorial.components.concepts.guide.literal.59") },
+    { i: 4, name: msg("auto.features.tutorial.components.concepts.guide.literal.60") },
+    { i: 5, name: msg("auto.features.tutorial.components.concepts.guide.literal.61") },
   ];
   return (
     <figure className="my-4 rounded-lg border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]" dir="ltr">
@@ -549,24 +531,14 @@ function GepaLoopDiagram() {
               />
               <text
                 x={cx}
-                y={50}
+                y={57}
                 textAnchor="middle"
-                fontFamily="Inter Variable, system-ui, sans-serif"
-                fontSize={13}
+                fontFamily="Heebo Variable, system-ui, sans-serif"
+                fontSize={14}
                 fontWeight={700}
                 fill={idx === 2 ? "#FAF8F5" : "#3D2E22"}
               >
                 {s.i}. {s.name}
-              </text>
-              <text
-                x={cx}
-                y={67}
-                textAnchor="middle"
-                fontFamily="Heebo Variable, system-ui, sans-serif"
-                fontSize={11}
-                fill={idx === 2 ? "#E5DDD4" : "#5C4D40"}
-              >
-                {s.he}
               </text>
               {idx < stages.length - 1 && (
                 <line
@@ -607,6 +579,24 @@ function GepaLoopDiagram() {
 }
 
 function SectionGepa() {
+  const reflectionRows = [
+    {
+      label: msg("auto.features.tutorial.components.concepts.guide.literal.89"),
+      withReflection: msg("auto.features.tutorial.components.concepts.guide.literal.90"),
+      withoutReflection: msg("auto.features.tutorial.components.concepts.guide.literal.303"),
+    },
+    {
+      label: msg("auto.features.tutorial.components.concepts.guide.literal.91"),
+      withReflection: msg("auto.features.tutorial.components.concepts.guide.literal.92"),
+      withoutReflection: msg("auto.features.tutorial.components.concepts.guide.literal.304"),
+    },
+    {
+      label: msg("auto.features.tutorial.components.concepts.guide.literal.93"),
+      withReflection: "",
+      withoutReflection: msg("auto.features.tutorial.components.concepts.guide.literal.305"),
+    },
+  ];
+
   return (
     <GuideSection
       id="gepa"
@@ -619,8 +609,6 @@ function SectionGepa() {
         {msg("auto.features.tutorial.components.concepts.guide.literal.65")}
         <em>{msg("auto.features.tutorial.components.concepts.guide.literal.66")}</em>
         {msg("auto.features.tutorial.components.concepts.guide.literal.67")}
-        <InlineCode>{msg("auto.features.tutorial.components.concepts.guide.literal.68")}</InlineCode>
-        {msg("auto.features.tutorial.components.concepts.guide.literal.69")}
       </p>
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.70")}</SubHeading>
@@ -663,61 +651,64 @@ function SectionGepa() {
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.86")}</SubHeading>
       <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-        <table className="w-full text-[13.5px]">
-          <thead>
-            <tr className="bg-[#F0EBE4] text-[#3D2E22]">
-              <th
-                className="text-right font-semibold px-3 py-2 w-1/2"
-                style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
-              >
+        <div className="grid gap-px bg-[#E5DDD4] md:grid-cols-2">
+          <div className="bg-white">
+            <div className="bg-[#EFE6D8] px-4 py-2.5">
+              <h5 className="text-[13.5px] font-bold text-[#3D2E22]">
                 {msg("auto.features.tutorial.components.concepts.guide.literal.87")}
-              </th>
-              <th
-                className="text-right font-semibold px-3 py-2 w-1/2 border-r border-[#E5DDD4]"
-                style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
-              >
+              </h5>
+            </div>
+            <div className="space-y-2 p-3">
+              {reflectionRows
+                .filter((row) => row.withReflection)
+                .map((row) => (
+                  <div key={row.label} className="rounded-md border border-[#E5DDD4] bg-[#FAF8F5] p-3">
+                    <div className="text-[13px] font-semibold text-[#3D2E22]">{row.label}</div>
+                    <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
+                      {row.withReflection}
+                    </div>
+                  </div>
+                ))}
+              <div className="rounded-md border border-[#D8C7AD] bg-[#FFF8EA] p-3">
+                <div className="text-[13px] font-semibold text-[#3D2E22]">
+                  {msg("auto.features.tutorial.components.concepts.guide.literal.94")}
+                </div>
+                <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
+                  {msg("auto.features.tutorial.components.concepts.guide.literal.95")}
+                </div>
+                <div className="mt-2 border-t border-[#E5DDD4] pt-2 text-[12.5px] leading-relaxed text-[#3D2E22]">
+                  <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.96")}</strong>{" "}
+                  {msg("auto.features.tutorial.components.concepts.guide.literal.97")}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white">
+            <div className="bg-[#F0EBE4] px-4 py-2.5">
+              <h5 className="text-[13.5px] font-bold text-[#3D2E22]">
                 {msg("auto.features.tutorial.components.concepts.guide.literal.88")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="bg-white">
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
-                {msg("auto.features.tutorial.components.concepts.guide.literal.89")}
-                <br />
-                <span className="text-[12px] text-[#5C4D40]">
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.90")}
-                </span>
-                <br />
-                {msg("auto.features.tutorial.components.concepts.guide.literal.91")}
-                <br />
-                <span className="text-[12px] text-[#5C4D40]">
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.92")}
-                </span>
-              </td>
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4] border-r">
-                {msg("auto.features.tutorial.components.concepts.guide.literal.89")}
-                <br />
-                {msg("auto.features.tutorial.components.concepts.guide.literal.91")}
-                <br />
-                {msg("auto.features.tutorial.components.concepts.guide.literal.93")}
-              </td>
-            </tr>
-            <tr className="bg-[#FAF8F5]">
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
-                <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.94")}</strong>
-                {msg("auto.features.tutorial.components.concepts.guide.literal.95")}
-                <br />→{" "}
-                <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.96")}</strong>
-                {msg("auto.features.tutorial.components.concepts.guide.literal.97")}
-              </td>
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4] border-r">
-                <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.98")}</strong>
-                {msg("auto.features.tutorial.components.concepts.guide.literal.99")}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </h5>
+            </div>
+            <div className="space-y-2 p-3">
+              {reflectionRows.map((row) => (
+                <div key={row.label} className="rounded-md border border-[#E5DDD4] bg-white p-3">
+                  <div className="text-[13px] font-semibold text-[#3D2E22]">{row.label}</div>
+                  <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
+                    {row.withoutReflection}
+                  </div>
+                </div>
+              ))}
+              <div className="rounded-md border border-[#E5DDD4] bg-[#FAF8F5] p-3">
+                <div className="text-[13px] font-semibold text-[#3D2E22]">
+                  {msg("auto.features.tutorial.components.concepts.guide.literal.98")}
+                </div>
+                <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
+                  {msg("auto.features.tutorial.components.concepts.guide.literal.99")}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </GuideSection>
   );
@@ -762,7 +753,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "max_full_evals",
+            name: "מספר הרצות מרבי",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.111")}
@@ -782,7 +773,7 @@ function SectionParameters() {
       <ParamTable
         rows={[
           {
-            name: "use_merge",
+            name: "שימוש במיזוג",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.114")}
@@ -794,7 +785,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "max_merge_invocations",
+            name: "מספר מיזוגים מרבי",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.115")}
@@ -812,7 +803,7 @@ function SectionParameters() {
       <ParamTable
         rows={[
           {
-            name: "num_threads",
+            name: "מספר תהליכונים",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.117")}
@@ -822,7 +813,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "failure_score",
+            name: "ציון כישלון",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.118")}
@@ -832,7 +823,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "perfect_score",
+            name: "ציון מושלם",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.119")}
@@ -842,7 +833,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "track_stats",
+            name: "מעקב סטטיסטיקות",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.121")}</>,
           },
         ]}
@@ -856,18 +847,6 @@ function SectionParameters() {
           {msg("auto.features.tutorial.components.concepts.guide.literal.123")}
         </strong>
         {msg("auto.features.tutorial.components.concepts.guide.literal.124")}
-        <InlineCode>
-          {msg("auto.features.tutorial.components.concepts.guide.literal.278")}
-        </InlineCode>
-        {", "}
-        <InlineCode>
-          {msg("auto.features.tutorial.components.concepts.guide.literal.279")}
-        </InlineCode>
-        {msg("auto.features.tutorial.components.concepts.guide.literal.125")}
-        <InlineCode>
-          {msg("auto.features.tutorial.components.concepts.guide.literal.280")}
-        </InlineCode>
-        {msg("auto.features.tutorial.components.concepts.guide.literal.126")}
       </p>
       <ul className="list-disc pr-5 space-y-1">
         <li>
@@ -916,8 +895,8 @@ function SectionTaskDefinition() {
           {msg("auto.features.tutorial.components.concepts.guide.literal.136")}
         </li>
       </ul>
-      <CodeBlock
-        lang="python"
+      <GuideCodeEditor
+        label={msg("auto.features.submit.components.steps.codestep.2")}
         code={`import dspy
 
 class AnswerQuestion(dspy.Signature):
@@ -931,11 +910,7 @@ class AnswerQuestion(dspy.Signature):
       <SubHeading>
         {msg("auto.features.tutorial.components.concepts.guide.literal.137")}
       </SubHeading>
-      <p>
-        {msg("auto.features.tutorial.components.concepts.guide.literal.138")}
-        <InlineCode>200+</InlineCode>
-        {msg("auto.features.tutorial.components.concepts.guide.literal.38")}
-      </p>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.138")}</p>
       <p>
         <strong>
           {msg("auto.features.tutorial.components.concepts.guide.literal.139")}
@@ -943,7 +918,7 @@ class AnswerQuestion(dspy.Signature):
         {msg("auto.features.tutorial.components.concepts.guide.literal.140")}
       </p>
       <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-        <table className="w-full text-[13.5px]">
+        <table className="w-full text-[13.5px] guide-table">
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
@@ -962,35 +937,35 @@ class AnswerQuestion(dspy.Signature):
           </thead>
           <tbody>
             <tr className="bg-white">
-              <td className="px-3 py-2 align-top border-t border-[#E5DDD4]" dir="ltr">
+              <td className="px-3 py-2 align-top">
                 <InlineCode>
                   {msg("auto.features.tutorial.components.concepts.guide.literal.281")}
                 </InlineCode>{" "}
                 {msg("auto.features.tutorial.components.concepts.guide.literal.143")}
               </td>
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+              <td className="px-3 py-2 align-top text-[#3D2E22]">
                 {msg("auto.features.tutorial.components.concepts.guide.literal.144")}
               </td>
             </tr>
             <tr className="bg-[#FAF8F5]">
-              <td className="px-3 py-2 align-top border-t border-[#E5DDD4]" dir="ltr">
+              <td className="px-3 py-2 align-top">
                 <InlineCode>
                   {msg("auto.features.tutorial.components.concepts.guide.literal.282")}
                 </InlineCode>{" "}
                 {msg("auto.features.tutorial.components.concepts.guide.literal.145")}
               </td>
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+              <td className="px-3 py-2 align-top text-[#3D2E22]">
                 {msg("auto.features.tutorial.components.concepts.guide.literal.146")}
               </td>
             </tr>
             <tr className="bg-white">
-              <td className="px-3 py-2 align-top border-t border-[#E5DDD4]" dir="ltr">
+              <td className="px-3 py-2 align-top">
                 <InlineCode>
                   {msg("auto.features.tutorial.components.concepts.guide.literal.283")}
                 </InlineCode>{" "}
                 {msg("auto.features.tutorial.components.concepts.guide.literal.147")}
               </td>
-              <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+              <td className="px-3 py-2 align-top text-[#3D2E22]">
                 {msg("auto.features.tutorial.components.concepts.guide.literal.148")}
               </td>
             </tr>
@@ -1019,8 +994,8 @@ class AnswerQuestion(dspy.Signature):
         </InlineCode>
         {msg("auto.features.tutorial.components.concepts.guide.literal.38")}
       </p>
-      <CodeBlock
-        lang="python"
+      <GuideCodeEditor
+        label={msg("auto.features.submit.components.steps.codestep.3")}
         code={msg("auto.features.tutorial.components.concepts.guide.literal.300")}
       />
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.154")}</p>
@@ -1055,48 +1030,80 @@ class AnswerQuestion(dspy.Signature):
 }
 
 function WorkflowFlow() {
-  const steps = [
-    msg("auto.features.tutorial.components.concepts.guide.literal.162"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.163"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.164"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.165"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.166"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.167"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.168"),
-    msg("auto.features.tutorial.components.concepts.guide.literal.169"),
+  const groups = [
+    {
+      title: msg("auto.features.tutorial.components.concepts.guide.literal.306"),
+      desc: msg("auto.features.tutorial.components.concepts.guide.literal.307"),
+      steps: [
+        msg("auto.features.tutorial.components.concepts.guide.literal.162"),
+        msg("auto.features.tutorial.components.concepts.guide.literal.163"),
+        msg("auto.features.tutorial.components.concepts.guide.literal.164"),
+        msg("auto.features.tutorial.components.concepts.guide.literal.165"),
+      ],
+    },
+    {
+      title: msg("auto.features.tutorial.components.concepts.guide.literal.308"),
+      desc: msg("auto.features.tutorial.components.concepts.guide.literal.309"),
+      steps: [
+        msg("auto.features.tutorial.components.concepts.guide.literal.166"),
+        msg("auto.features.tutorial.components.concepts.guide.literal.167"),
+        msg("auto.features.tutorial.components.concepts.guide.literal.168"),
+      ],
+    },
+    {
+      title: msg("auto.features.tutorial.components.concepts.guide.literal.310"),
+      desc: msg("auto.features.tutorial.components.concepts.guide.literal.311"),
+      steps: [msg("auto.features.tutorial.components.concepts.guide.literal.169")],
+    },
   ];
+  let stepIndex = 0;
+
   return (
-    <figure className="my-4 rounded-lg border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-      <ol className="space-y-2" dir="rtl">
-        {steps.map((label, idx) => (
-          <li key={label} className="flex items-center gap-3">
-            <span
-              className={[
-                "inline-flex items-center justify-center size-7 rounded-full text-[12px] font-bold flex-shrink-0",
-                idx === steps.length - 1
-                  ? "bg-[#3D2E22] text-[#FAF8F5]"
-                  : "bg-[#EDE7DD] text-[#3D2E22] border border-[#3D2E22]",
-              ].join(" ")}
-              style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
-            >
-              {idx + 1}
-            </span>
-            <span
-              className={[
-                "flex-1 px-3 py-1.5 rounded-md border text-[13.5px]",
-                idx === steps.length - 1
-                  ? "bg-[#3D2E22] text-[#FAF8F5] border-[#3D2E22]"
-                  : "bg-[#FAF8F5] text-[#3D2E22] border-[#E5DDD4]",
-              ].join(" ")}
-            >
-              {label}
-            </span>
-            {idx < steps.length - 1 && (
-              <ArrowLeft className="size-4 text-[#A69585] flex-shrink-0 rotate-90" aria-hidden />
-            )}
-          </li>
+    <figure className="my-4 rounded-xl border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
+      <div className="space-y-3" dir="rtl">
+        {groups.map((group, groupIdx) => (
+          <section key={group.title} className="relative">
+            <div className="mb-3 flex items-center gap-2.5">
+              <span
+                className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#D8C7AD] bg-white text-[14px] font-bold text-[#3D2E22] shadow-[0_1px_2px_rgba(28,22,18,0.04)]"
+                style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
+              >
+                {groupIdx + 1}
+              </span>
+              <div className="min-w-0">
+                <h5 className="text-[14px] font-bold leading-tight text-[#3D2E22]">{group.title}</h5>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-[#6D5B4B]">{group.desc}</p>
+              </div>
+            </div>
+            <ol className="space-y-1.5 rounded-lg border border-[#E5DDD4] bg-[#FAF8F5] p-2.5">
+              {group.steps.map((label) => {
+                stepIndex += 1;
+                const endpointMatch = label.match(/^(.*) \(([^)]+)\)$/);
+                const title = endpointMatch?.[1] ?? label;
+
+                return (
+                  <li
+                    key={label}
+                    className="flex items-start gap-2 rounded-md bg-white/70 px-2 py-2"
+                  >
+                    <span
+                      className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#EDE7DD] text-[10px] font-bold text-[#5C4D40]"
+                      style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
+                    >
+                      {stepIndex}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium leading-snug text-[#3D2E22]">
+                        {title}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
         ))}
-      </ol>
+      </div>
     </figure>
   );
 }
@@ -1169,7 +1176,7 @@ function SectionWorkflow() {
       <ParamTable
         rows={[
           {
-            name: "module_name",
+            name: "שם המודול",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.174")}
@@ -1185,7 +1192,7 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "optimizer_name",
+            name: "שם האופטימיזר",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.178")}
@@ -1197,19 +1204,19 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "signature_code",
+            name: "קוד החתימה",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.180")}</>,
           },
           {
-            name: "metric_code",
+            name: "קוד המדד",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.181")}</>,
           },
           {
-            name: "dataset",
+            name: "מערך נתונים",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.182")}</>,
           },
           {
-            name: "column_mapping",
+            name: "מיפוי עמודות",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.183")}
@@ -1225,11 +1232,11 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "model_config",
+            name: "הגדרות המודל",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.185")}</>,
           },
           {
-            name: "reflection_lm",
+            name: "מודל רפלקציה",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.186")}
@@ -1241,7 +1248,7 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "optimizer_kwargs",
+            name: "פרמטרי האופטימיזר",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.188")}
@@ -1253,7 +1260,7 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "split_fractions",
+            name: "יחסי חלוקה",
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.190")}
@@ -1265,11 +1272,11 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "shuffle",
+            name: "ערבוב דוגמאות",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.192")}</>,
           },
           {
-            name: "seed",
+            name: "מספר התחלתי",
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.193")}</>,
           },
         ]}
@@ -1280,7 +1287,7 @@ function SectionWorkflow() {
       </SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.195")}</p>
       <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-        <table className="w-full text-[13.5px]">
+        <table className="w-full text-[13.5px] guide-table">
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
@@ -1300,10 +1307,10 @@ function SectionWorkflow() {
           <tbody>
             {endpoints.map(([endpoint, purpose], i) => (
               <tr key={endpoint} className={i % 2 === 0 ? "bg-white" : "bg-[#FAF8F5]"}>
-                <td className="px-3 py-2 align-top border-t border-[#E5DDD4]" dir="ltr">
+                <td className="px-3 py-2 align-top" dir="ltr">
                   <InlineCode>{endpoint}</InlineCode>
                 </td>
-                <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+                <td className="px-3 py-2 align-top text-[#3D2E22]">
                   {purpose}
                 </td>
               </tr>
@@ -1322,6 +1329,12 @@ function SectionWorkflow() {
             {msg("auto.features.tutorial.components.concepts.guide.literal.290")}
           </InlineCode>
           {msg("auto.features.tutorial.components.concepts.guide.literal.215")}
+        </li>
+        <li>
+          <InlineCode>
+            {msg("auto.features.tutorial.components.concepts.guide.literal.301")}
+          </InlineCode>
+          {msg("auto.features.tutorial.components.concepts.guide.literal.302")}
         </li>
         <li>
           <InlineCode>
@@ -1460,7 +1473,7 @@ function SectionTips() {
         {msg("auto.features.tutorial.components.concepts.guide.literal.238")}
       </SubHeading>
       <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-        <table className="w-full text-[13.5px]">
+        <table className="w-full text-[13.5px] guide-table">
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
@@ -1480,10 +1493,10 @@ function SectionTips() {
           <tbody>
             {problems.map(([problem, solution], i) => (
               <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-[#FAF8F5]"}>
-                <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4] font-medium">
+                <td className="px-3 py-2 align-top text-[#3D2E22] font-medium">
                   {problem}
                 </td>
-                <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+                <td className="px-3 py-2 align-top text-[#3D2E22]">
                   {solution}
                 </td>
               </tr>
@@ -1497,22 +1510,22 @@ function SectionTips() {
 
 function SectionGlossary() {
   const rows: Array<[string, string]> = [
-    ["LLM", msg("auto.features.tutorial.components.concepts.guide.literal.255")],
-    ["Prompt", msg("auto.features.tutorial.components.concepts.guide.literal.256")],
+    ["מודל שפה (LLM)", msg("auto.features.tutorial.components.concepts.guide.literal.255")],
+    ["פרומפט", msg("auto.features.tutorial.components.concepts.guide.literal.256")],
     ["DSPy", msg("auto.features.tutorial.components.concepts.guide.literal.257")],
-    ["Optimizer", msg("auto.features.tutorial.components.concepts.guide.literal.258")],
+    ["אופטימיזר", msg("auto.features.tutorial.components.concepts.guide.literal.258")],
     ["GEPA", msg("auto.features.tutorial.components.concepts.guide.literal.259")],
-    ["Reflection", msg("auto.features.tutorial.components.concepts.guide.literal.260")],
-    ["Signature", msg("auto.features.tutorial.components.concepts.guide.literal.261")],
-    ["Metric", msg("auto.features.tutorial.components.concepts.guide.literal.262")],
-    ["Dataset", msg("auto.features.tutorial.components.concepts.guide.literal.263")],
-    ["Train / Val / Test", msg("auto.features.tutorial.components.concepts.guide.literal.264")],
-    ["Optimization", msg("auto.features.tutorial.components.concepts.guide.literal.265")],
-    ["Artifact", msg("auto.features.tutorial.components.concepts.guide.literal.266")],
-    ["Rollout", msg("auto.features.tutorial.components.concepts.guide.literal.267")],
-    ["Trace", msg("auto.features.tutorial.components.concepts.guide.literal.268")],
-    ["ChainOfThought", msg("auto.features.tutorial.components.concepts.guide.literal.269")],
-    ["reflection_lm", msg("auto.features.tutorial.components.concepts.guide.literal.270")],
+    ["רפלקציה", msg("auto.features.tutorial.components.concepts.guide.literal.260")],
+    ["חתימה", msg("auto.features.tutorial.components.concepts.guide.literal.261")],
+    ["מדד", msg("auto.features.tutorial.components.concepts.guide.literal.262")],
+    ["מערך נתונים", msg("auto.features.tutorial.components.concepts.guide.literal.263")],
+    ["אימון / אימות / בדיקה", msg("auto.features.tutorial.components.concepts.guide.literal.264")],
+    ["אופטימיזציה", msg("auto.features.tutorial.components.concepts.guide.literal.265")],
+    ["תוצר שמור", msg("auto.features.tutorial.components.concepts.guide.literal.266")],
+    ["הרצה מלאה", msg("auto.features.tutorial.components.concepts.guide.literal.267")],
+    ["מסלול הרצה", msg("auto.features.tutorial.components.concepts.guide.literal.268")],
+    ["חשיבה צעד-אחר-צעד", msg("auto.features.tutorial.components.concepts.guide.literal.269")],
+    ["מודל רפלקציה", msg("auto.features.tutorial.components.concepts.guide.literal.270")],
   ];
   return (
     <GuideSection
@@ -1522,7 +1535,7 @@ function SectionGlossary() {
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.252")}
     >
       <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-        <table className="w-full text-[13.5px]">
+        <table className="w-full text-[13.5px] guide-table">
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
@@ -1542,10 +1555,10 @@ function SectionGlossary() {
           <tbody>
             {rows.map(([term, explanation], i) => (
               <tr key={term} className={i % 2 === 0 ? "bg-white" : "bg-[#FAF8F5]"}>
-                <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]" dir="ltr">
-                  <InlineCode>{term}</InlineCode>
+                <td className="px-3 py-2 align-top text-[#3D2E22] font-medium">
+                  {term}
                 </td>
-                <td className="px-3 py-2 align-top text-[#3D2E22] border-t border-[#E5DDD4]">
+                <td className="px-3 py-2 align-top text-[#3D2E22]">
                   {explanation}
                 </td>
               </tr>

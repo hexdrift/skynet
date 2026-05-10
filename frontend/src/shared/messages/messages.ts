@@ -15,7 +15,7 @@ export const sharedMessages = {
   "app.shell.tour_aria": "סיור במערכת",
   "app.shell.tour_tooltip": "סיור מודרך במערכת",
   "app.shell.concepts_aria": "מדריך מושגים",
-  "app.shell.concepts_tooltip": "מדריך אינטראקטיבי לעקרונות, GEPA וזרימת העבודה",
+  "app.shell.concepts_tooltip": "מה זה Skynet ואיך GEPA משפר פרומפטים",
   "app.shell.api_docs_aria": "תיעוד API",
   "app.shell.api_docs_tooltip": "תיעוד API אינטראקטיבי",
   "app.shell.logout": "התנתק",
@@ -50,7 +50,7 @@ export const sharedMessages = {
   "shared.code_editor.copy": "העתק",
   "shared.code_editor.copied": "הועתק",
   "shared.code_editor.validation": "אימות",
-  "shared.code_editor.validating": "בודק את הקוד מול הדאטאסט…",
+  "shared.code_editor.validating": "בודק את הקוד מול מערך הנתונים…",
   "shared.code_editor.valid": "תקין",
   "shared.code_editor.inputs": "קלטים:",
   "shared.code_editor.outputs": "פלטים:",
@@ -431,11 +431,11 @@ export const sharedMessages = {
     "ה{p1} של הקלט והפלט נבדק מול מיפוי העמודות ב{p2}. {p3} נטענת ומאומתת. ה{p4} וה{p5} נבדקים לתאימות. אם נמצאת שגיאה — ה{p6} נעצרת כאן.",
   "auto.features.optimizations.constants.template.3": "ה{p1} מחולק לשלושה סטים: {p2}, {p3} ו{p4}.",
   "auto.features.optimizations.constants.template.4": 
-    "השורות מעורבבות באופן אקראי עם ערך התחלתי קבוע כדי להבטיח תוצאות זהות בכל {p1}. לאחר מכן הן מחולקות לפי היחסים שהוגדרו. סט הבדיקה נשמר בצד ולא משתתף בתהליך ה{p2}.",
+    "השורות מעורבבות באופן אקראי עם מספר התחלתי קבוע כדי להבטיח תוצאות זהות בכל {p1}. לאחר מכן הן מחולקות לפי היחסים שהוגדרו. סט הבדיקה נשמר בצד ולא משתתף בתהליך ה{p2}.",
   "auto.features.optimizations.constants.template.5": "מדידת {p1}",
   "auto.features.optimizations.constants.template.6": "הרצת ה{p1} ללא {p2} על סט הבדיקה.",
   "auto.features.optimizations.constants.template.7": 
-    "ה{p1} רצה כפי שהיא — ללא prompt engineering או דוגמאות — על כל {p2} בסט הבדיקה. {p3} מחשבת {p4} לכל {p5}, והממוצע הוא {p6}. ציון זה משמש כנקודת השוואה ל{p7} שה{p8} מביאה.",
+    "ה{p1} רצה כפי שהיא — ללא הנדסת פרומפטים או דוגמאות — על כל {p2} בסט הבדיקה. {p3} מחשבת {p4} לכל {p5}, והממוצע הוא {p6}. ציון זה משמש כנקודת השוואה ל{p7} שה{p8} מביאה.",
   "auto.features.optimizations.constants.template.8": "ה{p1} משפר את ה{p2} באמצעות סט האימון.",
   "auto.features.optimizations.constants.template.9": 
     "ה{p1} מנסה שילובים שונים של הנחיות, דוגמאות נבחרות והוראות כדי למקסם את ציון המדידה על סט האימות. כל ניסיון מריץ את ה{p2} עם הגדרה שונה ומודד את התוצאה. בסיום נבחרת הגרסה הטובה ביותר.",

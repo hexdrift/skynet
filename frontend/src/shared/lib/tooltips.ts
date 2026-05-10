@@ -31,7 +31,7 @@ export const TOOLTIPS = {
   "data.split.train": `דוגמאות שה${TERMS.optimizer} משתמש בהן כדי לבנות מועמדים לפרומפט`,
   "data.split.val": `דוגמאות שמדרגות את המועמדים בזמן ה${TERMS.optimization}`,
   "data.split.test": "דוגמאות שמורות למדידה הסופית, אחרי שהפרומפט כבר נבחר",
-  "data.seed": `מספר קבוע ששומר על אותה חלוקה ואותו ערבוב בכל הרצה חוזרת`,
+  "data.seed": `מספר התחלתי קבוע ששומר על אותה חלוקה ואותו ערבוב בכל הרצה חוזרת`,
 
   "prompt.optimized": `הפרומפט שה${TERMS.optimizer} בנה: הנחיות משופרות ודוגמאות שנבחרו מתוך ה${TERMS.dataset}`,
   "prompt.demonstrations": `דוגמאות קלט-פלט שמוצגות ל${TERMS.model} כדי להראות לו את הפורמט והתשובה הרצויים`,
