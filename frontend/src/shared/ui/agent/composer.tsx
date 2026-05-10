@@ -63,7 +63,7 @@ export function Composer({
           disabled={disabled || streaming}
           rows={1}
           placeholder={placeholder}
-          dir="auto"
+          dir="rtl"
           className={cn(
             "block flex-1 bg-muted/20 rounded-2xl border border-[#DDD4C8] px-4 py-[11px] text-sm leading-[20px] resize-none overflow-hidden",
             "h-[42px] max-h-[120px] outline-none ring-0 shadow-none",

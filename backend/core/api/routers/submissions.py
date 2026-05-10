@@ -1,17 +1,20 @@
-"""Routes for submitting optimization jobs.
+"""Routes for submitting optimization jobs. [PUBLIC DEV API]
 
 ``POST /run`` — single optimization run.
 ``POST /grid-search`` — sweep over (generation, reflection) model pairs.
+
+Both endpoints are part of the public dev surface and are listed in
+``_SCALAR_PUBLIC_PATHS`` (see ``backend/core/api/app.py``).
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import cast
+from typing import Annotated, cast
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
@@ -55,11 +58,14 @@ from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ...service_gateway.safe_exec import validate_signature_code
 from ...worker.engine import get_worker
+from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 from ..model_catalog import get_catalog_cached
 from ._helpers import compute_task_fingerprint, enforce_user_quota, stable_seed, strip_api_key
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 
 def _catalog_models_as_configs() -> list[ModelConfig]:
@@ -169,17 +175,20 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         summary="Submit a single DSPy optimization run",
         tags=["agent"],
     )
-    def submit_job(payload: RunRequest) -> OptimizationSubmissionResponse:
+    def submit_job(payload: RunRequest, current_user: AuthenticatedUserDep) -> OptimizationSubmissionResponse:
         """Queue one end-to-end DSPy optimization for background execution.
 
         Validates synchronously, persists a job row, and enqueues the
         payload. Returns HTTP 201 immediately; poll
         ``/optimizations/{id}/summary`` or stream via
         ``/optimizations/{id}/stream`` for progress. Security:
-        ``model_settings.api_key`` is stripped from the persisted overview.
+        ``model_settings.api_key`` is stripped from the persisted overview;
+        the persisted owner is the authenticated caller, not whatever the
+        client posted.
 
         Args:
             payload: The run-request body validated by FastAPI.
+            current_user: Authenticated submitter resolved from the bearer token.
 
         Returns:
             An ``OptimizationSubmissionResponse`` carrying the assigned id
@@ -188,6 +197,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         Raises:
             DomainError: 400 (validation), 409 (quota), 422 (malformed body).
         """
+        payload.username = current_user.username
 
         try:
             service.validate_payload(payload)
@@ -280,7 +290,10 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         summary="Submit a grid search over model pairs",
         tags=["agent"],
     )
-    def submit_grid_search(payload: GridSearchRequest) -> OptimizationSubmissionResponse:
+    def submit_grid_search(
+        payload: GridSearchRequest,
+        current_user: AuthenticatedUserDep,
+    ) -> OptimizationSubmissionResponse:
         """Queue a sweep over ``(generation_model, reflection_model)`` pairs.
 
         Runs one optimization per Cartesian pair serially inside a single
@@ -288,10 +301,12 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         ``use_all_available_reflection_models`` is set, the server replaces
         the matching list with every model currently available in the
         catalog before validation or enqueue. Poll
-        ``/optimizations/{id}/summary`` for per-pair progress.
+        ``/optimizations/{id}/summary`` for per-pair progress. The persisted
+        owner is the authenticated caller, not whatever the client posted.
 
         Args:
             payload: The grid-search request body validated by FastAPI.
+            current_user: Authenticated submitter resolved from the bearer token.
 
         Returns:
             An ``OptimizationSubmissionResponse`` carrying the assigned id
@@ -301,6 +316,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             DomainError: 400 (validation/empty catalog), 409 (quota), 422
                 (malformed).
         """
+        payload.username = current_user.username
         _expand_catalog_grid_payload(payload)
 
         if hasattr(service, "validate_grid_search_payload"):

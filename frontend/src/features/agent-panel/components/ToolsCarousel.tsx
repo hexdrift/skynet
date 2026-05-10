@@ -20,14 +20,9 @@ interface ToolEntry {
 
 // Curated subset of TOOL_META. Bulk variants are folded into their singular
 // counterparts so the user sees distinct capabilities, not API permutations.
+// Sorted by severity tier: info → warning → destructive.
 const FEATURED_TOOLS: readonly string[] = [
-  "submit_job_run_post",
-  "submit_grid_search_grid_search_post",
   "rename_job_optimizations",
-  "clone_job_optimizations",
-  "retry_job_optimizations",
-  "cancel_job_optimizations",
-  "delete_job_optimizations",
   "toggle_pin_job_optimizations",
   "toggle_archive_job_optimizations",
   "compare_jobs_optimizations_compare_post",
@@ -40,7 +35,13 @@ const FEATURED_TOOLS: readonly string[] = [
   "stage_sample_dataset_datasets_samples",
   "set_column_roles_datasets_column_roles_post",
   "discover_models_models_discover_post",
+  "submit_job_run_post",
+  "submit_grid_search_grid_search_post",
+  "clone_job_optimizations",
+  "retry_job_optimizations",
+  "cancel_job_optimizations",
   "serve_program_serve",
+  "delete_job_optimizations",
 ];
 
 // Tour-oriented descriptions (capabilities, not approval warnings). Fallback
@@ -113,7 +114,10 @@ const SEVERITY: Record<ApprovalSeverity, { color: string; label: string | null }
     color: "#9B2C1F",
     label: msg("auto.features.agent.panel.components.toolscarousel.literal.11"),
   },
-  warning: { color: "#A85A1A", label: null },
+  warning: {
+    color: "#A85A1A",
+    label: msg("auto.features.agent.panel.components.toolscarousel.literal.16"),
+  },
   info: {
     color: "#3D2E22",
     label: msg("auto.features.agent.panel.components.toolscarousel.literal.12"),

@@ -14,6 +14,8 @@ export const sharedMessages = {
     "מערכת לאופטימיזציית פרומפטים עם DSPy — משפרים ביצועים של מודלי שפה באופן אוטומטי",
   "app.shell.tour_aria": "סיור במערכת",
   "app.shell.tour_tooltip": "סיור מודרך במערכת",
+  "app.shell.concepts_aria": "מדריך מושגים",
+  "app.shell.concepts_tooltip": "מדריך אינטראקטיבי לעקרונות, GEPA וזרימת העבודה",
   "app.shell.api_docs_aria": "תיעוד API",
   "app.shell.api_docs_tooltip": "תיעוד API אינטראקטיבי",
   "app.shell.logout": "התנתק",

@@ -19,6 +19,7 @@ from ...models.artifacts import ProgramArtifact
 from ...models.common import SplitCounts
 from ...models.results import RunResponse
 from ..routers.optimizations import create_optimizations_router
+from .conftest import bypass_auth
 from .mocks import _BaseFakeJobStore, real_grid_response_dict
 
 # _ExtendedFakeJobStore is just _BaseFakeJobStore (which already has bulk-delete).
@@ -47,6 +48,7 @@ def opt_client(store: _ExtendedFakeJobStore) -> TestClient:
     """
     app = FastAPI()
     app.include_router(create_optimizations_router(job_store=store, get_worker_ref=lambda: None))
+    bypass_auth(app)
     return TestClient(app, raise_server_exceptions=False)
 
 

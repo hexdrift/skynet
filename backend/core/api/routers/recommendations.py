@@ -1,4 +1,4 @@
-"""Routes for the historical-performance recommendation service (PER-11).
+"""Routes for the historical-performance recommendation service (PER-11). [INTERNAL]
 
 ``POST /recommendations/similar`` takes the in-progress submission
 (dataset schema, signature source, target optimization type) and
@@ -9,6 +9,9 @@ model configs that historically performed well on tasks like this.
 Phase 1 (this commit) wires the endpoint, request/response shapes, and
 background-embedding hook — the service layer returns ``[]`` so the
 frontend can start integrating while the embedder is built.
+
+Hidden from the public Scalar reference (not in ``_SCALAR_PUBLIC_PATHS``)
+— wizard-internal recommendation surface.
 """
 
 from __future__ import annotations

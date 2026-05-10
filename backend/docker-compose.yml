@@ -5,7 +5,7 @@
 #
 # Air-gap operators: set REGISTRY_PREFIX (and DEBIAN_MIRROR / PIP_INDEX_URL
 # for the API build) so nothing pulls from public registries. See
-# AIRGAP.md.
+# AIRGAP.html.
 
 services:
   db:

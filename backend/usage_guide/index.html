@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skynet · Usage Guide</title>
+<style>
+  /* Palette and fonts mirror frontend/src/app/globals.css so this doc matches
+     the running app. Font names match the bundled @fontsource-variable/heebo
+     and @fontsource-variable/inter packages; if those variable fonts aren't
+     installed system-wide the fallback chain resolves to system fonts (same
+     chain the app uses). No CDN URLs — fully air-gap-clean. */
+  :root {
+    --background: #faf8f5;
+    --foreground: #1c1612;
+    --card: #ffffff;
+    --primary: #3d2e22;
+    --secondary: #f0ebe4;
+    --muted-foreground: #8c7a6b;
+    --accent: #ede7dd;
+    --border: #ddd6cc;
+    --bg: #f5f1ec;
+    --surface-1: #ffffff;
+    --surface-3: #f0ebe4;
+    --text-1: #1c1612;
+    --text-2: #5c4d40;
+    --text-3: #a69585;
+    --blue: #7c6350;
+    --blue-light: rgba(124, 99, 80, 0.08);
+    --shadow-sm: 0 1px 2px rgba(28, 22, 18, 0.05);
+    --shadow-card: 0 1px 3px rgba(28, 22, 18, 0.06), 0 1px 2px rgba(28, 22, 18, 0.04);
+    --radius: 0.5rem;
+    --code-bg: #1c1612;
+    --code-ink: #f0eadf;
+    --code-comment: #a69585;
+    --code-string: #c8a882;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Heebo Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-1);
+    background: var(--bg);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--accent); color: var(--primary); }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+  }
+  header.doc-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .eyebrow {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    margin: 0 0 0.5rem;
+  }
+  h1, h2, h3 {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-weight: 700;
+  }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, #1c1612 0%, #3d2e22 50%, #7c6350 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .lede { color: var(--text-2); margin: 0; max-width: 60ch; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.75rem; letter-spacing: -0.005em; }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+  p { margin: 0 0 0.85rem; }
+  a { color: var(--primary); }
+  a:hover { color: var(--blue); }
+  ul { padding-left: 1.4rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0 1.25rem;
+    font-size: 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface-3);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-1);
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--accent); }
+  td code, th code {
+    font-size: 12.5px;
+    background: var(--blue-light);
+    color: var(--blue);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  code:not(pre code) {
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--surface-3);
+    color: var(--primary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-variant-ligatures: none;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.95rem 1.1rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0.5rem 0 1.25rem;
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-ligatures: none;
+  }
+  pre .c { color: var(--code-comment); font-style: italic; }
+  pre .s { color: var(--code-string); }
+  .notebooks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .nb {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    text-decoration: none;
+    color: var(--text-1);
+    transition: border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                box-shadow 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    display: block;
+    box-shadow: var(--shadow-sm);
+  }
+  .nb:hover {
+    border-color: var(--blue);
+    box-shadow: var(--shadow-card);
+    transform: translateY(-1px);
+  }
+  .nb .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--primary);
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .nb .title {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    margin: 0 0 0.2rem;
+  }
+  .nb .ds { font-size: 12px; color: var(--text-2); margin: 0 0 0.4rem; }
+  .nb .ds code { background: none; padding: 0; color: var(--text-2); font-size: 11.5px; }
+  .nb .what { font-size: 12.5px; color: var(--text-2); line-height: 1.4; margin: 0; }
+  .progression {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin: 1rem 0 1.5rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .progression svg { width: 100%; height: auto; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+</style>
+</head>
+<body>
+<main>
+
+<header class="doc-header">
+  <p class="eyebrow">Skynet · Backend</p>
+  <h1>Usage Guide</h1>
+  <p class="lede">Tutorials for submitting optimization jobs to the Skynet service. For service operators, see the <a href="../../README.md">main README</a>.</p>
+</header>
+
+<section>
+  <h2>Prerequisites</h2>
+  <ul>
+    <li>The Skynet service running (locally via <code>python main.py</code> or deployed)</li>
+    <li>Python environment with <code>dspy</code> and <code>requests</code> installed</li>
+  </ul>
+
+  <h3>Quick Setup</h3>
+<pre>cd backend/usage_guide
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .</pre>
+
+  <p>The <code>pyproject.toml</code> in this folder declares the notebook deps (<code>dspy</code>, <code>pandas</code>, <code>openpyxl</code>, <code>requests</code>, <code>jupyter</code>); installing with <code>-e .</code> keeps the kernel in sync without dragging in the full backend service.</p>
+
+  <h3>Environment Variables</h3>
+  <table>
+    <thead><tr><th>Name</th><th>Purpose</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td><code>DSPY_SERVICE_URL</code></td><td>Skynet API base URL</td><td><code>http://localhost:8000</code></td></tr>
+      <tr><td><code>DSPY_LM_BASE_URL</code></td><td>LLM gateway base URL (use this for self-hosted endpoints)</td><td><code>https://api.openai.com/v1</code></td></tr>
+      <tr><td><code>LM_API_KEY</code></td><td>Bearer token for the LLM gateway</td><td>— (required)</td></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td>Legacy fallback name; honored if <code>LM_API_KEY</code> is unset</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <p>For self-hosted gateways (vLLM, Ollama, internal proxies), set <code>DSPY_LM_BASE_URL</code> to the gateway URL and <code>LM_API_KEY</code> to whatever token the gateway expects (any non-empty string works for endpoints that don't authenticate per-user).</p>
+
+  <h3>Air-Gap / On-Prem Install</h3>
+  <p>The notebooks have no <code>!pip install</code> magics — install once via the local <code>pyproject.toml</code>. To resolve packages from an internal Artifactory mirror instead of public PyPI, see the snippet at the top of <code>pyproject.toml</code> (pip.conf, <code>PIP_INDEX_URL</code>, or a <code>[[tool.uv.index]]</code> block).</p>
+</section>
+
+<section>
+  <h2>Notebooks</h2>
+  <p>Start with notebook 1. Each notebook builds on new concepts — not just different data.</p>
+
+  <figure class="progression">
+    <svg viewBox="0 0 720 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Notebook learning progression">
+      <defs>
+        <marker id="np-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#5c4d40"/>
+        </marker>
+      </defs>
+      <g font-family="Inter Variable, system-ui, sans-serif" font-size="11" fill="#1c1612">
+        <circle cx="60" cy="40" r="22" fill="#ede7dd" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="60" y="44" text-anchor="middle" font-weight="700" font-size="13" fill="#3d2e22">01</text>
+        <text x="60" y="74" text-anchor="middle" fill="#5c4d40">quickstart</text>
+
+        <line x1="86" y1="40" x2="125" y2="40" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#np-arrow)"/>
+
+        <circle cx="155" cy="40" r="22" fill="#ede7dd" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="155" y="44" text-anchor="middle" font-weight="700" font-size="13" fill="#3d2e22">02</text>
+        <text x="155" y="74" text-anchor="middle" fill="#5c4d40">grid search</text>
+
+        <line x1="181" y1="40" x2="220" y2="40" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#np-arrow)"/>
+
+        <circle cx="250" cy="40" r="22" fill="#ede7dd" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="250" y="44" text-anchor="middle" font-weight="700" font-size="13" fill="#3d2e22">03</text>
+        <text x="250" y="74" text-anchor="middle" fill="#5c4d40">creative</text>
+
+        <line x1="276" y1="40" x2="315" y2="40" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#np-arrow)"/>
+
+        <circle cx="345" cy="40" r="22" fill="#ede7dd" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="345" y="44" text-anchor="middle" font-weight="700" font-size="13" fill="#3d2e22">04</text>
+        <text x="345" y="74" text-anchor="middle" fill="#5c4d40">advanced</text>
+
+        <line x1="371" y1="40" x2="410" y2="40" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#np-arrow)"/>
+
+        <circle cx="440" cy="40" r="22" fill="#3d2e22" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="440" y="44" text-anchor="middle" font-weight="700" font-size="13" fill="#faf8f5">05</text>
+        <text x="440" y="74" text-anchor="middle" fill="#5c4d40">GEPA showcase</text>
+      </g>
+    </svg>
+  </figure>
+
+  <div class="notebooks">
+    <a class="nb" href="01_quickstart.ipynb">
+      <span class="num">01</span>
+      <p class="title">Quickstart</p>
+      <p class="ds"><code>math_problems.json</code> · math</p>
+      <p class="what">End-to-end: submit, monitor, results, load &amp; test optimized program.</p>
+    </a>
+    <a class="nb" href="02_grid_search.ipynb">
+      <span class="num">02</span>
+      <p class="title">Grid Search</p>
+      <p class="ds"><code>wikidata_qa.json</code> · general QA</p>
+      <p class="what">Compare model pairs via grid search, analyze per-pair results.</p>
+    </a>
+    <a class="nb" href="03_creative_tasks.ipynb">
+      <span class="num">03</span>
+      <p class="title">Creative Tasks</p>
+      <p class="ds"><code>nasa_missions.json</code> · multi-output</p>
+      <p class="what">Multi-field signatures, LLM-as-judge metrics, code validation, serve API.</p>
+    </a>
+    <a class="nb" href="04_advanced.ipynb">
+      <span class="num">04</span>
+      <p class="title">Advanced</p>
+      <p class="ds"><code>uspto_patents.json</code> · multi-input + multi-label</p>
+      <p class="what">Multi-input fusion + multi-label outputs, composite Jaccard / macro-F1 metrics.</p>
+    </a>
+    <a class="nb" href="05_gepa_showcase.ipynb">
+      <span class="num">05</span>
+      <p class="title">GEPA Showcase</p>
+      <p class="ds"><code>logic_puzzles.json</code> · constraint reasoning</p>
+      <p class="what">Structured reasoning, GEPA-driven prompt optimisation on a hard task.</p>
+    </a>
+  </div>
+</section>
+
+<section>
+  <h2>Shared Client</h2>
+  <p>All notebooks import from <code>skynet_client.py</code>:</p>
+  <ul>
+    <li><strong><code>DSPyServiceClient</code></strong> — HTTP client for every API endpoint</li>
+    <li><strong><code>JobMonitor</code></strong> — real-time progress polling with formatted output</li>
+    <li><strong><code>serialize_source</code></strong> — serialize DSPy signatures and metrics to source code strings</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Datasets</h2>
+  <p>All five datasets are fully permissive — self-generated or distilled from public-domain factual sources.</p>
+  <table>
+    <thead><tr><th>File</th><th>Rows</th><th>Task</th><th>Structure</th></tr></thead>
+    <tbody>
+      <tr><td><code>data/math_problems.json</code></td><td>100</td><td>Math word problems</td><td>question → answer (numeric)</td></tr>
+      <tr><td><code>data/wikidata_qa.json</code></td><td>100</td><td>General-domain factual QA</td><td>question → answer</td></tr>
+      <tr><td><code>data/nasa_missions.json</code></td><td>100</td><td>Multi-output structured prediction</td><td>name + description → year + type + destination + status</td></tr>
+      <tr><td><code>data/uspto_patents.json</code></td><td>100</td><td>Multi-input + multi-label classification</td><td>title + abstract → category + subcategories + inventors + decade</td></tr>
+      <tr><td><code>data/logic_puzzles.json</code></td><td>100</td><td>Constraint-satisfaction reasoning</td><td>entities + attributes + clues → solution</td></tr>
+    </tbody>
+  </table>
+
+  <p>Datasets live at the repo root in <code>data/</code>. From a notebook:</p>
+<pre><span class="c">with</span> open(Path(<span class="s">"../../data/math_problems.json"</span>)) <span class="c">as</span> f:
+    dataset = json.load(f)</pre>
+
+  <p>Full interactive API docs: <code>http://localhost:8000/reference</code></p>
+</section>
+
+</main>
+</body>
+</html>

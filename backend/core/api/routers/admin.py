@@ -1,4 +1,8 @@
-"""Admin-only operational routes."""
+"""Admin-only operational routes. [INTERNAL]
+
+All endpoints are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``). Used by the in-app admin console only.
+"""
 
 from __future__ import annotations
 

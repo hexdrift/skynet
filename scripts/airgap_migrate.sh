@@ -40,7 +40,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/airgap_migrate.sh <command>
 
-Migration plan (matches AIRGAP.md):
+Migration plan (matches AIRGAP.html):
   1. clone repo on the air-gapped host
   2. `todos`               list every TODO marker the operator must change
   3. edit URLs/secrets/CIDRs in those files
@@ -413,7 +413,7 @@ $ca_backend_env
     COMMS_WEBHOOK_URL: "$COMMS_WEBHOOK_URL"
     # TODO: On-premise - set to enable Active Directory username autocomplete
     # in the admin tab. Leave empty to keep the NullDirectoryClient fallback
-    # (DB-known users only). See AIRGAP.md "Internal LDAP / Active Directory
+    # (DB-known users only). See AIRGAP.html "Internal LDAP / Active Directory
     # User Search" for the full env contract.
     AD_LDAP_URL: ""
     AD_LDAP_BIND_DN: ""

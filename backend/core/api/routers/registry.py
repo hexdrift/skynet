@@ -1,9 +1,11 @@
-"""Read-only registry snapshot router.
+"""Read-only registry snapshot router. [INTERNAL]
 
 Exposes the set of module, metric, and optimizer names currently registered
 with the backing ``ServiceRegistry``. Used by the generalist agent to
 discover which optimizer / module identifiers are valid before driving a
 submission, and by the frontend to populate dropdowns.
+
+Hidden from the public Scalar reference (not in ``_SCALAR_PUBLIC_PATHS``).
 """
 
 from __future__ import annotations
