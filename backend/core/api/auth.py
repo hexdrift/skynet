@@ -144,6 +144,25 @@ def get_authenticated_user(authorization: str | None = Header(default=None)) -> 
     return AuthenticatedUser(username=username, role=role, groups=_normalise_groups(payload.get("groups")))
 
 
+def is_admin(user: AuthenticatedUser) -> bool:
+    """Return ``True`` when ``user`` matches the configured admin allowlist.
+
+    Non-raising mirror of :func:`require_admin_user` — used by routes that
+    grant admins extra privilege without forbidding the non-admin caller.
+
+    Args:
+        user: Authenticated user resolved from a signed backend token.
+
+    Returns:
+        Whether the user is recognised as a backend admin.
+    """
+    if user.username in settings.admin_usernames_set:
+        return True
+    if settings.admin_groups_set and settings.admin_groups_set.intersection(user.groups):
+        return True
+    return False
+
+
 def require_admin_user(user: AuthenticatedUser) -> AuthenticatedUser:
     """Return ``user`` only when backend admin authorization passes.
 
@@ -156,8 +175,6 @@ def require_admin_user(user: AuthenticatedUser) -> AuthenticatedUser:
     Raises:
         DomainError: When the user is not a backend admin.
     """
-    if user.username in settings.admin_usernames_set:
-        return user
-    if settings.admin_groups_set and settings.admin_groups_set.intersection(user.groups):
+    if is_admin(user):
         return user
     raise DomainError("admin.forbidden", status=403)

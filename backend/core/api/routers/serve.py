@@ -1,14 +1,23 @@
-"""Routes for inference on optimized programs (single runs and grid-search pairs)."""
+"""Routes for inference on optimized programs (single runs and grid-search pairs). [MIXED]
+
+Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
+- ``POST /serve/{id}`` — invoke the trained program.
+- ``GET /serve/{id}/info`` — input/output schema for the program.
+
+Internal (frontend-only, hidden from public docs):
+- ``POST /serve/{id}/stream`` and per-pair variants under
+  ``/serve/{id}/pair/{idx}/...`` — too granular for dev integration.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 import dspy
 from dspy.streaming import StreamListener, StreamResponse
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from starlette.responses import StreamingResponse
 
 from ...constants import (
@@ -19,11 +28,14 @@ from ...constants import (
 )
 from ...models import ModelConfig, ServeInfoResponse, ServeRequest, ServeResponse
 from ...service_gateway.language_models import build_language_model
+from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 from ..response_limits import AGENT_MAX_INSTRUCTIONS, AGENT_MAX_TEXT, truncate_text
 from ._helpers import load_pair_program, load_program, sse_from_events
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 
 def _cap_serve_outputs(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -182,23 +194,25 @@ def create_serve_router(*, job_store) -> APIRouter:
         summary="Describe an optimized program without running it",
         tags=["agent"],
     )
-    def serve_info(optimization_id: str) -> ServeInfoResponse:
+    def serve_info(optimization_id: str, current_user: AuthenticatedUserDep) -> ServeInfoResponse:
         """Describe a compiled optimized program without running it.
 
-        Metadata-only — no LLM calls. 404 if unknown, 409 if not finished.
+        Metadata-only — no LLM calls. 404 if unknown or inaccessible to the
+        caller, 409 if not finished.
 
         Args:
             optimization_id: Optimization id whose artifact should be described.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A ``ServeInfoResponse`` listing the program's I/O fields,
             instructions, and demo count.
 
         Raises:
-            DomainError: 404 if unknown, 409 if the optimization is not
-                in a serveable state.
+            DomainError: 404 if unknown or inaccessible, 409 if the
+                optimization is not in a serveable state.
         """
-        _, result, overview = load_program(job_store, optimization_id)
+        _, result, overview = load_program(job_store, optimization_id, current_user)
         artifact = result.program_artifact
         input_fields, output_fields, instructions, demo_count = _artifact_prompt_fields(artifact)
 
@@ -219,7 +233,9 @@ def create_serve_router(*, job_store) -> APIRouter:
         summary="Run a single inference through an optimized program",
         tags=["agent"],
     )
-    def serve_program(optimization_id: str, req: ServeRequest) -> ServeResponse:
+    def serve_program(
+        optimization_id: str, req: ServeRequest, current_user: AuthenticatedUserDep
+    ) -> ServeResponse:
         """Run a blocking inference call through the compiled program.
 
         Model resolution: ``model_config_override`` → stored job settings →
@@ -229,15 +245,16 @@ def create_serve_router(*, job_store) -> APIRouter:
         Args:
             optimization_id: Optimization id whose program should run.
             req: Inference request carrying inputs and optional model override.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A ``ServeResponse`` with the predicted outputs and resolved model.
 
         Raises:
-            DomainError: 400 (bad inputs / no model), 404 (unknown), 409
-                (not in a serveable state).
+            DomainError: 400 (bad inputs / no model), 404 (unknown or
+                inaccessible), 409 (not in a serveable state).
         """
-        program, result, overview = load_program(job_store, optimization_id)
+        program, result, overview = load_program(job_store, optimization_id, current_user)
         artifact = result.program_artifact
 
         if req.model_config_override:
@@ -290,7 +307,9 @@ def create_serve_router(*, job_store) -> APIRouter:
         "/serve/{optimization_id}/stream",
         summary="Run inference and stream partial outputs as SSE",
     )
-    async def serve_program_stream(optimization_id: str, req: ServeRequest):
+    async def serve_program_stream(
+        optimization_id: str, req: ServeRequest, current_user: AuthenticatedUserDep
+    ):
         """Run inference and stream partial outputs as Server-Sent Events.
 
         Emits one ``token`` event per chunk, keyed by output field, then a
@@ -302,14 +321,16 @@ def create_serve_router(*, job_store) -> APIRouter:
         Args:
             optimization_id: Optimization id whose program should run.
             req: Inference request carrying inputs and optional model override.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A streaming ``StreamingResponse`` with ``text/event-stream`` body.
 
         Raises:
-            DomainError: 400, 404, or 409 mirroring the non-streaming route.
+            DomainError: 400, 404 (including inaccessible to caller), or
+                409 mirroring the non-streaming route.
         """
-        program, result, overview = load_program(job_store, optimization_id)
+        program, result, overview = load_program(job_store, optimization_id, current_user)
         artifact = result.program_artifact
 
         if req.model_config_override:
@@ -367,7 +388,9 @@ def create_serve_router(*, job_store) -> APIRouter:
         summary="Describe the program for one grid-search pair",
         tags=["agent"],
     )
-    def serve_pair_info(optimization_id: str, pair_index: int) -> ServeInfoResponse:
+    def serve_pair_info(
+        optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep
+    ) -> ServeInfoResponse:
         """Describe the program for one grid-search pair without running it.
 
         Same shape as ``GET /serve/{id}/info`` but scoped to a specific
@@ -376,14 +399,16 @@ def create_serve_router(*, job_store) -> APIRouter:
         Args:
             optimization_id: Grid-search optimization id.
             pair_index: Index of the pair in the grid-search result.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A ``ServeInfoResponse`` describing the pair's compiled program.
 
         Raises:
-            DomainError: 404 (unknown), 409 (not finished or pair failed).
+            DomainError: 404 (unknown / inaccessible), 409 (not finished or
+                pair failed).
         """
-        _program, pair, overview = load_pair_program(job_store, optimization_id, pair_index)
+        _program, pair, overview = load_pair_program(job_store, optimization_id, pair_index, current_user)
         artifact = pair.program_artifact
         input_fields, output_fields, instructions, demo_count = _artifact_prompt_fields(artifact)
 
@@ -403,7 +428,12 @@ def create_serve_router(*, job_store) -> APIRouter:
         response_model=ServeResponse,
         summary="Run inference through one grid-search pair",
     )
-    def serve_pair_program(optimization_id: str, pair_index: int, req: ServeRequest) -> ServeResponse:
+    def serve_pair_program(
+        optimization_id: str,
+        pair_index: int,
+        req: ServeRequest,
+        current_user: AuthenticatedUserDep,
+    ) -> ServeResponse:
         """Run inference through one grid-search pair's compiled program.
 
         Default model is the pair's generation model; override with
@@ -414,15 +444,16 @@ def create_serve_router(*, job_store) -> APIRouter:
             optimization_id: Grid-search optimization id.
             pair_index: Index of the pair in the grid-search result.
             req: Inference request carrying inputs and optional model override.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A ``ServeResponse`` with the predicted outputs and resolved model.
 
         Raises:
-            DomainError: 400 (bad inputs), 404 (unknown), 409 (not finished
-                or pair failed).
+            DomainError: 400 (bad inputs), 404 (unknown / inaccessible),
+                409 (not finished or pair failed).
         """
-        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index)
+        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index, current_user)
         artifact = pair.program_artifact
 
         model_config = req.model_config_override or ModelConfig(name=pair.generation_model)
@@ -465,7 +496,12 @@ def create_serve_router(*, job_store) -> APIRouter:
         "/serve/{optimization_id}/pair/{pair_index}/stream",
         summary="Stream inference from one grid-search pair as SSE",
     )
-    async def serve_pair_program_stream(optimization_id: str, pair_index: int, req: ServeRequest):
+    async def serve_pair_program_stream(
+        optimization_id: str,
+        pair_index: int,
+        req: ServeRequest,
+        current_user: AuthenticatedUserDep,
+    ):
         """Stream inference from one grid-search pair as Server-Sent Events.
 
         Same ``token`` -> ``final`` event shape as the single-run stream
@@ -476,15 +512,16 @@ def create_serve_router(*, job_store) -> APIRouter:
             optimization_id: Grid-search optimization id.
             pair_index: Index of the pair in the grid-search result.
             req: Inference request carrying inputs and optional model override.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A streaming ``StreamingResponse`` with ``text/event-stream`` body.
 
         Raises:
-            DomainError: 400 (bad inputs), 404 (unknown), 409 (not finished
-                or pair failed).
+            DomainError: 400 (bad inputs), 404 (unknown / inaccessible),
+                409 (not finished or pair failed).
         """
-        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index)
+        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index, current_user)
         artifact = pair.program_artifact
 
         model_config = req.model_config_override or ModelConfig(name=pair.generation_model)

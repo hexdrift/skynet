@@ -4,10 +4,10 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Menu, LogOut, GraduationCap, BookOpen } from "lucide-react";
+import { Menu, LogOut, GraduationCap, BookOpen, Lightbulb } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
-import { useTutorialContext } from "@/features/tutorial";
+import { useTutorialContext, ConceptsGuide } from "@/features/tutorial";
 import { useUserPrefs } from "@/features/settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
@@ -45,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function ShellChrome({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [conceptsOpen, setConceptsOpen] = React.useState(false);
   const [isDesktop, setIsDesktop] = React.useState(false);
   const { data: session } = useSession();
   const pathname = usePathname();
@@ -141,6 +142,21 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
               {msg("app.shell.tour_tooltip")}
             </TooltipContent>
           </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setConceptsOpen(true)}
+                className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
+                aria-label={msg("app.shell.concepts_aria")}
+              >
+                <Lightbulb className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" dir="rtl">
+              {msg("app.shell.concepts_tooltip")}
+            </TooltipContent>
+          </Tooltip>
           {prefs.advancedMode && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -218,6 +234,8 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
           <Sidebar />
         </div>
       </div>
+
+      <ConceptsGuide open={conceptsOpen} onClose={() => setConceptsOpen(false)} />
     </div>
   );
 

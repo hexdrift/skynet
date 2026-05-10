@@ -1,4 +1,9 @@
-"""Streaming endpoint for the submit-wizard AI code agent."""
+"""Streaming endpoint for the submit-wizard AI code agent. [INTERNAL]
+
+All endpoints are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``). Used by the wizard UI to author DSPy code
+interactively — not part of the dev integration surface.
+"""
 
 from __future__ import annotations
 

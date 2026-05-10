@@ -1,11 +1,21 @@
-"""Routes for reading and mutating optimization metadata (logs, payload, name, pin, archive)."""
+"""Routes for reading and mutating optimization metadata (logs, payload, name, pin, archive). [MIXED]
+
+Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
+- ``GET /optimizations/{id}/logs``
+- ``GET /optimizations/{id}/payload``
+
+Internal (dashboard plumbing, hidden from public docs):
+- ``PATCH /optimizations/{id}/name``
+- ``PATCH /optimizations/{id}/pin``
+- ``PATCH /optimizations/{id}/archive``
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ...constants import (
@@ -14,6 +24,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
 )
 from ...models import JobLogEntry, OptimizationPayloadResponse
+from ..auth import AuthenticatedUser, get_authenticated_user, is_admin
 from ..converters import parse_overview
 from ..errors import DomainError
 from ..response_limits import (
@@ -23,9 +34,11 @@ from ..response_limits import (
     clamp_limit,
     truncate_text,
 )
-from ._helpers import strip_api_key
+from ._helpers import load_job_for_user, strip_api_key
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 _PAYLOAD_MODEL_CONFIG_FIELDS = (
     "model_settings",
@@ -90,6 +103,7 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
     )
     def get_job_logs(
         optimization_id: str,
+        current_user: AuthenticatedUserDep,
         limit: int | None = Query(
             default=AGENT_DEFAULT_LIST,
             ge=1,
@@ -113,10 +127,12 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         ``level`` is an exact uppercase match. Returns empty list for jobs
         with no logs yet. Individual log messages are truncated past ~500
         chars so a single line can't evict the agent context; paginate with
-        ``offset`` for more. 404 if the optimization is unknown.
+        ``offset`` for more. 404 if the optimization is unknown or the
+        non-admin caller doesn't own it.
 
         Args:
             optimization_id: Optimization id to fetch logs for.
+            current_user: Authenticated caller resolved from the bearer token.
             limit: Maximum number of log entries to return.
             offset: Number of log entries to skip.
             level: Optional uppercase level filter.
@@ -125,10 +141,13 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
             A list of ``JobLogEntry`` rows ordered by timestamp ascending.
 
         Raises:
-            DomainError: 404 when the optimization is unknown.
+            DomainError: 404 when the optimization is unknown or
+                inaccessible to the caller.
         """
 
-        if not job_store.job_exists(optimization_id):
+        if not is_admin(current_user):
+            load_job_for_user(job_store, optimization_id, current_user)
+        elif not job_store.job_exists(optimization_id):
             logger.warning("Optimization logs requested for unknown optimization_id=%s", optimization_id)
             raise DomainError(
                 "optimization.not_found",
@@ -157,35 +176,31 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         response_model=OptimizationPayloadResponse,
         summary="Retrieve the original submission payload",
     )
-    def get_job_payload(optimization_id: str) -> OptimizationPayloadResponse:
+    def get_job_payload(
+        optimization_id: str, current_user: AuthenticatedUserDep
+    ) -> OptimizationPayloadResponse:
         """Return the original submission payload for an optimization.
 
         Useful for re-running or duplicating an optimization. Includes the
         full dataset, column mapping, code, and kwargs. Inline API keys on
         every ``ModelConfig`` slot are scrubbed before the response leaves
         the server — duplicating a job therefore requires the caller to
-        re-supply credentials. 404 if the optimization is unknown or the
-        stored payload is missing.
+        re-supply credentials. 404 if the optimization is unknown, the
+        stored payload is missing, or the non-admin caller doesn't own it.
 
         Args:
             optimization_id: Optimization id whose payload should be returned.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             The original submission payload wrapped in
             ``OptimizationPayloadResponse``.
 
         Raises:
-            DomainError: 404 when the optimization is unknown or the
-                payload is no longer available.
+            DomainError: 404 when the optimization is unknown, inaccessible
+                to the caller, or the payload is no longer available.
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError(
-                "optimization.not_found",
-                status=404,
-                optimization_id=optimization_id,
-            ) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         payload = job_data.get("payload")
         if not payload or not isinstance(payload, dict):
@@ -205,27 +220,22 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         summary="Rename an optimization's display label",
         tags=["agent"],
     )
-    def rename_job(optimization_id: str, req: RenameRequest) -> dict:
+    def rename_job(optimization_id: str, req: RenameRequest, current_user: AuthenticatedUserDep) -> dict:
         """Update the display name for an optimization.
 
         Args:
             optimization_id: Optimization id to rename.
             req: New name payload.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             ``{"optimization_id": id, "name": new_name}``.
 
         Raises:
-            DomainError: 404 when the optimization is unknown.
+            DomainError: 404 when the optimization is unknown or
+                inaccessible to the caller.
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError(
-                "optimization.not_found",
-                status=404,
-                optimization_id=optimization_id,
-            ) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
         overview = parse_overview(job_data)
         overview[PAYLOAD_OVERVIEW_NAME] = req.name.strip()
         job_store.set_payload_overview(optimization_id, overview)
@@ -237,26 +247,21 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         summary="Toggle pinned state for an optimization",
         tags=["agent"],
     )
-    def toggle_pin_job(optimization_id: str) -> dict:
+    def toggle_pin_job(optimization_id: str, current_user: AuthenticatedUserDep) -> dict:
         """Toggle the ``pinned`` flag on an optimization.
 
         Args:
             optimization_id: Optimization id to toggle.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             ``{"optimization_id": id, "pinned": bool}``.
 
         Raises:
-            DomainError: 404 when the optimization is unknown.
+            DomainError: 404 when the optimization is unknown or
+                inaccessible to the caller.
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError(
-                "optimization.not_found",
-                status=404,
-                optimization_id=optimization_id,
-            ) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
         overview = parse_overview(job_data)
         current = overview.get("pinned", False)
         overview["pinned"] = not current
@@ -269,26 +274,21 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         summary="Toggle archived state for an optimization",
         tags=["agent"],
     )
-    def toggle_archive_job(optimization_id: str) -> dict:
+    def toggle_archive_job(optimization_id: str, current_user: AuthenticatedUserDep) -> dict:
         """Toggle the ``archived`` flag (soft-hide without deleting).
 
         Args:
             optimization_id: Optimization id to toggle.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             ``{"optimization_id": id, "archived": bool}``.
 
         Raises:
-            DomainError: 404 when the optimization is unknown.
+            DomainError: 404 when the optimization is unknown or
+                inaccessible to the caller.
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError(
-                "optimization.not_found",
-                status=404,
-                optimization_id=optimization_id,
-            ) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
         overview = parse_overview(job_data)
         current = overview.get("archived", False)
         overview["archived"] = not current

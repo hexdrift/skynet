@@ -1,4 +1,4 @@
-"""Routes for dataset profiling, split-plan recommendations, and demo samples.
+"""Routes for dataset profiling, split-plan recommendations, and demo samples. [INTERNAL]
 
 ``POST /datasets/profile`` — inspect the uploaded rows and return a
 ``DatasetProfile`` plus a recommended ``SplitPlan``. Purely advisory:
@@ -12,6 +12,9 @@ so non-technical users can try the product end-to-end with zero setup.
 ``POST /datasets/column-roles`` — validate a proposed column-role map
 and return a ``wizard_state`` patch so the agent can configure column
 roles on the user's behalf.
+
+All endpoints are hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``) — they exist to support the in-app wizard.
 """
 
 from __future__ import annotations

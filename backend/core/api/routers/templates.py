@@ -1,9 +1,14 @@
-"""Routes for CRUD on reusable job-configuration templates.
+"""Routes for CRUD on reusable job-configuration templates. [INTERNAL]
 
 Templates let users save and reload submission configurations. The backing
 ``templates`` table is created by ``ensure_template_schema`` at app startup
 (see :mod:`backend.core.api.app`); the router itself is side-effect-free
 on construction.
+
+Hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``) — devs integrating with Skynet should hold
+their own job configs and post them to ``/run`` directly rather than
+storing them server-side.
 """
 
 from __future__ import annotations

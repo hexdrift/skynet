@@ -32,9 +32,10 @@ from ....models import (
 from ....models.common import OptimizationType
 from ....notifications import notify_job_started
 from ....worker.engine import get_worker
+from ...auth import AuthenticatedUser, is_admin
 from ...converters import parse_overview
 from ...errors import DomainError
-from .._helpers import compute_task_fingerprint, strip_api_key
+from .._helpers import compute_task_fingerprint, job_owner, strip_api_key
 from .schemas import BulkMetadataRequest, BulkMetadataResponse, BulkMetadataSkipped
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,11 @@ DASHBOARD_POLL_SECONDS = 3
 JOB_STREAM_POLL_SECONDS = 2
 
 
-async def stream_dashboard_snapshots(job_store) -> AsyncIterator[dict[str, Any]]:
+async def stream_dashboard_snapshots(
+    job_store,
+    *,
+    owner_filter: str | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     """Yield live dashboard snapshots as ``{event, data}`` dicts.
 
     Polls every pending/validating/running optimization every
@@ -53,6 +58,9 @@ async def stream_dashboard_snapshots(job_store) -> AsyncIterator[dict[str, Any]]
 
     Args:
         job_store: Job-store used to enumerate active optimizations.
+        owner_filter: When set, restrict the stream to jobs owned by this
+            username; ``None`` means show every active optimization
+            (admin-scoped behaviour).
 
     Yields:
         ``{"event": "message"|"idle", "data": ...}`` dicts.
@@ -68,7 +76,7 @@ async def stream_dashboard_snapshots(job_store) -> AsyncIterator[dict[str, Any]]
         Returns:
             Raw ``job_store`` rows for the requested status (capped at 100).
         """
-        return job_store.list_jobs(status=status, limit=100)
+        return job_store.list_jobs(status=status, limit=100, username=owner_filter)
 
     while True:
         active_rows: list[dict] = []
@@ -283,17 +291,20 @@ def bulk_set_flag(
     req: BulkMetadataRequest,
     *,
     flag: str,
+    user: AuthenticatedUser,
 ) -> BulkMetadataResponse:
     """Shared bulk-metadata update used by ``/bulk-pin`` and ``/bulk-archive``.
 
     Walks ``req.optimization_ids``, loading each row, setting ``overview[flag]``
     to ``req.value``, and writing it back. Duplicate ids are collapsed;
-    unknown ids are surfaced in the ``skipped`` list rather than raising.
+    unknown ids — and ids the non-admin caller doesn't own — are surfaced
+    in the ``skipped`` list with ``reason="not_found"`` rather than raising.
 
     Args:
         job_store: Job-store the flag is written to.
         req: Bulk-metadata request body.
         flag: Overview key to toggle (e.g. ``"pinned"``, ``"archived"``).
+        user: Authenticated caller; non-admins are restricted to their own jobs.
 
     Returns:
         A ``BulkMetadataResponse`` listing successful and skipped ids.
@@ -301,6 +312,7 @@ def bulk_set_flag(
     updated: list[str] = []
     skipped: list[BulkMetadataSkipped] = []
     seen: set[str] = set()
+    admin = is_admin(user)
     for oid in req.optimization_ids:
         if oid in seen:
             continue
@@ -310,6 +322,11 @@ def bulk_set_flag(
         except KeyError:
             skipped.append(BulkMetadataSkipped(optimization_id=oid, reason="not_found"))
             continue
+        if not admin:
+            owner = job_owner(job_data)
+            if owner is None or owner != user.username:
+                skipped.append(BulkMetadataSkipped(optimization_id=oid, reason="not_found"))
+                continue
         overview = parse_overview(job_data)
         overview[flag] = bool(req.value)
         job_store.set_payload_overview(oid, overview)

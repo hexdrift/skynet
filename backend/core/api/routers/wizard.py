@@ -1,4 +1,4 @@
-"""Routes for agent-driven wizard-state mutation.
+"""Routes for agent-driven wizard-state mutation. [INTERNAL]
 
 ``POST /wizard/update`` is the single endpoint the generalist agent uses
 to edit any subset of wizard fields in one call. Each supplied field is
@@ -10,6 +10,8 @@ The endpoint is intentionally broad: it supersedes the per-field tools
 (``set_column_roles``, etc.) while staying additive — those legacy tools
 still work. An agent can call this once per turn with a composite patch
 (e.g. optimizer + split + kwargs) instead of chaining several narrow calls.
+
+Hidden from the public Scalar reference (not in ``_SCALAR_PUBLIC_PATHS``).
 """
 
 from __future__ import annotations

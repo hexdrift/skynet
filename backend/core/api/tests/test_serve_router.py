@@ -18,6 +18,7 @@ from ...models import ProgramArtifact
 # noinspection PyProtectedMember
 from ..routers import _helpers
 from ..routers.serve import create_serve_router
+from .conftest import bypass_auth
 from .mocks import (
     _BaseFakeJobStore,
     make_artifact,
@@ -79,6 +80,7 @@ def serve_client(serve_store: _FakeJobStore) -> TestClient:
     app = FastAPI()
     app.include_router(create_serve_router(job_store=serve_store))
     _wire_http_handler(app)
+    bypass_auth(app)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -372,6 +374,7 @@ def grid_client(grid_store: _FakeJobStore) -> TestClient:
     app = FastAPI()
     app.include_router(create_serve_router(job_store=grid_store))
     _wire_http_handler(app)
+    bypass_auth(app)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -501,6 +504,7 @@ def stream_client(stream_store: _FakeJobStore) -> TestClient:
     app = FastAPI()
     app.include_router(create_serve_router(job_store=stream_store))
     _wire_http_handler(app)
+    bypass_auth(app)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -568,6 +572,7 @@ def pair_stream_client(pair_stream_store: _FakeJobStore) -> TestClient:
     """
     app = FastAPI()
     app.include_router(create_serve_router(job_store=pair_stream_store))
+    bypass_auth(app)
     return TestClient(app, raise_server_exceptions=False)
 
 

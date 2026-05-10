@@ -1,4 +1,17 @@
-"""Single-optimization read routes and evaluate-examples."""
+"""Single-optimization read routes and evaluate-examples. [MIXED]
+
+Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
+- ``GET /optimizations/{id}`` — full job state.
+- ``GET /optimizations/{id}/summary`` — compact metrics summary.
+- ``GET /optimizations/{id}/artifact`` — download the trained program.
+- ``GET /optimizations/{id}/grid-result`` — per-pair grid-search results.
+
+Internal (frontend-only, hidden from public docs):
+- ``GET /optimizations/{id}/dataset`` — dataset reshuffle for the UI.
+- ``POST /optimizations/{id}/evaluate-examples`` — per-user playground.
+- ``GET /optimizations/{id}/test-results``
+- ``GET /optimizations/{id}/pair/{idx}/test-results``
+"""
 
 from __future__ import annotations
 
@@ -8,9 +21,10 @@ import logging
 import pickle
 import random
 from datetime import UTC, datetime
+from typing import Annotated
 
 import dspy
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -36,6 +50,7 @@ from ....models import (
 from ....registry import ResolverError, resolve_module_factory
 from ....service_gateway.language_models import build_language_model
 from ....service_gateway.optimization.data import load_metric_from_code, load_signature_from_code
+from ...auth import AuthenticatedUser, get_authenticated_user
 from ...converters import (
     compute_elapsed,
     extract_estimated_remaining,
@@ -45,11 +60,13 @@ from ...converters import (
     status_to_job_status,
 )
 from ...errors import DomainError
-from .._helpers import _program_cache, build_summary, stable_seed
+from .._helpers import _program_cache, build_summary, load_job_for_user, stable_seed
 from ..constants import TERMINAL_STATUSES
 from ._local import remap_test_indices
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 
 def register_detail_routes(router: APIRouter, *, job_store) -> None:
@@ -71,17 +88,19 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         response_model=OptimizationStatusResponse,
         summary="Full optimization detail with logs, progress, metrics, and result",
     )
-    def get_job(optimization_id: str, request: Request) -> JSONResponse:
+    def get_job(optimization_id: str, request: Request, current_user: AuthenticatedUserDep) -> JSONResponse:
         """Return full optimization detail with logs, progress, metrics, and result.
 
         Supports conditional GET via ``If-None-Match`` / ``ETag`` (304 when
         unchanged). Grid searches include partial ``grid_result`` while still
         running. Corrupted result data is omitted with a warning rather than
-        raising 500. 404 if the optimization id is unknown.
+        raising 500. 404 if the optimization id is unknown or the caller
+        doesn't own it (non-admins).
 
         Args:
             optimization_id: The id of the optimization to fetch.
             request: Starlette request used to check ``If-None-Match``.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A :class:`fastapi.responses.JSONResponse` whose body is a
@@ -89,14 +108,11 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             with no body when ``If-None-Match`` matches the current ETag).
 
         Raises:
-            DomainError: 404 when the optimization id is unknown.
+            DomainError: 404 when the optimization id is unknown or
+                inaccessible to the caller.
         """
 
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            logger.warning("Optimization status requested for unknown optimization_id=%s", optimization_id)
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         status = status_to_job_status(job_data.get("status", "pending"))
 
@@ -185,24 +201,22 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         summary="Lightweight summary card for one optimization",
         tags=["agent"],
     )
-    def get_job_summary(optimization_id: str) -> OptimizationSummaryResponse:
+    def get_job_summary(optimization_id: str, current_user: AuthenticatedUserDep) -> OptimizationSummaryResponse:
         """Return the compact dashboard-card shape for a single optimization.
 
         Args:
             optimization_id: Optimization id to summarise.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             An ``OptimizationSummaryResponse`` for dashboard display.
 
         Raises:
-            DomainError: 404 if the optimization is unknown.
+            DomainError: 404 if the optimization is unknown or inaccessible
+                to the caller.
         """
 
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            logger.warning("Optimization summary requested for unknown optimization_id=%s", optimization_id)
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         job_data["progress_count"] = job_store.get_progress_count(optimization_id)
         job_data["log_count"] = job_store.get_log_count(optimization_id)
@@ -212,26 +226,24 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         "/optimizations/{optimization_id}/dataset",
         summary="Reconstruct the train/val/test split used by this optimization",
     )
-    def get_job_dataset(optimization_id: str) -> dict:
+    def get_job_dataset(optimization_id: str, current_user: AuthenticatedUserDep) -> dict:
         """Reconstruct the train/val/test split deterministically from the stored seed.
 
         Each row includes its global dataset index for UI highlighting.
 
         Args:
             optimization_id: Optimization id whose dataset should be returned.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A dict with ``total_rows``, ``splits``, ``column_mapping``, and
             ``split_counts``.
 
         Raises:
-            DomainError: 404 (optimization/payload/dataset missing), 500
-                (corrupt mapping).
+            DomainError: 404 (optimization unknown / payload/dataset
+                missing / inaccessible), 500 (corrupt mapping).
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         payload = job_data.get("payload")
         if not payload or not isinstance(payload, dict):
@@ -296,7 +308,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         "/optimizations/{optimization_id}/evaluate-examples",
         summary="Run the optimized or baseline program on specific dataset rows",
     )
-    def evaluate_examples(optimization_id: str, req: dict) -> dict:
+    def evaluate_examples(optimization_id: str, req: dict, current_user: AuthenticatedUserDep) -> dict:
         """Run the optimized or baseline program on specific dataset rows.
 
         Out-of-range indices are silently skipped.
@@ -304,23 +316,21 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         Args:
             optimization_id: Optimization id whose program should run.
             req: Request body with ``indices`` and ``program_type`` keys.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             ``{"results": [...], "program_type": ...}`` with one entry per
             evaluated row.
 
         Raises:
-            DomainError: 404 (missing optimization/payload), 400 (no
-                metric/model/module), 409 (no result available for the
-                optimized program).
+            DomainError: 404 (missing/inaccessible optimization or payload),
+                400 (no metric/model/module), 409 (no result available for
+                the optimized program).
         """
         indices = req.get("indices", [])
         program_type = req.get("program_type", "optimized")
 
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         overview = parse_overview(job_data)
         payload = job_data.get("payload")
@@ -433,7 +443,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         "/optimizations/{optimization_id}/test-results",
         summary="Per-example baseline and optimized test scores",
     )
-    def get_test_results(optimization_id: str) -> dict:
+    def get_test_results(optimization_id: str, current_user: AuthenticatedUserDep) -> dict:
         """Return stored per-example baseline and optimized test scores.
 
         Sequential test-split indices are remapped to global dataset indices for
@@ -441,17 +451,15 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
 
         Args:
             optimization_id: Optimization id whose test results should be returned.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             ``{"baseline": [...], "optimized": [...]}`` with global indices.
 
         Raises:
-            DomainError: 404 if unknown, 409 if no result yet.
+            DomainError: 404 if unknown or inaccessible, 409 if no result yet.
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         result_data = job_data.get("result")
         if not result_data:
@@ -486,27 +494,24 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         response_model=ProgramArtifactResponse,
         summary="Download the compiled DSPy program artifact",
     )
-    def get_job_artifact(optimization_id: str) -> ProgramArtifactResponse:
+    def get_job_artifact(optimization_id: str, current_user: AuthenticatedUserDep) -> ProgramArtifactResponse:
         """Return the pickled program artifact for a successful single-run optimization.
 
         Grid searches 404 here — use ``/grid-result`` instead (one artifact per pair).
 
         Args:
             optimization_id: Optimization id whose artifact should be returned.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             A ``ProgramArtifactResponse`` carrying the pickled program.
 
         Raises:
-            DomainError: 404 (unknown / grid), 409 (not success), 500
-                (corrupt result).
+            DomainError: 404 (unknown / inaccessible / grid), 409 (not
+                success), 500 (corrupt result).
         """
 
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            logger.warning("Artifact requested for unknown optimization_id=%s", optimization_id)
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
@@ -545,7 +550,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         response_model=GridSearchResponse,
         summary="Retrieve the full grid-search result with per-pair details",
     )
-    def get_grid_search_result(optimization_id: str) -> GridSearchResponse:
+    def get_grid_search_result(optimization_id: str, current_user: AuthenticatedUserDep) -> GridSearchResponse:
         """Return all pair results for a finished grid search, including ``best_pair``.
 
         Only valid after the sweep reaches a terminal status. For live progress
@@ -554,18 +559,17 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
 
         Args:
             optimization_id: Grid-search optimization id.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             The full ``GridSearchResponse`` including every pair.
 
         Raises:
-            DomainError: 404 (unknown / not grid / no result), 409 (still
-                running / failed without result), 500 (corrupt result).
+            DomainError: 404 (unknown / inaccessible / not grid / no
+                result), 409 (still running / failed without result), 500
+                (corrupt result).
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         overview = parse_overview(job_data)
         if overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
@@ -593,24 +597,24 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
         summary="Per-example test scores for one grid-search pair",
     )
-    def get_pair_test_results(optimization_id: str, pair_index: int) -> dict:
+    def get_pair_test_results(
+        optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep
+    ) -> dict:
         """Per-pair analogue of ``GET /test-results`` with global-index remapping.
 
         Args:
             optimization_id: Grid-search optimization id.
             pair_index: Index of the pair to score.
+            current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
             ``{"baseline": [...], "optimized": [...]}`` with global indices.
 
         Raises:
-            DomainError: 404 (unknown / pair missing), 409 (not a grid
-                search, not success, or no stored result).
+            DomainError: 404 (unknown / inaccessible / pair missing), 409
+                (not a grid search, not success, or no stored result).
         """
-        try:
-            job_data = job_store.get_job(optimization_id)
-        except KeyError:
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
 
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)

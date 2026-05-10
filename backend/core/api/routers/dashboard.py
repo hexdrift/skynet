@@ -1,10 +1,14 @@
-"""Public anonymous dashboard routes (PER-11 Feature B).
+"""Public anonymous dashboard routes (PER-11 Feature B). [INTERNAL]
 
 ``GET /dashboard/public`` returns the payload the /explore page needs:
 a list of points (one per embedded job) with 2D coordinates for the
 scatter, precomputed cluster IDs at five granularity levels, and the
 per-level cluster counts for slider labelling. No authentication, no
 user identifiers in the response.
+
+Hidden from the public Scalar reference (none are in
+``_SCALAR_PUBLIC_PATHS``) — the response shape is bound to the /explore
+view, not a stable dev contract.
 """
 
 from __future__ import annotations

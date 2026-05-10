@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from ...constants import TQDM_REMAINING_KEY
 from ...models import OptimizationStatus
+from ..auth import AuthenticatedUser
 
 # noinspection PyProtectedMember
 from ..routers import _helpers as _helpers_mod
@@ -24,6 +25,8 @@ from ..routers._helpers import (
     load_program,
     strip_api_key,
 )
+
+_TEST_USER = AuthenticatedUser(username="alice", role="admin", groups=("skynet-admins",))
 from ..routers.constants import (
     TERMINAL_STATUSES,
     VALID_OPTIMIZATION_TYPES,
@@ -384,7 +387,7 @@ def test_load_program_deleted_job_raises_404_before_cache() -> None:
     store = _JobStoreWithDelete()
     # Job is never seeded — get_job will raise KeyError.
     with pytest.raises(HTTPException) as exc_info:
-        load_program(store, "missing-job")
+        load_program(store, "missing-job", _TEST_USER)
     assert exc_info.value.status_code == 404
 
 
@@ -401,7 +404,7 @@ def test_load_program_deleted_job_raises_404_even_when_cache_has_entry() -> None
     store.seed("job-then-deleted", job_data)
 
     # First call succeeds and populates the cache.
-    _program, _, _ = load_program(store, "job-then-deleted")
+    _program, _, _ = load_program(store, "job-then-deleted", _TEST_USER)
     assert "job-then-deleted" in _helpers_mod._program_cache
 
     # Delete the job from the store.
@@ -409,7 +412,7 @@ def test_load_program_deleted_job_raises_404_even_when_cache_has_entry() -> None
 
     # Second call still raises 404 because get_job is called first.
     with pytest.raises(HTTPException) as exc_info:
-        load_program(store, "job-then-deleted")
+        load_program(store, "job-then-deleted", _TEST_USER)
     assert exc_info.value.status_code == 404
 
 
@@ -423,8 +426,8 @@ def test_load_program_cache_avoids_repeated_pickle_deserialisation() -> None:
     store = _JobStoreWithDelete()
     store.seed("job-cache-hit", _run_job_data("job-cache-hit", object()))
 
-    first_call_program, _, _ = load_program(store, "job-cache-hit")
-    second_call_program, _, _ = load_program(store, "job-cache-hit")
+    first_call_program, _, _ = load_program(store, "job-cache-hit", _TEST_USER)
+    second_call_program, _, _ = load_program(store, "job-cache-hit", _TEST_USER)
 
     # Both calls must return the same object instance (from cache).
     assert first_call_program is second_call_program

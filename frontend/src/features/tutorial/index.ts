@@ -3,6 +3,7 @@ export { TutorialMenu } from "./components/tutorial-menu";
 export { TutorialPopover } from "./components/tutorial-popover";
 export { TutorialProvider, useTutorialContext } from "./components/tutorial-provider";
 export { SpotlightMask } from "./components/spotlight-mask";
+export { ConceptsGuide } from "./components/concepts-guide";
 export {
   consumePendingCompareDemo,
   consumePendingCompareExamples,

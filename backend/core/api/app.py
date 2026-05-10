@@ -73,54 +73,39 @@ logger = logging.getLogger(__name__)
 
 _SCALAR_STATIC_DIR = Path(__file__).parent / "static" / "scalar"
 
-# Routes that should be hidden from the *public* API reference shown by
-# Scalar. These are still live and still in /openapi.json — the filter
-# is applied only to the copy served at /openapi.public.json, which is
-# what Scalar fetches. The cut is aimed at developers integrating with
-# Skynet: submit jobs, poll, download artifacts, run inference, done.
-# Hidden routes fall into three categories:
-#   1. Frontend plumbing (sidebar lists, SSE streams, dataset reshuffle,
-#      code formatter, analytics dashboards, template CRUD)
-#   2. Redundant per-example readers whose data is already in
-#      /optimizations/{id} and /optimizations/{id}/grid-result
-#   3. Dashboard-only mutations (rename, pin, archive toggles, per-user
-#      evaluate-examples playground)
-_SCALAR_HIDDEN_PATHS = frozenset(
+# Allowlist of routes shown in the *public* Scalar API reference. Every
+# route is still live and still appears in /openapi.json — the filter is
+# applied only to the copy served at /openapi.public.json, which is what
+# Scalar fetches. The cut is aimed at developers integrating with Skynet:
+# submit a job, poll status, fetch the artifact, run inference. Anything
+# not on this list is treated as internal (dashboard plumbing, SSE
+# streams, analytics aggregations, per-pair readers, admin tooling) and
+# auto-hidden from the docs without any further action.
+_SCALAR_PUBLIC_PATHS = frozenset(
     {
-        # Dashboard plumbing
-        "/optimizations/sidebar",
-        "/optimizations/counts",
-        "/optimizations/bulk-delete",
-        "/optimizations/{optimization_id}/name",
-        "/optimizations/{optimization_id}/pin",
-        "/optimizations/{optimization_id}/archive",
+        # Service health
+        "/health",
+        "/queue",
+        # Submit work
+        "/run",
+        "/grid-search",
+        # Browse + read results
+        "/optimizations",
+        "/optimizations/{optimization_id}",
+        "/optimizations/{optimization_id}/summary",
+        "/optimizations/{optimization_id}/logs",
         "/optimizations/{optimization_id}/payload",
-        "/optimizations/{optimization_id}/evaluate-examples",
-        "/optimizations/{optimization_id}/dataset",
-        "/optimizations/{optimization_id}/pair/{pair_index}",
-        "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
-        # SSE streams (frontend real-time updates)
-        "/optimizations/stream",
+        "/optimizations/{optimization_id}/artifact",
+        "/optimizations/{optimization_id}/grid-result",
+        # Live progress
         "/optimizations/{optimization_id}/stream",
-        "/optimizations/ai-generate-code",
-        "/optimizations/generalist-agent",
-        "/optimizations/generalist-agent/confirm",
-        "/serve/{optimization_id}/stream",
-        "/serve/{optimization_id}/pair/{pair_index}/stream",
-        # Grid-pair-level serve (too granular for public docs)
-        "/serve/{optimization_id}/pair/{pair_index}",
-        "/serve/{optimization_id}/pair/{pair_index}/info",
-        # Analytics (dashboard-only aggregations)
-        "/analytics/summary",
-        "/analytics/optimizers",
-        "/analytics/models",
-        "/analytics/dashboard",
-        # Internal tools
-        "/models/discover",
-        "/format-code",
-        "/templates",
-        "/templates/{template_id}",
-        "/wizard/update",
+        # Lifecycle
+        "/optimizations/{optimization_id}/cancel",
+        "/optimizations/{optimization_id}/clone",
+        "/optimizations/{optimization_id}/retry",
+        # Inference on a finished optimization
+        "/serve/{optimization_id}",
+        "/serve/{optimization_id}/info",
     }
 )
 
@@ -232,12 +217,6 @@ _SCALAR_CUSTOM_CSS = """
   outline-offset: 2px;
 }
 
-.skynet-brand-logo {
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  display: block;
-}
 .skynet-toolbar-brand .skynet-toolbar-icon {
   flex-shrink: 0;
   display: block;
@@ -618,7 +597,7 @@ def create_app(
 
     @app.get("/openapi.public.json", include_in_schema=False)
     async def public_openapi() -> JSONResponse:
-        """Filtered copy of /openapi.json with hidden paths and empty tags pruned.
+        """Filtered copy of /openapi.json restricted to the public dev surface.
 
         Returns:
             A :class:`JSONResponse` containing the trimmed OpenAPI document.
@@ -627,7 +606,7 @@ def create_app(
         spec = deepcopy(base)
         paths = spec.get("paths", {})
         for path in list(paths.keys()):
-            if path in _SCALAR_HIDDEN_PATHS:
+            if path not in _SCALAR_PUBLIC_PATHS:
                 del paths[path]
         used_tags: set[str] = set()
         for methods in paths.values():

@@ -31,6 +31,7 @@ from ..model_catalog import CatalogModel, ModelCatalogResponse
 from ..routers import _helpers as _h
 from ..routers import submissions as _sub_mod
 from ..routers.submissions import create_submissions_router
+from .conftest import bypass_auth
 from .mocks import fake_background_worker
 
 
@@ -199,6 +200,7 @@ def _make_client(
 
     app = FastAPI()
     app.include_router(create_submissions_router(service=service, job_store=store))
+    bypass_auth(app)
 
     @app.exception_handler(HTTPException)
     async def _http_handler(_request: Request, exc: HTTPException) -> JSONResponse:
@@ -241,8 +243,13 @@ def test_submit_run_creates_job_in_store(monkeypatch: pytest.MonkeyPatch) -> Non
     assert created[0] == resp.json()["optimization_id"]
 
 
-def test_submit_run_echoes_name_and_username(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The response body echoes ``name`` and ``username`` from the payload."""
+def test_submit_run_echoes_name_and_authenticated_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The response echoes the payload ``name`` but always uses the auth user's username.
+
+    The submission router overwrites ``payload.username`` from the bearer
+    token, so a forged username in the request body is ignored — the
+    response carries the authenticated identity.
+    """
     store = _FakeJobStore()
     client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
     payload = _run_payload()
@@ -253,7 +260,7 @@ def test_submit_run_echoes_name_and_username(monkeypatch: pytest.MonkeyPatch) ->
 
     body = resp.json()
     assert body["name"] == "my-run"
-    assert body["username"] == "bob"
+    assert body["username"] == "alice"
 
 
 def test_submit_run_returns_400_on_service_error(monkeypatch: pytest.MonkeyPatch) -> None:

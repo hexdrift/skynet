@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tutorial System · Skynet Frontend</title>
+<style>
+  /* Palette and fonts mirror frontend/src/app/globals.css so this doc matches
+     the running app. Font names match the bundled @fontsource-variable/heebo
+     and @fontsource-variable/inter packages; if those variable fonts aren't
+     installed system-wide the fallback chain resolves to system fonts (same
+     chain the app uses). No CDN URLs — fully air-gap-clean. */
+  :root {
+    --background: #faf8f5;
+    --foreground: #1c1612;
+    --card: #ffffff;
+    --primary: #3d2e22;
+    --secondary: #f0ebe4;
+    --muted-foreground: #8c7a6b;
+    --accent: #ede7dd;
+    --border: #ddd6cc;
+    --bg: #f5f1ec;
+    --surface-1: #ffffff;
+    --surface-3: #f0ebe4;
+    --text-1: #1c1612;
+    --text-2: #5c4d40;
+    --text-3: #a69585;
+    --blue: #7c6350;
+    --blue-light: rgba(124, 99, 80, 0.08);
+    --warning: #9a6a10;
+    --warning-dim: rgba(154, 106, 16, 0.1);
+    --shadow-sm: 0 1px 2px rgba(28, 22, 18, 0.05);
+    --shadow-card: 0 1px 3px rgba(28, 22, 18, 0.06), 0 1px 2px rgba(28, 22, 18, 0.04);
+    --radius: 0.5rem;
+    --code-bg: #1c1612;
+    --code-ink: #f0eadf;
+    --code-comment: #a69585;
+    --code-string: #c8a882;
+    --code-keyword: #d4b896;
+    --code-tag: #c8a882;
+    --code-attr: #d4b896;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+  body {
+    margin: 0;
+    font-family: "Heebo Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-1);
+    background: var(--bg);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--accent); color: var(--primary); }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    max-width: 1140px;
+    margin: 0 auto;
+    gap: 2.5rem;
+    padding: 2.5rem 1.5rem;
+  }
+  aside.toc {
+    position: sticky;
+    top: 1.5rem;
+    align-self: start;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    font-size: 13px;
+  }
+  aside.toc .title {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted-foreground);
+    margin: 0 0 0.5rem;
+  }
+  aside.toc ul { list-style: none; padding: 0; margin: 0; }
+  aside.toc a {
+    display: block;
+    padding: 0.35rem 0.6rem;
+    color: var(--text-2);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    transition: color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                background 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  aside.toc a:hover { color: var(--text-1); background: var(--surface-1); }
+  aside.toc a.active {
+    color: var(--primary);
+    border-left-color: var(--blue);
+    background: var(--accent);
+  }
+  main { min-width: 0; }
+  header.doc-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .eyebrow {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    margin: 0 0 0.5rem;
+  }
+  h1, h2, h3 {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-weight: 700;
+  }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, #1c1612 0%, #3d2e22 50%, #7c6350 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .lede { color: var(--text-2); margin: 0; max-width: 60ch; }
+  .meta-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--accent);
+    color: var(--primary);
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  section { margin-bottom: 2.5rem; }
+  h2 { font-size: 1.25rem; margin: 0 0 0.5rem; letter-spacing: -0.005em; }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+  h4 {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 0.85rem;
+    margin: 1.25rem 0 0.4rem;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  p { margin: 0 0 0.85rem; }
+  ul, ol { margin: 0 0 0.85rem; padding-left: 1.4rem; }
+  li { margin: 0.2rem 0; }
+  a { color: var(--primary); }
+  a:hover { color: var(--blue); }
+  code:not(pre code) {
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--surface-3);
+    color: var(--primary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-variant-ligatures: none;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.95rem 1.1rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0.5rem 0 1.25rem;
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-ligatures: none;
+  }
+  pre .c { color: var(--code-comment); font-style: italic; }
+  pre .s { color: var(--code-string); }
+  pre .k { color: var(--code-keyword); }
+  pre .t { color: var(--code-tag); }
+  pre .a { color: var(--code-attr); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0 1.25rem;
+    font-size: 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface-3);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-1);
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--accent); }
+  td code {
+    font-size: 12.5px;
+    background: var(--blue-light);
+    color: var(--blue);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .tree {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    margin: 1rem 0 1.25rem;
+    color: var(--text-1);
+    box-shadow: var(--shadow-sm);
+    font-variant-ligatures: none;
+  }
+  .tree .dir { color: var(--blue); font-weight: 600; }
+  .tree .file-comment { color: var(--text-3); }
+  .tracks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0 1.25rem;
+  }
+  .track {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .track .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .track .name {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .track .count {
+    background: var(--accent);
+    color: var(--primary);
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .track ol { padding-left: 1.2rem; font-size: 13px; margin: 0.5rem 0 0; }
+  .track li { margin: 0.1rem 0; }
+  .track .group {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-2);
+    font-weight: 600;
+    margin: 0.6rem 0 0.2rem;
+  }
+  .state-machine {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin: 1rem 0 1.25rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .state-machine svg { width: 100%; height: auto; max-height: 220px; }
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem;
+    margin: 1rem 0 1.25rem;
+  }
+  .keys .row {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.55rem 0.8rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    box-shadow: var(--shadow-sm);
+  }
+  .keys .row kbd {
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-1);
+    font-variant-ligatures: none;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 1.5rem; padding: 1.5rem 1rem; }
+    aside.toc { position: static; max-height: none; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
+    .tracks { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="toc">
+  <p class="title">Contents</p>
+  <ul>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#tracks">Tutorial Tracks</a></li>
+    <li><a href="#data-tutorial">Data Tutorial Attributes</a></li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#styling">Styling</a></li>
+    <li><a href="#a11y">Accessibility</a></li>
+    <li><a href="#technical">Technical Details</a></li>
+    <li><a href="#performance">Performance</a></li>
+    <li><a href="#future">Future Enhancements</a></li>
+  </ul>
+</aside>
+
+<main>
+
+<header class="doc-header">
+  <p class="eyebrow">Skynet · Frontend Feature</p>
+  <h1>Tutorial System</h1>
+  <p class="lede">Complete interactive tutorial system with two tracks: Quick Tour (12 steps) and Deep Dive (24 steps).</p>
+  <div class="meta-row">
+    <span class="pill">React · TypeScript</span>
+    <span class="pill">RTL · Hebrew</span>
+    <span class="pill">localStorage persistence</span>
+    <span class="pill">a11y</span>
+  </div>
+</header>
+
+<section id="architecture">
+  <h2>Architecture</h2>
+  <div class="tree">
+<span class="dir">src/</span>
+├── <span class="dir">lib/</span>
+│   └── tutorial-steps.ts          <span class="file-comment"># Step definitions and types</span>
+├── <span class="dir">hooks/</span>
+│   └── use-tutorial.ts            <span class="file-comment"># State management with localStorage</span>
+└── <span class="dir">components/</span>
+    └── <span class="dir">tutorial/</span>
+        ├── spotlight-mask.tsx      <span class="file-comment"># SVG cutout effect</span>
+        ├── tutorial-popover.tsx    <span class="file-comment"># Main popover UI</span>
+        ├── tutorial-overlay.tsx    <span class="file-comment"># Orchestrator (keyboard nav, positioning)</span>
+        ├── tutorial-menu.tsx       <span class="file-comment"># Track selection modal</span>
+        ├── tutorial-provider.tsx   <span class="file-comment"># Context provider (optional)</span>
+        └── index.ts                <span class="file-comment"># Re-exports</span>
+  </div>
+</section>
+
+<section id="features">
+  <h2>Features</h2>
+
+  <h3>Spotlight Effect</h3>
+  <ul>
+    <li>SVG mask with animated cutout highlighting target elements</li>
+    <li>Smooth transitions between steps</li>
+    <li>Pulsing glow effect for visual emphasis</li>
+    <li>Responsive to target element size and position</li>
+  </ul>
+
+  <h3>Popover UI</h3>
+  <ul>
+    <li><strong>RTL-aware positioning:</strong> Automatically adjusts arrows and placement</li>
+    <li><strong>Gradient styling:</strong> <code>bg-gradient-to-b from-white/95 to-[#F8F4EF]</code></li>
+    <li><strong>Progress bar:</strong> Visual indicator of completion</li>
+    <li><strong>Navigation:</strong> Previous/Next buttons with Hebrew labels</li>
+    <li><strong>Step counter:</strong> "X מתוך Y" format</li>
+  </ul>
+
+  <h3>Keyboard Navigation</h3>
+  <div class="keys">
+    <div class="row"><span>Next step</span><span><kbd>Enter</kbd> / <kbd>←</kbd></span></div>
+    <div class="row"><span>Previous step</span><span><kbd>→</kbd> / <kbd>Backspace</kbd></span></div>
+    <div class="row"><span>Exit tutorial</span><span><kbd>Escape</kbd></span></div>
+  </div>
+
+  <h3>State Management</h3>
+  <ul>
+    <li><strong>useReducer</strong> for predictable state updates</li>
+    <li><strong>localStorage</strong> persistence for completion tracking</li>
+    <li>Tracks completed tutorials separately</li>
+    <li>Allows resuming interrupted tutorials</li>
+  </ul>
+
+  <h3>Responsive Positioning</h3>
+  <ul>
+    <li><strong>ResizeObserver</strong> watches target elements</li>
+    <li>Auto-repositions on window resize and scroll</li>
+    <li>Smart placement algorithm (<code>auto</code>, <code>top</code>, <code>bottom</code>, <code>left</code>, <code>right</code>)</li>
+    <li>Clamps to viewport edges</li>
+  </ul>
+</section>
+
+<section id="tracks">
+  <h2>Tutorial Tracks</h2>
+
+  <div class="tracks">
+    <div class="track">
+      <div class="head">
+        <span class="name">סיור מהיר · Quick Tour</span>
+        <span class="count">12 steps</span>
+      </div>
+      <ol>
+        <li><strong>Welcome</strong> — Introduction to Skynet</li>
+        <li><strong>Sidebar</strong> — Navigation overview</li>
+        <li><strong>Dashboard KPIs</strong> — Stats cards</li>
+        <li><strong>Dashboard Table</strong> — Optimization history</li>
+        <li><strong>Dashboard Stats</strong> — Analytics view</li>
+        <li><strong>New Optimization</strong> — Start wizard</li>
+        <li><strong>Submit Wizard</strong> — 6-step workflow</li>
+        <li><strong>Job Detail</strong> — Pipeline + logs</li>
+        <li><strong>Serve</strong> — Test optimized program</li>
+        <li><strong>Grid Search</strong> — Multi-model runs</li>
+        <li><strong>Compare</strong> — Side-by-side comparison</li>
+        <li><strong>Done</strong> — Ready to optimize!</li>
+      </ol>
+    </div>
+
+    <div class="track">
+      <div class="head">
+        <span class="name">הבנת המערכת · Deep Dive</span>
+        <span class="count">24 steps</span>
+      </div>
+
+      <p class="group">Part 1 · Concepts (4 steps)</p>
+      <ul>
+        <li>Prompt optimization explanation</li>
+        <li>Modules (Predict/CoT)</li>
+        <li>Optimizer (GEPA)</li>
+        <li>Scoring/metrics</li>
+      </ul>
+
+      <p class="group">Part 2 · Submit Wizard (13 steps)</p>
+      <ul>
+        <li>Detailed walkthrough of each wizard step</li>
+        <li>Column mapping, splits, models</li>
+        <li>Code editor and metric templates</li>
+        <li>Parameters and auto level</li>
+        <li>Optimizer-specific settings</li>
+      </ul>
+
+      <p class="group">Part 3 · Results (7 steps)</p>
+      <ul>
+        <li>Pipeline stages</li>
+        <li>Live logs</li>
+        <li>Score progression chart</li>
+        <li>Inference/serve</li>
+        <li>Grid search results</li>
+        <li>Comparison tools</li>
+        <li>Completion</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="data-tutorial">
+  <h2>Data Tutorial Attributes</h2>
+  <p>All target elements are marked with <code>data-tutorial</code> attributes:</p>
+
+  <h3>Layout</h3>
+  <table>
+    <tbody>
+      <tr><td><code>sidebar-logo</code></td><td>Skynet logo</td></tr>
+      <tr><td><code>sidebar-nav</code></td><td>Navigation menu</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Dashboard</h3>
+  <table>
+    <tbody>
+      <tr><td><code>dashboard-kpis</code></td><td>Stats cards</td></tr>
+      <tr><td><code>dashboard-table</code></td><td>Job table</td></tr>
+      <tr><td><code>dashboard-stats</code></td><td>Analytics tab</td></tr>
+      <tr><td><code>new-optimization</code></td><td>New optimization button</td></tr>
+      <tr><td><code>job-link</code></td><td>Job table row (for navigation)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Submit Wizard</h3>
+  <table>
+    <tbody>
+      <tr><td><code>submit-wizard</code></td><td>Wizard container</td></tr>
+      <tr><td><code>wizard-step-1</code></td><td>Basics step</td></tr>
+      <tr><td><code>wizard-step-2</code></td><td>Dataset step</td></tr>
+      <tr><td><code>wizard-step-3</code></td><td>Model step</td></tr>
+      <tr><td><code>wizard-step-4</code></td><td>Code step</td></tr>
+      <tr><td><code>wizard-step-5</code></td><td>Parameters step</td></tr>
+      <tr><td><code>wizard-step-6</code></td><td>Review step</td></tr>
+      <tr><td><code>wizard-next</code></td><td>Next button</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Job Detail</h3>
+  <table>
+    <tbody>
+      <tr><td><code>pipeline-stages</code></td><td>Pipeline tracker</td></tr>
+      <tr><td><code>score-chart</code></td><td>Score progression</td></tr>
+      <tr><td><code>live-logs</code></td><td>Logs tab</td></tr>
+      <tr><td><code>serve-playground</code></td><td>Playground tab content</td></tr>
+      <tr><td><code>playground-tab</code></td><td>Playground tab trigger</td></tr>
+      <tr><td><code>grid-search</code></td><td>Grid search results</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Compare</h3>
+  <table>
+    <tbody>
+      <tr><td><code>compare-button</code></td><td>Compare page header</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="usage">
+  <h2>Usage</h2>
+
+  <h3>1. Add to Layout</h3>
+  <p>Already integrated in <code>src/app/layout.tsx</code>:</p>
+<pre><span class="k">import</span> { TutorialOverlay, TutorialMenu } <span class="k">from</span> <span class="s">"@/components/tutorial"</span>;
+
+<span class="k">export default function</span> RootLayout({ children }) {
+  <span class="k">return</span> (
+    &lt;<span class="t">html</span>&gt;
+      &lt;<span class="t">body</span>&gt;
+        {children}
+        &lt;<span class="t">TutorialOverlay</span> /&gt;
+        &lt;<span class="t">TutorialMenu</span> /&gt;
+      &lt;/<span class="t">body</span>&gt;
+    &lt;/<span class="t">html</span>&gt;
+  );
+}</pre>
+
+  <h3>2. Trigger from Anywhere</h3>
+  <p>Use the <code>useTutorial</code> hook:</p>
+<pre><span class="k">import</span> { useTutorial } <span class="k">from</span> <span class="s">"@/hooks/use-tutorial"</span>;
+
+<span class="k">function</span> MyComponent() {
+  <span class="k">const</span> { openMenu } = useTutorial();
+
+  <span class="k">return</span> &lt;<span class="t">button</span> <span class="a">onClick</span>={openMenu}&gt;Open Tutorial&lt;/<span class="t">button</span>&gt;;
+}</pre>
+
+  <p>The help button in the sidebar automatically opens the tutorial menu.</p>
+
+  <h3>3. Add New Steps</h3>
+  <p>Edit <code>src/lib/tutorial-steps.ts</code>:</p>
+<pre><span class="k">const</span> newStep<span class="k">: TutorialStep</span> = {
+  id: <span class="s">"my-step"</span>,
+  title: <span class="s">"כותרת בעברית"</span>,
+  description: <span class="s">"תיאור מפורט של השלב"</span>,
+  target: <span class="s">"[data-tutorial='my-target']"</span>,
+  placement: <span class="s">"bottom"</span>,
+  track: <span class="s">"quick-tour"</span>,
+  beforeShow: <span class="k">async</span> () =&gt; {
+    <span class="c">// Optional: Navigate or prepare UI</span>
+    router.push(<span class="s">"/some-page"</span>);
+    <span class="k">await new</span> Promise((r) =&gt; setTimeout(r, <span class="s">100</span>));
+  },
+};</pre>
+
+  <p>Then add the corresponding <code>data-tutorial</code> attribute to your UI:</p>
+<pre>&lt;<span class="t">div</span> <span class="a">data-tutorial</span>=<span class="s">"my-target"</span>&gt;Target element&lt;/<span class="t">div</span>&gt;</pre>
+</section>
+
+<section id="styling">
+  <h2>Styling</h2>
+  <p>All styles use Tailwind CSS with RTL support:</p>
+
+  <h3>Popover</h3>
+<pre>rounded-2xl
+bg-gradient-to-b from-white/95 to-[#F8F4EF]
+border border-border/40
+shadow-[0_12px_40px_rgba(28,22,18,0.15)]
+direction: rtl</pre>
+
+  <h3>Backdrop</h3>
+<pre>rgba(0,0,0,0.55)</pre>
+
+  <h3>Help Button</h3>
+<pre>size-7
+rounded-lg
+bg-muted/50
+hover:bg-muted</pre>
+
+  <h3>Track Cards</h3>
+<pre>rounded-2xl
+border-2
+hover:border-primary/40
+hover:shadow-[0_8px_32px_rgba(28,22,18,0.12)]
+bg-gradient-to-br from-card to-card/60</pre>
+</section>
+
+<section id="a11y">
+  <h2>Accessibility</h2>
+  <ul>
+    <li>Keyboard-navigable (Enter, arrows, Escape)</li>
+    <li>ARIA labels on all interactive elements</li>
+    <li>Focus management</li>
+    <li>Screen reader friendly</li>
+    <li>Respects <code>prefers-reduced-motion</code></li>
+  </ul>
+</section>
+
+<section id="technical">
+  <h2>Technical Details</h2>
+
+  <h3>Portal Rendering</h3>
+  <p>Both overlay and menu are rendered via <code>createPortal(component, document.body)</code> to escape overflow clipping and ensure proper stacking.</p>
+
+  <h3>beforeShow Callbacks</h3>
+  <p>Each step can define async setup:</p>
+  <ul>
+    <li>Navigate to correct page</li>
+    <li>Switch tabs</li>
+    <li>Scroll elements into view</li>
+    <li>Wait for DOM updates</li>
+  </ul>
+
+  <h3>localStorage Schema</h3>
+<pre>{
+  <span class="s">"skynet-tutorial-state"</span>: {
+    <span class="s">"completedTracks"</span>: [<span class="s">"quick-tour"</span>]
+  }
+}</pre>
+
+  <h3>State Machine</h3>
+  <figure class="state-machine">
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tutorial state machine">
+      <defs>
+        <marker id="sm-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#5c4d40"/>
+        </marker>
+        <marker id="sm-arrow-back" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#9a6a10"/>
+        </marker>
+      </defs>
+      <g font-family="Inter Variable, system-ui, sans-serif" font-size="11">
+        <rect x="20" y="60" width="100" height="40" rx="6" fill="#ede7dd" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="70" y="85" text-anchor="middle" font-weight="600" fill="#1c1612">Menu Open</text>
+
+        <rect x="160" y="60" width="120" height="40" rx="6" fill="#ede7dd" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="220" y="85" text-anchor="middle" font-weight="600" fill="#1c1612">Track Selected</text>
+
+        <rect x="320" y="60" width="80" height="40" rx="6" fill="#ffffff" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="360" y="85" text-anchor="middle" font-weight="600" fill="#1c1612">Step 0</text>
+
+        <rect x="430" y="60" width="80" height="40" rx="6" fill="#ffffff" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="470" y="85" text-anchor="middle" font-weight="600" fill="#1c1612">Step 1 …</text>
+
+        <rect x="540" y="60" width="80" height="40" rx="6" fill="#ffffff" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="580" y="85" text-anchor="middle" font-weight="600" fill="#1c1612">Step N</text>
+
+        <rect x="630" y="60" width="80" height="40" rx="6" fill="#3d2e22" stroke="#3d2e22" stroke-width="1.5"/>
+        <text x="670" y="85" text-anchor="middle" font-weight="600" fill="#faf8f5">Completed</text>
+
+        <line x1="120" y1="80" x2="156" y2="80" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#sm-arrow)"/>
+        <line x1="280" y1="80" x2="316" y2="80" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#sm-arrow)"/>
+        <line x1="400" y1="80" x2="426" y2="80" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#sm-arrow)"/>
+        <line x1="510" y1="80" x2="536" y2="80" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#sm-arrow)"/>
+        <line x1="620" y1="80" x2="626" y2="80" stroke="#5c4d40" stroke-width="1.5" marker-end="url(#sm-arrow)"/>
+
+        <path d="M 360 100 Q 200 170 70 100" stroke="#9a6a10" stroke-width="1.2" fill="none" marker-end="url(#sm-arrow-back)" stroke-dasharray="4 3"/>
+        <text x="220" y="160" text-anchor="middle" fill="#9a6a10" font-style="italic">Exit (Escape)</text>
+      </g>
+    </svg>
+  </figure>
+</section>
+
+<section id="performance">
+  <h2>Performance</h2>
+  <ul>
+    <li><strong>Lazy loading:</strong> TutorialOverlay only renders when active</li>
+    <li><strong>Memoization:</strong> useCallback and useMemo for expensive calculations</li>
+    <li><strong>ResizeObserver:</strong> Single observer per target element</li>
+    <li><strong>Event cleanup:</strong> All listeners removed on unmount</li>
+    <li><strong>Minimal re-renders:</strong> Isolated state in reducer</li>
+  </ul>
+</section>
+
+<section id="future">
+  <h2>Future Enhancements</h2>
+  <ul>
+    <li>Video/GIF demonstrations in popover</li>
+    <li>Interactive playground steps (user must perform action)</li>
+    <li>Progress checkpoints (save current step)</li>
+    <li>Branching paths based on user choices</li>
+    <li>Achievement system for completion</li>
+    <li>Export tutorial completion certificate</li>
+    <li>Multi-language support (English/Hebrew toggle)</li>
+    <li>Admin panel to edit steps without code changes</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<script>
+  const links = document.querySelectorAll('aside.toc a');
+  const sections = Array.from(document.querySelectorAll('main section[id]'));
+  function setActive() {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + current.id));
+  }
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>
