@@ -52,7 +52,6 @@ load = [
     "locust>=2.0",
 ]
 recommendations = [
-    "sentence-transformers>=2.5",
     "umap-learn>=0.5",
 ]
 

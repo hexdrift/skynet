@@ -129,7 +129,7 @@ class JobEmbeddingModel(Base):
     aspects are embedded independently so a similarity search can
     weigh them separately (``summary`` = LLM-authored task description,
     ``code`` = signature + metric source, ``schema`` = dataset schema
-    digest). All use the same ``jina-code-embeddings-0.5b`` model,
+    digest). All use the configured embedding API model,
     MRL-truncated to ``EMBEDDING_DIM``.
 
     Metadata (``optimization_type``, ``winning_model``, ``winning_rank``)

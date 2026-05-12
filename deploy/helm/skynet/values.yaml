@@ -33,8 +33,8 @@ backend:
   replicas: 2
   containerPort: 8000
 
-  # Resources tuned for medium load. The 947 MB embedder bumps RSS to ~1.5 GB
-  # under hot inference, hence the generous memory headroom.
+  # Resources tuned for medium load. Embeddings are served by an internal API,
+  # so backend pods do not carry local model weights.
   resources:
     requests:
       cpu: 500m
@@ -77,6 +77,8 @@ backend:
     DB_POOL_RECYCLE: "3600"
     ALLOWED_ORIGINS: ""
     RECOMMENDATIONS_ENABLED: "true"
+    RECOMMENDATIONS_EMBEDDING_BASE_URL: ""
+    RECOMMENDATIONS_EMBEDDING_MODEL: "jina-code-embeddings-0.5b"
     # Internal LLM gateway URLs — leave empty to use OpenAI/Fireworks public endpoints.
     CODE_AGENT_BASE_URL: ""
     CODE_AGENT_MODEL: ""
@@ -108,6 +110,8 @@ backend:
       OPENAI_API_KEY: ""
       ANTHROPIC_API_KEY: ""
       FIREWORKS_AI_API_KEY: ""
+      # Optional. If empty, OPENAI_API_KEY is reused for the embedding API.
+      RECOMMENDATIONS_EMBEDDING_API_KEY: ""
       # Must match frontend.secrets.data.BACKEND_AUTH_SECRET.
       BACKEND_AUTH_SECRET: ""
       # REMOTE_DB_URL is composed below — see externalDatabase / postgres stanzas.

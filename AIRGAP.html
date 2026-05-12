@@ -487,7 +487,7 @@
   <p>The flow assumes you cloned the repo onto a host inside the air gap and have an internal Artifactory + OpenShift cluster ready. Each step has a matching <code>scripts/airgap_migrate.sh</code> command — none of them need internet.</p>
 
   <div class="flow">
-    <div class="step"><span class="num">STEP 01</span><div class="label">Clone repo + LFS pull</div><code>git lfs install &amp;&amp; git lfs pull</code></div>
+    <div class="step"><span class="num">STEP 01</span><div class="label">Clone repo / unpack source</div><code>git clone ...</code></div>
     <div class="step manual"><span class="num">STEP 02</span><div class="label">List URLs / secrets / CIDRs to change</div><code>airgap_migrate.sh todos</code></div>
     <div class="step manual"><span class="num">STEP 03</span><div class="label">Edit emitted lines</div><code>(editor)</code></div>
     <div class="step"><span class="num">STEP 04</span><div class="label">Verify lockfiles + alembic</div><code>airgap_migrate.sh check</code></div>
@@ -540,6 +540,8 @@ PULL_SECRET=artifactory-pull-secret \
 EXTERNAL_DB_HOST=pgvector.internal \
 EXTERNAL_DB_SECRET=skynet-db-password \
 LLM_BASE_URL=https://llm-gateway.internal/v1 \
+EMBEDDING_BASE_URL=https://llm-gateway.internal/v1 \
+EMBEDDING_MODEL=jina-code-embeddings-0.5b \
 OIDC_ISSUER=https://idp.internal/realms/skynet \
 OIDC_CLIENT_ID=skynet \
 OIDC_SCOPE=<span class="s">"openid profile email groups"</span> \
@@ -561,19 +563,17 @@ scripts/airgap_migrate.sh all</pre>
 <section id="pre-transfer">
   <h2><a class="anchor" href="#pre-transfer">§</a>Pre-Transfer Checklist</h2>
   <p>Run this before moving the repo or release bundle into the air gap:</p>
-<pre>git lfs install
-git lfs pull
-scripts/airgap_migrate.sh check
+<pre>scripts/airgap_migrate.sh check
 scripts/airgap_migrate.sh validate-migrations
 scripts/airgap_migrate.sh todos          <span class="c"># every URL/secret/CIDR you must change</span></pre>
 
   <h4>Confirm</h4>
   <ul>
-    <li><code>backend/vendor/models/jina-code-embeddings-0.5b/model.safetensors</code> is a real file, not a Git LFS pointer.</li>
     <li><code>frontend/package-lock.json</code> is present.</li>
     <li><code>backend/uv.lock</code> is present.</li>
     <li><code>backend/alembic/versions/</code> is present.</li>
     <li><code>migration.sql</code> (from <code>validate-migrations</code>) reflects the schema you expect.</li>
+    <li>Your internal OpenAI-compatible embedding endpoint is ready and returns at least 512 dimensions for <code>EMBEDDING_MODEL</code>.</li>
     <li>Backend, frontend, and pgvector images are available in the internal registry you will reference from Helm.</li>
     <li>If your IdP, LLM gateway, Postgres, or webhook uses a private CA, a Kubernetes Secret containing the CA bundle is ready.</li>
   </ul>
@@ -923,7 +923,7 @@ curl -k https://skynet-api.apps.internal/health</pre>
   <ul>
     <li>Scalar API docs are vendored under <code>backend/core/api/static/scalar/</code>.</li>
     <li>Fonts are bundled through npm packages, not Google Fonts.</li>
-    <li>The recommendations embedder is vendored under <code>backend/vendor/models/</code>.</li>
+    <li>Recommendations use an internal OpenAI-compatible embedding API; no embedding model weights are bundled in the repo.</li>
     <li>Sentry is gated so builds without a DSN do not ship it.</li>
     <li>LiteLLM telemetry is disabled in backend configuration.</li>
     <li>Storage is Postgres; there is no S3/GCS/Azure Blob dependency.</li>
@@ -940,7 +940,7 @@ curl -k https://skynet-api.apps.internal/health</pre>
     <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, webhook, and DB.</li>
     <li>Backing up and restoring Postgres.</li>
     <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names.</li>
-    <li>Deciding whether to enable recommendations. The app runs without <code>sentence-transformers</code>; recommendations degrade to an empty/no-op feature unless the backend image includes the <code>[recommendations]</code> extra.</li>
+    <li>Choosing the internal embedding model exposed by your embedding gateway. Recommendations degrade to an empty/no-op feature when <code>RECOMMENDATIONS_EMBEDDING_BASE_URL</code> is not set.</li>
   </ul>
 </section>
 
@@ -958,7 +958,7 @@ git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></pre>
     <li><code>scripts/airgap_migrate.sh</code> — defaults emitted into the values file.</li>
     <li><code>frontend/.env.example</code> — frontend dev/runtime env template.</li>
     <li><code>frontend/.npmrc</code> — internal npm registry mirror config (commented out).</li>
-    <li><code>backend/core/config.py</code> — model id, agent base URLs, embedder path.</li>
+    <li><code>backend/core/config.py</code> — model ids and internal agent/embedding base URLs.</li>
     <li><code>backend/core/api/directory_client.py</code> — LDAP-backed Active Directory user search; confirm <code>AD_LDAP_*</code> values against the target domain.</li>
   </ul>
 

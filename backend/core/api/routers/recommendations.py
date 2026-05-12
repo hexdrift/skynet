@@ -6,10 +6,6 @@ returns a ranked list of past jobs whose content-and-code embeddings
 come closest. The frontend uses the ranking to suggest optimizer and
 model configs that historically performed well on tasks like this.
 
-Phase 1 (this commit) wires the endpoint, request/response shapes, and
-background-embedding hook — the service layer returns ``[]`` so the
-frontend can start integrating while the embedder is built.
-
 Hidden from the public Scalar reference (not in ``_SCALAR_PUBLIC_PATHS``)
 — wizard-internal recommendation surface.
 """

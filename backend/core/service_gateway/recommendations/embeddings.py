@@ -1,167 +1,134 @@
-"""Jina code-embeddings adapter for the recommendation service.
+"""OpenAI-compatible embedding API adapter for recommendations.
 
-The model (``jinaai/jina-code-embeddings-0.5b`` by default) is loaded
-lazily on first use through ``sentence-transformers`` so the app can
-start and serve every other endpoint without the 1.5 GB of torch
-weights being present. If the extra isn't installed the embedder
-silently becomes a no-op — the recommendation endpoint still returns
-an empty list and the operator gets one log line explaining why.
-
-MRL ("Matryoshka Representation Learning") truncation: the Jina model
-is trained so that the first N dimensions are themselves a valid
-embedding. We slice to ``settings.recommendations_embedding_dim``
-(default 512) to match the ``vector(512)`` columns in
-``job_embeddings``. After truncation we L2-normalize so cosine and
-dot product agree, which keeps the pgvector index math simple.
+The recommendation service stores 512-dimensional pgvector embeddings, but the
+embedding model itself is not bundled with the backend. Operators provide an
+internal OpenAI-compatible embeddings endpoint and model id; this adapter sends
+text to that endpoint, truncates the returned vector to the configured schema
+dimension, and L2-normalizes it before storage/search.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import threading
-from pathlib import Path
+
+import requests
 
 from ...config import settings
-
-# sentence-transformers is an optional extra (pulls in torch); the recommendation
-# pipeline degrades to a no-op when it isn't installed.
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:
-    SentenceTransformer = None  # type: ignore[assignment,misc]
-
-# numpy ships with sentence-transformers; when the extra isn't installed we never
-# call the encode path, so a stub is fine.
-try:
-    import numpy as np
-except ImportError:
-    np = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
 _EMBEDDER_LOCK = threading.Lock()
-_EMBEDDER_INSTANCE: _JinaEmbedder | None = None
+_EMBEDDER_INSTANCE: _EmbeddingApiClient | None = None
 
 
-class _JinaEmbedder:
-    """Lazy singleton around a sentence-transformers model.
-
-    Use ``get_embedder()`` to access — never construct directly.
-    ``encode(text)`` returns a plain ``list[float]`` of length
-    ``settings.recommendations_embedding_dim`` or ``None`` if the
-    backing model isn't loadable in this process.
-    """
+class _EmbeddingApiClient:
+    """Lazy singleton around an OpenAI-compatible embeddings endpoint."""
 
     def __init__(self) -> None:
-        """Reset the lazy state; the model is only loaded on first :meth:`encode`."""
-        self._model = None
-        self._failed = False
+        """Initialize immutable API settings from process configuration."""
+        self._base_url = settings.recommendations_embedding_base_url.strip().rstrip("/")
+        self._model = settings.recommendations_embedding_model.strip()
         self._dim = settings.recommendations_embedding_dim
-
-    def _load(self) -> None:
-        """Import and instantiate the SentenceTransformer model; record a failure sentinel on error.
-
-        No-ops when a previous call already loaded the model or recorded
-        a failure. ``ImportError`` (extra not installed) and any
-        instantiation error mark the embedder as failed; the next call
-        to :meth:`available` returns ``False`` and the recommendation
-        pipeline degrades gracefully.
-        """
-        if self._model is not None or self._failed:
-            return
-        if SentenceTransformer is None:
-            logger.warning(
-                "sentence-transformers not installed. Recommendations "
-                "ingest + search will be disabled until you run "
-                "`pip install -e '.[recommendations]'`."
-            )
-            self._failed = True
-            return
-        # Air-gap policy: a vendored absolute path under backend/vendor/models
-        # is part of the trusted supply chain (tracked via git-lfs), so we run
-        # it with local_files_only=True (no implicit network fetch on a missing
-        # weight) and trust_remote_code=True (the model code ships alongside
-        # the weights). For an arbitrary HF Hub identifier we keep
-        # trust_remote_code off unless the operator explicitly opted in via
-        # RECOMMENDATIONS_EMBEDDING_TRUST_REMOTE_CODE.
-        model_id = settings.recommendations_embedding_model
-        is_local_snapshot = bool(model_id) and Path(model_id).is_absolute() and Path(model_id).exists()
-        allow_remote_code = is_local_snapshot or settings.recommendations_embedding_trust_remote_code
-        try:
-            self._model = SentenceTransformer(
-                model_id,
-                trust_remote_code=allow_remote_code,
-                local_files_only=is_local_snapshot,
-            )
-            logger.info(
-                "Loaded embedder %s (truncating to %d dims, local_only=%s, trust_remote_code=%s)",
-                model_id,
-                self._dim,
-                is_local_snapshot,
-                allow_remote_code,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Failed to load embedding model %s: %s. Recommendations disabled.",
-                settings.recommendations_embedding_model,
-                exc,
-            )
-            self._failed = True
+        self._timeout = settings.default_timeout
+        self._failed = False
 
     def available(self) -> bool:
-        """True if the encoder has loaded successfully on this process.
-
-        Returns:
-            True when the SentenceTransformer model is loaded; False when
-            a previous load attempt failed or the extra is not installed.
-        """
-        self._load()
-        return self._model is not None
+        """Return whether the embedding API is configured for use."""
+        if self._failed:
+            return False
+        if not self._base_url or not self._model:
+            logger.warning(
+                "Recommendations embedding API is not configured. Set "
+                "RECOMMENDATIONS_EMBEDDING_BASE_URL and RECOMMENDATIONS_EMBEDDING_MODEL."
+            )
+            self._failed = True
+            return False
+        return True
 
     def encode(self, text: str) -> list[float] | None:
-        """Return an MRL-truncated, L2-normalized embedding or ``None``.
-
-        Empty/whitespace input returns ``None`` so callers don't write
-        zero-vectors that would pollute the similarity search.
+        """Return a truncated, L2-normalized embedding from the configured API.
 
         Args:
             text: The input string to embed.
 
         Returns:
-            A list of floats of length
-            ``settings.recommendations_embedding_dim``, or ``None`` when
-            the input is empty/whitespace, the encoder isn't loadable,
-            the embedding has zero norm, or encoding raises.
+            A normalized list of floats of length
+            ``settings.recommendations_embedding_dim``, or ``None`` when the
+            input is empty, the API is unavailable, the vector is too short, or
+            the request/response is invalid.
         """
-        if not text or not text.strip():
-            return None
-        self._load()
-        if self._model is None:
+        if not text or not text.strip() or not self.available():
             return None
         try:
-            raw = self._model.encode(text, show_progress_bar=False, convert_to_numpy=True)
-            vec = raw[: self._dim]
-            norm = float(np.linalg.norm(vec))
+            raw = self._request_embedding(text)
+            if len(raw) < self._dim:
+                logger.warning(
+                    "Embedding model %s returned %d dimensions; schema requires %d.",
+                    self._model,
+                    len(raw),
+                    self._dim,
+                )
+                return None
+            vector = [float(value) for value in raw[: self._dim]]
+            norm = math.sqrt(sum(value * value for value in vector))
             if norm == 0.0:
                 return None
-            return (vec / norm).astype("float32").tolist()
+            return [value / norm for value in vector]
         except Exception as exc:
-            logger.warning("Embedding encode failed: %s", exc)
+            logger.warning("Embedding API encode failed: %s", exc)
             return None
 
+    def _request_embedding(self, text: str) -> list[float]:
+        """Call the embedding API and return the first embedding vector.
 
-def get_embedder() -> _JinaEmbedder:
-    """Return the process-wide embedder singleton.
+        Args:
+            text: The input string sent as the OpenAI-compatible ``input``.
 
-    Returns:
-        The cached :class:`_JinaEmbedder` instance, constructing it on
-        first call under a lock so concurrent callers share one model.
-    """
+        Returns:
+            The first embedding vector returned by the API.
+
+        Raises:
+            TypeError: When the API response shape uses invalid types.
+            ValueError: When the API response is missing required fields.
+            requests.RequestException: When the HTTP request fails.
+        """
+        response = requests.post(
+            f"{self._base_url}/embeddings",
+            headers=self._headers(),
+            json={"model": self._model, "input": text},
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            raise ValueError("embedding response missing data[0]")
+        first = data[0]
+        if not isinstance(first, dict):
+            raise TypeError("embedding response data[0] is not an object")
+        embedding = first.get("embedding")
+        if not isinstance(embedding, list) or not embedding:
+            raise ValueError("embedding response missing data[0].embedding")
+        return embedding
+
+    def _headers(self) -> dict[str, str]:
+        """Build HTTP headers for the embedding request."""
+        headers = {"Content-Type": "application/json"}
+        api_key = settings.recommendations_embedding_api_key or settings.openai_api_key
+        if api_key is not None:
+            headers["Authorization"] = f"Bearer {api_key.get_secret_value()}"
+        return headers
+
+
+def get_embedder() -> _EmbeddingApiClient:
+    """Return the process-wide embedding API client singleton."""
     global _EMBEDDER_INSTANCE
     if _EMBEDDER_INSTANCE is None:
         with _EMBEDDER_LOCK:
             if _EMBEDDER_INSTANCE is None:
-                _EMBEDDER_INSTANCE = _JinaEmbedder()
+                _EMBEDDER_INSTANCE = _EmbeddingApiClient()
     return _EMBEDDER_INSTANCE
 
 

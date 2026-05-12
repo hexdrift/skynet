@@ -6,8 +6,8 @@ Pipeline:
    ``embed_finished_job(optimization_id, job_store)`` on a daemon
    thread.
 2. That task: fetches the job payload, asks an LLM for a 2-3 sentence
-   task summary, builds a dataset-schema digest, then calls the Jina
-   encoder three times (summary, code, schema). The three vectors +
+   task summary, builds a dataset-schema digest, then calls the configured
+   embedding API three times (summary, code, schema). The three vectors +
    metadata (user_id, optimization_type, winning_model, winning_rank)
    are upserted into ``job_embeddings``.
 3. ``search_similar`` embeds the caller's query (code from
@@ -16,7 +16,7 @@ Pipeline:
    against pgvector's cosine operator.
 
 Failures never raise — the recommendation feature is best-effort.
-Missing embedder / LLM / pgvector extension all degrade to "skip this
+Missing embedding API / LLM / pgvector extension all degrade to "skip this
 step" and, ultimately, to an empty result list that the endpoint
 happily returns.
 """

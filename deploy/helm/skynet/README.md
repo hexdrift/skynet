@@ -71,7 +71,8 @@ helm upgrade skynet deploy/helm/skynet --reuse-values \
 |-------|---------|
 | `backend.env.WORKER_CONCURRENCY` | Threaded worker fan-out per replica (default 2). |
 | `backend.env.WORKER_POLL_INTERVAL` | DB poll cadence in seconds (default 2.0). |
-| `backend.env.RECOMMENDATIONS_ENABLED` | Master switch for the embedder pipeline. |
+| `backend.env.RECOMMENDATIONS_ENABLED` | Master switch for the embedding/recommendation pipeline. |
+| `backend.env.RECOMMENDATIONS_EMBEDDING_BASE_URL` | Internal OpenAI-compatible embedding API base URL. |
 | `backend.env.CODE_AGENT_BASE_URL` | Override for internal OpenAI-compatible gateway. |
 | `frontend.env.API_URL` | Runtime backend address. Empty → in-cluster service. |
 | `openshift.routes.backend.annotations` | Default `haproxy.router.openshift.io/timeout: 5m` for long optimization runs. |

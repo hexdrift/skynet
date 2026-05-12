@@ -21,6 +21,8 @@ INTERNAL_CA_SECRET="${INTERNAL_CA_SECRET:-}"
 INTERNAL_CA_FILENAME="${INTERNAL_CA_FILENAME:-ca-bundle.pem}"
 INTERNAL_CA_MOUNT_DIR="${INTERNAL_CA_MOUNT_DIR:-/etc/skynet/ca}"
 LLM_BASE_URL="${LLM_BASE_URL:-https://llm-gateway.internal/v1}"
+EMBEDDING_BASE_URL="${EMBEDDING_BASE_URL:-$LLM_BASE_URL}"
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-jina-code-embeddings-0.5b}"
 OIDC_ISSUER="${OIDC_ISSUER:-https://idp.internal/realms/skynet}"
 OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-skynet}"
 OIDC_SCOPE="${OIDC_SCOPE:-openid profile email groups}"
@@ -44,7 +46,7 @@ Migration plan (matches AIRGAP.html):
   1. clone repo on the air-gapped host
   2. `todos`               list every TODO marker the operator must change
   3. edit URLs/secrets/CIDRs in those files
-  4. `check`               verify lockfiles, vendored model, alembic dir present
+  4. `check`               verify lockfiles and alembic dir present
   5. `validate-migrations` offline alembic --sql dump (no DB required)
   6. `build-images`        docker build backend + frontend against internal mirrors
   7. `push-images`         docker push to internal Artifactory
@@ -77,6 +79,8 @@ Common environment overrides:
   FRONTEND_SECRET=skynet-frontend-secrets
   INTERNAL_CA_SECRET=skynet-internal-ca
   LLM_BASE_URL=https://llm-gateway.internal/v1
+  EMBEDDING_BASE_URL=https://llm-gateway.internal/v1
+  EMBEDDING_MODEL=jina-code-embeddings-0.5b
   OIDC_ISSUER=https://idp.internal/realms/skynet
   OIDC_CLIENT_ID=skynet
   OIDC_SCOPE="openid profile email groups"
@@ -178,6 +182,8 @@ EOF
     prompt INTERNAL_CA_MOUNT_DIR "Internal CA mount directory"
   fi
   prompt LLM_BASE_URL "Internal OpenAI-compatible LLM base URL"
+  prompt EMBEDDING_BASE_URL "Internal OpenAI-compatible embedding base URL"
+  prompt EMBEDDING_MODEL "Embedding model id"
   prompt OIDC_ISSUER "Internal ADFS/OIDC issuer URL"
   prompt OIDC_CLIENT_ID "ADFS/OIDC client ID"
   prompt OIDC_SCOPE "ADFS/OIDC scopes"
@@ -225,19 +231,6 @@ EOF
   fi
 }
 
-check_model() {
-  local model="$ROOT_DIR/backend/vendor/models/jina-code-embeddings-0.5b/model.safetensors"
-  if [[ ! -s "$model" ]]; then
-    echo "missing vendored embedder weights: $model" >&2
-    echo "fetch this with git lfs before moving the repo into the air gap" >&2
-    exit 1
-  fi
-  if head -c 80 "$model" | grep -q "git-lfs"; then
-    echo "embedder weights are still a Git LFS pointer: $model" >&2
-    exit 1
-  fi
-}
-
 cmd_check() {
   need helm
   [[ -f "$ROOT_DIR/backend/Dockerfile" ]] || { echo "missing backend/Dockerfile" >&2; exit 1; }
@@ -245,7 +238,6 @@ cmd_check() {
   [[ -f "$ROOT_DIR/frontend/package-lock.json" ]] || { echo "missing frontend/package-lock.json" >&2; exit 1; }
   [[ -f "$ROOT_DIR/backend/uv.lock" ]] || { echo "missing backend/uv.lock" >&2; exit 1; }
   [[ -d "$ROOT_DIR/backend/alembic/versions" ]] || { echo "missing backend/alembic/versions" >&2; exit 1; }
-  check_model
   echo "air-gap artifact check passed"
 }
 
@@ -403,6 +395,8 @@ backend:
     CODE_AGENT_MODEL: "gpt-5"
     GENERALIST_AGENT_BASE_URL: "$LLM_BASE_URL"
     GENERALIST_AGENT_MODEL: "gpt-5"
+    RECOMMENDATIONS_EMBEDDING_BASE_URL: "$EMBEDDING_BASE_URL"
+    RECOMMENDATIONS_EMBEDDING_MODEL: "$EMBEDDING_MODEL"
 $ca_backend_env
     # TODO: On-premise - set to the public frontend route.
     FRONTEND_URL: "https://$FRONTEND_HOST"
@@ -422,6 +416,8 @@ $ca_backend_env
     AD_LDAP_USERNAME_ATTR: ""
   secrets:
     # TODO: On-premise - must contain OPENAI_API_KEY and BACKEND_AUTH_SECRET.
+    # OPENAI_API_KEY is also reused for the embedding API unless you add
+    # RECOMMENDATIONS_EMBEDDING_API_KEY to this Secret.
     # Add AD_LDAP_BIND_PASSWORD when AD_LDAP_URL is set.
     existingSecret: "$BACKEND_SECRET"
 $ca_backend_mounts

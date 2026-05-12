@@ -53,11 +53,8 @@ ENV LOG_LEVEL=INFO
 # Containerized runs default to structured logs; override to "text" only
 # when running the image interactively for debugging.
 ENV LOG_FORMAT=json
-# huggingface_hub + transformers default to phoning home for model updates;
-# the embedder ships as a vendored snapshot under backend/vendor/models, so
-# force offline mode in the image to keep the runtime egress-clean.
-ENV HF_HUB_OFFLINE=1
-ENV TRANSFORMERS_OFFLINE=1
+# Recommendation embeddings are served by an internal OpenAI-compatible API;
+# no model weights are loaded inside the backend container.
 # REMOTE_DB_URL must be set at runtime (e.g., via docker-compose or -e flag)
 # ENV REMOTE_DB_URL=postgresql://user:password@host:5432/skynet
 

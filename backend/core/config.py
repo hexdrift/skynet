@@ -14,9 +14,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_BACKEND_DIR = Path(__file__).parent.parent
-_ENV_FILE = _BACKEND_DIR / ".env"
-_VENDORED_EMBEDDER = _BACKEND_DIR / "vendor" / "models" / "jina-code-embeddings-0.5b"
+_ENV_FILE = Path(__file__).parent.parent / ".env"
 
 # TODO: On-prem / air-gap — change MINIMAX_MODEL_ID to whichever LiteLLM
 # identifier your internal gateway exposes for MiniMax M2.7 (e.g.
@@ -165,22 +163,26 @@ class Settings(BaseSettings):
         description="Optional custom base URL for the generalist agent LM (e.g. internal OpenAI-compatible gateway)",
     )
 
-    # TODO: On-prem / air-gap — the embedder snapshot is vendored under
-    # backend/vendor/models/jina-code-embeddings-0.5b/ and tracked via git-lfs.
-    # Run `git lfs pull` once after cloning so the weight file is materialised;
-    # otherwise the loader will fall back to fetching from huggingface.co and
-    # the call will hang. Override RECOMMENDATIONS_EMBEDDING_MODEL only if you
-    # ship a different snapshot to a different absolute path.
+    # TODO: On-prem / air-gap — point this at an internal OpenAI-compatible
+    # embeddings endpoint (usually the same gateway family as CODE_AGENT_BASE_URL).
+    # The backend sends POST {base_url}/embeddings with {model, input}; no model
+    # weights are bundled in this repo.
+    recommendations_embedding_base_url: str = Field(
+        default="",
+        description="Internal OpenAI-compatible embedding API base URL, e.g. https://llm.internal/v1",
+    )
     recommendations_embedding_model: str = Field(
-        default=str(_VENDORED_EMBEDDER),
+        default="jina-code-embeddings-0.5b",
         description=(
-            "Path or HF model id for the recommendation embedder. Defaults to "
-            "the snapshot vendored under backend/vendor/models/ (tracked via "
-            "git-lfs) so air-gapped deployments work out of the box. Override "
-            "with a HF id (e.g. 'jinaai/jina-code-embeddings-0.5b') to fetch "
-            "from Hugging Face when the host has internet, or with another "
-            "absolute path to use a different snapshot. Must support MRL / "
-            "head-truncated dimensions."
+            "Embedding model id exposed by recommendations_embedding_base_url. "
+            "The model must return at least recommendations_embedding_dim values."
+        ),
+    )
+    recommendations_embedding_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Optional bearer token for the embedding API. Falls back to OPENAI_API_KEY "
+            "when unset so a shared internal gateway secret can be reused."
         ),
     )
     recommendations_embedding_dim: int = Field(
@@ -188,26 +190,8 @@ class Settings(BaseSettings):
         ge=64,
         le=2048,
         description=(
-            "MRL-truncated dimension stored in job_embeddings.embedding_*. "
+            "Head-truncated dimension stored in job_embeddings.embedding_*. "
             "Must match the schema; changing requires a migration."
-        ),
-    )
-    # Vendored snapshots ship a `modeling_*.py` (the Jina embedder is one such
-    # case) that sentence-transformers loads via transformers' AutoModel —
-    # which requires `trust_remote_code=True`. The vendored path under
-    # backend/vendor/models is part of our trusted supply chain, so allow it
-    # implicitly. For arbitrary HF model identifiers the operator must opt in
-    # by flipping this flag, which keeps drive-by remote-code execution off
-    # by default.
-    recommendations_embedding_trust_remote_code: bool = Field(
-        default=False,
-        description=(
-            "Allow `trust_remote_code=True` when the embedding model id is "
-            "an HF Hub identifier rather than the vendored snapshot path. "
-            "Vendored local snapshots always run with trust_remote_code=True "
-            "(they ship the model code in the trusted bundle). Leave False "
-            "in air-gapped deployments unless you have audited the remote "
-            "modeling code yourself."
         ),
     )
     # TODO: On-prem / air-gap — leave RECOMMENDATIONS_SUMMARY_MODEL empty so the
