@@ -67,6 +67,16 @@ spec:
           port: {{ . }}
         {{- end }}
     {{- end }}
+    {{- range .Values.networkPolicy.embeddingEgress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- range (.ports | default (list 443)) }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+    {{- end }}
     {{- range .Values.networkPolicy.ldapEgress }}
     - to:
         - ipBlock:
@@ -77,7 +87,7 @@ spec:
           port: {{ . }}
         {{- end }}
     {{- end }}
-    {{- if and (not .Values.networkPolicy.egressCidrs) (not .Values.networkPolicy.llmEgress) (not .Values.networkPolicy.ldapEgress) }}
+    {{- if and (not .Values.networkPolicy.egressCidrs) (not .Values.networkPolicy.llmEgress) (not .Values.networkPolicy.embeddingEgress) (not .Values.networkPolicy.ldapEgress) }}
     # No explicit allowlist configured — fall back to wide-open egress.
     # Set networkPolicy.egressCidrs, llmEgress, and/or ldapEgress to lock down.
     - to:

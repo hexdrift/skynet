@@ -551,6 +551,7 @@ AUTH_ADMINS=break-glass-admin@example.com \
 FRONTEND_HOST=skynet.apps.internal \
 BACKEND_HOST=skynet-api.apps.internal \
 LLM_EGRESS_CIDR=10.0.5.0/24 \
+EMBEDDING_EGRESS_CIDR=10.0.5.0/24 \
 IDP_EGRESS_CIDR=10.0.6.0/24 \
 INTERNAL_CA_SECRET=skynet-internal-ca \
 COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet \
@@ -937,7 +938,7 @@ curl -k https://skynet-api.apps.internal/health</pre>
   <ul>
     <li>Mirroring/pushing images and package repositories into your internal Artifactory/registry.</li>
     <li>Creating Kubernetes Secrets and rotating credentials.</li>
-    <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, webhook, and DB.</li>
+    <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, embedding gateway, webhook, and DB.</li>
     <li>Backing up and restoring Postgres.</li>
     <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names.</li>
     <li>Choosing the internal embedding model exposed by your embedding gateway. Recommendations degrade to an empty/no-op feature when <code>RECOMMENDATIONS_EMBEDDING_BASE_URL</code> is not set.</li>

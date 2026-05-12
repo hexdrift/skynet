@@ -32,6 +32,7 @@ AUTH_ADMINS="${AUTH_ADMINS:-}"
 FRONTEND_HOST="${FRONTEND_HOST:-skynet.apps.internal}"
 BACKEND_HOST="${BACKEND_HOST:-skynet-api.apps.internal}"
 LLM_EGRESS_CIDR="${LLM_EGRESS_CIDR:-10.0.5.0/24}"
+EMBEDDING_EGRESS_CIDR="${EMBEDDING_EGRESS_CIDR:-$LLM_EGRESS_CIDR}"
 IDP_EGRESS_CIDR="${IDP_EGRESS_CIDR:-10.0.6.0/24}"
 LDAP_EGRESS_CIDR="${LDAP_EGRESS_CIDR:-}"
 LDAP_EGRESS_PORT="${LDAP_EGRESS_PORT:-636}"
@@ -90,6 +91,7 @@ Common environment overrides:
   FRONTEND_HOST=skynet.apps.internal
   BACKEND_HOST=skynet-api.apps.internal
   LLM_EGRESS_CIDR=10.0.5.0/24
+  EMBEDDING_EGRESS_CIDR=10.0.5.0/24              # set separately if embedding gateway differs
   IDP_EGRESS_CIDR=10.0.6.0/24
   LDAP_EGRESS_CIDR=10.0.8.0/24                 # blank to omit ldapEgress
   LDAP_EGRESS_PORT=636                         # 389 if you really must use ldap://
@@ -193,6 +195,7 @@ EOF
   prompt FRONTEND_HOST "Frontend route host"
   prompt BACKEND_HOST "Backend route host"
   prompt LLM_EGRESS_CIDR "LLM gateway egress CIDR"
+  prompt EMBEDDING_EGRESS_CIDR "Embedding gateway egress CIDR"
   prompt IDP_EGRESS_CIDR "IdP egress CIDR"
   prompt LDAP_EGRESS_CIDR "LDAP/AD controller egress CIDR (blank to omit)"
   if [[ -n "$LDAP_EGRESS_CIDR" ]]; then
@@ -372,6 +375,10 @@ EOF
   if [[ -n "$COMMS_EGRESS_CIDR" ]]; then
     comms_egress="    - \"$COMMS_EGRESS_CIDR\""
   fi
+  local embedding_egress=""
+  if [[ -n "$EMBEDDING_EGRESS_CIDR" && "$EMBEDDING_EGRESS_CIDR" != "$LLM_EGRESS_CIDR" ]]; then
+    embedding_egress=$(printf '\n  # TODO: On-premise - use the exact embedding gateway CIDRs and ports.\n  embeddingEgress:\n    - cidr: "%s"\n      ports: [443]' "$EMBEDDING_EGRESS_CIDR")
+  fi
   local ldap_egress=""
   if [[ -n "$LDAP_EGRESS_CIDR" ]]; then
     ldap_egress=$(printf '\n  # TODO: On-premise - use the exact AD/LDAP controller CIDR and port (636 ldaps / 389 ldap).\n  ldapEgress:\n    - cidr: "%s"\n      ports: [%s]' "$LDAP_EGRESS_CIDR" "$LDAP_EGRESS_PORT")
@@ -477,7 +484,7 @@ $comms_egress
   # TODO: On-premise - use the exact LLM gateway CIDRs and ports.
   llmEgress:
     - cidr: "$LLM_EGRESS_CIDR"
-      ports: [443]$ldap_egress
+      ports: [443]$embedding_egress$ldap_egress
 
 migration:
   enabled: true

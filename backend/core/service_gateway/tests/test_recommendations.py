@@ -20,7 +20,7 @@ class _FakeEmbedder:
     """Minimal embedder double used by the tests.
 
     ``encode`` returns a small deterministic vector so call-count and
-    argument shape can be asserted without pulling in torch.
+    argument shape can be asserted without a live embedding API.
     """
 
     def __init__(self, *, available: bool = True, vector: list[float] | None = None) -> None:
