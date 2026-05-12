@@ -12,6 +12,7 @@ import { getSiteUrl } from "@/shared/lib/site-config";
 import { SentryInit } from "@/shared/observability/sentry-init";
 import "@fontsource-variable/heebo/index.css";
 import "@fontsource-variable/inter/index.css";
+import "@fontsource-variable/jetbrains-mono/index.css";
 import "react-toastify/dist/ReactToastify.css";
 import "./globals.css";
 

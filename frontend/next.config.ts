@@ -49,6 +49,7 @@ const nextConfig: NextConfig = {
       "recharts",
       "@fontsource-variable/heebo",
       "@fontsource-variable/inter",
+      "@fontsource-variable/jetbrains-mono",
       "@uiw/react-codemirror",
       "@codemirror/lang-python",
       "xlsx",

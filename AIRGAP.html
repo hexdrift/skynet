@@ -6,10 +6,36 @@
 <title>Skynet · Air-Gap Deployment Guide</title>
 <style>
   /* Palette and fonts mirror frontend/src/app/globals.css so this doc looks
-     consistent with the running app. Font names match the bundled
-     @fontsource-variable/heebo and @fontsource-variable/inter packages; if
-     those variable fonts aren't installed system-wide the fallback chain
-     resolves to system fonts (same chain the app uses). No CDN URLs. */
+     consistent with the running app. Fonts are loaded from local WOFF2 files;
+     no CDN URLs are used. */
+  @font-face {
+    font-family: "Heebo Variable";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("frontend/public/fonts/heebo-hebrew-wght-normal.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Heebo Variable";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("frontend/public/fonts/heebo-latin-wght-normal.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Inter Variable";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("frontend/public/fonts/inter-latin-wght-normal.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "JetBrains Mono Variable";
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url("frontend/public/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+  }
   :root {
     --background: #faf8f5;
     --foreground: #1c1612;
