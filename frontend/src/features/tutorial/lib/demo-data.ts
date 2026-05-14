@@ -1432,6 +1432,9 @@ function buildExploreDemoPoints(): PublicDashboardPoint[] {
         Math.floor(c32 / 2),
         c32,
       ],
+      siblings: [],
+      task_fingerprint: null,
+      compare_fingerprint: null,
     });
   }
   return points;

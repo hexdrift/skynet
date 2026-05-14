@@ -23,7 +23,7 @@ import {
   ChevronLeft,
   CopyPlus,
 } from "lucide-react";
-import { Skeleton } from "boneyard-js/react";
+import { Skeleton } from "@/shared/ui/bone-skeleton";
 import { sidebarMoreBones } from "../lib/bones";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/primitives/button";
@@ -56,8 +56,8 @@ const NAV_ITEMS = [
     label: msg("auto.features.sidebar.components.sidebar.literal.1"),
     icon: LayoutDashboard,
   },
-  { href: "/submit", label: TERMS.notificationNewOpt, icon: Send },
   { href: "/tagger", label: msg("auto.features.sidebar.components.sidebar.literal.2"), icon: Tags },
+  { href: "/submit", label: TERMS.notificationNewOpt, icon: Send },
 ] as const;
 
 const PAGE_SIZE = 20;
@@ -452,7 +452,7 @@ export function Sidebar() {
           if (!open) setDeleteConfirm(null);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
               {msg("auto.features.sidebar.components.sidebar.3")}
@@ -467,7 +467,7 @@ export function Sidebar() {
               ?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter className="mt-2 gap-3">
             <Button
               variant="outline"
               onClick={() => setDeleteConfirm(null)}
@@ -750,6 +750,12 @@ function JobRow({
             <div className="ps-6 pe-2 pb-1">
               {Array.from({ length: job.total_pairs ?? 0 }, (_, i) => {
                 const isPairActive = isActive && activePair === i;
+                const pairStatus = derivePairStatus(
+                  i,
+                  job.status,
+                  job.completed_pairs ?? 0,
+                  job.failed_pairs ?? 0,
+                );
                 return (
                   <Link
                     key={i}
@@ -761,7 +767,7 @@ function JobRow({
                         : "text-muted-foreground/70 hover:bg-sidebar-accent/30 hover:text-foreground",
                     )}
                   >
-                    <StatusDot status={job.status} />
+                    <StatusDot status={pairStatus} />
                     <span>
                       {msg("auto.features.sidebar.components.sidebar.6")}
                       {i + 1}
@@ -855,6 +861,17 @@ function JobRow({
         )}
     </div>
   );
+}
+
+function derivePairStatus(
+  index: number,
+  parentStatus: string,
+  completedPairs: number,
+  failedPairs: number,
+): string {
+  if (index < completedPairs) return "success";
+  if (index < completedPairs + failedPairs) return "failed";
+  return parentStatus;
 }
 
 function StatusDot({ status }: { status: string }) {

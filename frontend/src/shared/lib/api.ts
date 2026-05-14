@@ -54,6 +54,15 @@ export function setApiAuthToken(token: string | undefined) {
   _authToken = token;
 }
 
+/**
+ * Return the current bearer token (without the `Bearer ` prefix) so raw
+ * `fetch` callers (SSE streams that can't go through `request`) can attach
+ * it themselves. Returns `undefined` when the user is not authenticated.
+ */
+export function getApiAuthToken(): string | undefined {
+  return _authToken;
+}
+
 function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
   const key = path;
   const startGen = _cacheGen;
@@ -596,6 +605,8 @@ export interface SidebarJobItem {
   pinned?: boolean;
   optimization_type?: string | null;
   total_pairs?: number | null;
+  completed_pairs?: number | null;
+  failed_pairs?: number | null;
 }
 
 export function listJobsSidebar(params?: { username?: string; limit?: number; offset?: number }) {
@@ -946,6 +957,9 @@ export interface PublicDashboardPoint {
   x: number;
   y: number;
   cluster_levels: number[];
+  siblings: string[];
+  task_fingerprint: string | null;
+  compare_fingerprint: string | null;
 }
 
 export interface PublicDashboardMeta {

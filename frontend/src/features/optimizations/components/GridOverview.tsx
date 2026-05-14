@@ -895,7 +895,7 @@ export function GridOverview({
       </div>
 
       <Dialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogTitleRow
             title={msg("auto.features.optimizations.components.gridoverview.19")}
             description={
@@ -908,7 +908,7 @@ export function GridOverview({
               </>
             }
           />
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setPendingDelete(null)}

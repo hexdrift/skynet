@@ -20,6 +20,7 @@ import type { useColumnResize } from "@/shared/ui/excel-filter";
 import { ColumnHeader, ResetColumnsButton, type SortDir } from "@/shared/ui/excel-filter";
 import { formatDate, formatElapsed, formatId, formatRelativeTime } from "@/shared/lib";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
+import { LiveElapsed } from "./LiveElapsed";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -132,9 +133,12 @@ export function JobsTab({
         )}
 
         {filteredItems.length > 0 && (
-          <div className="overflow-x-auto" data-tutorial="dashboard-table">
+          <div
+            className="overflow-x-auto rounded-2xl border border-border/40 bg-card/60"
+            data-tutorial="dashboard-table"
+          >
             <Table style={{ minWidth: "800px" }}>
-              <TableHeader className="bg-muted/30">
+              <TableHeader className="bg-muted/20 [&_tr]:border-b-border/40">
                 <TableRow>
                   <TableHead className="w-10 px-3">
                     <input
@@ -165,6 +169,21 @@ export function JobsTab({
                     openFilter={openFilter}
                     setOpenFilter={setOpenFilter}
                     width={colResize.widths["optimization_id"]}
+                    onResize={colResize.setColumnWidth}
+                  />
+                  <ColumnHeader
+                    label={msg("auto.features.dashboard.components.jobstab.literal.9")}
+                    sortKey="name"
+                    currentSort={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                    filterCol="name"
+                    filterOptions={filterOptions.name}
+                    filters={filters}
+                    onFilter={setColumnFilter}
+                    openFilter={openFilter}
+                    setOpenFilter={setOpenFilter}
+                    width={colResize.widths["name"]}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -213,21 +232,6 @@ export function JobsTab({
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
-                    label={TERMS.optimizer}
-                    sortKey="optimizer_name"
-                    currentSort={sortKey}
-                    sortDir={sortDir}
-                    onSort={toggleSort}
-                    filterCol="optimizer_name"
-                    filterOptions={filterOptions.optimizer_name}
-                    filters={filters}
-                    onFilter={setColumnFilter}
-                    openFilter={openFilter}
-                    setOpenFilter={setOpenFilter}
-                    width={colResize.widths["optimizer_name"]}
-                    onResize={colResize.setColumnWidth}
-                  />
-                  <ColumnHeader
                     label={msg("auto.features.dashboard.components.jobstab.literal.5")}
                     sortKey="dataset_rows"
                     currentSort={sortKey}
@@ -273,7 +277,7 @@ export function JobsTab({
                     <TableRow
                       key={job.optimization_id}
                       data-selected={isSelected}
-                      className="group border-border/40 transition-colors duration-150 data-[selected=true]:bg-primary/10 hover:bg-accent/30 data-[selected=true]:hover:bg-primary/15 cursor-pointer [&_td:first-child]:cursor-default [&_td:last-child]:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="group border-border/30 transition-colors duration-150 data-[selected=true]:bg-primary/[0.08] hover:bg-foreground/[0.025] data-[selected=true]:hover:bg-primary/[0.12] cursor-pointer [&_td:first-child]:cursor-default [&_td:last-child]:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       style={{
                         animation: `fadeSlideIn 0.25s ease-out ${idx * 0.03}s both`,
                       }}
@@ -318,6 +322,17 @@ export function JobsTab({
                           </span>
                         </div>
                       </TableCell>
+                      <TableCell
+                        className="max-w-[200px] text-sm truncate overflow-hidden"
+                        title={job.name ?? ""}
+                        dir="auto"
+                      >
+                        {job.name ? (
+                          <span className="text-foreground">{job.name}</span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="truncate overflow-hidden">
                         {typeBadge(job.optimization_type)}
                       </TableCell>
@@ -329,12 +344,6 @@ export function JobsTab({
                         title={job.module_name ?? ""}
                       >
                         {job.module_name ?? "-"}
-                      </TableCell>
-                      <TableCell
-                        className="text-sm truncate overflow-hidden"
-                        title={job.optimizer_name ?? ""}
-                      >
-                        {job.optimizer_name ?? "-"}
                       </TableCell>
                       <TableCell
                         className="text-sm tabular-nums truncate overflow-hidden"
@@ -352,7 +361,11 @@ export function JobsTab({
                         className="text-xs tabular-nums truncate overflow-hidden"
                         title={formatElapsed(job.elapsed_seconds) ?? ""}
                       >
-                        {formatElapsed(job.elapsed_seconds)}
+                        <LiveElapsed
+                          startedAt={job.started_at}
+                          elapsedSeconds={job.elapsed_seconds}
+                          isActive={ACTIVE_STATUSES.has(job.status)}
+                        />
                       </TableCell>
                       <TableCell className="truncate overflow-hidden">{formatScore(job)}</TableCell>
                       <TableCell>

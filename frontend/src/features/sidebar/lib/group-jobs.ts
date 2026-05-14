@@ -7,6 +7,12 @@ export interface JobGroup {
   jobs: SidebarJobItem[];
 }
 
+const DATE_FORMATTER = new Intl.DateTimeFormat("he-IL", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
 /**
  * Case-insensitive substring match across the sidebar's searchable fields.
  */
@@ -24,21 +30,15 @@ export function matchesJobSearch(job: SidebarJobItem, query: string): boolean {
 }
 
 /**
- * Bucket jobs into pinned → active → today → yesterday → this week → older.
+ * Bucket jobs into pinned → active → concrete calendar dates.
  * Empty buckets are dropped.
  */
 export function groupJobsByRecency(jobs: SidebarJobItem[], now: Date = new Date()): JobGroup[] {
+  void now;
   const groups: JobGroup[] = [];
   const pinned: SidebarJobItem[] = [];
   const active: SidebarJobItem[] = [];
-  const today: SidebarJobItem[] = [];
-  const yesterday: SidebarJobItem[] = [];
-  const thisWeek: SidebarJobItem[] = [];
-  const older: SidebarJobItem[] = [];
-
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterdayStart = new Date(todayStart.getTime() - 86400000);
-  const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
+  const dated = new Map<string, JobGroup>();
 
   for (const job of jobs) {
     if (job.pinned) {
@@ -49,26 +49,26 @@ export function groupJobsByRecency(jobs: SidebarJobItem[], now: Date = new Date(
       active.push(job);
       continue;
     }
-    // Missing created_at falls through epoch (1970) → "older" bucket.
     const created = new Date(job.created_at ?? 0);
-    if (created >= todayStart) today.push(job);
-    else if (created >= yesterdayStart) yesterday.push(job);
-    else if (created >= weekStart) thisWeek.push(job);
-    else older.push(job);
+    const validDate = !Number.isNaN(created.getTime());
+    const key = validDate
+      ? `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}-${String(
+          created.getDate(),
+        ).padStart(2, "0")}`
+      : "unknown";
+    const label = validDate
+      ? DATE_FORMATTER.format(created)
+      : msg("auto.features.sidebar.lib.group.jobs.literal.6");
+    const group = dated.get(key) ?? { label, jobs: [] };
+    group.jobs.push(job);
+    dated.set(key, group);
   }
 
   if (pinned.length)
     groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.1"), jobs: pinned });
   if (active.length)
     groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.2"), jobs: active });
-  if (today.length)
-    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.3"), jobs: today });
-  if (yesterday.length)
-    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.4"), jobs: yesterday });
-  if (thisWeek.length)
-    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.5"), jobs: thisWeek });
-  if (older.length)
-    groups.push({ label: msg("auto.features.sidebar.lib.group.jobs.literal.6"), jobs: older });
+  groups.push(...dated.values());
 
   return groups;
 }

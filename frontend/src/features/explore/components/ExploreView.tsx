@@ -16,6 +16,7 @@ import { ScatterCanvas, type ExploreFilter } from "./ScatterCanvas";
 import { ExploreDetailPanel } from "./ExploreDetailPanel";
 import { GranularitySlider } from "./GranularitySlider";
 import { deriveLevelCounts } from "../lib/format";
+import { buildVariationGroups } from "../lib/groups";
 import { msg } from "@/shared/lib/messages";
 import { registerTutorialHook } from "@/features/tutorial";
 
@@ -194,9 +195,21 @@ export function ExploreView() {
   const filter: ExploreFilter = isExploreFilter(urlFilter) ? urlFilter : "all";
   const selectedId = urlFocus ?? null;
   const parsedCluster = urlCluster !== null ? parseInt(urlCluster, 10) : NaN;
-  const granularityLevel = Number.isFinite(parsedCluster)
+  const urlGranularityLevel = Number.isFinite(parsedCluster)
     ? Math.max(0, Math.min(maxLevelIdx, parsedCluster))
     : Math.min(DEFAULT_GRANULARITY_LEVEL, maxLevelIdx);
+
+  // Local in-flight state for the slider — re-renders the canvas instantly on
+  // each tick while the URL update is debounced (see setGranularity). Without
+  // this, every drag step ran router.replace synchronously and re-evaluated
+  // the entire route's searchParams, which made the slider feel laggy.
+  const [liveGranularity, setLiveGranularity] = React.useState(urlGranularityLevel);
+  // External URL changes (back/forward, deep link) push into the live value.
+  // Same-value updates bail out, so the in-flight debounce loop is safe.
+  React.useEffect(() => {
+    setLiveGranularity(urlGranularityLevel);
+  }, [urlGranularityLevel]);
+  const granularityLevel = liveGranularity;
   const clusterCount = levelCounts[granularityLevel] ?? 1;
 
   const updateQuery = React.useCallback(
@@ -229,22 +242,45 @@ export function ExploreView() {
     [pathname, router],
   );
 
+  // Group variations of the same task together: one shared dot per task on
+  // the canvas, but the detail panel can still surface every variation
+  // (different splits ⇒ different ``compare_fingerprint`` ⇒ separate rows).
+  const { leaders, byLeaderId } = React.useMemo(
+    () => buildVariationGroups(points),
+    [points],
+  );
+  const multiVariationIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const [leaderId, variations] of byLeaderId) {
+      if (variations.length > 1) ids.add(leaderId);
+    }
+    return ids;
+  }, [byLeaderId]);
+  const variationCountById = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [leaderId, variations] of byLeaderId) {
+      m.set(leaderId, variations.length);
+    }
+    return m;
+  }, [byLeaderId]);
+
   const pointsById = React.useMemo(() => {
     const m = new Map<string, PublicDashboardPoint>();
-    for (const p of points) m.set(p.optimization_id, p);
+    for (const p of leaders) m.set(p.optimization_id, p);
     return m;
-  }, [points]);
+  }, [leaders]);
 
   const selected = selectedId ? (pointsById.get(selectedId) ?? null) : null;
+  const selectedVariations = selected ? (byLeaderId.get(selected.optimization_id) ?? [selected]) : [];
 
   const counts: Record<ExploreFilter, number> = React.useMemo(() => {
-    const c: Record<ExploreFilter, number> = { all: points.length, run: 0, grid_search: 0 };
-    for (const p of points) {
+    const c: Record<ExploreFilter, number> = { all: leaders.length, run: 0, grid_search: 0 };
+    for (const p of leaders) {
       if (p.optimization_type === "run") c.run += 1;
       else if (p.optimization_type === "grid_search") c.grid_search += 1;
     }
     return c;
-  }, [points]);
+  }, [leaders]);
 
   const setFilter = React.useCallback(
     (next: ExploreFilter) => {
@@ -259,9 +295,24 @@ export function ExploreView() {
     (next: string | null) => updateQuery({ focus: next }),
     [updateQuery],
   );
+  // Debounced URL write — slider drag pushes into local state immediately
+  // and only flushes to the URL once motion settles, so the route doesn't
+  // re-render on every tick.
+  const urlWriteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(
+    () => () => {
+      if (urlWriteTimerRef.current) clearTimeout(urlWriteTimerRef.current);
+    },
+    [],
+  );
   const setGranularity = React.useCallback(
-    (next: number) =>
-      updateQuery({ cluster: next === DEFAULT_GRANULARITY_LEVEL ? null : next }),
+    (next: number) => {
+      setLiveGranularity(next);
+      if (urlWriteTimerRef.current) clearTimeout(urlWriteTimerRef.current);
+      urlWriteTimerRef.current = setTimeout(() => {
+        updateQuery({ cluster: next === DEFAULT_GRANULARITY_LEVEL ? null : next });
+      }, 200);
+    },
     [updateQuery],
   );
 
@@ -272,7 +323,7 @@ export function ExploreView() {
     updateQuery({ focus: null });
   }, [loading, selectedId, pointsById, updateQuery]);
 
-  const corpusTotal = points.length;
+  const corpusTotal = leaders.length;
   const isTrulyEmpty = !loading && !error && corpusTotal === 0;
 
   return (
@@ -320,13 +371,15 @@ export function ExploreView() {
               )}
             </AnimatePresence>
             <ScatterCanvas
-              points={points}
+              points={leaders}
               filter={filter}
               selectedId={selectedId}
               onSelect={setSelected}
               granularityLevel={granularityLevel}
               clusterCount={clusterCount}
               dimmed={selected !== null}
+              multiVariationIds={multiVariationIds}
+              variationCountById={variationCountById}
             >
               <AnimatePresence>
                 {counts[filter] === 0 && corpusTotal > 0 && selected === null && (
@@ -352,7 +405,11 @@ export function ExploreView() {
                   className="pointer-events-none absolute inset-y-3 start-3 z-20 w-[min(340px,calc(100%-1.5rem))]"
                 >
                   <div className="pointer-events-auto h-full">
-                    <ExploreDetailPanel point={selected} onClose={() => setSelected(null)} />
+                    <ExploreDetailPanel
+                      point={selected}
+                      variations={selectedVariations}
+                      onClose={() => setSelected(null)}
+                    />
                   </div>
                 </motion.div>
               )}

@@ -42,6 +42,18 @@ class PublicDashboardPoint(BaseModel):
     x: float = 0.0
     y: float = 0.0
     cluster_levels: list[int]
+    # Older optimization_ids that share this point's identity (same task
+    # signature + module + optimizer + type). Empty when the leader is
+    # unique. Used by the explore UI to offer a "compare with previous
+    # runs" CTA so users can still inspect what dedup hid.
+    siblings: list[str] = []
+    # Identifies a comparable ML task (signature + metric + dataset). Two
+    # points sharing this value were trained on the same task — the
+    # frontend groups them as variations under one dot.
+    task_fingerprint: str | None = None
+    # Stronger key: same task AND byte-identical train/val/test splits.
+    # Backend uses this for dedup; one ``compare_fingerprint`` = one leader.
+    compare_fingerprint: str | None = None
 
 
 class PublicDashboardMeta(BaseModel):

@@ -1,21 +1,17 @@
-"""LLM-backed task summariser for the ``summary`` embedding aspect.
+"""LLM-backed task summariser feeding ``embedding_summary``.
 
-Given a finished job, we want ~2-3 sentences describing *what the
-task is* in natural language: input → output, objective, metric
-shape. This text is what the ``embedding_summary`` column captures,
-separate from the raw code (``embedding_code``) and the column
-layout (``embedding_schema``). Keeping summary text in a dedicated
-embedding lets the search query a user's natural-language description
-of what they want to do — "classify customer complaints by urgency" —
-against historical jobs without the raw Python source dragging the
-cosine distance around.
+Given a finished job, we want ~2-3 sentences describing *what the task is*
+in natural language: input → output, objective, metric shape. This text is
+embedded into ``embedding_summary``, which drives the explore-map's 2D
+projection. Keeping a natural-language summary (rather than raw code) lets
+semantically-similar tasks cluster together even when their Python source
+looks unrelated.
 
-The summariser is cheap to stub: ``settings.recommendations_summary_model``
-(or ``settings.code_agent_model`` as fallback) is a normal LiteLLM
-model id, wrapped in ``dspy.Predict``. If it fails for any reason
-(no key, network error, quota) we fall back to a heuristic text
-composed from the column mapping — the pipeline keeps working,
-just with weaker summary-side signal.
+The summariser is cheap to stub: ``settings.embeddings_summary_model`` (or
+``settings.code_agent_model`` as fallback) is a normal LiteLLM model id,
+wrapped in ``dspy.Predict``. If it fails for any reason (no key, network
+error, quota) we fall back to a heuristic text composed from the column
+mapping — the pipeline keeps working, just with weaker signal.
 """
 
 from __future__ import annotations
@@ -115,11 +111,10 @@ def _build_lm() -> dspy.LM | None:
 
     Returns:
         A :class:`dspy.LM` instance configured with
-        ``recommendations_summary_model`` (or ``code_agent_model`` as
-        fallback), or ``None`` when no model id is set or instantiation
-        fails.
+        ``embeddings_summary_model`` (or ``code_agent_model`` as fallback),
+        or ``None`` when no model id is set or instantiation fails.
     """
-    model_id = (settings.recommendations_summary_model or settings.code_agent_model).strip()
+    model_id = (settings.embeddings_summary_model or settings.code_agent_model).strip()
     if not model_id:
         return None
     try:

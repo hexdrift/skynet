@@ -6,7 +6,6 @@ Covers prompt-string formatting, optimized-predictor extraction, and the
 
 from __future__ import annotations
 
-import base64
 import json
 import shutil
 import tempfile
@@ -152,23 +151,21 @@ def test_persist_program_missing_files_raises_service_error(tmp_path) -> None:
         persist_program(program, artifact_id="test-id")
 
 
-def test_persist_program_base64_encodes_correctly(tmp_path) -> None:
-    """Pickle bytes are base64-encoded into ``program_pickle_base64``."""
-    raw_bytes = b"fake-pickle-bytes"
-    expected_b64 = base64.b64encode(raw_bytes).decode("ascii")
-
-    program = _fake_save_program(raw_bytes)
+def test_persist_program_writes_state_json_into_artifact() -> None:
+    """The saved JSON state is parsed into ``program_state_json`` verbatim."""
+    state = {"demos": [{"q": "hi", "a": "bye"}], "metadata": {"dspy_version": "0"}}
+    program = _fake_save_program(state)
 
     result = persist_program(program, artifact_id=None)
 
     assert result is not None
-    assert result.program_pickle_base64 == expected_b64
+    assert result.program_state_json == state
+    assert result.program_pickle_base64 is None
 
 
 def test_persist_program_no_temp_files_left_on_disk() -> None:
     """No ``dspy_artifact_*`` temp directories survive a successful persist call."""
-    raw_bytes = b"bytes"
-    program = _fake_save_program(raw_bytes)
+    program = _fake_save_program({"demos": [], "metadata": {"dspy_version": "0"}})
     tmp_root = Path(tempfile.gettempdir())
     tmp_dirs_before = {p.name for p in tmp_root.iterdir()}
 
@@ -181,12 +178,23 @@ def test_persist_program_no_temp_files_left_on_disk() -> None:
 
 def test_persist_program_returns_program_artifact_model() -> None:
     """``persist_program`` returns a ``ProgramArtifact`` with no on-disk path."""
-    program = _fake_save_program(b"data")
+    program = _fake_save_program({"demos": [], "metadata": {"dspy_version": "0"}})
 
     result = persist_program(program, artifact_id="abc")
 
     assert isinstance(result, ProgramArtifact)
     assert result.path is None
+
+
+def test_persist_program_surfaces_metadata_from_state() -> None:
+    """``ProgramArtifact.metadata`` mirrors the ``metadata`` block inside the JSON state."""
+    meta = {"dspy_version": "2.5.0", "extras": {"k": "v"}}
+    program = _fake_save_program({"demos": [], "metadata": meta})
+
+    result = persist_program(program, artifact_id="meta")
+
+    assert result is not None
+    assert result.metadata == meta
 
 
 def test_persist_program_raises_service_error_when_save_fails() -> None:
@@ -198,34 +206,18 @@ def test_persist_program_raises_service_error_when_save_fails() -> None:
         persist_program(program, artifact_id="save-fail")
 
 
-def test_persist_program_raises_service_error_when_metadata_read_fails() -> None:
-    """A missing ``metadata.json`` produces the load-failure ``ServiceError``."""
-    def _save_no_metadata(path: str, save_program: bool = True) -> None:
-        dest = Path(path)
-        # Deliberately omit metadata.json so read_text() raises FileNotFoundError
-        (dest / "program.pkl").write_bytes(b"pkl-bytes")
+def test_persist_program_raises_service_error_when_json_missing() -> None:
+    """A missing ``program.json`` produces the load-failure ``ServiceError``."""
+    def _save_nothing(path: str, save_program: bool = False) -> None:
+        # Deliberately write no file so read_text() raises FileNotFoundError.
+        return
 
     program = MagicMock()
-    program.save.side_effect = _save_no_metadata
+    program.save.side_effect = _save_nothing
     program.named_predictors.return_value = []
 
     with pytest.raises(ServiceError, match="Failed to load program artifact"):
-        persist_program(program, artifact_id="meta-fail")
-
-
-def test_persist_program_raises_service_error_when_pkl_read_fails() -> None:
-    """A missing ``program.pkl`` produces the load-failure ``ServiceError``."""
-    def _save_no_pkl(path: str, save_program: bool = True) -> None:
-        dest = Path(path)
-        (dest / "metadata.json").write_text(json.dumps({"dspy_version": "0"}))
-        # Deliberately omit program.pkl
-
-    program = MagicMock()
-    program.save.side_effect = _save_no_pkl
-    program.named_predictors.return_value = []
-
-    with pytest.raises(ServiceError, match="Failed to load program artifact"):
-        persist_program(program, artifact_id="pkl-fail")
+        persist_program(program, artifact_id="json-fail")
 
 
 def test_persist_program_cleans_up_tempdir_on_error() -> None:
@@ -252,15 +244,13 @@ def test_persist_program_cleans_up_tempdir_on_success() -> None:
     """Symmetric to the error-cleanup test: cleanup must run on the happy path too."""
     known_path = tempfile.mkdtemp(prefix="dspy_sentinel_success_")
     try:
-        raw_bytes = b"success-bytes"
+        state = {"demos": [], "metadata": {"dspy_version": "0"}}
 
-        def _save_files(path: str, save_program: bool = True) -> None:
-            dest = Path(path)
-            (dest / "metadata.json").write_text(json.dumps({"dspy_version": "0"}))
-            (dest / "program.pkl").write_bytes(raw_bytes)
+        def _save_state(path: str, save_program: bool = False) -> None:
+            Path(path).write_text(json.dumps(state))
 
         program = MagicMock()
-        program.save.side_effect = _save_files
+        program.save.side_effect = _save_state
         program.named_predictors.return_value = []
 
         with (
@@ -291,12 +281,11 @@ def _mock_sig(
     return sig
 
 
-def _fake_save_program(raw_bytes: bytes) -> MagicMock:
-    """Return a fake program whose ``save`` writes ``metadata.json`` and ``program.pkl``."""
-    def _save(path: str, save_program: bool = True) -> None:
-        dest = Path(path)
-        (dest / "metadata.json").write_text(json.dumps({"dspy_version": "0"}))
-        (dest / "program.pkl").write_bytes(raw_bytes)
+def _fake_save_program(state: dict) -> MagicMock:
+    """Return a fake program whose ``save`` writes ``state`` to the requested JSON path."""
+
+    def _save(path: str, save_program: bool = False) -> None:
+        Path(path).write_text(json.dumps(state))
 
     program = MagicMock()
     program.save.side_effect = _save

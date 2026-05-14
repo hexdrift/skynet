@@ -478,7 +478,10 @@ export function CodeEditor({
       )}
 
       {hasOutput && (
-        <div className="bg-[#F5EDE4] border-t border-[#E5DDD4] px-4 py-3 space-y-2">
+        <div
+          dir="ltr"
+          className="bg-[#F5EDE4] border-t border-[#E5DDD4] px-4 py-3 space-y-2 text-left"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[0.625rem] text-[#8C7A6B] uppercase tracking-wider font-semibold">
               {msg("shared.code_editor.validation")}
@@ -504,11 +507,9 @@ export function CodeEditor({
             <div className="flex items-start gap-2 text-xs">
               <CheckCircle2 className="size-3.5 text-[#5A7247] shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <span className="font-medium text-[#5A7247]">
-                  {msg("shared.code_editor.valid")}
-                </span>
+                <span className="font-medium text-[#5A7247]">{msg("shared.code_editor.valid")}</span>
                 {result.signature_fields && (
-                  <div className="text-[#7C6350] font-mono text-[0.6875rem] space-y-0.5" dir="ltr">
+                  <div className="text-[#7C6350] font-mono text-[0.6875rem] space-y-0.5">
                     <div>
                       <span className="text-[#8C7A6B]">{msg("shared.code_editor.inputs")}</span>{" "}
                       {result.signature_fields.inputs.join(", ")}

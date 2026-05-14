@@ -2,12 +2,10 @@
  * Pure formatters and projection helpers for the explore slice.
  *
  * Score values from the public dashboard are already on a 0–100 scale —
- * see `backend/service_gateway/recommendations._extract_scores`. Any value
- * received as a 0–1 ratio is an upstream bug; this module canonicalizes
- * to 0–100 without a runtime guess.
+ * see `backend/service_gateway/embedding_pipeline._extract_scores`. Any
+ * value received as a 0–1 ratio is an upstream bug; this module
+ * canonicalizes to 0–100 without a runtime guess.
  */
-
-import { formatMsg, msg } from "@/shared/lib/messages";
 
 export type GainBadge = {
   text: string;
@@ -43,25 +41,15 @@ export function formatGain(
 }
 
 /**
- * Returns a relative-time duration (no "לפני" prefix) or null when the
- * timestamp is missing/unparseable. The caller decides whether to render a
- * sentinel ("—") or prepend the prefix.
- *
- * Future timestamps (clock skew, system clock drift) clamp to "just now"
- * rather than reading as a positive duration into the past.
+ * Format an ISO timestamp as a numeric date (e.g. "14.5.2026").
+ * Returns "—" for missing/unparseable input so callers can render the result
+ * directly without a null check.
  */
-export function formatAgo(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return null;
-  const diffMs = Math.max(0, Date.now() - then);
-  const mins = Math.round(diffMs / 60_000);
-  if (mins < 1) return msg("explore.detail.time.now");
-  if (mins < 60) return formatMsg("explore.detail.time.minutes", { p1: mins });
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return formatMsg("explore.detail.time.hours", { p1: hrs });
-  const days = Math.round(hrs / 24);
-  return formatMsg("explore.detail.time.days", { p1: days });
+export function formatExploreDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
 }
 
 // Spread cluster colors evenly around the hue circle. Lightness and chroma

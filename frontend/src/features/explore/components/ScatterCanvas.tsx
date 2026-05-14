@@ -13,7 +13,6 @@ import {
 } from "@/shared/ui/primitives/tooltip";
 import {
   BASE_RADIUS,
-  CLUSTER_LABEL_MAX_CHARS,
   CLUSTER_LABEL_MIN_POINTS,
   DRAG_THRESHOLD_PX,
   FOCUS_RING_COLOR,
@@ -37,7 +36,6 @@ import {
   clampView,
   colorForCluster,
   computeClusterHulls,
-  computeClusterLabels,
   formatScore,
   pointInPolygon,
   type View,
@@ -61,6 +59,13 @@ interface ScatterCanvasProps {
   hideResetButton?: boolean;
   heightClass?: string;
   children?: React.ReactNode;
+  // optimization_ids of leaders whose task has more than one variation
+  // (same task_fingerprint, different splits). Rendered with a subtle
+  // concentric ring and a hover hint pointing at the picker.
+  multiVariationIds?: ReadonlySet<string>;
+  // Number of variations per leader (when > 1). Used to format the
+  // hover hint as "{n} גרסאות — לחצו לבחירה".
+  variationCountById?: ReadonlyMap<string, number>;
 }
 
 interface ProjectedPoint {
@@ -138,6 +143,8 @@ export function ScatterCanvas({
   hideResetButton = false,
   heightClass = "h-[64vh] min-h-[420px]",
   children,
+  multiVariationIds,
+  variationCountById,
 }: ScatterCanvasProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -191,32 +198,7 @@ export function ScatterCanvas({
     });
   }, [points, filter, size, granularityLevel, clusterCount]);
 
-  const projectedLabels = React.useMemo(() => {
-    if (size.w < 2 || size.h < 2) return [];
-    const plotW = Math.max(1, size.w - PADDING * 2);
-    const plotH = Math.max(1, size.h - PADDING * 2);
-    return computeClusterLabels(points, granularityLevel, CLUSTER_LABEL_MIN_POINTS).map((cl) => {
-      const normX = (clampNorm(cl.cx) + 1) / 2;
-      const normY = 1 - (clampNorm(cl.cy) + 1) / 2;
-      const text =
-        cl.label.length > CLUSTER_LABEL_MAX_CHARS
-          ? `${cl.label.slice(0, CLUSTER_LABEL_MAX_CHARS - 1)}…`
-          : cl.label;
-      return {
-        clusterId: cl.clusterId,
-        text,
-        basePx: PADDING + normX * plotW,
-        basePy: PADDING + normY * plotH,
-        color: colorForCluster(cl.clusterId, clusterCount, true),
-      };
-    });
-  }, [points, granularityLevel, clusterCount, size]);
-
-  // Boundary outlines per cluster, in canvas-base pixel coordinates
-  // (pre-view-transform). The drawing pass and the hover hit-test apply
-  // the current pan/zoom on top. Vertices include a centroid push-out so
-  // the line sits a few pixels outside the actual point markers.
-  const clusterHulls = React.useMemo(() => {
+  const clusterHulls = React.useMemo<HullShape[]>(() => {
     if (size.w < 2 || size.h < 2) return [];
     const plotW = Math.max(1, size.w - PADDING * 2);
     const plotH = Math.max(1, size.h - PADDING * 2);
@@ -314,6 +296,7 @@ export function ScatterCanvas({
       const isHovered = hoveredId === p.point.optimization_id;
       const isSelected = selectedId === p.point.optimization_id;
       const isActive = isHovered || isSelected;
+      const hasVariations = multiVariationIds?.has(p.point.optimization_id) ?? false;
 
       let alpha = p.match ? 1 : 0.35;
       if (dimmed && !isActive) alpha *= 0.35;
@@ -323,6 +306,18 @@ export function ScatterCanvas({
       ctx.globalAlpha = alpha;
       ctx.arc(sx, sy, isActive ? HOVER_RADIUS : p.radius, 0, Math.PI * 2);
       ctx.fill();
+
+      // Subtle concentric ring marks dots that hide additional task
+      // variations (same task, different splits). Drawn at low opacity so it
+      // reads as a secondary affordance, not a primary visual.
+      if (hasVariations && !isSelected) {
+        ctx.globalAlpha = (p.match ? 0.4 : 0.2) * (dimmed && !isActive ? 0.5 : 1);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sx, sy, (isActive ? HOVER_RADIUS : p.radius) + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       if (isSelected) {
         ctx.globalAlpha = 1;
@@ -335,46 +330,15 @@ export function ScatterCanvas({
         ctx.globalAlpha = 1;
         ctx.strokeStyle = POINT_OUTLINE_COLOR;
         ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, isActive ? HOVER_RADIUS : p.radius, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
     ctx.globalAlpha = 1;
 
-    if (hoveredClusterId !== null && projectedLabels.length > 0) {
-      const lbl = projectedLabels.find((l) => l.clusterId === hoveredClusterId);
-      if (lbl) {
-        const sx = lbl.basePx * view.k + view.tx;
-        const sy = lbl.basePy * view.k + view.ty;
-        if (sx >= -120 && sx <= size.w + 120 && sy >= -40 && sy <= size.h + 40) {
-          ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          const padX = 7;
-          const padY = 3;
-          const textH = 12;
-          const labelAlpha = dimmed ? 0.6 : 1;
-          const textW = ctx.measureText(lbl.text).width;
-          const pillX = sx - textW / 2 - padX;
-          const pillY = sy - textH / 2 - padY;
-          const pillW = textW + padX * 2;
-          const pillH = textH + padY * 2;
-          ctx.globalAlpha = labelAlpha;
-          ctx.fillStyle = "oklch(0.99 0.003 50)";
-          ctx.beginPath();
-          ctx.roundRect(pillX, pillY, pillW, pillH, 6);
-          ctx.fill();
-          ctx.strokeStyle = "oklch(0.85 0.01 50)";
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.fillStyle = lbl.color;
-          ctx.fillText(lbl.text, sx, sy + 0.5);
-          ctx.globalAlpha = 1;
-        }
-      }
-    }
   }, [
     projected,
-    projectedLabels,
     clusterHulls,
     size,
     hoveredId,
@@ -382,6 +346,7 @@ export function ScatterCanvas({
     selectedId,
     dimmed,
     view,
+    multiVariationIds,
   ]);
 
   const pickNearest = React.useCallback(
@@ -597,7 +562,13 @@ export function ScatterCanvas({
         </div>
       )}
       {hovered && tooltipPos && !isDragging && (
-        <Tooltip point={hovered} x={tooltipPos.x} y={tooltipPos.y} containerWidth={size.w} />
+        <Tooltip
+          point={hovered}
+          x={tooltipPos.x}
+          y={tooltipPos.y}
+          containerWidth={size.w}
+          variationCount={variationCountById?.get(hovered.optimization_id) ?? 1}
+        />
       )}
     </div>
   );
@@ -636,16 +607,19 @@ function Tooltip({
   x,
   y,
   containerWidth,
+  variationCount,
 }: {
   point: PublicDashboardPoint;
   x: number;
   y: number;
   containerWidth: number;
+  variationCount: number;
 }) {
   const primary = point.summary_text ?? point.task_name ?? "—";
   const typeLabel = point.optimization_type ? getJobTypeLabel(point.optimization_type) : null;
   const score = formatScore(point.optimized_metric);
   const above = y > TOOLTIP_ABOVE_THRESHOLD;
+  const hasVariations = variationCount > 1;
 
   const half = TOOLTIP_MAX_WIDTH / 2;
   let shiftX = 0;
@@ -705,7 +679,9 @@ function Tooltip({
         )}
       </div>
       <p className="mt-2 border-t border-border/50 pt-1.5 text-[0.6875rem] font-medium text-muted-foreground/80">
-        {msg("explore.tooltip.open_hint")}
+        {hasVariations
+          ? formatMsg("explore.canvas.variations_hint", { n: variationCount })
+          : msg("explore.tooltip.open_hint")}
       </p>
     </div>
   );

@@ -1,4 +1,4 @@
-import type { Bone, ResponsiveBones } from "boneyard-js";
+import type { Bone, ResponsiveBones } from "@/shared/ui/bone-skeleton";
 
 function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {
   return container ? { x, y, w, h, r, c: true } : { x, y, w, h, r };

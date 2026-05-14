@@ -47,7 +47,7 @@ export function DeleteJobDialog({
         </Button>
       </TooltipButton>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogTitleRow
             title={
               <>
@@ -67,7 +67,7 @@ export function DeleteJobDialog({
             }
           />
 
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setOpen(false)}

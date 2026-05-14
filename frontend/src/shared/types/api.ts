@@ -127,6 +127,7 @@ export interface OptimizationSummaryResponse {
   metric_improvement?: number | null;
   best_pair_label?: string | null;
   task_fingerprint?: string | null;
+  compare_fingerprint?: string | null;
 }
 
 export interface PaginatedJobsResponse {

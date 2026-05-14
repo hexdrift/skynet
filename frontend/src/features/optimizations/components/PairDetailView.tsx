@@ -250,7 +250,7 @@ export function PairDetailView({
       </FadeIn>
 
       <Dialog open={deleteOpen} onOpenChange={(open) => !open && setDeleteOpen(false)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogTitleRow
             title={msg("auto.features.optimizations.components.gridoverview.19")}
             description={
@@ -263,7 +263,7 @@ export function PairDetailView({
               </>
             }
           />
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}

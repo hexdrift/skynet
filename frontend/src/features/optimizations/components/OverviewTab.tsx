@@ -31,7 +31,6 @@ export function OverviewTab({
   onStageClick,
   onPairSelect,
   onPairDeleted,
-  onShowLMActivity,
 }: {
   job: OptimizationStatusResponse;
   isActive: boolean;
@@ -40,7 +39,6 @@ export function OverviewTab({
   onStageClick: (stage: PipelineStage) => void;
   onPairSelect: (pairIndex: number) => void;
   onPairDeleted?: (pairIndex: number) => void;
-  onShowLMActivity?: () => void;
 }) {
   const metrics = job.latest_metrics ?? {};
 
@@ -285,17 +283,6 @@ export function OverviewTab({
                       </>
                     )}
                   </div>
-                  {onShowLMActivity && (
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={onShowLMActivity}
-                        className="text-xs text-[#7C6350] hover:text-[#3D2E22] transition-colors duration-150 underline-offset-2 hover:underline cursor-pointer"
-                      >
-                        {msg("auto.features.optimizations.components.overviewtab.lm_activity_link")}
-                      </button>
-                    </div>
-                  )}
                 </div>
               </FadeIn>
             );

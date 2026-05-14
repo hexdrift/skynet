@@ -25,6 +25,9 @@ PAYLOAD_OVERVIEW_DESCRIPTION = "description"
 PAYLOAD_OVERVIEW_USERNAME = "username"
 PAYLOAD_OVERVIEW_MODULE_NAME = "module_name"
 PAYLOAD_OVERVIEW_MODULE_KWARGS = "module_kwargs"
+# Stored so the load path can reconstruct the optimized program from a
+# state-only JSON artifact (no pickle deserialization required).
+PAYLOAD_OVERVIEW_SIGNATURE_CODE = "signature_code"
 PAYLOAD_OVERVIEW_OPTIMIZER_NAME = "optimizer_name"
 PAYLOAD_OVERVIEW_MODEL_NAME = "model_name"
 PAYLOAD_OVERVIEW_MODEL_SETTINGS = "model_settings"

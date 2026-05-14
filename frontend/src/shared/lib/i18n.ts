@@ -18,26 +18,7 @@ const FSI = "⁨";
 const PDI = "⁩";
 const LATIN_LIKE = /[A-Za-z0-9@./:_\-+#]/;
 
-type MissingKeyHandler = (key: string, params?: Record<string, unknown>) => void;
-let missingKeyHandler: MissingKeyHandler | null = null;
-
-/**
- * Register a callback invoked whenever ``tI18n`` is asked for a key it
- * cannot resolve. Production wires this to a Sentry breadcrumb tagged
- * ``error.unmapped_code`` so catalog drift surfaces in observability.
- */
-export function setMissingKeyHandler(handler: MissingKeyHandler | null): void {
-  missingKeyHandler = handler;
-}
-
-function reportMissingKey(key: string, params?: Record<string, unknown>): void {
-  if (missingKeyHandler) {
-    try {
-      missingKeyHandler(key, params);
-    } catch {
-      /* never let observability errors mask the original UI */
-    }
-  }
+function reportMissingKey(key: string): void {
   if (typeof console !== "undefined" && typeof console.warn === "function") {
     console.warn(`[i18n] missing translation for ${key}`);
   }
@@ -175,13 +156,12 @@ export function formatTemplate(
  * BiDi isolation around every interpolated value so embedded Latin/numeric
  * values don't flip surrounding Hebrew punctuation.
  *
- * Reports unmapped codes via the configured missing-key handler (Sentry in
- * production) and returns the key unchanged so drift is dev-visible.
+ * Returns the key unchanged so drift is dev-visible.
  */
 export function tI18n(code: string, params?: Record<string, unknown>): string {
   const template = (I18N_MESSAGES as Record<string, string>)[code as I18nMessageKey];
   if (!template) {
-    reportMissingKey(code, params);
+    reportMissingKey(code);
     return code;
   }
   return formatTemplate(template, params);

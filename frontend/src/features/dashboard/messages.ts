@@ -83,6 +83,7 @@ export const dashboardMessages = {
   "auto.features.dashboard.components.jobstab.literal.6": "נוצר",
   "auto.features.dashboard.components.jobstab.literal.7": "זמן",
   "auto.features.dashboard.components.jobstab.literal.8": "ציון",
+  "auto.features.dashboard.components.jobstab.literal.9": "שם",
   "auto.features.dashboard.components.analyticsempty.literal.1": "אין עדיין נתונים",
   "auto.features.dashboard.components.analyticsempty.literal.2": "לא נמצאו תוצאות",
   "auto.features.dashboard.components.analyticsempty.literal.3": "שגיאה בטעינת נתונים",

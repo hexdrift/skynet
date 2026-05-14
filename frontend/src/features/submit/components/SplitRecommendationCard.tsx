@@ -71,20 +71,17 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
 
       {splitMode === "auto" && (
         <div className="space-y-2">
-          <div
-            dir="ltr"
-            className="flex h-2 overflow-hidden rounded-full bg-white/70 ring-1 ring-[#DDD6CC]/80"
-          >
+          <div className="flex h-3 overflow-hidden rounded-full">
             <div
-              className="bg-[#3D2E22] transition-[width] duration-300 ease-out"
+              className="bg-[#3D2E22] transition-all"
               style={{ width: `${fractions.train * 100}%` }}
             />
             <div
-              className="bg-[#C8A882] transition-[width] duration-300 ease-out"
+              className="bg-[#C8A882] transition-all"
               style={{ width: `${fractions.val * 100}%` }}
             />
             <div
-              className="bg-[#8C7A6B] transition-[width] duration-300 ease-out"
+              className="bg-[#8C7A6B] transition-all"
               style={{ width: `${fractions.test * 100}%` }}
             />
           </div>

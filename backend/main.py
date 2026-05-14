@@ -13,7 +13,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 
-from core.api import create_app
+from core.api.app import create_app
 from core.api.observability import configure_logging
 from core.registry import ServiceRegistry
 

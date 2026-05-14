@@ -167,75 +167,49 @@ class Settings(BaseSettings):
     # embeddings endpoint (usually the same gateway family as CODE_AGENT_BASE_URL).
     # The backend sends POST {base_url}/embeddings with {model, input}; no model
     # weights are bundled in this repo.
-    recommendations_embedding_base_url: str = Field(
+    embeddings_base_url: str = Field(
         default="",
         description="Internal OpenAI-compatible embedding API base URL, e.g. https://llm.internal/v1",
     )
-    recommendations_embedding_model: str = Field(
+    embeddings_model: str = Field(
         default="jina-code-embeddings-0.5b",
         description=(
-            "Embedding model id exposed by recommendations_embedding_base_url. "
-            "The model must return at least recommendations_embedding_dim values."
+            "Embedding model id exposed by embeddings_base_url. "
+            "The model must return at least embeddings_dim values."
         ),
     )
-    recommendations_embedding_api_key: SecretStr | None = Field(
+    embeddings_api_key: SecretStr | None = Field(
         default=None,
         description=(
             "Optional bearer token for the embedding API. Falls back to OPENAI_API_KEY "
             "when unset so a shared internal gateway secret can be reused."
         ),
     )
-    recommendations_embedding_dim: int = Field(
+    embeddings_dim: int = Field(
         default=512,
         ge=64,
         le=2048,
         description=(
-            "Head-truncated dimension stored in job_embeddings.embedding_*. "
+            "Head-truncated dimension stored in job_embeddings.embedding_summary. "
             "Must match the schema; changing requires a migration."
         ),
     )
-    # TODO: On-prem / air-gap — leave RECOMMENDATIONS_SUMMARY_MODEL empty so the
+    # TODO: On-prem / air-gap — leave EMBEDDINGS_SUMMARY_MODEL empty so the
     # pipeline reuses code_agent_model (which already points at your internal
     # gateway). Setting this to a public-provider id would route summarisation
     # calls outside the air-gap.
-    recommendations_summary_model: str = Field(
+    embeddings_summary_model: str = Field(
         default="",
         description=(
-            "LiteLLM model id used to summarise a finished job for the "
-            "'summary' embedding aspect. Falls back to code_agent_model when empty."
+            "LiteLLM model id used to summarise a finished job before embedding. "
+            "Falls back to code_agent_model when empty."
         ),
     )
-    recommendations_enabled: bool = Field(
+    embeddings_enabled: bool = Field(
         default=True,
         description=(
-            "Master switch for the recommendation ingest + search pipeline. "
-            "Off = the endpoint still returns [] and no embeddings are written."
-        ),
-    )
-    recommendations_quality_min_absolute: float = Field(
-        default=50.0,
-        ge=0.0,
-        description=(
-            "Minimum optimized_test_metric required for a job to be "
-            "flagged is_recommendable. Metrics live on a 0-100 scale in "
-            "this codebase, so 50.0 is 'beats random for a two-class task.'"
-        ),
-    )
-    recommendations_quality_min_gain_absolute: float = Field(
-        default=5.0,
-        ge=0.0,
-        description=(
-            "Minimum absolute lift (optimized - baseline) in percentage "
-            "points for a job to be flagged is_recommendable."
-        ),
-    )
-    recommendations_quality_min_gain_relative: float = Field(
-        default=0.10,
-        ge=0.0,
-        description=(
-            "Minimum relative lift (optimized - baseline) / baseline for a "
-            "job to be flagged is_recommendable. Used in tandem with the "
-            "absolute gain threshold via max(); whichever is larger applies."
+            "Master switch for the explore-map embedding pipeline. "
+            "Off = no rows are written to job_embeddings and the map renders empty."
         ),
     )
 

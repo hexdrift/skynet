@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dial
 import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Button } from "@/shared/ui/primitives/button";
 import { Label } from "@/shared/ui/primitives/label";
+import { Input } from "@/shared/ui/primitives/input";
 import { Switch } from "@/shared/ui/primitives/switch";
 import { Separator } from "@/shared/ui/primitives/separator";
 import { ModelPicker, modelSupportsThinking } from "./ModelPicker";
@@ -84,7 +85,7 @@ export function ModelConfigModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogTitleRow title={roleLabel} />
 
         <div className="space-y-4">
@@ -192,6 +193,49 @@ export function ModelConfigModal({
               }}
               placeholder={msg("auto.features.submit.components.modelconfigmodal.literal.3")}
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="modelConfigBaseUrl">
+                {msg("auto.features.submit.components.steps.modelstep.8")}
+              </Label>
+              <Input
+                id="modelConfigBaseUrl"
+                dir="ltr"
+                value={draft.base_url ?? ""}
+                onChange={(e) =>
+                  setDraft((p) => ({ ...p, base_url: e.target.value || null }))
+                }
+              />
+              <p className="text-[0.625rem] text-muted-foreground">
+                {msg("auto.features.submit.components.steps.modelstep.9")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="modelConfigApiKey">
+                {msg("auto.features.submit.components.steps.modelstep.10")}
+              </Label>
+              <Input
+                id="modelConfigApiKey"
+                dir="ltr"
+                type="password"
+                placeholder="sk-..."
+                value={(draft.extra?.api_key as string | undefined) ?? ""}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDraft((p) => {
+                    const rest = { ...p.extra };
+                    if (next) rest.api_key = next;
+                    else delete rest.api_key;
+                    return { ...p, extra: Object.keys(rest).length ? rest : undefined };
+                  });
+                }}
+              />
+              <p className="text-[0.625rem] text-muted-foreground">
+                {msg("auto.features.submit.components.steps.modelstep.11")}
+              </p>
+            </div>
           </div>
 
           <Separator />
@@ -306,7 +350,7 @@ export function ModelConfigModal({
           )}
         </div>
 
-        <DialogFooter className="grid grid-cols-2 gap-2">
+        <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
             {msg("auto.features.submit.components.modelconfigmodal.10")}
           </Button>

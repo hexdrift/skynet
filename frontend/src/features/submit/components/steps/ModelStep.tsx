@@ -9,7 +9,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/shared/ui/primitives/card";
-import { Input } from "@/shared/ui/primitives/input";
 import { Label } from "@/shared/ui/primitives/label";
 import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
@@ -73,11 +72,6 @@ function AllAvailableChip({ availableCount, onReset }: AllAvailableChipProps) {
 
 export function ModelStep({ w }: { w: SubmitWizardContext }) {
   const {
-    globalBaseUrl,
-    setGlobalBaseUrl,
-    globalApiKey,
-    setGlobalApiKey,
-    anyProviderHasEnvKey,
     jobType,
     modelConfig,
     setModelConfig,
@@ -120,52 +114,6 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="baseUrl">
-              {msg("auto.features.submit.components.steps.modelstep.8")}
-            </Label>
-            <Input
-              id="baseUrl"
-              dir="ltr"
-              value={globalBaseUrl}
-              onChange={(e) => setGlobalBaseUrl(e.target.value)}
-            />
-            <p className="text-[0.625rem] text-muted-foreground">
-              {msg("auto.features.submit.components.steps.modelstep.9")}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="apiKey">
-              {msg("auto.features.submit.components.steps.modelstep.10")}
-            </Label>
-            <Input
-              id="apiKey"
-              dir="ltr"
-              type="password"
-              placeholder="sk-..."
-              value={globalApiKey}
-              onChange={(e) => setGlobalApiKey(e.target.value)}
-            />
-            {anyProviderHasEnvKey && (
-              <p className="text-[0.625rem] text-muted-foreground">
-                {msg("auto.features.submit.components.steps.modelstep.11")}
-              </p>
-            )}
-            {globalApiKey &&
-              typeof window !== "undefined" &&
-              window.location.protocol !== "https:" &&
-              process.env.NODE_ENV === "production" && (
-                <p className="text-[0.625rem] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                  <AlertTriangle className="size-3 shrink-0" />
-                  {msg("auto.features.submit.components.steps.modelstep.12")}
-                </p>
-              )}
-          </div>
-        </div>
-
-        <Separator />
-
         {jobType === "run" ? (
           <div className="space-y-3" data-tutorial="model-catalog">
             <Label className="text-sm font-semibold">

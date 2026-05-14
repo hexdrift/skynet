@@ -1,5 +1,9 @@
-"""HTTP API layer for DSPy optimization service."""
+"""HTTP API layer for DSPy optimization service.
 
-from .app import create_app
-
-__all__ = ["create_app"]
+Kept intentionally slim: leaf modules under this package import from each
+other freely, and an eager re-export of ``create_app`` here would force
+``core.api.app`` (and its router fan-out) to load whenever any submodule
+is imported, creating circular-import risk for service-gateway code that
+needs only a single helper (e.g. ``compute_compare_fingerprint``). Import
+``create_app`` directly from ``core.api.app``.
+"""

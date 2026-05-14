@@ -271,14 +271,15 @@
   }
   .callout p:last-child { margin-bottom: 0; }
   .arch {
-    background: var(--surface-1);
+    background: linear-gradient(180deg, var(--surface-1), #fbfaf7);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.25rem;
     margin: 1rem 0 1.5rem;
     box-shadow: var(--shadow-card);
+    overflow-x: auto;
   }
-  .arch svg { width: 100%; height: auto; max-height: 380px; }
+  .arch svg { width: 100%; min-width: 620px; height: auto; max-height: 430px; display: block; }
   .arch figcaption {
     font-size: 12px;
     color: var(--text-2);
@@ -357,7 +358,109 @@
       padding-bottom: 1rem;
     }
   }
+  /* OS selector: segmented control in the header. An inset track holds two
+     equal-width buttons; a sliding indicator behind the active button
+     transitions on transform for a smooth, iOS-style feel. */
+  .os-toggle {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    width: max-content;
+    margin-top: 1.25rem;
+    padding: 3px;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow: inset 0 1px 1px rgba(28, 22, 18, 0.04);
+    user-select: none;
+  }
+  .os-toggle::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    height: calc(100% - 6px);
+    background: var(--card);
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(28, 22, 18, 0.08), 0 0 0 1px rgba(28, 22, 18, 0.04);
+    transform: translate3d(0, 0, 0);
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+  }
+  /* Two selectors so the indicator sits in the right slot on first paint
+     (`:root[data-os-pref]` is set synchronously in <head>) AND tracks
+     subsequent clicks (which only flip the body class). */
+  :root[data-os-pref="win"] .os-toggle::before,
+  body.os-windows .os-toggle::before {
+    transform: translate3d(100%, 0, 0);
+  }
+  .os-toggle button {
+    position: relative;
+    z-index: 1;
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-3);
+    padding: 0.4rem 0.95rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    transition: color 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .os-toggle button:hover { color: var(--text-2); }
+  .os-toggle button[aria-pressed="true"] { color: var(--text-1); }
+  .os-toggle button[aria-pressed="true"]:hover { color: var(--text-1); }
+  .os-toggle button:focus { outline: none; }
+  .os-toggle button:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  .os-toggle .os-glyph {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    opacity: 0.9;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .os-toggle::before, .os-toggle button { transition: none; }
+  }
+  /* Default before JS runs: show unix, hide windows. The inline <head>
+     script flips body to .os-windows when the saved pref is 'win', and the
+     bottom <script> handles toggle clicks. If JS is disabled the unix
+     variant renders normally; the windows variant stays hidden — operators
+     on Windows can still copy unix commands and adapt them, or run the
+     .bat from the README. */
+  [data-os="win"] { display: none; }
+  body.os-windows [data-os="unix"] { display: none; }
+  body.os-windows [data-os="win"] { display: inline; }
 </style>
+<script>
+  // Apply the saved OS class to <body> before first paint so the correct
+  // variant is visible immediately (no flash of the default unix variant).
+  // Default to unix on first visit. Stored under 'airgap-os' = 'unix' | 'win'.
+  (function () {
+    try {
+      var saved = localStorage.getItem('airgap-os');
+      if (saved !== 'unix' && saved !== 'win') saved = 'unix';
+      document.documentElement.setAttribute('data-os-pref', saved);
+      document.addEventListener('DOMContentLoaded', function () {
+        document.body.classList.add(saved === 'win' ? 'os-windows' : 'os-unix');
+      });
+    } catch (_) { /* localStorage blocked: fall through to unix default */ }
+  })();
+</script>
 </head>
 <body>
 <div class="layout">
@@ -393,6 +496,16 @@
   <p class="lede">
     Operator path for moving Skynet into an internet-isolated environment when you already have the required internal mirrors, images, secrets, IdP, LLM gateway, CA bundle, and Postgres available.
   </p>
+  <div class="os-toggle" role="group" aria-label="Operator OS">
+    <button type="button" data-os-set="unix" aria-pressed="true">
+      <svg class="os-glyph" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.182 8.027a3.265 3.265 0 0 1 1.555-2.74 3.342 3.342 0 0 0-2.633-1.424c-1.108-.116-2.18.663-2.748.663-.58 0-1.448-.65-2.382-.63a3.504 3.504 0 0 0-2.95 1.799c-1.275 2.21-.324 5.466.91 7.255.604.875 1.31 1.857 2.234 1.823.901-.037 1.24-.578 2.328-.578 1.078 0 1.395.578 2.346.557.97-.014 1.582-.886 2.165-1.768a7.832 7.832 0 0 0 .988-2.025 3.182 3.182 0 0 1-1.94-2.932zM9.485 3.072c.49-.59.81-1.405.722-2.222-.7.034-1.55.466-2.054 1.054-.456.523-.853 1.36-.747 2.157.78.06 1.578-.396 2.079-.99z"/></svg>
+      <span>macOS / Linux</span>
+    </button>
+    <button type="button" data-os-set="win" aria-pressed="false">
+      <svg class="os-glyph" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 1.91 6.564.992v6.342H0V1.91zm7.336-1.027L16 0v7.334H7.336V.883zM0 8.044h6.564v6.342L0 13.469V8.044zm7.336 0H16V16l-8.664-1.027V8.044z"/></svg>
+      <span>Windows</span>
+    </button>
+  </div>
 </header>
 
 <section id="overview">
@@ -400,139 +513,162 @@
   <p>Skynet runs as two pods (frontend + backend) plus an in-cluster migration Job, fronted by the OpenShift router. Every external dependency below resolves inside the air gap — your job is to point the chart at the right internal hosts.</p>
 
   <figure class="arch">
-    <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Skynet air-gap architecture">
+    <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
+      <title id="arch-title">Skynet air-gap architecture</title>
+      <desc id="arch-desc">Cluster workloads connect to internal identity, database, model, notification, package registry, and certificate services.</desc>
       <defs>
-        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 z" fill="#5c4d40"/>
+        <marker id="arch-arrow-required" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#3d2e22"/>
+        </marker>
+        <marker id="arch-arrow-optional" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#8c7a6b"/>
+        </marker>
+        <marker id="arch-arrow-deploy" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9a6a10"/>
         </marker>
         <style>
-          .box { fill: #ffffff; stroke: #3d2e22; stroke-width: 1.5; }
-          .box-int { fill: #f0ebe4; stroke: #7c6350; stroke-width: 1.2; stroke-dasharray: 4 3; }
-          .lbl { font: 600 12px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
-          .sub { font: 11px "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
-          .grp { font: 700 10px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #3d2e22; letter-spacing: 0.08em; }
-          .edge { stroke: #5c4d40; stroke-width: 1.2; fill: none; marker-end: url(#arrow); }
-          .edge-soft { stroke: #a69585; stroke-width: 1; fill: none; stroke-dasharray: 3 3; marker-end: url(#arrow); }
+          .zone { fill: rgba(240, 235, 228, 0.34); stroke: #ddd6cc; stroke-width: 1.1; }
+          .zone-title { font: 700 10px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #7c6350; letter-spacing: 0.08em; }
+          .node { fill: #fffdf9; stroke: #c8b9a8; stroke-width: 1.1; }
+          .node-core { stroke: #3d2e22; stroke-width: 1.35; }
+          .node-int { fill: #f5f1ec; }
+          .node-opt { stroke-dasharray: 4 3; }
+          .node-title { font: 700 12px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
+          .node-sub { font: 11px "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
+          .lane { stroke-linecap: round; stroke-linejoin: round; fill: none; }
+          .edge-required { stroke: #3d2e22; stroke-width: 1.35; marker-end: url(#arch-arrow-required); }
+          .edge-optional { stroke: #8c7a6b; stroke-width: 1.15; stroke-dasharray: 4 4; marker-end: url(#arch-arrow-optional); }
+          .edge-deploy { stroke: #9a6a10; stroke-width: 1.15; stroke-dasharray: 2 4; marker-end: url(#arch-arrow-deploy); }
+          .legend-label { font: 600 10.5px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
         </style>
       </defs>
 
-      <text x="20" y="22" class="grp">CLUSTER</text>
-      <rect x="15" y="30" width="320" height="270" rx="8" fill="none" stroke="#ddd6cc" stroke-dasharray="3 3"/>
+      <rect class="zone" x="16" y="38" width="330" height="300" rx="10"/>
+      <text x="32" y="62" class="zone-title">CLUSTER WORKLOADS</text>
 
-      <rect class="box" x="40" y="60" width="130" height="60" rx="6"/>
-      <text x="105" y="85" class="lbl" text-anchor="middle">Frontend</text>
-      <text x="105" y="102" class="sub" text-anchor="middle">Next.js · NextAuth</text>
+      <rect class="node node-core" x="48" y="78" width="124" height="58" rx="7"/>
+      <text x="110" y="102" class="node-title" text-anchor="middle">Frontend</text>
+      <text x="110" y="119" class="node-sub" text-anchor="middle">Next.js · NextAuth</text>
 
-      <rect class="box" x="180" y="60" width="130" height="60" rx="6"/>
-      <text x="245" y="85" class="lbl" text-anchor="middle">Backend</text>
-      <text x="245" y="102" class="sub" text-anchor="middle">FastAPI · workers</text>
+      <rect class="node node-core" x="196" y="78" width="124" height="58" rx="7"/>
+      <text x="258" y="102" class="node-title" text-anchor="middle">Backend</text>
+      <text x="258" y="119" class="node-sub" text-anchor="middle">FastAPI · workers</text>
 
-      <rect class="box" x="40" y="160" width="130" height="50" rx="6"/>
-      <text x="105" y="183" class="lbl" text-anchor="middle">Migration Job</text>
-      <text x="105" y="198" class="sub" text-anchor="middle">alembic upgrade</text>
+      <rect class="node" x="48" y="168" width="124" height="54" rx="7"/>
+      <text x="110" y="190" class="node-title" text-anchor="middle">Migration Job</text>
+      <text x="110" y="207" class="node-sub" text-anchor="middle">alembic upgrade</text>
 
-      <rect class="box" x="180" y="160" width="130" height="50" rx="6"/>
-      <text x="245" y="183" class="lbl" text-anchor="middle">Route / Ingress</text>
-      <text x="245" y="198" class="sub" text-anchor="middle">OpenShift router</text>
+      <rect class="node" x="196" y="168" width="124" height="54" rx="7"/>
+      <text x="258" y="190" class="node-title" text-anchor="middle">Route / Ingress</text>
+      <text x="258" y="207" class="node-sub" text-anchor="middle">OpenShift router</text>
 
-      <rect class="box" x="40" y="240" width="270" height="50" rx="6"/>
-      <text x="175" y="262" class="lbl" text-anchor="middle">Helm chart · NetworkPolicy · Secrets</text>
-      <text x="175" y="277" class="sub" text-anchor="middle">deploy/helm/skynet</text>
+      <rect class="node" x="48" y="270" width="272" height="52" rx="7"/>
+      <text x="184" y="292" class="node-title" text-anchor="middle">Helm chart · NetworkPolicy · Secrets</text>
+      <text x="184" y="309" class="node-sub" text-anchor="middle">deploy/helm/skynet</text>
 
-      <text x="370" y="22" class="grp">INTERNAL DEPENDENCIES</text>
-      <rect x="365" y="30" width="340" height="270" rx="8" fill="none" stroke="#ddd6cc" stroke-dasharray="3 3"/>
+      <rect class="zone" x="414" y="38" width="330" height="300" rx="10"/>
+      <text x="430" y="62" class="zone-title">INTERNAL DEPENDENCIES</text>
 
-      <rect class="box-int" x="385" y="50" width="130" height="44" rx="6"/>
-      <text x="450" y="68" class="lbl" text-anchor="middle">ADFS / OIDC</text>
-      <text x="450" y="83" class="sub" text-anchor="middle">SSO issuer</text>
+      <path class="lane edge-required" d="M172 112 C244 112 350 106 438 106"/>
+      <path class="lane edge-required" d="M320 92 C396 64 518 64 594 94"/>
+      <path class="lane edge-required" d="M320 126 C372 134 386 175 438 175"/>
+      <path class="lane edge-deploy" d="M172 195 C240 144 358 150 438 175"/>
+      <path class="lane edge-optional" d="M320 119 C420 130 488 154 594 175"/>
+      <path class="lane edge-optional" d="M320 132 C382 162 374 247 438 247"/>
+      <path class="lane edge-deploy" d="M320 288 C424 286 510 266 594 250"/>
+      <path class="lane edge-deploy" d="M320 310 C372 320 392 310 438 310"/>
 
-      <rect class="box-int" x="535" y="50" width="150" height="44" rx="6"/>
-      <text x="610" y="68" class="lbl" text-anchor="middle">LLM Gateway</text>
-      <text x="610" y="83" class="sub" text-anchor="middle">OpenAI-compatible</text>
+      <rect class="node node-int" x="438" y="78" width="124" height="50" rx="7"/>
+      <text x="500" y="98" class="node-title" text-anchor="middle">ADFS / OIDC</text>
+      <text x="500" y="114" class="node-sub" text-anchor="middle">SSO issuer</text>
 
-      <rect class="box-int" x="385" y="110" width="130" height="44" rx="6"/>
-      <text x="450" y="128" class="lbl" text-anchor="middle">Postgres</text>
-      <text x="450" y="143" class="sub" text-anchor="middle">pgvector</text>
+      <rect class="node node-int" x="594" y="78" width="124" height="50" rx="7"/>
+      <text x="656" y="98" class="node-title" text-anchor="middle">LLM Gateway</text>
+      <text x="656" y="114" class="node-sub" text-anchor="middle">OpenAI-compatible</text>
 
-      <rect class="box-int" x="535" y="110" width="150" height="44" rx="6"/>
-      <text x="610" y="128" class="lbl" text-anchor="middle">AD / LDAP</text>
-      <text x="610" y="143" class="sub" text-anchor="middle">user search (optional)</text>
+      <rect class="node node-int" x="438" y="150" width="124" height="50" rx="7"/>
+      <text x="500" y="170" class="node-title" text-anchor="middle">Postgres</text>
+      <text x="500" y="186" class="node-sub" text-anchor="middle">pgvector</text>
 
-      <rect class="box-int" x="385" y="170" width="130" height="44" rx="6"/>
-      <text x="450" y="188" class="lbl" text-anchor="middle">Notifications</text>
-      <text x="450" y="203" class="sub" text-anchor="middle">webhook (optional)</text>
+      <rect class="node node-int node-opt" x="594" y="150" width="124" height="50" rx="7"/>
+      <text x="656" y="170" class="node-title" text-anchor="middle">AD / LDAP</text>
+      <text x="656" y="186" class="node-sub" text-anchor="middle">user search</text>
 
-      <rect class="box-int" x="535" y="170" width="150" height="44" rx="6"/>
-      <text x="610" y="188" class="lbl" text-anchor="middle">Artifactory</text>
-      <text x="610" y="203" class="sub" text-anchor="middle">images · pip · npm · deb</text>
+      <rect class="node node-int node-opt" x="438" y="222" width="124" height="50" rx="7"/>
+      <text x="500" y="242" class="node-title" text-anchor="middle">Notifications</text>
+      <text x="500" y="258" class="node-sub" text-anchor="middle">webhook</text>
 
-      <rect class="box-int" x="385" y="230" width="300" height="50" rx="6"/>
-      <text x="535" y="252" class="lbl" text-anchor="middle">Internal CA bundle</text>
-      <text x="535" y="267" class="sub" text-anchor="middle">mounted as Secret · NODE_EXTRA_CA_CERTS · REQUESTS_CA_BUNDLE</text>
+      <rect class="node node-int" x="594" y="222" width="124" height="50" rx="7"/>
+      <text x="656" y="242" class="node-title" text-anchor="middle">Artifactory</text>
+      <text x="656" y="258" class="node-sub" text-anchor="middle">images · pip · npm</text>
 
-      <path class="edge" d="M170 80 L380 70"/>
-      <path class="edge" d="M310 80 L530 70"/>
-      <path class="edge" d="M310 100 L380 130"/>
-      <path class="edge" d="M170 100 L380 130"/>
-      <path class="edge-soft" d="M310 110 L530 135"/>
-      <path class="edge-soft" d="M310 115 L380 190"/>
-      <path class="edge-soft" d="M170 250 L380 215"/>
+      <rect class="node node-int" x="438" y="294" width="280" height="32" rx="7"/>
+      <text x="578" y="314" class="node-title" text-anchor="middle">Internal CA bundle · mounted Secret</text>
+
+      <g transform="translate(380 358)">
+        <path class="lane edge-required" d="M-240 0 L-208 0"/>
+        <text x="-198" y="4" class="legend-label">required runtime</text>
+        <path class="lane edge-optional" d="M-65 0 L-33 0"/>
+        <text x="-23" y="4" class="legend-label">optional runtime</text>
+        <path class="lane edge-deploy" d="M110 0 L142 0"/>
+        <text x="152" y="4" class="legend-label">install / trust setup</text>
+      </g>
     </svg>
-    <figcaption>Solid arrows: required runtime egress. Dashed arrows: optional.</figcaption>
+    <figcaption>Solid arrows are required at runtime. Dashed arrows are optional runtime integrations. Amber dotted arrows are install-time or trust-bundle setup.</figcaption>
   </figure>
 </section>
 
 <section id="migration-plan">
   <h2><a class="anchor" href="#migration-plan">§</a>Migration Plan</h2>
-  <p>The flow assumes you cloned the repo onto a host inside the air gap and have an internal Artifactory + OpenShift cluster ready. Each step has a matching <code>scripts/airgap_migrate.sh</code> command — none of them need internet.</p>
+  <p>The flow assumes you cloned the repo onto a host inside the air gap and have an internal Artifactory + OpenShift cluster ready. Each step has a matching <code><span data-os="unix">scripts/airgap_migrate.sh</span><span data-os="win">scripts\airgap_migrate.bat</span></code> command — none of them need internet.</p>
 
   <div class="flow">
     <div class="step"><span class="num">STEP 01</span><div class="label">Clone repo / unpack source</div><code>git clone ...</code></div>
-    <div class="step manual"><span class="num">STEP 02</span><div class="label">List URLs / secrets / CIDRs to change</div><code>airgap_migrate.sh todos</code></div>
+    <div class="step manual"><span class="num">STEP 02</span><div class="label">List URLs / secrets / CIDRs to change</div><code><span data-os="unix">airgap_migrate.sh todos</span><span data-os="win">airgap_migrate.bat todos</span></code></div>
     <div class="step manual"><span class="num">STEP 03</span><div class="label">Edit emitted lines</div><code>(editor)</code></div>
-    <div class="step"><span class="num">STEP 04</span><div class="label">Verify lockfiles + alembic</div><code>airgap_migrate.sh check</code></div>
-    <div class="step"><span class="num">STEP 05</span><div class="label">Offline alembic dump</div><code>airgap_migrate.sh validate-migrations</code></div>
-    <div class="step"><span class="num">STEP 06</span><div class="label">Build BE + FE images</div><code>airgap_migrate.sh build-images</code></div>
-    <div class="step"><span class="num">STEP 07</span><div class="label">Push to Artifactory</div><code>airgap_migrate.sh push-images</code></div>
-    <div class="step"><span class="num">STEP 08</span><div class="label">Generate Helm values</div><code>airgap_migrate.sh values</code></div>
-    <div class="step"><span class="num">STEP 09</span><div class="label">Lint + render chart</div><code>airgap_migrate.sh render</code></div>
-    <div class="step"><span class="num">STEP 10</span><div class="label">Install / upgrade</div><code>airgap_migrate.sh install</code></div>
-    <div class="step"><span class="num">STEP 11</span><div class="label">Smoke + ADFS callback</div><code>airgap_migrate.sh status</code></div>
+    <div class="step"><span class="num">STEP 04</span><div class="label">Verify lockfiles + alembic</div><code><span data-os="unix">airgap_migrate.sh check</span><span data-os="win">airgap_migrate.bat check</span></code></div>
+    <div class="step"><span class="num">STEP 05</span><div class="label">Offline alembic dump</div><code><span data-os="unix">airgap_migrate.sh validate-migrations</span><span data-os="win">airgap_migrate.bat validate-migrations</span></code></div>
+    <div class="step"><span class="num">STEP 06</span><div class="label">Build BE + FE images</div><code><span data-os="unix">airgap_migrate.sh build-images</span><span data-os="win">airgap_migrate.bat build-images</span></code></div>
+    <div class="step"><span class="num">STEP 07</span><div class="label">Push to Artifactory</div><code><span data-os="unix">airgap_migrate.sh push-images</span><span data-os="win">airgap_migrate.bat push-images</span></code></div>
+    <div class="step"><span class="num">STEP 08</span><div class="label">Generate Helm values</div><code><span data-os="unix">airgap_migrate.sh values</span><span data-os="win">airgap_migrate.bat values</span></code></div>
+    <div class="step"><span class="num">STEP 09</span><div class="label">Lint + render chart</div><code><span data-os="unix">airgap_migrate.sh render</span><span data-os="win">airgap_migrate.bat render</span></code></div>
+    <div class="step"><span class="num">STEP 10</span><div class="label">Install / upgrade</div><code><span data-os="unix">airgap_migrate.sh install</span><span data-os="win">airgap_migrate.bat install</span></code></div>
+    <div class="step"><span class="num">STEP 11</span><div class="label">Smoke + ADFS callback</div><code><span data-os="unix">airgap_migrate.sh status</span><span data-os="win">airgap_migrate.bat status</span></code></div>
   </div>
 
-  <p><code>scripts/airgap_migrate.sh all</code> runs steps 4, 5, 8, 9, 10, 11 in sequence once you have your env vars set. Step 2 stays manual because edits don't script themselves; step 3 is yours.</p>
+  <p><code><span data-os="unix">scripts/airgap_migrate.sh all</span><span data-os="win">scripts\airgap_migrate.bat all</span></code> runs steps 4, 5, 8, 9, 10, 11 in sequence once you have your env vars set. Step 2 stays manual because edits don't script themselves; step 3 is yours.</p>
 </section>
 
 <section id="operator-script">
   <h2><a class="anchor" href="#operator-script">§</a>Operator Script</h2>
 <pre><span class="c"># guided values setup</span>
-scripts/airgap_migrate.sh configure
+<span data-os="unix">scripts/airgap_migrate.sh configure</span><span data-os="win">scripts\airgap_migrate.bat configure</span>
 <span class="c"># every TODO marker, in one list</span>
-scripts/airgap_migrate.sh todos
+<span data-os="unix">scripts/airgap_migrate.sh todos</span><span data-os="win">scripts\airgap_migrate.bat todos</span>
 <span class="c"># repo artefacts present</span>
-scripts/airgap_migrate.sh check
+<span data-os="unix">scripts/airgap_migrate.sh check</span><span data-os="win">scripts\airgap_migrate.bat check</span>
 <span class="c"># offline alembic --sql, no DB</span>
-scripts/airgap_migrate.sh validate-migrations
+<span data-os="unix">scripts/airgap_migrate.sh validate-migrations</span><span data-os="win">scripts\airgap_migrate.bat validate-migrations</span>
 <span class="c"># docker build BE + FE</span>
-scripts/airgap_migrate.sh build-images
+<span data-os="unix">scripts/airgap_migrate.sh build-images</span><span data-os="win">scripts\airgap_migrate.bat build-images</span>
 <span class="c"># docker push BE + FE</span>
-scripts/airgap_migrate.sh push-images
+<span data-os="unix">scripts/airgap_migrate.sh push-images</span><span data-os="win">scripts\airgap_migrate.bat push-images</span>
 <span class="c"># write values-airgap.generated.yaml</span>
-scripts/airgap_migrate.sh values
+<span data-os="unix">scripts/airgap_migrate.sh values</span><span data-os="win">scripts\airgap_migrate.bat values</span>
 <span class="c"># helm lint + helm template</span>
-scripts/airgap_migrate.sh render
+<span data-os="unix">scripts/airgap_migrate.sh render</span><span data-os="win">scripts\airgap_migrate.bat render</span>
 <span class="c"># helm upgrade --install</span>
-scripts/airgap_migrate.sh install
+<span data-os="unix">scripts/airgap_migrate.sh install</span><span data-os="win">scripts\airgap_migrate.bat install</span>
 <span class="c"># rollout + smoke commands</span>
-scripts/airgap_migrate.sh status
+<span data-os="unix">scripts/airgap_migrate.sh status</span><span data-os="win">scripts\airgap_migrate.bat status</span>
 <span class="c"># check → ... → status</span>
-scripts/airgap_migrate.sh all</pre>
+<span data-os="unix">scripts/airgap_migrate.sh all</span><span data-os="win">scripts\airgap_migrate.bat all</span></pre>
 
   <p>Start with <code>configure</code> if you want a guided setup. It asks for registry, image tags, hosts, IdP, database, optional internal CA Secret, notifications webhook, and egress CIDRs, then writes the Helm values file and offers to run <code>check</code>, <code>render</code>, and <code>install</code>.</p>
 
   <p>Most installs should use environment overrides instead of editing the script:</p>
 
-<pre>RELEASE=skynet \
+<pre><span data-os="unix">RELEASE=skynet \
 NAMESPACE=skynet \
 REGISTRY=artifactory.example.com/skynet \
 IMAGE_TAG=2026.04.30 \
@@ -556,7 +692,32 @@ IDP_EGRESS_CIDR=10.0.6.0/24 \
 INTERNAL_CA_SECRET=skynet-internal-ca \
 COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet \
 COMMS_EGRESS_CIDR=10.0.7.0/24 \
-scripts/airgap_migrate.sh all</pre>
+scripts/airgap_migrate.sh all</span><span data-os="win"><span class="c">REM Run from cmd.exe. Each `set` persists for the lifetime of this shell.</span>
+set RELEASE=skynet
+set NAMESPACE=skynet
+set REGISTRY=artifactory.example.com/skynet
+set IMAGE_TAG=2026.04.30
+set PULL_SECRET=artifactory-pull-secret
+set EXTERNAL_DB_HOST=pgvector.internal
+set EXTERNAL_DB_SECRET=skynet-db-password
+set LLM_BASE_URL=https://llm-gateway.internal/v1
+set EMBEDDING_BASE_URL=https://llm-gateway.internal/v1
+set EMBEDDING_MODEL=jina-code-embeddings-0.5b
+set OIDC_ISSUER=https://idp.internal/realms/skynet
+set OIDC_CLIENT_ID=skynet
+set OIDC_SCOPE=openid profile email groups
+set AUTH_GROUP_CLAIM=groups
+set AUTH_ADMIN_GROUPS=Skynet-Admins
+set AUTH_ADMINS=break-glass-admin@example.com
+set FRONTEND_HOST=skynet.apps.internal
+set BACKEND_HOST=skynet-api.apps.internal
+set LLM_EGRESS_CIDR=10.0.5.0/24
+set EMBEDDING_EGRESS_CIDR=10.0.5.0/24
+set IDP_EGRESS_CIDR=10.0.6.0/24
+set INTERNAL_CA_SECRET=skynet-internal-ca
+set COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet
+set COMMS_EGRESS_CIDR=10.0.7.0/24
+scripts\airgap_migrate.bat all</span></pre>
 
   <p><code>values</code> writes <code>deploy/helm/skynet/values-airgap.generated.yaml</code>. That generated file intentionally contains <code>TODO: On-premise</code> comments. Review them before <code>install</code>.</p>
 </section>
@@ -564,9 +725,11 @@ scripts/airgap_migrate.sh all</pre>
 <section id="pre-transfer">
   <h2><a class="anchor" href="#pre-transfer">§</a>Pre-Transfer Checklist</h2>
   <p>Run this before moving the repo or release bundle into the air gap:</p>
-<pre>scripts/airgap_migrate.sh check
+<pre><span data-os="unix">scripts/airgap_migrate.sh check
 scripts/airgap_migrate.sh validate-migrations
-scripts/airgap_migrate.sh todos          <span class="c"># every URL/secret/CIDR you must change</span></pre>
+scripts/airgap_migrate.sh todos          <span class="c"># every URL/secret/CIDR you must change</span></span><span data-os="win">scripts\airgap_migrate.bat check
+scripts\airgap_migrate.bat validate-migrations
+scripts\airgap_migrate.bat todos         <span class="c">REM every URL/secret/CIDR you must change</span></span></pre>
 
   <h4>Confirm</h4>
   <ul>
@@ -595,7 +758,7 @@ scripts/airgap_migrate.sh todos          <span class="c"># every URL/secret/CIDR
   <p>Replace <code>artifactory.example.com</code> with your actual registry host. The examples assume your registry exposes Docker Hub, Debian, PyPI, and npm mirrors.</p>
 
   <p>The script wraps the two <code>docker build</code> invocations into one command:</p>
-<pre>REGISTRY=artifactory.example.com/skynet \
+<pre><span data-os="unix">REGISTRY=artifactory.example.com/skynet \
 IMAGE_TAG=2026.04.30 \
 REGISTRY_PREFIX=artifactory.example.com/docker-remote \
 DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
@@ -606,12 +769,23 @@ NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
 scripts/airgap_migrate.sh build-images
 
 <span class="c"># Then push:</span>
-scripts/airgap_migrate.sh push-images</pre>
+scripts/airgap_migrate.sh push-images</span><span data-os="win">set REGISTRY=artifactory.example.com/skynet
+set IMAGE_TAG=2026.04.30
+set REGISTRY_PREFIX=artifactory.example.com/docker-remote
+set DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
+set PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
+set PIP_TRUSTED_HOST=artifactory.example.com
+set BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine
+set NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
+scripts\airgap_migrate.bat build-images
+
+<span class="c">REM Then push:</span>
+scripts\airgap_migrate.bat push-images</span></pre>
 
   <p>Set <code>DOCKER=podman</code> to run on Podman / OpenShift Buildah-compatible hosts.</p>
 
   <p>The equivalent raw commands (if you prefer to run them directly):</p>
-<pre>docker build backend \
+<pre><span data-os="unix">docker build backend \
   -t artifactory.example.com/skynet/skynet/backend:2026.04.30 \
   --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote \
   --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
@@ -624,7 +798,20 @@ docker build frontend \
   --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 
 docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
-docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</pre>
+docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span><span data-os="win">docker build backend ^
+  -t artifactory.example.com/skynet/skynet/backend:2026.04.30 ^
+  --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote ^
+  --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote ^
+  --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple ^
+  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
+
+docker build frontend ^
+  -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 ^
+  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine ^
+  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
+
+docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
+docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span></pre>
 
   <p>The frontend <code>package.json</code> pins <code>next build --webpack</code> so the production build never silently switches to Turbopack. Webpack is reproducible inside restrictive sandboxes (Turbopack spawns helper processes that bind a local port and trip restricted-egress / sandboxed CI environments).</p>
 
@@ -646,7 +833,7 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</pre>
 <section id="secrets">
   <h2><a class="anchor" href="#secrets">§</a>Required Kubernetes Secrets</h2>
   <p>Create these before running the Helm install. Names match the generated values file; change them there if your platform uses different names.</p>
-<pre>export BACKEND_AUTH_SECRET=<span class="s">"$(openssl rand -base64 32)"</span>
+<pre><span data-os="unix">export BACKEND_AUTH_SECRET=<span class="s">"$(openssl rand -base64 32)"</span>
 
 kubectl -n skynet create secret docker-registry artifactory-pull-secret \
   --docker-server=artifactory.example.com \
@@ -670,7 +857,34 @@ kubectl -n skynet create secret generic skynet-frontend-secrets \
 
 <span class="c"># Only needed when internal endpoints use a private CA.</span>
 kubectl -n skynet create secret generic skynet-internal-ca \
-  --from-file=ca-bundle.pem=./internal-ca-bundle.pem</pre>
+  --from-file=ca-bundle.pem=./internal-ca-bundle.pem</span><span data-os="win"><span class="c">REM Run from PowerShell so we can capture openssl output. cmd.exe lacks</span>
+<span class="c">REM command substitution; either install openssl from Git for Windows or</span>
+<span class="c">REM use a self-generated random base64 secret you store in your secret manager.</span>
+$env:BACKEND_AUTH_SECRET = (openssl rand -base64 32)
+
+kubectl -n skynet create secret docker-registry artifactory-pull-secret `
+  --docker-server=artifactory.example.com `
+  --docker-username=<span class="s">"$env:REGISTRY_USER"</span> `
+  --docker-password=<span class="s">"$env:REGISTRY_PASSWORD"</span>
+
+kubectl -n skynet create secret generic skynet-db-password `
+  --from-literal=password=<span class="s">"$env:POSTGRES_PASSWORD"</span>
+
+kubectl -n skynet create secret generic skynet-backend-secrets `
+  --from-literal=OPENAI_API_KEY=<span class="s">"$env:INTERNAL_LLM_API_KEY"</span> `
+  --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$env:BACKEND_AUTH_SECRET"</span>
+  <span class="c"># Append --from-literal=AD_LDAP_BIND_PASSWORD="$env:AD_LDAP_BIND_PASSWORD"</span>
+  <span class="c"># when enabling LDAP autocomplete (see "Internal LDAP / Active Directory</span>
+  <span class="c"># User Search").</span>
+
+kubectl -n skynet create secret generic skynet-frontend-secrets `
+  --from-literal=AUTH_SECRET=(openssl rand -base64 32) `
+  --from-literal=AUTH_SSO_CLIENT_SECRET=<span class="s">"$env:OIDC_CLIENT_SECRET"</span> `
+  --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$env:BACKEND_AUTH_SECRET"</span>
+
+<span class="c"># Only needed when internal endpoints use a private CA.</span>
+kubectl -n skynet create secret generic skynet-internal-ca `
+  --from-file=ca-bundle.pem=.\internal-ca-bundle.pem</span></pre>
 
   <div class="callout">
     <span class="label">TODO · On-premise</span>
@@ -766,14 +980,17 @@ BACKEND_AUTH_SECRET</pre>
   <p>When <strong>any</strong> of the required vars is unset, the backend silently keeps <code>NullDirectoryClient</code> and admins still see DB-backed suggestions.</p>
 
   <p>Update <code>skynet-backend-secrets</code> to include the bind password (see <a href="#secrets">Required Kubernetes Secrets</a>):</p>
-<pre>kubectl -n skynet create secret generic skynet-backend-secrets \
+<pre><span data-os="unix">kubectl -n skynet create secret generic skynet-backend-secrets \
   --from-literal=OPENAI_API_KEY=<span class="s">"$INTERNAL_LLM_API_KEY"</span> \
   --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$BACKEND_AUTH_SECRET"</span> \
-  --from-literal=AD_LDAP_BIND_PASSWORD=<span class="s">"$AD_LDAP_BIND_PASSWORD"</span></pre>
+  --from-literal=AD_LDAP_BIND_PASSWORD=<span class="s">"$AD_LDAP_BIND_PASSWORD"</span></span><span data-os="win">kubectl -n skynet create secret generic skynet-backend-secrets `
+  --from-literal=OPENAI_API_KEY=<span class="s">"$env:INTERNAL_LLM_API_KEY"</span> `
+  --from-literal=BACKEND_AUTH_SECRET=<span class="s">"$env:BACKEND_AUTH_SECRET"</span> `
+  --from-literal=AD_LDAP_BIND_PASSWORD=<span class="s">"$env:AD_LDAP_BIND_PASSWORD"</span></span></pre>
 
   <h3>Network + TLS</h3>
   <ul>
-    <li>The backend pod must reach <code>AD_LDAP_URL</code> (typically TCP/636 for <code>ldaps://</code>, TCP/389 for <code>ldap://</code>). Add the AD controller CIDR/port to <code>networkPolicy.ldapEgress</code> in the generated values; that slot exists precisely so the LDAP allowlist sits next to the LLM allowlist instead of competing with the broader <code>egressCidrs</code> list. Set <code>LDAP_EGRESS_CIDR</code> (and optionally <code>LDAP_EGRESS_PORT</code>, default <code>636</code>) before running <code>scripts/airgap_migrate.sh values</code> to emit it automatically.</li>
+    <li>The backend pod must reach <code>AD_LDAP_URL</code> (typically TCP/636 for <code>ldaps://</code>, TCP/389 for <code>ldap://</code>). Add the AD controller CIDR/port to <code>networkPolicy.ldapEgress</code> in the generated values; that slot exists precisely so the LDAP allowlist sits next to the LLM allowlist instead of competing with the broader <code>egressCidrs</code> list. Set <code>LDAP_EGRESS_CIDR</code> (and optionally <code>LDAP_EGRESS_PORT</code>, default <code>636</code>) before running <code><span data-os="unix">scripts/airgap_migrate.sh values</span><span data-os="win">scripts\airgap_migrate.bat values</span></code> to emit it automatically.</li>
     <li>For <code>ldaps://</code> over a private CA, mount the CA exactly as the OIDC setup does — see <a href="#ca">Private TLS / CA Bundles</a>. The same <code>SSL_CERT_FILE</code> / <code>REQUESTS_CA_BUNDLE</code> mount that the backend already uses for the LLM gateway and Postgres covers <code>ldap3</code> as well, since <code>ldap3</code> honours the Python TLS trust store.</li>
   </ul>
 
@@ -789,12 +1006,17 @@ BACKEND_AUTH_SECRET</pre>
 <section id="tls">
   <h2><a class="anchor" href="#tls">§</a>TLS Certificates</h2>
   <p>By default the chart uses the OpenShift router's wildcard certificate. To serve a custom certificate:</p>
-<pre>helm upgrade --install skynet deploy/helm/skynet \
+<pre><span data-os="unix">helm upgrade --install skynet deploy/helm/skynet \
   -n skynet --create-namespace \
   -f deploy/helm/skynet/values-airgap.generated.yaml \
   --set-file openshift.routes.frontend.tls.certificate=./tls/frontend.crt \
   --set-file openshift.routes.frontend.tls.key=./tls/frontend.key \
-  --set-file openshift.routes.frontend.tls.caCertificate=./tls/ca-bundle.crt</pre>
+  --set-file openshift.routes.frontend.tls.caCertificate=./tls/ca-bundle.crt</span><span data-os="win">helm upgrade --install skynet deploy\helm\skynet ^
+  -n skynet --create-namespace ^
+  -f deploy\helm\skynet\values-airgap.generated.yaml ^
+  --set-file openshift.routes.frontend.tls.certificate=.\tls\frontend.crt ^
+  --set-file openshift.routes.frontend.tls.key=.\tls\frontend.key ^
+  --set-file openshift.routes.frontend.tls.caCertificate=.\tls\ca-bundle.crt</span></pre>
   <p>For <code>reencrypt</code> termination, also set <code>openshift.routes.frontend.tls.destinationCACertificate</code>.</p>
 </section>
 
@@ -803,8 +1025,9 @@ BACKEND_AUTH_SECRET</pre>
 
   <h3>Offline schema review (no DB required)</h3>
   <p>Before pushing the backend image, you can dump the exact SQL the in-cluster migration Job will execute. This is the path to use when your build host has no Postgres reachable (e.g., sandboxed CI):</p>
-<pre>scripts/airgap_migrate.sh validate-migrations
-<span class="c"># wrote offline migration SQL: ./migration.sql</span></pre>
+<pre><span data-os="unix">scripts/airgap_migrate.sh validate-migrations
+<span class="c"># wrote offline migration SQL: ./migration.sql</span></span><span data-os="win">scripts\airgap_migrate.bat validate-migrations
+<span class="c">REM wrote offline migration SQL: .\migration.sql</span></span></pre>
 
   <p>Under the hood this calls <code>alembic upgrade head --sql</code> against the same <code>alembic/env.py</code> the Job uses, so the offline output is byte-for-byte the DDL the cluster will run. Review <code>./migration.sql</code>, then proceed to <code>build-images</code> / <code>install</code>.</p>
 
@@ -817,16 +1040,19 @@ BACKEND_AUTH_SECRET</pre>
   <p>The migration Job uses the same backend image and the same <code>REMOTE_DB_URL</code> composition as backend pods. Helm waits for the Job to succeed before starting new backend pods.</p>
 
   <p>First install or upgrade:</p>
-<pre>scripts/airgap_migrate.sh install</pre>
+<pre><span data-os="unix">scripts/airgap_migrate.sh install</span><span data-os="win">scripts\airgap_migrate.bat install</span></pre>
 
   <p>Check migration logs:</p>
 <pre>kubectl -n skynet logs job/skynet-skynet-migrate</pre>
 
   <p>If you are adopting a database that already has the baseline schema created outside Alembic, do a one-time stamp at the baseline revision so subsequent upgrades only apply the deltas:</p>
-<pre>helm upgrade --install skynet deploy/helm/skynet \
+<pre><span data-os="unix">helm upgrade --install skynet deploy/helm/skynet \
   -n skynet --create-namespace \
   -f deploy/helm/skynet/values-airgap.generated.yaml \
-  --set-json <span class="s">'migration.command=["alembic","stamp","342f7449be26"]'</span></pre>
+  --set-json <span class="s">'migration.command=["alembic","stamp","342f7449be26"]'</span></span><span data-os="win">helm upgrade --install skynet deploy\helm\skynet ^
+  -n skynet --create-namespace ^
+  -f deploy\helm\skynet\values-airgap.generated.yaml ^
+  --set-json <span class="s">"migration.command=[\"alembic\",\"stamp\",\"342f7449be26\"]"</span></span></pre>
 
   <p><code>342f7449be26</code> is the squashed baseline (all <code>jobs</code>, <code>job_*</code>, and quota tables). If your existing schema is fully current — including the <code>job_embeddings.is_private</code> column added in <code>a1b2c3d4e5f6</code> — stamp <code>head</code> instead. Run <code>alembic history</code> from <code>backend/</code> to see the chain.</p>
 
@@ -863,7 +1089,7 @@ BACKEND_AUTH_SECRET</pre>
 
 <section id="ca">
   <h2><a class="anchor" href="#ca">§</a>Private TLS / CA Bundles</h2>
-  <p>If internal endpoints use a private CA, set <code>INTERNAL_CA_SECRET</code> while running <code>scripts/airgap_migrate.sh configure</code> or <code>values</code>. The generated values file will:</p>
+  <p>If internal endpoints use a private CA, set <code>INTERNAL_CA_SECRET</code> while running <code><span data-os="unix">scripts/airgap_migrate.sh configure</span><span data-os="win">scripts\airgap_migrate.bat configure</span></code> or <code>values</code>. The generated values file will:</p>
   <ul>
     <li>mount the CA Secret into backend and frontend pods,</li>
     <li>set <code>NODE_EXTRA_CA_CERTS</code> for NextAuth/OIDC in the frontend,</li>
@@ -871,9 +1097,11 @@ BACKEND_AUTH_SECRET</pre>
   </ul>
 
   <p>Example:</p>
-<pre>INTERNAL_CA_SECRET=skynet-internal-ca \
+<pre><span data-os="unix">INTERNAL_CA_SECRET=skynet-internal-ca \
 INTERNAL_CA_FILENAME=ca-bundle.pem \
-scripts/airgap_migrate.sh values</pre>
+scripts/airgap_migrate.sh values</span><span data-os="win">set INTERNAL_CA_SECRET=skynet-internal-ca
+set INTERNAL_CA_FILENAME=ca-bundle.pem
+scripts\airgap_migrate.bat values</span></pre>
 
   <div class="callout">
     <span class="label">TODO · On-premise</span>
@@ -884,11 +1112,16 @@ scripts/airgap_migrate.sh values</pre>
 <section id="smoke">
   <h2><a class="anchor" href="#smoke">§</a>Smoke Test</h2>
   <p>After install:</p>
-<pre>kubectl -n skynet rollout status deploy/skynet-skynet-backend
+<pre><span data-os="unix">kubectl -n skynet rollout status deploy/skynet-skynet-backend
 kubectl -n skynet rollout status deploy/skynet-skynet-frontend
 
 curl -k https://skynet.apps.internal/
-curl -k https://skynet-api.apps.internal/health</pre>
+curl -k https://skynet-api.apps.internal/health</span><span data-os="win">kubectl -n skynet rollout status deploy/skynet-skynet-backend
+kubectl -n skynet rollout status deploy/skynet-skynet-frontend
+
+<span class="c">REM Use curl.exe (bundled in Windows 10 1803+) to avoid PowerShell's curl alias.</span>
+curl.exe -k https://skynet.apps.internal/
+curl.exe -k https://skynet-api.apps.internal/health</span></pre>
 
   <h4>From the UI</h4>
   <ul>
@@ -899,10 +1132,14 @@ curl -k https://skynet-api.apps.internal/health</pre>
   </ul>
 
   <h4>Runtime-env check</h4>
-<pre>kubectl -n skynet exec deploy/skynet-skynet-frontend -- \
+<pre><span data-os="unix">kubectl -n skynet exec deploy/skynet-skynet-frontend -- \
   curl -sf http://localhost:3001/ \
   | grep -o <span class="s">'window.__SKYNET_ENV__=[^&lt;]*'</span> \
-  | head -c 500</pre>
+  | head -c 500</span><span data-os="win"><span class="c">REM `kubectl exec` runs the curl/grep/head pipe inside the (Linux) pod, so</span>
+<span class="c">REM the Windows shell only handles quoting. Wrap with `cmd /c` for cmd.exe;</span>
+<span class="c">REM PowerShell users can invoke kubectl directly with the same `--` pipeline.</span>
+kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
+  sh -c "curl -sf http://localhost:3001/ | grep -o 'window.__SKYNET_ENV__=[^&lt;]*' | head -c 500"</span></pre>
 
   <p>The <code>apiUrl</code> should match <code>frontend.env.API_URL</code> in the generated values file. Changing <code>API_URL</code> should take effect after a frontend pod restart without rebuilding the image.</p>
 </section>
@@ -925,7 +1162,6 @@ curl -k https://skynet-api.apps.internal/health</pre>
     <li>Scalar API docs are vendored under <code>backend/core/api/static/scalar/</code>.</li>
     <li>Fonts are bundled through npm packages, not Google Fonts.</li>
     <li>Recommendations use an internal OpenAI-compatible embedding API; no embedding model weights are bundled in the repo.</li>
-    <li>Sentry is gated so builds without a DSN do not ship it.</li>
     <li>LiteLLM telemetry is disabled in backend configuration.</li>
     <li>Storage is Postgres; there is no S3/GCS/Azure Blob dependency.</li>
     <li>Auth is Credentials plus generic OIDC; no Google/GitHub OAuth provider is configured.</li>
@@ -948,22 +1184,24 @@ curl -k https://skynet-api.apps.internal/health</pre>
 <section id="audit">
   <h2><a class="anchor" href="#audit">§</a>Audit TODOs</h2>
   <p>Run this regularly:</p>
-<pre>scripts/airgap_migrate.sh todos
+<pre><span data-os="unix">scripts/airgap_migrate.sh todos
 <span class="c"># or, equivalently:</span>
-git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></pre>
+git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></span><span data-os="win">scripts\airgap_migrate.bat todos
+<span class="c">REM or, equivalently (Git Bash / Git for Windows ships git grep):</span>
+git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></span></pre>
 
   <h4>Current intentional TODO locations</h4>
   <ul>
     <li><code>AIRGAP.html</code> — context for each on-prem decision.</li>
     <li><code>deploy/helm/skynet/values-airgap.generated.yaml</code> — after <code>values</code>.</li>
-    <li><code>scripts/airgap_migrate.sh</code> — defaults emitted into the values file.</li>
+    <li><code>scripts/airgap_migrate.sh</code> / <code>scripts\airgap_migrate.bat</code> — defaults emitted into the values file.</li>
     <li><code>frontend/.env.example</code> — frontend dev/runtime env template.</li>
     <li><code>frontend/.npmrc</code> — internal npm registry mirror config (commented out).</li>
     <li><code>backend/core/config.py</code> — model ids and internal agent/embedding base URLs.</li>
     <li><code>backend/core/api/directory_client.py</code> — LDAP-backed Active Directory user search; confirm <code>AD_LDAP_*</code> values against the target domain.</li>
   </ul>
 
-  <p>If new external services are added, add them to this file, the Helm values, and <code>scripts/airgap_migrate.sh</code>. Then <code>todos</code> will pick them up automatically.</p>
+  <p>If new external services are added, add them to this file, the Helm values, and <code>scripts/airgap_migrate.sh</code> (with the matching change to <code>scripts/airgap_migrate.ps1</code> for the Windows path). Then <code>todos</code> will pick them up automatically.</p>
 </section>
 
 </main>
@@ -980,6 +1218,32 @@ git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></pre>
   }
   window.addEventListener('scroll', setActive, { passive: true });
   setActive();
+
+  // OS toggle wiring. The body class was already applied by the inline
+  // pre-render script in <head>; this just keeps the buttons in sync and
+  // handles clicks.
+  (function () {
+    const buttons = document.querySelectorAll('.os-toggle button[data-os-set]');
+    function read() {
+      try {
+        const v = localStorage.getItem('airgap-os');
+        return (v === 'win') ? 'win' : 'unix';
+      } catch (_) { return 'unix'; }
+    }
+    function apply(os) {
+      document.body.classList.toggle('os-windows', os === 'win');
+      document.body.classList.toggle('os-unix', os !== 'win');
+      buttons.forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-os-set') === os ? 'true' : 'false'));
+    }
+    apply(read());
+    buttons.forEach(b => {
+      b.addEventListener('click', () => {
+        const os = b.getAttribute('data-os-set');
+        try { localStorage.setItem('airgap-os', os); } catch (_) {}
+        apply(os);
+      });
+    });
+  })();
 </script>
 
 </body>

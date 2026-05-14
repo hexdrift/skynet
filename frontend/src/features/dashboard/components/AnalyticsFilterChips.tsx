@@ -8,37 +8,16 @@ export function AnalyticsFilterChips({
 }: {
   filters: Pick<
     UseAnalyticsFiltersReturn,
-    | "optimizer"
-    | "model"
-    | "status"
-    | "jobId"
-    | "date"
-    | "setOptimizer"
-    | "setModel"
-    | "setStatus"
-    | "setJobId"
-    | "setDate"
+    "model" | "status" | "jobId" | "date" | "setModel" | "setStatus" | "setJobId" | "setDate"
   >;
 }) {
-  const {
-    optimizer,
-    model,
-    status,
-    jobId,
-    date,
-    setOptimizer,
-    setModel,
-    setStatus,
-    setJobId,
-    setDate,
-  } = filters;
-  const hasFilters = jobId || date || optimizer !== "all" || model !== "all" || status !== "all";
+  const { model, status, jobId, date, setModel, setStatus, setJobId, setDate } = filters;
+  const hasFilters = jobId || date || model !== "all" || status !== "all";
   if (!hasFilters) return null;
 
   const clearAllFilters = () => {
     setJobId(null);
     setDate(null);
-    setOptimizer("all");
     setModel("all");
     setStatus("all");
   };
@@ -62,14 +41,6 @@ export function AnalyticsFilterChips({
           })}
           ariaLabel={msg("auto.features.dashboard.components.analyticstab.literal.2")}
           onClear={() => setDate(null)}
-        />
-      )}
-      {optimizer !== "all" && (
-        <FilterChip
-          dir="ltr"
-          label={optimizer}
-          ariaLabel={msg("auto.features.dashboard.components.analyticstab.literal.3")}
-          onClear={() => setOptimizer("all")}
         />
       )}
       {model !== "all" && (

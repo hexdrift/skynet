@@ -1,12 +1,11 @@
 """Persistence and prompt-extraction helpers for compiled DSPy programs.
 
 Encapsulates two concerns: turning a compiled :class:`dspy.Program` into a
-JSON-friendly :class:`ProgramArtifact` (pickle base64-encoded alongside its
-metadata) and extracting a human-readable :class:`OptimizedPredictor` view
-from the program's first named predictor for the UI.
+JSON-friendly :class:`ProgramArtifact` (state JSON alongside its metadata)
+and extracting a human-readable :class:`OptimizedPredictor` view from the
+program's first named predictor for the UI.
 """
 
-import base64
 import json
 import logging
 import shutil
@@ -161,45 +160,49 @@ def persist_program(
     program: Any,
     artifact_id: str | None,
 ) -> ProgramArtifact | None:
-    """Save the compiled program to a temp dir, encode to base64, clean up, and return the artifact.
+    """Save the compiled program as JSON state and return the artifact.
 
-    DSPy's serializer writes two files (``metadata.json`` and
-    ``program.pkl``) into a directory; we read both back, pack the
-    pickle into base64 so the artifact can live inside a JSON payload,
-    and delete the scratch dir before returning.
+    Uses DSPy's state-only ``module.save(path.json)`` path: only the
+    optimizer-tuned state (instructions, demos, predictor settings) is
+    written, never a pickle. Reconstruction at load time rebuilds the
+    module shell from ``signature_code`` + ``module_name`` and then
+    overlays this state.
 
     Args:
         program: The compiled DSPy program to serialize.
         artifact_id: Optional identifier baked into the temp directory name.
 
     Returns:
-        A :class:`ProgramArtifact` containing metadata and the base64-encoded
-        pickle, or ``None`` when no artifact is produced.
+        A :class:`ProgramArtifact` containing the program state JSON,
+        DSPy metadata, and the extracted prompt — or ``None`` when no
+        artifact is produced.
 
     Raises:
-        ServiceError: When ``program.save`` fails or the serialized files
+        ServiceError: When ``program.save`` fails or the serialized JSON
             cannot be read back from the scratch directory.
     """
     temp_dir = None
     try:
         temp_dir = tempfile.mkdtemp(prefix=f"dspy_artifact_{artifact_id or uuid4()}_")
         destination = Path(temp_dir)
+        state_path = destination / "program.json"
 
         try:
-            program.save(str(destination), save_program=True)
+            program.save(str(state_path), save_program=False)
         except Exception as exc:
             logger.exception("Failed to save DSPy program artifact")
             raise ServiceError(f"Failed to save program artifact: {exc}") from exc
 
         try:
-            metadata_path = destination / "metadata.json"
-            program_path = destination / "program.pkl"
-            metadata = json.loads(metadata_path.read_text())
-            program_bytes = program_path.read_bytes()
-            program_b64 = base64.b64encode(program_bytes).decode("ascii")
+            state = json.loads(state_path.read_text())
         except Exception as exc:
             logger.exception("Failed to read DSPy artifact contents")
             raise ServiceError(f"Failed to load program artifact contents: {exc}") from exc
+
+        # DSPy bundles dependency_versions into ``state["metadata"]``;
+        # surface it separately so the artifact shape mirrors the old
+        # (metadata, payload) split the UI/API was built around.
+        metadata = state.get("metadata")
 
         optimized_prompt = extract_optimized_prompt(program)
         if optimized_prompt:
@@ -208,7 +211,7 @@ def persist_program(
         return ProgramArtifact(
             path=None,
             metadata=metadata,
-            program_pickle_base64=program_b64,
+            program_state_json=state,
             optimized_prompt=optimized_prompt,
         )
 

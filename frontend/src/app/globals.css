@@ -380,38 +380,40 @@ h3 {
    left to the consumer (e.g. ``absolute top-4 end-4`` for dialog corners,
    nothing for inline table cells) so the same visual treatment applies in
    both contexts. */
-.close-button {
-  all: unset;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  transition:
-    color 100ms,
-    background-color 100ms,
-    transform 100ms;
-}
-.close-button:hover {
-  color: var(--foreground);
-  background-color: rgba(200, 168, 130, 0.12);
-  transform: scale(1.08);
-  cursor: pointer;
-}
-.close-button:active {
-  transform: scale(0.9);
-}
-.close-button:focus-visible {
-  box-shadow: 0 0 0 2px rgba(200, 168, 130, 0.3);
-}
-.close-button svg {
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-  flex-shrink: 0;
+@layer components {
+  .close-button {
+    all: unset;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition:
+      color 100ms,
+      background-color 100ms,
+      transform 100ms;
+  }
+  .close-button:hover {
+    color: var(--foreground);
+    background-color: rgba(200, 168, 130, 0.12);
+    transform: scale(1.08);
+    cursor: pointer;
+  }
+  .close-button:active {
+    transform: scale(0.9);
+  }
+  .close-button:focus-visible {
+    box-shadow: 0 0 0 2px rgba(200, 168, 130, 0.3);
+  }
+  .close-button svg {
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+    flex-shrink: 0;
+  }
 }
 
 /* Code font */

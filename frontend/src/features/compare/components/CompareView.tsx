@@ -47,7 +47,6 @@ import {
   getTestResults,
   getPairTestResults,
   getOptimizationDataset,
-  getOptimizationPayload,
 } from "@/shared/lib/api";
 import type {
   EvalExampleResult,
@@ -55,7 +54,8 @@ import type {
   OptimizationStatusResponse,
   OptimizedPredictor,
 } from "@/shared/types/api";
-import { Skeleton } from "boneyard-js/react";
+import { Skeleton } from "@/shared/ui/bone-skeleton";
+import { ReasoningPill } from "@/features/optimizations";
 import { compareBones } from "../lib/bones";
 import { canCompareKeys, compareCompatibilityKey } from "../lib/compatibility";
 import { COMPARE_MAX } from "@/features/dashboard";
@@ -131,6 +131,7 @@ function VerdictBlock({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number 
   }
   const modelDisplay = winner.pairLabel ?? winner.modelName;
   if (modelDisplay) {
+    const isPair = winner.pairLabel != null && winner.reflectionModelName != null;
     stats.push({
       key: "models",
       label: winner.pairLabel
@@ -138,13 +139,45 @@ function VerdictBlock({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number 
         : msg("auto.app.compare.page.literal.6"),
       tooltip: tip("compare.winner_models"),
       icon: <Cpu className="size-3 text-muted-foreground/70 shrink-0" />,
-      value: (
+      value: isPair ? (
+        <div className="space-y-1.5" title={modelDisplay}>
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="text-[0.625rem] font-semibold text-muted-foreground uppercase tracking-[0.14em] shrink-0">
+              {TERMS.generationModelShort}
+            </span>
+            <span
+              className="inline-flex items-center gap-1 min-w-0 font-mono text-sm text-foreground/90"
+              dir="ltr"
+            >
+              <span className="truncate">{winner.modelName}</span>
+              {winner.reasoningEffort && (
+                <ReasoningPill value={winner.reasoningEffort} size="sm" />
+              )}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="text-[0.625rem] font-semibold text-muted-foreground uppercase tracking-[0.14em] shrink-0">
+              {msg("auto.features.tutorial.components.concepts.guide.literal.59")}
+            </span>
+            <span
+              className="inline-flex items-center gap-1 min-w-0 font-mono text-sm text-foreground/90"
+              dir="ltr"
+            >
+              <span className="truncate">{winner.reflectionModelName}</span>
+              {winner.reflectionReasoningEffort && (
+                <ReasoningPill value={winner.reflectionReasoningEffort} size="sm" />
+              )}
+            </span>
+          </div>
+        </div>
+      ) : (
         <span
-          className="block truncate font-mono text-sm text-foreground/90"
+          className="flex flex-wrap items-center gap-1.5 font-mono text-sm text-foreground/90"
           dir="ltr"
           title={modelDisplay}
         >
-          {modelDisplay}
+          <span className="truncate">{modelDisplay}</span>
+          {winner.reasoningEffort && <ReasoningPill value={winner.reasoningEffort} size="sm" />}
         </span>
       ),
     });
@@ -610,7 +643,11 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
     key: string;
     icon: React.ElementType;
     label: string;
+    // Identity strings used for the "all same" collapse — must encode every
+    // attribute that's surfaced in `renderCell` so visually distinct cells
+    // never collapse into a single "זהה בכל הריצות" row.
     values: string[];
+    renderCell?: (index: number) => React.ReactNode;
   };
   const configRows: ConfigRowDef[] = [
     {
@@ -620,16 +657,25 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
       values: runs.map((r) => r.moduleName ?? "—"),
     },
     {
-      key: "optimizer",
-      icon: Cpu,
-      label: TERMS.optimizer,
-      values: runs.map((r) => r.optimizerName ?? "—"),
-    },
-    {
       key: "model",
       icon: Sparkles,
       label: msg("auto.app.compare.page.literal.15"),
-      values: runs.map((r) => r.modelName ?? "—"),
+      values: runs.map((r) => `${r.modelName ?? "—"}|${r.reasoningEffort ?? ""}`),
+      renderCell: (i) => {
+        const r = runs[i]!;
+        const name = r.modelName ?? "—";
+        return (
+          <span className="inline-flex items-center gap-1.5 min-w-0" dir="ltr">
+            <span
+              className="font-mono text-xs tabular-nums text-foreground truncate"
+              title={name}
+            >
+              {name}
+            </span>
+            {r.reasoningEffort && <ReasoningPill value={r.reasoningEffort} />}
+          </span>
+        );
+      },
     },
   ];
 
@@ -665,9 +711,13 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
                     </td>
                     {allSame ? (
                       <td colSpan={runs.length} className={`py-2.5 px-2 text-center ${borderTop}`}>
-                        <span className="font-mono text-xs tabular-nums text-foreground">
-                          {first}
-                        </span>
+                        {row.renderCell ? (
+                          row.renderCell(0)
+                        ) : (
+                          <span className="font-mono text-xs tabular-nums text-foreground">
+                            {first}
+                          </span>
+                        )}
                         <span className="mx-2 text-muted-foreground/40">·</span>
                         <span className="text-[0.6875rem] text-muted-foreground">
                           {msg("auto.app.compare.page.10")}
@@ -677,10 +727,10 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
                       row.values.map((v, i) => (
                         <td
                           key={i}
-                          className={`py-2.5 px-2 text-center font-mono text-xs tabular-nums truncate ${borderTop}`}
-                          title={v}
+                          className={`py-2.5 px-2 text-center ${row.renderCell ? "" : "font-mono text-xs tabular-nums truncate"} ${borderTop}`}
+                          title={row.renderCell ? undefined : v}
                         >
-                          {v}
+                          {row.renderCell ? row.renderCell(i) : v}
                         </td>
                       ))
                     )}
@@ -1258,27 +1308,14 @@ export function CompareView() {
           setError(msg("compare.cap_reached"));
           setJobs(null);
         } else {
-          const keys = await Promise.all(
-            ok.map(async (job) => {
-              try {
-                const [payload, dataset] = await Promise.all([
-                  getOptimizationPayload(job.optimization_id),
-                  getOptimizationDataset(job.optimization_id),
-                ]);
-                return compareCompatibilityKey(payload, dataset);
-              } catch {
-                return null;
-              }
-            }),
-          );
+          const keys = ok.map((job) => compareCompatibilityKey(job));
           if (!canCompareKeys(keys)) {
             setError(msg("compare.mismatch"));
             setJobs(null);
-            setFailedIds(failed);
-            return;
+          } else {
+            setJobs(ok);
+            setError(null);
           }
-          setJobs(ok);
-          setError(null);
         }
         setFailedIds(failed);
       })
