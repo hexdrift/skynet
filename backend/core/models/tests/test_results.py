@@ -8,7 +8,7 @@ import pytest
 
 from core.models.artifacts import ProgramArtifact
 from core.models.common import SplitCounts
-from core.models.results import GridSearchResponse, PairResult, RunResponse
+from core.models.results import GridSearchResponse, LMActivity, LMStageStats, PairResult, RunResponse
 from core.models.telemetry import JobLogEntry
 
 
@@ -169,3 +169,66 @@ def test_grid_search_response_persists_pair_results() -> None:
     assert resp.completed_pairs == 1
     assert resp.best_pair is not None
     assert resp.best_pair.metric_improvement == pytest.approx(0.5)
+
+
+def test_lm_stage_stats_defaults() -> None:
+    """``LMStageStats`` defaults to zero calls and no recorded average."""
+    s = LMStageStats()
+    assert s.calls == 0
+    assert s.avg_response_time_ms is None
+
+
+def test_lm_activity_round_trips_through_json() -> None:
+    """``LMActivity`` survives a dump+load cycle preserving per-stage stats."""
+    activity = LMActivity(
+        generation={
+            "baseline": LMStageStats(calls=3, avg_response_time_ms=120.5),
+            "training": LMStageStats(calls=10, avg_response_time_ms=180.0),
+        },
+        reflection={
+            "training": LMStageStats(calls=4, avg_response_time_ms=900.0),
+        },
+    )
+    payload = activity.model_dump()
+    restored = LMActivity.model_validate(payload)
+
+    assert restored.generation["baseline"].calls == 3
+    assert restored.generation["baseline"].avg_response_time_ms == pytest.approx(120.5)
+    assert restored.generation["training"].calls == 10
+    assert restored.reflection["training"].calls == 4
+    assert "evaluation" not in restored.generation
+    assert "baseline" not in restored.reflection
+
+
+def test_run_response_persists_lm_activity() -> None:
+    """``RunResponse`` round-trips an attached ``LMActivity``."""
+    activity = LMActivity(
+        generation={"baseline": LMStageStats(calls=1, avg_response_time_ms=50.0)},
+    )
+    r = RunResponse(
+        module_name="predict",
+        optimizer_name="gepa",
+        metric_name="accuracy",
+        split_counts=_split_counts(),
+        lm_activity=activity,
+    )
+
+    assert r.lm_activity is not None
+    assert r.lm_activity.generation["baseline"].calls == 1
+    assert r.lm_activity.reflection == {}
+
+
+def test_pair_result_persists_lm_activity() -> None:
+    """``PairResult`` round-trips an attached ``LMActivity``."""
+    activity = LMActivity(
+        reflection={"training": LMStageStats(calls=2, avg_response_time_ms=400.0)},
+    )
+    pair = PairResult(
+        pair_index=0,
+        generation_model="g",
+        reflection_model="r",
+        lm_activity=activity,
+    )
+
+    assert pair.lm_activity is not None
+    assert pair.lm_activity.reflection["training"].avg_response_time_ms == pytest.approx(400.0)

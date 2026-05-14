@@ -56,7 +56,7 @@ from .optimizations import (
     PaginatedJobsResponse,
     ProgramArtifactResponse,
 )
-from .results import GridSearchResponse, PairResult, RunResponse
+from .results import GridSearchResponse, LMActivity, LMStageStats, PairResult, RunResponse
 from .serve import ServeInfoResponse, ServeRequest, ServeResponse
 from .submissions import GridSearchRequest, OptimizationSubmissionResponse, RunRequest
 from .telemetry import JobLogEntry, ProgressEvent
@@ -86,6 +86,8 @@ __all__ = [
     "JobCancelResponse",
     "JobDeleteResponse",
     "JobLogEntry",
+    "LMActivity",
+    "LMStageStats",
     "ModelConfig",
     "ModelStatsItem",
     "ModelStatsResponse",
