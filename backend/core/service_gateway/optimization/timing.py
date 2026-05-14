@@ -3,18 +3,20 @@
 The two callbacks here (:class:`GenLMTimingCallback` and
 :class:`ReflectionLMTimingCallback`) both filter calls by object identity
 so other LMs sharing the same ``dspy.context`` cannot contaminate the
-duration list. Both also bucket durations by the active "stage" — the
-caller marks stage boundaries with :func:`track_stage`, which writes to a
-module-level :class:`contextvars.ContextVar`. The ``stage_summary``
-method returns ``(calls, avg_ms)`` per stage; the existing ``summary``
-method (over all stages combined) is preserved for backward compatibility.
+duration list. Each callback owns its current-stage state (mutated through
+:func:`track_stage` under a per-callback lock) so DSPy worker threads see
+the stage active on the driver thread. A ``contextvars.ContextVar`` was
+deliberately rejected here: ``concurrent.futures.ThreadPoolExecutor``
+workers — which DSPy's ``Evaluate`` uses — start with a fresh context, so
+ContextVar values set on the driver thread would not reach callback
+``on_lm_start`` calls running in workers, and the per-stage buckets would
+silently stay empty.
 """
 
 import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar
 from typing import Any
 
 from dspy.utils.callback import BaseCallback
@@ -28,33 +30,12 @@ STAGE_EVALUATION = "evaluation"
 
 STAGE_ORDER: tuple[str, ...] = (STAGE_BASELINE, STAGE_TRAINING, STAGE_EVALUATION)
 
-current_stage: ContextVar[str | None] = ContextVar("current_stage", default=None)
-
-
-@contextmanager
-def track_stage(name: str) -> Iterator[None]:
-    """Set the current-stage ContextVar for the duration of a ``with`` block.
-
-    Args:
-        name: Stage identifier (typically one of :data:`STAGE_ORDER`).
-            Callbacks bucket durations under this string.
-
-    Yields:
-        Control. The previous stage value is restored on exit even if the
-        wrapped block raises.
-    """
-    token = current_stage.set(name)
-    try:
-        yield
-    finally:
-        current_stage.reset(token)
-
 
 class _LMStageTimingCallback(BaseCallback):
     """Shared base: time only the configured LM and bucket per active stage.
 
     Subclasses differ only in which LM identity to filter on; the actual
-    timing logic, ContextVar lookup, and stage bucketing live here.
+    timing logic, stage state, and bucketing live here.
     """
 
     def __init__(self, target_lm: Any) -> None:
@@ -75,6 +56,18 @@ class _LMStageTimingCallback(BaseCallback):
         self.durations_ms: list[float] = []
         self.stage_durations_ms: dict[str, list[float]] = {}
         self._lock = threading.Lock()
+        # Stage state lives on the callback (not in a ContextVar) so it is
+        # visible from DSPy's worker threads — see module docstring.
+        self._current_stage: str | None = None
+
+    def set_stage(self, stage: str | None) -> None:
+        """Record the stage that subsequent ``on_lm_start`` calls should attribute to.
+
+        Args:
+            stage: Stage name, or ``None`` when no stage is active.
+        """
+        with self._lock:
+            self._current_stage = stage
 
     def on_lm_start(self, call_id: str, instance: Any, inputs: dict[str, Any]) -> None:
         """Record start time and active stage for matching calls; ignore others.
@@ -86,10 +79,12 @@ class _LMStageTimingCallback(BaseCallback):
         """
         if id(instance) != self._target_id:
             return
+        with self._lock:
+            stage = self._current_stage
         self._starts[call_id] = time.monotonic()
         # Snapshot the stage at start-time so a stage transition mid-call
         # doesn't misattribute the duration to the next bucket.
-        self._stage_starts[call_id] = current_stage.get()
+        self._stage_starts[call_id] = stage
 
     def on_lm_end(
         self,
@@ -164,3 +159,37 @@ class ReflectionLMTimingCallback(_LMStageTimingCallback):
     GEPA routes through the same dspy.context. Identity-filtered so the
     generation LM's calls never reach this callback's buckets.
     """
+
+
+@contextmanager
+def track_stage(
+    name: str,
+    *callbacks: _LMStageTimingCallback,
+) -> Iterator[None]:
+    """Set the active stage on each callback for the duration of a ``with`` block.
+
+    Stage state lives on each callback (not in a ContextVar) so DSPy worker
+    threads — which start with a fresh context when spawned by
+    ``concurrent.futures.ThreadPoolExecutor`` — observe the value set on
+    the driver thread. ``set_stage`` is only invoked here (on the driver
+    thread); workers only read inside ``on_lm_start``, so there is no
+    write-write race.
+
+    Args:
+        name: Stage identifier (typically one of :data:`STAGE_ORDER`).
+            Callbacks bucket durations under this string.
+        *callbacks: Timing callbacks to update. Pass none for a no-op
+            (useful in tests that only need the call accounting).
+
+    Yields:
+        Control. The previous stage value on each callback is restored on
+        exit even if the wrapped block raises.
+    """
+    previous: list[str | None] = [cb._current_stage for cb in callbacks]
+    for cb in callbacks:
+        cb.set_stage(name)
+    try:
+        yield
+    finally:
+        for cb, prev in zip(callbacks, previous):
+            cb.set_stage(prev)

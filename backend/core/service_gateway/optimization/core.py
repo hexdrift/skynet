@@ -186,8 +186,10 @@ def _run_grid_pair(
     pair_start = datetime.now(UTC)
     try:
         program = ctx.module_factory(**dict(ctx.module_kwargs))
-        language_model = build_language_model(gen_cfg)
-        reflection_lm = build_language_model(ref_cfg) if ref_cfg is not None else None
+        language_model = build_language_model(gen_cfg, disable_cache=True)
+        reflection_lm = (
+            build_language_model(ref_cfg, disable_cache=True) if ref_cfg is not None else None
+        )
         gen_timing = GenLMTimingCallback(language_model)
         refl_timing = ReflectionLMTimingCallback(reflection_lm) if reflection_lm is not None else None
         callbacks: list[Any] = [gen_timing]
@@ -207,7 +209,7 @@ def _run_grid_pair(
             baseline = None
             baseline_test_results: list[dict] = []
             if ctx.splits.test:
-                with track_stage(STAGE_BASELINE):
+                with track_stage(STAGE_BASELINE, *callbacks):
                     baseline, baseline_test_results = evaluate_on_test(
                         program,
                         ctx.splits.test,
@@ -223,7 +225,7 @@ def _run_grid_pair(
                         },
                     )
 
-            with capture_tqdm(ctx.progress_callback), track_stage(STAGE_TRAINING):
+            with capture_tqdm(ctx.progress_callback), track_stage(STAGE_TRAINING, *callbacks):
                 compiled = compile_program(
                     optimizer=optimizer,
                     program=program,
@@ -235,7 +237,7 @@ def _run_grid_pair(
             optimized = None
             optimized_test_results: list[dict] = []
             if ctx.splits.test:
-                with track_stage(STAGE_EVALUATION):
+                with track_stage(STAGE_EVALUATION, *callbacks):
                     optimized, optimized_test_results = evaluate_on_test(
                         compiled,
                         ctx.splits.test,
@@ -427,12 +429,14 @@ class DspyService:
         metric = load_metric_from_code(payload.metric_code)
         metric_identifier = getattr(metric, "__name__", "inline_metric")
 
-        language_model = build_language_model(payload.model_settings)
+        language_model = build_language_model(payload.model_settings, disable_cache=True)
         # Build the reflection LM up front (when supplied) so the timing
         # callback can be bound to its identity. ``instantiate_optimizer``
         # would otherwise build it internally, leaving us no handle.
+        # Cache disabled so the callback fires on every call — cached calls
+        # bypass DSPy's callback hooks and would zero out the activity matrix.
         reflection_lm = (
-            build_language_model(payload.reflection_model_settings)
+            build_language_model(payload.reflection_model_settings, disable_cache=True)
             if payload.reflection_model_settings is not None
             else None
         )
@@ -485,7 +489,7 @@ class DspyService:
             baseline_test_metric = None
             baseline_test_results: list[dict] = []
             if splits.test:
-                with track_stage(STAGE_BASELINE):
+                with track_stage(STAGE_BASELINE, *callbacks):
                     baseline_test_metric, baseline_test_results = evaluate_on_test(
                         program,
                         splits.test,
@@ -500,7 +504,7 @@ class DspyService:
                     )
 
             logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
-            with capture_tqdm(progress_callback), track_stage(STAGE_TRAINING):
+            with capture_tqdm(progress_callback), track_stage(STAGE_TRAINING, *callbacks):
                 compiled_program = compile_program(
                     optimizer=optimizer,
                     program=program,
@@ -513,7 +517,7 @@ class DspyService:
             optimized_test_metric = None
             optimized_test_results: list[dict] = []
             if splits.test:
-                with track_stage(STAGE_EVALUATION):
+                with track_stage(STAGE_EVALUATION, *callbacks):
                     optimized_test_metric, optimized_test_results = evaluate_on_test(
                         compiled_program,
                         splits.test,

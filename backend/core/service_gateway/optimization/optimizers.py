@@ -314,7 +314,9 @@ def instantiate_optimizer(
         if reflection_lm is not None and needs_reflection:
             kwargs[OPTIMIZER_REFLECTION_LM_KEY] = reflection_lm
         elif reflection_model and needs_reflection:
-            kwargs[OPTIMIZER_REFLECTION_LM_KEY] = build_language_model(reflection_model)
+            kwargs[OPTIMIZER_REFLECTION_LM_KEY] = build_language_model(
+                reflection_model, disable_cache=True
+            )
         elif needs_reflection:
             raise ServiceError(
                 f"Optimizer '{optimizer_name}' requires reflection_model_config "
