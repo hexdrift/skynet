@@ -180,6 +180,16 @@ export interface EvalExampleResult {
   error?: string | null;
 }
 
+export interface LMStageStats {
+  calls: number;
+  avg_response_time_ms?: number | null;
+}
+
+export interface LMActivity {
+  generation: Record<string, LMStageStats>;
+  reflection: Record<string, LMStageStats>;
+}
+
 export interface PairResult {
   pair_index: number;
   generation_model: string;
@@ -192,6 +202,7 @@ export interface PairResult {
   runtime_seconds?: number | null;
   num_lm_calls?: number | null;
   avg_response_time_ms?: number | null;
+  lm_activity?: LMActivity | null;
   program_artifact?: ProgramArtifact | null;
   error?: string | null;
   baseline_test_results?: EvalExampleResult[];
@@ -213,6 +224,7 @@ export interface RunResult {
   runtime_seconds?: number | null;
   num_lm_calls?: number | null;
   avg_response_time_ms?: number | null;
+  lm_activity?: LMActivity | null;
   run_log?: OptimizationLogEntry[];
   baseline_test_results?: EvalExampleResult[];
   optimized_test_results?: EvalExampleResult[];
