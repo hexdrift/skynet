@@ -41,6 +41,7 @@ import { LogsTab } from "./LogsTab";
 import { ExportMenu } from "./ExportMenu";
 import { ServeChat, type ServeChatProps } from "./ServeChat";
 import { CopyButton, InfoCard, ReasoningPill } from "./ui-primitives";
+import { LMActivityTab } from "./LMActivityTab";
 import { PipelineStages, computeStageTimestamps } from "./PipelineStages";
 import { detectPairStage } from "../lib/detect-stage";
 import type { PipelineStage } from "../constants";
@@ -466,6 +467,10 @@ export function PairDetailView({
               </div>
             </FadeIn>
           </div>
+
+          {activePair.lm_activity && (
+            <LMActivityTab lmActivity={activePair.lm_activity} />
+          )}
 
           {pairScorePoints.length > 1 && (
             <FadeIn delay={0.1}>

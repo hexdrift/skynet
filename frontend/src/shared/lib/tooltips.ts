@@ -23,6 +23,16 @@ export const TOOLTIPS = {
   "lm.calls_count": `מספר הקריאות ל${TERMS.model} השפה במהלך ה${TERMS.optimization}`,
   "lm.avg_response_time": `הזמן הממוצע שלקח ל${TERMS.model} לענות לכל קריאה`,
 
+  "lm_activity.section": `פעילות מודלי השפה לפי שלב — כמה קריאות בוצעו וכמה זמן לקחו, מה${TERMS.generationModelShort} וממודל הרפלקציה בנפרד`,
+  "lm_activity.stage.baseline": `קריאות שבוצעו בעת מדידת ה${TERMS.baselineScore} — לפני שה${TERMS.optimizer} התחיל לפעול`,
+  "lm_activity.stage.training": `קריאות שבוצעו במהלך ה${TERMS.optimization} עצמה — כשהאופטימייזר בנה מועמדים לפרומפט`,
+  "lm_activity.stage.evaluation": `קריאות שבוצעו בעת מדידת ה${TERMS.optimizedScore} — אחרי שה${TERMS.optimization} הסתיימה`,
+  "lm_activity.column.generation": `קריאות שבוצעו ל${TERMS.generationModel} — המודל שמייצר תשובות`,
+  "lm_activity.column.reflection": `קריאות שבוצעו ל${TERMS.reflectionModel} — המודל שמנתח שגיאות ומציע שיפורים`,
+  "lm_activity.cell.calls": "מספר הקריאות שבוצעו בשלב הזה",
+  "lm_activity.cell.avg_ms": "הזמן הממוצע לקריאה בשלב הזה",
+  "lm_activity.total_row": "סך הכול הקריאות והזמן הממוצע על פני כל השלבים",
+
   "model.generation": `ה${TERMS.model} שמייצר את התשובה בפועל בזמן ה${TERMS.optimizationTypeRun}`,
   "model.reflection": `ה${TERMS.model} שבודק טעויות ומציע איך לשפר את ההנחיות במהלך ה${TERMS.optimization}`,
 

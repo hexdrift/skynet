@@ -11,6 +11,23 @@ from .common import SplitCounts
 from .telemetry import JobLogEntry
 
 
+# Per-(LM, stage) cell of the LM activity matrix. Pydantic class docstrings
+# are part of the OpenAPI contract — see AGENTS.md "Pydantic class
+# docstrings" — so this annotation lives in a comment, not in the class body.
+class LMStageStats(BaseModel):
+    calls: int = 0
+    avg_response_time_ms: float | None = None
+
+
+# Two-LM × N-stage matrix returned alongside RunResponse / PairResult.
+# Inner dicts are keyed by stage name ("baseline" / "training" /
+# "evaluation"); missing keys mean "no calls in that stage". The wire
+# shape is stable — the frontend renders rows in a fixed order.
+class LMActivity(BaseModel):
+    generation: dict[str, LMStageStats] = Field(default_factory=dict)
+    reflection: dict[str, LMStageStats] = Field(default_factory=dict)
+
+
 class RunResponse(BaseModel):
     """Result of a single optimization run."""
 
@@ -28,6 +45,7 @@ class RunResponse(BaseModel):
     runtime_seconds: float | None = None
     num_lm_calls: int | None = None
     avg_response_time_ms: float | None = None
+    lm_activity: LMActivity | None = None
     run_log: list[JobLogEntry] = Field(default_factory=list)
     baseline_test_results: list[dict[str, Any]] = Field(default_factory=list)
     optimized_test_results: list[dict[str, Any]] = Field(default_factory=list)
@@ -47,6 +65,7 @@ class PairResult(BaseModel):
     runtime_seconds: float | None = None
     num_lm_calls: int | None = None
     avg_response_time_ms: float | None = None
+    lm_activity: LMActivity | None = None
     program_artifact: ProgramArtifact | None = None
     error: str | None = None
     baseline_test_results: list[dict[str, Any]] = Field(default_factory=list)

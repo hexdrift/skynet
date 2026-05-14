@@ -39,6 +39,8 @@ from ...exceptions import ServiceError
 from ...models import (
     GridSearchRequest,
     GridSearchResponse,
+    LMActivity,
+    LMStageStats,
     PairResult,
     RunRequest,
     RunResponse,
@@ -71,13 +73,50 @@ from .optimizers import (
     validate_optimizer_signature,
 )
 from .progress import capture_tqdm
-from .timing import GenLMTimingCallback
+from .timing import (
+    STAGE_BASELINE,
+    STAGE_EVALUATION,
+    STAGE_ORDER,
+    STAGE_TRAINING,
+    GenLMTimingCallback,
+    ReflectionLMTimingCallback,
+    track_stage,
+)
 from .validators import (
     require_mapping_columns_in_dataset,
     require_mapping_matches_signature,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _build_lm_activity(
+    gen_timing: GenLMTimingCallback,
+    refl_timing: ReflectionLMTimingCallback | None,
+) -> LMActivity:
+    """Compose an ``LMActivity`` payload from per-stage callback summaries.
+
+    Only stages that recorded at least one call get a ``LMStageStats``
+    entry; the frontend renders zero-call stages from :data:`STAGE_ORDER`
+    on its own, so we keep the wire payload sparse.
+
+    Args:
+        gen_timing: Generation-LM timing callback, always present.
+        refl_timing: Reflection-LM timing callback, or ``None`` when the
+            run did not use a reflection LM (non-GEPA optimizer).
+
+    Returns:
+        An ``LMActivity`` whose ``generation`` and ``reflection`` dicts
+        contain one entry per stage with calls > 0.
+    """
+    generation: dict[str, LMStageStats] = {}
+    for stage, (calls, avg_ms) in gen_timing.stage_summary().items():
+        generation[stage] = LMStageStats(calls=calls, avg_response_time_ms=avg_ms)
+    reflection: dict[str, LMStageStats] = {}
+    if refl_timing is not None:
+        for stage, (calls, avg_ms) in refl_timing.stage_summary().items():
+            reflection[stage] = LMStageStats(calls=calls, avg_response_time_ms=avg_ms)
+    return LMActivity(generation=generation, reflection=reflection)
 
 
 @dataclass
@@ -148,9 +187,14 @@ def _run_grid_pair(
     try:
         program = ctx.module_factory(**dict(ctx.module_kwargs))
         language_model = build_language_model(gen_cfg)
+        reflection_lm = build_language_model(ref_cfg) if ref_cfg is not None else None
         gen_timing = GenLMTimingCallback(language_model)
+        refl_timing = ReflectionLMTimingCallback(reflection_lm) if reflection_lm is not None else None
+        callbacks: list[Any] = [gen_timing]
+        if refl_timing is not None:
+            callbacks.append(refl_timing)
 
-        with dspy.context(lm=language_model, callbacks=[gen_timing]):
+        with dspy.context(lm=language_model, callbacks=callbacks):
             optimizer = instantiate_optimizer(
                 ctx.optimizer_factory,
                 ctx.payload.optimizer_name,
@@ -158,16 +202,18 @@ def _run_grid_pair(
                 ctx.metric,
                 gen_cfg,
                 ref_cfg,
+                reflection_lm=reflection_lm,
             )
             baseline = None
             baseline_test_results: list[dict] = []
             if ctx.splits.test:
-                baseline, baseline_test_results = evaluate_on_test(
-                    program,
-                    ctx.splits.test,
-                    ctx.metric,
-                    collect_per_example=True,
-                )
+                with track_stage(STAGE_BASELINE):
+                    baseline, baseline_test_results = evaluate_on_test(
+                        program,
+                        ctx.splits.test,
+                        ctx.metric,
+                        collect_per_example=True,
+                    )
                 if ctx.progress_callback and baseline is not None:
                     ctx.progress_callback(
                         PROGRESS_BASELINE,
@@ -177,7 +223,7 @@ def _run_grid_pair(
                         },
                     )
 
-            with capture_tqdm(ctx.progress_callback):
+            with capture_tqdm(ctx.progress_callback), track_stage(STAGE_TRAINING):
                 compiled = compile_program(
                     optimizer=optimizer,
                     program=program,
@@ -189,12 +235,13 @@ def _run_grid_pair(
             optimized = None
             optimized_test_results: list[dict] = []
             if ctx.splits.test:
-                optimized, optimized_test_results = evaluate_on_test(
-                    compiled,
-                    ctx.splits.test,
-                    ctx.metric,
-                    collect_per_example=True,
-                )
+                with track_stage(STAGE_EVALUATION):
+                    optimized, optimized_test_results = evaluate_on_test(
+                        compiled,
+                        ctx.splits.test,
+                        ctx.metric,
+                        collect_per_example=True,
+                    )
                 if ctx.progress_callback and optimized is not None:
                     ctx.progress_callback(
                         PROGRESS_OPTIMIZED,
@@ -225,6 +272,7 @@ def _run_grid_pair(
         pair_runtime = (datetime.now(UTC) - pair_start).total_seconds()
         pair_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
         _, pair_avg_ms = gen_timing.summary()
+        pair_lm_activity = _build_lm_activity(gen_timing, refl_timing)
         result = PairResult(
             pair_index=i,
             generation_model=gen_cfg.name,
@@ -237,6 +285,7 @@ def _run_grid_pair(
             runtime_seconds=round(pair_runtime, 2),
             num_lm_calls=pair_lm_calls,
             avg_response_time_ms=pair_avg_ms,
+            lm_activity=pair_lm_activity,
             program_artifact=program_artifact,
             baseline_test_results=baseline_test_results,
             optimized_test_results=optimized_test_results,
@@ -379,6 +428,14 @@ class DspyService:
         metric_identifier = getattr(metric, "__name__", "inline_metric")
 
         language_model = build_language_model(payload.model_settings)
+        # Build the reflection LM up front (when supplied) so the timing
+        # callback can be bound to its identity. ``instantiate_optimizer``
+        # would otherwise build it internally, leaving us no handle.
+        reflection_lm = (
+            build_language_model(payload.reflection_model_settings)
+            if payload.reflection_model_settings is not None
+            else None
+        )
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         optimizer = instantiate_optimizer(
             optimizer_factory,
@@ -387,6 +444,7 @@ class DspyService:
             metric,
             payload.model_settings,
             payload.reflection_model_settings,
+            reflection_lm=reflection_lm,
         )
 
         examples = rows_to_examples(
@@ -419,16 +477,21 @@ class DspyService:
             )
 
         gen_timing = GenLMTimingCallback(language_model)
-        with dspy.context(lm=language_model, callbacks=[gen_timing]):
+        refl_timing = ReflectionLMTimingCallback(reflection_lm) if reflection_lm is not None else None
+        callbacks: list[Any] = [gen_timing]
+        if refl_timing is not None:
+            callbacks.append(refl_timing)
+        with dspy.context(lm=language_model, callbacks=callbacks):
             baseline_test_metric = None
             baseline_test_results: list[dict] = []
             if splits.test:
-                baseline_test_metric, baseline_test_results = evaluate_on_test(
-                    program,
-                    splits.test,
-                    metric,
-                    collect_per_example=True,
-                )
+                with track_stage(STAGE_BASELINE):
+                    baseline_test_metric, baseline_test_results = evaluate_on_test(
+                        program,
+                        splits.test,
+                        metric,
+                        collect_per_example=True,
+                    )
                 logger.info("Baseline test metric: %s", baseline_test_metric)
                 if progress_callback and baseline_test_metric is not None:
                     progress_callback(
@@ -437,7 +500,7 @@ class DspyService:
                     )
 
             logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
-            with capture_tqdm(progress_callback):
+            with capture_tqdm(progress_callback), track_stage(STAGE_TRAINING):
                 compiled_program = compile_program(
                     optimizer=optimizer,
                     program=program,
@@ -450,12 +513,13 @@ class DspyService:
             optimized_test_metric = None
             optimized_test_results: list[dict] = []
             if splits.test:
-                optimized_test_metric, optimized_test_results = evaluate_on_test(
-                    compiled_program,
-                    splits.test,
-                    metric,
-                    collect_per_example=True,
-                )
+                with track_stage(STAGE_EVALUATION):
+                    optimized_test_metric, optimized_test_results = evaluate_on_test(
+                        compiled_program,
+                        splits.test,
+                        metric,
+                        collect_per_example=True,
+                    )
                 logger.info("Optimized test metric: %s", optimized_test_metric)
                 if progress_callback and optimized_test_metric is not None:
                     progress_callback(
@@ -509,6 +573,7 @@ class DspyService:
         # avg is wall-clock time spent inside the generation LM only, via the callback.
         num_lm_calls = len(language_model.history) if hasattr(language_model, "history") else None
         _, avg_response_time_ms = gen_timing.summary()
+        lm_activity = _build_lm_activity(gen_timing, refl_timing)
         response = RunResponse(
             module_name=payload.module_name,
             optimizer_name=payload.optimizer_name,
@@ -524,6 +589,7 @@ class DspyService:
             runtime_seconds=runtime_seconds,
             num_lm_calls=num_lm_calls,
             avg_response_time_ms=avg_response_time_ms,
+            lm_activity=lm_activity,
             baseline_test_results=baseline_test_results,
             optimized_test_results=optimized_test_results,
         )

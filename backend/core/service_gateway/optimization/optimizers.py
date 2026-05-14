@@ -263,6 +263,8 @@ def instantiate_optimizer(
     metric: Callable[..., Any],
     default_model: ModelConfig,
     reflection_model: ModelConfig | None,
+    *,
+    reflection_lm: Any | None = None,
 ) -> Any:
     """Instantiate an optimizer, injecting language models and metrics as needed.
 
@@ -279,7 +281,12 @@ def instantiate_optimizer(
         default_model: Configuration for the generation model (currently
             informational; reserved for future per-optimizer wiring).
         reflection_model: Configuration for the reflection model (required
-            when ``optimizer_name`` is GEPA).
+            when ``optimizer_name`` is GEPA and no ``reflection_lm`` is
+            already provided).
+        reflection_lm: Optional pre-built reflection LM instance. When
+            supplied (e.g. so the caller can attach a timing callback
+            bound to its identity), it bypasses construction from
+            ``reflection_model``.
 
     Returns:
         An instantiated optimizer ready for ``compile``.
@@ -304,7 +311,9 @@ def instantiate_optimizer(
         kwargs["auto"] = "light"
     needs_reflection = optimizer_key in reflection_required_optimizers
     if OPTIMIZER_REFLECTION_LM_KEY not in kwargs:
-        if reflection_model and needs_reflection:
+        if reflection_lm is not None and needs_reflection:
+            kwargs[OPTIMIZER_REFLECTION_LM_KEY] = reflection_lm
+        elif reflection_model and needs_reflection:
             kwargs[OPTIMIZER_REFLECTION_LM_KEY] = build_language_model(reflection_model)
         elif needs_reflection:
             raise ServiceError(

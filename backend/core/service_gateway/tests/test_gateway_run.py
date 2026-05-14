@@ -9,7 +9,7 @@ import pytest
 from core.constants import PROGRESS_GRID_PAIR_FAILED, PROGRESS_SPLITS_READY
 from core.exceptions import ServiceError
 from core.models import ColumnMapping, ModelConfig, RunRequest, RunResponse, SplitFractions
-from core.models.results import GridSearchResponse
+from core.models.results import GridSearchResponse, LMActivity
 from core.models.submissions import GridSearchRequest
 from core.registry import ServiceRegistry
 from core.service_gateway.optimization.core import DspyService
@@ -408,3 +408,52 @@ def test_run_raises_service_error_when_module_factory_unavailable() -> None:
 
     with pytest.raises(ServiceError):
         service.run(payload)
+
+
+def test_run_populates_lm_activity_with_empty_buckets_when_no_real_calls() -> None:
+    """``RunResponse.lm_activity`` is present with empty stage buckets when patched mocks fire no real LM calls."""
+    # The patched evaluate_on_test / compile_program never invoke the LM through
+    # dspy, so the timing callbacks record zero per-stage durations. The shape
+    # of the payload is still correct: ``lm_activity`` is a valid LMActivity
+    # with no per-stage entries (frontend renders zero rows from STAGE_ORDER).
+    service = _service()
+    payload = _run_request()
+
+    with patch_core_dependencies():
+        result = service.run(payload)
+
+    assert isinstance(result.lm_activity, LMActivity)
+    assert result.lm_activity.generation == {}
+    assert result.lm_activity.reflection == {}
+
+
+def test_run_lm_activity_reflection_empty_when_no_reflection_model() -> None:
+    """When the run has no reflection model, ``lm_activity.reflection`` stays empty."""
+    service = _service()
+    payload = _run_request()  # no reflection_model_settings
+
+    with patch_core_dependencies():
+        result = service.run(payload)
+
+    assert result.lm_activity is not None
+    assert result.lm_activity.reflection == {}
+
+
+def test_run_grid_search_pair_results_carry_lm_activity() -> None:
+    """Each successful ``PairResult`` carries an ``LMActivity`` payload."""
+    service = _service()
+    payload = _grid_request()
+
+    def _eval_side_effect(program, test_examples, metric, collect_per_example=False):
+        return (0.8, [])
+
+    with (
+        patch_core_dependencies(),
+        patch("core.service_gateway.optimization.core.evaluate_on_test", side_effect=_eval_side_effect),
+        patch("core.worker.log_handler.set_current_pair_index"),
+    ):
+        result = service.run_grid_search(payload)
+
+    for pair in result.pair_results:
+        assert pair.error is None
+        assert isinstance(pair.lm_activity, LMActivity)

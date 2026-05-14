@@ -31,6 +31,7 @@ export function OverviewTab({
   onStageClick,
   onPairSelect,
   onPairDeleted,
+  onShowLMActivity,
 }: {
   job: OptimizationStatusResponse;
   isActive: boolean;
@@ -39,6 +40,7 @@ export function OverviewTab({
   onStageClick: (stage: PipelineStage) => void;
   onPairSelect: (pairIndex: number) => void;
   onPairDeleted?: (pairIndex: number) => void;
+  onShowLMActivity?: () => void;
 }) {
   const metrics = job.latest_metrics ?? {};
 
@@ -189,40 +191,151 @@ export function OverviewTab({
       {job.status === "success" &&
         job.optimization_type === "run" &&
         job.result &&
-        (job.result.num_lm_calls || job.result.avg_response_time_ms) && (
-          <FadeIn delay={0.1}>
-            <div className="grid grid-cols-2 gap-2.5">
-              {job.result.num_lm_calls != null && (
-                <InfoCard
-                  label={
-                    <HelpTip text={tip("lm.calls_count")}>
-                      {msg("auto.features.optimizations.components.overviewtab.1")}
-                    </HelpTip>
-                  }
-                  value={formatMsg(
-                    "auto.features.optimizations.components.overviewtab.template.6",
-                    { p1: job.result.num_lm_calls },
+        (() => {
+          const activity = job.result.lm_activity;
+          // When the backend provided per-LM × per-stage activity, render a
+          // compact 2x2 (Generation/Reflection × calls/avg) and link to the
+          // dedicated tab. Otherwise fall back to the legacy 2-card summary
+          // so older jobs (no ``lm_activity`` field) still render usefully.
+          if (activity) {
+            const sumStage = (
+              perStage: Record<string, { calls: number; avg_response_time_ms?: number | null }>,
+            ): { calls: number; avgMs: number | null } => {
+              let totalCalls = 0;
+              let weighted = 0;
+              let weighted_n = 0;
+              for (const cell of Object.values(perStage)) {
+                const calls = cell?.calls ?? 0;
+                totalCalls += calls;
+                if (calls > 0 && typeof cell?.avg_response_time_ms === "number") {
+                  weighted += cell.avg_response_time_ms * calls;
+                  weighted_n += calls;
+                }
+              }
+              return {
+                calls: totalCalls,
+                avgMs: weighted_n > 0 ? weighted / weighted_n : null,
+              };
+            };
+            const gen = sumStage(activity.generation ?? {});
+            const refl = sumStage(activity.reflection ?? {});
+            const hasReflection = refl.calls > 0;
+            const fmtAvg = (ms: number | null): string =>
+              ms == null ? "—" : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+            return (
+              <FadeIn delay={0.1}>
+                <div className="space-y-2">
+                  <div
+                    className={`grid gap-2.5 ${hasReflection ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2"}`}
+                  >
+                    <InfoCard
+                      label={
+                        <HelpTip text={tip("lm_activity.column.generation")}>
+                          {msg("auto.features.optimizations.components.lmactivitytab.col_generation")}
+                          {" — "}
+                          {msg("auto.features.optimizations.components.lmactivitytab.cell_calls")}
+                        </HelpTip>
+                      }
+                      value={gen.calls.toLocaleString("he-IL")}
+                      icon={<MessageSquare className="size-3.5" />}
+                    />
+                    <InfoCard
+                      label={
+                        <HelpTip text={tip("lm_activity.column.generation")}>
+                          {msg("auto.features.optimizations.components.lmactivitytab.col_generation")}
+                          {" — "}
+                          {msg("auto.features.optimizations.components.lmactivitytab.cell_avg_ms")}
+                        </HelpTip>
+                      }
+                      value={fmtAvg(gen.avgMs)}
+                      icon={<Timer className="size-3.5" />}
+                    />
+                    {hasReflection && (
+                      <>
+                        <InfoCard
+                          label={
+                            <HelpTip text={tip("lm_activity.column.reflection")}>
+                              {msg(
+                                "auto.features.optimizations.components.lmactivitytab.col_reflection",
+                              )}
+                              {" — "}
+                              {msg(
+                                "auto.features.optimizations.components.lmactivitytab.cell_calls",
+                              )}
+                            </HelpTip>
+                          }
+                          value={refl.calls.toLocaleString("he-IL")}
+                          icon={<MessageSquare className="size-3.5" />}
+                        />
+                        <InfoCard
+                          label={
+                            <HelpTip text={tip("lm_activity.column.reflection")}>
+                              {msg(
+                                "auto.features.optimizations.components.lmactivitytab.col_reflection",
+                              )}
+                              {" — "}
+                              {msg(
+                                "auto.features.optimizations.components.lmactivitytab.cell_avg_ms",
+                              )}
+                            </HelpTip>
+                          }
+                          value={fmtAvg(refl.avgMs)}
+                          icon={<Timer className="size-3.5" />}
+                        />
+                      </>
+                    )}
+                  </div>
+                  {onShowLMActivity && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={onShowLMActivity}
+                        className="text-xs text-[#7C6350] hover:text-[#3D2E22] transition-colors duration-150 underline-offset-2 hover:underline cursor-pointer"
+                      >
+                        {msg("auto.features.optimizations.components.overviewtab.lm_activity_link")}
+                      </button>
+                    </div>
                   )}
-                  icon={<MessageSquare className="size-3.5" />}
-                />
-              )}
-              {job.result.avg_response_time_ms != null && (
-                <InfoCard
-                  label={
-                    <HelpTip text={tip("lm.avg_response_time")}>
-                      {msg("auto.features.optimizations.components.overviewtab.2")}
-                    </HelpTip>
-                  }
-                  value={formatMsg(
-                    "auto.features.optimizations.components.overviewtab.template.7",
-                    { p1: (job.result.avg_response_time_ms / 1000).toFixed(1) },
-                  )}
-                  icon={<Timer className="size-3.5" />}
-                />
-              )}
-            </div>
-          </FadeIn>
-        )}
+                </div>
+              </FadeIn>
+            );
+          }
+          if (!job.result.num_lm_calls && !job.result.avg_response_time_ms) return null;
+          return (
+            <FadeIn delay={0.1}>
+              <div className="grid grid-cols-2 gap-2.5">
+                {job.result.num_lm_calls != null && (
+                  <InfoCard
+                    label={
+                      <HelpTip text={tip("lm.calls_count")}>
+                        {msg("auto.features.optimizations.components.overviewtab.1")}
+                      </HelpTip>
+                    }
+                    value={formatMsg(
+                      "auto.features.optimizations.components.overviewtab.template.6",
+                      { p1: job.result.num_lm_calls },
+                    )}
+                    icon={<MessageSquare className="size-3.5" />}
+                  />
+                )}
+                {job.result.avg_response_time_ms != null && (
+                  <InfoCard
+                    label={
+                      <HelpTip text={tip("lm.avg_response_time")}>
+                        {msg("auto.features.optimizations.components.overviewtab.2")}
+                      </HelpTip>
+                    }
+                    value={formatMsg(
+                      "auto.features.optimizations.components.overviewtab.template.7",
+                      { p1: (job.result.avg_response_time_ms / 1000).toFixed(1) },
+                    )}
+                    icon={<Timer className="size-3.5" />}
+                  />
+                )}
+              </div>
+            </FadeIn>
+          );
+        })()}
 
       {job.status === "success" && job.optimization_type === "run" && job.result && (
         <div data-tutorial="score-cards">

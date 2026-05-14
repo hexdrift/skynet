@@ -16,6 +16,7 @@ import {
   CopyPlus,
   Database,
   Settings,
+  Activity,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -70,6 +71,7 @@ import { StageInfoModal } from "./StageInfoModal";
 import { PairDetailView } from "./PairDetailView";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
+import { LMActivityTab } from "./LMActivityTab";
 import { linkifyMessage } from "@/shared/lib/linkify";
 import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
 
@@ -781,6 +783,12 @@ export function OptimizationDetailView() {
                     {isActive && <PingDot className="ms-1" />}
                   </TabsTrigger>
                 )}
+                {job.optimization_type !== "grid_search" && job.result?.lm_activity && (
+                  <TabsTrigger value="lm-activity" className={tabCls}>
+                    <Activity className="size-3.5" />
+                    {msg("auto.app.optimizations.id.page.lm_activity")}
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="config" className={tabCls} data-tutorial="config-tab-trigger">
                   <Settings className="size-3.5" />
                   {msg("auto.app.optimizations.id.page.19")}
@@ -806,6 +814,11 @@ export function OptimizationDetailView() {
                     }
                     void fetchJob();
                   }}
+                  onShowLMActivity={
+                    job.optimization_type !== "grid_search" && job.result?.lm_activity
+                      ? () => setDetailTab("lm-activity")
+                      : undefined
+                  }
                 />
               </TabsContent>
 
@@ -921,6 +934,12 @@ export function OptimizationDetailView() {
               {job.optimization_type !== "grid_search" && (
                 <TabsContent value="logs" data-tutorial="live-logs">
                   <LogsTab logs={job.logs} live={isActive} />
+                </TabsContent>
+              )}
+
+              {job.optimization_type !== "grid_search" && job.result?.lm_activity && (
+                <TabsContent value="lm-activity" className="mt-4">
+                  <LMActivityTab lmActivity={job.result.lm_activity} />
                 </TabsContent>
               )}
 
