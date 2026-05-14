@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from core.service_gateway.optimization.timing import (
     STAGE_BASELINE,
     STAGE_EVALUATION,
@@ -79,10 +81,10 @@ def test_stage_summary_buckets_calls_by_active_stage() -> None:
     target = _FakeLM()
     cb = GenLMTimingCallback(target)
 
-    with track_stage(STAGE_BASELINE):
+    with track_stage(STAGE_BASELINE, cb):
         cb.on_lm_start("call-a", target, {})
         cb.on_lm_end("call-a", outputs={"ok": True})
-    with track_stage(STAGE_TRAINING):
+    with track_stage(STAGE_TRAINING, cb):
         cb.on_lm_start("call-b", target, {})
         cb.on_lm_end("call-b", outputs={"ok": True})
         cb.on_lm_start("call-c", target, {})
@@ -103,9 +105,9 @@ def test_stage_snapshot_at_start_survives_mid_call_transition() -> None:
     target = _FakeLM()
     cb = GenLMTimingCallback(target)
 
-    with track_stage(STAGE_BASELINE):
+    with track_stage(STAGE_BASELINE, cb):
         cb.on_lm_start("call-a", target, {})
-    with track_stage(STAGE_TRAINING):
+    with track_stage(STAGE_TRAINING, cb):
         cb.on_lm_end("call-a", outputs={"ok": True})
 
     summary = cb.stage_summary()
@@ -120,7 +122,7 @@ def test_stage_summary_counts_match_all_call_total() -> None:
     cb = GenLMTimingCallback(target)
 
     for stage, count in ((STAGE_BASELINE, 1), (STAGE_TRAINING, 3), (STAGE_EVALUATION, 2)):
-        with track_stage(stage):
+        with track_stage(stage, cb):
             for i in range(count):
                 cid = f"{stage}-{i}"
                 cb.on_lm_start(cid, target, {})
@@ -152,7 +154,7 @@ def test_gen_and_reflection_callbacks_dont_cross_contaminate() -> None:
     gen_cb = GenLMTimingCallback(gen_lm)
     refl_cb = ReflectionLMTimingCallback(refl_lm)
 
-    with track_stage(STAGE_TRAINING):
+    with track_stage(STAGE_TRAINING, gen_cb, refl_cb):
         for cb in (gen_cb, refl_cb):
             cb.on_lm_start("call-1", gen_lm, {})
             cb.on_lm_end("call-1", outputs={})
@@ -167,8 +169,8 @@ def test_track_stage_restores_previous_value_on_exit() -> None:
     """Nested ``track_stage`` blocks restore the outer stage on exit."""
     target = _FakeLM()
     cb = GenLMTimingCallback(target)
-    with track_stage(STAGE_BASELINE):
-        with track_stage(STAGE_TRAINING):
+    with track_stage(STAGE_BASELINE, cb):
+        with track_stage(STAGE_TRAINING, cb):
             cb.on_lm_start("call-inner", target, {})
             cb.on_lm_end("call-inner", outputs={})
         cb.on_lm_start("call-outer", target, {})
@@ -176,3 +178,28 @@ def test_track_stage_restores_previous_value_on_exit() -> None:
     summary = cb.stage_summary()
     assert summary[STAGE_BASELINE][0] == 1
     assert summary[STAGE_TRAINING][0] == 1
+
+
+def test_stage_visible_from_worker_thread() -> None:
+    """Stage set on driver thread is visible from a ThreadPoolExecutor worker.
+
+    Regression: an earlier implementation used a ``ContextVar`` here, but
+    ``concurrent.futures.ThreadPoolExecutor`` does NOT propagate the
+    driver's context to workers — so ``current_stage.get()`` returned the
+    default ``None`` and the per-stage buckets stayed silently empty.
+    DSPy's ``Evaluate`` uses such an executor under the hood.
+    """
+    target = _FakeLM()
+    cb = GenLMTimingCallback(target)
+
+    def worker(call_id: str) -> None:
+        cb.on_lm_start(call_id, target, {})
+        cb.on_lm_end(call_id, outputs={"ok": True})
+
+    with track_stage(STAGE_TRAINING, cb):
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            list(ex.map(worker, [f"call-{i}" for i in range(8)]))
+
+    summary = cb.stage_summary()
+    assert STAGE_TRAINING in summary
+    assert summary[STAGE_TRAINING][0] == 8
