@@ -9,7 +9,6 @@ import { UserPrefsProvider, SettingsModalProvider, SettingsModal } from "@/featu
 import { msg } from "@/shared/lib/messages";
 import { getServerRuntimeEnv, serializeRuntimeEnv } from "@/shared/lib/runtime-env";
 import { getSiteUrl } from "@/shared/lib/site-config";
-import { SentryInit } from "@/shared/observability/sentry-init";
 import "@fontsource-variable/heebo/index.css";
 import "@fontsource-variable/inter/index.css";
 import "@fontsource-variable/jetbrains-mono/index.css";
@@ -107,7 +106,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe }} />
       </head>
       <body suppressHydrationWarning>
-        <SentryInit />
         <SessionProvider>
           <UserPrefsProvider>
             <ThemeProvider>

@@ -31,7 +31,7 @@ import httpx
 import pytest
 import requests  # type: ignore[import-untyped]
 
-from .conftest import requires_server, wait_for_terminal
+from .conftest import backend_auth_headers, requires_server, wait_for_terminal
 
 BASE_URL = "http://localhost:8000"
 LOAD_TEST_MODEL = os.getenv("LOAD_TEST_MODEL", "openai/gpt-5.4-nano")
@@ -43,6 +43,7 @@ async def _hammer(
     n: int,
     concurrency: int,
     json_body: dict | None = None,
+    username: str = "load-test",
 ) -> dict:
     """Fire ``n`` concurrent requests at ``url`` and return latency/error stats.
 
@@ -52,6 +53,7 @@ async def _hammer(
         n: Total number of requests to issue.
         concurrency: Maximum in-flight requests at any time.
         json_body: JSON body for POST requests.
+        username: Authenticated test user for protected endpoints.
 
     Returns:
         Mapping with ``total``, ``errors``, ``status_codes``, ``latencies``,
@@ -59,6 +61,7 @@ async def _hammer(
     """
     sem = asyncio.Semaphore(concurrency)
     results: list[tuple[int, float]] = []
+    headers = backend_auth_headers(username)
 
     async def req(client: httpx.AsyncClient) -> None:
         """Issue a single request honouring the concurrency semaphore."""
@@ -66,11 +69,11 @@ async def _hammer(
             t0 = time.monotonic()
             try:
                 if method == "POST":
-                    r = await client.post(url, json=json_body, timeout=30)
+                    r = await client.post(url, headers=headers, json=json_body, timeout=30)
                 elif method == "DELETE":
-                    r = await client.delete(url, timeout=30)
+                    r = await client.delete(url, headers=headers, timeout=30)
                 else:
-                    r = await client.get(url, timeout=30)
+                    r = await client.get(url, headers=headers, timeout=30)
                 results.append((r.status_code, time.monotonic() - t0))
             except (httpx.HTTPError, OSError):
                 results.append((0, time.monotonic() - t0))
@@ -179,20 +182,42 @@ class TestWriteEndpointLoad:
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
             "model_config": {"name": LOAD_TEST_MODEL},
         }
-        r = asyncio.run(_hammer("POST", f"{BASE_URL}/run", n=10, concurrency=5, json_body=payload))
+        r = asyncio.run(
+            _hammer(
+                "POST",
+                f"{BASE_URL}/run",
+                n=10,
+                concurrency=5,
+                json_body=payload,
+                username="load-test-submit",
+            ),
+        )
         _print_results("POST /run (10 rapid submissions)", r)
         assert r["status_codes"].get(201, 0) == 10, f"Expected all 10 accepted (201), got: {r['status_codes']}"
 
-        jobs = requests.get(f"{BASE_URL}/optimizations?username=load-test-submit&limit=50", timeout=10).json()
+        headers = backend_auth_headers("load-test-submit")
+        jobs = requests.get(
+            f"{BASE_URL}/optimizations?username=load-test-submit&limit=50",
+            headers=headers,
+            timeout=10,
+        ).json()
         for job in jobs.get("items", []):
             with contextlib.suppress(Exception):
-                requests.post(f"{BASE_URL}/optimizations/{job['optimization_id']}/cancel", timeout=5)
-                wait_for_terminal(job["optimization_id"], timeout=30)
-                requests.delete(f"{BASE_URL}/optimizations/{job['optimization_id']}", timeout=5)
+                requests.post(
+                    f"{BASE_URL}/optimizations/{job['optimization_id']}/cancel",
+                    headers=headers,
+                    timeout=5,
+                )
+                wait_for_terminal(job["optimization_id"], timeout=30, username="load-test-submit")
+                requests.delete(
+                    f"{BASE_URL}/optimizations/{job['optimization_id']}",
+                    headers=headers,
+                    timeout=5,
+                )
 
     def test_50_invalid_submissions_all_rejected_as_422(self):
         """Verify 50 malformed submissions are uniformly rejected with 422."""
-        bad_payload = {"username": "load-test-bad"}  # missing required fields
+        bad_payload = {"username": "load-test-bad"}
         r = asyncio.run(_hammer("POST", f"{BASE_URL}/run", n=50, concurrency=20, json_body=bad_payload))
         _print_results("POST /run invalid (50 reqs, 20 concurrent)", r)
         assert r["status_codes"].get(422, 0) == 50, f"Expected all 50 to be 422, got: {r['status_codes']}"
@@ -219,7 +244,8 @@ class TestMixedWorkload:
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
             "model_config": {"name": LOAD_TEST_MODEL},
         }
-        r = requests.post(f"{BASE_URL}/run", json=payload, timeout=10)
+        headers = backend_auth_headers("load-test-mixed")
+        r = requests.post(f"{BASE_URL}/run", headers=headers, json=payload, timeout=10)
         assert r.status_code == 201, f"Background job submit failed: {r.status_code}"
         job_id = r.json()["optimization_id"]
 
@@ -228,11 +254,41 @@ class TestMixedWorkload:
             async def mixed_load() -> dict:
                 """Hammer the read endpoints in parallel and return the per-route stats."""
                 return {
-                    "health": await _hammer("GET", f"{BASE_URL}/health", n=50, concurrency=20),
-                    "queue": await _hammer("GET", f"{BASE_URL}/queue", n=50, concurrency=20),
-                    "jobs": await _hammer("GET", f"{BASE_URL}/optimizations?limit=5", n=50, concurrency=20),
-                    "detail": await _hammer("GET", f"{BASE_URL}/optimizations/{job_id}", n=30, concurrency=10),
-                    "summary": await _hammer("GET", f"{BASE_URL}/optimizations/{job_id}/summary", n=30, concurrency=10),
+                    "health": await _hammer(
+                        "GET",
+                        f"{BASE_URL}/health",
+                        n=50,
+                        concurrency=20,
+                        username="load-test-mixed",
+                    ),
+                    "queue": await _hammer(
+                        "GET",
+                        f"{BASE_URL}/queue",
+                        n=50,
+                        concurrency=20,
+                        username="load-test-mixed",
+                    ),
+                    "jobs": await _hammer(
+                        "GET",
+                        f"{BASE_URL}/optimizations?limit=5",
+                        n=50,
+                        concurrency=20,
+                        username="load-test-mixed",
+                    ),
+                    "detail": await _hammer(
+                        "GET",
+                        f"{BASE_URL}/optimizations/{job_id}",
+                        n=30,
+                        concurrency=10,
+                        username="load-test-mixed",
+                    ),
+                    "summary": await _hammer(
+                        "GET",
+                        f"{BASE_URL}/optimizations/{job_id}/summary",
+                        n=30,
+                        concurrency=10,
+                        username="load-test-mixed",
+                    ),
                 }
 
             results = asyncio.run(mixed_load())
@@ -241,9 +297,13 @@ class TestMixedWorkload:
                 assert result["errors"] == 0, f"{name} had {result['errors']} errors — codes: {result['status_codes']}"
         finally:
             with contextlib.suppress(Exception):
-                requests.post(f"{BASE_URL}/optimizations/{job_id}/cancel", timeout=5)
-                wait_for_terminal(job_id, timeout=30)
-                requests.delete(f"{BASE_URL}/optimizations/{job_id}", timeout=5)
+                requests.post(
+                    f"{BASE_URL}/optimizations/{job_id}/cancel",
+                    headers=headers,
+                    timeout=5,
+                )
+                wait_for_terminal(job_id, timeout=30, username="load-test-mixed")
+                requests.delete(f"{BASE_URL}/optimizations/{job_id}", headers=headers, timeout=5)
 
 
 @pytest.mark.load

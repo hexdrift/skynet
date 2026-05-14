@@ -202,7 +202,6 @@ export const sharedMessages = {
   "auto.features.optimizations.components.overviewtab.2": "זמן תגובה ממוצע לקריאה",
   "auto.features.optimizations.components.overviewtab.3": "שיפור",
   "auto.features.optimizations.components.overviewtab.4": "מהלך הציונים",
-  "auto.features.optimizations.components.overviewtab.lm_activity_link": "פירוט פעילות מודל לפי שלב ←",
   "auto.features.optimizations.components.lmactivitytab.title": "פעילות מודל לפי שלב",
   "auto.features.optimizations.components.lmactivitytab.col_stage": "שלב",
   "auto.features.optimizations.components.lmactivitytab.col_generation": "מודל מג׳נרט",
@@ -305,7 +304,6 @@ export const sharedMessages = {
   "auto.app.compare.page.literal.26": "הריצות לא הסכימו בדוגמה זו",
   "auto.features.optimizations.components.datatab.literal.1": "שגיאה בטעינת הנתונים",
   "auto.features.optimizations.components.datatab.literal.2": "אין נתונים",
-  "auto.features.optimizations.components.datatab.literal.3": "טוען תוצאות…",
   "auto.features.optimizations.components.datatab.literal.4": "הכל",
   "auto.features.optimizations.components.datatab.literal.5": "אימון",
   "auto.features.optimizations.components.datatab.literal.6": "אימות",
@@ -420,8 +418,6 @@ export const sharedMessages = {
   "auto.features.optimizations.components.configtab.template.3": 
     "כמה דוגמאות ה{p1} מנתח בכל סבב רפלקציה",
   "auto.features.optimizations.components.configtab.template.4": "רפלקציה {p1}",
-  "auto.features.optimizations.components.datatab.template.1": 
-    "{p1}/{p2} דוגמאות · ממוצע {p3} · טווח {p4}–{p5}",
   "auto.features.optimizations.components.gridlivechart.template.1": "{p1} לפני {p2}",
   "auto.features.optimizations.components.gridlivechart.template.2": "{p1} אחרי {p2}",
   "auto.features.optimizations.components.gridoverview.template.1": "{p1} לפני {p2}",

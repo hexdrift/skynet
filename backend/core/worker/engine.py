@@ -35,7 +35,7 @@ from ..models import GridSearchRequest, RunRequest
 from ..notifications import notify_job_completed
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
-from ..service_gateway.recommendations import embed_finished_job
+from ..service_gateway.embedding_pipeline import embed_finished_job
 from ..storage import JobStore
 from .constants import EVENT_ERROR, EVENT_LOG, EVENT_PROGRESS, EVENT_RESULT
 from .subprocess_runner import run_service_in_subprocess, set_fork_service
@@ -491,7 +491,7 @@ class BackgroundWorker:
                         optimized_score=_optimized,
                     )
                     if final_status == "success":
-                        self._schedule_recommendation_indexing(optimization_id)
+                        self._schedule_embedding_indexing(optimization_id)
                 except KeyError:
                     logger.info(
                         "Optimization %s was deleted during execution (likely cancelled), skipping result",
@@ -646,13 +646,13 @@ class BackgroundWorker:
                 if event is not None:
                     event.set()
 
-    def _schedule_recommendation_indexing(self, optimization_id: str) -> None:
-        """Fire-and-forget embed the finished job for the recommendation service.
+    def _schedule_embedding_indexing(self, optimization_id: str) -> None:
+        """Fire-and-forget embed the finished job for the explore-map index.
 
         Runs on a daemon thread so a slow LLM call or a missing pgvector
         extension can never block the worker's hot path. Failures are
         swallowed — the job itself is already marked success; the index
-        is best-effort.
+        is best-effort and the startup backfill heals any gaps.
 
         Args:
             optimization_id: ID of the just-finished job to index.
@@ -660,12 +660,12 @@ class BackgroundWorker:
         threading.Thread(
             target=self._embed_finished_job_best_effort,
             args=(optimization_id,),
-            name=f"recs-{optimization_id[:8]}",
+            name=f"embed-{optimization_id[:8]}",
             daemon=True,
         ).start()
 
     def _embed_finished_job_best_effort(self, optimization_id: str) -> None:
-        """Embed a finished job into the recommendations index, swallowing failures.
+        """Embed a finished job, swallowing failures so they never reach the worker.
 
         A missing pgvector extension or LLM credentials issue only surfaces
         on the indexing thread, never on the worker hot path.
@@ -676,7 +676,7 @@ class BackgroundWorker:
         try:
             embed_finished_job(optimization_id, job_store=self._job_store)
         except Exception as exc:  # isolation boundary: best-effort indexing must never impact job status
-            logger.debug("Recommendation indexing for %s failed: %s", optimization_id, exc)
+            logger.debug("Embedding indexing for %s failed: %s", optimization_id, exc)
 
     def _terminate_run_process(self, run_process: mp.process.BaseProcess, optimization_id: str) -> None:
         """Terminate a still-running job subprocess, escalating to SIGKILL after a 3-second grace period.

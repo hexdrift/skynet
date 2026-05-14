@@ -38,6 +38,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_REFLECTION_MODELS,
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
+    PAYLOAD_OVERVIEW_SIGNATURE_CODE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
     PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
     PAYLOAD_OVERVIEW_TASK_MODEL,
@@ -213,11 +214,12 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         enforce_user_quota(job_store, payload.username)
 
         optimization_id = str(uuid4())
-        # Ensure a deterministic seed so dataset splits are reproducible
-        if payload.seed is None:
-            payload.seed = stable_seed(optimization_id)
-
         task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
+        # Derive the default seed from the task fingerprint (not the optimization id)
+        # so submissions of the same task share train/val/test splits — a prerequisite
+        # for the compare flow to line up per-row test results across deduplicated runs.
+        if payload.seed is None:
+            payload.seed = stable_seed(task_fingerprint)
 
         job_store.create_job(optimization_id)
         job_store.set_payload_overview(
@@ -229,6 +231,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_USERNAME: payload.username,
                 PAYLOAD_OVERVIEW_MODULE_NAME: payload.module_name,
                 PAYLOAD_OVERVIEW_MODULE_KWARGS: dict(payload.module_kwargs),
+                PAYLOAD_OVERVIEW_SIGNATURE_CODE: payload.signature_code,
                 PAYLOAD_OVERVIEW_OPTIMIZER_NAME: payload.optimizer_name,
                 PAYLOAD_OVERVIEW_MODEL_NAME: payload.model_settings.normalized_identifier(),
                 PAYLOAD_OVERVIEW_MODEL_SETTINGS: strip_api_key(payload.model_settings.model_dump()),
@@ -350,6 +353,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_USERNAME: payload.username,
                 PAYLOAD_OVERVIEW_MODULE_NAME: payload.module_name,
                 PAYLOAD_OVERVIEW_MODULE_KWARGS: dict(payload.module_kwargs),
+                PAYLOAD_OVERVIEW_SIGNATURE_CODE: payload.signature_code,
                 PAYLOAD_OVERVIEW_OPTIMIZER_NAME: payload.optimizer_name,
                 PAYLOAD_OVERVIEW_COLUMN_MAPPING: payload.column_mapping.model_dump(),
                 PAYLOAD_OVERVIEW_DATASET_ROWS: len(payload.dataset),

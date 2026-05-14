@@ -609,7 +609,11 @@ class GeneralistStatusProvider(StatusMessageProvider):
 
 
 @asynccontextmanager
-async def _mcp_session(mcp_url: str) -> AsyncGenerator[ClientSession, None]:
+async def _mcp_session(
+    mcp_url: str,
+    *,
+    auth_header: str | None = None,
+) -> AsyncGenerator[ClientSession, None]:
     """Open a Streamable-HTTP MCP client session bound to ``mcp_url``.
 
     The generalist agent typically hits its own sibling-mounted MCP
@@ -619,11 +623,19 @@ async def _mcp_session(mcp_url: str) -> AsyncGenerator[ClientSession, None]:
 
     Args:
         mcp_url: The HTTP endpoint of the target MCP server.
+        auth_header: Verbatim ``Authorization`` header value (e.g.
+            ``"Bearer <jwt>"``) to forward to the MCP server. Required when
+            the target MCP mount sits behind ``get_authenticated_user``;
+            ``mcp_mount.py`` forwards it through to the inner ASGI route.
 
     Yields:
         An initialized :class:`ClientSession` ready for ``list_tools``.
     """
-    async with streamablehttp_client(mcp_url) as (read, write, _), ClientSession(read, write) as session:
+    headers = {"Authorization": auth_header} if auth_header else None
+    async with (
+        streamablehttp_client(mcp_url, headers=headers) as (read, write, _),
+        ClientSession(read, write) as session,
+    ):
         await session.initialize()
         yield session
 
@@ -655,6 +667,7 @@ async def _drive_generalist_agent(
     registry: ApprovalRegistry,
     emit: Callable[[dict], None],
     lm: Any,
+    auth_header: str | None = None,
 ) -> str:
     """Open the MCP session, run the ReAct loop, and return the final assistant message.
 
@@ -671,11 +684,14 @@ async def _drive_generalist_agent(
         registry: Approval registry used for tool gating.
         emit: Thread-safe SSE event emitter.
         lm: Language model bound to the ReAct program.
+        auth_header: Verbatim ``Authorization`` header forwarded to the MCP
+            session so tool calls hit the agent-tagged routes as the same
+            user that opened the SSE stream.
 
     Returns:
         The full assistant reply text after the loop completes.
     """
-    async with _mcp_session(mcp_url) as session:
+    async with _mcp_session(mcp_url, auth_header=auth_header) as session:
         listing = await session.list_tools()
         allowed_names = tools_for(wizard_state)
         dspy_tools = [
@@ -738,6 +754,7 @@ async def run_generalist_agent(
     mcp_url: str | None = None,
     model_config: ModelConfig | None = None,
     approval_registry: ApprovalRegistry | None = None,
+    auth_header: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream generalist-agent events for one user turn.
 
@@ -763,6 +780,10 @@ async def run_generalist_agent(
         mcp_url: Optional override for the MCP server URL.
         model_config: Optional override for the language model configuration.
         approval_registry: Optional registry used for tool approval coordination.
+        auth_header: Verbatim ``Authorization`` header from the SSE caller.
+            Forwarded to the MCP session so the agent's tool calls
+            authenticate against ``get_authenticated_user`` on the same
+            FastAPI app — without it every agent-tagged route returns 401.
 
     Yields:
         SSE event dicts of shape ``{"event": str, "data": dict}``.
@@ -796,6 +817,7 @@ async def run_generalist_agent(
             registry=registry,
             emit=emit,
             lm=lm,
+            auth_header=auth_header,
         )
     )
     try:

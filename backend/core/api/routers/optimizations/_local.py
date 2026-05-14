@@ -35,7 +35,7 @@ from ....worker.engine import get_worker
 from ...auth import AuthenticatedUser, is_admin
 from ...converters import parse_overview
 from ...errors import DomainError
-from .._helpers import compute_task_fingerprint, job_owner, strip_api_key
+from .._helpers import compute_task_fingerprint, job_owner, stable_seed, strip_api_key
 from .schemas import BulkMetadataRequest, BulkMetadataResponse, BulkMetadataSkipped
 
 logger = logging.getLogger(__name__)
@@ -198,7 +198,12 @@ def clone_payload(
             error=exc.errors()[0]["msg"],
         ) from exc
     new_id = str(uuid4())
-    payload.seed = hash(new_id) % (2**31)
+    # Derive the seed from the task fingerprint so clones/resubmits of the same task share
+    # splits with the original — keeps the compare flow apples-to-apples across deduplicated
+    # runs. hash() is also per-process salted (PYTHONHASHSEED), which silently desyncs
+    # workers; stable_seed(...) is byte-stable.
+    fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
+    payload.seed = stable_seed(fingerprint)
     return new_id, payload
 
 

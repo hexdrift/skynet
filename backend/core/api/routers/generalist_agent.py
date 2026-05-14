@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
@@ -79,7 +79,10 @@ def create_generalist_agent_router() -> APIRouter:
         "/optimizations/generalist-agent",
         summary="Stream generalist-agent events for one user turn",
     )
-    async def generalist_agent(req: GeneralistAgentRequest) -> StreamingResponse:
+    async def generalist_agent(
+        req: GeneralistAgentRequest,
+        authorization: str | None = Header(default=None),
+    ) -> StreamingResponse:
         """Stream the generalist agent's reasoning, tool calls, and reply as SSE.
 
         Event types: ``reasoning_patch``, ``tool_start``, ``tool_end``,
@@ -89,6 +92,9 @@ def create_generalist_agent_router() -> APIRouter:
         Args:
             req: Request body with user message, chat history, wizard
                 snapshot, and trust mode.
+            authorization: Caller's bearer token, forwarded into the agent's
+                MCP session so its tool calls authenticate against
+                ``get_authenticated_user`` on the same FastAPI app.
 
         Returns:
             A :class:`StreamingResponse` of Server-Sent Events.
@@ -100,6 +106,7 @@ def create_generalist_agent_router() -> APIRouter:
             chat_history=[t.model_dump() for t in req.chat_history],
             user_message=req.user_message,
             trust_mode=req.trust_mode,
+            auth_header=authorization,
         )
         return StreamingResponse(
             sse_from_events(source),

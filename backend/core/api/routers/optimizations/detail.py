@@ -15,10 +15,8 @@ Internal (frontend-only, hidden from public docs):
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import logging
-import pickle
 import random
 from datetime import UTC, datetime
 from typing import Annotated
@@ -33,7 +31,10 @@ from ....constants import (
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
+    PAYLOAD_OVERVIEW_MODULE_KWARGS,
+    PAYLOAD_OVERVIEW_MODULE_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
+    PAYLOAD_OVERVIEW_SIGNATURE_CODE,
 )
 from ....models import (
     ColumnMapping,
@@ -60,13 +61,27 @@ from ...converters import (
     status_to_job_status,
 )
 from ...errors import DomainError
-from .._helpers import _program_cache, build_summary, load_job_for_user, stable_seed
+from .._helpers import (
+    _artifact_has_payload,
+    _materialize_program,
+    _program_cache,
+    build_summary,
+    compute_compare_fingerprint,
+    load_job_for_user,
+    stable_seed,
+)
 from ..constants import TERMINAL_STATUSES
 from ._local import remap_test_indices
 
 logger = logging.getLogger(__name__)
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
+
+# Bumped whenever the GET /optimizations/{id} response shape changes in a way
+# that adds, removes, or renames fields. Mixed into the ETag so cached 304s
+# can't serve a pre-change body that's missing the new fields. Last bump:
+# task_fingerprint moved onto _JobResponseBase (compare-gate fix).
+_RESPONSE_SCHEMA_VERSION = "v3"
 
 
 def register_detail_routes(router: APIRouter, *, job_store) -> None:
@@ -168,6 +183,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             elapsed_seconds=elapsed_secs,
             estimated_remaining=est_remaining,
             **overview_to_base_fields(overview),
+            compare_fingerprint=compute_compare_fingerprint(optimization_id, overview),
             message=job_data.get("message"),
             latest_metrics=latest_metrics,
             completed_pairs=completed_pairs,
@@ -178,15 +194,19 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             grid_result=grid_result,
         )
 
-        etag_src = f"{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}"
+        etag_src = f"{_RESPONSE_SCHEMA_VERSION}:{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}"
         etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
         if_none_match = request.headers.get("if-none-match")
         if if_none_match == etag:
             return JSONResponse(status_code=304, content=None, headers={"ETag": etag})
 
         headers = {"ETag": etag}
+        # ``no-cache`` (not ``no-store``) tells the browser to revalidate via
+        # If-None-Match every time, so a schema bump in ``_RESPONSE_SCHEMA_VERSION``
+        # invalidates terminal-job bodies immediately instead of being shadowed
+        # by ``max-age`` until the next deploy + N seconds pass.
         if status in TERMINAL_STATUSES:
-            headers["Cache-Control"] = "private, max-age=60"
+            headers["Cache-Control"] = "private, no-cache"
         else:
             headers["Cache-Control"] = "private, max-age=1"
 
@@ -382,14 +402,29 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
                 raise DomainError("optimization.no_result_for_artifact", status=409)
             result = RunResponse.model_validate(result_data)
             artifact = result.program_artifact
-            if not artifact or not artifact.program_pickle_base64:
+            if not _artifact_has_payload(artifact):
                 raise DomainError("optimization.no_program_artifact", status=409)
             if optimization_id not in _program_cache:
-                program_bytes = base64.b64decode(artifact.program_pickle_base64)
-                # pickle.loads safety: artifact bytes are written by our own
-                # worker; see _helpers.load_program for the signed-payload
-                # follow-up note.
-                _program_cache[optimization_id] = pickle.loads(program_bytes)
+                # Pre-migration jobs may not have signature_code in their
+                # ``payload_overview``, but the original ``payload`` row
+                # always carries it — fall back to that so legacy runs can
+                # still be reconstructed.
+                effective_overview = {
+                    **overview,
+                    PAYLOAD_OVERVIEW_SIGNATURE_CODE: (
+                        overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE)
+                        or payload.get("signature_code")
+                    ),
+                    PAYLOAD_OVERVIEW_MODULE_NAME: (
+                        overview.get(PAYLOAD_OVERVIEW_MODULE_NAME)
+                        or payload.get("module_name")
+                    ),
+                    PAYLOAD_OVERVIEW_MODULE_KWARGS: (
+                        overview.get(PAYLOAD_OVERVIEW_MODULE_KWARGS)
+                        or payload.get("module_kwargs", {})
+                    ),
+                }
+                _program_cache[optimization_id] = _materialize_program(artifact, effective_overview)
             program = _program_cache[optimization_id]
 
         results = []

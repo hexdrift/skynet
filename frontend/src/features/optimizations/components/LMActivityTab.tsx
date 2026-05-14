@@ -1,7 +1,6 @@
 "use client";
 
 import { Activity } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { msg } from "@/shared/lib/messages";
@@ -13,7 +12,7 @@ type StageKey = (typeof STAGE_KEYS)[number];
 
 const STAGE_MESSAGE_KEYS: Record<
   StageKey,
-  "auto.features.optimizations.components.lmactivitytab.stage_baseline"
+  | "auto.features.optimizations.components.lmactivitytab.stage_baseline"
   | "auto.features.optimizations.components.lmactivitytab.stage_training"
   | "auto.features.optimizations.components.lmactivitytab.stage_evaluation"
 > = {
@@ -57,26 +56,46 @@ function formatCalls(n: number): string {
   return n.toLocaleString("he-IL");
 }
 
-function formatAvgMs(ms: number | null | undefined): string {
+// Unified to seconds so the eye doesn't re-parse units row to row. Sub-100ms
+// shows ``<0.1s`` rather than ``42ms`` to keep the column dimension uniform —
+// the diagnostic question is "where did time go", so consistent scale wins
+// over per-cell precision at the millisecond floor.
+function formatSeconds(ms: number | null | undefined): string {
   if (ms == null) return "—";
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 0.1) return "<0.1s";
+  return `${seconds.toFixed(1)}s`;
 }
 
-function Cell({
-  value,
-  ariaLabel,
+function NumericCell({
+  calls,
+  ms,
+  emphasized = false,
 }: {
-  value: string;
-  ariaLabel?: string;
+  calls: number;
+  ms: number | null;
+  emphasized?: boolean;
 }) {
+  if (calls === 0) {
+    return <span className="text-[var(--text-3)]">—</span>;
+  }
   return (
-    <span
-      aria-label={ariaLabel}
-      className="inline-block font-mono tabular-nums text-sm text-[#1C1612]"
-    >
-      {value}
-    </span>
+    <div className="flex flex-col items-start gap-0.5">
+      <span
+        className={`font-mono tabular-nums text-sm text-foreground ${
+          emphasized ? "font-semibold" : "font-normal"
+        }`}
+      >
+        {formatCalls(calls)}
+      </span>
+      <span
+        className={`font-mono tabular-nums text-xs ${
+          emphasized ? "text-foreground" : "text-muted-foreground"
+        }`}
+      >
+        {formatSeconds(ms)}
+      </span>
+    </div>
   );
 }
 
@@ -91,40 +110,26 @@ function StageRow({
   reflection: LMStageStats | undefined;
   hasReflection: boolean;
 }) {
-  const genCalls = generation?.calls ?? 0;
-  const reflCalls = reflection?.calls ?? 0;
   return (
-    <tr className="border-t border-[#E3DCD0]/70">
+    <tr className="border-t border-border/60">
       <th
         scope="row"
-        className="px-3 py-2.5 text-start text-xs font-semibold text-[#7C6350] whitespace-nowrap"
+        className="px-3 py-2.5 text-start text-sm font-medium text-foreground whitespace-nowrap"
       >
         <HelpTip text={tip(STAGE_TIP_KEYS[stage])}>{msg(STAGE_MESSAGE_KEYS[stage])}</HelpTip>
       </th>
       <td className="px-3 py-2.5 text-start">
-        {genCalls > 0 ? (
-          <div className="flex flex-col gap-0.5">
-            <Cell value={formatCalls(genCalls)} />
-            <span className="text-[10px] text-[#A89680] font-mono tabular-nums">
-              {formatAvgMs(generation?.avg_response_time_ms)}
-            </span>
-          </div>
-        ) : (
-          <span className="text-[#BFB3A3] font-mono">—</span>
-        )}
+        <NumericCell
+          calls={generation?.calls ?? 0}
+          ms={generation?.avg_response_time_ms ?? null}
+        />
       </td>
       {hasReflection && (
         <td className="px-3 py-2.5 text-start">
-          {reflCalls > 0 ? (
-            <div className="flex flex-col gap-0.5">
-              <Cell value={formatCalls(reflCalls)} />
-              <span className="text-[10px] text-[#A89680] font-mono tabular-nums">
-                {formatAvgMs(reflection?.avg_response_time_ms)}
-              </span>
-            </div>
-          ) : (
-            <span className="text-[#BFB3A3] font-mono">—</span>
-          )}
+          <NumericCell
+            calls={reflection?.calls ?? 0}
+            ms={reflection?.avg_response_time_ms ?? null}
+          />
         </td>
       )}
     </tr>
@@ -141,39 +146,21 @@ function TotalRow({
   hasReflection: boolean;
 }) {
   return (
-    <tr className="border-t-2 border-[#C8A882]/40 bg-[#FAF6F0]/70">
+    <tr className="border-t border-border">
       <th
         scope="row"
-        className="px-3 py-2.5 text-start text-xs font-bold text-[#1C1612] whitespace-nowrap"
+        className="px-3 py-2.5 text-start text-sm font-bold text-foreground whitespace-nowrap"
       >
         <HelpTip text={tip("lm_activity.total_row")}>
           {msg("auto.features.optimizations.components.lmactivitytab.row_total")}
         </HelpTip>
       </th>
       <td className="px-3 py-2.5 text-start">
-        {generation.calls > 0 ? (
-          <div className="flex flex-col gap-0.5">
-            <Cell value={formatCalls(generation.calls)} />
-            <span className="text-[10px] text-[#7C6350] font-mono tabular-nums font-semibold">
-              {formatAvgMs(generation.avg_response_time_ms)}
-            </span>
-          </div>
-        ) : (
-          <span className="text-[#BFB3A3] font-mono">—</span>
-        )}
+        <NumericCell calls={generation.calls} ms={generation.avg_response_time_ms} emphasized />
       </td>
       {hasReflection && (
         <td className="px-3 py-2.5 text-start">
-          {reflection.calls > 0 ? (
-            <div className="flex flex-col gap-0.5">
-              <Cell value={formatCalls(reflection.calls)} />
-              <span className="text-[10px] text-[#7C6350] font-mono tabular-nums font-semibold">
-                {formatAvgMs(reflection.avg_response_time_ms)}
-              </span>
-            </div>
-          ) : (
-            <span className="text-[#BFB3A3] font-mono">—</span>
-          )}
+          <NumericCell calls={reflection.calls} ms={reflection.avg_response_time_ms} emphasized />
         </td>
       )}
     </tr>
@@ -193,85 +180,87 @@ export function LMActivityTab({ lmActivity }: { lmActivity: LMActivity | null | 
   const genTotal = aggregateColumn(generation);
   const reflTotal = aggregateColumn(reflection);
 
+  // Plain ``<section>`` instead of ``<Card>`` to opt out of the global
+  // ``[data-slot="card"]`` chrome (gradient bg, backdrop-blur, mouse-spotlight,
+  // hover-lift, top hairline). This card is a quiet diagnostic surface; the
+  // ornamental defaults fight that intent.
   return (
     <FadeIn>
-      <Card className="relative overflow-hidden shadow-[0_1px_3px_rgba(28,22,18,0.04),inset_0_1px_0_rgba(255,255,255,0.5)]">
-        <div
-          className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#C8A882]/40 to-transparent"
-          aria-hidden="true"
-        />
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Activity className="size-4 text-[#7C6350]" aria-hidden="true" />
-            <HelpTip text={tip("lm_activity.section")}>
-              <span className="font-bold tracking-tight">
-                {msg("auto.features.optimizations.components.lmactivitytab.title")}
-              </span>
-            </HelpTip>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <section
+        aria-labelledby="lm-activity-title"
+        className="rounded-2xl border border-border bg-card text-card-foreground shadow-[var(--shadow-sm)]"
+      >
+        <header className="flex items-center gap-2 px-6 pt-5 pb-3">
+          <Activity
+            className="size-4 text-muted-foreground"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <HelpTip text={tip("lm_activity.section")}>
+            <h3
+              id="lm-activity-title"
+              className="m-0 text-lg font-bold text-foreground"
+            >
+              {msg("auto.features.optimizations.components.lmactivitytab.title")}
+            </h3>
+          </HelpTip>
+        </header>
+        <div className="px-6 pb-5">
           {!hasAnyCalls ? (
-            <p className="text-sm text-[#A89680] py-2">
+            <p className="text-sm text-muted-foreground">
               {msg("auto.features.optimizations.components.lmactivitytab.no_data")}
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table
-                className="w-full text-sm border-collapse"
-                dir="rtl"
-              >
-                <thead>
-                  <tr>
-                    <th
-                      scope="col"
-                      className="px-3 py-2 text-start text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680]"
-                    >
+            <table className="guide-table w-full text-sm" dir="rtl">
+              <thead>
+                <tr>
+                  <th scope="col" className="px-3 py-2 text-start">
+                    <span className="sr-only">
                       {msg("auto.features.optimizations.components.lmactivitytab.col_stage")}
-                    </th>
+                    </span>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-3 py-2 text-start text-xs font-medium text-muted-foreground"
+                  >
+                    <HelpTip text={tip("lm_activity.column.generation")}>
+                      {msg("auto.features.optimizations.components.lmactivitytab.col_generation")}
+                    </HelpTip>
+                  </th>
+                  {hasReflection && (
                     <th
                       scope="col"
-                      className="px-3 py-2 text-start text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680]"
+                      className="px-3 py-2 text-start text-xs font-medium text-muted-foreground"
                     >
-                      <HelpTip text={tip("lm_activity.column.generation")}>
-                        {msg("auto.features.optimizations.components.lmactivitytab.col_generation")}
+                      <HelpTip text={tip("lm_activity.column.reflection")}>
+                        {msg(
+                          "auto.features.optimizations.components.lmactivitytab.col_reflection",
+                        )}
                       </HelpTip>
                     </th>
-                    {hasReflection && (
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-start text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680]"
-                      >
-                        <HelpTip text={tip("lm_activity.column.reflection")}>
-                          {msg(
-                            "auto.features.optimizations.components.lmactivitytab.col_reflection",
-                          )}
-                        </HelpTip>
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {STAGE_KEYS.map((stage) => (
-                    <StageRow
-                      key={stage}
-                      stage={stage}
-                      generation={generation[stage]}
-                      reflection={reflection[stage]}
-                      hasReflection={hasReflection}
-                    />
-                  ))}
-                  <TotalRow
-                    generation={genTotal}
-                    reflection={reflTotal}
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {STAGE_KEYS.map((stage) => (
+                  <StageRow
+                    key={stage}
+                    stage={stage}
+                    generation={generation[stage]}
+                    reflection={reflection[stage]}
                     hasReflection={hasReflection}
                   />
-                </tbody>
-              </table>
-            </div>
+                ))}
+                <TotalRow
+                  generation={genTotal}
+                  reflection={reflTotal}
+                  hasReflection={hasReflection}
+                />
+              </tbody>
+            </table>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </FadeIn>
   );
 }

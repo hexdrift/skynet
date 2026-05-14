@@ -26,6 +26,8 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from fastmcp import FastMCP
+from fastmcp.server import dependencies as _fastmcp_deps
+from fastmcp.server.providers.openapi import components as _fastmcp_openapi_components
 from fastmcp.server.providers.openapi.components import (
     OpenAPIResource,
     OpenAPIResourceTemplate,
@@ -38,6 +40,17 @@ if TYPE_CHECKING:
     from fastmcp.utilities.openapi.models import HTTPRoute
 
 logger = logging.getLogger(__name__)
+
+# FastMCP's OpenAPITool/OpenAPIResource forward MCP request headers to the
+# inner ASGI call via ``get_http_headers()``, which strips ``authorization``
+# by default (see fastmcp/server/dependencies.py: it lives in the
+# ``exclude_headers`` set). Our downstream is the same FastAPI app and every
+# agent-tagged route depends on ``get_authenticated_user``, so without the
+# bearer token every tool call returns 401 ``auth.missing_token``. Override
+# the lookup in the components module so the header flows through.
+_fastmcp_openapi_components.get_http_headers = partial(
+    _fastmcp_deps.get_http_headers, include={"authorization"}
+)
 
 AGENT_TAG = "agent"
 

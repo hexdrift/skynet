@@ -1,5 +1,3 @@
-import { Activity, CheckCircle2, Layers, XCircle } from "lucide-react";
-import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { AnimatedNumber, FadeIn } from "@/shared/ui/motion";
 import { TERMS } from "@/shared/lib/terms";
 import type { DashboardStats } from "../lib/get-dashboard-stats";
@@ -9,28 +7,73 @@ type DashboardHeaderProps = {
   stats: DashboardStats;
 };
 
+type StatCardProps = {
+  label: string;
+  value: number;
+  accent?: "default" | "warning" | "success" | "danger";
+  pulse?: boolean;
+};
+
+const ACCENT_TEXT: Record<NonNullable<StatCardProps["accent"]>, string> = {
+  default: "text-foreground",
+  warning: "text-[var(--warning)]",
+  success: "text-emerald-600",
+  danger: "text-red-600",
+};
+
+const ACCENT_DOT: Record<NonNullable<StatCardProps["accent"]>, string> = {
+  default: "bg-foreground/25",
+  warning: "bg-[var(--warning)]",
+  success: "bg-emerald-500",
+  danger: "bg-red-500",
+};
+
+function StatCard({ label, value, accent = "default", pulse = false }: StatCardProps) {
+  return (
+    <div className="group/stat relative flex flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7">
+      <div className="flex items-center gap-2">
+        <span
+          className={`size-1.5 rounded-full ${ACCENT_DOT[accent]} ${pulse ? "animate-pulse" : ""}`}
+          aria-hidden
+        />
+        <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+          {label}
+        </p>
+      </div>
+      <p
+        className={`text-[2.75rem] sm:text-[3.25rem] font-bold leading-[0.9] tracking-tight tabular-nums ${ACCENT_TEXT[accent]}`}
+      >
+        <AnimatedNumber value={value} />
+      </p>
+    </div>
+  );
+}
+
 export function DashboardHeader({ stats }: DashboardHeaderProps) {
   return (
     <>
       <FadeIn>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              {msg("auto.features.dashboard.components.dashboardheader.1")}
-            </h1>
-            {stats && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {stats.total} {TERMS.optimizationPlural}
-                {stats.running > 0 && (
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+            {msg("auto.features.dashboard.components.dashboardheader.1")}
+          </h1>
+          {stats && (
+            <p className="text-sm text-muted-foreground/80">
+              <span className="tabular-nums">{stats.total}</span>{" "}
+              {TERMS.optimizationPlural}
+              {stats.running > 0 && (
+                <>
+                  {" · "}
+                  <span className="tabular-nums text-[var(--warning)] font-medium">
+                    {stats.running}
+                  </span>
                   <span className="text-[var(--warning)] font-medium">
-                    {" "}
-                    &middot; {stats.running}
                     {msg("auto.features.dashboard.components.dashboardheader.2")}
                   </span>
-                )}
-              </p>
-            )}
-          </div>
+                </>
+              )}
+            </p>
+          )}
         </div>
       </FadeIn>
 
@@ -38,134 +81,30 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
         <div
           className="grid gap-3 sm:gap-4"
           style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))",
           }}
           data-tutorial="dashboard-kpis"
         >
-          <Card className="h-full border-border/40">
-            <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-3">
-                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                    {msg("auto.features.dashboard.components.dashboardheader.3")}
-                  </p>
-                  <p className="text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums">
-                    <AnimatedNumber value={stats.total} />
-                  </p>
-                </div>
-                <div className="size-9 rounded-lg bg-stone-500/[0.07] flex items-center justify-center">
-                  <Layers className="size-4 text-stone-500" />
-                </div>
-              </div>
-              <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
-                {TERMS.optimizationPlural}
-              </p>
-            </CardContent>
-          </Card>
-          <Card
-            className={`h-full border-border/40 ${stats.running > 0 ? "border-[var(--warning)]/20" : ""}`}
-          >
-            <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-3">
-                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                    {msg("auto.features.dashboard.components.dashboardheader.4")}
-                  </p>
-                  <p
-                    className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.running > 0 ? "text-[var(--warning)]" : "text-muted-foreground"}`}
-                  >
-                    <AnimatedNumber value={stats.running} />
-                  </p>
-                </div>
-                <div
-                  className={`size-9 rounded-lg flex items-center justify-center ${stats.running > 0 ? "bg-[var(--warning)]/[0.08]" : "bg-stone-500/[0.07]"}`}
-                >
-                  <Activity
-                    className={`size-4 ${stats.running > 0 ? "text-[var(--warning)] animate-pulse" : "text-stone-500"}`}
-                  />
-                </div>
-              </div>
-              <p className="mt-3 text-[0.625rem] text-muted-foreground/50">
-                {msg("auto.features.dashboard.components.dashboardheader.5")}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="h-full border-border/40">
-            <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-3">
-                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                    {msg("auto.features.dashboard.components.dashboardheader.6")}
-                  </p>
-                  <p
-                    className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.success > 0 ? "text-emerald-700" : "text-muted-foreground"}`}
-                  >
-                    <AnimatedNumber value={stats.success} />
-                  </p>
-                </div>
-                <div
-                  className={`size-9 rounded-lg flex items-center justify-center ${stats.success > 0 ? "bg-emerald-500/[0.07]" : "bg-stone-500/[0.07]"}`}
-                >
-                  <CheckCircle2
-                    className={`size-4 ${stats.success > 0 ? "text-emerald-600" : "text-stone-500"}`}
-                  />
-                </div>
-              </div>
-              {stats.total > 0 && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-emerald-500/40 transition-all duration-700"
-                      style={{
-                        width: `${(stats.success / stats.total) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="text-[0.625rem] tabular-nums text-muted-foreground/50">
-                    {Math.round((stats.success / stats.total) * 100)}%
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <Card className="h-full border-border/40">
-            <CardContent className="flex h-full flex-col justify-between p-5 sm:p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-3">
-                  <p className="text-[0.75rem] font-medium text-muted-foreground/80 tracking-wide">
-                    {msg("auto.features.dashboard.components.dashboardheader.7")}
-                  </p>
-                  <p
-                    className={`text-2xl sm:text-4xl font-bold tracking-tighter tabular-nums ${stats.failed > 0 ? "text-red-600" : "text-muted-foreground"}`}
-                  >
-                    <AnimatedNumber value={stats.failed} />
-                  </p>
-                </div>
-                <div
-                  className={`size-9 rounded-lg flex items-center justify-center ${stats.failed > 0 ? "bg-red-500/[0.07]" : "bg-stone-500/[0.07]"}`}
-                >
-                  <XCircle
-                    className={`size-4 ${stats.failed > 0 ? "text-red-500" : "text-stone-500"}`}
-                  />
-                </div>
-              </div>
-              {stats.total > 0 && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-red-500/40 transition-all duration-700"
-                      style={{
-                        width: `${(stats.failed / stats.total) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="text-[0.625rem] tabular-nums text-muted-foreground/50">
-                    {Math.round((stats.failed / stats.total) * 100)}%
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <StatCard
+            label={msg("auto.features.dashboard.components.dashboardheader.3")}
+            value={stats.total}
+          />
+          <StatCard
+            label={msg("auto.features.dashboard.components.dashboardheader.4")}
+            value={stats.running}
+            accent={stats.running > 0 ? "warning" : "default"}
+            pulse={stats.running > 0}
+          />
+          <StatCard
+            label={msg("auto.features.dashboard.components.dashboardheader.6")}
+            value={stats.success}
+            accent={stats.success > 0 ? "success" : "default"}
+          />
+          <StatCard
+            label={msg("auto.features.dashboard.components.dashboardheader.7")}
+            value={stats.failed}
+            accent={stats.failed > 0 ? "danger" : "default"}
+          />
         </div>
       )}
     </>

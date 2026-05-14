@@ -1,7 +1,8 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import i18next from "eslint-plugin-i18next";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
+import tseslint from "typescript-eslint";
 
 const canonicalTermLiteralSelectors = [
   "Literal[value=/אופטימיזציה|אופטימיזציות|דאטאסט|מודל רפלקציה|מודל מג׳נרט|מודל מג'נרט|אופטימייזר|אופטימייזרים|פונקציית מדידה/u]",
@@ -11,11 +12,13 @@ const canonicalTermLiteralSelectors = [
 const hebrewLiteralSelectors = ["Literal[value=/[א-ת]/u]", "TemplateElement[value.raw=/[א-ת]/u]"];
 
 export default defineConfig([
-  ...nextVitals,
-  ...nextTs,
   {
     files: ["src/**/*.{ts,tsx}"],
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
+    },
     languageOptions: {
+      parser: tseslint.parser,
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
@@ -56,6 +59,15 @@ export default defineConfig([
     },
   },
   {
+    plugins: {
+      react,
+      "react-hooks": reactHooks,
+    },
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
     rules: {
       "react-hooks/immutability": "error",
       "react-hooks/preserve-manual-memoization": "error",
@@ -66,7 +78,6 @@ export default defineConfig([
       // Tracked separately; enabling this today creates broad churn in
       // stateful client components without changing runtime behavior.
       "react-hooks/set-state-in-effect": "off",
-      "@next/next/no-html-link-for-pages": "error",
       "prefer-const": "error",
       "react/no-unescaped-entities": "error",
     },

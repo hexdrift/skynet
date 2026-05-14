@@ -14,8 +14,10 @@ export type RunInfo = {
   pairLabel: string | null;
   winnerPairIndex: number | null;
   moduleName: string | null;
-  optimizerName: string | null;
   modelName: string | null;
+  reasoningEffort: string | null;
+  reflectionModelName: string | null;
+  reflectionReasoningEffort: string | null;
   datasetRows: number | null;
 };
 
@@ -131,11 +133,15 @@ export function deriveRunInfo(job: OptimizationStatusResponse): RunInfo {
         : null,
       winnerPairIndex: winnerIdx ?? null,
       moduleName: job.module_name ?? null,
-      optimizerName: job.optimizer_name ?? null,
       modelName: winnerPair?.generation_model ?? null,
+      reasoningEffort: winnerPair?.generation_reasoning_effort ?? null,
+      reflectionModelName: winnerPair?.reflection_model ?? null,
+      reflectionReasoningEffort: winnerPair?.reflection_reasoning_effort ?? null,
       datasetRows: job.dataset_rows ?? null,
     };
   }
+  const modelExtra = (job.model_settings as { extra?: { reasoning_effort?: string } } | undefined)
+    ?.extra;
   return {
     job,
     label,
@@ -149,8 +155,10 @@ export function deriveRunInfo(job: OptimizationStatusResponse): RunInfo {
     pairLabel: null,
     winnerPairIndex: null,
     moduleName: job.module_name ?? null,
-    optimizerName: job.optimizer_name ?? null,
     modelName: job.model_name ?? null,
+    reasoningEffort: modelExtra?.reasoning_effort ?? null,
+    reflectionModelName: null,
+    reflectionReasoningEffort: null,
     datasetRows: job.dataset_rows ?? null,
   };
 }

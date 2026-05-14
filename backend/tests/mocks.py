@@ -38,7 +38,7 @@ def _patch_main_dependencies(registry: Any = None, app: Any = None):
     with (
         patch("dotenv.load_dotenv"),
         patch("core.registry.ServiceRegistry", return_value=registry),
-        patch("core.api.create_app", return_value=app),
+        patch("core.api.app.create_app", return_value=app),
         patch("uvicorn.run"),
     ):
         yield

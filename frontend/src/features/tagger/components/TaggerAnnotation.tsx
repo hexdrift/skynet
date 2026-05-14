@@ -178,7 +178,7 @@ export function TaggerAnnotation({
   if (!item) return null;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]">
       <div className="flex items-center gap-2 text-sm text-muted-foreground px-5 pt-3">
         <Link href="/" className="hover:text-foreground transition-colors">
           {msg("auto.features.tagger.components.taggerannotation.1")}
@@ -478,7 +478,7 @@ export function TaggerAnnotation({
           if (!open) setExportConfirm(null);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.15")}</DialogTitle>
             <DialogDescription>
@@ -489,7 +489,7 @@ export function TaggerAnnotation({
               {msg("auto.features.tagger.components.taggerannotation.17")}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setExportConfirm(null)}

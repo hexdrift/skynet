@@ -24,7 +24,7 @@ export const sidebarMessages = {
   "auto.features.sidebar.lib.group.jobs.literal.3": "היום",
   "auto.features.sidebar.lib.group.jobs.literal.4": "אתמול",
   "auto.features.sidebar.lib.group.jobs.literal.5": "השבוע",
-  "auto.features.sidebar.lib.group.jobs.literal.6": "ישנים",
+  "auto.features.sidebar.lib.group.jobs.literal.6": "ללא תאריך",
   "auto.features.sidebar.components.sidebar.literal.1": "לוח בקרה",
   "auto.features.sidebar.components.sidebar.literal.2": "תיוג טקסטים",
   "auto.features.sidebar.components.sidebar.literal.3": "פתח סרגל צד",

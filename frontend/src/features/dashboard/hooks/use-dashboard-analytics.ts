@@ -5,7 +5,6 @@ type UseDashboardAnalyticsArgs = {
   sessionUser: string;
   isAdmin: boolean;
   activeTab: string;
-  optimizer: string;
   model: string;
   status: string;
   jobId: string | null;
@@ -23,7 +22,6 @@ export function useDashboardAnalytics({
   sessionUser,
   isAdmin,
   activeTab,
-  optimizer,
   model,
   status,
   jobId,
@@ -38,7 +36,6 @@ export function useDashboardAnalytics({
     try {
       const result = await getDashboardAnalytics({
         username,
-        optimizer: optimizer !== "all" ? optimizer : undefined,
         model: model !== "all" ? model : undefined,
         status: status !== "all" ? status : undefined,
         optimization_id: jobId ?? undefined,
@@ -50,7 +47,7 @@ export function useDashboardAnalytics({
     } finally {
       setAnalyticsLoading(false);
     }
-  }, [isAdmin, sessionUser, optimizer, model, status, jobId, date]);
+  }, [isAdmin, sessionUser, model, status, jobId, date]);
 
   useEffect(() => {
     if (activeTab !== "analytics") return;

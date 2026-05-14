@@ -22,6 +22,7 @@ from ..constants import (
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
     PAYLOAD_OVERVIEW_REFLECTION_MODEL,
     PAYLOAD_OVERVIEW_REFLECTION_MODELS,
+    PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
     PAYLOAD_OVERVIEW_TASK_MODEL,
     PAYLOAD_OVERVIEW_TOTAL_PAIRS,
     PAYLOAD_OVERVIEW_USERNAME,
@@ -197,4 +198,5 @@ def overview_to_base_fields(overview: dict) -> dict:
         "total_pairs": overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
         "generation_models": overview.get(PAYLOAD_OVERVIEW_GENERATION_MODELS),
         "reflection_models": overview.get(PAYLOAD_OVERVIEW_REFLECTION_MODELS),
+        "task_fingerprint": overview.get(PAYLOAD_OVERVIEW_TASK_FINGERPRINT),
     }

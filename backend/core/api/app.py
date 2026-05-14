@@ -46,6 +46,7 @@ from ..exceptions import AppError
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
+from ..service_gateway.embedding_pipeline import backfill_missing_embeddings
 from ..storage import get_job_store
 from ..worker.engine import BackgroundWorker, get_worker
 from .directory_client import build_directory_client
@@ -62,7 +63,6 @@ from .routers.generalist_agent import create_generalist_agent_router
 from .routers.models import create_models_router
 from .routers.optimizations import create_optimizations_router
 from .routers.optimizations_meta import create_optimizations_meta_router
-from .routers.recommendations import create_recommendations_router
 from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
 from .routers.submissions import create_submissions_router
@@ -542,6 +542,17 @@ def create_app(
             logger.info("Re-queued %d pending jobs from previous run (local hint)", len(pending_ids))
         logger.info("Background worker started")
 
+        # Embedding the explore-map vector is on a daemon thread when a job
+        # succeeds; a crashed thread (LLM creds, API blip) leaves the row
+        # missing forever and the map silently drops the job. A startup
+        # backfill drains the gap so the index heals after a restart.
+        try:
+            queued = backfill_missing_embeddings(job_store)
+            if queued:
+                logger.info("Embedding backfill queued for %d job(s)", queued)
+        except Exception as exc:
+            logger.warning("Embedding backfill scan failed: %s", exc)
+
         # SIGTERM handler can only be registered on the main interpreter
         # thread. ``threading.current_thread()`` lets us detect when the
         # lifespan is running inside a worker thread (e.g. uvicorn reload).
@@ -938,10 +949,6 @@ def create_app(
     )
     app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
     app.include_router(create_templates_router(job_store=job_store), tags=["Templates"])
-    app.include_router(
-        create_recommendations_router(job_store=job_store),
-        tags=["Recommendations"],
-    )
     app.include_router(
         create_dashboard_router(job_store=job_store),
         tags=["Dashboard"],

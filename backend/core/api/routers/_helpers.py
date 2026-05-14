@@ -23,10 +23,13 @@ from ...constants import (
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_COMPILE_KWARGS,
     PAYLOAD_OVERVIEW_MODEL_NAME,
+    PAYLOAD_OVERVIEW_MODULE_KWARGS,
+    PAYLOAD_OVERVIEW_MODULE_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS,
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
+    PAYLOAD_OVERVIEW_SIGNATURE_CODE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
     PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
     PAYLOAD_OVERVIEW_USERNAME,
@@ -36,8 +39,11 @@ from ...models import (
     OptimizationStatus,
     OptimizationSummaryResponse,
     PairResult,
+    ProgramArtifact,
     RunResponse,
 )
+from ...registry import ResolverError, resolve_module_factory
+from ...service_gateway.optimization.data import load_signature_from_code
 from ..auth import AuthenticatedUser, is_admin
 from ..converters import (
     compute_elapsed,
@@ -207,6 +213,41 @@ def compute_task_fingerprint(
     return hashlib.sha256(task_blob.encode("utf-8")).hexdigest()
 
 
+def compute_compare_fingerprint(optimization_id: str, overview: dict[str, Any]) -> str | None:
+    """Return a fingerprint identifying compareability (same task + same split).
+
+    Two jobs share a ``compare_fingerprint`` iff they share a ``task_fingerprint``
+    AND evaluate on byte-identical train/val/test splits. ``task_fingerprint``
+    alone only proves the signature/metric/dataset match; jobs with mismatching
+    seeds, shuffle flags, or split fractions land on different test rows and
+    must not be compared row-by-row.
+
+    The effective seed mirrors the fallback in ``/dataset`` and ``/test-results``:
+    use the stored seed when present, otherwise derive ``stable_seed(optimization_id)``
+    — the same value those endpoints used to compute the actual split.
+
+    Args:
+        optimization_id: Optimization id; used as the seed fallback.
+        overview: Parsed ``payload_overview`` dict for the job.
+
+    Returns:
+        A hex-encoded SHA256 digest, or ``None`` when the base ``task_fingerprint``
+        is missing (legacy job; can't be compared either way).
+    """
+    task_fp = overview.get(PAYLOAD_OVERVIEW_TASK_FINGERPRINT)
+    if not isinstance(task_fp, str) or not task_fp:
+        return None
+    stored_seed = overview.get(PAYLOAD_OVERVIEW_SEED)
+    effective_seed = stored_seed if stored_seed is not None else stable_seed(optimization_id)
+    shuffle = overview.get(PAYLOAD_OVERVIEW_SHUFFLE, True)
+    fractions = overview.get(PAYLOAD_OVERVIEW_SPLIT_FRACTIONS) or {}
+    if hasattr(fractions, "model_dump"):
+        fractions = fractions.model_dump()
+    fractions_blob = json.dumps(fractions, sort_keys=True, separators=(",", ":"))
+    blob = f"{task_fp}\x00{effective_seed}\x00{bool(shuffle)}\x00{fractions_blob}"
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def job_owner(job_data: dict[str, Any]) -> str | None:
     """Return the lowercased owner username for a job row, or ``None`` if absent.
 
@@ -348,8 +389,9 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
 
     elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
 
+    optimization_id = job_data["optimization_id"]
     return OptimizationSummaryResponse(
-        optimization_id=job_data["optimization_id"],
+        optimization_id=optimization_id,
         status=job_status,
         message=job_data.get("message"),
         created_at=created_at,
@@ -359,6 +401,7 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
         elapsed_seconds=elapsed_secs,
         estimated_remaining=est_remaining,
         **overview_to_base_fields(overview),
+        compare_fingerprint=compute_compare_fingerprint(optimization_id, overview),
         split_fractions=overview.get(PAYLOAD_OVERVIEW_SPLIT_FRACTIONS),
         shuffle=overview.get(PAYLOAD_OVERVIEW_SHUFFLE),
         seed=overview.get(PAYLOAD_OVERVIEW_SEED),
@@ -373,8 +416,105 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
         completed_pairs=completed_pairs,
         failed_pairs=failed_pairs,
         best_pair_label=best_pair_label,
-        task_fingerprint=overview.get(PAYLOAD_OVERVIEW_TASK_FINGERPRINT),
     )
+
+
+def _artifact_has_payload(artifact: ProgramArtifact | None) -> bool:
+    """Return whether the artifact carries either JSON state or a legacy pickle.
+
+    Args:
+        artifact: The artifact pulled off a ``RunResponse`` or ``PairResult``.
+
+    Returns:
+        ``True`` when the artifact has something we can materialize a program
+        from; ``False`` otherwise.
+    """
+    if artifact is None:
+        return False
+    return artifact.program_state_json is not None or bool(artifact.program_pickle_base64)
+
+
+def _materialize_program(artifact: ProgramArtifact, overview: dict) -> Any:
+    """Materialize a runnable DSPy program from an artifact.
+
+    The state-JSON path is preferred: reconstruct the module shell from the
+    stored ``signature_code`` / ``module_name`` / ``module_kwargs`` and apply
+    the saved state via ``program.load_state``. The pickle path is retained
+    only as a fallback for artifacts written before the JSON migration.
+
+    Args:
+        artifact: The artifact carrying either ``program_state_json`` (new
+            jobs) or ``program_pickle_base64`` (legacy jobs).
+        overview: Parsed payload-overview dict from the job row; supplies
+            ``signature_code``, ``module_name``, and ``module_kwargs`` for
+            the JSON path.
+
+    Returns:
+        A live DSPy program object ready for inference.
+
+    Raises:
+        DomainError: 409 when the artifact lacks both payload variants, when
+            ``signature_code`` is missing from the overview for a JSON
+            artifact, or when module reconstruction fails.
+    """
+    if artifact.program_state_json is not None:
+        signature_code = overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE)
+        if not signature_code:
+            # Pre-migration overviews don't carry signature_code. Force the
+            # legacy pickle path if it's present; otherwise fail loudly so
+            # the caller can prompt a re-run instead of producing nonsense.
+            if artifact.program_pickle_base64:
+                return _legacy_pickle_load(artifact.program_pickle_base64)
+            raise DomainError("optimization.no_signature_code_for_reload", status=409)
+
+        module_name = overview.get(PAYLOAD_OVERVIEW_MODULE_NAME) or "predict"
+        module_kwargs = dict(overview.get(PAYLOAD_OVERVIEW_MODULE_KWARGS, {}))
+        try:
+            signature_cls = load_signature_from_code(signature_code)
+            module_factory, auto_signature = resolve_module_factory(module_name)
+        except ResolverError as exc:
+            raise DomainError(
+                "optimization.module_reconstruction_failed", status=409, error=str(exc)
+            ) from exc
+
+        if auto_signature or "signature" not in module_kwargs:
+            module_kwargs["signature"] = signature_cls
+        program = module_factory(**module_kwargs)
+        program.load_state(artifact.program_state_json)
+        return program
+
+    return _legacy_pickle_load(artifact.program_pickle_base64)
+
+
+def _legacy_pickle_load(program_pickle_base64: str | None) -> Any:
+    """Deserialize a legacy pickle artifact.
+
+    Retained for artifacts written before the JSON migration. New jobs use
+    the state-JSON path in :func:`_materialize_program` and never reach this
+    branch. The same trust boundary applies: artifact bytes were produced by
+    our own worker, never accepted from API input.
+
+    Args:
+        program_pickle_base64: Base64-encoded ``program.pkl`` bytes from a
+            legacy artifact.
+
+    Returns:
+        The deserialized DSPy program.
+
+    Raises:
+        DomainError: 409 when the pickle payload is empty (caller forgot to
+            guard via :func:`_artifact_has_payload`).
+    """
+    if not program_pickle_base64:
+        raise DomainError("optimization.no_program_artifact_scoped", status=409)
+    program_bytes = base64.b64decode(program_pickle_base64)
+    # pickle.loads is RCE if an attacker can write to the jobs table. The
+    # artifact bytes are produced by our own worker and never accepted from
+    # API input, so today the only attacker who reaches this branch already
+    # has DB write — at which point they own the process anyway. New jobs
+    # don't take this path; this exists only to serve already-finished jobs
+    # that predate the JSON migration.
+    return pickle.loads(program_bytes)
 
 
 def load_program(
@@ -425,7 +565,7 @@ def load_program(
         if not grid_result.best_pair:
             raise DomainError("grid_search.no_best_pair", status=409)
         artifact = grid_result.best_pair.program_artifact
-        if not artifact or not artifact.program_pickle_base64:
+        if not _artifact_has_payload(artifact):
             raise DomainError("grid_search.no_best_program_artifact", status=409)
         result = RunResponse(
             module_name=grid_result.module_name,
@@ -441,18 +581,11 @@ def load_program(
     else:
         result = RunResponse.model_validate(result_data)
         artifact = result.program_artifact
-        if not artifact or not artifact.program_pickle_base64:
+        if not _artifact_has_payload(artifact):
             raise DomainError("optimization.no_program_artifact_scoped", status=409)
 
     if optimization_id not in _program_cache:
-        program_bytes = base64.b64decode(artifact.program_pickle_base64)
-        # pickle.loads is RCE if an attacker can write to the jobs table.
-        # The artifact bytes are produced by our own worker and never
-        # accepted from API input, so today the only attacker who reaches
-        # this branch already has DB write — at which point they own the
-        # process anyway. Follow-up tracked under "signed payloads": HMAC
-        # the pickle at worker-write time and verify here before loading.
-        _program_cache[optimization_id] = pickle.loads(program_bytes)
+        _program_cache[optimization_id] = _materialize_program(artifact, overview)
 
     return _program_cache[optimization_id], result, overview
 
@@ -528,7 +661,7 @@ def load_pair_program(
         )
 
     artifact = pair.program_artifact
-    if not artifact or not artifact.program_pickle_base64:
+    if not _artifact_has_payload(artifact):
         raise DomainError(
             "grid_search.pair_no_artifact",
             status=409,
@@ -537,9 +670,6 @@ def load_pair_program(
 
     cache_key = f"{optimization_id}_pair_{pair_index}"
     if cache_key not in _program_cache:
-        program_bytes = base64.b64decode(artifact.program_pickle_base64)
-        # See ``load_program`` for the full pickle.loads safety story; same
-        # signed-payload follow-up applies here.
-        _program_cache[cache_key] = pickle.loads(program_bytes)
+        _program_cache[cache_key] = _materialize_program(artifact, overview)
 
     return _program_cache[cache_key], pair, overview

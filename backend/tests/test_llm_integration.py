@@ -37,7 +37,7 @@ from pathlib import Path
 import pytest
 import requests  # type: ignore[import-untyped]
 
-from .conftest import requires_llm, requires_server, wait_for_terminal
+from .conftest import backend_auth_headers, requires_llm, requires_server, wait_for_terminal
 
 BASE_URL = "http://localhost:8000"
 DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "math_problems.json"
@@ -68,6 +68,7 @@ MODEL = {
     "temperature": 1.0,
     "max_tokens": 16000,
 }
+OPTIMIZER_KWARGS = {"max_metric_calls": 18, "num_threads": 1}
 
 
 def _load_dataset(rows: int = 12) -> list[dict]:
@@ -84,7 +85,7 @@ def _common_payload(username: str) -> dict:
         "signature_code": SIGNATURE_CODE,
         "metric_code": METRIC_CODE,
         "optimizer_name": "gepa",
-        "optimizer_kwargs": {"auto": "light", "num_threads": 2},
+        "optimizer_kwargs": OPTIMIZER_KWARGS,
         "dataset": _load_dataset(),
         "column_mapping": {
             "inputs": {"question": "question"},
@@ -96,10 +97,21 @@ def _common_payload(username: str) -> dict:
     }
 
 
-def _cleanup(job_id: str) -> None:
+def _cleanup(job_id: str, username: str) -> None:
     """Best-effort delete the test job from the backend; swallow any error."""
     with contextlib.suppress(Exception):
-        requests.delete(f"{BASE_URL}/optimizations/{job_id}", timeout=10)
+        requests.delete(
+            f"{BASE_URL}/optimizations/{job_id}",
+            headers=backend_auth_headers(username),
+            timeout=10,
+        )
+
+
+def _assert_artifact_persisted(artifact: dict) -> None:
+    """Verify the run produced a serveable persisted program artifact."""
+    assert artifact["program_state_json"] or artifact["program_pickle_base64"], (
+        "artifact missing serialized program state"
+    )
 
 
 @pytest.mark.e2e
@@ -113,12 +125,13 @@ def test_single_run_golden_path() -> None:
     payload["model_config"] = MODEL
     payload["reflection_model_config"] = MODEL
 
-    r = requests.post(f"{BASE_URL}/run", json=payload, timeout=30)
+    headers = backend_auth_headers("e2e-golden-single")
+    r = requests.post(f"{BASE_URL}/run", headers=headers, json=payload, timeout=30)
     assert r.status_code == 201, f"submit failed ({r.status_code}): {r.text}"
     job_id = r.json()["optimization_id"]
 
     try:
-        final = wait_for_terminal(job_id, timeout=900)
+        final = wait_for_terminal(job_id, timeout=900, username="e2e-golden-single")
         assert final["status"] == "success", f"expected success, got {final['status']}: {final.get('message')}"
 
         result = final["result"]
@@ -127,10 +140,11 @@ def test_single_run_golden_path() -> None:
         assert isinstance(result["optimized_test_metric"], (int, float))
         assert result["num_lm_calls"] > 0, "optimizer should have called the LM"
         artifact = result["program_artifact"]
-        assert artifact["program_pickle_base64"], "artifact missing pickled program"
+        _assert_artifact_persisted(artifact)
 
         inference = requests.post(
             f"{BASE_URL}/serve/{job_id}",
+            headers=headers,
             json={"inputs": {"question": "What is 12 + 7?"}},
             timeout=60,
         )
@@ -139,7 +153,7 @@ def test_single_run_golden_path() -> None:
         assert "answer" in body["outputs"], f"missing answer in outputs: {body}"
         assert body["outputs"]["answer"], "answer should not be empty"
     finally:
-        _cleanup(job_id)
+        _cleanup(job_id, "e2e-golden-single")
 
 
 @pytest.mark.e2e
@@ -154,12 +168,13 @@ def test_grid_search_golden_path() -> None:
     payload["generation_models"] = [MODEL]
     payload["reflection_models"] = [MODEL, MODEL]
 
-    r = requests.post(f"{BASE_URL}/grid-search", json=payload, timeout=30)
+    headers = backend_auth_headers("e2e-golden-grid")
+    r = requests.post(f"{BASE_URL}/grid-search", headers=headers, json=payload, timeout=30)
     assert r.status_code == 201, f"submit failed ({r.status_code}): {r.text}"
     job_id = r.json()["optimization_id"]
 
     try:
-        final = wait_for_terminal(job_id, timeout=1500)
+        final = wait_for_terminal(job_id, timeout=1500, username="e2e-golden-grid")
         assert final["status"] == "success", f"expected success, got {final['status']}: {final.get('message')}"
 
         grid = final["grid_result"]
@@ -170,11 +185,12 @@ def test_grid_search_golden_path() -> None:
 
         best = grid["best_pair"]
         assert best is not None, "grid-search missing best_pair"
-        assert best["program_artifact"]["program_pickle_base64"]
+        _assert_artifact_persisted(best["program_artifact"])
 
         pair_index = best["pair_index"]
         inference = requests.post(
             f"{BASE_URL}/serve/{job_id}/pair/{pair_index}",
+            headers=headers,
             json={"inputs": {"question": "What is 8 + 5?"}},
             timeout=60,
         )
@@ -183,4 +199,4 @@ def test_grid_search_golden_path() -> None:
         assert "answer" in body["outputs"], f"missing answer in outputs: {body}"
         assert body["outputs"]["answer"], "answer should not be empty"
     finally:
-        _cleanup(job_id)
+        _cleanup(job_id, "e2e-golden-grid")

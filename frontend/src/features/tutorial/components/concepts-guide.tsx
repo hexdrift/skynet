@@ -505,7 +505,7 @@ function GepaLoopDiagram() {
     { i: 5, name: msg("auto.features.tutorial.components.concepts.guide.literal.61") },
   ];
   return (
-    <figure className="my-4 rounded-lg border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]" dir="ltr">
+    <figure className="my-4 rounded-lg border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]" dir="rtl">
       <svg viewBox="0 0 700 130" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
         <defs>
           <marker id="gepa-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
@@ -516,7 +516,7 @@ function GepaLoopDiagram() {
           </marker>
         </defs>
         {stages.map((s, idx) => {
-          const cx = 75 + idx * 138;
+          const cx = 625 - idx * 138;
           return (
             <g key={s.i}>
               <rect
@@ -542,9 +542,9 @@ function GepaLoopDiagram() {
               </text>
               {idx < stages.length - 1 && (
                 <line
-                  x1={cx + 60}
+                  x1={cx - 60}
                   y1={52}
-                  x2={cx + 78}
+                  x2={cx - 78}
                   y2={52}
                   stroke="#5C4D40"
                   strokeWidth={1.4}
@@ -555,7 +555,7 @@ function GepaLoopDiagram() {
           );
         })}
         <path
-          d="M 615 78 Q 615 110 350 110 Q 75 110 75 78"
+          d="M 73 80 C 73 110 250 112 350 112 C 430 112 487 104 487 80"
           stroke="#9A6A10"
           strokeWidth={1.2}
           fill="none"
@@ -753,7 +753,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "מספר הרצות מרבי",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.312"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.111")}
@@ -773,7 +773,7 @@ function SectionParameters() {
       <ParamTable
         rows={[
           {
-            name: "שימוש במיזוג",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.313"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.114")}
@@ -785,7 +785,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "מספר מיזוגים מרבי",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.314"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.115")}
@@ -803,7 +803,7 @@ function SectionParameters() {
       <ParamTable
         rows={[
           {
-            name: "מספר תהליכונים",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.315"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.117")}
@@ -813,7 +813,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "ציון כישלון",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.316"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.118")}
@@ -823,7 +823,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "ציון מושלם",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.317"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.119")}
@@ -833,7 +833,7 @@ function SectionParameters() {
             ),
           },
           {
-            name: "מעקב סטטיסטיקות",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.318"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.121")}</>,
           },
         ]}
@@ -1176,7 +1176,7 @@ function SectionWorkflow() {
       <ParamTable
         rows={[
           {
-            name: "שם המודול",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.319"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.174")}
@@ -1192,7 +1192,7 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "שם האופטימיזר",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.320"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.178")}
@@ -1204,19 +1204,19 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "קוד החתימה",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.321"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.180")}</>,
           },
           {
-            name: "קוד המדד",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.322"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.181")}</>,
           },
           {
-            name: "מערך נתונים",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.323"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.182")}</>,
           },
           {
-            name: "מיפוי עמודות",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.324"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.183")}
@@ -1232,11 +1232,11 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "הגדרות המודל",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.325"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.185")}</>,
           },
           {
-            name: "מודל רפלקציה",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.326"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.186")}
@@ -1248,7 +1248,7 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "פרמטרי האופטימיזר",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.327"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.188")}
@@ -1260,7 +1260,7 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "יחסי חלוקה",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.328"),
             desc: (
               <>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.190")}
@@ -1272,11 +1272,11 @@ function SectionWorkflow() {
             ),
           },
           {
-            name: "ערבוב דוגמאות",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.329"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.192")}</>,
           },
           {
-            name: "מספר התחלתי",
+            name: msg("auto.features.tutorial.components.concepts.guide.literal.330"),
             desc: <>{msg("auto.features.tutorial.components.concepts.guide.literal.193")}</>,
           },
         ]}
@@ -1510,22 +1510,64 @@ function SectionTips() {
 
 function SectionGlossary() {
   const rows: Array<[string, string]> = [
-    ["מודל שפה (LLM)", msg("auto.features.tutorial.components.concepts.guide.literal.255")],
-    ["פרומפט", msg("auto.features.tutorial.components.concepts.guide.literal.256")],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.331"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.255"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.332"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.256"),
+    ],
     ["DSPy", msg("auto.features.tutorial.components.concepts.guide.literal.257")],
-    ["אופטימיזר", msg("auto.features.tutorial.components.concepts.guide.literal.258")],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.333"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.258"),
+    ],
     ["GEPA", msg("auto.features.tutorial.components.concepts.guide.literal.259")],
-    ["רפלקציה", msg("auto.features.tutorial.components.concepts.guide.literal.260")],
-    ["חתימה", msg("auto.features.tutorial.components.concepts.guide.literal.261")],
-    ["מדד", msg("auto.features.tutorial.components.concepts.guide.literal.262")],
-    ["מערך נתונים", msg("auto.features.tutorial.components.concepts.guide.literal.263")],
-    ["אימון / אימות / בדיקה", msg("auto.features.tutorial.components.concepts.guide.literal.264")],
-    ["אופטימיזציה", msg("auto.features.tutorial.components.concepts.guide.literal.265")],
-    ["תוצר שמור", msg("auto.features.tutorial.components.concepts.guide.literal.266")],
-    ["הרצה מלאה", msg("auto.features.tutorial.components.concepts.guide.literal.267")],
-    ["מסלול הרצה", msg("auto.features.tutorial.components.concepts.guide.literal.268")],
-    ["חשיבה צעד-אחר-צעד", msg("auto.features.tutorial.components.concepts.guide.literal.269")],
-    ["מודל רפלקציה", msg("auto.features.tutorial.components.concepts.guide.literal.270")],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.334"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.260"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.335"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.261"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.336"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.262"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.337"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.263"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.338"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.264"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.339"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.265"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.340"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.266"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.341"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.267"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.342"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.268"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.343"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.269"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.326"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.270"),
+    ],
   ];
   return (
     <GuideSection

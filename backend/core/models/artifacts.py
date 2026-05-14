@@ -36,9 +36,21 @@ class ProgramArtifact(BaseModel):
         default=None,
         description="Absolute path on the server where the artifact lives.",
     )
+    program_state_json: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "State-only JSON dump from ``module.save(path.json)``. Loaded by "
+            "reconstructing the module from signature_code + module_name and "
+            "calling ``program.load(json_path)``."
+        ),
+    )
     program_pickle_base64: str | None = Field(
         default=None,
-        description="Base64-encoded contents of the saved program.pkl file.",
+        description=(
+            "Deprecated. Base64-encoded ``program.pkl`` retained only so jobs "
+            "saved before the JSON migration can still be served. New jobs "
+            "leave this field unset."
+        ),
     )
     metadata: dict[str, Any] | None = Field(
         default=None,

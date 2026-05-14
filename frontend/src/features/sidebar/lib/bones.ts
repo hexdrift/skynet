@@ -1,11 +1,11 @@
 /**
- * Boneyard skeleton bones for the sidebar's infinite-scroll "load more"
+ * Skeleton bones for the sidebar's infinite-scroll "load more"
  * state. Rendered below the currently-visible jobs while the next page
  * is in flight. Each bone row mirrors the shape of a real ``JobRow``:
  * a small status dot plus a single text line.
  */
 
-import type { Bone, ResponsiveBones } from "boneyard-js";
+import type { Bone, ResponsiveBones } from "@/shared/ui/bone-skeleton";
 
 function bone(x: number, y: number, w: number, h: number, r: number): Bone {
   return { x, y, w, h, r };

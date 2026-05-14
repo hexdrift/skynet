@@ -33,6 +33,9 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ..api.routers._helpers import compute_compare_fingerprint
+from ..constants import PAYLOAD_OVERVIEW_TASK_FINGERPRINT
+
 # numpy underpins both projection paths — degrade gracefully when absent.
 try:
     import numpy as np
@@ -222,9 +225,10 @@ def _fetch_fingerprint(session: Session) -> str:
     row = (
         session.execute(
             text(
-                "SELECT COUNT(*) AS n, MAX(created_at) AS max_ts "
-                "FROM job_embeddings "
-                "WHERE embedding_summary IS NOT NULL AND is_private = FALSE"
+                "SELECT COUNT(*) AS n, MAX(je.created_at) AS max_ts "
+                "FROM job_embeddings je "
+                "INNER JOIN jobs j ON j.optimization_id = je.optimization_id "
+                "WHERE je.embedding_summary IS NOT NULL AND je.is_private = FALSE"
             )
         )
         .mappings()
@@ -244,6 +248,13 @@ def _fetch_projection_rows(session: Session) -> list[dict[str, Any]]:
     arrays — we convert to ``list[float]`` up front so the downstream
     code only sees one representation.
 
+    Rows are deduplicated by ``compare_fingerprint`` (task + identical
+    train/val/test split): jobs that are row-by-row comparable collapse
+    into a single leader with the rest exposed as ``siblings``. Jobs that
+    share a ``task_fingerprint`` but evaluate on different splits keep
+    distinct ``compare_fingerprint`` values and therefore remain separate
+    points — the frontend groups them visually as variations of one task.
+
     Args:
         session: An open SQLAlchemy session bound to the job-store engine.
 
@@ -256,42 +267,74 @@ def _fetch_projection_rows(session: Session) -> list[dict[str, Any]]:
     rows = (
         session.execute(
             text(
-                "SELECT optimization_id, optimization_type, winning_model, "
-                "baseline_metric, optimized_metric, summary_text, task_name, "
-                "module_name, optimizer_name, created_at, "
-                "embedding_summary::text AS embedding_summary_text "
-                "FROM job_embeddings "
-                "WHERE embedding_summary IS NOT NULL AND is_private = FALSE "
-                "ORDER BY created_at DESC "
+                "SELECT je.optimization_id, je.optimization_type, je.winning_model, "
+                "je.baseline_metric, je.optimized_metric, je.summary_text, je.task_name, "
+                "je.module_name, je.optimizer_name, je.created_at, "
+                "je.embedding_summary::text AS embedding_summary_text, "
+                "j.payload_overview AS payload_overview "
+                "FROM job_embeddings je "
+                "INNER JOIN jobs j ON j.optimization_id = je.optimization_id "
+                "WHERE je.embedding_summary IS NOT NULL AND je.is_private = FALSE "
+                "ORDER BY je.created_at DESC, je.optimization_id DESC "
                 f"LIMIT {MAX_POINTS}"
             )
         )
         .mappings()
         .all()
     )
-    out: list[dict[str, Any]] = []
+    # Group by compare_fingerprint so fully-compareable jobs collapse to
+    # one leader + siblings (same UX as before for that case), while jobs
+    # that share a task_fingerprint but differ on split keep distinct
+    # points. Rows without a compare_fingerprint (legacy, missing
+    # task_fingerprint) fall back to their own optimization_id so they
+    # never collapse into one bogus group.
+    groups: dict[str, list[dict[str, Any]]] = {}
+    group_order: list[str] = []
     for row in rows:
         vector = _parse_pgvector_literal(row.get("embedding_summary_text"))
         if vector is None:
             continue
+        overview = row.get("payload_overview") or {}
+        if not isinstance(overview, dict):
+            overview = {}
+        optimization_id = row["optimization_id"]
+        compare_fp = compute_compare_fingerprint(optimization_id, overview)
+        task_fp = overview.get(PAYLOAD_OVERVIEW_TASK_FINGERPRINT)
+        if not isinstance(task_fp, str) or not task_fp:
+            task_fp = None
         summary = row["summary_text"]
         if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
             summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
-        out.append(
-            {
-                "optimization_id": row["optimization_id"],
-                "optimization_type": row["optimization_type"],
-                "winning_model": row["winning_model"],
-                "baseline_metric": _as_float(row["baseline_metric"]),
-                "optimized_metric": _as_float(row["optimized_metric"]),
-                "summary_text": summary,
-                "task_name": row["task_name"],
-                "module_name": row["module_name"],
-                "optimizer_name": row["optimizer_name"],
-                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "_vector": vector,
-            }
-        )
+        entry = {
+            "optimization_id": optimization_id,
+            "optimization_type": row["optimization_type"],
+            "winning_model": row["winning_model"],
+            "baseline_metric": _as_float(row["baseline_metric"]),
+            "optimized_metric": _as_float(row["optimized_metric"]),
+            "summary_text": summary,
+            "task_name": row["task_name"],
+            "module_name": row["module_name"],
+            "optimizer_name": row["optimizer_name"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "task_fingerprint": task_fp,
+            "compare_fingerprint": compare_fp,
+            "_vector": vector,
+        }
+        key = compare_fp if compare_fp else f"_no_fp:{optimization_id}"
+        bucket = groups.get(key)
+        if bucket is None:
+            groups[key] = [entry]
+            group_order.append(key)
+        else:
+            bucket.append(entry)
+    # SQL already ordered newest-first; the first member of each bucket
+    # is the leader, the rest are siblings.
+    out: list[dict[str, Any]] = []
+    for key in group_order:
+        bucket = groups[key]
+        leader = bucket[0]
+        leader["siblings"] = [m["optimization_id"] for m in bucket[1:]]
+        out.append(leader)
     return out
 
 

@@ -8,6 +8,7 @@ type BulkActionBarProps = {
   isAdmin: boolean;
   selectedCount: number;
   compareEligibleCount: number;
+  autoAddedSiblings: number;
   canCompare: boolean;
   onClear: () => void;
   onCompare: () => void;
@@ -18,6 +19,7 @@ export function BulkActionBar({
   isAdmin,
   selectedCount,
   compareEligibleCount,
+  autoAddedSiblings,
   canCompare,
   onClear,
   onCompare,
@@ -75,11 +77,13 @@ export function BulkActionBar({
             <TooltipButton
               tooltip={
                 canCompare
-                  ? skipped > 0
-                    ? formatMsg("auto.features.dashboard.components.bulkactionbar.template.1", {
-                        p1: skipped,
-                      })
-                    : msg("auto.features.dashboard.components.bulkactionbar.literal.3")
+                  ? autoAddedSiblings > 0
+                    ? formatMsg("compare.includes_siblings", { p1: autoAddedSiblings })
+                    : skipped > 0
+                      ? formatMsg("auto.features.dashboard.components.bulkactionbar.template.1", {
+                          p1: skipped,
+                        })
+                      : msg("auto.features.dashboard.components.bulkactionbar.literal.3")
                   : msg("auto.features.dashboard.components.bulkactionbar.literal.4")
               }
               side="top"

@@ -37,7 +37,7 @@ export function DeleteDialogs({
           if (!open) setBulkDeleteOpen(false);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogTitleRow
             title={
               selectedCount === 1
@@ -64,7 +64,7 @@ export function DeleteDialogs({
               )
             }
           />
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setBulkDeleteOpen(false)}
@@ -95,7 +95,7 @@ export function DeleteDialogs({
           if (!open) setDeleteTarget(null);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogTitleRow
             title={
               <>
@@ -114,7 +114,7 @@ export function DeleteDialogs({
               </>
             }
           />
-          <DialogFooter className="grid grid-cols-2 gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteTarget(null)}

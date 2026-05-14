@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { Loader2, Zap, FlaskConical } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
@@ -12,11 +12,11 @@ import {
   ResetColumnsButton,
   type SortDir,
 } from "@/shared/ui/excel-filter";
-import { Skeleton } from "boneyard-js/react";
+import { Skeleton } from "@/shared/ui/bone-skeleton";
 import { dataTabBones } from "../lib/data-tab-bones";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { formatMsg, msg } from "@/shared/lib/messages";
+import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/shared/lib/api";
 import type {
@@ -29,11 +29,18 @@ import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial";
 type Split = "all" | "train" | "val" | "test";
 type ProgramType = "optimized" | "baseline";
 
-/** Map a score (0–1) to a color on an absolute red→green scale via HSL */
+/**
+ * Map a score (0–1) to a warm earth-tone color: terracotta → ochre → olive.
+ *
+ * The hue range (35°→130°) is shifted off pure red/green so the scale sits in
+ * the same family as the cream/coffee/taupe chrome (#3D2E22, #8C7A6B, #E5DDD4)
+ * instead of clashing with it. Constant OKLCH lightness keeps text contrast
+ * stable across the cream backgrounds.
+ */
 function scoreColor(score: number): string {
   const t = Math.max(0, Math.min(1, score));
-  const hue = t * 120; // 0 = red, 120 = green
-  return `hsl(${hue}, 55%, 42%)`;
+  const hue = 35 + t * 95;
+  return `oklch(0.5 0.13 ${hue.toFixed(1)})`;
 }
 
 export function DataTab({
@@ -236,26 +243,6 @@ export function DataTab({
   }, [rows, allColumns]);
 
   const evalCount = Object.keys(currentResults).length;
-  const testTotal = dataset?.split_counts.test ?? 0;
-  const scores = Object.values(currentResults).map((r) => r.score);
-  const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-  const minScore = scores.length > 0 ? Math.min(...scores) : 0;
-  const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
-
-  /** Build a segmented CSS gradient — one block per test example, sorted by score */
-  const summaryBarGradient = useMemo(() => {
-    const sorted = [...scores].sort((a, b) => a - b);
-    if (sorted.length === 0) return "transparent";
-    if (sorted.length === 1) return scoreColor(sorted[0]!);
-    const n = sorted.length;
-    const stops = sorted.map((s, i) => {
-      const start = (i / n) * 100;
-      const end = ((i + 1) / n) * 100;
-      const c = scoreColor(s);
-      return `${c} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
-    });
-    return `linear-gradient(to right, ${stops.join(", ")})`;
-  }, [scores]);
 
   if (loading)
     return (
@@ -293,19 +280,6 @@ export function DataTab({
                     {msg("auto.features.optimizations.components.datatab.1")}
                   </HelpTip>
                 </div>
-                <div className="text-[0.6875rem] text-[#8C7A6B] mt-0.5">
-                  {testResultsLoading
-                    ? msg("auto.features.optimizations.components.datatab.literal.3")
-                    : evalCount > 0
-                      ? formatMsg("auto.features.optimizations.components.datatab.template.1", {
-                          p1: evalCount,
-                          p2: testTotal,
-                          p3: avgScore.toFixed(2),
-                          p4: minScore.toFixed(2),
-                          p5: maxScore.toFixed(2),
-                        })
-                      : ""}
-                </div>
               </div>
               <div className="relative inline-flex rounded-lg bg-[#F0EBE4] p-1 gap-1 text-[0.6875rem] shrink-0">
                 <div
@@ -319,14 +293,12 @@ export function DataTab({
                   onClick={() => setProgramType("baseline")}
                   className={`relative z-10 flex items-center gap-1.5 rounded-md px-3 py-1.5 cursor-pointer transition-colors duration-150 ${programType === "baseline" ? "text-[#FAF8F5] font-semibold" : "text-[#8C7A6B] hover:text-[#3D2E22]"}`}
                 >
-                  <FlaskConical className="size-3" />
                   {msg("auto.features.optimizations.components.datatab.2")}
                 </button>
                 <button
                   onClick={() => setProgramType("optimized")}
                   className={`relative z-10 flex items-center gap-1.5 rounded-md px-3 py-1.5 cursor-pointer transition-colors duration-150 ${programType === "optimized" ? "text-[#FAF8F5] font-semibold" : "text-[#8C7A6B] hover:text-[#3D2E22]"}`}
                 >
-                  <Zap className="size-3" />
                   {msg("auto.features.optimizations.components.datatab.3")}
                 </button>
               </div>
@@ -334,13 +306,6 @@ export function DataTab({
                 <Loader2 className="size-4 animate-spin text-[#8C7A6B] shrink-0" />
               )}
             </div>
-            {evalCount > 0 && (
-              <div
-                className="h-2.5 rounded-full overflow-hidden"
-                dir="ltr"
-                style={{ background: summaryBarGradient }}
-              />
-            )}
           </div>
         </FadeIn>
       )}

@@ -44,7 +44,7 @@ import {
   buildGridDemoJob,
   startDemoSimulation,
 } from "@/features/tutorial";
-import { Skeleton } from "boneyard-js/react";
+import { Skeleton } from "@/shared/ui/bone-skeleton";
 import { optimizationDetailBones } from "../lib/bones";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
@@ -522,12 +522,12 @@ export function OptimizationDetailView() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-2 min-w-0">
                 <div className="flex items-center gap-3 flex-wrap">
+                  <StatusBadge status={job.status} />
                   {job.name && (
                     <h2 className="text-lg sm:text-xl font-bold tracking-tight" dir="auto">
                       {job.name}
                     </h2>
                   )}
-                  <StatusBadge status={job.status} />
                 </div>
                 {job.description && (
                   <p className="text-sm text-muted-foreground/70 leading-relaxed">
@@ -814,11 +814,6 @@ export function OptimizationDetailView() {
                     }
                     void fetchJob();
                   }}
-                  onShowLMActivity={
-                    job.optimization_type !== "grid_search" && job.result?.lm_activity
-                      ? () => setDetailTab("lm-activity")
-                      : undefined
-                  }
                 />
               </TabsContent>
 

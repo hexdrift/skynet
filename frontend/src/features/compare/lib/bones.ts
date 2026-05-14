@@ -1,4 +1,4 @@
-import type { Bone, ResponsiveBones, SkeletonResult } from "boneyard-js";
+import type { Bone, ResponsiveBones, SkeletonResult } from "@/shared/ui/bone-skeleton";
 
 const PERCENT_WIDTH = 100;
 
@@ -7,10 +7,10 @@ function pct(px: number, viewportWidth: number): number {
 }
 
 /**
- * Create a boneyard skeleton bone.
+ * Create a skeleton bone.
  *
  * `x` and `w` are percentages of the rendered container width. `y`, `h`, and
- * `r` remain pixels, matching boneyard-js runtime rendering semantics.
+ * `r` remain pixels.
  */
 function bone(x: number, y: number, w: number, h: number, r: number, container = false): Bone {
   return { x, y, w, h, r, ...(container ? { c: true } : {}) };

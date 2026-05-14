@@ -65,7 +65,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="close-button absolute top-4 left-4"
+            className="close-button absolute top-4 end-4"
           >
             <XIcon />
             <span className="sr-only">{msg("shared.dialog.close")}</span>
@@ -97,7 +97,7 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      className={cn("grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:justify-end", className)}
       {...props}
     >
       {children}
@@ -114,7 +114,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("text-lg leading-snug font-semibold", className)}
       {...props}
     />
   );
