@@ -88,7 +88,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<DataRow[]>([]);
   const [parsedCols, setParsedCols] = useState<string[]>([]);
-  const [textCol, setTextCol] = useState<string>("");
+  const [inputCols, setInputCols] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<AnnotationMode | null>(null);
 
@@ -116,7 +116,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         setFile(new File([""], "demo_dataset.csv"));
         setParsedRows(data.rows as DataRow[]);
         setParsedCols(data.cols);
-        setTextCol(data.textCol);
+        setInputCols(Array.isArray(data.textCol) ? data.textCol : [data.textCol]);
       }),
     [],
   );
@@ -132,8 +132,8 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       const { columns, rows } = await parseDatasetFile(f);
       setParsedRows(rows as DataRow[]);
       setParsedCols(columns);
-      const guessText = columns.find((c) => c.toLowerCase() === "text") ?? columns[0] ?? "";
-      setTextCol(guessText);
+      const guessText = columns.find((c) => c.toLowerCase() === "text") ?? columns[0];
+      setInputCols(guessText ? [guessText] : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to parse file");
     }
@@ -160,8 +160,14 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label } : c)));
   };
 
+  const toggleInputCol = (col: string) => {
+    setInputCols((prev) =>
+      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col],
+    );
+  };
+
   const validateStep = (s: number): boolean => {
-    if (s === 0) return parsedRows.length > 0 && !!textCol;
+    if (s === 0) return parsedRows.length > 0 && inputCols.length > 0;
     if (s === 1) return !!mode;
     if (s === 2) {
       if (!mode) return false;
@@ -204,16 +210,21 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const handleStart = () => {
     if (!mode || !validateStep(0) || !validateStep(1) || !validateStep(2)) return;
     const mapped: DataRow[] = parsedRows.map((row, i) => {
-      const raw = row[textCol];
-      const text =
-        raw === undefined || raw === null
-          ? ""
-          : typeof raw === "object"
-            ? JSON.stringify(raw)
-            : String(raw);
+      const text = inputCols
+        .map((col) => {
+          const raw = row[col];
+          const value =
+            raw === undefined || raw === null
+              ? ""
+              : typeof raw === "object"
+                ? JSON.stringify(raw)
+                : String(raw);
+          return `${col}: ${value}`;
+        })
+        .join("\n");
       return { ...row, id: i + 1, text };
     });
-    const config: TaggerConfig = { mode };
+    const config: TaggerConfig = { mode, inputColumns: inputCols };
     if (mode === "binary") config.question = question;
     if (mode === "multiclass") config.categories = categories.filter((c) => c.label.trim());
     if (mode === "freetext") {
@@ -276,29 +287,32 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                 </HelpTip>
               </p>
               <div className="space-y-1">
-                {parsedCols.map((col, i) => (
-                  <button
-                    key={`${col}-${i}`}
-                    type="button"
-                    onClick={() => setTextCol(col)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all cursor-pointer",
-                      textCol === col
-                        ? "bg-primary/10 border border-primary/40 text-primary font-medium"
-                        : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                  >
-                    <span
-                      className="size-3 rounded-full border-2 flex items-center justify-center shrink-0"
-                      style={{ borderColor: textCol === col ? "var(--primary)" : "var(--border)" }}
+                {parsedCols.map((col, i) => {
+                  const selected = inputCols.includes(col);
+                  return (
+                    <button
+                      key={`${col}-${i}`}
+                      type="button"
+                      onClick={() => toggleInputCol(col)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all cursor-pointer",
+                        selected
+                          ? "bg-primary/10 border border-primary/40 text-primary font-medium"
+                          : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
                     >
-                      {textCol === col && <span className="size-1.5 rounded-full bg-primary" />}
-                    </span>
-                    <span className="font-mono text-xs" dir="ltr">
-                      {col}
-                    </span>
-                  </button>
-                ))}
+                      <span
+                        className="size-3 rounded-[3px] border-2 flex items-center justify-center shrink-0"
+                        style={{ borderColor: selected ? "var(--primary)" : "var(--border)" }}
+                      >
+                        {selected && <Check className="size-2 text-primary" strokeWidth={3.5} />}
+                      </span>
+                      <span className="font-mono text-xs" dir="ltr">
+                        {col}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </>
