@@ -319,6 +319,7 @@ export interface CatalogModel {
   value: string;
   label: string;
   provider: string;
+  data_center?: string | null;
   supports_thinking: boolean;
   supports_vision: boolean;
   available: boolean;
@@ -328,6 +329,7 @@ export interface CatalogModel {
 export interface CatalogProvider {
   slug: string;
   label: string;
+  data_center?: string | null;
   env_var?: string | null;
   default_base_url?: string | null;
   has_env_key: boolean;
