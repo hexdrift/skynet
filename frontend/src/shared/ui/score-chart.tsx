@@ -31,7 +31,7 @@ function ScoreChartTooltip({
           <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
           <span className="text-muted-foreground">{p.name}:</span>
           <span className="font-mono font-bold ms-auto" dir="ltr">
-            {p.value.toFixed(1)}
+            {typeof p.value === "number" ? p.value.toFixed(1) : "—"}
           </span>
         </div>
       ))}
