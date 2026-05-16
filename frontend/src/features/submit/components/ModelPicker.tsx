@@ -161,23 +161,34 @@ export function ModelPicker({
     );
   }, [allModels, query]);
 
+  // Group by provider *and* data center: a provider that fans out across
+  // several endpoints (e.g. a public API plus an on-prem gateway) gets one
+  // section per data center so the user can see which endpoint a model
+  // resolves through. The NUL byte can't appear in a slug/DC label.
   const grouped = React.useMemo(() => {
     const groups = new Map<string, EnrichedModel[]>();
     for (const m of filtered) {
-      const arr = groups.get(m.provider) ?? [];
+      const key = `${m.provider}\u0000${m.data_center ?? ""}`;
+      const arr = groups.get(key) ?? [];
       arr.push(m);
-      groups.set(m.provider, arr);
+      groups.set(key, arr);
     }
     return groups;
   }, [filtered]);
 
   const providerLabel = React.useCallback(
-    (slug: string): string => {
+    (groupKey: string): string => {
+      const [slug, dataCenter] = groupKey.split("\u0000");
       if (slug === "discovered")
         return formatMsg("auto.features.submit.components.modelpicker.template.1", {
           p1: discoverUrl ?? "",
         });
-      return catalog?.providers.find((p) => p.slug === slug)?.label ?? slug;
+      const base = catalog?.providers.find((p) => p.slug === slug)?.label ?? slug;
+      if (!dataCenter) return base;
+      return formatMsg("auto.features.submit.components.modelpicker.template.2", {
+        p1: base,
+        p2: dataCenter,
+      });
     },
     [catalog, discoverUrl],
   );

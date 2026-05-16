@@ -266,6 +266,7 @@ export const submitMessages = {
   "auto.features.submit.components.modelconfigmodal.template.1":
     "ירוץ {p1} לכל {p2} בקטלוג · {p3} כרגע",
   "auto.features.submit.components.modelpicker.template.1": "מהשרת ({p1})",
+  "auto.features.submit.components.modelpicker.template.2": "{p1} · {p2}",
   "auto.features.submit.components.modelprobedialog.template.1": "חסר קוד {p1}",
   "auto.features.submit.components.modelprobedialog.template.2":
     "נדרשות לפחות {p1} שורות (יש {p2})",

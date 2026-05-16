@@ -71,6 +71,48 @@ def test_list_models_returns_model_fields(models_client: TestClient) -> None:
     assert "provider" in model
 
 
+def test_list_models_serializes_per_data_center_entries(models_client: TestClient) -> None:
+    """A multi-DC provider round-trips one entry per data center via ``GET /models``."""
+    models = [
+        CatalogModel(value="openai/gpt-4o", label="gpt-4o", provider="openai"),
+        CatalogModel(
+            value="openai/gpt-4o",
+            label="gpt-4o",
+            provider="openai",
+            data_center="On-prem gateway",
+        ),
+    ]
+    providers = [
+        CatalogProvider(
+            slug="openai",
+            label="OpenAI",
+            default_base_url="https://api.openai.com/v1",
+            has_env_key=True,
+        ),
+        CatalogProvider(
+            slug="openai",
+            label="OpenAI",
+            data_center="On-prem gateway",
+            default_base_url="https://llm.internal/v1",
+            has_env_key=True,
+        ),
+    ]
+    fake_catalog = ModelCatalogResponse(providers=providers, models=models)
+
+    with patch("core.api.routers.models.get_catalog_cached", return_value=fake_catalog):
+        resp = models_client.get("/models")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    dcs = sorted((p.get("data_center") or "") for p in body["providers"] if p["slug"] == "openai")
+    assert dcs == ["", "On-prem gateway"]
+    on_prem = next(
+        p for p in body["providers"] if p["slug"] == "openai" and p.get("data_center") == "On-prem gateway"
+    )
+    assert on_prem["default_base_url"] == "https://llm.internal/v1"
+    assert any(m.get("data_center") == "On-prem gateway" for m in body["models"])
+
+
 def test_list_models_empty_catalog_returns_empty_lists(models_client: TestClient) -> None:
     """An empty catalog round-trips as empty ``models`` and ``providers`` lists."""
     fake_catalog = ModelCatalogResponse(providers=[], models=[])
