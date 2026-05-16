@@ -764,7 +764,7 @@ REGISTRY_PREFIX=artifactory.example.com/docker-remote \
 DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
 PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
 PIP_TRUSTED_HOST=artifactory.example.com \
-BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
+BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine \
 NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
 scripts/airgap_migrate.sh build-images
 
@@ -775,7 +775,7 @@ set REGISTRY_PREFIX=artifactory.example.com/docker-remote
 set DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
 set PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
 set PIP_TRUSTED_HOST=artifactory.example.com
-set BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine
+set BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine
 set NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 scripts\airgap_migrate.bat build-images
 
@@ -794,7 +794,7 @@ scripts\airgap_migrate.bat push-images</span></pre>
 
 docker build frontend \
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 \
-  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine \
+  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine \
   --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 
 docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
@@ -807,7 +807,7 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span><spa
 
 docker build frontend ^
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 ^
-  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine ^
+  --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine ^
   --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 
 docker push artifactory.example.com/skynet/skynet/backend:2026.04.30

@@ -17,7 +17,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..config import settings
 from ..constants import STRUCTURAL_PROGRESS_EVENTS
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
-from .models import Base, JobModel, LogEntryModel, ProgressEventModel, UserQuotaAuditModel, UserQuotaOverrideModel
+from .models import (
+    Base,
+    JobEmbeddingModel,
+    JobModel,
+    LogEntryModel,
+    ProgressEventModel,
+    UserQuotaAuditModel,
+    UserQuotaOverrideModel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +41,14 @@ class RemoteDBJobStore:
     """
 
     def __init__(self, db_url: str) -> None:
-        """Build the SQLAlchemy engine, bootstrap pgvector, and create tables.
+        """Build the SQLAlchemy engine and create tables.
 
         Pool sizing follows ``settings.worker_threads`` with a conservative
         floor so a configured worker pool has enough connections available.
+
+        pgvector bootstrap and the ``job_embeddings`` table are created only
+        when ``settings.embeddings_enabled`` is true, so a plain PostgreSQL
+        without the pgvector extension can host the rest of the schema.
 
         Args:
             db_url: PostgreSQL DSN to connect to.
@@ -55,10 +67,18 @@ class RemoteDBJobStore:
             pool_recycle=3600,
             pool_timeout=30,
         )
-        vector_extension_ready = self._bootstrap_pgvector()
-        Base.metadata.create_all(self._engine)
-        vector_indexes_ready = self._bootstrap_vector_indexes()
-        self.vector_search_enabled = vector_extension_ready and vector_indexes_ready
+        if settings.embeddings_enabled:
+            vector_extension_ready = self._bootstrap_pgvector()
+            Base.metadata.create_all(self._engine)
+            vector_indexes_ready = self._bootstrap_vector_indexes()
+            self.vector_search_enabled = vector_extension_ready and vector_indexes_ready
+        else:
+            non_embedding_tables = [
+                table
+                for table in Base.metadata.sorted_tables
+                if table is not JobEmbeddingModel.__table__
+            ]
+            Base.metadata.create_all(self._engine, tables=non_embedding_tables)
         self._session_factory = sessionmaker(bind=self._engine)
         parsed_url = urlparse(db_url)
         db_location = parsed_url.hostname or "<masked>"

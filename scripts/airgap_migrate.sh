@@ -104,7 +104,7 @@ Image build / push overrides (build-images, push-images):
   DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
   PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
   PIP_TRUSTED_HOST=artifactory.example.com
-  BASE_IMAGE=artifactory.example.com/docker-remote/node:22-alpine
+  BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine
   NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 
 Assumptions:
