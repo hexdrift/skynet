@@ -376,7 +376,7 @@ function RunsHeaderRow({
   return (
     <tr>
       <th
-        className={`py-2.5 text-center text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground w-[180px] border-b border-border/40 ${stickyFirst}`}
+        className={`py-2.5 text-center text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground w-[120px] sm:w-[180px] border-b border-border/40 ${stickyFirst}`}
       >
         {firstLabel}
       </th>

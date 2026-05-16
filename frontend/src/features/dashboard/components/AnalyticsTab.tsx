@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { toast } from "react-toastify";
 import dynamic from "next/dynamic";
@@ -120,7 +121,7 @@ function copyToClipboard(text: string) {
     .catch(() => {});
 }
 
-export function AnalyticsTab({
+function AnalyticsTabImpl({
   analyticsLoading,
   analyticsData,
   chartData,
@@ -137,6 +138,30 @@ export function AnalyticsTab({
     setJobId,
     setDate,
   } = filters;
+
+  const statusBars = useMemo(() => {
+    const total = chartData.status.reduce((a, b) => a + b.value, 0);
+    return chartData.status.map((s) => ({
+      ...s,
+      pct: total > 0 ? (s.value / total) * 100 : 0,
+    }));
+  }, [chartData.status]);
+
+  const jobTypeBars = useMemo(() => {
+    const total = chartData.jobTypeData.reduce((a, b) => a + b.value, 0);
+    return chartData.jobTypeData.map((d) => ({
+      ...d,
+      pct: total > 0 ? (d.value / total) * 100 : 0,
+    }));
+  }, [chartData.jobTypeData]);
+
+  const modelUsageBars = useMemo(() => {
+    const maxCount = chartData.modelUsage[0]?.count ?? 1;
+    return chartData.modelUsage.map((m) => ({
+      ...m,
+      pct: maxCount > 0 ? (m.count / maxCount) * 100 : 0,
+    }));
+  }, [chartData.modelUsage]);
 
   if (analyticsLoading && analyticsData === null) {
     return (
@@ -245,8 +270,8 @@ export function AnalyticsTab({
                 defaultOpen={true}
                 className="border-border/60"
               >
-                <div className="grid gap-5 xl:grid-cols-7">
-                  <div className="md:col-span-4">
+                <div className="grid gap-5 lg:grid-cols-7">
+                  <div className="lg:col-span-4">
                     <div className="mb-3">
                       <h4 className="text-sm font-semibold">
                         {msg("auto.features.dashboard.components.analyticstab.21")}
@@ -260,46 +285,43 @@ export function AnalyticsTab({
                     />
                   </div>
 
-                  <div className="md:col-span-3 space-y-6">
+                  <div className="lg:col-span-3 space-y-6">
                     <div className="space-y-3">
                       <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase tracking-widest">
                         {msg("auto.features.dashboard.components.analyticstab.22")}
                       </p>
-                      {(() => {
-                        const statusTotal = chartData.status.reduce((a, b) => a + b.value, 0);
-                        return chartData.status.map((s) => (
-                          <div
-                            key={s.key}
-                            role="button"
-                            tabIndex={0}
-                            className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
-                            onClick={() => setStatus(s.key)}
-                            onKeyDown={(e) => activateOnKey(e, () => setStatus(s.key))}
-                          >
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className=" size-2.5 rounded-full shrink-0 ring-1 ring-black/5"
-                                  style={{ backgroundColor: s.fill }}
-                                />
-                                <span className="text-[0.8125rem]">{s.name}</span>
-                              </span>
-                              <span className="tabular-nums font-semibold text-[0.8125rem]">
-                                {s.value}
-                              </span>
-                            </div>
-                            <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{
-                                  width: `${statusTotal > 0 ? (s.value / statusTotal) * 100 : 0}%`,
-                                  backgroundColor: s.fill,
-                                }}
+                      {statusBars.map((s) => (
+                        <div
+                          key={s.key}
+                          role="button"
+                          tabIndex={0}
+                          className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
+                          onClick={() => setStatus(s.key)}
+                          onKeyDown={(e) => activateOnKey(e, () => setStatus(s.key))}
+                        >
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2">
+                              <span
+                                className=" size-2.5 rounded-full shrink-0 ring-1 ring-black/5"
+                                style={{ backgroundColor: s.fill }}
                               />
-                            </div>
+                              <span className="text-[0.8125rem]">{s.name}</span>
+                            </span>
+                            <span className="tabular-nums font-semibold text-[0.8125rem]">
+                              {s.value}
+                            </span>
                           </div>
-                        ));
-                      })()}
+                          <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${s.pct}%`,
+                                backgroundColor: s.fill,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
                     {chartData.jobTypeData.length > 0 && (
@@ -310,28 +332,22 @@ export function AnalyticsTab({
                             {msg("auto.features.dashboard.components.analyticstab.24")}
                             {TERMS.optimization}
                           </p>
-                          {(() => {
-                            const jobTypeTotal = chartData.jobTypeData.reduce(
-                              (a, b) => a + b.value,
-                              0,
-                            );
-                            return chartData.jobTypeData.map((d) => (
-                              <div key={d.name} className="space-y-1">
-                                <div className="flex items-center justify-between text-sm">
-                                  <span>{d.name}</span>
-                                  <span className="tabular-nums font-medium">{d.value}</span>
-                                </div>
-                                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-primary/70 transition-all"
-                                    style={{
-                                      width: `${jobTypeTotal > 0 ? (d.value / jobTypeTotal) * 100 : 0}%`,
-                                    }}
-                                  />
-                                </div>
+                          {jobTypeBars.map((d) => (
+                            <div key={d.name} className="space-y-1">
+                              <div className="flex items-center justify-between text-sm">
+                                <span>{d.name}</span>
+                                <span className="tabular-nums font-medium">{d.value}</span>
                               </div>
-                            ));
-                          })()}
+                              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-primary/70 transition-all"
+                                  style={{
+                                    width: `${d.pct}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}
@@ -435,34 +451,31 @@ export function AnalyticsTab({
                   className="border-border/60"
                 >
                   <div className="space-y-3">
-                    {(() => {
-                      const maxCount = chartData.modelUsage[0]?.count ?? 1;
-                      return chartData.modelUsage.map((m) => (
-                        <div
-                          key={m.name}
-                          role="button"
-                          tabIndex={0}
-                          className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
-                          onClick={() => setModel(m.name)}
-                          onKeyDown={(e) => activateOnKey(e, () => setModel(m.name))}
-                        >
-                          <div className="flex items-center justify-between text-sm" dir="ltr">
-                            <span className="font-mono truncate max-w-[200px]" title={m.name}>
-                              {m.name}
-                            </span>
-                            <span className="tabular-nums font-medium">{m.count}</span>
-                          </div>
-                          <div className="h-2 rounded-full bg-muted overflow-hidden" dir="ltr">
-                            <div
-                              className="h-full rounded-full bg-primary/60 transition-all"
-                              style={{
-                                width: `${maxCount > 0 ? (m.count / maxCount) * 100 : 0}%`,
-                              }}
-                            />
-                          </div>
+                    {modelUsageBars.map((m) => (
+                      <div
+                        key={m.name}
+                        role="button"
+                        tabIndex={0}
+                        className="space-y-1.5 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
+                        onClick={() => setModel(m.name)}
+                        onKeyDown={(e) => activateOnKey(e, () => setModel(m.name))}
+                      >
+                        <div className="flex items-center justify-between text-sm" dir="ltr">
+                          <span className="font-mono truncate max-w-[200px]" title={m.name}>
+                            {m.name}
+                          </span>
+                          <span className="tabular-nums font-medium">{m.count}</span>
                         </div>
-                      ));
-                    })()}
+                        <div className="h-2 rounded-full bg-muted overflow-hidden" dir="ltr">
+                          <div
+                            className="h-full rounded-full bg-primary/60 transition-all"
+                            style={{
+                              width: `${m.pct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </AnalyticsSection>
               </StaggerItem>
@@ -474,3 +487,5 @@ export function AnalyticsTab({
     </div>
   );
 }
+
+export const AnalyticsTab = memo(AnalyticsTabImpl);

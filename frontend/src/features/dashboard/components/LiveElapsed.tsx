@@ -22,8 +22,20 @@ export function LiveElapsed({ startedAt, elapsedSeconds, isActive }: LiveElapsed
   React.useEffect(() => {
     if (!canStream) return;
     setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    // Pause the per-second tick in background tabs (mirrors the
+    // visibility-gated polling in the sidebar / public dashboard).
+    const tick = () => {
+      if (document.visibilityState === "visible") setNow(Date.now());
+    };
+    const id = setInterval(tick, 1000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") setNow(Date.now());
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [canStream]);
 
   const seconds = canStream && startMs !== null ? (now - startMs) / 1000 : elapsedSeconds;

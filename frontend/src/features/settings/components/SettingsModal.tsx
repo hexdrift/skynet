@@ -619,7 +619,8 @@ function AdminTab() {
           </div>
 
           <div className="flex-1 overflow-auto">
-            <Table style={{ minWidth: "560px" }}>
+            <div className="overflow-x-auto">
+              <Table style={{ minWidth: "560px" }}>
               <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur-sm">
                 <TableRow>
                   <ColumnHeader
@@ -782,7 +783,8 @@ function AdminTab() {
                   ))
                 )}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
