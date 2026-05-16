@@ -16,14 +16,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).parent.parent / ".env"
 
-# TODO: On-prem / air-gap — change MINIMAX_MODEL_ID to whichever LiteLLM
-# identifier your internal gateway exposes for MiniMax M2.7 (e.g.
-# "openai/minimax-m2p7"), and override CODE_AGENT_BASE_URL /
-# GENERALIST_AGENT_BASE_URL via env to point at the gateway. Both agents
-# default to MiniMax so swapping this single constant is enough for most
-# deployments. The Fireworks-hosted default works only when the host has
-# egress to api.fireworks.ai.
-MINIMAX_MODEL_ID = "fireworks_ai/accounts/fireworks/models/minimax-m2p7"
+# Both agents (submit-wizard code agent + Cmd/Ctrl+J generalist) default
+# to this one model id, so a single swap covers both; override per agent
+# via CODE_AGENT_MODEL / GENERALIST_AGENT_MODEL.
+#
+# TODO: On-prem / air-gap — set this to whatever LiteLLM identifier your
+# internal gateway exposes (e.g. "openai/<model>") and point
+# CODE_AGENT_BASE_URL / GENERALIST_AGENT_BASE_URL at the gateway via env.
+# The shipped default is Fireworks-hosted and only works when the host
+# has egress to api.fireworks.ai.
+DEFAULT_AGENT_MODEL_ID = "fireworks_ai/accounts/fireworks/models/minimax-m2p7"
 
 
 class Settings(BaseSettings):
@@ -128,10 +130,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
 
     code_agent_model: str = Field(
-        default=MINIMAX_MODEL_ID,
+        default=DEFAULT_AGENT_MODEL_ID,
         description=(
             "LiteLLM model id used by the submit-wizard code agent. "
-            "Defaults to MINIMAX_MODEL_ID (Fireworks-hosted MiniMax M2p7); "
+            "Defaults to DEFAULT_AGENT_MODEL_ID (Fireworks-hosted); "
             "override via CODE_AGENT_MODEL for on-prem deployments."
         ),
     )
@@ -148,11 +150,12 @@ class Settings(BaseSettings):
         description="URL of the MCP server the generalist agent connects to (usually the same app's /mcp mount)",
     )
     generalist_agent_model: str = Field(
-        default=MINIMAX_MODEL_ID,
+        default=DEFAULT_AGENT_MODEL_ID,
         description=(
             "LiteLLM model id used by the generalist agent (Cmd/Ctrl+J "
-            "panel). Defaults to MINIMAX_MODEL_ID — MiniMax M2p7 emits "
-            "<think> reasoning that streams visibly to the chat UI."
+            "panel). Defaults to DEFAULT_AGENT_MODEL_ID; the shipped "
+            "default emits <think> reasoning that streams visibly to the "
+            "chat UI."
         ),
     )
     # TODO: On-prem / air-gap — set GENERALIST_AGENT_BASE_URL to your internal

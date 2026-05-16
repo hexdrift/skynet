@@ -85,10 +85,10 @@ export function ModelConfigModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogTitleRow title={roleLabel} />
+      <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogTitleRow title={roleLabel} className="px-6 pt-6" />
 
-        <div className="space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
           {onSelectAllAvailable &&
             (() => {
               const availableCount = catalogModels?.length ?? 0;
@@ -350,11 +350,11 @@ export function ModelConfigModal({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+        <DialogFooter className="border-t border-border/40 px-6 pb-6 pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
             {msg("auto.features.submit.components.modelconfigmodal.10")}
           </Button>
-          <Button onClick={handleSave} disabled={!draft.name.trim()} className="w-full">
+          <Button onClick={handleSave} disabled={!draft.name.trim()} className="flex-1">
             {msg("auto.features.submit.components.modelconfigmodal.11")}
           </Button>
         </DialogFooter>

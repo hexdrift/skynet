@@ -64,7 +64,7 @@ export const dashboardMessages = {
   "auto.features.dashboard.components.jobstab.2": "נקה הכל",
   "auto.features.dashboard.components.jobstab.3": " תוצאות",
   "auto.features.dashboard.components.jobstab.4": "לא נמצאו ",
-  "auto.features.dashboard.components.jobstab.5": "העלה",
+  "auto.features.dashboard.components.jobstab.5": "העלה ",
   "auto.features.dashboard.components.jobstab.6": ", הגדירו ",
   "auto.features.dashboard.components.jobstab.7": " ו",
   "auto.features.dashboard.components.jobstab.8": ", והמערכת תשפר אותו אוטומטית",

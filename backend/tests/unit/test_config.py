@@ -536,11 +536,11 @@ def test_quota_overrides_property_parses_once(monkeypatch: pytest.MonkeyPatch) -
     assert s.quota_overrides is s.quota_overrides
 
 
-def test_settings_default_agent_models_use_minimax_constant() -> None:
-    """Both agents default to ``MINIMAX_MODEL_ID`` so a single swap covers both."""
-    from core.config import MINIMAX_MODEL_ID
+def test_settings_default_agent_models_use_shared_constant() -> None:
+    """Both agents default to ``DEFAULT_AGENT_MODEL_ID`` so a single swap covers both."""
+    from core.config import DEFAULT_AGENT_MODEL_ID
 
     s = Settings(_env_file=None)
 
-    assert s.code_agent_model == MINIMAX_MODEL_ID
-    assert s.generalist_agent_model == MINIMAX_MODEL_ID
+    assert s.code_agent_model == DEFAULT_AGENT_MODEL_ID
+    assert s.generalist_agent_model == DEFAULT_AGENT_MODEL_ID

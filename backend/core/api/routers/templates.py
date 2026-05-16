@@ -21,8 +21,10 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ...config import settings
 from ...models import TemplateCreateRequest, TemplateResponse
 from ...storage.models import Base as StorageBase
+from ...storage.models import JobEmbeddingModel
 from ...storage.models import TemplateModel
 from ..errors import DomainError
 from ..response_limits import (
@@ -109,16 +111,28 @@ class ApplyTemplateResponse(BaseModel):
 
 
 def ensure_template_schema(job_store) -> None:
-    """Create the ``templates`` table on ``job_store.engine`` if missing.
+    """Create the storage schema on ``job_store.engine`` if missing.
 
     Safe to call repeatedly: ``create_all`` is a no-op when every table
     already exists. Called once from the app lifespan so the router
     factory itself stays side-effect-free.
 
+    When ``settings.embeddings_enabled`` is false the pgvector-backed
+    ``job_embeddings`` table is excluded, so a plain PostgreSQL without the
+    pgvector extension can host the rest of the schema.
+
     Args:
         job_store: Job-store instance whose ``engine`` is used for DDL.
     """
-    StorageBase.metadata.create_all(job_store.engine)
+    if settings.embeddings_enabled:
+        StorageBase.metadata.create_all(job_store.engine)
+    else:
+        non_embedding_tables = [
+            table
+            for table in StorageBase.metadata.sorted_tables
+            if table is not JobEmbeddingModel.__table__
+        ]
+        StorageBase.metadata.create_all(job_store.engine, tables=non_embedding_tables)
 
 
 def create_templates_router(*, job_store) -> APIRouter:

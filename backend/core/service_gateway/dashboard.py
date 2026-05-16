@@ -34,6 +34,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..api.routers._helpers import compute_compare_fingerprint
+from ..config import settings
 from ..constants import PAYLOAD_OVERVIEW_TASK_FINGERPRINT
 
 # numpy underpins both projection paths — degrade gracefully when absent.
@@ -386,6 +387,10 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
     expensive (seconds at 100k rows); recomputing per request would
     spike CPU under traffic.
 
+    When ``settings.embeddings_enabled`` is false the ``job_embeddings``
+    table is never created, so this short-circuits to an empty payload
+    before any query is issued.
+
     Args:
         job_store: A store exposing a SQLAlchemy ``engine`` attribute.
 
@@ -395,6 +400,11 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
         and ``meta`` exposes the per-level cluster counts so the
         frontend can label the slider.
     """
+    if not settings.embeddings_enabled:
+        return {
+            "points": [],
+            "meta": {"count": 0, "level_cluster_counts": list(CLUSTER_LEVEL_K)},
+        }
     engine = job_store.engine
     with Session(engine) as session:
         fingerprint = _fetch_fingerprint(session)

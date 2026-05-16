@@ -1,11 +1,11 @@
 # On-prem mirrors / artifactory: see AIRGAP.html.
 #
 # Build args:
-#   BASE_IMAGE   — node:22-alpine compatible image; override with internal mirror.
+#   BASE_IMAGE   — node:20-alpine compatible image; override with internal mirror.
 #   NPM_REGISTRY — npm registry URL; override with Artifactory for air-gap builds.
 #                  Note: lockfile `resolved` URLs must also point at the mirror,
 #                  otherwise `npm ci` still fetches tarballs from the original host.
-ARG BASE_IMAGE=node:22-alpine
+ARG BASE_IMAGE=node:20-alpine
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 
 FROM ${BASE_IMAGE} AS base
