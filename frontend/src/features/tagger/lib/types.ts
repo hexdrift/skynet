@@ -7,6 +7,7 @@ export interface Category {
 
 export interface TaggerConfig {
   mode: AnnotationMode;
+  inputColumns: string[];
   question?: string;
   categories?: Category[];
   prompt?: string;
