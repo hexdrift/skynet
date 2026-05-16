@@ -116,6 +116,7 @@ export const sharedMessages = {
   "auto.app.optimizations.id.page.18": "לוגים",
   "auto.app.optimizations.id.page.19": "הגדרות",
   "auto.app.optimizations.id.page.lm_activity": "פעילות מודל",
+  "auto.app.optimizations.id.page.serve_info_failed": "טעינת פרטי השירות נכשלה",
   "auto.app.optimizations.id.page.20": "הרצת התוכנית המשופרת בזמן אמת — הזינו קלט וקבלו תשובה.",
   "auto.app.optimizations.id.page.21": "נקה היסטוריה",
   "auto.app.optimizations.id.page.22": "ריצה",
