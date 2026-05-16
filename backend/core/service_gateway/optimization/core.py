@@ -186,10 +186,14 @@ def _run_grid_pair(
     pair_start = datetime.now(UTC)
     try:
         program = ctx.module_factory(**dict(ctx.module_kwargs))
-        language_model = build_language_model(gen_cfg, disable_cache=True)
-        reflection_lm = (
-            build_language_model(ref_cfg, disable_cache=True) if ref_cfg is not None else None
-        )
+        # Caching stays ON here: forcing cache off across the GEPA
+        # training/eval region suppresses GEPA's recognized valset
+        # ``Evaluate`` / rollouts tqdm bar, which is the only bar the
+        # progress proxy emits from (regression from #23/#24). Per-stage
+        # activity tracking does not need cache-off — it works through the
+        # timing callbacks' stage state, independent of the LM cache.
+        language_model = build_language_model(gen_cfg)
+        reflection_lm = build_language_model(ref_cfg) if ref_cfg is not None else None
         gen_timing = GenLMTimingCallback(language_model)
         refl_timing = ReflectionLMTimingCallback(reflection_lm) if reflection_lm is not None else None
         callbacks: list[Any] = [gen_timing]
@@ -429,14 +433,18 @@ class DspyService:
         metric = load_metric_from_code(payload.metric_code)
         metric_identifier = getattr(metric, "__name__", "inline_metric")
 
-        language_model = build_language_model(payload.model_settings, disable_cache=True)
+        # Caching stays ON here: forcing cache off across the GEPA
+        # training/eval region suppresses GEPA's recognized valset
+        # ``Evaluate`` / rollouts tqdm bar, which is the only bar the
+        # progress proxy emits from (regression from #23/#24). Per-stage
+        # activity tracking does not need cache-off — it works through the
+        # timing callbacks' stage state, independent of the LM cache.
+        language_model = build_language_model(payload.model_settings)
         # Build the reflection LM up front (when supplied) so the timing
         # callback can be bound to its identity. ``instantiate_optimizer``
         # would otherwise build it internally, leaving us no handle.
-        # Cache disabled so the callback fires on every call — cached calls
-        # bypass DSPy's callback hooks and would zero out the activity matrix.
         reflection_lm = (
-            build_language_model(payload.reflection_model_settings, disable_cache=True)
+            build_language_model(payload.reflection_model_settings)
             if payload.reflection_model_settings is not None
             else None
         )
