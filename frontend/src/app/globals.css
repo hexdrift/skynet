@@ -915,7 +915,7 @@ header {
 
   /* Chart containers scroll horizontally */
   .recharts-responsive-container {
-    min-width: 400px;
+    min-width: 320px;
   }
 }
 

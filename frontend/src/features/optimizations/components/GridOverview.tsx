@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Crown,
@@ -49,7 +49,7 @@ import {
   type ScatterPoint,
 } from "./grid-overview-helpers";
 
-export function GridOverview({
+function GridOverviewImpl({
   job,
   onPairSelect,
   onPairDeleted,
@@ -106,67 +106,101 @@ export function GridOverview({
       setDeleting(false);
     }
   };
-  if (!job.grid_result) return null;
-  const prs = job.grid_result.pair_results;
-  const completedPrs = prs.filter((p) => !p.error);
-  const scoring = computePairScores(prs);
-  const byIdx = (i: number | null | undefined) =>
-    i == null ? null : (prs.find((p) => p.pair_index === i) ?? null);
-  const qualityPair = byIdx(scoring.qualityWinner);
-  const speedPair = byIdx(scoring.speedWinner);
-  const pairScoresData = completedPrs.map((p) => ({
-    pair_index: p.pair_index,
-    name: pairLabel(p),
-    baselineScore: Math.round(
-      (p.baseline_test_metric ?? 0) > 1
-        ? (p.baseline_test_metric ?? 0)
-        : (p.baseline_test_metric ?? 0) * 100,
-    ),
-    optimizedScore: Math.round(
-      (p.optimized_test_metric ?? 0) > 1
-        ? (p.optimized_test_metric ?? 0)
-        : (p.optimized_test_metric ?? 0) * 100,
-    ),
-    isBest: scoring.overallWinner === p.pair_index,
-  }));
-  const combinedScoresData = completedPrs
-    .map((p) => {
-      const s = scoring.byIndex[p.pair_index];
-      if (!s) return null;
-      return {
-        pair_index: p.pair_index,
-        name: pairLabel(p),
-        quality: Math.round(s.quality * 100),
-        speed: s.speed != null ? Math.round(s.speed * 100) : 0,
-        isBest: scoring.overallWinner === p.pair_index,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r != null);
-  const pairRespTimeData = completedPrs
-    .filter((p) => p.avg_response_time_ms)
-    .map((p) => ({
+  const gridResult = job.grid_result;
+  // Keyed on `gridResult`: the parent polls every 5s and runs a 1s elapsed
+  // interval, so without memoization these datasets (and the O(n²) Pareto
+  // pass) rebuild ~1Hz even when the grid payload is unchanged.
+  const derived = useMemo(() => {
+    if (!gridResult) return null;
+    const prs = gridResult.pair_results;
+    const completedPrs = prs.filter((p) => !p.error);
+    const scoring = computePairScores(prs);
+    const byIdx = (i: number | null | undefined) =>
+      i == null ? null : (prs.find((p) => p.pair_index === i) ?? null);
+    const qualityPair = byIdx(scoring.qualityWinner);
+    const speedPair = byIdx(scoring.speedWinner);
+    const pairScoresData = completedPrs.map((p) => ({
       pair_index: p.pair_index,
       name: pairLabel(p),
-      responseTime: +(p.avg_response_time_ms! / 1000).toFixed(1),
-      isBest: scoring.speedWinner === p.pair_index,
+      baselineScore: Math.round(
+        (p.baseline_test_metric ?? 0) > 1
+          ? (p.baseline_test_metric ?? 0)
+          : (p.baseline_test_metric ?? 0) * 100,
+      ),
+      optimizedScore: Math.round(
+        (p.optimized_test_metric ?? 0) > 1
+          ? (p.optimized_test_metric ?? 0)
+          : (p.optimized_test_metric ?? 0) * 100,
+      ),
+      isBest: scoring.overallWinner === p.pair_index,
     }));
-
-  const scatterPoints: ScatterPoint[] = completedPrs
-    .filter((p) => p.avg_response_time_ms != null && p.optimized_test_metric != null)
-    .map((p) => {
-      const raw = p.optimized_test_metric!;
-      const qPct = raw > 1 ? raw : raw * 100;
-      return {
+    const combinedScoresData = completedPrs
+      .map((p) => {
+        const s = scoring.byIndex[p.pair_index];
+        if (!s) return null;
+        return {
+          pair_index: p.pair_index,
+          name: pairLabel(p),
+          quality: Math.round(s.quality * 100),
+          speed: s.speed != null ? Math.round(s.speed * 100) : 0,
+          isBest: scoring.overallWinner === p.pair_index,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r != null);
+    const pairRespTimeData = completedPrs
+      .filter((p) => p.avg_response_time_ms)
+      .map((p) => ({
         pair_index: p.pair_index,
         name: pairLabel(p),
-        quality: +qPct.toFixed(1),
-        latency: +(p.avg_response_time_ms! / 1000).toFixed(2),
-        isOverall: scoring.overallWinner === p.pair_index,
-        isQuality: scoring.qualityWinner === p.pair_index,
-        isSpeed: scoring.speedWinner === p.pair_index,
-      };
-    });
-  const { pareto: paretoPoints, dominated: dominatedPoints } = computePareto(scatterPoints);
+        responseTime: +(p.avg_response_time_ms! / 1000).toFixed(1),
+        isBest: scoring.speedWinner === p.pair_index,
+      }));
+
+    const scatterPoints: ScatterPoint[] = completedPrs
+      .filter((p) => p.avg_response_time_ms != null && p.optimized_test_metric != null)
+      .map((p) => {
+        const raw = p.optimized_test_metric!;
+        const qPct = raw > 1 ? raw : raw * 100;
+        return {
+          pair_index: p.pair_index,
+          name: pairLabel(p),
+          quality: +qPct.toFixed(1),
+          latency: +(p.avg_response_time_ms! / 1000).toFixed(2),
+          isOverall: scoring.overallWinner === p.pair_index,
+          isQuality: scoring.qualityWinner === p.pair_index,
+          isSpeed: scoring.speedWinner === p.pair_index,
+        };
+      });
+    const { pareto: paretoPoints, dominated: dominatedPoints } = computePareto(scatterPoints);
+    return {
+      prs,
+      completedPrs,
+      scoring,
+      qualityPair,
+      speedPair,
+      pairScoresData,
+      combinedScoresData,
+      pairRespTimeData,
+      scatterPoints,
+      paretoPoints,
+      dominatedPoints,
+    };
+  }, [gridResult]);
+
+  if (!derived) return null;
+  const {
+    prs,
+    completedPrs,
+    scoring,
+    qualityPair,
+    speedPair,
+    pairScoresData,
+    combinedScoresData,
+    pairRespTimeData,
+    scatterPoints,
+    paretoPoints,
+    dominatedPoints,
+  } = derived;
 
   const matchesFilter = (pi: number) => pairFilter == null || pi === pairFilter;
   const pairScoresFiltered = pairScoresData.filter((r) => matchesFilter(r.pair_index));
@@ -935,3 +969,5 @@ export function GridOverview({
     </div>
   );
 }
+
+export const GridOverview = memo(GridOverviewImpl);
