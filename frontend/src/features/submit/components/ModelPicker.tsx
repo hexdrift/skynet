@@ -178,7 +178,7 @@ export function ModelPicker({
 
   const providerLabel = React.useCallback(
     (groupKey: string): string => {
-      const [slug, dataCenter] = groupKey.split("\u0000");
+      const [slug = "", dataCenter = ""] = groupKey.split("\u0000");
       if (slug === "discovered")
         return formatMsg("auto.features.submit.components.modelpicker.template.1", {
           p1: discoverUrl ?? "",
