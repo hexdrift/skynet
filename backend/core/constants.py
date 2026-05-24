@@ -48,6 +48,7 @@ PROGRESS_SPLITS_READY = "dataset_splits_ready"
 PROGRESS_BASELINE = "baseline_evaluated"
 PROGRESS_OPTIMIZED = "optimized_evaluated"
 PROGRESS_OPTIMIZER = "optimizer_progress"
+PROGRESS_CANDIDATE = "candidate"
 
 PROGRESS_GRID_PAIR_STARTED = "grid_pair_started"
 PROGRESS_GRID_PAIR_COMPLETED = "grid_pair_completed"
@@ -58,11 +59,15 @@ PROGRESS_GRID_PAIR_FAILED = "grid_pair_failed"
 # cheap to keep — but they also happen early, which makes them the
 # first casualties of a naive FIFO eviction. The jobstore preserves
 # these before touching optimizer_progress and other high-volume rows.
+# Candidate events are also preserved: the trajectory tree references
+# each candidate's parent by id, so evicting earlier rows produces
+# orphan nodes the frontend cannot resolve.
 STRUCTURAL_PROGRESS_EVENTS = frozenset(
     {
         PROGRESS_SPLITS_READY,
         PROGRESS_BASELINE,
         PROGRESS_OPTIMIZED,
+        PROGRESS_CANDIDATE,
         PROGRESS_GRID_PAIR_STARTED,
         PROGRESS_GRID_PAIR_COMPLETED,
         PROGRESS_GRID_PAIR_FAILED,
@@ -89,5 +94,6 @@ COMPILE_TRAINSET_KEY = "trainset"
 COMPILE_VALSET_KEY = "valset"
 OPTIMIZER_METRIC_KEY = "metric"
 OPTIMIZER_REFLECTION_LM_KEY = "reflection_lm"
+OPTIMIZER_LOG_DIR_KEY = "log_dir"
 
 OPTIMIZER_NAME_GEPA = "gepa"

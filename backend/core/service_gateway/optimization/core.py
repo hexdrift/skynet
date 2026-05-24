@@ -73,6 +73,7 @@ from .optimizers import (
     validate_optimizer_signature,
 )
 from .progress import capture_tqdm
+from .trajectory import gepa_log_dir, trajectory_watch
 from .timing import (
     STAGE_BASELINE,
     STAGE_EVALUATION,
@@ -196,7 +197,9 @@ def _run_grid_pair(
         if refl_timing is not None:
             callbacks.append(refl_timing)
 
-        with dspy.context(lm=language_model, callbacks=callbacks):
+        with dspy.context(lm=language_model, callbacks=callbacks), gepa_log_dir(
+            ctx.payload.optimizer_name
+        ) as trajectory_log_dir:
             optimizer = instantiate_optimizer(
                 ctx.optimizer_factory,
                 ctx.payload.optimizer_name,
@@ -205,6 +208,7 @@ def _run_grid_pair(
                 gen_cfg,
                 ref_cfg,
                 reflection_lm=reflection_lm,
+                log_dir=trajectory_log_dir,
             )
             baseline = None
             baseline_test_results: list[dict] = []
@@ -225,7 +229,11 @@ def _run_grid_pair(
                         },
                     )
 
-            with capture_tqdm(ctx.progress_callback), track_stage(STAGE_TRAINING, *callbacks):
+            with (
+                capture_tqdm(ctx.progress_callback),
+                track_stage(STAGE_TRAINING, *callbacks),
+                trajectory_watch(trajectory_log_dir, ctx.progress_callback),
+            ):
                 compiled = compile_program(
                     optimizer=optimizer,
                     program=program,
@@ -441,15 +449,6 @@ class DspyService:
             else None
         )
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
-        optimizer = instantiate_optimizer(
-            optimizer_factory,
-            payload.optimizer_name,
-            payload.optimizer_kwargs,
-            metric,
-            payload.model_settings,
-            payload.reflection_model_settings,
-            reflection_lm=reflection_lm,
-        )
 
         examples = rows_to_examples(
             payload.dataset,
@@ -485,66 +484,81 @@ class DspyService:
         callbacks: list[Any] = [gen_timing]
         if refl_timing is not None:
             callbacks.append(refl_timing)
-        with dspy.context(lm=language_model, callbacks=callbacks):
-            baseline_test_metric = None
-            baseline_test_results: list[dict] = []
-            if splits.test:
-                with track_stage(STAGE_BASELINE, *callbacks):
-                    baseline_test_metric, baseline_test_results = evaluate_on_test(
-                        program,
-                        splits.test,
-                        metric,
-                        collect_per_example=True,
-                    )
-                logger.info("Baseline test metric: %s", baseline_test_metric)
-                if progress_callback and baseline_test_metric is not None:
-                    progress_callback(
-                        PROGRESS_BASELINE,
-                        {DETAIL_BASELINE: baseline_test_metric},
-                    )
+        with gepa_log_dir(payload.optimizer_name) as trajectory_log_dir:
+            optimizer = instantiate_optimizer(
+                optimizer_factory,
+                payload.optimizer_name,
+                payload.optimizer_kwargs,
+                metric,
+                payload.model_settings,
+                payload.reflection_model_settings,
+                reflection_lm=reflection_lm,
+                log_dir=trajectory_log_dir,
+            )
+            with dspy.context(lm=language_model, callbacks=callbacks):
+                baseline_test_metric = None
+                baseline_test_results: list[dict] = []
+                if splits.test:
+                    with track_stage(STAGE_BASELINE, *callbacks):
+                        baseline_test_metric, baseline_test_results = evaluate_on_test(
+                            program,
+                            splits.test,
+                            metric,
+                            collect_per_example=True,
+                        )
+                    logger.info("Baseline test metric: %s", baseline_test_metric)
+                    if progress_callback and baseline_test_metric is not None:
+                        progress_callback(
+                            PROGRESS_BASELINE,
+                            {DETAIL_BASELINE: baseline_test_metric},
+                        )
 
-            logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
-            with capture_tqdm(progress_callback), track_stage(STAGE_TRAINING, *callbacks):
-                compiled_program = compile_program(
-                    optimizer=optimizer,
-                    program=program,
-                    splits=splits,
-                    metric=metric,
-                    compile_kwargs=payload.compile_kwargs,
-                )
-            logger.info("Optimizer compile completed successfully")
-
-            optimized_test_metric = None
-            optimized_test_results: list[dict] = []
-            if splits.test:
-                with track_stage(STAGE_EVALUATION, *callbacks):
-                    optimized_test_metric, optimized_test_results = evaluate_on_test(
-                        compiled_program,
-                        splits.test,
-                        metric,
-                        collect_per_example=True,
+                logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
+                with (
+                    capture_tqdm(progress_callback),
+                    track_stage(STAGE_TRAINING, *callbacks),
+                    trajectory_watch(trajectory_log_dir, progress_callback),
+                ):
+                    compiled_program = compile_program(
+                        optimizer=optimizer,
+                        program=program,
+                        splits=splits,
+                        metric=metric,
+                        compile_kwargs=payload.compile_kwargs,
                     )
-                logger.info("Optimized test metric: %s", optimized_test_metric)
-                if progress_callback and optimized_test_metric is not None:
-                    progress_callback(
-                        PROGRESS_OPTIMIZED,
-                        {DETAIL_OPTIMIZED: optimized_test_metric},
-                    )
+                logger.info("Optimizer compile completed successfully")
 
-            best_program = compiled_program
-            if (
-                baseline_test_metric is not None
-                and optimized_test_metric is not None
-                and optimized_test_metric < baseline_test_metric
-            ):
-                logger.warning(
-                    "Optimized program (%.4f) is worse than baseline (%.4f) — returning baseline program",
-                    optimized_test_metric,
-                    baseline_test_metric,
-                )
-                best_program = program
-                # Swap so the "optimized" metric reflects what we're actually returning
-                optimized_test_metric = baseline_test_metric
+                optimized_test_metric = None
+                optimized_test_results: list[dict] = []
+                if splits.test:
+                    with track_stage(STAGE_EVALUATION, *callbacks):
+                        optimized_test_metric, optimized_test_results = evaluate_on_test(
+                            compiled_program,
+                            splits.test,
+                            metric,
+                            collect_per_example=True,
+                        )
+                    logger.info("Optimized test metric: %s", optimized_test_metric)
+                    if progress_callback and optimized_test_metric is not None:
+                        progress_callback(
+                            PROGRESS_OPTIMIZED,
+                            {DETAIL_OPTIMIZED: optimized_test_metric},
+                        )
+
+                best_program = compiled_program
+                if (
+                    baseline_test_metric is not None
+                    and optimized_test_metric is not None
+                    and optimized_test_metric < baseline_test_metric
+                ):
+                    logger.warning(
+                        "Optimized program (%.4f) is worse than baseline (%.4f) — returning baseline program",
+                        optimized_test_metric,
+                        baseline_test_metric,
+                    )
+                    best_program = program
+                    # Swap so the "optimized" metric reflects what we're actually returning
+                    optimized_test_metric = baseline_test_metric
 
         program_artifact = persist_program(best_program, artifact_id)
         if program_artifact:

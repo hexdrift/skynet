@@ -16,6 +16,7 @@ import { GridOverview } from "./GridOverview";
 import { GridLiveChart } from "./GridLiveChart";
 import { InfoCard } from "./ui-primitives";
 import { PipelineStages, computeStageTimestamps } from "./PipelineStages";
+import { TrajectoryPanel } from "@/features/trajectory/components/TrajectoryPanel";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 const ScoreChart = dynamic(() => import("@/shared/ui/score-chart").then((m) => m.ScoreChart), {
@@ -395,6 +396,8 @@ export function OverviewTab({
           </Card>
         </FadeIn>
       )}
+
+      {job.optimization_type === "run" && <TrajectoryPanel job={job} />}
 
       {job.optimization_type === "grid_search" && !job.grid_result && activePairIndex === null && (
         <FadeIn delay={0.1}>
