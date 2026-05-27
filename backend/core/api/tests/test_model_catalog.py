@@ -5,12 +5,14 @@ from __future__ import annotations
 import litellm
 import pytest
 
+from ...config import settings
 from .. import model_catalog as mc
 from ..model_catalog import (  # type: ignore[attr-defined]
     CatalogModel,
     CatalogProvider,
     ModelCatalogResponse,
     _make_label,
+    _provider_data_centers,
     get_catalog,
 )
 
@@ -42,6 +44,7 @@ def test_catalog_model_defaults() -> None:
     assert m.supports_vision is False
     assert m.available is False
     assert m.max_input_tokens is None
+    assert m.data_center is None
 
 
 def test_catalog_model_stores_all_fields() -> None:
@@ -60,16 +63,18 @@ def test_catalog_model_stores_all_fields() -> None:
 
 
 def test_catalog_provider_has_env_key_defaults_false() -> None:
-    """``has_env_key`` defaults to ``False`` on ``CatalogProvider``."""
+    """``has_env_key`` defaults to ``False`` and ``data_center`` to ``None``."""
     p = CatalogProvider(slug="openai", label="OpenAI")
     assert p.has_env_key is False
+    assert p.data_center is None
 
 
 def test_catalog_provider_stores_env_var_and_url() -> None:
-    """Provider env vars and base URLs round-trip through ``CatalogProvider``."""
+    """Provider env vars, base URLs and data center round-trip."""
     p = CatalogProvider(
         slug="openai",
         label="OpenAI",
+        data_center="On-prem gateway",
         env_var="OPENAI_API_KEY",
         default_base_url="https://api.openai.com/v1",
         has_env_key=True,
@@ -77,6 +82,7 @@ def test_catalog_provider_stores_env_var_and_url() -> None:
     assert p.env_var == "OPENAI_API_KEY"
     assert p.default_base_url == "https://api.openai.com/v1"
     assert p.has_env_key is True
+    assert p.data_center == "On-prem gateway"
 
 
 def test_model_catalog_response_empty_lists() -> None:
@@ -268,3 +274,95 @@ def test_get_catalog_handles_valid_models_failure(monkeypatch: pytest.MonkeyPatc
     assert isinstance(result, ModelCatalogResponse)
     # model is not in valid_set so it's unavailable → filtered out
     assert result.models == []
+
+
+def test_single_endpoint_provider_has_none_data_center(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provider with one endpoint emits exactly one entry, ``data_center=None``.
+
+    Preserves the historical single-DC wire shape so existing clients keep
+    working when no on-prem gateway is configured.
+    """
+    monkeypatch.setattr(settings, "code_agent_base_url", "")
+    monkeypatch.setattr(settings, "embeddings_base_url", "")
+    centers = _provider_data_centers("openai")
+    assert len(centers) == 1
+    assert centers[0].label is None
+
+    fake_cost: dict = {
+        "gpt-4o": {
+            "mode": "chat",
+            "litellm_provider": "openai",
+            "supports_reasoning": False,
+            "max_input_tokens": 128000,
+            "input_cost_per_token": 0,
+            "output_cost_per_token": 0,
+        }
+    }
+    monkeypatch.setattr(litellm, "model_cost", fake_cost)
+    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["gpt-4o"])
+    monkeypatch.setattr(mc, "_probe_all_providers", dict)
+
+    result = get_catalog()
+
+    openai_models = [m for m in result.models if m.provider == "openai"]
+    assert len(openai_models) == 1
+    assert openai_models[0].data_center is None
+    openai_providers = [p for p in result.providers if p.slug == "openai"]
+    assert len(openai_providers) == 1
+    assert openai_providers[0].data_center is None
+
+
+def test_on_prem_gateway_surfaces_as_extra_data_center(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A configured on-prem gateway adds a second OpenAI data center.
+
+    The same model fans out to two catalog entries — the public OpenAI
+    endpoint (``data_center=None``) and the internal gateway
+    (``data_center="On-prem gateway"``) — each carrying its own base URL.
+    """
+    monkeypatch.setattr(settings, "code_agent_base_url", "https://llm.internal/v1")
+    monkeypatch.setattr(settings, "embeddings_base_url", "")
+
+    centers = _provider_data_centers("openai")
+    assert len(centers) == 2
+    on_prem = next(c for c in centers if c.label == "On-prem gateway")
+    assert on_prem.base_url == "https://llm.internal/v1"
+    assert on_prem.models_url == "https://llm.internal/v1/models"
+
+    fake_cost: dict = {
+        "gpt-4o": {
+            "mode": "chat",
+            "litellm_provider": "openai",
+            "supports_reasoning": False,
+            "max_input_tokens": 128000,
+            "input_cost_per_token": 0,
+            "output_cost_per_token": 0,
+        }
+    }
+    monkeypatch.setattr(litellm, "model_cost", fake_cost)
+    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["gpt-4o"])
+    monkeypatch.setattr(mc, "_probe_all_providers", dict)
+
+    result = get_catalog()
+
+    openai_models = [m for m in result.models if m.value == "openai/gpt-4o"]
+    dcs = sorted((m.data_center or "") for m in openai_models)
+    assert dcs == ["", "On-prem gateway"]
+
+    on_prem_provider = next(
+        p for p in result.providers if p.slug == "openai" and p.data_center == "On-prem gateway"
+    )
+    assert on_prem_provider.default_base_url == "https://llm.internal/v1"
+    native_provider = next(
+        p for p in result.providers if p.slug == "openai" and p.data_center is None
+    )
+    assert native_provider.default_base_url == "https://api.openai.com/v1"
+
+
+def test_on_prem_falls_back_to_embeddings_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``EMBEDDINGS_BASE_URL`` is used as the on-prem DC when no agent URL is set."""
+    monkeypatch.setattr(settings, "code_agent_base_url", "")
+    monkeypatch.setattr(settings, "embeddings_base_url", "https://embed.internal/v1")
+
+    centers = _provider_data_centers("openai")
+    on_prem = next(c for c in centers if c.label == "On-prem gateway")
+    assert on_prem.base_url == "https://embed.internal/v1"

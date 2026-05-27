@@ -103,9 +103,9 @@ export function ExploreDetailPanel({ point, onClose, variations }: ExploreDetail
             type="button"
             onClick={onClose}
             aria-label={msg("explore.detail.close")}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+            className="close-button shrink-0"
           >
-            <X className="size-4" />
+            <X />
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -162,9 +162,9 @@ export function ExploreDetailPanel({ point, onClose, variations }: ExploreDetail
             type="button"
             onClick={onClose}
             aria-label={msg("explore.detail.close")}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+            className="close-button shrink-0"
           >
-            <X className="size-4" />
+            <X />
           </button>
         )}
       </header>

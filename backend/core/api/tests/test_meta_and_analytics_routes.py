@@ -104,16 +104,6 @@ def test_toggle_pin_flips_state(client: TestClient, job_store: FakeJobStore) -> 
     assert r2.json()["pinned"] is False
 
 
-def test_toggle_archive_flips_state(client: TestClient, job_store: FakeJobStore) -> None:
-    """Toggling archive twice returns to the original false state."""
-    job_store.seed_job("arc1", payload_overview={})
-    r1 = client.patch("/optimizations/arc1/archive")
-    assert r1.status_code == 200
-    assert r1.json()["archived"] is True
-    r2 = client.patch("/optimizations/arc1/archive")
-    assert r2.json()["archived"] is False
-
-
 def test_analytics_summary_empty_returns_zeros(client: TestClient) -> None:
     """An empty job store yields a zeroed-out analytics summary."""
     r = client.get("/analytics/summary")
@@ -322,12 +312,6 @@ def test_rename_job_404_for_missing_job(client: TestClient) -> None:
 def test_pin_job_404_for_missing_job(client: TestClient) -> None:
     """Pinning an unknown job returns 404."""
     r = client.patch("/optimizations/no-such-id/pin")
-    assert r.status_code == 404
-
-
-def test_archive_job_404_for_missing_job(client: TestClient) -> None:
-    """Archiving an unknown job returns 404."""
-    r = client.patch("/optimizations/no-such-id/archive")
     assert r.status_code == 404
 
 

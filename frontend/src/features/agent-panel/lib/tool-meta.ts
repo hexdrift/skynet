@@ -1,6 +1,6 @@
 import {
   AlertTriangle,
-  Archive,
+  BarChart3,
   CheckCircle2,
   Code2,
   Copy,
@@ -8,15 +8,19 @@ import {
   FileSearch,
   GitCompare,
   Layers,
+  ListChecks,
   Pencil,
   Pin,
   Play,
   RefreshCw,
   Save,
+  ScanSearch,
+  ScrollText,
   Search,
   Square,
   Tags,
   Trash2,
+  Wand2,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -72,6 +76,17 @@ export const TOOL_META: Record<string, ToolMeta> = {
     severity: "warning",
     icon: Square,
   },
+  bulk_cancel_jobs_optimizations_bulk_cancel_post: {
+    title: formatMsg("auto.features.agent.panel.lib.tool.meta.template.26", {
+      p1: TERMS.optimizationPlural,
+    }),
+    description: formatMsg("auto.features.agent.panel.lib.tool.meta.template.27", {
+      p1: TERMS.optimizationPlural,
+    }),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.69"),
+    severity: "warning",
+    icon: Square,
+  },
   submit_job_run_post: {
     title: formatMsg("auto.features.agent.panel.lib.tool.meta.template.6", {
       p1: TERMS.optimization,
@@ -111,15 +126,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.12"),
     severity: "info",
     icon: Pin,
-  },
-  toggle_archive_job_optimizations: {
-    title: msg("auto.features.agent.panel.lib.tool.meta.literal.13"),
-    description: formatMsg("auto.features.agent.panel.lib.tool.meta.template.13", {
-      p1: TERMS.optimization,
-    }),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.14"),
-    severity: "info",
-    icon: Archive,
   },
   create_template_templates_post: {
     title: msg("auto.features.agent.panel.lib.tool.meta.literal.15"),
@@ -206,15 +212,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     severity: "info",
     icon: Pin,
   },
-  bulk_archive_jobs_optimizations_bulk_archive_post: {
-    title: formatMsg("auto.features.agent.panel.lib.tool.meta.template.22", {
-      p1: TERMS.optimizationPlural,
-    }),
-    description: msg("auto.features.agent.panel.lib.tool.meta.literal.37"),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.38"),
-    severity: "info",
-    icon: Archive,
-  },
   update_template_templates: {
     title: msg("auto.features.agent.panel.lib.tool.meta.literal.39"),
     description: msg("auto.features.agent.panel.lib.tool.meta.literal.40"),
@@ -253,6 +250,41 @@ export const TOOL_META: Record<string, ToolMeta> = {
     confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.50"),
     severity: "info",
     icon: FileSearch,
+  },
+  update_wizard_state: {
+    title: msg("auto.features.agent.panel.lib.tool.meta.literal.54"),
+    description: msg("auto.features.agent.panel.lib.tool.meta.literal.55"),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.56"),
+    severity: "info",
+    icon: Wand2,
+  },
+  public_search_dashboard_search_post: {
+    title: msg("auto.features.agent.panel.lib.tool.meta.literal.57"),
+    description: msg("auto.features.agent.panel.lib.tool.meta.literal.58"),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.59"),
+    severity: "info",
+    icon: ScanSearch,
+  },
+  get_test_results_optimizations: {
+    title: msg("auto.features.agent.panel.lib.tool.meta.literal.60"),
+    description: msg("auto.features.agent.panel.lib.tool.meta.literal.61"),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.62"),
+    severity: "info",
+    icon: ListChecks,
+  },
+  get_job_logs_optimizations: {
+    title: msg("auto.features.agent.panel.lib.tool.meta.literal.63"),
+    description: msg("auto.features.agent.panel.lib.tool.meta.literal.64"),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.65"),
+    severity: "info",
+    icon: ScrollText,
+  },
+  get_analytics_summary_analytics_summary_get: {
+    title: msg("auto.features.agent.panel.lib.tool.meta.literal.66"),
+    description: msg("auto.features.agent.panel.lib.tool.meta.literal.67"),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.68"),
+    severity: "info",
+    icon: BarChart3,
   },
 };
 

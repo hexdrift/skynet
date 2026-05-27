@@ -78,10 +78,10 @@ export function TutorialMenu() {
             <button
               type="button"
               onClick={closeMenu}
-              className="absolute top-3.5 end-3.5 z-10 p-1.5 rounded-lg hover:bg-[#E5DDD4]/60 text-[#8C7A6B] hover:text-[#3D2E22] transition-colors cursor-pointer"
+              className="close-button absolute top-4 end-4 z-10"
               aria-label={msg("auto.features.tutorial.components.tutorial.menu.literal.1")}
             >
-              <X className="size-4" />
+              <X />
             </button>
 
             <div className="flex flex-col items-center px-6 pt-7 pb-6 text-center">

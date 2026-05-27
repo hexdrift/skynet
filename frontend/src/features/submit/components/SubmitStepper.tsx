@@ -18,14 +18,34 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
           const completed = i < step && validateStep(i);
           const active = i === step;
           const clickable = i <= step || reachable;
+          const isLast = i === STEPS.length - 1;
+          const segmentDone = i + 1 <= step;
           return (
             <div key={s.id} className="flex flex-col items-center relative z-10 flex-1">
+              {!isLast ? (
+                <div
+                  aria-hidden="true"
+                  className="absolute top-[18px] sm:top-5 h-px overflow-hidden rounded-full bg-muted/40"
+                  style={{
+                    insetInlineStart: "calc(50% + 22px)",
+                    insetInlineEnd: "calc(-50% + 22px)",
+                  }}
+                >
+                  <motion.div
+                    className="h-full rounded-full opacity-40"
+                    style={{ background: "linear-gradient(90deg, #c8a882, #a68b6b, #d4b896)" }}
+                    initial={{ width: 0 }}
+                    animate={{ width: segmentDone ? "100%" : "0%" }}
+                    transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+                  />
+                </div>
+              ) : null}
               <button
                 type="button"
                 onClick={() => handleTabClick(i)}
                 disabled={!clickable}
                 className={cn(
-                  "relative flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer",
+                  "relative z-10 flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer",
                   "size-9 sm:size-10 text-sm font-semibold",
                   active
                     ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(124,99,80,0.4)] scale-110"
@@ -56,15 +76,6 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
             </div>
           );
         })}
-      </div>
-      <div className="absolute top-[18px] sm:top-5 inset-x-[10%] h-[2px] bg-muted -z-0 rounded-full">
-        <motion.div
-          className="h-full rounded-full"
-          style={{ background: "linear-gradient(90deg, #c8a882, #a68b6b, #d4b896)" }}
-          initial={{ width: 0 }}
-          animate={{ width: `${(step / (STEPS.length - 1)) * 100}%` }}
-          transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
-        />
       </div>
     </div>
   );

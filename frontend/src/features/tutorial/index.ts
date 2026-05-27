@@ -14,6 +14,8 @@ export {
 export {
   DEMO_GRID_OPTIMIZATION_ID,
   DEMO_OPTIMIZATION_ID,
+  DEMO_TRAJECTORY_PREVIEW_LAYOUT,
   buildGridDemoJob,
+  resetDemoSimulation,
   startDemoSimulation,
 } from "./lib/demo-data";

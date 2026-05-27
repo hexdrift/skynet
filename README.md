@@ -14,7 +14,7 @@ DSPy prompt optimization as a service. Submit datasets + signature/metric code, 
 ### 2. Clone and Setup
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/hexdrift/skynet.git
 cd skynet
 ```
 

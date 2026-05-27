@@ -177,7 +177,7 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> bool:
         dataset_sample=dataset,
     )
 
-    emb_summary = embedder.encode(summary_text) if summary_text else None
+    emb_summary = embedder.encode(summary_text, task="retrieval.passage") if summary_text else None
     if emb_summary is None:
         logger.debug("embed_finished_job: no usable summary for %s, skipping", optimization_id)
         return False
@@ -330,3 +330,39 @@ def backfill_missing_embeddings(job_store: Any) -> int:
     )
     thread.start()
     return len(ids)
+
+
+def purge_orphan_embeddings(job_store: Any) -> int:
+    """Delete embedding rows whose underlying ``jobs`` row no longer exists.
+
+    Pre-existing orphans accumulated before the deletion path cascaded into
+    ``job_embeddings``. This one-shot sweep — run at startup alongside
+    ``backfill_missing_embeddings`` — keeps the index honest even after a
+    migration / restore that drops jobs out from under the embedding table.
+
+    Args:
+        job_store: Job-store handle exposing a SQLAlchemy engine.
+
+    Returns:
+        The number of orphan rows deleted (0 when none were found or the
+        delete failed).
+    """
+    try:
+        with Session(job_store.engine) as session:
+            result = session.execute(
+                text(
+                    "DELETE FROM job_embeddings WHERE optimization_id IN ("
+                    "SELECT je.optimization_id FROM job_embeddings je "
+                    "LEFT JOIN jobs j ON j.optimization_id = je.optimization_id "
+                    "WHERE j.optimization_id IS NULL"
+                    ")"
+                )
+            )
+            session.commit()
+            deleted = int(result.rowcount or 0)
+            if deleted:
+                logger.info("Embedding sweep: removed %d orphan row(s)", deleted)
+            return deleted
+    except Exception as exc:
+        logger.warning("Embedding orphan sweep failed: %s", exc)
+        return 0

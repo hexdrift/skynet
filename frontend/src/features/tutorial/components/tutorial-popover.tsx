@@ -89,10 +89,10 @@ export function TutorialPopover({
           <button
             type="button"
             onClick={onExit}
-            className="shrink-0 p-1 rounded-lg hover:bg-[#E5DDD4]/60 text-[#8C7A6B] hover:text-[#3D2E22] transition-colors cursor-pointer"
+            className="close-button shrink-0"
             aria-label={msg("auto.features.tutorial.components.tutorial.popover.literal.5")}
           >
-            <X className="size-3.5" />
+            <X />
           </button>
         </div>
 

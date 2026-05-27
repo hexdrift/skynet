@@ -79,8 +79,11 @@ function SheetContent({
       >
         {children}
         {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-4 end-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary">
-            <XIcon className="size-4" />
+          <SheetPrimitive.Close
+            data-slot="sheet-close"
+            className="close-button absolute top-4 end-4"
+          >
+            <XIcon />
             <span className="sr-only">{msg("shared.dialog.close")}</span>
           </SheetPrimitive.Close>
         )}

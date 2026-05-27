@@ -23,13 +23,13 @@ import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip } from "@/shared/ui/model-chip";
-import { LoadingState } from "@/shared/ui/loading-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
-  loading: () => <LoadingState variant="block" className="h-[200px]" />,
+  loading: () => <Skeleton height={200} borderRadius={8} />,
 });
 
 const SUMMARY_TABS = [

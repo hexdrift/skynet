@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from ...models.constants import HEALTH_STATUS_OK
 from ...registry.core import ServiceRegistry
-from ..app import _SCALAR_HIDDEN_PATHS, create_app
+from ..app import _SCALAR_PUBLIC_PATHS, create_app
 
 
 def _make_mock_worker(*, threads_alive: bool = True, stale_seconds: float | None = 0.0):
@@ -329,12 +329,12 @@ def test_openapi_public_returns_valid_json(app_client):
     assert "paths" in body
 
 
-def test_openapi_public_hides_hidden_paths(app_client):
-    """All paths declared as hidden are absent from the public spec."""
+def test_openapi_public_only_exposes_allowlisted_paths(app_client):
+    """Every path in the public spec is on the public allowlist."""
     client, _, _ = app_client
     paths = client.get("/openapi.public.json").json().get("paths", {})
-    for hidden in _SCALAR_HIDDEN_PATHS:
-        assert hidden not in paths, f"Hidden path {hidden!r} leaked into public spec"
+    leaked = set(paths.keys()) - _SCALAR_PUBLIC_PATHS
+    assert not leaked, f"Non-public paths leaked into public spec: {sorted(leaked)}"
 
 
 def test_openapi_public_removes_empty_tag_groups(app_client) -> None:

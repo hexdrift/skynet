@@ -456,6 +456,15 @@ migration:
       memory: 1Gi
   backoffLimit: 1
   activeDeadlineSeconds: 600
+  # Source timezone assumed for any legacy ``timestamp without time zone`` rows
+  # written before revision b2c3d4e5f6a7. Only relevant when upgrading an
+  # existing on-prem DB whose PostgreSQL session timezone is not UTC (e.g.
+  # an operator-managed external DB running with ``Asia/Jerusalem`` or
+  # ``America/New_York``). Leave empty for fresh installs and for the bundled
+  # pgvector StatefulSet — the migration then falls back to
+  # ``current_setting('timezone')`` which is UTC for those cases.
+  # Example: legacyNaiveTz: "Asia/Jerusalem"
+  legacyNaiveTz: ""
 
 # Extra labels/annotations applied to every resource in the chart.
 commonLabels: {}

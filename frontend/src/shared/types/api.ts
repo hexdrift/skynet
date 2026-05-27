@@ -128,6 +128,7 @@ export interface OptimizationSummaryResponse {
   best_pair_label?: string | null;
   task_fingerprint?: string | null;
   compare_fingerprint?: string | null;
+  summary_text?: string | null;
 }
 
 export interface PaginatedJobsResponse {
@@ -319,6 +320,7 @@ export interface CatalogModel {
   value: string;
   label: string;
   provider: string;
+  data_center?: string | null;
   supports_thinking: boolean;
   supports_vision: boolean;
   available: boolean;
@@ -328,6 +330,7 @@ export interface CatalogModel {
 export interface CatalogProvider {
   slug: string;
   label: string;
+  data_center?: string | null;
   env_var?: string | null;
   default_base_url?: string | null;
   has_env_key: boolean;

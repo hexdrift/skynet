@@ -215,17 +215,10 @@ async function ensureTagger() {
 }
 
 async function ensureExplore() {
-  // Show /explore inside the dashboard's explore tab so the surrounding
-  // jobs/analytics tabs stay visible — feels more "I'm exploring inside
-  // the dashboard" than the bare /explore route. The deep-dive tour now
-  // only includes this step when advancedMode is already on (see the
-  // dynamic visibleSteps filter), so we no longer flip the pref silently.
-  if (window.location.pathname !== "/" || !window.location.search.includes("tab=explore")) {
-    navigateTo("/?tab=explore");
-    await waitForElement("[data-tutorial='explore-canvas']");
+  if (window.location.pathname !== "/explore") {
+    navigateTo("/explore");
+    await waitForElement("[data-tutorial='explore-search']");
   }
-  await waitForHook("setTab");
-  setTab("explore");
   await waitForHook("setDemoExplorePoints");
   callTutorialHook("setDemoExplorePoints", DEMO_EXPLORE_POINTS);
 }
@@ -773,6 +766,23 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 5,
   },
   {
+    id: "dd-trajectory",
+    title: msg("auto.features.tutorial.lib.steps.literal.46"),
+    description: msg("auto.features.tutorial.lib.steps.literal.47"),
+    target: "[data-tutorial='trajectory-panel']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      setDetailTab("overview");
+      // Re-stream the candidates so the user sees the tree grow live instead
+      // of jumping straight to the completed graph.
+      callTutorialHook("replayDemoSimulation");
+      await waitForElement("[data-tutorial='trajectory-panel']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 12,
+  },
+  {
     id: "dd-score-chart",
     title: formatMsg("auto.features.tutorial.lib.steps.template.33", { p1: TERMS.scorePlural }),
     description: formatMsg("auto.features.tutorial.lib.steps.template.34", {
@@ -788,27 +798,6 @@ const tutorialSteps: TutorialStep[] = [
     },
     track: "deep-dive",
     readingTimeSec: 7,
-  },
-  {
-    id: "dd-data-tab",
-    title: msg("auto.features.tutorial.lib.steps.literal.24"),
-    description: formatMsg("auto.features.tutorial.lib.steps.template.35", {
-      p1: TERMS.dataset,
-      p2: TERMS.score,
-      p3: TERMS.model,
-      p4: TERMS.splitTrain,
-      p5: TERMS.splitVal,
-      p6: TERMS.splitTest,
-      p7: TERMS.score,
-    }),
-    target: "[data-tutorial='data-tab-trigger']",
-    placement: "bottom",
-    beforeShow: async () => {
-      await ensureDemoDetail();
-      setDetailTab("data");
-    },
-    track: "deep-dive",
-    readingTimeSec: 9,
   },
   {
     id: "dd-playground",
@@ -833,6 +822,27 @@ const tutorialSteps: TutorialStep[] = [
       await ensureDemoDetail();
       setDetailTab("playground");
       await waitForElement("[data-tutorial='serve-playground']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 9,
+  },
+  {
+    id: "dd-data-tab",
+    title: msg("auto.features.tutorial.lib.steps.literal.24"),
+    description: formatMsg("auto.features.tutorial.lib.steps.template.35", {
+      p1: TERMS.dataset,
+      p2: TERMS.score,
+      p3: TERMS.model,
+      p4: TERMS.splitTrain,
+      p5: TERMS.splitVal,
+      p6: TERMS.splitTest,
+      p7: TERMS.score,
+    }),
+    target: "[data-tutorial='data-tab-trigger']",
+    placement: "bottom",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      setDetailTab("data");
     },
     track: "deep-dive",
     readingTimeSec: 9,
@@ -954,13 +964,13 @@ const tutorialSteps: TutorialStep[] = [
     id: "dd-explore",
     title: msg("auto.features.tutorial.lib.steps.literal.38"),
     description: msg("auto.features.tutorial.lib.steps.literal.39"),
-    target: "[data-tutorial='explore-canvas']",
-    placement: "auto",
+    target: "[data-tutorial='explore-search']",
+    placement: "bottom",
     beforeShow: async () => {
       await ensureExplore();
     },
     track: "deep-dive",
-    readingTimeSec: 11,
+    readingTimeSec: 14,
   },
   // Agent panel steps. Filtered out below when the generalist agent
   // feature flag is off so prod users without the panel don't get
@@ -1029,6 +1039,7 @@ const ADVANCED_ONLY_STEP_IDS = new Set([
   "dd-auto-level",
   "dd-model-probe",
   "dd-score-chart",
+  "dd-trajectory",
   "dd-playground",
   "dd-serve",
   "dd-logs",
@@ -1036,7 +1047,6 @@ const ADVANCED_ONLY_STEP_IDS = new Set([
   "dd-grid-overview",
   "dd-grid-pair",
   "dd-tagger-modes",
-  "dd-explore",
   "dd-module",
   "dd-gepa",
 ]);

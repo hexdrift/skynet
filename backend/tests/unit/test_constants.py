@@ -36,6 +36,20 @@ class TestProgressEventKeys:
         assert C.PROGRESS_OPTIMIZER == "optimizer_progress"
         assert isinstance(C.PROGRESS_OPTIMIZER, str)
 
+    def test_progress_candidate_value_and_type(self) -> None:
+        """``PROGRESS_CANDIDATE`` is the string ``"candidate"``."""
+        assert C.PROGRESS_CANDIDATE == "candidate"
+        assert isinstance(C.PROGRESS_CANDIDATE, str)
+
+    def test_progress_candidate_in_structural_events(self) -> None:
+        """``PROGRESS_CANDIDATE`` is preserved during FIFO eviction.
+
+        The trajectory tree references each candidate's parent by id, so
+        evicting earlier rows produces orphan nodes that the frontend cannot
+        resolve.
+        """
+        assert C.PROGRESS_CANDIDATE in C.STRUCTURAL_PROGRESS_EVENTS
+
 
 class TestTqdmKeys:
     """Pin the tqdm wire keys read by the API layer."""

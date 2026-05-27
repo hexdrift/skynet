@@ -1,10 +1,6 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
-import { TERMS } from "@/shared/lib/terms";
-import { msg } from "@/shared/lib/messages";
 
 import { useSubmitWizard } from "../hooks/use-submit-wizard";
 import { slideVariants } from "../constants";
@@ -37,16 +33,8 @@ export function SubmitWizard() {
 
   return (
     <div
-      className={`space-y-6 ${containerWidthClass} mx-auto pb-8 transition-[max-width] duration-300`}
+      className={`space-y-6 ${containerWidthClass} mx-auto pb-8 -mt-2 md:-mt-4 transition-[max-width] duration-300`}
     >
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-foreground transition-colors">
-          {msg("auto.features.submit.components.submitwizard.1")}
-        </Link>
-        <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">{TERMS.notificationNewOpt}</span>
-      </div>
-
       <SubmitStepper w={w} />
 
       <div className="relative overflow-hidden pt-[10px]" data-tutorial="submit-wizard">

@@ -147,22 +147,6 @@ const RENDERERS: Record<string, ToolRenderer> = {
     },
   },
 
-  toggle_archive_job_optimizations: {
-    summary: (call) => {
-      const args = getArgs(call);
-      const arch = Boolean(args.archived ?? args.value);
-      return byStatus(call, {
-        running: arch
-          ? msg("auto.features.agent.panel.lib.tool.renderers.literal.11")
-          : msg("auto.features.agent.panel.lib.tool.renderers.literal.12"),
-        done: arch
-          ? msg("auto.features.agent.panel.lib.tool.renderers.literal.13")
-          : msg("auto.features.agent.panel.lib.tool.renderers.literal.14"),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.15"),
-      });
-    },
-  },
-
   bulk_pin_jobs_optimizations_bulk_pin_post: {
     summary: (call) => {
       const args = getArgs(call);
@@ -180,23 +164,6 @@ const RENDERERS: Record<string, ToolRenderer> = {
     },
   },
 
-  bulk_archive_jobs_optimizations_bulk_archive_post: {
-    summary: (call) => {
-      const args = getArgs(call);
-      const n = pickIds(args).length;
-      const arch = Boolean(args.archived ?? args.value);
-      return byStatus(call, {
-        running: arch
-          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.16", { p1: n })
-          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.17", { p1: n }),
-        done: arch
-          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.18", { p1: n })
-          : formatMsg("auto.features.agent.panel.lib.tool.renderers.template.19", { p1: n }),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.17"),
-      });
-    },
-  },
-
   cancel_job_optimizations: {
     summary: (call) => {
       const id = pickId(getArgs(call));
@@ -206,6 +173,21 @@ const RENDERERS: Record<string, ToolRenderer> = {
           ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.20", { p1: id })
           : msg("auto.features.agent.panel.lib.tool.renderers.literal.19"),
         error: msg("auto.features.agent.panel.lib.tool.renderers.literal.20"),
+      });
+    },
+  },
+
+  bulk_cancel_jobs_optimizations_bulk_cancel_post: {
+    summary: (call) => {
+      const n = pickIds(getArgs(call)).length;
+      return byStatus(call, {
+        running: n
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.39", { p1: n })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.18"),
+        done: n
+          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.40", { p1: n })
+          : msg("auto.features.agent.panel.lib.tool.renderers.literal.19"),
+        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.63"),
       });
     },
   },

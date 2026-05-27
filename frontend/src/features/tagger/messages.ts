@@ -1,9 +1,6 @@
 // Hebrew UI strings owned by the tagger feature slice. Edit directly.
 
 export const taggerMessages = {
-  "auto.features.tagger.components.taggerannotation.1": "לוח בקרה",
-  "auto.features.tagger.components.taggerannotation.2": "הגדרות תיוג",
-  "auto.features.tagger.components.taggerannotation.3": "תיוג",
   "auto.features.tagger.components.taggerannotation.4": "Y",
   "auto.features.tagger.components.taggerannotation.5": "כן",
   "auto.features.tagger.components.taggerannotation.6": "N",
@@ -30,8 +27,6 @@ export const taggerMessages = {
   "auto.features.tagger.components.taggersetup.8": "הנחיה",
   "auto.features.tagger.components.taggersetup.9": "הוסיפו לפחות שתי קטגוריות",
   "auto.features.tagger.components.taggersetup.10": "בחרו מצב תיוג בשלב הקודם",
-  "auto.features.tagger.components.taggersetup.11": "לוח בקרה",
-  "auto.features.tagger.components.taggersetup.12": "הגדרות תיוג",
   "auto.features.tagger.components.taggersetup.13": "הקודם",
   "auto.features.tagger.components.taggersetup.14": "הבא",
   "auto.features.tagger.components.taggersetup.15": "התחלת תיוג",

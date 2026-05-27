@@ -43,9 +43,9 @@ export function FirstRunHint({ onDismiss, className }: FirstRunHintProps) {
           type="button"
           onClick={onDismiss}
           aria-label={msg("auto.features.agent.panel.components.firstrunhint.literal.1")}
-          className="rounded-md p-0.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors cursor-pointer -me-1 -mt-0.5"
+          className="close-button"
         >
-          <X className="size-3" />
+          <X />
         </button>
       </div>
       <span

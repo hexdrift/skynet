@@ -13,7 +13,7 @@ Phased exposure (the gate):
   ``validate_code``, ``profile_datasets``.
 * Unlocked once signature + metric + model are all set: ``submit_job``,
   ``submit_grid_search``.
-* Always available post-submit: ``cancel_job``, rename/pin/archive.
+* Always available post-submit: ``cancel_job``, rename/pin.
 
 Tool docstrings become the agent prompt, so we rely on the trimming in
 :mod:`mcp_mount._trim_tool_spec` to keep each description ≤240 chars. Any
@@ -137,7 +137,6 @@ _SAFE_MUTATIONS: frozenset[str] = frozenset(
     {
         "rename_job_optimizations",
         "toggle_pin_job_optimizations",
-        "toggle_archive_job_optimizations",
         "create_template_templates_post",
         "update_template_templates",
         "apply_template_templates",
@@ -150,7 +149,6 @@ _SAFE_MUTATIONS: frozenset[str] = frozenset(
         "set_column_roles_datasets_column_roles_post",
         "update_wizard_state",
         "bulk_pin_jobs_optimizations_bulk_pin_post",
-        "bulk_archive_jobs_optimizations_bulk_archive_post",
     }
 )
 
@@ -461,13 +459,11 @@ _ALWAYS_TOOLS = frozenset(
         "discover_models_models_discover_post",
         "rename_job_optimizations",
         "toggle_pin_job_optimizations",
-        "toggle_archive_job_optimizations",
         # Job lifecycle tools that can run on an existing optimization at any time.
         "clone_job_optimizations",
         "retry_job_optimizations",
         "compare_jobs_optimizations_compare_post",
         "bulk_pin_jobs_optimizations_bulk_pin_post",
-        "bulk_archive_jobs_optimizations_bulk_archive_post",
         # Wizard-prefill tools — safe to expose before a dataset is uploaded
         # since they *produce* a dataset or column map, they don't consume one.
         "list_sample_datasets_datasets_samples_get",
@@ -477,6 +473,16 @@ _ALWAYS_TOOLS = frozenset(
         "set_column_roles_datasets_column_roles_post",
         # Generalized wizard patch — any editable field, partial updates.
         "update_wizard_state",
+        # Semantic + structured search across every public optimization. The
+        # agent uses it to surface comparable runs ("find me sentiment jobs
+        # that beat 0.8 with MIPROv2") before the user has filled the wizard.
+        "public_search_dashboard_search_post",
+        # Diagnostic readouts for finished runs — per-example baseline /
+        # optimized scores and full grid-result detail. Read-only and safe
+        # to call once an optimization id is in scope.
+        "get_test_results_optimizations",
+        "get_grid_search_result_optimizations",
+        "get_pair_test_results_optimizations",
     }
 )
 _DATASET_READY_TOOLS = frozenset(
@@ -552,10 +558,10 @@ class GeneralistSig(dspy.Signature):
       new one.
     * Existing jobs: ``clone_job`` duplicates a job (1–5 copies),
       ``retry_job`` re-runs a failed/cancelled one, ``compare_jobs`` gives
-      a side-by-side snapshot of 2–5 optimizations, ``bulk_pin_jobs`` /
-      ``bulk_archive_jobs`` toggle metadata in batch, ``bulk_cancel_jobs``
-      stops many running/pending jobs at once, ``bulk_delete_jobs`` removes
-      many terminal jobs at once.
+      a side-by-side snapshot of 2–5 optimizations, ``bulk_pin_jobs``
+      toggles pin state in batch, ``bulk_cancel_jobs`` stops many
+      running/pending jobs at once, ``bulk_delete_jobs`` removes many
+      terminal jobs at once.
     * Column roles: ``set_column_roles`` writes a validated input/output
       map back to the wizard; prefer it over hand-editing code.
     * Any other wizard field: ``update_wizard_state`` patches any subset
@@ -569,6 +575,18 @@ class GeneralistSig(dspy.Signature):
       (e.g. optimizer + kwargs + split) in a single call.
     * Logs: ``get_job_logs`` returns the log trail when the user is
       debugging a failed run.
+    * Cross-corpus search: ``public_search`` does semantic + structured
+      search over every public optimization (free-text query in any
+      language, plus optional models / optimizers / optimization_types /
+      date filters, sorted by relevance / recency / gain). Use it when the
+      user asks to find comparable runs ("הראה לי ריצות סנטימנט שעברו את
+      0.8") before reaching for the wizard.
+    * Run diagnostics: ``get_test_results`` returns per-example baseline
+      and optimized test scores for a single run; ``get_grid_search_result``
+      returns the full per-pair table for a finished grid search;
+      ``get_pair_test_results`` zooms into one pair's per-example scores.
+      Call them when the user asks why a run scored what it did or which
+      examples regressed.
     """
 
     wizard_state: str = dspy.InputField(desc="JSON snapshot of the current wizard state.")

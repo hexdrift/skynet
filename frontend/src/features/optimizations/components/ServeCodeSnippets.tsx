@@ -4,12 +4,12 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { ServeInfoResponse } from "@/shared/types/api";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
-import { LoadingState } from "@/shared/ui/loading-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 import { LangPicker } from "./ui-primitives";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
-  loading: () => <LoadingState variant="block" className="h-[180px]" />,
+  loading: () => <Skeleton height={180} borderRadius={8} />,
 });
 
 export function ServeCodeSnippets({

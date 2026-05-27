@@ -57,7 +57,7 @@ def register_deletion_routes(router: APIRouter, *, job_store) -> None:
         """Hard-delete an optimization and all its data (not recoverable).
 
         Only terminal optimizations can be deleted — cancel first if still
-        active. Use ``PATCH /archive`` for a reversible soft-hide.
+        active.
 
         Args:
             optimization_id: Optimization id to delete.

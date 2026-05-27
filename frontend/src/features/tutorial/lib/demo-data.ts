@@ -23,6 +23,7 @@ import type {
   DashboardAnalyticsJob,
   PublicDashboardPoint,
 } from "@/shared/lib/api";
+import { layoutTrajectory, type CandidateMetrics } from "@/features/trajectory";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -39,8 +40,64 @@ function fmtElapsed(seconds: number): string {
   return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `0:${String(s).padStart(2, "0")}`;
 }
 
-const TRIAL_SCORES = [65.0, 70.0, 68.0, 72.5, 75.0, 71.0, 80.0, 84.0];
+const TRIAL_SCORES = [65.0, 62.0, 70.0, 68.0, 71.0, 75.0, 77.0, 72.5, 80.0, 84.0];
 const NUM_TRIALS = TRIAL_SCORES.length;
+
+// Wide-shallow branching so the trajectory panel fills the container with a
+// recognizably "exploratory" tree (gen 1 fans out to four variants, gen 2
+// keeps two of those alive plus one with twin offspring). The winning spine
+// 0 → 2 → 6 → 9 climbs 65 → 70 → 77 → 84.
+const CANDIDATE_PLAN: ReadonlyArray<{ parent: string | null; generation: number }> = [
+  { parent: null, generation: 0 },
+  { parent: "0", generation: 1 },
+  { parent: "0", generation: 1 },
+  { parent: "0", generation: 1 },
+  { parent: "0", generation: 1 },
+  { parent: "2", generation: 2 },
+  { parent: "2", generation: 2 },
+  { parent: "3", generation: 2 },
+  { parent: "4", generation: 2 },
+  { parent: "6", generation: 3 },
+];
+
+// Eventual layout extent for the demo's full 10-candidate tree. The
+// trajectory tree opens framed to these dims so the dd-trajectory step
+// shows the whole graph from the first frame instead of zooming-in on the
+// lone root candidate before streaming starts.
+const DEMO_TRAJECTORY_FULL_LAYOUT = (() => {
+  const fullCandidates: CandidateMetrics[] = CANDIDATE_PLAN.map((plan, idx) => ({
+    candidate_id: String(idx),
+    parent_id: plan.parent,
+    parents_extra: [],
+    generation: plan.generation,
+    score: (TRIAL_SCORES[idx] ?? 0) / 100,
+    per_example: [],
+    prompt: {},
+    discovered_at_evals: 0,
+    iteration: idx,
+    timestamp: "",
+  }));
+  const result = layoutTrajectory(fullCandidates);
+  return { width: result.width, height: result.height };
+})();
+
+export const DEMO_TRAJECTORY_PREVIEW_LAYOUT: { width: number; height: number } =
+  DEMO_TRAJECTORY_FULL_LAYOUT;
+
+function candidateEvent(start: Date, idx: number, offsetMs: number): ProgressEvent {
+  const plan = CANDIDATE_PLAN[idx]!;
+  return {
+    timestamp: ts(start, offsetMs),
+    event: "candidate",
+    metrics: {
+      candidate_id: String(idx),
+      generation: plan.generation,
+      score: (TRIAL_SCORES[idx] ?? 0) / 100,
+      parent_id: plan.parent,
+      iteration: idx,
+    },
+  };
+}
 
 function baseJob(start: Date): OptimizationStatusResponse {
   return {
@@ -234,6 +291,9 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
   if (trialsDone > 0) {
     events.push({ timestamp: ts(start, 5000), event: "optimizer_progress", metrics: {} });
   }
+  for (let i = 0; i < trialsDone && i < CANDIDATE_PLAN.length; i++) {
+    events.push(candidateEvent(start, i, 5000 + i * 550));
+  }
 
   const logs: OptimizationLogEntry[] = [
     {
@@ -355,6 +415,10 @@ function buildDone(start: Date): OptimizationStatusResponse {
       metrics: { optimized_test_metric: 0.84 },
     },
   ];
+
+  for (let i = 0; i < CANDIDATE_PLAN.length; i++) {
+    events.push(candidateEvent(start, i, 5000 + i * 550));
+  }
 
   const logs: OptimizationLogEntry[] = [
     {
@@ -526,8 +590,25 @@ export function resetDemoSimulation() {
   _simulationCompleted = false;
 }
 
-export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
+export interface StartDemoSimulationOptions {
+  /**
+   * Skip past validating/splitting/baseline and start with the first trial
+   * already complete, then stream the remaining candidates ~0.45s apart.
+   * Used when the tutorial replays the simulation while the user is already
+   * looking at the trajectory panel — keeps the panel visible from the
+   * first frame instead of blanking out for the 2.5s pipeline warm-up.
+   */
+  fromTrajectory?: boolean;
+}
+
+const REPLAY_STAGGER_MS = 450;
+
+export function startDemoSimulation(
+  callbacks: DemoCallbacks,
+  options?: StartDemoSimulationOptions,
+): () => void {
   const { setJob, setLoading } = callbacks;
+  const fromTrajectory = options?.fromTrajectory === true;
 
   if (_simulationCompleted) {
     setLoading(false);
@@ -539,10 +620,34 @@ export function startDemoSimulation(callbacks: DemoCallbacks): () => void {
     return () => {};
   }
 
-  const start = new Date();
   const timers: Array<ReturnType<typeof setTimeout>> = [];
-
   const set = (job: OptimizationStatusResponse) => setJob(() => job);
+
+  if (fromTrajectory) {
+    // Anchor `start` in the past so the existing event/log offsets land in
+    // the recent past while still letting the live elapsed clock read a
+    // believable value during the replay.
+    const replayStart = new Date(Date.now() - 2500);
+    setLoading(false);
+    set(buildOptimizing(replayStart, 1));
+    for (let i = 1; i < NUM_TRIALS; i++) {
+      timers.push(
+        setTimeout(() => set(buildOptimizing(replayStart, i + 1)), i * REPLAY_STAGGER_MS),
+      );
+    }
+    timers.push(
+      setTimeout(
+        () => {
+          _simulationCompleted = true;
+          set(buildDone(replayStart));
+        },
+        NUM_TRIALS * REPLAY_STAGGER_MS + 400,
+      ),
+    );
+    return () => timers.forEach(clearTimeout);
+  }
+
+  const start = new Date();
 
   timers.push(
     setTimeout(() => {
@@ -1322,10 +1427,6 @@ export const DEMO_COMPARE_DATASET: OptimizationDatasetResponse = {
   split_counts: { train: 0, val: 0, test: COMPARE_DATASET_ROWS.length },
 };
 
-// Tasks are ordered to match the cluster hierarchy below: pairs of two
-// share a level-1 parent (4 parents = 4 broad themes), and the first 4 vs
-// last 4 split the level-0 halves. So when the granularity slider walks
-// from 2 → 4 → 8 the dominant label per cluster sharpens predictably.
 const EXPLORE_TASKS = [
   msg("auto.features.tutorial.lib.demo.data.literal.1"),
   msg("auto.features.tutorial.lib.demo.data.literal.9"),
@@ -1337,11 +1438,9 @@ const EXPLORE_TASKS = [
   msg("auto.features.tutorial.lib.demo.data.literal.34"),
 ];
 
-// Maps each of the 32 leaf clusters to one of the 8 task indices above.
-// Within each level-1 group of 8 leaves, 5 take the primary task and 3
-// take the secondary — that 5/3 skew picks a clear modal at level 1, and
-// each level-2 group of 4 leaves contains either all-primary or 1/3 mix
-// (modal is the secondary), giving 8 distinct labels at level 2.
+// Maps each of the 32 grid cells to one of the 8 task indices above so
+// neighbouring cells share themes — the resulting scatter has visible
+// task-coloured neighbourhoods without any aggregation layer.
 const EXPLORE_LEAF_TASK = [
   0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7,
 ];
@@ -1363,8 +1462,7 @@ const EXPLORE_CLUSTER_TOTAL = EXPLORE_CLUSTER_ROWS * EXPLORE_CLUSTER_COLS;
 
 function buildExploreDemoPoints(): PublicDashboardPoint[] {
   // Deterministic LCG so the layout is stable across reloads — keeps the
-  // tutorial screenshot-friendly and means cluster colors don't shift each
-  // time the user re-opens the explore step.
+  // tutorial screenshot-friendly.
   let seed = 0x6a09e667;
   const rand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -1423,15 +1521,6 @@ function buildExploreDemoPoints(): PublicDashboardPoint[] {
       created_at: new Date(now - daysAgo * 86400_000).toISOString(),
       x,
       y,
-      // Hierarchical IDs — cluster k=32 is the leaf, coarser levels collapse
-      // adjacent clusters in pairs so the slider walks 2 → 4 → 8 → 16 → 32.
-      cluster_levels: [
-        Math.floor(c32 / 16),
-        Math.floor(c32 / 8),
-        Math.floor(c32 / 4),
-        Math.floor(c32 / 2),
-        c32,
-      ],
       siblings: [],
       task_fingerprint: null,
       compare_fingerprint: null,
