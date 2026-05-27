@@ -1,6 +1,10 @@
 "use client";
 
-import { SessionProvider as NextAuthSessionProvider, useSession, getSession } from "next-auth/react";
+import {
+  SessionProvider as NextAuthSessionProvider,
+  getSession,
+  useSession,
+} from "next-auth/react";
 import type { ComponentProps } from "react";
 import * as React from "react";
 import { setApiAuthToken, setApiAuthTokenRefresher } from "@/shared/lib/api";
@@ -26,6 +30,9 @@ function ApiAuthTokenBridge() {
     setApiAuthToken(session?.backendAccessToken);
   }, [session?.backendAccessToken]);
 
+  // On a 401 the API layer calls this to mint a fresh bearer by re-fetching
+  // the session — recovers a tab whose cached token expired while idle
+  // during a long run, without forcing a full reload.
   React.useEffect(() => {
     setApiAuthTokenRefresher(async () => {
       const fresh = await getSession();

@@ -143,6 +143,7 @@ export function OptimizationDetailView() {
   }, [isGridDemoMode]);
 
   const [serveInfo, setServeInfo] = useState<ServeInfoResponse | null>(null);
+  const [serveInfoError, setServeInfoError] = useState<string | null>(null);
   const [serveLoading, setServeLoading] = useState(false);
   const [runHistory, setRunHistory] = useState<
     Array<{
@@ -270,6 +271,10 @@ export function OptimizationDetailView() {
     pollIntervalMs: 5000,
     shouldStopPolling: () =>
       !!jobRef.current && TERMINAL_STATUSES.has(jobRef.current.status),
+    // Stream auth failed even after a token refresh — re-fetch through the
+    // self-healing request() path so a still-bad token surfaces the existing
+    // error banner instead of the page silently freezing on stale data.
+    onAuthError: () => void fetchJob(),
   });
 
   useEffect(() => {
@@ -332,22 +337,28 @@ export function OptimizationDetailView() {
   useEffect(() => {
     if (isAnyDemoMode) return;
     if (job?.status !== "success") return;
-    if (job.optimization_type === "grid_search") {
-      if (activePairIndex != null) {
-        getPairServeInfo(id, activePairIndex)
-          .then(setServeInfo)
-          .catch(() => setServeInfo(null));
-      } else {
-        // Grid overview — fetch serve info for best pair (used for playground on overview)
-        getServeInfo(id)
-          .then(setServeInfo)
-          .catch(() => setServeInfo(null));
-      }
-    } else {
-      getServeInfo(id)
-        .then(setServeInfo)
-        .catch(() => setServeInfo(null));
-    }
+    // A failure here used to be swallowed as `setServeInfo(null)`, which
+    // silently blanked the Usage tab (e.g. when an expired bearer 401'd).
+    // request() now self-heals a stale token; a persistent failure surfaces.
+    const onFail = (err: unknown) => {
+      setServeInfo(null);
+      setServeInfoError(
+        err instanceof Error
+          ? err.message
+          : formatMsg("auto.app.optimizations.id.page.template.1", { p1: TERMS.optimization }),
+      );
+    };
+    const isGrid = job.optimization_type === "grid_search";
+    const loader =
+      isGrid && activePairIndex != null
+        ? getPairServeInfo(id, activePairIndex)
+        : getServeInfo(id);
+    loader
+      .then((info) => {
+        setServeInfo(info);
+        setServeInfoError(null);
+      })
+      .catch(onFail);
   }, [id, job?.status, job?.optimization_type, activePairIndex, isAnyDemoMode]);
 
   useEffect(() => {
@@ -372,6 +383,7 @@ export function OptimizationDetailView() {
     setServeLoading(false);
     setServeError(null);
     setServeInfo(null);
+    setServeInfoError(null);
   }, [activePairIndex]);
 
   const readServeInputs = () => {
