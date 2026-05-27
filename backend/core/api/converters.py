@@ -184,7 +184,6 @@ def overview_to_base_fields(overview: dict) -> dict:
         "name": overview.get(PAYLOAD_OVERVIEW_NAME),
         "description": overview.get(PAYLOAD_OVERVIEW_DESCRIPTION),
         "pinned": overview.get("pinned", False),
-        "archived": overview.get("archived", False),
         "username": overview.get(PAYLOAD_OVERVIEW_USERNAME),
         "module_name": overview.get(PAYLOAD_OVERVIEW_MODULE_NAME),
         "module_kwargs": overview.get(PAYLOAD_OVERVIEW_MODULE_KWARGS, {}),

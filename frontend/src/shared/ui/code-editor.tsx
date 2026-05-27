@@ -490,10 +490,10 @@ export function CodeEditor({
               <button
                 type="button"
                 onClick={() => setResult(null)}
-                className="p-0.5 rounded hover:bg-black/5 text-[#8C7A6B] cursor-pointer"
+                className="close-button"
                 aria-label={msg("shared.dialog.close")}
               >
-                <X className="size-3" />
+                <X />
               </button>
             )}
           </div>
@@ -506,21 +506,7 @@ export function CodeEditor({
           {result && result.valid && result.errors.length === 0 && (
             <div className="flex items-start gap-2 text-xs">
               <CheckCircle2 className="size-3.5 text-[#5A7247] shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="font-medium text-[#5A7247]">{msg("shared.code_editor.valid")}</span>
-                {result.signature_fields && (
-                  <div className="text-[#7C6350] font-mono text-[0.6875rem] space-y-0.5">
-                    <div>
-                      <span className="text-[#8C7A6B]">{msg("shared.code_editor.inputs")}</span>{" "}
-                      {result.signature_fields.inputs.join(", ")}
-                    </div>
-                    <div>
-                      <span className="text-[#8C7A6B]">{msg("shared.code_editor.outputs")}</span>{" "}
-                      {result.signature_fields.outputs.join(", ")}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <span className="font-medium text-[#5A7247]">{msg("shared.code_editor.valid")}</span>
             </div>
           )}
           {result?.errors.map((err, i) => (

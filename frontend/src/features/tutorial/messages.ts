@@ -50,9 +50,9 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.literal.36": "בדיקת מודלים",
   "auto.features.tutorial.lib.steps.literal.37":
     "לפני שמתחילים ריצה, אפשר לבדוק שהמודל זמין ולמדוד את זמן התגובה שלו. כך מזהים בעיות חיבור או הגדרה לפני שמפעילים ריצה ארוכה.",
-  "auto.features.tutorial.lib.steps.literal.38": "גלריה ציבורית",
+  "auto.features.tutorial.lib.steps.literal.38": "חיפוש סמנטי",
   "auto.features.tutorial.lib.steps.literal.39":
-    "מפת פיזור אינטראקטיבית של ריצות ציבוריות. הקבוצות מסומנות בגבולות צבעוניים, וריחוף מעל קבוצה מציג את שם המשימה שלה. אפשר לסנן לפי מודלים, אופטימיזרים ומשימות, ולמצוא רעיונות להגדרות מוצלחות לפני שמתחילים ריצה משלכם.",
+    "חיפוש חופשי בכל הריצות במערכת — שלכם או של משתמשים אחרים. הקלידו תיאור באנגלית או בעברית, ו-Skynet ימצא ריצות עם משמעות דומה, ולא רק התאמות מילים. אפשר לסנן לפי מודלים, אופטימייזרים, סטטוס וטווח תאריכים, ולעבור בין רשימת תוצאות מדורגת לתצוגת מפה.",
   "auto.features.tutorial.lib.steps.literal.40": "API ואינטגרציה",
   "auto.features.tutorial.lib.steps.literal.41":
     "מעבר לבדיקה בדפדפן, הפרומפט המשופר זמין מיד דרך REST API. העתיקו את כתובת נקודת הקצה או השתמשו בקטעי הקוד המוכנים (Python, JavaScript, cURL) כדי לשלב אותו בקוד שלכם.",
@@ -62,6 +62,9 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.literal.44": "צ'אט עם הסוכן",
   "auto.features.tutorial.lib.steps.literal.45":
     "בחלון הצ'אט אפשר לדבר עם הסוכן ולבקש ממנו לבצע פעולות. מצב אמון קובע אם הסוכן יבקש אישור לפני כל פעולה או יבצע פעולות בטוחות בעצמו. הסוכן רואה את מצב טופס ההגשה ויכול לעזור במילוי שדות.",
+  "auto.features.tutorial.lib.steps.literal.46": "עץ המועמדים",
+  "auto.features.tutorial.lib.steps.literal.47":
+    "GEPA יוצר מועמדים חדשים לפרומפט, ומכל מועמד יכולים להיווצר מועמדים בדור הבא. בעץ רואים את הציון של כל מועמד ואת הקשר בין הורה לילד לאורך הניסיונות. הסליידר שמעל הגרף מדפדף בין הדורות וחושף איך התוצאות התפתחו, ולחיצה על צומת פותחת מגירה עם הפרומפט המלא, ציונים לכל דוגמה והמשוב שהוביל לשיפור.",
   "auto.features.tutorial.lib.demo.data.literal.1": "סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.2": "מתחילים אופטימיזציה: סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.3": "מתחילים אופטימיזציה: סיווג אימיילים",
@@ -98,12 +101,12 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.demo.data.literal.32": "סיכום מאמרים",
   "auto.features.tutorial.lib.demo.data.literal.33": "מענה על שאלות מתוך מסמכים",
   "auto.features.tutorial.lib.demo.data.literal.34": "תיוג כוונת משתמש",
-  "auto.features.tutorial.components.tutorial.menu.literal.1": "סגור",
-  "auto.features.tutorial.components.tutorial.popover.literal.1": "השהה",
-  "auto.features.tutorial.components.tutorial.popover.literal.2": "נגן אוטומטי",
-  "auto.features.tutorial.components.tutorial.popover.literal.3": "השהה",
-  "auto.features.tutorial.components.tutorial.popover.literal.4": "נגן אוטומטי",
-  "auto.features.tutorial.components.tutorial.popover.literal.5": "סגור מדריך",
+  "auto.features.tutorial.components.tutorial.menu.literal.1": "סגירה",
+  "auto.features.tutorial.components.tutorial.popover.literal.1": "השהיה",
+  "auto.features.tutorial.components.tutorial.popover.literal.2": "הפעלה אוטומטית",
+  "auto.features.tutorial.components.tutorial.popover.literal.3": "השהיה",
+  "auto.features.tutorial.components.tutorial.popover.literal.4": "הפעלה אוטומטית",
+  "auto.features.tutorial.components.tutorial.popover.literal.5": "סגירת המדריך",
   "auto.features.tutorial.components.tutorial.popover.literal.6": "סיום",
   "auto.features.tutorial.components.tutorial.popover.literal.7": "הבא",
   "auto.features.tutorial.lib.demo.data.template.1":
@@ -118,7 +121,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.2":
     "כאן מופיעות כל הריצות. אפשר למיין לפי כותרות העמודות, לסנן דרך המסננים, לשנות רוחב עמודות ולפתוח את הפרטים של כל {p1}.",
   "auto.features.tutorial.lib.steps.template.3":
-    "בחלק העליון יש ניווט ללוח הבקרה, להגשת {p1} חדשה ולתיוג טקסטים. בחלק התחתון יש חיפוש והיסטוריית ריצות לפי תאריך. דרך ⋯ ליד {p2} אפשר לשתף, לשנות שם, לשכפל, להצמיד או למחוק.",
+    "בחלק העליון יש ניווט ללוח הבקרה, לתיוג טקסטים, להגשת {p1} חדשה ולחיפוש סמנטי בריצות הקיימות. בחלק התחתון מופיעה היסטוריית הריצות מקובצת לפי תאריך. דרך ⋯ ליד {p2} אפשר לשתף, לשנות שם, לשכפל, להצמיד או למחוק.",
   "auto.features.tutorial.lib.steps.template.4":
     "גרפים אינטראקטיביים שמציגים {p1}, יעילות, השוואת {p2} וטבלת שיאים. לחיצה על עמודה בגרף מסננת את הרשימה ל{p3} הרלוונטית.",
   "auto.features.tutorial.lib.steps.template.5": "איך להשוות {p1}",
@@ -191,12 +194,12 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.44":
     "עכשיו אתם מכירים את היכולות המרכזיות של Skynet. הגישו {p1} ראשונה, עקבו אחרי ה{p2} בזמן אמת, ובדקו את הפרומפט המשופר בלשונית שימוש.",
 
-  "auto.features.tutorial.components.concepts.guide.literal.1": "רקע ומושגי בסיס",
-  "auto.features.tutorial.components.concepts.guide.literal.2": "GEPA — אופטימיזציה רפלקטיבית",
-  "auto.features.tutorial.components.concepts.guide.literal.3": "פרמטרים של GEPA",
-  "auto.features.tutorial.components.concepts.guide.literal.4": "מושגי יסוד בהגדרת משימה",
-  "auto.features.tutorial.components.concepts.guide.literal.5": "זרימת העבודה המלאה",
-  "auto.features.tutorial.components.concepts.guide.literal.6": "טיפים ושיטות עבודה מומלצות",
+  "auto.features.tutorial.components.concepts.guide.literal.1": "רקע ומושגים",
+  "auto.features.tutorial.components.concepts.guide.literal.2": "GEPA: שיפור פרומפטים בעזרת רפלקציה",
+  "auto.features.tutorial.components.concepts.guide.literal.3": "כוונון GEPA ועלויות ריצה",
+  "auto.features.tutorial.components.concepts.guide.literal.4": "משימה, דאטאסט ופונקציית מדידה",
+  "auto.features.tutorial.components.concepts.guide.literal.5": "מהגשה ועד שימוש בתוצר",
+  "auto.features.tutorial.components.concepts.guide.literal.6": "שיטות עבודה ותקלות נפוצות",
   "auto.features.tutorial.components.concepts.guide.literal.7": "מילון מונחים",
   "auto.features.tutorial.components.concepts.guide.literal.8": "Skynet · מדריך מושגים",
   "auto.features.tutorial.components.concepts.guide.literal.9":
@@ -207,405 +210,405 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.13": "העתקה",
   "auto.features.tutorial.components.concepts.guide.literal.14": "פרמטר",
   "auto.features.tutorial.components.concepts.guide.literal.15": "תיאור",
-  "auto.features.tutorial.components.concepts.guide.literal.16": "ממודל שפה ועד אופטימיזציה",
+  "auto.features.tutorial.components.concepts.guide.literal.16": "ממודל שפה ועד פרומפט שאפשר למדוד",
   "auto.features.tutorial.components.concepts.guide.literal.17": "1.1 מהם מודלי שפה גדולים (LLMs)?",
   "auto.features.tutorial.components.concepts.guide.literal.18":
-    "מודלי שפה גדולים (Large Language Models) הם מודלים גנרטיביים שאומנו על כמויות גדולות של נתונים, ובהם טקסט וקוד. דוגמאות מוכרות הן ChatGPT, Gemini ו-Claude.",
+    "מודלי שפה גדולים (Large Language Models) הם מערכות שמקבלות קלט בשפה טבעית, קוד או מידע מובנה, ומחזירות תשובה: טקסט, JSON, סיווג, קוד או החלטה. הם לא מפעילים שיקול דעת אנושי, אבל הם טובים מאוד בזיהוי דפוסים ובהשלמת הוראות מתוך הדוגמאות והידע שלמדו בזמן האימון.",
   "auto.features.tutorial.components.concepts.guide.literal.19":
-    "בהתאם למודל ולכלים שמחוברים אליו, הוא יכול לענות על שאלות, לכתוב ולסכם טקסטים, להסיק מסקנות ולעזור בכתיבת קוד.",
+    "במוצרי תוכנה משתמשים בהם כדי לסווג פניות, לסכם מסמכים, לחלץ שדות, לענות על שאלות, לכתוב קוד או להפוך טקסט חופשי לפלט מובנה. איכות התשובה תלויה במודל, באיכות הקלט, בהגדרות הריצה, ובעיקר באופן שבו המשימה מנוסחת ונמדדת.",
   "auto.features.tutorial.components.concepts.guide.literal.20": "1.2 מהו פרומפט?",
   "auto.features.tutorial.components.concepts.guide.literal.21":
-    "פרומפט הוא ההוראה או השאלה ששולחים למודל. הניסוח משפיע על סוג התשובה, על המבנה שלה ועל רמת הפירוט. למשל:",
+    "פרומפט הוא ההוראה שמכוונת את המודל: מה המשימה, אילו שדות קלט זמינים, איך הפלט צריך להיראות, ומה אסור או חשוב במיוחד. שינוי קטן בניסוח יכול לשנות תשובות, ולכן בפרודקשן לא מספיק לכתוב הוראה שנשמעת סבירה. צריך לבדוק אותה על דוגמאות אמיתיות.",
   "auto.features.tutorial.components.concepts.guide.literal.22": "פרומפט פשוט:",
   "auto.features.tutorial.components.concepts.guide.literal.23": "\"סכם את הכתבה הבאה.\"",
   "auto.features.tutorial.components.concepts.guide.literal.24": "פרומפט מפורט:",
   "auto.features.tutorial.components.concepts.guide.literal.25":
-    "\"קרא את הכתבה והחזר תשובה מובנית עם שלושה שדות: סיכום — עד 80 מילים; נקודות מרכזיות — שלוש נקודות; רמת ביטחון — נמוכה, בינונית או גבוהה לפי מידת התמיכה בטקסט.\"",
+    "\"קראו את הכתבה והחזירו JSON תקין עם שלושה שדות: summary עד 80 מילים, key_points כרשימה של שלוש נקודות, ו-confidence בערכים low, medium או high לפי מידת התמיכה בטקסט המקורי.\"",
   "auto.features.tutorial.components.concepts.guide.literal.26": "1.3 הבעיה: קשה לכתוב פרומפט טוב",
   "auto.features.tutorial.components.concepts.guide.literal.27":
-    "הנדסת פרומפטים דורשת ניסוי ודיוק:",
+    "פרומפט שנראה טוב בדוגמה אחת עלול להיכשל בשקט כשמחברים אותו לדאטאסט אמיתי. בדרך כלל הבעיה אינה חוסר יצירתיות בניסוח, אלא היעדר תהליך מסודר שמראה מה עובד, איפה זה נכשל, ולמה. ארבעה אתגרים חוזרים כמעט בכל פרויקט:",
   "auto.features.tutorial.components.concepts.guide.literal.28": "זמן:",
   "auto.features.tutorial.components.concepts.guide.literal.29":
-    "צריך לא מעט ניסיונות כדי למצוא ניסוח שעובד היטב.",
+    "בדיקה ידנית של עשרות ניסוחים מול דוגמאות אמיתיות גוזלת זמן, וקשה לשחזר למה גרסה אחת נבחרה על פני אחרת.",
   "auto.features.tutorial.components.concepts.guide.literal.30": "מומחיות:",
   "auto.features.tutorial.components.concepts.guide.literal.31":
-    "צריך להבין איך מודלים מפרשים הוראות.",
+    "צריך להבין מתי להוסיף מבנה, מתי לבקש חשיבה בשלבים, מתי לדרוש JSON, ומתי הוראה ארוכה רק מוסיפה רעש.",
   "auto.features.tutorial.components.concepts.guide.literal.32": "עקביות:",
   "auto.features.tutorial.components.concepts.guide.literal.33":
-    "הביצועים יכולים להשתנות בין מודלים, גרסאות, נתונים והגדרות ריצה.",
+    "אותו פרומפט יכול להתנהג אחרת בין מודלים, גרסאות, שפות, אורך קלט וסוגי מסמכים.",
   "auto.features.tutorial.components.concepts.guide.literal.34": "יכולת הרחבה:",
   "auto.features.tutorial.components.concepts.guide.literal.35":
-    "פרומפט שעובד במשימה אחת לא בהכרח יתאים למשימה אחרת.",
+    "שיפור שנראה טוב על חמש דוגמאות לא בהכרח יחזיק על מאות דוגמאות, מקרי קצה ונתונים חדשים.",
   "auto.features.tutorial.components.concepts.guide.literal.36": "הפתרון של Skynet:",
   "auto.features.tutorial.components.concepts.guide.literal.37":
-    "במקום לכוונן פרומפטים ידנית, מגדירים משימה, דוגמאות ומדד הצלחה, ונותנים לאופטימיזר לחפש ניסוח טוב יותר",
+    "מגדירים משימה, דאטאסט ופונקציית מדידה, ונותנים לאופטימיזר לחפש פרומפט טוב יותר בתהליך מדיד, מתועד וחוזר על עצמו",
   "auto.features.tutorial.components.concepts.guide.literal.38": ".",
   "auto.features.tutorial.components.concepts.guide.literal.39": "1.4 מהו DSPy?",
   "auto.features.tutorial.components.concepts.guide.literal.40":
-    " (ראשי תיבות של ",
+    " (",
   "auto.features.tutorial.components.concepts.guide.literal.41":
     "Declarative Self-improving Python",
   "auto.features.tutorial.components.concepts.guide.literal.42":
-    ") היא ספרייה שפותחה באוניברסיטת Stanford ומאפשרת לבנות תוכניות מבוססות מודלי שפה בצורה שיטתית. במקום לכתוב פרומפט מלא ביד, מגדירים שלושה דברים:",
-  "auto.features.tutorial.components.concepts.guide.literal.43": "מה הקלט",
+    ") היא ספריית Python לבניית תוכניות שמפעילות מודלי שפה. במקום להחזיק את כל ההיגיון במחרוזת פרומפט אחת, DSPy מפרידה בין צורת המשימה, המודול שמריץ את המודל, ופונקציית המדידה שבודקת הצלחה. ההפרדה הזו מאפשרת לשפר את התוכנית באופן שיטתי ולא רק לערוך טקסט ידנית.",
+  "auto.features.tutorial.components.concepts.guide.literal.43": "קלט",
   "auto.features.tutorial.components.concepts.guide.literal.44":
-    " — איזה מידע המודל מקבל",
-  "auto.features.tutorial.components.concepts.guide.literal.45": "מה הפלט",
+    ": המידע שהמודל מקבל בכל דוגמה, למשל שאלה, אימייל, ביקורת לקוח או צילום.",
+  "auto.features.tutorial.components.concepts.guide.literal.45": "פלט",
   "auto.features.tutorial.components.concepts.guide.literal.46":
-    " — מה רוצים שהמודל יחזיר",
-  "auto.features.tutorial.components.concepts.guide.literal.47": "איך מודדים הצלחה",
+    ": התשובה שהמודל צריך להחזיר, למשל קטגוריה, תשובה קצרה, רשימת שדות או JSON.",
+  "auto.features.tutorial.components.concepts.guide.literal.47": "בדיקה",
   "auto.features.tutorial.components.concepts.guide.literal.48":
-    " — מה נחשב לתשובה טובה",
+    ": פונקציית מדידה שמחזירה ציון, וב-GEPA רצוי שגם משוב טקסטואלי שמסביר מה היה טוב או שגוי.",
   "auto.features.tutorial.components.concepts.guide.literal.49":
-    "לאחר מכן, האופטימיזר משתמש בדוגמאות ובמדד כדי לשפר את ההוראות, את הדוגמאות בפרומפט או הגדרות אחרות של התוכנית, בהתאם לסוג האופטימיזר.",
+    "המודולים המרכזיים של DSPy, כמו Predict ו-ChainOfThought, מפעילים את ה-LLM לפי שדות הקלט והפלט שהגדרתם. האופטימיזרים של DSPy משתמשים בדוגמאות ובפונקציית המדידה כדי לשפר הוראות, לבחור דוגמאות עזר לפרומפט, או לכוון רכיבים אחרים בתוכנית.",
   "auto.features.tutorial.components.concepts.guide.literal.50": "1.5 מהו אופטימיזר?",
   "auto.features.tutorial.components.concepts.guide.literal.51":
-    "אופטימיזר הוא אלגוריתם שמנסה לשפר תוכנית DSPy לפי מדד שהוגדר מראש. הוא יכול:",
-  "auto.features.tutorial.components.concepts.guide.literal.52": "לקבל דוגמאות של קלט ופלט רצוי.",
-  "auto.features.tutorial.components.concepts.guide.literal.53": "לנסות הוראות, דוגמאות או הגדרות שונות, בהתאם לאופטימיזר.",
-  "auto.features.tutorial.components.concepts.guide.literal.54": "למדוד את ההצלחה של כל וריאציה.",
-  "auto.features.tutorial.components.concepts.guide.literal.55": "ללמוד מההצלחות והכישלונות.",
-  "auto.features.tutorial.components.concepts.guide.literal.56": "להחזיר את הגרסה שקיבלה את התוצאה הטובה ביותר בתהליך.",
+    "אופטימיזר הוא תהליך חיפוש מבוקר: הוא מנסה גרסאות שונות של תוכנית DSPy, מריץ אותן על דוגמאות, מחשב ציונים, ומשתמש במה שנלמד כדי להציע גרסה טובה יותר. מבחינת משתמשי Skynet, זה מחליף ניחוש ידני בתהליך עם דאטאסט, לוגים, ציונים ותוצר שאפשר לבדוק.",
+  "auto.features.tutorial.components.concepts.guide.literal.52": "מקבל דאטאסט עם קלטים ותשובות רצויות, ולא רק תחושת בטן לגבי מה עובד.",
+  "auto.features.tutorial.components.concepts.guide.literal.53": "מריץ מועמדים שונים של אותה תוכנית ומשווה ביניהם על דוגמאות עקביות.",
+  "auto.features.tutorial.components.concepts.guide.literal.54": "מחשב ציון באמצעות פונקציית המדידה שהגדרתם, כך שהשיפור מכוון למה שחשוב לכם.",
+  "auto.features.tutorial.components.concepts.guide.literal.55": "משתמש בהצלחות, בכישלונות ובמשוב כדי להציע שינויים ממוקדים בפרומפט.",
+  "auto.features.tutorial.components.concepts.guide.literal.56": "מחזיר תוכנית משופרת שאפשר להריץ דרך Skynet או לשלב דרך API.",
   "auto.features.tutorial.components.concepts.guide.literal.57": "אתחול",
   "auto.features.tutorial.components.concepts.guide.literal.58": "הערכה",
   "auto.features.tutorial.components.concepts.guide.literal.59": "רפלקציה",
   "auto.features.tutorial.components.concepts.guide.literal.60": "שיפור",
   "auto.features.tutorial.components.concepts.guide.literal.61": "עדכון Pareto",
   "auto.features.tutorial.components.concepts.guide.literal.62":
-    "מעדכנים את Pareto וחוזרים להערכה עד שהתקציב נגמר",
-  "auto.features.tutorial.components.concepts.guide.literal.63": "שיפור פרומפטים בעזרת רפלקציה ו-Pareto",
+    "מעדכנים מועמדים וחוזרים עד שתקציב הריצה נגמר",
+  "auto.features.tutorial.components.concepts.guide.literal.63": "האלגוריתם שמחפש הוראות טובות יותר בלי לאמן מחדש את המודל",
   "auto.features.tutorial.components.concepts.guide.literal.64": "2.1 מהו GEPA?",
   "auto.features.tutorial.components.concepts.guide.literal.65":
-    "GEPA (Genetic-Pareto) הוא אופטימיזר רפלקטיבי ב-DSPy שמפתח רכיבי טקסט בתוכנית, למשל הוראות בפרומפט. מעבר לציון מספרי של המדד, הוא יכול להשתמש גם ב-",
+    "GEPA הוא אופטימיזר רפלקטיבי שמשפר רכיבי טקסט בתוכנית, בעיקר הוראות בפרומפט. הוא לא משנה את משקלי ה-LLM. במקום להסתפק בציון מספרי, הוא מסתכל גם על ",
   "auto.features.tutorial.components.concepts.guide.literal.66": "מסלולי הרצה",
   "auto.features.tutorial.components.concepts.guide.literal.67":
-    " — תיעוד של הקלט, השלבים, התשובות והמשוב בכל ניסיון — כדי לנתח אילו חלקים עזרו או הכשילו את המועמד, ואז להציע הוראות חדשות.",
+    ": תיעוד של הקלט, שלבי הביצוע, התשובה, הציון וה-feedback לכל ניסיון. מודל הרפלקציה קורא את המסלולים האלה כמו מפתח שמבצע code review: הוא מחפש דפוסים של הצלחה וכישלון, ואז מציע הוראות חדשות שמכוונות לבעיות שנמצאו.",
   "auto.features.tutorial.components.concepts.guide.literal.70":
-    "2.2 איך GEPA עובד: חמישה שלבים",
+    "2.2 איך GEPA עובד: הלולאה המעשית",
   "auto.features.tutorial.components.concepts.guide.literal.71": "אתחול:",
   "auto.features.tutorial.components.concepts.guide.literal.72":
-    " מתחילים מהתוכנית הקיימת ומההוראות הנוכחיות שלה בתור המועמד הראשון.",
+    " מתחילים מהתוכנית שהגדרתם ומהפרומפט ההתחלתי שלה. GEPA מודד את נקודת הבסיס כדי לדעת אם מועמד חדש באמת השתפר.",
   "auto.features.tutorial.components.concepts.guide.literal.73": "הערכה:",
   "auto.features.tutorial.components.concepts.guide.literal.74":
-    " מריצים מועמדים על דוגמאות: דוגמאות אימון מספקות משוב לרפלקציה, ודוגמאות אימות משמשות להשוואה בין מועמדים.",
+    " מריצים מועמדים על דוגמאות. דוגמאות האימון מספקות מסלולי הרצה ומשוב לרפלקציה; דוגמאות האימות משמשות למעקב אחרי ציוני המועמדים ולבחירה ביניהם.",
   "auto.features.tutorial.components.concepts.guide.literal.75": "רפלקציה:",
   "auto.features.tutorial.components.concepts.guide.literal.76":
-    " זה החלק המרכזי ב-GEPA: מודל הרפלקציה (",
+    " זה החלק שמבדיל את GEPA מחיפוש עיוור. מודל הרפלקציה (",
   "auto.features.tutorial.components.concepts.guide.literal.77":
-    ") מנתח את התוצאות: למה מועמד אחד הצליח, למה אחר נכשל, ואילו ניסוחים עבדו טוב יותר.",
+    ") מקבל מסלולי הרצה, ציונים ו-feedback, ומנסח הסבר על טעויות חוזרות, תנאים חסרים והוראות שכדאי לשנות.",
   "auto.features.tutorial.components.concepts.guide.literal.78": "שיפור:",
   "auto.features.tutorial.components.concepts.guide.literal.79":
-    " מנגנון הצעת ההוראות יוצר הוראות חדשות שמיישמות את התובנות, ולעיתים משלב בין מועמדים בעזרת מיזוג (",
+    " GEPA יוצר מועמד חדש שמיישם את התובנות. בחלק מהריצות הוא גם משלב בין שני מועמדים חזקים בעזרת מיזוג (",
   "auto.features.tutorial.components.concepts.guide.literal.80": ") של וריאציות מוצלחות.",
   "auto.features.tutorial.components.concepts.guide.literal.81": "עדכון Pareto:",
   "auto.features.tutorial.components.concepts.guide.literal.82":
     " מעדכנים את מאגר המועמדים ואת חזית ",
   "auto.features.tutorial.components.concepts.guide.literal.83": "Pareto",
   "auto.features.tutorial.components.concepts.guide.literal.84":
-    " לפי ציוני האימות, ושומרים מועמדים חזקים ומגוונים גם כשהם טובים בדרכים שונות.",
+    " לפי ציונים פר-דוגמה על סט האימות. מועמד יכול להישאר חשוב גם אם אינו הטוב ביותר בממוצע, כל עוד הוא מצטיין בדוגמאות מסוימות ואינו נשלט לגמרי על ידי מועמד אחר.",
   "auto.features.tutorial.components.concepts.guide.literal.85":
-    "חוזרים לשלב ההערכה עד שתקציב הקריאות או ההרצות נגמר.",
+    "חשוב לדייק: התרשים הוא הסבר שימושי, לא כל פרטי המימוש. בפועל GEPA דוגם מועמדים מחזית Pareto, מריץ mini-batch לאיסוף משוב, מעריך מועמד חדש, מעדכן את מאגר המועמדים, ובסוף מחזיר את המועמד עם הציון המצטבר הטוב ביותר על סט האימות.",
   "auto.features.tutorial.components.concepts.guide.literal.86": "2.3 למה הרפלקציה כל כך חשובה?",
   "auto.features.tutorial.components.concepts.guide.literal.87": "GEPA עם רפלקציה",
-  "auto.features.tutorial.components.concepts.guide.literal.88": "אופטימיזציה רגילה",
+  "auto.features.tutorial.components.concepts.guide.literal.88": "בחירה לפי ציון בלבד",
   "auto.features.tutorial.components.concepts.guide.literal.89": "מועמד א׳",
   "auto.features.tutorial.components.concepts.guide.literal.90":
-    "ציון 0.3 · משוב: נכשל בשאלות שדורשות כמה שלבי פתרון.",
+    "ציון 0.30, feedback: נכשל בשאלות שבהן צריך לבדוק שני תנאים לפני הסיווג.",
   "auto.features.tutorial.components.concepts.guide.literal.91": "מועמד ב׳",
   "auto.features.tutorial.components.concepts.guide.literal.92":
-    "ציון 0.5 · משוב: הצליח כשנוספה הוראה לפתרון בשלבים.",
+    "ציון 0.50, feedback: השתפר כשהפרומפט ביקש להחזיר תשובה רק אחרי אימות הפורמט והקטגוריה.",
   "auto.features.tutorial.components.concepts.guide.literal.93": "מועמד ג׳",
   "auto.features.tutorial.components.concepts.guide.literal.94": "מה לומדים מזה?",
   "auto.features.tutorial.components.concepts.guide.literal.95":
-    "כדאי לבקש מהמודל לפרק את השאלה לשלבים ולבדוק את התשובה לפני ההחזרה.",
+    "הבעיה אינה רק ״ניסוח חלש״. חסרה הוראה שמכריחה את המודל לבדוק תנאים לפני הפלט, ולכן השיפור הבא צריך להיות ממוקד ולא אקראי.",
   "auto.features.tutorial.components.concepts.guide.literal.96": "הדור הבא:",
   "auto.features.tutorial.components.concepts.guide.literal.97":
-    "הוראה חדשה שמשלבת את התובנה, במקום שינוי אקראי של הניסוח.",
+    "פרומפט חדש שמשלב את התובנה ומגדיר סדר עבודה ברור יותר.",
   "auto.features.tutorial.components.concepts.guide.literal.98": "מה חסר בלי רפלקציה?",
   "auto.features.tutorial.components.concepts.guide.literal.99":
-    "רואים שמועמד ב׳ קיבל ציון גבוה יותר, אבל קשה לדעת מה בדיוק לשמר או לשפר.",
-  "auto.features.tutorial.components.concepts.guide.literal.100": "כיוון מדויק של ההרצה",
+    "הציון אומר מי הצליח יותר, אבל לא מסביר למה. בלי feedback ומסלולי הרצה, השינוי הבא הוא כמעט ניחוש.",
+  "auto.features.tutorial.components.concepts.guide.literal.100": "שליטה בתקציב, איכות ועלות",
   "auto.features.tutorial.components.concepts.guide.literal.101":
-    "3.1 פרמטרי תקציב",
+    "3.1 תקציב ריצה",
   "auto.features.tutorial.components.concepts.guide.literal.102":
-    "GEPA עובד עם תקציב ריצה במקום מספר סבבים קבוע. כך אפשר לאזן בין מהירות לאיכות לפי סוג המשימה.",
+    "GEPA מנוהל לפי תקציב קריאות לפונקציית המדידה ולמודלים, לא לפי מספר סבבים קבוע. ב-DSPy צריך לבחור דרך תקצוב אחת בלבד: auto, max_full_evals או max_metric_calls. ב-Skynet התחילו בדרך כלל מתקציב קל, בדקו שהמשימה, הדאטאסט ופונקציית המדידה תקינים, ורק אחר כך העלו עומק.",
   "auto.features.tutorial.components.concepts.guide.literal.103":
-    "תקציב אוטומטי. הערכים האפשריים הם ",
+    "תקציב אוטומטי. בחרו ",
   "auto.features.tutorial.components.concepts.guide.literal.104": "\"light\"",
   "auto.features.tutorial.components.concepts.guide.literal.105":
-    " — תקציב קטן וריצה מהירה, מתאים לניסויים ראשוניים; ",
+    " להרצה ראשונה מהירה ולבדיקת ההגדרה; ",
   "auto.features.tutorial.components.concepts.guide.literal.106": "\"medium\"",
   "auto.features.tutorial.components.concepts.guide.literal.107":
-    " — תקציב בינוני, עם איזון בין מהירות לאיכות; ",
+    " אחרי שהדאטאסט וה-feedback יציבים ורוצים איזון בין איכות לעלות; ",
   "auto.features.tutorial.components.concepts.guide.literal.108": "\"heavy\"",
   "auto.features.tutorial.components.concepts.guide.literal.109":
-    " — תקציב גדול ויסודי יותר ",
-  "auto.features.tutorial.components.concepts.guide.literal.110": "(כשרוצים חיפוש רחב יותר)",
+    " כשיש סיבה עסקית לחיפוש רחב יותר ותקציב זמן וקריאות מתאים ",
+  "auto.features.tutorial.components.concepts.guide.literal.110": "(מומלץ רק אחרי ריצה קטנה שהצליחה)",
   "auto.features.tutorial.components.concepts.guide.literal.111": "חלופה ל-",
   "auto.features.tutorial.components.concepts.guide.literal.112":
-    ": מספר מרבי של הרצות מלאות שהאופטימיזר רשאי לבצע. מתאים כשרוצים לשלוט בתקציב במדויק.",
+    ": הגדירו תקציב ידני כשחשוב לשלוט בעלות או להשוות ריצות בתנאים זהים. max_full_evals מתורגם למספר הערכות מלאות, ו-max_metric_calls מגביל ישירות את מספר הקריאות לפונקציית המדידה.",
   "auto.features.tutorial.components.concepts.guide.literal.113":
-    "3.2 פרמטרי מיזוג",
+    "3.2 מיזוג מועמדים",
   "auto.features.tutorial.components.concepts.guide.literal.114":
-    "האם לאפשר מיזוג של מועמדים טובים. ברירת מחדל: ",
+    "האם לאפשר ל-GEPA לבצע מיזוג בין מועמדים (system-aware merge). המיזוג אינו ערבוב מילים חופשי: הוא מנסה לשלב רכיבי פרומפט משני הורים שהשתפרו בדרכים שונות. ב-DSPy הפרמטר נקרא use_merge. ברירת מחדל: ",
   "auto.features.tutorial.components.concepts.guide.literal.115":
-    "מספר מרבי של פעולות מיזוג. ברירת מחדל: ",
+    "מספר מרבי של ניסיונות מיזוג. הגדילו בזהירות, כי כל ניסיון יכול להוסיף הערכות וקריאות מודל. ברירת מחדל: ",
   "auto.features.tutorial.components.concepts.guide.literal.116":
-    "3.3 פרמטרי הערכה",
+    "3.3 הערכה, ציונים ותיעוד",
   "auto.features.tutorial.components.concepts.guide.literal.117":
-    "מספר תהליכוני הערכה שרצים במקביל. ערך גבוה יותר יכול לקצר את הריצה, למשל ",
+    "מספר Threads של הערכה שרצים במקביל. ערך גבוה יקצר את זמן הריצה הכולל, אבל גם יעמיס על ספק המודל ועלול לעורר שגיאות rate limit. לדוגמה ",
   "auto.features.tutorial.components.concepts.guide.literal.118":
-    "הציון שניתן לדוגמאות שנכשלו. ברירת מחדל: ",
-  "auto.features.tutorial.components.concepts.guide.literal.119": "הציון המקסימלי האפשרי. ברירת מחדל: ",
-  "auto.features.tutorial.components.concepts.guide.literal.120": " (לזיהוי מתי התשובה מלאה ומדויקת).",
+    "הציון שנרשם כאשר הערכת דוגמה נכשלת בגלל חריגה, כשל פורמט או שגיאת הרצה. ברירת מחדל: ",
+  "auto.features.tutorial.components.concepts.guide.literal.119": "הציון שמייצג תשובה מושלמת. ברירת מחדל: ",
+  "auto.features.tutorial.components.concepts.guide.literal.120": " (משמש גם לזיהוי דוגמאות מושלמות שאפשר לדלג עליהן בזמן רפלקציה).",
   "auto.features.tutorial.components.concepts.guide.literal.121":
-    "האם לשמור תוצאות מפורטות ותוכניות מוצעות לניתוח אחרי הריצה.",
+    "האם לשמור סטטיסטיקות ותוצרים פנימיים של האופטימיזציה. הפעילו כאשר אתם רוצים להבין למה מועמד נבחר, להשוות מועמדים או לחקור תוצאות; כבו רק אם חשוב לצמצם תיעוד.",
   "auto.features.tutorial.components.concepts.guide.literal.122":
-    "3.4 פרמטרי מודל הרפלקציה",
-  "auto.features.tutorial.components.concepts.guide.literal.123": "חשוב!",
+    "3.4 מודל רפלקציה",
+  "auto.features.tutorial.components.concepts.guide.literal.123": "חשוב לדעת",
   "auto.features.tutorial.components.concepts.guide.literal.124":
-    " מודל הרפלקציה מנתח את התוצאות ומציע הוראות חדשות. GEPA דורש מודל רפלקציה, אלא אם מספקים מנגנון מותאם אישית להצעת הוראות. כדאי לבחור מודל חזק למשימה הזו.",
+    " GEPA ב-DSPy צריך מודל רפלקציה, אלא אם מספקים מנגנון מותאם להצעת הוראות. ב-Skynet בוחרים מודל רפלקציה, והוא זה שקורא מסלולי הרצה ו-feedback ומציע איך לשפר את הפרומפט. לרוב כדאי לבחור כאן מודל חזק יותר ממודל המשימה, גם אם מודל המשימה עצמו זול ומהיר יותר.",
   "auto.features.tutorial.components.concepts.guide.literal.125": "",
   "auto.features.tutorial.components.concepts.guide.literal.126": ".",
   "auto.features.tutorial.components.concepts.guide.literal.127":
-    " מודל השפה שמבצע את הרפלקציה. חובה בריצות GEPA.",
+    " מודל השפה שמבצע את הרפלקציה. בריצות GEPA ב-Skynet הוא נדרש, כי בלי מודל כזה אין מי שיקרא את הכשלים ויציע הוראות חדשות.",
   "auto.features.tutorial.components.concepts.guide.literal.128":
-    "חתימה · מערך נתונים · מדד",
-  "auto.features.tutorial.components.concepts.guide.literal.129": "4.1 חתימה",
+    "פרומפט התחלתי · דאטאסט · פונקציית מדידה",
+  "auto.features.tutorial.components.concepts.guide.literal.129": "4.1 פרומפט התחלתי",
   "auto.features.tutorial.components.concepts.guide.literal.130":
-    "החתימה היא הגדרת המשימה בקוד. היא מציינת:",
+    "הפרומפט ההתחלתי הוא קוד Python שמגדיר ל-DSPy את צורת המשימה: אילו שדות נכנסים, אילו שדות יוצאים, ומה ההוראה הכללית. Skynet יכול לייצר בסיס ממיפוי העמודות, אבל כדאי לערוך אותו כך שיבהיר את המשימה, את גבולות הפלט ואת משמעות כל שדה.",
   "auto.features.tutorial.components.concepts.guide.literal.131": "שדות קלט:",
-  "auto.features.tutorial.components.concepts.guide.literal.132": " מה המודל מקבל (למשל: שאלה).",
+  "auto.features.tutorial.components.concepts.guide.literal.132": " מה המודל מקבל בכל דוגמה, למשל שאלה, אימייל, ביקורת או צילום.",
   "auto.features.tutorial.components.concepts.guide.literal.133": "שדות פלט:",
   "auto.features.tutorial.components.concepts.guide.literal.134":
-    " מה המודל צריך להחזיר (למשל: תשובה).",
-  "auto.features.tutorial.components.concepts.guide.literal.135": "תיאור המשימה:",
-  "auto.features.tutorial.components.concepts.guide.literal.136": " הסבר קצר על המשימה.",
-  "auto.features.tutorial.components.concepts.guide.literal.137": "4.2 מערך נתונים",
+    " מה המודל צריך להחזיר, למשל קטגוריה, תשובה קצרה, הסבר או אובייקט JSON.",
+  "auto.features.tutorial.components.concepts.guide.literal.135": "הוראת המשימה:",
+  "auto.features.tutorial.components.concepts.guide.literal.136": " תיאור קצר ומדויק של העבודה שהמודל צריך לבצע, כולל מגבלות פורמט חשובות.",
+  "auto.features.tutorial.components.concepts.guide.literal.137": "4.2 דאטאסט",
   "auto.features.tutorial.components.concepts.guide.literal.138":
-    "מערך הנתונים הוא אוסף דוגמאות שמראות למערכת מהי תשובה טובה. DSPy יכול להתחיל גם ממעט דוגמאות, ומערך גדול ומייצג יותר בדרך כלל נותן לאופטימיזציה בסיס טוב יותר.",
-  "auto.features.tutorial.components.concepts.guide.literal.139": "חלוקת נתונים ב-Skynet:",
+    "דאטאסט הוא אוסף דוגמאות שמראות למערכת מהי תשובה טובה. כל שורה צריכה לכלול את הקלטים שהמודל יקבל ואת הפלט הרצוי להשוואה. דאטאסט קטן, נקי ומייצג עדיף כמעט תמיד על דאטאסט גדול עם תיוגים סותרים או פורמטים מעורבים.",
+  "auto.features.tutorial.components.concepts.guide.literal.139": "חלוקת דאטאסט ב-Skynet:",
   "auto.features.tutorial.components.concepts.guide.literal.140":
-    "המערכת בוחרת חלוקה לפי גודל מערך הנתונים: מתחת ל-30 דוגמאות משתמשים בכל הדוגמאות; במערך קטן שומרים סט אימות בלי סט מבחן; ובמערכים גדולים יותר מחלקים לאימון, אימות ובדיקה עם תקרות שמגבילות את עלות הריצה.",
-  "auto.features.tutorial.components.concepts.guide.literal.141": "סט",
+    "ברירת המחדל היא חלוקה ל-70% אימון, 15% אימות ו-15% בדיקה, עם אפשרות לערבב את השורות ולקבוע seed לשחזור. אם הדאטאסט קטן, שמרו סט אימות מספיק מייצג ל-Pareto ולבחירת מועמדים, אבל אל תבזבזו עליו יותר מדי דוגמאות על חשבון האימון.",
+  "auto.features.tutorial.components.concepts.guide.literal.141": "חלוקה",
   "auto.features.tutorial.components.concepts.guide.literal.142": "מטרה",
   "auto.features.tutorial.components.concepts.guide.literal.143": " (אימון)",
   "auto.features.tutorial.components.concepts.guide.literal.144":
-    "מספק דוגמאות ומשוב לרפלקציה וליצירת מועמדים חדשים.",
+    "מספק דוגמאות למסלולי הרצה, feedback ורעיונות לשיפור מועמדים.",
   "auto.features.tutorial.components.concepts.guide.literal.145": " (אימות)",
   "auto.features.tutorial.components.concepts.guide.literal.146":
-    "משמש להשוואה בין מועמדים ולבחירת חזית Pareto.",
+    "משמש למעקב אחרי ציוני מועמדים, לעדכון חזית Pareto ולבחירת התוכנית המנצחת.",
   "auto.features.tutorial.components.concepts.guide.literal.147": " (מבחן)",
   "auto.features.tutorial.components.concepts.guide.literal.148":
-    "משמש למדידה סופית על דוגמאות שלא שימשו לאימון או לבחירה.",
+    "משמש לבדיקה סופית על דוגמאות שלא שימשו ליצירת המועמדים או לבחירה ביניהם.",
   "auto.features.tutorial.components.concepts.guide.literal.149":
-    "4.3 מדד — דרישות מיוחדות ל-GEPA",
+    "4.3 פונקציית מדידה ל-GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.150": "חשוב:",
   "auto.features.tutorial.components.concepts.guide.literal.151":
-    " ב-Skynet, מדד ל-GEPA צריך לקבל חמישה פרמטרים ולהחזיר ",
+    " פונקציית מדידה ל-GEPA צריכה לקבל חמישה פרמטרים: gold, pred, trace, pred_name ו-pred_trace. היא יכולה להחזיר ציון מספרי בלבד, אבל כדי לתת ל-GEPA חומר אמיתי לרפלקציה עדיף להחזיר ",
   "auto.features.tutorial.components.concepts.guide.literal.152": " עם ",
   "auto.features.tutorial.components.concepts.guide.literal.153": " וגם ",
   "auto.features.tutorial.components.concepts.guide.literal.154": "דוגמאות לניקוד:",
   "auto.features.tutorial.components.concepts.guide.literal.155": "תשובה זהה:",
   "auto.features.tutorial.components.concepts.guide.literal.156": " ציון ",
-  "auto.features.tutorial.components.concepts.guide.literal.157": ", עם משוב כמו \"תשובה מושלמת!\".",
+  "auto.features.tutorial.components.concepts.guide.literal.157": ", עם feedback שמסביר שהפלט תואם לפלט הרצוי.",
   "auto.features.tutorial.components.concepts.guide.literal.158": "תשובה חלקית:",
-  "auto.features.tutorial.components.concepts.guide.literal.159": ", עם משוב שמסביר מה נכון ומה חסר.",
+  "auto.features.tutorial.components.concepts.guide.literal.159": ", עם feedback שמפרט מה נכון, מה חסר, ואיזה כלל היה עוזר.",
   "auto.features.tutorial.components.concepts.guide.literal.160": "תשובה שגויה:",
-  "auto.features.tutorial.components.concepts.guide.literal.161": ", עם משוב שמסביר את מקור הטעות.",
-  "auto.features.tutorial.components.concepts.guide.literal.162": "הכנת נתונים",
-  "auto.features.tutorial.components.concepts.guide.literal.163": "הגדרת חתימה",
-  "auto.features.tutorial.components.concepts.guide.literal.164": "הגדרת מדד",
-  "auto.features.tutorial.components.concepts.guide.literal.165": "בניית בקשה",
+  "auto.features.tutorial.components.concepts.guide.literal.161": ", עם feedback שמצביע על מקור הטעות בצורה שיכולה להפוך להוראה חדשה.",
+  "auto.features.tutorial.components.concepts.guide.literal.162": "ניקוי ובדיקת הדאטאסט",
+  "auto.features.tutorial.components.concepts.guide.literal.163": "כתיבת פרומפט התחלתי",
+  "auto.features.tutorial.components.concepts.guide.literal.164": "כתיבת פונקציית מדידה עם feedback",
+  "auto.features.tutorial.components.concepts.guide.literal.165": "הרכבת בקשת API",
   "auto.features.tutorial.components.concepts.guide.literal.166": "שליחה לשירות (POST /run)",
   "auto.features.tutorial.components.concepts.guide.literal.167":
-    "ניטור (GET /optimizations/{id})",
-  "auto.features.tutorial.components.concepts.guide.literal.168": "קבלת תוכנית משופרת",
-  "auto.features.tutorial.components.concepts.guide.literal.169": "שימוש (POST /serve/{id})",
-  "auto.features.tutorial.components.concepts.guide.literal.170": "מהגדרת משימה ועד הרצה על קלט חדש",
+    "מעקב (GET /optimizations/{id})",
+  "auto.features.tutorial.components.concepts.guide.literal.168": "בדיקת התוכנית המשופרת",
+  "auto.features.tutorial.components.concepts.guide.literal.169": "שימוש בתוצר (POST /serve/{id})",
+  "auto.features.tutorial.components.concepts.guide.literal.170": "מהגדרת משימה ועד הרצה בקוד שלכם",
   "auto.features.tutorial.components.concepts.guide.literal.171": "5.1 סקירת התהליך",
   "auto.features.tutorial.components.concepts.guide.literal.306": "הכנת המשימה",
-  "auto.features.tutorial.components.concepts.guide.literal.307": "מגדירים מה המודל מקבל, מה הוא צריך להחזיר, ואיך מודדים תשובה טובה.",
+  "auto.features.tutorial.components.concepts.guide.literal.307": "מגדירים קלט, פלט, דאטאסט ופונקציית מדידה שמייצגת הצלחה אמיתית, לא רק ניסוח יפה.",
   "auto.features.tutorial.components.concepts.guide.literal.308": "הרצת האופטימיזציה",
-  "auto.features.tutorial.components.concepts.guide.literal.309": "שולחים את הבקשה, עוקבים אחרי ההתקדמות, ומחכים לתוכנית המשופרת.",
+  "auto.features.tutorial.components.concepts.guide.literal.309": "שולחים בקשה, עוקבים אחרי סטטוס ולוגים, ובודקים אם הציונים משתפרים לאורך הריצה.",
   "auto.features.tutorial.components.concepts.guide.literal.310": "שימוש בתוצאה",
-  "auto.features.tutorial.components.concepts.guide.literal.311": "מורידים או מריצים את התוכנית המשופרת על קלט חדש.",
-  "auto.features.tutorial.components.concepts.guide.literal.312": "מספר הרצות מרבי",
-  "auto.features.tutorial.components.concepts.guide.literal.313": "שימוש במיזוג",
-  "auto.features.tutorial.components.concepts.guide.literal.314": "מספר מיזוגים מרבי",
-  "auto.features.tutorial.components.concepts.guide.literal.315": "מספר תהליכונים",
-  "auto.features.tutorial.components.concepts.guide.literal.316": "ציון כישלון",
-  "auto.features.tutorial.components.concepts.guide.literal.317": "ציון מושלם",
-  "auto.features.tutorial.components.concepts.guide.literal.318": "מעקב סטטיסטיקות",
-  "auto.features.tutorial.components.concepts.guide.literal.319": "שם המודול",
-  "auto.features.tutorial.components.concepts.guide.literal.320": "שם האופטימיזר",
-  "auto.features.tutorial.components.concepts.guide.literal.321": "קוד החתימה",
-  "auto.features.tutorial.components.concepts.guide.literal.322": "קוד המדד",
-  "auto.features.tutorial.components.concepts.guide.literal.323": "מערך נתונים",
-  "auto.features.tutorial.components.concepts.guide.literal.324": "מיפוי עמודות",
-  "auto.features.tutorial.components.concepts.guide.literal.325": "הגדרות המודל",
-  "auto.features.tutorial.components.concepts.guide.literal.326": "מודל רפלקציה",
-  "auto.features.tutorial.components.concepts.guide.literal.327": "פרמטרי האופטימיזר",
-  "auto.features.tutorial.components.concepts.guide.literal.328": "יחסי חלוקה",
-  "auto.features.tutorial.components.concepts.guide.literal.329": "ערבוב דוגמאות",
-  "auto.features.tutorial.components.concepts.guide.literal.330": "מספר התחלתי",
+  "auto.features.tutorial.components.concepts.guide.literal.311": "בודקים את התוצר על קלטים חדשים, מורידים את התוכנית או מריצים אותה דרך נקודת השירות.",
+  "auto.features.tutorial.components.concepts.guide.literal.312": "max_full_evals / max_metric_calls",
+  "auto.features.tutorial.components.concepts.guide.literal.313": "use_merge",
+  "auto.features.tutorial.components.concepts.guide.literal.314": "max_merge_invocations",
+  "auto.features.tutorial.components.concepts.guide.literal.315": "num_threads",
+  "auto.features.tutorial.components.concepts.guide.literal.316": "failure_score",
+  "auto.features.tutorial.components.concepts.guide.literal.317": "perfect_score",
+  "auto.features.tutorial.components.concepts.guide.literal.318": "track_stats",
+  "auto.features.tutorial.components.concepts.guide.literal.319": "module_name",
+  "auto.features.tutorial.components.concepts.guide.literal.320": "optimizer_name",
+  "auto.features.tutorial.components.concepts.guide.literal.321": "signature_code",
+  "auto.features.tutorial.components.concepts.guide.literal.322": "metric_code",
+  "auto.features.tutorial.components.concepts.guide.literal.323": "dataset",
+  "auto.features.tutorial.components.concepts.guide.literal.324": "column_mapping",
+  "auto.features.tutorial.components.concepts.guide.literal.325": "model_config",
+  "auto.features.tutorial.components.concepts.guide.literal.326": "reflection_model_config",
+  "auto.features.tutorial.components.concepts.guide.literal.327": "optimizer_kwargs",
+  "auto.features.tutorial.components.concepts.guide.literal.328": "split_fractions",
+  "auto.features.tutorial.components.concepts.guide.literal.329": "shuffle",
+  "auto.features.tutorial.components.concepts.guide.literal.330": "seed",
   "auto.features.tutorial.components.concepts.guide.literal.331": "מודל שפה (LLM)",
   "auto.features.tutorial.components.concepts.guide.literal.332": "פרומפט",
   "auto.features.tutorial.components.concepts.guide.literal.333": "אופטימיזר",
   "auto.features.tutorial.components.concepts.guide.literal.334": "רפלקציה",
-  "auto.features.tutorial.components.concepts.guide.literal.335": "חתימה",
-  "auto.features.tutorial.components.concepts.guide.literal.336": "מדד",
-  "auto.features.tutorial.components.concepts.guide.literal.337": "מערך נתונים",
+  "auto.features.tutorial.components.concepts.guide.literal.335": "פרומפט התחלתי",
+  "auto.features.tutorial.components.concepts.guide.literal.336": "פונקציית מדידה",
+  "auto.features.tutorial.components.concepts.guide.literal.337": "דאטאסט",
   "auto.features.tutorial.components.concepts.guide.literal.338": "אימון / אימות / בדיקה",
   "auto.features.tutorial.components.concepts.guide.literal.339": "אופטימיזציה",
   "auto.features.tutorial.components.concepts.guide.literal.340": "תוצר שמור",
-  "auto.features.tutorial.components.concepts.guide.literal.341": "הרצה מלאה",
+  "auto.features.tutorial.components.concepts.guide.literal.341": "הערכה מלאה",
   "auto.features.tutorial.components.concepts.guide.literal.342": "מסלול הרצה",
-  "auto.features.tutorial.components.concepts.guide.literal.343": "חשיבה צעד-אחר-צעד",
+  "auto.features.tutorial.components.concepts.guide.literal.343": "חשיבה בשלבים",
   "auto.features.tutorial.components.concepts.guide.literal.172": "5.2 מבנה הבקשה לשרת",
   "auto.features.tutorial.components.concepts.guide.literal.173":
-    "אלה השדות המרכזיים בבקשה:",
-  "auto.features.tutorial.components.concepts.guide.literal.174": "סוג המודול. בדרך כלל ",
+    "אלה השדות המרכזיים שכדאי להבין לפני שליחה דרך API. לא חייבים ללמוד DSPy לעומק, אבל כן חשוב לדעת מה כל שדה משנה בריצה:",
+  "auto.features.tutorial.components.concepts.guide.literal.174": "סוג המודול. למשימות שמצריכות הסבר, בדיקת תנאים או כמה צעדים, לרוב בחרו ",
   "auto.features.tutorial.components.concepts.guide.literal.175": "\"dspy.ChainOfThought\"",
   "auto.features.tutorial.components.concepts.guide.literal.176": " (מוסיף שדה ",
   "auto.features.tutorial.components.concepts.guide.literal.177":
-    " לפני הפלט, ועוזר במיוחד במשימות מורכבות).",
+    " לפני הפלט; למשימות פשוטות, קצרות ומהירות אפשר להשתמש ב-dspy.Predict).",
   "auto.features.tutorial.components.concepts.guide.literal.178": "שם האופטימיזר (",
   "auto.features.tutorial.components.concepts.guide.literal.179": "\"dspy.GEPA\"",
-  "auto.features.tutorial.components.concepts.guide.literal.180": "קוד החתימה ב-Python.",
-  "auto.features.tutorial.components.concepts.guide.literal.181": "קוד המדד ב-Python.",
-  "auto.features.tutorial.components.concepts.guide.literal.182": "רשימת הדוגמאות בפורמט JSON.",
+  "auto.features.tutorial.components.concepts.guide.literal.180": "קוד Python שמגדיר את הפרומפט ההתחלתי, שדות הקלט, שדות הפלט והוראת המשימה.",
+  "auto.features.tutorial.components.concepts.guide.literal.181": "קוד Python של פונקציית המדידה. ב-GEPA ודאו שהיא מקבלת חמישה פרמטרים ומחזירה ציון, ורצוי גם feedback.",
+  "auto.features.tutorial.components.concepts.guide.literal.182": "רשימת שורות הדאטאסט בפורמט JSON. כל שורה צריכה להתאים למיפוי השדות.",
   "auto.features.tutorial.components.concepts.guide.literal.183":
-    "מיפוי בין שמות השדות בחתימה לבין שמות העמודות בנתונים. למשל, אם בחתימה יש ",
-  "auto.features.tutorial.components.concepts.guide.literal.184": " ובנתונים יש ",
-  "auto.features.tutorial.components.concepts.guide.literal.185": "הגדרות מודל השפה הראשי.",
+    "מיפוי בין שמות השדות בפרומפט ההתחלתי לבין שמות העמודות בדאטאסט. למשל, אם השדה הוא ",
+  "auto.features.tutorial.components.concepts.guide.literal.184": " ובדאטאסט העמודה נקראת ",
+  "auto.features.tutorial.components.concepts.guide.literal.185": "הגדרות מודל המשימה שמייצר את התשובות בזמן האופטימיזציה ובשימוש.",
   "auto.features.tutorial.components.concepts.guide.literal.186": "הגדרות מודל הרפלקציה (",
   "auto.features.tutorial.components.concepts.guide.literal.187": "חובה ב-GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.188": "פרמטרים לאופטימיזר (כמו ",
   "auto.features.tutorial.components.concepts.guide.literal.189": "auto=\"heavy\"",
   "auto.features.tutorial.components.concepts.guide.literal.190":
-    "(אופציונלי) יחס החלוקה לאימון, אימות ובדיקה, למשל ",
+    "(אופציונלי) יחס החלוקה לאימון, אימות ובדיקה. שמרו בדיקה נפרדת כשחשוב להבין ביצועים על דוגמאות שלא שימשו לבחירה. למשל ",
   "auto.features.tutorial.components.concepts.guide.literal.191": "[0.6, 0.2, 0.2]",
   "auto.features.tutorial.components.concepts.guide.literal.192":
-    "(אופציונלי) האם לערבב את הדוגמאות לפני החלוקה.",
+    "(אופציונלי) האם לערבב את הדוגמאות לפני החלוקה. הפעילו כשקובץ המקור מסודר לפי זמן, לקוח או קטגוריה.",
   "auto.features.tutorial.components.concepts.guide.literal.193":
-    "(אופציונלי) מספר התחלתי קבוע שמאפשר לשחזר את אותה חלוקה ואותו ערבוב.",
+    "(אופציונלי) seed קבוע שמאפשר לשחזר את אותה חלוקה ואותו ערבוב בין ריצות.",
   "auto.features.tutorial.components.concepts.guide.literal.194":
-    "5.3 נקודות קצה מרכזיות",
+    "5.3 Endpoints מרכזיים",
   "auto.features.tutorial.components.concepts.guide.literal.195":
-    "אלה הכתובות המרכזיות לעבודה מול השירות:",
+    "אלה ה-endpoints המרכזיים לעבודה מול השירות. בדפדפן Skynet משתמש באותם שלבים, וה-API מאפשר לשלב אותם בקוד שלכם:",
   "auto.features.tutorial.components.concepts.guide.literal.196": "כתובת",
   "auto.features.tutorial.components.concepts.guide.literal.197":
-    "שליחת הרצת אופטימיזציה חדשה.",
-  "auto.features.tutorial.components.concepts.guide.literal.198": "הרצת סריקה שמשווה בין זוגות מודלים.",
+    "שליחת הרצת אופטימיזציה חדשה עם דאטאסט, פרומפט התחלתי, פונקציית מדידה, מודל משימה ומודל רפלקציה.",
+  "auto.features.tutorial.components.concepts.guide.literal.198": "הרצת סריקה שמשווה כמה זוגות של מודל משימה ומודל רפלקציה על אותה משימה.",
   "auto.features.tutorial.components.concepts.guide.literal.199":
-    "רשימת ההרצות, כולל סינון ועימוד.",
+    "רשימת ההרצות, כולל סטטוס, סינון, עימוד ונתוני סיכום.",
   "auto.features.tutorial.components.concepts.guide.literal.200":
-    "מצב מלא ופרטים של הרצה מסוימת.",
+    "מצב מלא ופרטים של הרצה מסוימת: הגדרות, ציונים, שלבים ותוצרים.",
   "auto.features.tutorial.components.concepts.guide.literal.201":
-    "סיכום ידידותי לדף הבקרה.",
-  "auto.features.tutorial.components.concepts.guide.literal.202": "לוגים בסינון לפי רמה.",
-  "auto.features.tutorial.components.concepts.guide.literal.203": "עדכונים בזמן אמת דרך SSE.",
+    "סיכום קומפקטי להצגה בדף הבקרה או ברשימות.",
+  "auto.features.tutorial.components.concepts.guide.literal.202": "לוגים של הריצה, כולל סינון לפי רמה ומקור.",
+  "auto.features.tutorial.components.concepts.guide.literal.203": "עדכוני התקדמות בזמן אמת דרך SSE, שימושי למסכי מעקב ולחוויית UI חיה.",
   "auto.features.tutorial.components.concepts.guide.literal.204":
-    "הורדת התוכנית המשופרת כקובץ JSON.",
-  "auto.features.tutorial.components.concepts.guide.literal.205": "תוצאות סריקת המודלים.",
+    "הורדת התוצר השמור של התוכנית המשופרת לצורך בדיקה, ארכוב או שימוש מחוץ לממשק.",
+  "auto.features.tutorial.components.concepts.guide.literal.205": "תוצאות סריקת המודלים כאשר ההרצה היא Grid Search.",
   "auto.features.tutorial.components.concepts.guide.literal.206": "ביטול הרצה פעילה.",
   "auto.features.tutorial.components.concepts.guide.literal.207":
-    "שכפול הרצה כבסיס להרצה חדשה.",
+    "שכפול הגדרות הרצה כבסיס להרצה חדשה, למשל כדי להחליף מודל או תקציב.",
   "auto.features.tutorial.components.concepts.guide.literal.208":
-    "ניסיון חוזר להרצה שנכשלה.",
+    "ניסיון חוזר להרצה שנכשלה בלי לבנות את הבקשה מחדש.",
   "auto.features.tutorial.components.concepts.guide.literal.209":
-    "מידע על שדות הקלט של התוכנית המשופרת.",
+    "מידע על שדות הקלט שהתוכנית המשופרת מצפה לקבל לפני שמריצים אותה.",
   "auto.features.tutorial.components.concepts.guide.literal.210":
-    "הרצת התוכנית המשופרת על קלט חדש.",
+    "הרצת התוכנית המשופרת על קלט חדש וקבלת תשובה דרך API.",
   "auto.features.tutorial.components.concepts.guide.literal.211": "בדיקת תקינות השרת.",
   "auto.features.tutorial.components.concepts.guide.literal.212": "מצב התור הכללי.",
   "auto.features.tutorial.components.concepts.guide.literal.213": "5.4 ניטור התקדמות",
   "auto.features.tutorial.components.concepts.guide.literal.214":
-    "סטטוסים אפשריים של הרצת אופטימיזציה:",
+    "סטטוסים נפוצים בהרצת אופטימיזציה ומה לעשות איתם:",
   "auto.features.tutorial.components.concepts.guide.literal.215": ": ממתין בתור.",
-  "auto.features.tutorial.components.concepts.guide.literal.216": ": הריצה מתבצעת עכשיו.",
-  "auto.features.tutorial.components.concepts.guide.literal.217": ": הסתיים בהצלחה.",
-  "auto.features.tutorial.components.concepts.guide.literal.218": ": נכשל (בדקו לוגים).",
+  "auto.features.tutorial.components.concepts.guide.literal.216": ": GEPA או שלבי ההערכה רצים עכשיו. עקבו אחרי לוגים וציוני ביניים.",
+  "auto.features.tutorial.components.concepts.guide.literal.217": ": הסתיים בהצלחה והתוצר זמין לבדיקה ולשימוש.",
+  "auto.features.tutorial.components.concepts.guide.literal.218": ": נכשל. פתחו לוגים ובדקו JSON, קוד Python, מיפוי עמודות, הרשאות מודל ומודל רפלקציה.",
   "auto.features.tutorial.components.concepts.guide.literal.219": ": בוטל על ידי המשתמש.",
-  "auto.features.tutorial.components.concepts.guide.literal.220": "מה באמת משפיע על התוצאות",
-  "auto.features.tutorial.components.concepts.guide.literal.221": "6.1 טיפים להכנת נתונים",
+  "auto.features.tutorial.components.concepts.guide.literal.220": "שיפור יציב מתחיל בהגדרה טובה",
+  "auto.features.tutorial.components.concepts.guide.literal.221": "6.1 הכנת דאטאסט",
   "auto.features.tutorial.components.concepts.guide.literal.222": "איכות מעל כמות:",
   "auto.features.tutorial.components.concepts.guide.literal.223":
-    " 50 דוגמאות מדויקות עדיפות על 200 בינוניות.",
+    " 50 דוגמאות עקביות ומדויקות עדיפות על 200 דוגמאות רועשות. GEPA לומד מהדוגמאות ומה-feedback שאתם נותנים לו.",
   "auto.features.tutorial.components.concepts.guide.literal.224": "גיוון:",
   "auto.features.tutorial.components.concepts.guide.literal.225":
-    " כסו גם מקרי קצה, לא רק את המקרה הנפוץ.",
+    " כללו מקרים נפוצים, מקרי קצה ודוגמאות שבהן קל לטעות: טקסט קצר מדי, קלט ארוך, קטגוריות דומות ופורמטים לא מושלמים.",
   "auto.features.tutorial.components.concepts.guide.literal.226": "ניקיון:",
   "auto.features.tutorial.components.concepts.guide.literal.227":
-    " בלי שגיאות הקלדה, כפילויות או תיוגים שסותרים זה את זה.",
-  "auto.features.tutorial.components.concepts.guide.literal.228": "עקביות וייצוגיות:",
+    " הסירו כפילויות, תיוגים סותרים ושורות שבהן הפלט הרצוי אינו ברור. אם בני אדם לא מסכימים על התשובה, גם האופטימיזציה תתקשה.",
+  "auto.features.tutorial.components.concepts.guide.literal.228": "ייצוגיות:",
   "auto.features.tutorial.components.concepts.guide.literal.229":
-    " פורמט אחיד והתפלגות שדומה לנתונים שיגיעו בשימוש אמיתי.",
+    " שמרו על פורמט והתפלגות שדומים לנתונים שיגיעו בשימוש אמיתי. אל תבנו דאטאסט שמורכב רק מדוגמאות קלות.",
   "auto.features.tutorial.components.concepts.guide.literal.230":
-    "6.2 טיפים לכתיבת מדדים ל-GEPA",
+    "6.2 כתיבת פונקציית מדידה טובה ל-GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.231": "משוב מפורט:",
   "auto.features.tutorial.components.concepts.guide.literal.232":
-    " הסבירו מה בדיוק לא נכון, ולא רק שהתשובה שגויה.",
+    " החזירו feedback שמסביר מה בדיוק נכון או לא נכון, לא רק שהתשובה שגויה.",
   "auto.features.tutorial.components.concepts.guide.literal.233": "משוב שימושי:",
   "auto.features.tutorial.components.concepts.guide.literal.234":
-    " ציינו מה צריך לשפר ובאיזה כיוון.",
-  "auto.features.tutorial.components.concepts.guide.literal.235": "ציון הוגן:",
+    " כתבו מה כדאי לשנות בכיוון הפרומפט: פורמט חסר, תנאי שלא נבדק, בלבול בין קטגוריות או שדה שהמודל התעלם ממנו.",
+  "auto.features.tutorial.components.concepts.guide.literal.235": "ציון מדורג:",
   "auto.features.tutorial.components.concepts.guide.literal.236":
-    " תנו ניקוד חלקי כשצריך; אל תסתפקו תמיד ב-0 או 1.",
+    " השתמשו בניקוד חלקי כשיש תשובה חלקית. רק 0 או 1 מתאים למשימות פשוטות, אבל מקשה על GEPA ללמוד הבדלים עדינים.",
   "auto.features.tutorial.components.concepts.guide.literal.237":
-    " תנו ציונים דומים למקרים דומים. חוסר עקביות מבלבל את ",
+    " תנו ציונים דומים למקרים דומים. עקביות עוזרת ל-",
   "auto.features.tutorial.components.concepts.guide.literal.238": "6.3 פתרון בעיות נפוצות",
   "auto.features.tutorial.components.concepts.guide.literal.239": "בעיה",
   "auto.features.tutorial.components.concepts.guide.literal.240": "פתרון",
-  "auto.features.tutorial.components.concepts.guide.literal.241": "העבודה נכשלת מיד",
+  "auto.features.tutorial.components.concepts.guide.literal.241": "הריצה נכשלת מיד",
   "auto.features.tutorial.components.concepts.guide.literal.242":
-    "בדקו את מבנה הבקשה ואת ה-JSON, וודאו שהוגדר מודל רפלקציה.",
+    "בדקו שה-JSON תקין, שמיפוי העמודות מכסה את כל השדות, שפונקציית המדידה מקבלת חמישה פרמטרים, ושנבחר מודל רפלקציה.",
   "auto.features.tutorial.components.concepts.guide.literal.243": "תוצאות גרועות",
   "auto.features.tutorial.components.concepts.guide.literal.244":
-    "הוסיפו דוגמאות מגוונות ושפרו את המשוב שהמדד מחזיר.",
+    "בדקו קודם את הדאטאסט ואת ה-feedback של פונקציית המדידה. תקציב גבוה יותר לא יתקן תיוגים סותרים או פונקציית מדידה שמתגמלת תשובות לא נכונות.",
   "auto.features.tutorial.components.concepts.guide.literal.245": "ריצה איטית מאוד",
   "auto.features.tutorial.components.concepts.guide.literal.246": "השתמשו ב-",
   "auto.features.tutorial.components.concepts.guide.literal.247":
-    " לניסויים ראשוניים, או הגדילו את ",
-  "auto.features.tutorial.components.concepts.guide.literal.248": "המדד תמיד נותן 0",
+    " לניסוי ראשון; אם ספק המודל מגביל מקביליות או מחזיר שגיאות rate limit, הורידו את ",
+  "auto.features.tutorial.components.concepts.guide.literal.248": "פונקציית המדידה תמיד מחזירה 0",
   "auto.features.tutorial.components.concepts.guide.literal.249":
-    "בדקו את לוגיקת ההשוואה והוסיפו נרמול בסיסי, למשל התעלמות מאותיות גדולות/קטנות ומרווחים מיותרים.",
-  "auto.features.tutorial.components.concepts.guide.literal.250": "הרפלקציה לא עוזרת",
+    "בדקו את לוגיקת ההשוואה והוסיפו נרמול בסיסי: הסרת רווחים מיותרים, אחידות אותיות, טיפול ב-JSON תקין והשוואת קטגוריות לפי רשימה סגורה.",
+  "auto.features.tutorial.components.concepts.guide.literal.250": "הרפלקציה לא משפרת",
   "auto.features.tutorial.components.concepts.guide.literal.251":
-    "נסו מודל רפלקציה חזק יותר ושפרו את המשוב שהמדד מספק.",
+    "בדקו שה-feedback מסביר טעויות בצורה שאפשר להפוך להוראות. אם כן, נסו מודל רפלקציה חזק יותר, דאטאסט אימון מגוון יותר או תקציב גבוה יותר.",
   "auto.features.tutorial.components.concepts.guide.literal.252": "עזר מהיר",
   "auto.features.tutorial.components.concepts.guide.literal.253": "מונח",
   "auto.features.tutorial.components.concepts.guide.literal.254": "הסבר",
-  "auto.features.tutorial.components.concepts.guide.literal.255": "מודל שמקבל טקסט ומחזיר טקסט, למשל תשובה, סיכום או קוד.",
-  "auto.features.tutorial.components.concepts.guide.literal.256": "ההוראה או השאלה ששולחים למודל כדי לכוון את התשובה שלו.",
+  "auto.features.tutorial.components.concepts.guide.literal.255": "מודל שמקבל קלט בשפה טבעית, קוד או מידע מובנה ומחזיר תשובה, סיכום, סיווג או פלט מובנה.",
+  "auto.features.tutorial.components.concepts.guide.literal.256": "ההוראה שמכוונת את המודל: מה לבצע, באיזה פורמט לענות, ומה להעדיף או להימנע ממנו.",
   "auto.features.tutorial.components.concepts.guide.literal.257":
-    "ספריית Python לבניית תוכניות שמפעילות מודלי שפה ומשפרות אותן לפי דוגמאות ומדדים.",
+    "ספריית Python לבניית תוכניות שמפעילות מודלי שפה ומשפרות אותן לפי דוגמאות ופונקציות מדידה.",
   "auto.features.tutorial.components.concepts.guide.literal.258":
-    "אלגוריתם שמנסה לשפר תוכנית DSPy לפי מדד הצלחה מוגדר.",
+    "אלגוריתם שמנסה לשפר תוכנית DSPy לפי דאטאסט, פונקציית מדידה ותקציב ריצה.",
   "auto.features.tutorial.components.concepts.guide.literal.259":
-    "אופטימיזר רפלקטיבי שמשפר הוראות בעזרת מסלולי הרצה, משוב טקסטואלי ובחירת Pareto.",
+    "אופטימיזר רפלקטיבי שמשפר הוראות בעזרת מסלולי הרצה, feedback, mini-batches ובחירת Pareto.",
   "auto.features.tutorial.components.concepts.guide.literal.260":
-    "שלב שבו מודל הרפלקציה מנתח הצלחות וכישלונות ומציע איך לשפר את ההוראה.",
+    "שלב שבו מודל הרפלקציה מנתח הצלחות וכישלונות ומציע שינוי בפרומפט על בסיס ראיות מהריצה.",
   "auto.features.tutorial.components.concepts.guide.literal.261":
-    "הגדרה קצרה של שדות הקלט שהמודל מקבל ושדות הפלט שהוא צריך להחזיר.",
+    "קוד ההתחלה שמגדיר ל-DSPy את שדות הקלט, שדות הפלט והוראת המשימה.",
   "auto.features.tutorial.components.concepts.guide.literal.262":
-    "פונקציה שבודקת אם התשובה טובה. ב-GEPA היא יכולה להחזיר גם ציון וגם הסבר טקסטואלי.",
+    "פונקציה שבודקת תשובה ומחזירה ציון. ב-GEPA מומלץ להחזיר גם feedback טקסטואלי שמסביר את הציון.",
   "auto.features.tutorial.components.concepts.guide.literal.263":
-    "אוסף דוגמאות של קלט ותשובה רצויה, שמשמש ללמידה ולהשוואה בין מועמדים.",
+    "אוסף דוגמאות של קלט ותשובה רצויה שמשמש ליצירת מועמדים, השוואה ובדיקה.",
   "auto.features.tutorial.components.concepts.guide.literal.264":
-    "חלוקה לדוגמאות ללמידה, לדוגמאות להשוואה בין מועמדים ולדוגמאות למדידה סופית.",
+    "חלוקה לדוגמאות שמייצרות משוב, לדוגמאות שבוחרות מועמדים, ולדוגמאות לבדיקה סופית.",
   "auto.features.tutorial.components.concepts.guide.literal.265":
-    "הרצת אופטימיזציה בשרת.",
-  "auto.features.tutorial.components.concepts.guide.literal.266": "התוכנית המשופרת שנשמרת בסוף הריצה.",
+    "תהליך שבו Skynet מחפש תוכנית DSPy טובה יותר לפי ההגדרה שסיפקתם.",
+  "auto.features.tutorial.components.concepts.guide.literal.266": "התוכנית המשופרת שנשמרת בסוף הריצה וזמינה להורדה או להרצה דרך API.",
   "auto.features.tutorial.components.concepts.guide.literal.267":
-    "הרצה מלאה אחת של התוכנית על דוגמה או קבוצת דוגמאות.",
+    "הרצה של מועמד על סט דוגמאות רחב מספיק כדי לחשב ציון השוואתי.",
   "auto.features.tutorial.components.concepts.guide.literal.268":
-    "מסלול הביצוע: הקלט, השלבים, התשובה והמשוב.",
+    "תיעוד של הקלט, שלבי הביצוע, התשובה, הציון וה-feedback עבור ניסיון מסוים.",
   "auto.features.tutorial.components.concepts.guide.literal.269":
-    "מודול שמבקש מהמודל לחשוב בשלבים לפני שהוא מחזיר תשובה.",
+    "מודול DSPy שמוסיף שדה reasoning לפני הפלט, ולכן מתאים למשימות שדורשות בדיקת תנאים, הסבר או פתרון בכמה צעדים.",
   "auto.features.tutorial.components.concepts.guide.literal.270":
-    "מודל השפה שמנתח את תוצאות GEPA ומציע שיפורים.",
+    "מודל השפה שמנתח את מסלולי ההרצה וה-feedback ומציע שיפורים לפרומפט.",
   "auto.features.tutorial.components.concepts.guide.literal.271": "DSPy",
   "auto.features.tutorial.components.concepts.guide.literal.272": "GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.273": "/serve/{id}",
@@ -630,32 +633,32 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.295": 'auto="light"',
   "auto.features.tutorial.components.concepts.guide.literal.296": "num_threads",
   "auto.features.tutorial.components.concepts.guide.literal.297":
-    "Skynet הוא שירות לאופטימיזציה אוטומטית של פרומפטים. במקום לכוונן פרומפט ביד עד שהוא עובד, מספקים מערך נתונים ומדד הצלחה, והשירות מחפש תוכנית DSPy טובה יותר. ברקע רץ ",
-  "auto.features.tutorial.components.concepts.guide.literal.298": " והאופטימיזר ",
+    "Skynet הוא שירות לאופטימיזציה של פרומפטים. במקום לנחש ניסוח ולבדוק אותו ידנית, מעלים דאטאסט, מגדירים פונקציית מדידה, בוחרים מודלים, ו-Skynet מחפש תוכנית DSPy שמחזירה תשובות טובות יותר. מאחורי הקלעים הוא משתמש ב-",
+  "auto.features.tutorial.components.concepts.guide.literal.298": " ובאופטימיזר ",
   "auto.features.tutorial.components.concepts.guide.literal.299": ".",
   "auto.features.tutorial.components.concepts.guide.literal.300": `import dspy
 
-def gepa_metric(gold, pred, trace, pred_name, pred_trace):
-    """Score a prediction and return constructive feedback for the reflection LM."""
+def score_answer(gold, pred, trace, pred_name, pred_trace):
+    """Return a score and constructive feedback for the reflection LM."""
     expected = gold.answer.strip().lower()
     actual = (pred.answer or "").strip().lower()
 
     if expected == actual:
-        return dspy.Prediction(score=1.0, feedback="תשובה מושלמת!")
+        return dspy.Prediction(score=1.0, feedback="התשובה תואמת לפלט הרצוי.")
     if expected in actual:
         return dspy.Prediction(
             score=0.5,
-            feedback=f"תשובה חלקית. הנכון הוא {expected}, קיבלנו {actual}.",
+            feedback=f"תשובה חלקית. הפלט הרצוי הוא {expected}, וקיבלנו {actual}.",
         )
     return dspy.Prediction(
         score=0.0,
-        feedback=f"שגוי לחלוטין. המודל התבלבל בין {expected} ל-{actual}.",
+        feedback=f"התשובה אינה תואמת. הפלט הרצוי הוא {expected}, וקיבלנו {actual}.",
     )
 `,
   "auto.features.tutorial.components.concepts.guide.literal.301": "validating",
-  "auto.features.tutorial.components.concepts.guide.literal.302": ": הקלט והקוד נבדקים לפני תחילת הריצה.",
-  "auto.features.tutorial.components.concepts.guide.literal.303": "ציון 0.3",
-  "auto.features.tutorial.components.concepts.guide.literal.304": "ציון 0.5",
-  "auto.features.tutorial.components.concepts.guide.literal.305": "ציון 0.4",
+  "auto.features.tutorial.components.concepts.guide.literal.302": ": הקלט, הקוד, מיפוי העמודות והמודלים נבדקים לפני תחילת הריצה.",
+  "auto.features.tutorial.components.concepts.guide.literal.303": "ציון 0.30 בלבד, בלי הסבר למה המועמד נכשל.",
+  "auto.features.tutorial.components.concepts.guide.literal.304": "ציון 0.50 בלבד, בלי מידע על ההוראה שעזרה.",
+  "auto.features.tutorial.components.concepts.guide.literal.305": "ציון 0.40 בלבד, בלי דרך להבין אם הוא טוב למקרי קצה.",
   "auto.features.tutorial.components.concepts.guide.template.1": "חלק {p1}",
 } as const;

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
 import { ChevronRight, ChevronLeft, SkipBack, CircleMinus, Download, Keyboard } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
@@ -180,25 +179,7 @@ export function TaggerAnnotation({
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground px-5 pt-3">
-        <Link href="/" className="hover:text-foreground transition-colors">
-          {msg("auto.features.tagger.components.taggerannotation.1")}
-        </Link>
-        <ChevronLeft className="h-3 w-3" />
-        <button
-          type="button"
-          onClick={onBack}
-          className="hover:text-foreground transition-colors cursor-pointer"
-        >
-          {msg("auto.features.tagger.components.taggerannotation.2")}
-        </button>
-        <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">
-          {msg("auto.features.tagger.components.taggerannotation.3")}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2 px-5 py-1.5">
+      <div className="flex items-center gap-2 px-5 pt-3 pb-1.5">
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full rounded-full transition-all duration-300"
@@ -425,7 +406,7 @@ export function TaggerAnnotation({
       </div>
 
       <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
-        <DialogContent className="sm:max-w-sm" dir="rtl">
+        <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.14")}</DialogTitle>
           </DialogHeader>
@@ -479,7 +460,7 @@ export function TaggerAnnotation({
           if (!open) setExportConfirm(null);
         }}
       >
-        <DialogContent className="max-w-sm sm:max-w-sm">
+        <DialogContent className="max-w-md sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.15")}</DialogTitle>
             <DialogDescription>

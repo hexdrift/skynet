@@ -17,7 +17,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
-import type { OptimizationPayloadResponse, OptimizationStatusResponse } from "@/shared/types/api";
+import type {
+  ModelConfig,
+  OptimizationPayloadResponse,
+  OptimizationStatusResponse,
+  PairResult,
+} from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -104,12 +109,34 @@ function ModelCard({ label, cfg }: { label: string; cfg: Record<string, unknown>
   );
 }
 
+// The pair only carries the model name + reasoning effort; the richer
+// ModelConfig (temperature, max_tokens, extra) lives on job.generation_models
+// / job.reflection_models. Match by name first, narrowing on reasoning
+// effort when multiple configs share the name. Fall back to a synthesized
+// config so the ModelCard still renders when the grid lists are missing
+// (older payloads, partial responses).
+function pickPairModelConfig(
+  configs: ModelConfig[] | undefined,
+  name: string,
+  reasoningEffort: string | null | undefined,
+): Record<string, unknown> {
+  const candidates = (configs ?? []).filter((c) => c.name === name);
+  const matched =
+    candidates.find(
+      (c) => ((c.extra?.reasoning_effort as string | undefined) ?? null) === (reasoningEffort ?? null),
+    ) ?? candidates[0];
+  if (matched) return matched as unknown as Record<string, unknown>;
+  return reasoningEffort ? { name, extra: { reasoning_effort: reasoningEffort } } : { name };
+}
+
 export function ConfigTab({
   job,
   payload,
+  activePair,
 }: {
   job: OptimizationStatusResponse;
   payload: OptimizationPayloadResponse | null;
+  activePair?: PairResult;
 }) {
   // Merge job-level data with full payload for richer config display
   const p = (payload?.payload ?? {}) as Record<string, unknown>;
@@ -245,6 +272,25 @@ export function ConfigTab({
                     )}
                   </>
                 )}
+              </div>
+            ) : activePair ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ModelCard
+                  label={msg("model.generation.label")}
+                  cfg={pickPairModelConfig(
+                    job.generation_models,
+                    activePair.generation_model,
+                    activePair.generation_reasoning_effort,
+                  )}
+                />
+                <ModelCard
+                  label={TERMS.reflectionModel}
+                  cfg={pickPairModelConfig(
+                    job.reflection_models,
+                    activePair.reflection_model,
+                    activePair.reflection_reasoning_effort,
+                  )}
+                />
               </div>
             ) : job.generation_models && job.reflection_models ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

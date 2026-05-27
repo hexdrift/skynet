@@ -52,9 +52,9 @@ export function InlineErrorRow({
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel}
-          className="shrink-0 rounded-md p-0.5 text-destructive/60 hover:text-destructive transition-colors cursor-pointer"
+          className="close-button shrink-0"
         >
-          <X className="size-3.5" />
+          <X />
         </button>
       )}
     </div>

@@ -29,14 +29,21 @@ const clientSecret = process.env.AUTH_SSO_CLIENT_SECRET;
 const adfsConfigured = !!issuer && !!clientId && !!clientSecret;
 const devAdminFallback = adfsConfigured ? "" : "admin";
 
+// Deploy manifests (Helm values, docker-compose) ship AUTH_ADMINS="" as an
+// explicit empty string, so `??` would never reach the fallback — an empty
+// var must be treated as unset for the dev-admin fallback to apply.
+function envOrFallback(value: string | undefined, fallback: string) {
+  return value && value.trim() ? value : fallback;
+}
+
 const ADMIN_LIST = new Set(
-  (process.env.AUTH_ADMINS ?? devAdminFallback)
+  envOrFallback(process.env.AUTH_ADMINS, devAdminFallback)
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
 );
 const ADMIN_GROUPS = new Set(
-  (process.env.AUTH_ADMIN_GROUPS ?? "")
+  envOrFallback(process.env.AUTH_ADMIN_GROUPS, "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),

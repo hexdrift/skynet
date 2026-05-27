@@ -386,9 +386,9 @@ h3 {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
+    width: var(--close-btn-size, 26px);
+    height: var(--close-btn-size, 26px);
+    border-radius: var(--close-btn-radius, 7px);
     color: var(--muted-foreground);
     cursor: pointer;
     transition:
@@ -409,8 +409,8 @@ h3 {
     box-shadow: 0 0 0 2px rgba(200, 168, 130, 0.3);
   }
   .close-button svg {
-    width: 14px;
-    height: 14px;
+    width: var(--close-btn-icon, 14px);
+    height: var(--close-btn-icon, 14px);
     pointer-events: none;
     flex-shrink: 0;
   }

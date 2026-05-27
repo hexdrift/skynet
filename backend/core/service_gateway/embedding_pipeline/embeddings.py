@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
+from typing import Any
 
 import requests
 
@@ -46,11 +47,16 @@ class _EmbeddingApiClient:
             return False
         return True
 
-    def encode(self, text: str) -> list[float] | None:
+    def encode(self, text: str, *, task: str | None = None) -> list[float] | None:
         """Return a truncated, L2-normalized embedding from the configured API.
 
         Args:
             text: The input string to embed.
+            task: Optional task adapter id forwarded to the API. Jina v4 uses
+                ``retrieval.query`` for search queries and ``retrieval.passage``
+                for indexed documents so the asymmetric LoRA adapters score
+                each side correctly. Providers that don't recognize the field
+                ignore it.
 
         Returns:
             A normalized list of floats of length ``settings.embeddings_dim``,
@@ -60,7 +66,7 @@ class _EmbeddingApiClient:
         if not text or not text.strip() or not self.available():
             return None
         try:
-            raw = self._request_embedding(text)
+            raw = self._request_embedding(text, task=task)
             if len(raw) < self._dim:
                 logger.warning(
                     "Embedding model %s returned %d dimensions; schema requires %d.",
@@ -78,11 +84,13 @@ class _EmbeddingApiClient:
             logger.warning("Embedding API encode failed: %s", exc)
             return None
 
-    def _request_embedding(self, text: str) -> list[float]:
+    def _request_embedding(self, text: str, *, task: str | None = None) -> list[float]:
         """Call the embedding API and return the first embedding vector.
 
         Args:
             text: The input string sent as the OpenAI-compatible ``input``.
+            task: Optional task adapter id added to the request body. Jina v4
+                interprets this to pick a LoRA head; OpenAI ignores it.
 
         Returns:
             The first embedding vector returned by the API.
@@ -92,10 +100,13 @@ class _EmbeddingApiClient:
             ValueError: When the API response is missing required fields.
             requests.RequestException: When the HTTP request fails.
         """
+        body: dict[str, Any] = {"model": self._model, "input": text}
+        if task:
+            body["task"] = task
         response = requests.post(
             f"{self._base_url}/embeddings",
             headers=self._headers(),
-            json={"model": self._model, "input": text},
+            json=body,
             timeout=self._timeout,
         )
         response.raise_for_status()

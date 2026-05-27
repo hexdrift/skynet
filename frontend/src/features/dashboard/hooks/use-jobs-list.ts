@@ -52,7 +52,6 @@ export function useJobsList({ sessionUser, isAdmin }: UseJobsListArgs): UseJobsL
     void fetchJobs();
     // fetchJobs changes whenever sessionUser/isAdmin/pageOffset change, so
     // `data` deliberately stays out of the dep array to avoid a refetch loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchJobs]);
 
   return {

@@ -1,5 +1,4 @@
-import { AnimatedNumber, FadeIn } from "@/shared/ui/motion";
-import { TERMS } from "@/shared/lib/terms";
+import { AnimatedNumber } from "@/shared/ui/motion";
 import type { DashboardStats } from "../lib/get-dashboard-stats";
 import { msg } from "@/shared/lib/messages";
 
@@ -52,31 +51,6 @@ function StatCard({ label, value, accent = "default", pulse = false }: StatCardP
 export function DashboardHeader({ stats }: DashboardHeaderProps) {
   return (
     <>
-      <FadeIn>
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-            {msg("auto.features.dashboard.components.dashboardheader.1")}
-          </h1>
-          {stats && (
-            <p className="text-sm text-muted-foreground/80">
-              <span className="tabular-nums">{stats.total}</span>{" "}
-              {TERMS.optimizationPlural}
-              {stats.running > 0 && (
-                <>
-                  {" · "}
-                  <span className="tabular-nums text-[var(--warning)] font-medium">
-                    {stats.running}
-                  </span>
-                  <span className="text-[var(--warning)] font-medium">
-                    {msg("auto.features.dashboard.components.dashboardheader.2")}
-                  </span>
-                </>
-              )}
-            </p>
-          )}
-        </div>
-      </FadeIn>
-
       {stats && (
         <div
           className="grid gap-3 sm:gap-4"

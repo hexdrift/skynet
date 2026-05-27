@@ -65,3 +65,63 @@ reflectionModel:
   he: מודל רפלקציה
   note: GEPA reflection-step model.
   direction: Model identifiers remain LTR in UI.
+
+candidate:
+  en: candidate
+  he: מועמד
+  note: A prompt variant produced by GEPA. The trajectory tree node label.
+  do_not_use:
+    - אפשרות
+    - מועמדות
+
+parent:
+  en: parent
+  he: הורה
+  note: Source candidate the current one was reflected from. Genealogy term.
+  do_not_use:
+    - אב
+    - מקור
+
+generation:
+  en: generation
+  he: דור
+  note: Depth in the parent tree (root = 0). Reuse the family-tree sense.
+    Do not confuse with "generation_model" (that stays מודל מג׳נרט).
+
+trajectory:
+  en: trajectory
+  he: מסלול
+  note: The genealogy of accepted candidates over the run. Use as a noun.
+  do_not_use:
+    - נתיב
+    - דרך
+
+paretoFront:
+  en: Pareto front
+  he: חזית Pareto
+  note: Mixed-direction phrase. Pareto stays LTR/Latin, חזית stays RTL.
+  direction: Wrap "Pareto" in bdi or a span with dir="ltr".
+
+reflection:
+  en: reflection
+  he: רפלקציה
+  note: The GEPA self-improvement step. Already established in tutorial copy.
+
+prompt:
+  en: prompt
+  he: פרומפט
+  note: Established borrowing across the app. Do not use הנחיה or הוראה.
+  do_not_use:
+    - הנחיה
+    - הוראה
+
+seedCandidate:
+  en: seed candidate
+  he: מועמד התחלתי
+  note: The original prompt that seeds the optimization (always id "0").
+
+winningCandidate:
+  en: winning candidate
+  he: מועמד מוביל
+  note: The best-scoring candidate at any given moment. "מוביל" (leading) not
+    "מנצח" (final winner) because the value changes mid-run. Matches winningModel.

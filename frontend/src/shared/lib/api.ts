@@ -54,13 +54,99 @@ export function setApiAuthToken(token: string | undefined) {
   _authToken = token;
 }
 
+let _authTokenRefresher: (() => Promise<string | undefined>) | undefined;
+
 /**
- * Return the current bearer token (without the `Bearer ` prefix) so raw
- * `fetch` callers (SSE streams that can't go through `request`) can attach
- * it themselves. Returns `undefined` when the user is not authenticated.
+ * Register an async refresher that mints a fresh backend bearer token (e.g.
+ * by re-fetching the NextAuth session). Used to recover from a 401 when the
+ * cached token expired while a tab sat idle during a long optimization run.
  */
-export function getApiAuthToken(): string | undefined {
-  return _authToken;
+export function setApiAuthTokenRefresher(
+  refresher: (() => Promise<string | undefined>) | undefined,
+) {
+  _authTokenRefresher = refresher;
+}
+
+/**
+ * Run a one-shot bearer-token refresh after a 401 and hand back a fresh
+ * token to retry with. Returns `undefined` when there is no refresher, the
+ * refresh failed, or the refreshed token is unchanged (so the caller should
+ * surface the original 401 instead of looping).
+ */
+async function refreshAuthTokenOn401(): Promise<string | undefined> {
+  if (!_authTokenRefresher) return undefined;
+  let fresh: string | undefined;
+  try {
+    fresh = await _authTokenRefresher();
+  } catch {
+    return undefined;
+  }
+  if (!fresh || fresh === _authToken) return undefined;
+  _authToken = fresh;
+  return fresh;
+}
+
+/**
+ * `fetch` for raw SSE/NDJSON callers that can't go through `request`.
+ * Attaches the cached bearer token and, on a 401, transparently refreshes
+ * the token and retries once — the in-memory token has a short TTL and goes
+ * stale while a long run keeps the tab idle/backgrounded.
+ */
+export async function fetchWithAuthRetry(url: string, init: RequestInit): Promise<Response> {
+  const send = (token: string | undefined) =>
+    fetch(url, {
+      ...init,
+      headers: {
+        ...(init.headers as Record<string, string> | undefined),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  const res = await send(_authToken);
+  if (res.status !== 401) return res;
+  const fresh = await refreshAuthTokenOn401();
+  if (!fresh) return res;
+  return send(fresh);
+}
+
+let _authTokenRefresher: (() => Promise<string | undefined>) | undefined;
+
+/**
+ * Register an async refresher that mints a fresh backend bearer token (e.g.
+ * by re-fetching the NextAuth session). Used to recover from a 401 when the
+ * cached token expired while a tab sat idle during a long optimization run.
+ */
+export function setApiAuthTokenRefresher(
+  refresher: (() => Promise<string | undefined>) | undefined,
+) {
+  _authTokenRefresher = refresher;
+}
+
+/**
+ * `fetch` for raw SSE callers that can't go through `request`. Attaches the
+ * cached bearer token and, on a 401, transparently refreshes the token and
+ * retries once — the in-memory token has a short TTL and goes stale while a
+ * long run keeps the tab idle/backgrounded.
+ */
+async function fetchWithAuthRetry(url: string, init: RequestInit): Promise<Response> {
+  const send = (token: string | undefined) =>
+    fetch(url, {
+      ...init,
+      headers: {
+        ...(init.headers as Record<string, string> | undefined),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  const res = await send(_authToken);
+  if (res.status !== 401 || !_authTokenRefresher) return res;
+  let fresh: string | undefined;
+  try {
+    fresh = await _authTokenRefresher();
+  } catch {
+    return res;
+  }
+  if (!fresh || fresh === _authToken) return res;
+  _authToken = fresh;
+  return send(fresh);
 }
 
 function cachedGet<T>(path: string, maxAge = GET_CACHE_MS): Promise<T> {
@@ -114,16 +200,22 @@ if (typeof window !== "undefined") {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${API}${path}`, {
+  const send = (token: string | undefined) =>
+    fetch(`${API}${path}`, {
       ...init,
       headers: {
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
-        ...(_authToken ? { Authorization: `Bearer ${_authToken}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
     });
+  let res: Response;
+  try {
+    res = await send(_authToken);
+    if (res.status === 401) {
+      const fresh = await refreshAuthTokenOn401();
+      if (fresh) res = await send(fresh);
+    }
   } catch (err) {
     throw new Error(msg("auto.shared.lib.api.literal.1"), { cause: err });
   }
@@ -545,7 +637,7 @@ export async function probeModels(
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${API}/models/probe`, {
+    res = await fetchWithAuthRetry(`${API}/models/probe`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
       body: JSON.stringify(payload),
@@ -663,7 +755,7 @@ export async function serveProgramStream(
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${API}/serve/${optimizationId}/stream`, {
+    res = await fetchWithAuthRetry(`${API}/serve/${optimizationId}/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({ inputs }),
@@ -713,7 +805,7 @@ export async function servePairProgramStream(
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${API}/serve/${optimizationId}/pair/${pairIndex}/stream`, {
+    res = await fetchWithAuthRetry(`${API}/serve/${optimizationId}/pair/${pairIndex}/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({ inputs }),
@@ -814,7 +906,7 @@ export async function streamCodeAgent(
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${API}/optimizations/ai-generate-code`, {
+    res = await fetchWithAuthRetry(`${API}/optimizations/ai-generate-code`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify(req),
@@ -956,22 +1048,69 @@ export interface PublicDashboardPoint {
   created_at: string | null;
   x: number;
   y: number;
-  cluster_levels: number[];
   siblings: string[];
   task_fingerprint: string | null;
   compare_fingerprint: string | null;
-}
-
-export interface PublicDashboardMeta {
-  count: number;
-  level_cluster_counts: number[];
+  has_coordinates?: boolean;
 }
 
 export interface PublicDashboardResponse {
   points: PublicDashboardPoint[];
-  meta: PublicDashboardMeta;
 }
 
 export function getPublicDashboard(): Promise<PublicDashboardResponse> {
   return cachedGet("/dashboard/public", 15000);
+}
+
+export type SearchSort = "relevance" | "recent" | "gain";
+
+export interface SearchFilters {
+  query?: string;
+  models?: string[];
+  optimizers?: string[];
+  optimization_types?: string[];
+  date_from?: string; // ISO date (YYYY-MM-DD)
+  date_to?: string; // ISO date (YYYY-MM-DD)
+  sort?: SearchSort;
+  page?: number;
+  size?: number;
+  /**
+   * Scope the search to the caller's own jobs (including private rows). The
+   * backend requires the bearer token to match this username, so only the
+   * logged-in user can set this to their own name.
+   */
+  owner_username?: string;
+}
+
+export interface SearchResult {
+  optimization_id: string;
+  optimization_type: string | null;
+  winning_model: string | null;
+  baseline_metric: number | null;
+  optimized_metric: number | null;
+  summary_text: string | null;
+  task_name: string | null;
+  module_name: string | null;
+  optimizer_name: string | null;
+  created_at: string | null;
+  relevance: number | null;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+  matched_ids: string[];
+  /** Which backend branch served the response — drives per-row source badges. */
+  search_type?: "semantic" | "lexical";
+}
+
+export function searchPublicDashboard(
+  filters: SearchFilters,
+  init?: { signal?: AbortSignal },
+): Promise<SearchResponse> {
+  return request<SearchResponse>("/dashboard/search", {
+    method: "POST",
+    body: JSON.stringify(filters),
+    signal: init?.signal,
+  });
 }

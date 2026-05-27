@@ -54,9 +54,8 @@ import type {
   OptimizationStatusResponse,
   OptimizedPredictor,
 } from "@/shared/types/api";
-import { Skeleton } from "@/shared/ui/bone-skeleton";
+import { CompareSkeleton } from "./CompareSkeleton";
 import { ReasoningPill } from "@/features/optimizations";
-import { compareBones } from "../lib/bones";
 import { canCompareKeys, compareCompatibilityKey } from "../lib/compatibility";
 import { COMPARE_MAX } from "@/features/dashboard";
 import { HelpTip } from "@/shared/ui/help-tip";
@@ -86,6 +85,42 @@ import {
 const WINNER_TINT = "rgba(61, 46, 34, 0.085)";
 // Cubic-bezier matches the snappy curve in globals.css (`--ease-snappy`).
 const EASE_SNAPPY = [0.2, 0.8, 0.2, 1] as const;
+// Per-table tipping point. At four runs the verbose pill cells force
+// the header UUID to truncate and the signal-to-pixel ratio collapses,
+// so switch to compact letter-only headers with a legend strip that
+// keeps the full UUIDs nearby. PerExampleSection additionally swaps
+// pills for dots and defaults the disagreements filter on at the same
+// threshold.
+const COMPARE_COMPACT_THRESHOLD = 4;
+
+function CompactRunsLegend({ runs }: { runs: RunInfo[] }) {
+  return (
+    <div className="px-4 sm:px-5 py-2.5 border-b border-border/40 bg-muted/15">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {runs.map((run, i) => (
+          <span
+            key={run.job.optimization_id}
+            className="inline-flex items-center gap-1.5 text-[0.6875rem]"
+          >
+            <span
+              className="size-4 rounded-sm flex items-center justify-center text-[0.5625rem] font-bold text-white tabular-nums"
+              style={{ background: colorFor(i) }}
+            >
+              {runToken(i)}
+            </span>
+            <span
+              className="font-mono tabular-nums text-muted-foreground"
+              dir="ltr"
+              title={run.label}
+            >
+              {run.label}
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function VerdictBlock({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
   const winner = winnerIdx != null ? runs[winnerIdx] : null;
@@ -366,11 +401,13 @@ function RunsHeaderRow({
   winnerIdx,
   stickyFirst,
   firstLabel,
+  compact,
 }: {
   runs: RunInfo[];
   winnerIdx: number | null;
   stickyFirst: string;
   firstLabel: string;
+  compact: boolean;
 }) {
   const winnerBg = (i: number) => (i === winnerIdx ? WINNER_TINT : undefined);
   return (
@@ -383,11 +420,24 @@ function RunsHeaderRow({
       {runs.map((run, i) => (
         <th
           key={run.job.optimization_id}
-          className="py-2.5 px-2 border-b border-border/40"
+          className={`border-b border-border/40 ${compact ? "py-2 px-1" : "py-2.5 px-2"}`}
           style={{ background: winnerBg(i) }}
         >
           <div className="flex flex-col items-center gap-1">
-            <RunChip index={i} label={run.label} winner={i === winnerIdx} />
+            {compact ? (
+              <span
+                className={`size-5 rounded-md flex items-center justify-center text-[0.625rem] font-bold text-white tabular-nums ${
+                  i === winnerIdx ? "ring-2 ring-primary/40 ring-offset-1 ring-offset-card" : ""
+                }`}
+                style={{ background: colorFor(i) }}
+                aria-label={run.label}
+                title={run.label}
+              >
+                {runToken(i)}
+              </span>
+            ) : (
+              <RunChip index={i} label={run.label} winner={i === winnerIdx} />
+            )}
           </div>
         </th>
       ))}
@@ -551,6 +601,7 @@ function PerformanceChart({ runs }: { runs: RunInfo[] }) {
 }
 
 function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
+  const compact = runs.length >= COMPARE_COMPACT_THRESHOLD;
   const metricRows: MetricRow[] = [
     {
       key: "baseline",
@@ -595,6 +646,7 @@ function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
+        {compact && <CompactRunsLegend runs={runs} />}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[500px] text-sm border-separate border-spacing-0">
             <thead>
@@ -603,6 +655,7 @@ function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
                 winnerIdx={winnerIdx}
                 stickyFirst={stickyFirst}
                 firstLabel={TERMS.metric}
+                compact={compact}
               />
             </thead>
             <tbody>
@@ -639,6 +692,7 @@ function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
 }
 
 function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
+  const compact = runs.length >= COMPARE_COMPACT_THRESHOLD;
   type ConfigRowDef = {
     key: string;
     icon: React.ElementType;
@@ -684,6 +738,7 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
+        {compact && <CompactRunsLegend runs={runs} />}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[500px] text-sm border-separate border-spacing-0">
             <thead>
@@ -692,6 +747,7 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
                 winnerIdx={winnerIdx}
                 stickyFirst={stickyFirst}
                 firstLabel={msg("auto.app.compare.page.literal.16")}
+                compact={compact}
               />
             </thead>
             <tbody>
@@ -838,6 +894,34 @@ function PassBadge({ result }: { result: EvalExampleResult | undefined }) {
       <X className="size-3 shrink-0" aria-hidden="true" />
       {scoreStr}
     </span>
+  );
+}
+
+function PassDot({ result }: { result: EvalExampleResult | undefined }) {
+  if (!result) {
+    return (
+      <span
+        className="inline-block size-4 rounded-sm border border-dashed border-muted-foreground/30 align-middle"
+        aria-label="—"
+      />
+    );
+  }
+  const scoreStr = fmt(result.score);
+  const label = `${result.pass ? "✓" : "✗"} ${scoreStr}`;
+  const base = result.pass ? "var(--success)" : "var(--danger)";
+  return (
+    <UiTooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-block size-4 rounded-sm align-middle cursor-default"
+          style={{ backgroundColor: `color-mix(in oklch, ${base} 78%, transparent)` }}
+          aria-label={label}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="top" dir="ltr">
+        {label}
+      </TooltipContent>
+    </UiTooltip>
   );
 }
 
@@ -998,7 +1082,8 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
     () => injectedDemo?.dataset ?? null,
   );
   const [loading, setLoading] = useState(() => !injectedDemo);
-  const [onlyDisagreements, setOnlyDisagreements] = useState(false);
+  const compact = runs.length >= COMPARE_COMPACT_THRESHOLD;
+  const [onlyDisagreements, setOnlyDisagreements] = useState(compact);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -1156,6 +1241,8 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
           </UiTooltip>
         </div>
 
+        {compact && <CompactRunsLegend runs={runs} />}
+
         {rows.length === 0 ? (
           <div className="py-6 text-center">
             <p className="text-sm text-muted-foreground">{msg("auto.app.compare.page.16")}</p>
@@ -1172,10 +1259,21 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
                   {runs.map((run, i) => (
                     <th
                       key={run.job.optimization_id}
-                      className="py-2.5 px-2 border-b border-border/40 text-center"
+                      className={`border-b border-border/40 text-center ${compact ? "py-2 px-1 w-9" : "py-2.5 px-2"}`}
                     >
                       <div className="flex items-center justify-center">
-                        <RunChip index={i} label={run.label} />
+                        {compact ? (
+                          <span
+                            className="size-5 rounded-md flex items-center justify-center text-[0.625rem] font-bold text-white tabular-nums"
+                            style={{ background: colorFor(i) }}
+                            aria-label={run.label}
+                            title={run.label}
+                          >
+                            {runToken(i)}
+                          </span>
+                        ) : (
+                          <RunChip index={i} label={run.label} />
+                        )}
                       </div>
                     </th>
                   ))}
@@ -1232,8 +1330,15 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
                           </span>
                         </td>
                         {runs.map((run, i) => (
-                          <td key={i} className={`py-2 px-2 ${borderTop} text-center`}>
-                            <PassBadge result={outputsPerRun[i]} />
+                          <td
+                            key={i}
+                            className={`py-2 ${compact ? "px-1" : "px-2"} ${borderTop} text-center`}
+                          >
+                            {compact ? (
+                              <PassDot result={outputsPerRun[i]} />
+                            ) : (
+                              <PassBadge result={outputsPerRun[i]} />
+                            )}
                           </td>
                         ))}
                       </tr>
@@ -1325,19 +1430,7 @@ export function CompareView() {
   const runs = useMemo(() => (jobs ? jobs.map(deriveRunInfo) : []), [jobs]);
   const winnerIdx = useMemo(() => winnerIndexOf(runs), [runs]);
 
-  if (loading) {
-    return (
-      <Skeleton
-        name="compare"
-        loading
-        initialBones={compareBones}
-        color="var(--muted)"
-        animate="shimmer"
-      >
-        <div className="min-h-[60vh]" />
-      </Skeleton>
-    );
-  }
+  if (loading) return <CompareSkeleton />;
 
   if (error || !jobs || runs.length < 2) {
     return (

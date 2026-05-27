@@ -10,7 +10,7 @@ import type {
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { readServerSentEvents } from "@/shared/lib/sse";
-import { getApiAuthToken } from "@/shared/lib/api";
+import { fetchWithAuthRetry } from "@/shared/lib/api";
 
 const API = getRuntimeEnv().apiUrl;
 
@@ -41,13 +41,11 @@ export async function streamGeneralistAgent(
 ): Promise<void> {
   let res: Response;
   try {
-    const token = getApiAuthToken();
-    res = await fetch(`${API}/optimizations/generalist-agent`, {
+    res = await fetchWithAuthRetry(`${API}/optimizations/generalist-agent`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(req),
       signal: handlers.signal,
@@ -145,7 +143,7 @@ export async function confirmGeneralistApproval(
 ): Promise<boolean> {
   let res: Response;
   try {
-    res = await fetch(`${API}/optimizations/generalist-agent/confirm`, {
+    res = await fetchWithAuthRetry(`${API}/optimizations/generalist-agent/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ call_id: callId, approved }),

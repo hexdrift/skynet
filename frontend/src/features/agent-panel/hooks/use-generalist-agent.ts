@@ -46,15 +46,14 @@ const OPTIMIZATION_MUTATING_TOOLS: ReadonlySet<string> = new Set([
   "delete_job_optimizations",
   "bulk_delete_jobs_optimizations_bulk_delete_post",
   "cancel_job_optimizations",
+  "bulk_cancel_jobs_optimizations_bulk_cancel_post",
   "submit_job_run_post",
   "submit_grid_search_grid_search_post",
   "rename_job_optimizations",
   "toggle_pin_job_optimizations",
-  "toggle_archive_job_optimizations",
   "clone_job_optimizations",
   "retry_job_optimizations",
   "bulk_pin_jobs_optimizations_bulk_pin_post",
-  "bulk_archive_jobs_optimizations_bulk_archive_post",
 ]);
 
 // MCP tool names that mutate the user's template library. A successful call

@@ -436,7 +436,7 @@ function GridOverviewImpl({
                         <BarChart
                           data={pairScoresFiltered}
                           layout="vertical"
-                          margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
+                          margin={{ left: 28, right: 20, top: 5, bottom: 5 }}
                         >
                           <CartesianGrid
                             horizontal={false}
@@ -475,8 +475,8 @@ function GridOverviewImpl({
                                 "auto.features.optimizations.components.gridoverview.literal.8",
                               ),
                               angle: -90,
-                              position: "insideLeft",
-                              offset: 15,
+                              position: "left",
+                              offset: 10,
                               fontSize: 10,
                             }}
                           />
@@ -573,7 +573,7 @@ function GridOverviewImpl({
                         <BarChart
                           data={combinedScoresFiltered}
                           layout="vertical"
-                          margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
+                          margin={{ left: 28, right: 20, top: 5, bottom: 5 }}
                         >
                           <CartesianGrid
                             horizontal={false}
@@ -612,8 +612,8 @@ function GridOverviewImpl({
                                 "auto.features.optimizations.components.gridoverview.literal.16",
                               ),
                               angle: -90,
-                              position: "insideLeft",
-                              offset: 15,
+                              position: "left",
+                              offset: 10,
                               fontSize: 10,
                             }}
                           />
@@ -712,7 +712,7 @@ function GridOverviewImpl({
                         <BarChart
                           data={pairRespTimeFiltered}
                           layout="vertical"
-                          margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
+                          margin={{ left: 28, right: 20, top: 5, bottom: 5 }}
                         >
                           <CartesianGrid
                             horizontal={false}
@@ -747,8 +747,8 @@ function GridOverviewImpl({
                                 "auto.features.optimizations.components.gridoverview.literal.27",
                               ),
                               angle: -90,
-                              position: "insideLeft",
-                              offset: 15,
+                              position: "left",
+                              offset: 10,
                               fontSize: 10,
                             }}
                           />
@@ -929,7 +929,7 @@ function GridOverviewImpl({
       </div>
 
       <Dialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <DialogContent className="max-w-sm sm:max-w-sm">
+        <DialogContent className="max-w-md sm:max-w-md">
           <DialogTitleRow
             title={msg("auto.features.optimizations.components.gridoverview.19")}
             description={

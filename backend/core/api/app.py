@@ -46,7 +46,7 @@ from ..exceptions import AppError
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
-from ..service_gateway.embedding_pipeline import backfill_missing_embeddings
+from ..service_gateway.embedding_pipeline import backfill_missing_embeddings, purge_orphan_embeddings
 from ..storage import get_job_store
 from ..worker.engine import BackgroundWorker, get_worker
 from .directory_client import build_directory_client
@@ -545,8 +545,11 @@ def create_app(
         # Embedding the explore-map vector is on a daemon thread when a job
         # succeeds; a crashed thread (LLM creds, API blip) leaves the row
         # missing forever and the map silently drops the job. A startup
-        # backfill drains the gap so the index heals after a restart.
+        # backfill drains the gap so the index heals after a restart, and a
+        # one-shot orphan sweep cleans up any rows whose job was deleted
+        # before the deletion path cascaded into job_embeddings.
         try:
+            purge_orphan_embeddings(job_store)
             queued = backfill_missing_embeddings(job_store)
             if queued:
                 logger.info("Embedding backfill queued for %d job(s)", queued)

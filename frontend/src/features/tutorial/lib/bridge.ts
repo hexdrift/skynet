@@ -69,7 +69,11 @@ export interface TutorialHooks {
   /** Jump the tagger setup wizard to a specific step. */
   setTaggerStep: (step: number) => void;
   /** Inject demo rows into the tagger setup. */
-  setTaggerDemoData: (data: { rows: unknown[]; cols: string[]; textCol: string }) => void;
+  setTaggerDemoData: (data: {
+    rows: unknown[];
+    cols: string[];
+    textCol: string | string[];
+  }) => void;
   /** Open or close the generalist agent panel (left-anchored aside). */
   setGeneralistPanelOpen: (open: boolean) => void;
   /**
@@ -79,6 +83,12 @@ export interface TutorialHooks {
    * place to revert.
    */
   setAdvancedMode: (enabled: boolean) => void;
+  /**
+   * Replay the demo optimization simulation. The deep-dive tour calls this
+   * when reaching the trajectory step so the user sees the tree grow live
+   * instead of jumping to the completed state.
+   */
+  replayDemoSimulation: () => void;
 }
 
 /**

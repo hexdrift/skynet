@@ -12,8 +12,7 @@ import {
   ResetColumnsButton,
   type SortDir,
 } from "@/shared/ui/excel-filter";
-import { Skeleton } from "@/shared/ui/bone-skeleton";
-import { dataTabBones } from "../lib/data-tab-bones";
+import { DataTabSkeleton } from "./DataTabSkeleton";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { msg } from "@/shared/lib/messages";
@@ -244,18 +243,7 @@ export function DataTab({
 
   const evalCount = Object.keys(currentResults).length;
 
-  if (loading)
-    return (
-      <Skeleton
-        name="data-tab"
-        loading
-        initialBones={dataTabBones}
-        color="var(--muted)"
-        animate="shimmer"
-      >
-        <div className="min-h-[400px]" />
-      </Skeleton>
-    );
+  if (loading) return <DataTabSkeleton />;
   if (error || !dataset)
     return (
       <div className="text-sm text-destructive text-center py-16">

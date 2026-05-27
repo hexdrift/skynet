@@ -23,7 +23,6 @@ class _JobResponseBase(BaseModel):
     name: str | None = None
     description: str | None = None
     pinned: bool = False
-    archived: bool = False
 
     created_at: datetime
     started_at: datetime | None = None
@@ -116,6 +115,12 @@ class OptimizationSummaryResponse(_JobResponseBase):
     )
 
     best_pair_label: str | None = None
+
+    # AI-authored task summary from job_embeddings.summary_text. Populated
+    # at read-time via a side lookup so the dashboard "mine" corpus can
+    # render the same one-liner the public /explore corpus shows. Null
+    # when no embedding row exists yet (queued/failed/not-yet-embedded).
+    summary_text: str | None = None
 
 
 class PaginatedJobsResponse(BaseModel):
