@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-
 export interface ParsedDataset {
   columns: string[];
   rows: Array<Record<string, unknown>>;
@@ -80,6 +78,9 @@ export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
   }
 
   if (ext === "xlsx" || ext === "xls") {
+    // Lazy-load xlsx (~900KB) so it stays out of the initial dataset-route
+    // chunk — only pulled in when a spreadsheet is actually parsed.
+    const XLSX = await import("xlsx");
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "array" });
     const sheetName = workbook.SheetNames[0];
