@@ -32,6 +32,14 @@ class CatalogModel(BaseModel):
     value: str = Field(..., description="Canonical LiteLLM model ID (e.g. 'gpt-4o-mini').")
     label: str = Field(..., description="Human-friendly display name.")
     provider: str = Field(..., description="Provider slug for grouping (e.g. 'openai').")
+    data_center: str | None = Field(
+        default=None,
+        description=(
+            "Data-center label this model resolves through when the provider "
+            "exposes more than one endpoint (e.g. an on-prem gateway). "
+            "``None`` for single-endpoint providers."
+        ),
+    )
     supports_thinking: bool = Field(default=False, description="Model supports reasoning_effort.")
     supports_vision: bool = Field(
         default=False,
@@ -42,10 +50,18 @@ class CatalogModel(BaseModel):
 
 
 class CatalogProvider(BaseModel):
-    """A provider section in the catalog."""
+    """A provider section in the catalog.
+
+    A provider with a single endpoint emits one entry with
+    ``data_center=None``. A provider that fans out across several endpoints
+    (e.g. a public API plus an on-prem OpenAI-compatible gateway) emits one
+    entry per data center, each with a distinct ``default_base_url`` and a
+    populated ``data_center`` label.
+    """
 
     slug: str
     label: str
+    data_center: str | None = None
     env_var: str | None = None
     default_base_url: str | None = None
     has_env_key: bool = False
@@ -58,49 +74,199 @@ class ModelCatalogResponse(BaseModel):
     models: list[CatalogModel]
 
 
-_PROVIDER_META: dict[str, tuple[str, str | None, str | None]] = {
-    "openai": ("OpenAI", "OPENAI_API_KEY", "https://api.openai.com/v1"),
-    "anthropic": ("Anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com"),
-    "gemini": ("Google Gemini", "GEMINI_API_KEY", None),
-    "groq": ("Groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1"),
-    "deepseek": ("DeepSeek", "DEEPSEEK_API_KEY", "https://api.deepseek.com"),
-    "xai": ("xAI (Grok)", "XAI_API_KEY", "https://api.x.ai/v1"),
-    "together_ai": ("Together AI", "TOGETHERAI_API_KEY", "https://api.together.xyz/v1"),
-    "openrouter": ("OpenRouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"),
-    "cerebras": ("Cerebras", "CEREBRAS_API_KEY", None),
-    "fireworks_ai": ("Fireworks AI", "FIREWORKS_AI_API_KEY", None),
-    "cohere_chat": ("Cohere", "COHERE_API_KEY", None),
-    "mistral": ("Mistral", "MISTRAL_API_KEY", None),
-    "moonshot": ("Moonshot (Kimi)", "MOONSHOT_API_KEY", None),
-    "volcengine": ("Volcengine", "VOLCENGINE_API_KEY", None),
-    "novita": ("Novita AI", "NOVITA_API_KEY", None),
-    "ollama": ("Ollama (self-hosted)", None, "http://localhost:11434"),
+class _DataCenter(BaseModel):
+    """One reachable endpoint for a provider.
+
+    ``label`` is ``None`` for a provider's sole/native endpoint (renders as
+    just the provider name) and a short human string for additional centers
+    such as an on-prem gateway. ``models_url`` is the OpenAI-compatible
+    ``/models`` probe target, or ``None`` to fall back to LiteLLM's API-key
+    heuristic.
+    """
+
+    label: str | None = None
+    base_url: str | None = None
+    models_url: str | None = None
+    env_var: str | None = None
+
+
+# Each provider declares one or more data centers. Historically every
+# provider had exactly one endpoint; that maps to a single ``_DataCenter``
+# with ``label=None`` so existing single-DC behaviour (and the
+# ``data_center=None`` wire shape) is preserved. The on-prem gateway is
+# appended at runtime by ``_provider_data_centers`` when configured.
+#
+# A ``models_url`` of ``None`` skips the live probe and falls back to
+# LiteLLM's API-key heuristic — used for providers with bespoke auth
+# (Anthropic), non-OpenAI shapes (Gemini, Ollama), or no public /models
+# endpoint we can rely on (Cohere, Volcengine).
+_PROVIDER_META: dict[str, tuple[str, list[_DataCenter]]] = {
+    "openai": (
+        "OpenAI",
+        [
+            _DataCenter(
+                base_url="https://api.openai.com/v1",
+                models_url="https://api.openai.com/v1/models",
+                env_var="OPENAI_API_KEY",
+            )
+        ],
+    ),
+    "anthropic": (
+        "Anthropic",
+        [_DataCenter(base_url="https://api.anthropic.com", env_var="ANTHROPIC_API_KEY")],
+    ),
+    "gemini": ("Google Gemini", [_DataCenter(env_var="GEMINI_API_KEY")]),
+    "groq": (
+        "Groq",
+        [
+            _DataCenter(
+                base_url="https://api.groq.com/openai/v1",
+                models_url="https://api.groq.com/openai/v1/models",
+                env_var="GROQ_API_KEY",
+            )
+        ],
+    ),
+    "deepseek": (
+        "DeepSeek",
+        [
+            _DataCenter(
+                base_url="https://api.deepseek.com",
+                models_url="https://api.deepseek.com/v1/models",
+                env_var="DEEPSEEK_API_KEY",
+            )
+        ],
+    ),
+    "xai": (
+        "xAI (Grok)",
+        [
+            _DataCenter(
+                base_url="https://api.x.ai/v1",
+                models_url="https://api.x.ai/v1/models",
+                env_var="XAI_API_KEY",
+            )
+        ],
+    ),
+    "together_ai": (
+        "Together AI",
+        [
+            _DataCenter(
+                base_url="https://api.together.xyz/v1",
+                models_url="https://api.together.xyz/v1/models",
+                env_var="TOGETHERAI_API_KEY",
+            )
+        ],
+    ),
+    "openrouter": (
+        "OpenRouter",
+        [
+            _DataCenter(
+                base_url="https://openrouter.ai/api/v1",
+                models_url="https://openrouter.ai/api/v1/models",
+                env_var="OPENROUTER_API_KEY",
+            )
+        ],
+    ),
+    "cerebras": (
+        "Cerebras",
+        [
+            _DataCenter(
+                models_url="https://api.cerebras.ai/v1/models",
+                env_var="CEREBRAS_API_KEY",
+            )
+        ],
+    ),
+    "fireworks_ai": (
+        "Fireworks AI",
+        [
+            _DataCenter(
+                models_url="https://api.fireworks.ai/inference/v1/models",
+                env_var="FIREWORKS_AI_API_KEY",
+            )
+        ],
+    ),
+    "cohere_chat": ("Cohere", [_DataCenter(env_var="COHERE_API_KEY")]),
+    "mistral": (
+        "Mistral",
+        [
+            _DataCenter(
+                models_url="https://api.mistral.ai/v1/models",
+                env_var="MISTRAL_API_KEY",
+            )
+        ],
+    ),
+    "moonshot": (
+        "Moonshot (Kimi)",
+        [
+            _DataCenter(
+                models_url="https://api.moonshot.cn/v1/models",
+                env_var="MOONSHOT_API_KEY",
+            )
+        ],
+    ),
+    "volcengine": ("Volcengine", [_DataCenter(env_var="VOLCENGINE_API_KEY")]),
+    "novita": (
+        "Novita AI",
+        [
+            _DataCenter(
+                models_url="https://api.novita.ai/v3/openai/models",
+                env_var="NOVITA_API_KEY",
+            )
+        ],
+    ),
+    "ollama": ("Ollama (self-hosted)", [_DataCenter(base_url="http://localhost:11434")]),
 }
+
+_ON_PREM_DC_LABEL = "On-prem gateway"
 
 _DATE_SUFFIX_RE = re.compile(r"-\d{4}-\d{2}-\d{2}$")
 
-# ``None`` means skip the live probe and fall back to LiteLLM's API-key
-# heuristic — used for providers with bespoke auth (Anthropic), non-OpenAI
-# shapes (Gemini, Ollama), or no public /models endpoint we can rely on
-# (Cohere, Volcengine).
-_PROVIDER_MODELS_URL: dict[str, str | None] = {
-    "openai": "https://api.openai.com/v1/models",
-    "anthropic": None,
-    "gemini": None,
-    "groq": "https://api.groq.com/openai/v1/models",
-    "deepseek": "https://api.deepseek.com/v1/models",
-    "xai": "https://api.x.ai/v1/models",
-    "together_ai": "https://api.together.xyz/v1/models",
-    "openrouter": "https://openrouter.ai/api/v1/models",
-    "cerebras": "https://api.cerebras.ai/v1/models",
-    "fireworks_ai": "https://api.fireworks.ai/inference/v1/models",
-    "cohere_chat": None,
-    "mistral": "https://api.mistral.ai/v1/models",
-    "moonshot": "https://api.moonshot.cn/v1/models",
-    "volcengine": None,
-    "novita": "https://api.novita.ai/v3/openai/models",
-    "ollama": None,
-}
+
+def _on_prem_base_url() -> str | None:
+    """Return the configured internal OpenAI-compatible gateway URL, if any.
+
+    Prefers ``code_agent_base_url`` (the submit-wizard agent gateway) and
+    falls back to ``embeddings_base_url`` since on-prem deployments commonly
+    point both at the same internal gateway family.
+
+    Returns:
+        The configured internal base URL, or ``None`` when neither
+        ``CODE_AGENT_BASE_URL`` nor ``EMBEDDINGS_BASE_URL`` is set.
+    """
+    return (
+        settings.code_agent_base_url.strip()
+        or settings.embeddings_base_url.strip()
+        or None
+    )
+
+
+def _provider_data_centers(provider_slug: str) -> list[_DataCenter]:
+    """Return the data centers for ``provider_slug`` including the on-prem one.
+
+    The configured on-prem gateway is OpenAI-compatible, so it is surfaced as
+    an extra data center on the ``openai`` provider (its native ``/models``
+    shape matches). All other providers return their static endpoint list
+    unchanged.
+
+    Args:
+        provider_slug: LiteLLM provider key (e.g. ``"openai"``).
+
+    Returns:
+        The provider's data centers, with the on-prem gateway appended when
+        configured and applicable to this provider.
+    """
+    centers = list(_PROVIDER_META[provider_slug][1])
+    if provider_slug == "openai":
+        on_prem = _on_prem_base_url()
+        if on_prem:
+            centers.append(
+                _DataCenter(
+                    label=_ON_PREM_DC_LABEL,
+                    base_url=on_prem,
+                    models_url=f"{on_prem.rstrip('/')}/models",
+                    env_var="OPENAI_API_KEY",
+                )
+            )
+    return centers
 
 
 def _make_label(model_id: str) -> str:
@@ -116,22 +282,24 @@ def _make_label(model_id: str) -> str:
     return name
 
 
-def _probe_deployed_models(provider_slug: str) -> set[str] | None:
-    """Query a provider's OpenAI-compatible ``/models`` endpoint.
+def _probe_deployed_models(provider_slug: str, data_center: _DataCenter) -> set[str] | None:
+    """Query a single data center's OpenAI-compatible ``/models`` endpoint.
 
     Args:
         provider_slug: LiteLLM provider key (e.g. ``"openai"``, ``"fireworks_ai"``).
+        data_center: The specific endpoint to probe (its own ``models_url``
+            and ``env_var``).
 
     Returns:
-        The set of model IDs the provider currently has deployed, or ``None``
-        when no live check is configured for the provider, the API key is
+        The set of model IDs the data center currently has deployed, or
+        ``None`` when no live check is configured for it, the API key is
         missing, the request fails, or the response shape is unexpected. The
         caller should then fall back to the LiteLLM ``valid_set`` heuristic.
     """
-    url = _PROVIDER_MODELS_URL.get(provider_slug)
+    url = data_center.models_url
     if not url:
         return None
-    env_var = _PROVIDER_META[provider_slug][1]
+    env_var = data_center.env_var
     if not env_var:
         return None
     api_key = os.getenv(env_var)
@@ -169,19 +337,24 @@ def _probe_deployed_models(provider_slug: str) -> set[str] | None:
     return ids
 
 
-def _probe_all_providers() -> dict[str, set[str] | None]:
-    """Probe every configured provider in parallel, capped at 8 workers.
+def _probe_all_providers() -> dict[tuple[str, str | None], set[str] | None]:
+    """Probe every configured data center in parallel, capped at 8 workers.
+
+    Each ``(provider, data center)`` pair is probed independently since they
+    are distinct endpoints that may serve different model sets (e.g. an
+    on-prem gateway exposes only locally-deployed models).
 
     Returns:
-        A mapping of provider slug to the set of deployed model IDs reported
-        by the provider, or ``None`` when the live probe was skipped or
-        failed for that provider.
+        A mapping of ``(provider_slug, data_center_label)`` to the set of
+        deployed model IDs reported by that endpoint, or ``None`` when the
+        live probe was skipped or failed for it.
     """
-    results: dict[str, set[str] | None] = {}
+    results: dict[tuple[str, str | None], set[str] | None] = {}
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {
-            executor.submit(_probe_deployed_models, slug): slug for slug in _PROVIDER_META
-        }
+        futures = {}
+        for slug in _PROVIDER_META:
+            for dc in _provider_data_centers(slug):
+                futures[executor.submit(_probe_deployed_models, slug, dc)] = (slug, dc.label)
         for fut in as_completed(futures):
             results[futures[fut]] = fut.result()
     return results
@@ -212,9 +385,9 @@ def get_catalog() -> ModelCatalogResponse:
         logger.warning("litellm.get_valid_models() failed: %s; marking none as available", exc)
         valid_set = set()
 
-    deployed_by_provider = _probe_all_providers()
+    deployed_by_dc = _probe_all_providers()
 
-    seen_providers: dict[str, CatalogProvider] = {}
+    seen_providers: dict[tuple[str, str | None], CatalogProvider] = {}
     models: list[CatalogModel] = []
     base_names_seen: set[str] = set()
 
@@ -246,45 +419,54 @@ def get_catalog() -> ModelCatalogResponse:
             if model_id.startswith(f"{provider_slug}/")
             else model_id
         )
-        deployed = deployed_by_provider.get(provider_slug)
-        if deployed is not None:
-            available = canonical_id in deployed or model_id in deployed
-            if not available:
-                continue
-        else:
-            available = model_id in valid_set or prefixed_id in valid_set
 
-        if provider_slug not in seen_providers:
-            label, env_var, default_url = _PROVIDER_META[provider_slug]
-            has_key = bool(env_var and os.getenv(env_var))
-            seen_providers[provider_slug] = CatalogProvider(
-                slug=provider_slug,
-                label=label,
-                env_var=env_var,
-                default_base_url=default_url,
-                has_env_key=has_key,
-            )
+        provider_label = _PROVIDER_META[provider_slug][0]
+        for dc in _provider_data_centers(provider_slug):
+            deployed = deployed_by_dc.get((provider_slug, dc.label))
+            if deployed is not None:
+                available = canonical_id in deployed or model_id in deployed
+                if not available:
+                    continue
+            else:
+                available = model_id in valid_set or prefixed_id in valid_set
 
-        models.append(
-            CatalogModel(
-                value=prefixed_id,
-                label=_make_label(model_id),
-                provider=provider_slug,
-                supports_thinking=bool(meta.get("supports_reasoning")),
-                supports_vision=bool(meta.get("supports_vision")),
-                available=available,
-                max_input_tokens=meta.get("max_input_tokens"),
+            provider_key = (provider_slug, dc.label)
+            if provider_key not in seen_providers:
+                has_key = bool(dc.env_var and os.getenv(dc.env_var))
+                seen_providers[provider_key] = CatalogProvider(
+                    slug=provider_slug,
+                    label=provider_label,
+                    data_center=dc.label,
+                    env_var=dc.env_var,
+                    default_base_url=dc.base_url,
+                    has_env_key=has_key,
+                )
+
+            models.append(
+                CatalogModel(
+                    value=prefixed_id,
+                    label=_make_label(model_id),
+                    provider=provider_slug,
+                    data_center=dc.label,
+                    supports_thinking=bool(meta.get("supports_reasoning")),
+                    supports_vision=bool(meta.get("supports_vision")),
+                    available=available,
+                    max_input_tokens=meta.get("max_input_tokens"),
+                )
             )
-        )
 
     models = [m for m in models if m.available]
 
-    models.sort(key=lambda m: (m.provider, m.value))
+    models.sort(key=lambda m: (m.provider, m.data_center or "", m.value))
 
-    available_providers = {m.provider for m in models}
+    available_dcs = {(m.provider, m.data_center) for m in models}
     providers = sorted(
-        (p for p in seen_providers.values() if p.slug in available_providers or not p.env_var),
-        key=lambda p: (not p.has_env_key, p.slug),
+        (
+            p
+            for p in seen_providers.values()
+            if (p.slug, p.data_center) in available_dcs or not p.env_var
+        ),
+        key=lambda p: (not p.has_env_key, p.slug, p.data_center or ""),
     )
 
     return ModelCatalogResponse(providers=providers, models=models)
