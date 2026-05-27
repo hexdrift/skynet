@@ -13,7 +13,6 @@ import {
   Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
 import { Button } from "@/shared/ui/primitives/button";
 import {
   Card,
@@ -440,17 +439,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const isLastStep = step === TAGGER_STEPS.length - 1;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto pb-8" data-tutorial="tagger-setup">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-foreground transition-colors">
-          {msg("auto.features.tagger.components.taggersetup.11")}
-        </Link>
-        <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">
-          {msg("auto.features.tagger.components.taggersetup.12")}
-        </span>
-      </div>
-
+    <div className="space-y-6 max-w-2xl mx-auto pb-8 -mt-2 md:-mt-4" data-tutorial="tagger-setup">
       <div className="relative">
         <div className="flex items-center justify-between">
           {TAGGER_STEPS.map((s, i) => {

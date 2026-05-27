@@ -221,10 +221,10 @@ function GuideHeader({
         ref={closeBtnRef}
         type="button"
         onClick={onClose}
-        className="p-1.5 rounded-lg hover:bg-[#E5DDD4]/60 text-[#8C7A6B] hover:text-[#3D2E22] transition-colors cursor-pointer flex-shrink-0"
+        className="close-button flex-shrink-0"
         aria-label={msg("auto.features.tutorial.components.concepts.guide.literal.10")}
       >
-        <X className="size-4" />
+        <X />
       </button>
     </header>
   );
@@ -377,8 +377,16 @@ function ParamTable({
         <tbody>
           {rows.map((r, i) => (
             <tr key={r.name} className={i % 2 === 0 ? "bg-white" : "bg-[#FAF8F5]"}>
-              <td className="px-3 py-2 align-top" dir="auto">
-                <span className="font-medium text-[#3D2E22]">{r.name}</span>
+              <td className="px-3 py-2 align-top" dir="ltr">
+                <span
+                  className="font-medium text-[#3D2E22] text-[0.92em] tabular-nums"
+                  style={{
+                    fontFamily:
+                      '"JetBrains Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                  }}
+                >
+                  {r.name}
+                </span>
               </td>
               <td className="px-3 py-2 align-top text-[#3D2E22]">
                 {r.desc}
@@ -650,64 +658,68 @@ function SectionGepa() {
       </p>
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.86")}</SubHeading>
-      <div className="my-3 overflow-hidden rounded-lg border border-[#E5DDD4] bg-white shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
+      <div className="my-4 overflow-hidden rounded-xl border border-[#E5DDD4] bg-white">
         <div className="grid gap-px bg-[#E5DDD4] md:grid-cols-2">
-          <div className="bg-white">
-            <div className="bg-[#EFE6D8] px-4 py-2.5">
-              <h5 className="text-[13.5px] font-bold text-[#3D2E22]">
-                {msg("auto.features.tutorial.components.concepts.guide.literal.87")}
-              </h5>
-            </div>
-            <div className="space-y-2 p-3">
+          <section className="bg-white px-5 py-5 sm:px-6 sm:py-6">
+            <h5 className="mb-4 text-[13.5px] font-bold tracking-tight text-[#3D2E22]">
+              {msg("auto.features.tutorial.components.concepts.guide.literal.87")}
+            </h5>
+            <div>
               {reflectionRows
                 .filter((row) => row.withReflection)
-                .map((row) => (
-                  <div key={row.label} className="rounded-md border border-[#E5DDD4] bg-[#FAF8F5] p-3">
-                    <div className="text-[13px] font-semibold text-[#3D2E22]">{row.label}</div>
-                    <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
+                .map((row, i) => (
+                  <div
+                    key={row.label}
+                    className={i === 0 ? "" : "mt-4 border-t border-[#EFE7DD] pt-4"}
+                  >
+                    <div className="text-[12.5px] font-semibold text-[#3D2E22]">{row.label}</div>
+                    <p className="mt-1 text-[12.5px] leading-[1.65] text-[#5C4D40]">
                       {row.withReflection}
-                    </div>
+                    </p>
                   </div>
                 ))}
-              <div className="rounded-md border border-[#D8C7AD] bg-[#FFF8EA] p-3">
-                <div className="text-[13px] font-semibold text-[#3D2E22]">
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.94")}
-                </div>
-                <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.95")}
-                </div>
-                <div className="mt-2 border-t border-[#E5DDD4] pt-2 text-[12.5px] leading-relaxed text-[#3D2E22]">
-                  <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.96")}</strong>{" "}
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.97")}
-                </div>
+            </div>
+            <div className="mt-5 border-t border-[#EFE7DD] pt-4">
+              <div className="text-[12.5px] font-semibold text-[#3D2E22]">
+                {msg("auto.features.tutorial.components.concepts.guide.literal.94")}
               </div>
+              <p className="mt-1 text-[12.5px] leading-[1.65] text-[#5C4D40]">
+                {msg("auto.features.tutorial.components.concepts.guide.literal.95")}
+              </p>
+              <p className="mt-2.5 text-[12.5px] leading-[1.65] text-[#3D2E22]">
+                <strong className="font-semibold">
+                  {msg("auto.features.tutorial.components.concepts.guide.literal.96")}
+                </strong>{" "}
+                {msg("auto.features.tutorial.components.concepts.guide.literal.97")}
+              </p>
             </div>
-          </div>
-          <div className="bg-white">
-            <div className="bg-[#F0EBE4] px-4 py-2.5">
-              <h5 className="text-[13.5px] font-bold text-[#3D2E22]">
-                {msg("auto.features.tutorial.components.concepts.guide.literal.88")}
-              </h5>
-            </div>
-            <div className="space-y-2 p-3">
-              {reflectionRows.map((row) => (
-                <div key={row.label} className="rounded-md border border-[#E5DDD4] bg-white p-3">
-                  <div className="text-[13px] font-semibold text-[#3D2E22]">{row.label}</div>
-                  <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
+          </section>
+          <section className="bg-white px-5 py-5 sm:px-6 sm:py-6">
+            <h5 className="mb-4 text-[13.5px] font-bold tracking-tight text-[#9A8B7A]">
+              {msg("auto.features.tutorial.components.concepts.guide.literal.88")}
+            </h5>
+            <div>
+              {reflectionRows.map((row, i) => (
+                <div
+                  key={row.label}
+                  className={i === 0 ? "" : "mt-4 border-t border-[#EFE7DD] pt-4"}
+                >
+                  <div className="text-[12.5px] font-semibold text-[#3D2E22]">{row.label}</div>
+                  <p className="mt-1 text-[12.5px] leading-[1.65] text-[#8A7A6B]">
                     {row.withoutReflection}
-                  </div>
+                  </p>
                 </div>
               ))}
-              <div className="rounded-md border border-[#E5DDD4] bg-[#FAF8F5] p-3">
-                <div className="text-[13px] font-semibold text-[#3D2E22]">
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.98")}
-                </div>
-                <div className="mt-1 text-[12.5px] leading-relaxed text-[#5C4D40]">
-                  {msg("auto.features.tutorial.components.concepts.guide.literal.99")}
-                </div>
-              </div>
             </div>
-          </div>
+            <div className="mt-5 border-t border-[#EFE7DD] pt-4">
+              <div className="text-[12.5px] font-semibold text-[#3D2E22]">
+                {msg("auto.features.tutorial.components.concepts.guide.literal.98")}
+              </div>
+              <p className="mt-1 text-[12.5px] leading-[1.65] text-[#5C4D40]">
+                {msg("auto.features.tutorial.components.concepts.guide.literal.99")}
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </GuideSection>

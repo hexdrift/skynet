@@ -8,6 +8,6 @@ run into the prose chunk that gets embedded.
 
 from __future__ import annotations
 
-from .core import backfill_missing_embeddings, embed_finished_job
+from .core import backfill_missing_embeddings, embed_finished_job, purge_orphan_embeddings
 
-__all__ = ["backfill_missing_embeddings", "embed_finished_job"]
+__all__ = ["backfill_missing_embeddings", "embed_finished_job", "purge_orphan_embeddings"]

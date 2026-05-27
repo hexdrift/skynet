@@ -35,9 +35,11 @@ class JobModel(Base):
 
     optimization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC), index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     estimated_remaining_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     latest_metrics: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, default=dict)
@@ -47,8 +49,8 @@ class JobModel(Base):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     optimization_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     claimed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_jobs_status_created_at", "status", "created_at"),
@@ -63,7 +65,9 @@ class ProgressEventModel(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     optimization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     event: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metrics: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, default=dict)
 
@@ -77,7 +81,9 @@ class LogEntryModel(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     optimization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     level: Mapped[str] = mapped_column(String(20), nullable=False)
     logger: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -94,7 +100,9 @@ class TemplateModel(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class UserQuotaOverrideModel(Base):
@@ -104,7 +112,9 @@ class UserQuotaOverrideModel(Base):
 
     username: Mapped[str] = mapped_column(String(255), primary_key=True)
     quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
@@ -119,7 +129,9 @@ class UserQuotaAuditModel(Base):
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     old_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
     new_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class JobEmbeddingModel(Base):
@@ -144,7 +156,9 @@ class JobEmbeddingModel(Base):
     optimization_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     winning_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     winning_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     embedding_summary: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     embedding_code: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     embedding_schema: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)

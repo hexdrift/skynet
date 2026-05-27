@@ -6,6 +6,7 @@ import { SessionProvider, ThemeProvider, ToastContainer } from "@/shared/provide
 import { SplashScreen } from "@/shared/layout/splash-screen";
 import { TutorialOverlay, TutorialMenu, TutorialProvider } from "@/features/tutorial";
 import { UserPrefsProvider, SettingsModalProvider, SettingsModal } from "@/features/settings";
+import { AppSkeletonTheme } from "@/shared/ui/skeleton";
 import { msg } from "@/shared/lib/messages";
 import { getServerRuntimeEnv, serializeRuntimeEnv } from "@/shared/lib/runtime-env";
 import { getSiteUrl } from "@/shared/lib/site-config";
@@ -110,15 +111,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <UserPrefsProvider>
             <ThemeProvider>
               <TooltipProvider>
-                <SplashScreen />
-                <TutorialProvider>
-                  <SettingsModalProvider>
-                    <AppShell>{children}</AppShell>
-                    <SettingsModal />
-                  </SettingsModalProvider>
-                  <TutorialOverlay />
-                  <TutorialMenu />
-                </TutorialProvider>
+                <AppSkeletonTheme>
+                  <SplashScreen />
+                  <TutorialProvider>
+                    <SettingsModalProvider>
+                      <AppShell>{children}</AppShell>
+                      <SettingsModal />
+                    </SettingsModalProvider>
+                    <TutorialOverlay />
+                    <TutorialMenu />
+                  </TutorialProvider>
+                </AppSkeletonTheme>
               </TooltipProvider>
             </ThemeProvider>
           </UserPrefsProvider>

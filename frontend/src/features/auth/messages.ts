@@ -2,7 +2,7 @@
 
 export const authMessages = {
   "auth.login.error": "שגיאה בהתחברות",
-  "auth.login.loading": "מתחבר…",
+  "auth.login.loading": "מתחברים…",
   "auth.login.tagline": "מערכת אופטימיזציית פרומפטים",
   "auth.login.form_aria": "טופס התחברות",
   "auth.login.username": "שם משתמש",

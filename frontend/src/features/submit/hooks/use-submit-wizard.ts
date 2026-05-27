@@ -291,7 +291,6 @@ export function useSubmitWizard() {
         if (typeof kw.use_merge === "boolean") setUseMerge(kw.use_merge);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentPulseTick]);
 
   // Outgoing: push relevant local state back into the shared context so the
@@ -689,7 +688,6 @@ export function useSubmitWizard() {
         toast.error(msg("submit.clone.failed"));
       })
       .finally(() => setCloneLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const goNext = () => {

@@ -82,10 +82,10 @@ class CompareJobsResponse(BaseModel):
 
 
 class BulkMetadataRequest(BaseModel):
-    """Request body for bulk pin or bulk archive."""
+    """Request body for bulk pin."""
 
     optimization_ids: list[str] = Field(min_length=1, max_length=100)
-    value: bool = Field(description="Target state — true to pin/archive, false to clear.")
+    value: bool = Field(description="Target state — true to pin, false to clear.")
 
 
 class BulkMetadataSkipped(BaseModel):
@@ -96,7 +96,7 @@ class BulkMetadataSkipped(BaseModel):
 
 
 class BulkMetadataResponse(BaseModel):
-    """Response for POST /optimizations/bulk-pin and /bulk-archive."""
+    """Response for POST /optimizations/bulk-pin."""
 
     updated: list[str]
     skipped: list[BulkMetadataSkipped]

@@ -1,0 +1,241 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { ArrowUp, ArrowDown, Minus, Sparkles, Type } from "lucide-react";
+import { msg, formatMsg } from "@/shared/lib/messages";
+import type { SearchResult } from "@/shared/lib/api";
+import type { SearchType } from "../hooks/use-semantic-search";
+import { formatGain, formatMetric, formatRelativeDate } from "../lib/format";
+
+interface ResultsListProps {
+  results: SearchResult[];
+  /** Highlight any token from the query inside the title/snippet. Empty = no highlight. */
+  highlight: string;
+  /** Which backend branch served the query — drives the per-row source badge. */
+  searchType: SearchType | null;
+}
+
+/**
+ * Vertically-rhythmic list of search hits. Each row is a single-tap card:
+ * title with an inline score+delta tag, two-line summary, and a thin meta
+ * strip with the technical attributes (optimizer / model / module) anchored
+ * to the start and a relative timestamp anchored to the end.
+ *
+ * The label noise ("optimizer:", "model:") is intentionally dropped —
+ * monospace values plus a coloured optimizer chip already tell the reader
+ * what each field is. Hover lifts the title to full-opacity; the row itself
+ * is the open affordance.
+ */
+export function ResultsList({ results, highlight, searchType }: ResultsListProps) {
+  const tokens = React.useMemo(() => tokenize(highlight), [highlight]);
+  return (
+    <ul dir="rtl" className="divide-y divide-border/55">
+      {results.map((row) => (
+        <li key={row.optimization_id}>
+          <ResultRow row={row} tokens={tokens} searchType={searchType} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ResultRow({
+  row,
+  tokens,
+  searchType,
+}: {
+  row: SearchResult;
+  tokens: string[];
+  searchType: SearchType | null;
+}) {
+  const title = row.task_name?.trim() || msg("explore.row.no_summary");
+  const gain = formatGain(row.baseline_metric, row.optimized_metric);
+  const dateText = formatRelativeDate(row.created_at);
+  const summary = row.summary_text?.trim();
+
+  return (
+    <Link
+      href={`/optimizations/${row.optimization_id}`}
+      aria-label={formatMsg("explore.row.open_aria", { name: title })}
+      className="group relative flex flex-col gap-2 rounded-lg px-3 py-4 transition-[background-color,transform] duration-150 ease-out cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:bg-accent/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8A882]/45"
+    >
+      <div className="flex items-baseline justify-between gap-4">
+        <h3 className="min-w-0 flex-1 text-start text-[15.5px] font-medium leading-snug tracking-tight text-foreground/90 transition-colors group-hover:text-foreground">
+          <Highlighted text={title} tokens={tokens} />
+        </h3>
+        {gain && <ScoreTag score={row.optimized_metric} gain={gain} />}
+      </div>
+
+      {summary && (
+        <p className="line-clamp-2 max-w-[72ch] text-start text-[13.5px] leading-relaxed text-foreground/55">
+          <Highlighted text={summary} tokens={tokens} />
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-foreground/50">
+        {searchType && <SearchTypeBadge kind={searchType} />}
+        {searchType === "semantic" && row.relevance != null && (
+          <RelevanceBadge relevance={row.relevance} />
+        )}
+        {row.optimizer_name && <OptimizerChip name={row.optimizer_name} />}
+        {row.winning_model && <MonoValue value={row.winning_model} />}
+        {row.module_name && <MonoValue value={row.module_name} />}
+        <time
+          dateTime={row.created_at ?? undefined}
+          title={row.created_at ?? undefined}
+          className="ms-auto text-foreground/45 tabular-nums"
+        >
+          {dateText}
+        </time>
+      </div>
+    </Link>
+  );
+}
+
+function SearchTypeBadge({ kind }: { kind: SearchType }) {
+  const isSemantic = kind === "semantic";
+  const Icon = isSemantic ? Sparkles : Type;
+  const label = isSemantic ? msg("explore.row.type.semantic") : msg("explore.row.type.lexical");
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-foreground/12 bg-foreground/[0.04] px-2 py-0.5 text-[10.5px] font-medium leading-none text-foreground/65"
+      title={label}
+    >
+      <Icon className="size-2.5" strokeWidth={2} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function RelevanceBadge({ relevance }: { relevance: number }) {
+  // Cosine similarity is in [-1, 1] but in practice falls in [0, 1] for
+  // sentence embeddings. Clamp defensively and render as a 0–100 score so
+  // users have an intuitive ranking signal next to each row.
+  const pct = Math.max(0, Math.min(1, relevance)) * 100;
+  const label = formatMsg("explore.row.relevance", { pct: pct.toFixed(0) });
+  return (
+    <span
+      dir="ltr"
+      className="inline-flex items-baseline gap-1 rounded-full bg-[oklch(0.94_0.03_82)] px-2 py-0.5 font-mono text-[10.5px] font-medium leading-none text-[oklch(0.42_0.10_82)] tabular-nums"
+      title={msg("explore.row.relevance.title")}
+    >
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function ScoreTag({
+  score,
+  gain,
+}: {
+  score: number | null | undefined;
+  gain: { text: string; kind: "positive" | "negative" | "neutral" };
+}) {
+  const Icon =
+    gain.kind === "positive" ? ArrowUp : gain.kind === "negative" ? ArrowDown : Minus;
+  return (
+    <span
+      dir="ltr"
+      className="inline-flex shrink-0 items-baseline gap-2 font-mono text-[12.5px] tabular-nums"
+    >
+      <span className="font-semibold text-foreground">{formatMetric(score)}</span>
+      <span
+        className={`inline-flex items-baseline gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] ${GAIN_TONE[gain.kind]}`}
+      >
+        <Icon className="size-2.5 self-center" aria-hidden="true" />
+        <span>{gain.text}</span>
+      </span>
+    </span>
+  );
+}
+
+const GAIN_TONE: Record<"positive" | "negative" | "neutral", string> = {
+  positive: "bg-[oklch(0.93_0.04_140)] text-[oklch(0.42_0.12_140)]",
+  negative: "bg-destructive/10 text-destructive",
+  neutral: "bg-muted text-foreground/60",
+};
+
+function OptimizerChip({ name }: { name: string }) {
+  return (
+    <span
+      dir="ltr"
+      className="inline-flex items-center rounded-full bg-foreground/[0.06] px-2 py-0.5 font-mono text-[11px] text-foreground/75"
+    >
+      {name}
+    </span>
+  );
+}
+
+function MonoValue({ value }: { value: string }) {
+  return (
+    <span dir="ltr" className="font-mono text-foreground/65">
+      {value}
+    </span>
+  );
+}
+
+function tokenize(query: string): string[] {
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length >= 2)
+    .map((t) => t.toLocaleLowerCase());
+}
+
+function Highlighted({ text, tokens }: { text: string; tokens: string[] }) {
+  if (tokens.length === 0) return <>{text}</>;
+  const segments = highlightSegments(text, tokens);
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.match ? (
+          <mark
+            key={i}
+            className="bg-transparent font-semibold text-foreground underline decoration-[#C8A882] decoration-[1.5px] underline-offset-[3px]"
+          >
+            {seg.text}
+          </mark>
+        ) : (
+          <React.Fragment key={i}>{seg.text}</React.Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+type Segment = { text: string; match: boolean };
+
+function highlightSegments(text: string, tokens: string[]): Segment[] {
+  const lower = text.toLocaleLowerCase();
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const token of tokens) {
+    let from = 0;
+    while (from <= lower.length - token.length) {
+      const idx = lower.indexOf(token, from);
+      if (idx === -1) break;
+      ranges.push({ start: idx, end: idx + token.length });
+      from = idx + token.length;
+    }
+  }
+  if (ranges.length === 0) return [{ text, match: false }];
+  ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end) {
+      last.end = Math.max(last.end, r.end);
+    } else {
+      merged.push({ ...r });
+    }
+  }
+  const segs: Segment[] = [];
+  let cursor = 0;
+  for (const r of merged) {
+    if (r.start > cursor) segs.push({ text: text.slice(cursor, r.start), match: false });
+    segs.push({ text: text.slice(r.start, r.end), match: true });
+    cursor = r.end;
+  }
+  if (cursor < text.length) segs.push({ text: text.slice(cursor), match: false });
+  return segs;
+}

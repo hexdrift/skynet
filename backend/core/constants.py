@@ -49,6 +49,10 @@ PROGRESS_BASELINE = "baseline_evaluated"
 PROGRESS_OPTIMIZED = "optimized_evaluated"
 PROGRESS_OPTIMIZER = "optimizer_progress"
 PROGRESS_CANDIDATE = "candidate"
+PROGRESS_REJECTED = "candidate_rejected"
+PROGRESS_VALSET = "valset_rows"
+PROGRESS_VALSET_OUTPUTS = "valset_outputs"
+PROGRESS_MINIBATCH = "minibatch_feedback"
 
 PROGRESS_GRID_PAIR_STARTED = "grid_pair_started"
 PROGRESS_GRID_PAIR_COMPLETED = "grid_pair_completed"
@@ -68,6 +72,9 @@ STRUCTURAL_PROGRESS_EVENTS = frozenset(
         PROGRESS_BASELINE,
         PROGRESS_OPTIMIZED,
         PROGRESS_CANDIDATE,
+        PROGRESS_REJECTED,
+        PROGRESS_VALSET,
+        PROGRESS_VALSET_OUTPUTS,
         PROGRESS_GRID_PAIR_STARTED,
         PROGRESS_GRID_PAIR_COMPLETED,
         PROGRESS_GRID_PAIR_FAILED,

@@ -1,4 +1,4 @@
-"""Routes for reading and mutating optimization metadata (logs, payload, name, pin, archive). [MIXED]
+"""Routes for reading and mutating optimization metadata (logs, payload, name, pin). [MIXED]
 
 Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
 - ``GET /optimizations/{id}/logs``
@@ -7,7 +7,6 @@ Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
 Internal (dashboard plumbing, hidden from public docs):
 - ``PATCH /optimizations/{id}/name``
 - ``PATCH /optimizations/{id}/pin``
-- ``PATCH /optimizations/{id}/archive``
 """
 
 from __future__ import annotations
@@ -267,32 +266,5 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
         overview["pinned"] = not current
         job_store.set_payload_overview(optimization_id, overview)
         return {"optimization_id": optimization_id, "pinned": not current}
-
-    @router.patch(
-        "/optimizations/{optimization_id}/archive",
-        status_code=200,
-        summary="Toggle archived state for an optimization",
-        tags=["agent"],
-    )
-    def toggle_archive_job(optimization_id: str, current_user: AuthenticatedUserDep) -> dict:
-        """Toggle the ``archived`` flag (soft-hide without deleting).
-
-        Args:
-            optimization_id: Optimization id to toggle.
-            current_user: Authenticated caller resolved from the bearer token.
-
-        Returns:
-            ``{"optimization_id": id, "archived": bool}``.
-
-        Raises:
-            DomainError: 404 when the optimization is unknown or
-                inaccessible to the caller.
-        """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
-        overview = parse_overview(job_data)
-        current = overview.get("archived", False)
-        overview["archived"] = not current
-        job_store.set_payload_overview(optimization_id, overview)
-        return {"optimization_id": optimization_id, "archived": not current}
 
     return router

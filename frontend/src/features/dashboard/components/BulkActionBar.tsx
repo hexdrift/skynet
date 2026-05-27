@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import * as React from "react";
 import { ArrowLeftRight, Trash2, X } from "lucide-react";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { TERMS } from "@/shared/lib/terms";
@@ -8,7 +9,6 @@ type BulkActionBarProps = {
   isAdmin: boolean;
   selectedCount: number;
   compareEligibleCount: number;
-  autoAddedSiblings: number;
   canCompare: boolean;
   onClear: () => void;
   onCompare: () => void;
@@ -19,7 +19,6 @@ export function BulkActionBar({
   isAdmin,
   selectedCount,
   compareEligibleCount,
-  autoAddedSiblings,
   canCompare,
   onClear,
   onCompare,
@@ -68,22 +67,27 @@ export function BulkActionBar({
               <button
                 type="button"
                 onClick={onClear}
-                className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent/80 hover:text-foreground active:scale-95 transition-all cursor-pointer"
+                className="close-button"
+                style={
+                  {
+                    "--close-btn-size": "32px",
+                    "--close-btn-radius": "9999px",
+                    "--close-btn-icon": "16px",
+                  } as React.CSSProperties
+                }
                 aria-label={msg("auto.features.dashboard.components.bulkactionbar.literal.1")}
               >
-                <X className="size-4" />
+                <X />
               </button>
             </TooltipButton>
             <TooltipButton
               tooltip={
                 canCompare
-                  ? autoAddedSiblings > 0
-                    ? formatMsg("compare.includes_siblings", { p1: autoAddedSiblings })
-                    : skipped > 0
-                      ? formatMsg("auto.features.dashboard.components.bulkactionbar.template.1", {
-                          p1: skipped,
-                        })
-                      : msg("auto.features.dashboard.components.bulkactionbar.literal.3")
+                  ? skipped > 0
+                    ? formatMsg("auto.features.dashboard.components.bulkactionbar.template.1", {
+                        p1: skipped,
+                      })
+                    : msg("auto.features.dashboard.components.bulkactionbar.literal.3")
                   : msg("auto.features.dashboard.components.bulkactionbar.literal.4")
               }
               side="top"

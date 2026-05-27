@@ -78,30 +78,6 @@ def test_invalidate_projection_cache_resets_state() -> None:
     assert dashboard._CACHE["payload"] is None
 
 
-def test_compute_cluster_levels_empty() -> None:
-    """An empty input yields one empty list per granularity level."""
-    levels = dashboard._compute_cluster_levels([])
-    assert len(levels) == dashboard.CLUSTER_LEVELS
-    assert all(level == [] for level in levels)
-
-
-def test_compute_cluster_levels_assigns_dense_ids() -> None:
-    """Each level produces zero-indexed cluster IDs of the same length as the input."""
-    coords = [
-        (-1.0, -1.0),
-        (-0.9, -1.0),
-        (1.0, 1.0),
-        (1.1, 0.9),
-        (0.0, 0.0),
-        (0.05, -0.1),
-    ]
-    levels = dashboard._compute_cluster_levels(coords)
-    assert len(levels) == dashboard.CLUSTER_LEVELS
-    for level in levels:
-        assert len(level) == len(coords)
-        assert all(isinstance(cid, int) and cid >= 0 for cid in level)
-
-
 def _row(
     *,
     optimization_id: str,
@@ -133,8 +109,8 @@ def _stub_session(rows: list[dict]) -> MagicMock:
     return session
 
 
-def test_fetch_projection_rows_collapses_same_compare_fingerprint() -> None:
-    """Two rows with identical task + split collapse to one leader plus a sibling."""
+def test_fetch_projection_rows_keeps_same_compare_fingerprint_as_separate_points() -> None:
+    """Rows with identical task+split stay separate; the frontend groups them by task."""
     overview = {
         "task_fingerprint": "task-abc",
         "seed": 42,
@@ -146,12 +122,12 @@ def test_fetch_projection_rows_collapses_same_compare_fingerprint() -> None:
         _row(optimization_id="opt-older", created_at=datetime(2026, 5, 14, 11, 0), overview=overview),
     ]
     out = dashboard._fetch_projection_rows(_stub_session(rows))
-    assert len(out) == 1
-    leader = out[0]
-    assert leader["optimization_id"] == "opt-newer"
-    assert leader["siblings"] == ["opt-older"]
-    assert leader["task_fingerprint"] == "task-abc"
-    assert leader["compare_fingerprint"] is not None
+    assert len(out) == 2
+    assert {p["optimization_id"] for p in out} == {"opt-newer", "opt-older"}
+    assert all(p["task_fingerprint"] == "task-abc" for p in out)
+    compare_fps = {p["compare_fingerprint"] for p in out}
+    assert len(compare_fps) == 1
+    assert all(p["siblings"] == [] for p in out)
 
 
 def test_fetch_projection_rows_keeps_distinct_splits_separate() -> None:

@@ -1,11 +1,17 @@
-import type { CandidateMetrics, TrajectoryNode } from "./types";
+import type { CandidateMetrics, RejectedMetrics, RejectedNode, TrajectoryNode } from "./types";
 
-const NODE_GAP_X = 64;
-const NODE_GAP_Y = 96;
-const NODE_RADIUS = 22;
+const NODE_GAP_X = 96;
+const NODE_GAP_Y = 132;
+const NODE_RADIUS = 30;
+const GHOST_RADIUS = 7;
+const GHOST_ORBIT_BASE = NODE_RADIUS + 22;
+const GHOST_ORBIT_STEP = 12;
+const GHOST_ARC_RADIANS = Math.PI * 0.55;
+const TOP_PAD = NODE_RADIUS + 20;
 
 export interface LayoutResult {
   nodes: TrajectoryNode[];
+  ghosts: RejectedNode[];
   edges: Array<{ from: string; to: string; isMerge: boolean }>;
   width: number;
   height: number;
@@ -26,9 +32,20 @@ function buildSpine(byId: Map<string, TrajectoryNode>, winnerId: string | null):
   return spine;
 }
 
-export function layoutTrajectory(candidates: CandidateMetrics[]): LayoutResult {
+export function layoutTrajectory(
+  candidates: CandidateMetrics[],
+  rejected: RejectedMetrics[] = [],
+): LayoutResult {
   if (candidates.length === 0) {
-    return { nodes: [], edges: [], width: 0, height: 0, winnerId: null, spineIds: new Set() };
+    return {
+      nodes: [],
+      ghosts: [],
+      edges: [],
+      width: 0,
+      height: 0,
+      winnerId: null,
+      spineIds: new Set(),
+    };
   }
 
   const byId = new Map<string, TrajectoryNode>();
@@ -63,7 +80,15 @@ export function layoutTrajectory(candidates: CandidateMetrics[]): LayoutResult {
       .sort((a, b) => Number(a.candidate_id) - Number(b.candidate_id))[0] ?? null;
   }
   if (root === null) {
-    return { nodes: [], edges: [], width: 0, height: 0, winnerId: null, spineIds: new Set() };
+    return {
+      nodes: [],
+      ghosts: [],
+      edges: [],
+      width: 0,
+      height: 0,
+      winnerId: null,
+      spineIds: new Set(),
+    };
   }
 
   for (const node of byId.values()) {
@@ -83,7 +108,7 @@ export function layoutTrajectory(candidates: CandidateMetrics[]): LayoutResult {
   computeWidth(root);
 
   const place = (node: TrajectoryNode, leftSlot: number, depth: number): void => {
-    node.y = depth * NODE_GAP_Y + NODE_RADIUS + 12;
+    node.y = depth * NODE_GAP_Y + TOP_PAD;
     if (node.children.length === 0) {
       node.x = leftSlot * NODE_GAP_X + NODE_GAP_X / 2;
       return;
@@ -127,17 +152,49 @@ export function layoutTrajectory(candidates: CandidateMetrics[]): LayoutResult {
     }
   }
 
+  const ghostsByParent = new Map<string, RejectedMetrics[]>();
+  for (const rej of rejected) {
+    if (!byId.has(rej.parent_id)) continue;
+    const list = ghostsByParent.get(rej.parent_id);
+    if (list === undefined) ghostsByParent.set(rej.parent_id, [rej]);
+    else list.push(rej);
+  }
+  const ghosts: RejectedNode[] = [];
+  for (const [parentId, parentRejections] of ghostsByParent) {
+    const parent = byId.get(parentId);
+    if (parent === undefined) continue;
+    parentRejections.sort((a, b) => a.iteration - b.iteration);
+    // Fan rejected proposals out in a shallow arc on the trailing side of the
+    // parent so they read as "tried but didn't stick" rather than children.
+    parentRejections.forEach((rej, idx) => {
+      const ring = Math.floor(idx / 5);
+      const offsetInRing = idx % 5;
+      const ringSize = Math.min(5, parentRejections.length - ring * 5);
+      const spread = ringSize === 1 ? 0 : (offsetInRing - (ringSize - 1) / 2) / (ringSize - 1);
+      const angle = -Math.PI / 2 + spread * GHOST_ARC_RADIANS;
+      const r = GHOST_ORBIT_BASE + ring * GHOST_ORBIT_STEP;
+      ghosts.push({
+        ...rej,
+        x: parent.x + r * Math.cos(angle),
+        y: parent.y + r * Math.sin(angle),
+      });
+    });
+  }
+
   const nodes = Array.from(byId.values());
   const xs = nodes.map((n) => n.x);
   const ys = nodes.map((n) => n.y);
-  const width = Math.max(...xs) + NODE_GAP_X / 2 + NODE_RADIUS;
-  const height = Math.max(...ys) + NODE_GAP_Y / 2 + NODE_RADIUS;
+  const ghostMaxX = ghosts.length > 0 ? Math.max(...ghosts.map((g) => g.x + GHOST_RADIUS)) : 0;
+  const ghostMaxY = ghosts.length > 0 ? Math.max(...ghosts.map((g) => g.y + GHOST_RADIUS)) : 0;
+  const width = Math.max(Math.max(...xs) + NODE_GAP_X / 2 + NODE_RADIUS, ghostMaxX + 12);
+  const height = Math.max(Math.max(...ys) + NODE_GAP_Y / 2 + NODE_RADIUS, ghostMaxY + 12);
 
-  return { nodes, edges, width, height, winnerId, spineIds };
+  return { nodes, ghosts, edges, width, height, winnerId, spineIds };
 }
 
 export const TRAJECTORY_LAYOUT = {
   nodeRadius: NODE_RADIUS,
+  ghostRadius: GHOST_RADIUS,
   gapX: NODE_GAP_X,
   gapY: NODE_GAP_Y,
 } as const;

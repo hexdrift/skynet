@@ -7,6 +7,7 @@ The companion modules in this package handle the individual concerns;
 this file orchestrates them.
 """
 
+import functools
 import logging
 import threading
 from collections.abc import Callable
@@ -29,10 +30,13 @@ from ...constants import (
     META_OPTIMIZER,
     META_OPTIMIZER_KWARGS,
     PROGRESS_BASELINE,
+    PROGRESS_CANDIDATE,
     PROGRESS_GRID_PAIR_COMPLETED,
     PROGRESS_GRID_PAIR_FAILED,
     PROGRESS_GRID_PAIR_STARTED,
+    PROGRESS_MINIBATCH,
     PROGRESS_OPTIMIZED,
+    PROGRESS_REJECTED,
     PROGRESS_SPLITS_READY,
 )
 from ...exceptions import ServiceError
@@ -73,7 +77,13 @@ from .optimizers import (
     validate_optimizer_signature,
 )
 from .progress import capture_tqdm
-from .trajectory import gepa_log_dir, trajectory_watch
+from .trajectory import (
+    capture_proposal_prompts,
+    emit_valset_event,
+    gepa_log_dir,
+    maybe_wrap_minibatch_recorder,
+    trajectory_watch,
+)
 from .timing import (
     STAGE_BASELINE,
     STAGE_EVALUATION,
@@ -145,6 +155,31 @@ class _GridPairContext:
     failed: int = 0
 
 
+def _tag_candidate_event(
+    callback: Callable[[str, dict[str, Any]], None],
+    pair_index: int,
+    event: str,
+    metrics: dict[str, Any],
+) -> None:
+    """Forward a progress event, stamping ``pair_index`` onto trajectory metrics.
+
+    Candidate and rejected-proposal events come out of the per-pair GEPA state
+    file unaware of which grid pair produced them; the frontend uses
+    ``pair_index`` to scope the trajectory tree to a single pair, so we
+    inject it here before forwarding. Other events pass through untouched.
+
+    Args:
+        callback: The downstream progress callback to forward into.
+        pair_index: Zero-based grid pair index to stamp onto trajectory metrics.
+        event: Event name as produced by ``TrajectoryWatcher``.
+        metrics: Event metrics dict from the watcher.
+    """
+    if event == PROGRESS_CANDIDATE or event == PROGRESS_REJECTED or event == PROGRESS_MINIBATCH:
+        callback(event, {**metrics, "pair_index": pair_index})
+    else:
+        callback(event, metrics)
+
+
 def _run_grid_pair(
     ctx: _GridPairContext,
     i: int,
@@ -200,11 +235,22 @@ def _run_grid_pair(
         with dspy.context(lm=language_model, callbacks=callbacks), gepa_log_dir(
             ctx.payload.optimizer_name
         ) as trajectory_log_dir:
+            trajectory_callback: Callable[[str, dict[str, Any]], None] | None = (
+                functools.partial(_tag_candidate_event, ctx.progress_callback, i)
+                if ctx.progress_callback is not None
+                else None
+            )
+            training_metric = maybe_wrap_minibatch_recorder(
+                ctx.metric,
+                ctx.splits.val,
+                ctx.payload.optimizer_name,
+                trajectory_callback,
+            )
             optimizer = instantiate_optimizer(
                 ctx.optimizer_factory,
                 ctx.payload.optimizer_name,
                 ctx.payload.optimizer_kwargs,
-                ctx.metric,
+                training_metric,
                 gen_cfg,
                 ref_cfg,
                 reflection_lm=reflection_lm,
@@ -232,7 +278,8 @@ def _run_grid_pair(
             with (
                 capture_tqdm(ctx.progress_callback),
                 track_stage(STAGE_TRAINING, *callbacks),
-                trajectory_watch(trajectory_log_dir, ctx.progress_callback),
+                capture_proposal_prompts(ctx.payload.optimizer_name),
+                trajectory_watch(trajectory_log_dir, trajectory_callback),
             ):
                 compiled = compile_program(
                     optimizer=optimizer,
@@ -478,6 +525,7 @@ class DspyService:
                     DETAIL_TEST: len(splits.test),
                 },
             )
+            emit_valset_event(splits.val, progress_callback)
 
         gen_timing = GenLMTimingCallback(language_model)
         refl_timing = ReflectionLMTimingCallback(reflection_lm) if reflection_lm is not None else None
@@ -485,11 +533,17 @@ class DspyService:
         if refl_timing is not None:
             callbacks.append(refl_timing)
         with gepa_log_dir(payload.optimizer_name) as trajectory_log_dir:
+            training_metric = maybe_wrap_minibatch_recorder(
+                metric,
+                splits.val,
+                payload.optimizer_name,
+                progress_callback,
+            )
             optimizer = instantiate_optimizer(
                 optimizer_factory,
                 payload.optimizer_name,
                 payload.optimizer_kwargs,
-                metric,
+                training_metric,
                 payload.model_settings,
                 payload.reflection_model_settings,
                 reflection_lm=reflection_lm,
@@ -517,6 +571,7 @@ class DspyService:
                 with (
                     capture_tqdm(progress_callback),
                     track_stage(STAGE_TRAINING, *callbacks),
+                    capture_proposal_prompts(payload.optimizer_name),
                     trajectory_watch(trajectory_log_dir, progress_callback),
                 ):
                     compiled_program = compile_program(
@@ -693,6 +748,7 @@ class DspyService:
                     "total_pairs": total_pairs,
                 },
             )
+            emit_valset_event(splits.val, progress_callback)
 
         pair_results: list[PairResult] = [None] * total_pairs  # type: ignore[list-item]
         grid_ctx = _GridPairContext(

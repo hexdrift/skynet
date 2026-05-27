@@ -24,15 +24,15 @@ class _FakeEmbedder:
         """Configure availability and the canned vector returned by ``encode``."""
         self._available = available
         self._vector = vector if vector is not None else [0.1, 0.2, 0.3]
-        self.encode_calls: list[str] = []
+        self.encode_calls: list[tuple[str, str | None]] = []
 
     def available(self) -> bool:
         """Return whether this embedder is configured as available."""
         return self._available
 
-    def encode(self, text: str) -> list[float] | None:
+    def encode(self, text: str, *, task: str | None = None) -> list[float] | None:
         """Record the call and return the canned vector (or ``None`` for blanks)."""
-        self.encode_calls.append(text)
+        self.encode_calls.append((text, task))
         if not text or not text.strip():
             return None
         return list(self._vector)
