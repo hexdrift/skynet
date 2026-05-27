@@ -66,6 +66,10 @@ spec:
             - name: REMOTE_DB_URL
               value: "postgresql://{{ include "skynet.dbUser" . }}:$(SKYNET_DB_PASSWORD)@{{ include "skynet.dbHost" . }}:{{ include "skynet.dbPort" . }}/{{ include "skynet.dbName" . }}{{ if .Values.externalDatabase.enabled }}?sslmode={{ .Values.externalDatabase.sslmode }}{{ end }}"
             {{- end }}
+            {{- with .Values.migration.legacyNaiveTz }}
+            - name: LEGACY_NAIVE_TZ
+              value: {{ . | quote }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "skynet.backend.fullname" . }}-config

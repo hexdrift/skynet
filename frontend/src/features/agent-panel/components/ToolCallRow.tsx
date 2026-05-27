@@ -67,7 +67,6 @@ export function ToolCallRow({
     if (call.status === "error" && !open) {
       setOpen(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call.status]);
 
   React.useEffect(() => {

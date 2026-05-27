@@ -8,7 +8,7 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { Label } from "@/shared/ui/primitives/label";
 import { Separator } from "@/shared/ui/primitives/separator";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { LoadingState } from "@/shared/ui/loading-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 import { tip } from "@/shared/lib/tooltips";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
@@ -19,7 +19,7 @@ import { CodeAgentPanel, VersionStepper } from "./CodeAgentPanel";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
-  loading: () => <LoadingState variant="block" className="h-[200px]" />,
+  loading: () => <Skeleton height={200} borderRadius={8} />,
 });
 
 export function CodeStep({ w }: { w: SubmitWizardContext }) {

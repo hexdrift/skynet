@@ -20,20 +20,27 @@ interface ToolEntry {
 
 // Curated subset of TOOL_META. Bulk variants are folded into their singular
 // counterparts so the user sees distinct capabilities, not API permutations.
-// Sorted by severity tier: info → warning → destructive.
+// Sorted by severity tier (info → warning → destructive), with the most
+// distinctive capabilities — auto-fill, semantic search, diagnostics — leading
+// the info group so the carousel opens on something memorable rather than a
+// rename action.
 const FEATURED_TOOLS: readonly string[] = [
-  "rename_job_optimizations",
-  "toggle_pin_job_optimizations",
-  "toggle_archive_job_optimizations",
+  "update_wizard_state",
+  "public_search_dashboard_search_post",
+  "get_analytics_summary_analytics_summary_get",
+  "get_job_logs_optimizations",
+  "get_test_results_optimizations",
   "compare_jobs_optimizations_compare_post",
   "list_jobs_optimizations_get",
-  "create_template_templates_post",
+  "rename_job_optimizations",
+  "toggle_pin_job_optimizations",
   "apply_template_templates",
-  "edit_code_optimizations_edit_code_post",
-  "validate_code_validate_code_post",
-  "profile_datasets_profile_post",
+  "create_template_templates_post",
   "stage_sample_dataset_datasets_samples",
   "set_column_roles_datasets_column_roles_post",
+  "profile_datasets_profile_post",
+  "edit_code_optimizations_edit_code_post",
+  "validate_code_validate_code_post",
   "discover_models_models_discover_post",
   "submit_job_run_post",
   "submit_grid_search_grid_search_post",
@@ -66,10 +73,6 @@ const TOUR_DESCRIPTIONS: Record<string, string> = {
   ),
   toggle_pin_job_optimizations: formatMsg(
     "auto.features.agent.panel.components.toolscarousel.template.4",
-    { p1: TERMS.optimization },
-  ),
-  toggle_archive_job_optimizations: formatMsg(
-    "auto.features.agent.panel.components.toolscarousel.template.5",
     { p1: TERMS.optimization },
   ),
   compare_jobs_optimizations_compare_post: msg(

@@ -13,7 +13,6 @@ import {
 } from "@/shared/ui/primitives/tooltip";
 import {
   BASE_RADIUS,
-  CLUSTER_LABEL_MIN_POINTS,
   DRAG_THRESHOLD_PX,
   FOCUS_RING_COLOR,
   FOCUS_RING_OFFSET,
@@ -34,10 +33,7 @@ import {
 import {
   clampNorm,
   clampView,
-  colorForCluster,
-  computeClusterHulls,
   formatScore,
-  pointInPolygon,
   type View,
 } from "../lib/format";
 
@@ -48,13 +44,6 @@ interface ScatterCanvasProps {
   filter: ExploreFilter;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  // Index into each point's cluster_levels array. The backend returns
-  // a fixed number of levels (typically 5), and the slider in ExploreView
-  // chooses which one drives the coloring.
-  granularityLevel: number;
-  // The number of clusters present at the current granularity level —
-  // used to spread colors evenly around the hue wheel.
-  clusterCount: number;
   dimmed?: boolean;
   hideResetButton?: boolean;
   heightClass?: string;
@@ -66,6 +55,10 @@ interface ScatterCanvasProps {
   // Number of variations per leader (when > 1). Used to format the
   // hover hint as "{n} גרסאות — לחצו לבחירה".
   variationCountById?: ReadonlyMap<string, number>;
+  // When non-null, points whose id is not in this set fade to ~15%. Lets
+  // the map act as a secondary view of an active semantic search — matches
+  // pop, non-matches recede without disappearing entirely.
+  matchedIds?: ReadonlySet<string> | null;
 }
 
 interface ProjectedPoint {
@@ -74,40 +67,15 @@ interface ProjectedPoint {
   basePy: number;
   radius: number;
   match: boolean;
-  color: string;
+  // false when an active search excludes this point — drives an extra
+  // alpha multiplier in the draw loop. True when no search is active.
+  searchMatch: boolean;
 }
 
 const GRID_STEP = 44;
-// Pushes hull vertices outward from the cluster centroid by this many
-// screen pixels so the boundary sits clear of the point markers (whose
-// radius is BASE_RADIUS / HOVER_RADIUS) at any zoom level.
-const HULL_PIXEL_PADDING = 8;
 
-interface HullShape {
-  clusterId: number;
-  color: string;
-  vertices: ReadonlyArray<{ bx: number; by: number }>;
-  centroid: { cx: number; cy: number };
-}
-
-function projectHullToScreen(
-  hull: HullShape,
-  view: View,
-): Array<{ x: number; y: number }> {
-  const cx = hull.centroid.cx * view.k + view.tx;
-  const cy = hull.centroid.cy * view.k + view.ty;
-  return hull.vertices.map((v) => {
-    const sx = v.bx * view.k + view.tx;
-    const sy = v.by * view.k + view.ty;
-    const dx = sx - cx;
-    const dy = sy - cy;
-    const len = Math.hypot(dx, dy) || 1;
-    return {
-      x: sx + (dx / len) * HULL_PIXEL_PADDING,
-      y: sy + (dy / len) * HULL_PIXEL_PADDING,
-    };
-  });
-}
+const POINT_FILL_MATCH = "oklch(0.3 0.05 40)";
+const POINT_FILL_DIM = "oklch(0.3 0.01 40)";
 
 function drawCanvasGrid(
   ctx: CanvasRenderingContext2D,
@@ -137,20 +105,18 @@ export function ScatterCanvas({
   filter,
   selectedId,
   onSelect,
-  granularityLevel,
-  clusterCount,
   dimmed = false,
   hideResetButton = false,
   heightClass = "h-[64vh] min-h-[420px]",
   children,
   multiVariationIds,
   variationCountById,
+  matchedIds,
 }: ScatterCanvasProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [size, setSize] = React.useState({ w: 0, h: 0 });
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
-  const [hoveredClusterId, setHoveredClusterId] = React.useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = React.useState<{ x: number; y: number } | null>(null);
   const [view, setView] = React.useState<View>({ k: 1, tx: 0, ty: 0 });
   const [isDragging, setIsDragging] = React.useState(false);
@@ -181,52 +147,19 @@ export function ScatterCanvas({
     const plotH = Math.max(1, size.h - PADDING * 2);
     return points.map((point) => {
       const match = filter === "all" || point.optimization_type === filter;
+      const searchMatch = matchedIds == null || matchedIds.has(point.optimization_id);
       const normX = (clampNorm(point.x) + 1) / 2;
       const normY = 1 - (clampNorm(point.y) + 1) / 2;
-      // cluster_levels is required by the DTO but defensively fall back to 0
-      // if the field is absent (older backend, half-rolled-back deploy) or
-      // the slider points past the array — the page stays useful either way.
-      const clusterId = (point.cluster_levels ?? [])[granularityLevel] ?? 0;
       return {
         point,
         basePx: PADDING + normX * plotW,
         basePy: PADDING + normY * plotH,
         radius: match ? BASE_RADIUS : BASE_RADIUS - 1,
         match,
-        color: colorForCluster(clusterId, clusterCount, match),
+        searchMatch,
       };
     });
-  }, [points, filter, size, granularityLevel, clusterCount]);
-
-  const clusterHulls = React.useMemo<HullShape[]>(() => {
-    if (size.w < 2 || size.h < 2) return [];
-    const plotW = Math.max(1, size.w - PADDING * 2);
-    const plotH = Math.max(1, size.h - PADDING * 2);
-    return computeClusterHulls(points, granularityLevel, CLUSTER_LABEL_MIN_POINTS).map((h) => {
-      const vertices = h.hull.map((v) => {
-        const normX = (v.x + 1) / 2;
-        const normY = 1 - (v.y + 1) / 2;
-        return {
-          bx: PADDING + normX * plotW,
-          by: PADDING + normY * plotH,
-        };
-      });
-      let cxSum = 0;
-      let cySum = 0;
-      for (const v of vertices) {
-        cxSum += v.bx;
-        cySum += v.by;
-      }
-      const cx = cxSum / vertices.length;
-      const cy = cySum / vertices.length;
-      return {
-        clusterId: h.clusterId,
-        color: colorForCluster(h.clusterId, clusterCount, true),
-        vertices,
-        centroid: { cx, cy },
-      };
-    });
-  }, [points, granularityLevel, clusterCount, size]);
+  }, [points, filter, size, matchedIds]);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -253,27 +186,6 @@ export function ScatterCanvas({
     ctx.lineTo(size.w - PADDING, cy);
     ctx.stroke();
 
-    for (const hull of clusterHulls) {
-      const polygon = projectHullToScreen(hull, view);
-      if (polygon.length < 3) continue;
-      const isHovered = hull.clusterId === hoveredClusterId;
-      ctx.beginPath();
-      for (let i = 0; i < polygon.length; i++) {
-        const v = polygon[i]!;
-        if (i === 0) ctx.moveTo(v.x, v.y);
-        else ctx.lineTo(v.x, v.y);
-      }
-      ctx.closePath();
-      ctx.fillStyle = hull.color;
-      ctx.globalAlpha = dimmed ? 0.04 : isHovered ? 0.14 : 0.06;
-      ctx.fill();
-      ctx.strokeStyle = hull.color;
-      ctx.lineWidth = isHovered ? 2 : 1;
-      ctx.globalAlpha = dimmed ? 0.3 : isHovered ? 0.85 : 0.45;
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
     // Viewport-cull before sorting — at 100k points only a fraction is
     // ever on screen, and the per-frame sort is what dominates otherwise.
     const cullMargin = HOVER_RADIUS + FOCUS_RING_OFFSET + 4;
@@ -287,8 +199,9 @@ export function ScatterCanvas({
     }
 
     const rank = (p: ProjectedPoint) => {
-      if (selectedId === p.point.optimization_id || hoveredId === p.point.optimization_id) return 2;
-      return p.match ? 1 : 0;
+      if (selectedId === p.point.optimization_id || hoveredId === p.point.optimization_id) return 3;
+      if (!p.searchMatch) return 0;
+      return p.match ? 2 : 1;
     };
     visible.sort((a, b) => rank(a.p) - rank(b.p));
 
@@ -297,12 +210,14 @@ export function ScatterCanvas({
       const isSelected = selectedId === p.point.optimization_id;
       const isActive = isHovered || isSelected;
       const hasVariations = multiVariationIds?.has(p.point.optimization_id) ?? false;
+      const fill = p.match ? POINT_FILL_MATCH : POINT_FILL_DIM;
 
       let alpha = p.match ? 1 : 0.35;
+      if (!p.searchMatch && !isActive) alpha *= 0.15;
       if (dimmed && !isActive) alpha *= 0.35;
 
       ctx.beginPath();
-      ctx.fillStyle = p.color;
+      ctx.fillStyle = fill;
       ctx.globalAlpha = alpha;
       ctx.arc(sx, sy, isActive ? HOVER_RADIUS : p.radius, 0, Math.PI * 2);
       ctx.fill();
@@ -312,7 +227,7 @@ export function ScatterCanvas({
       // reads as a secondary affordance, not a primary visual.
       if (hasVariations && !isSelected) {
         ctx.globalAlpha = (p.match ? 0.4 : 0.2) * (dimmed && !isActive ? 0.5 : 1);
-        ctx.strokeStyle = p.color;
+        ctx.strokeStyle = fill;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(sx, sy, (isActive ? HOVER_RADIUS : p.radius) + 3, 0, Math.PI * 2);
@@ -339,14 +254,13 @@ export function ScatterCanvas({
 
   }, [
     projected,
-    clusterHulls,
     size,
     hoveredId,
-    hoveredClusterId,
     selectedId,
     dimmed,
     view,
     multiVariationIds,
+    matchedIds,
   ]);
 
   const pickNearest = React.useCallback(
@@ -373,23 +287,6 @@ export function ScatterCanvas({
       return best ? best.p : null;
     },
     [projected, view],
-  );
-
-  const pickClusterAt = React.useCallback(
-    (clientX: number, clientY: number): number | null => {
-      const canvas = canvasRef.current;
-      if (!canvas || clusterHulls.length === 0) return null;
-      const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-      for (const hull of clusterHulls) {
-        const polygon = projectHullToScreen(hull, view);
-        if (polygon.length < 3) continue;
-        if (pointInPolygon(x, y, polygon)) return hull.clusterId;
-      }
-      return null;
-    },
-    [clusterHulls, view],
   );
 
   const zoomAt = React.useCallback(
@@ -442,7 +339,6 @@ export function ScatterCanvas({
         setIsDragging(true);
         setHoveredId(null);
         setTooltipPos(null);
-        setHoveredClusterId(null);
       }
       if (ps.moved) {
         setView((v) => clampView({ k: v.k, tx: ps.startTx + dx, ty: ps.startTy + dy }, size));
@@ -456,12 +352,9 @@ export function ScatterCanvas({
       const sy = hit.basePy * view.k + view.ty;
       setHoveredId(hit.point.optimization_id);
       setTooltipPos({ x: sx, y: sy });
-      const cid = (hit.point.cluster_levels ?? [])[granularityLevel];
-      setHoveredClusterId(cid ?? null);
     } else {
       setHoveredId(null);
       setTooltipPos(null);
-      setHoveredClusterId(pickClusterAt(e.clientX, e.clientY));
     }
   };
 
@@ -494,14 +387,12 @@ export function ScatterCanvas({
     }
     setHoveredId(null);
     setTooltipPos(null);
-    setHoveredClusterId(null);
   };
 
   const handlePointerLeave = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.pointerType !== "mouse") return;
     setHoveredId(null);
     setTooltipPos(null);
-    setHoveredClusterId(null);
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {

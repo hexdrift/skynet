@@ -5,10 +5,10 @@
  * splitting → baseline → optimizing → evaluating) as a connected row of
  * nodes with per-stage timestamps.
  *
- * Used in two places: OverviewTab for the job-wide pipeline, and
- * PairDetailView for the per-pair pipeline in a grid_search. Stage
- * detection + timestamp derivation live in the caller; this component
- * is a pure renderer.
+ * Used by OverviewTab for both the job-wide pipeline and (when scoped by
+ * pair_index) the per-pair pipeline inside a grid_search. Stage detection
+ * + timestamp derivation live in the caller; this component is a pure
+ * renderer.
  */
 
 import { useEffect, useRef, useState } from "react";

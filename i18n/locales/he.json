@@ -60,7 +60,17 @@
     "outputColumnTarget": "עמודת היעד",
     "finalScore": "הציון הסופי",
     "modelPlural": "מודלים",
-    "pairPlural": "זוגות"
+    "pairPlural": "זוגות",
+    "candidate": "מועמד",
+    "candidatePlural": "מועמדים",
+    "parent": "הורה",
+    "generation": "דור",
+    "trajectory": "מסלול",
+    "paretoFront": "חזית Pareto",
+    "reflection": "רפלקציה",
+    "prompt": "פרומפט",
+    "seedCandidate": "מועמד התחלתי",
+    "winningCandidate": "מועמד מוביל"
   },
   "messages": {
     "admin.forbidden": "רק מנהלים יכולים לבצע את הפעולה הזו.",

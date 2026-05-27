@@ -175,10 +175,15 @@ class Settings(BaseSettings):
         description="Internal OpenAI-compatible embedding API base URL, e.g. https://llm.internal/v1",
     )
     embeddings_model: str = Field(
-        default="jina-code-embeddings-0.5b",
+        default="jina-embeddings-v4",
         description=(
             "Embedding model id exposed by embeddings_base_url. "
-            "The model must return at least embeddings_dim values."
+            "The model must return at least embeddings_dim values. "
+            "Jina v4 is multilingual (89 languages incl. Hebrew) and supports "
+            "asymmetric retrieval LoRA adapters via the request ``task`` field — "
+            "the gateway passes ``retrieval.query`` for searches and "
+            "``retrieval.passage`` for indexed summaries so Hebrew↔English and "
+            "same-language pairs all score correctly."
         ),
     )
     embeddings_api_key: SecretStr | None = Field(

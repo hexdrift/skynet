@@ -1,4 +1,4 @@
-"""Lifecycle mutations: clone, retry, cancel, bulk-cancel, bulk-pin, bulk-archive. [MIXED]
+"""Lifecycle mutations: clone, retry, cancel, bulk-cancel, bulk-pin. [MIXED]
 
 Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
 - ``POST /optimizations/{id}/cancel``
@@ -8,7 +8,6 @@ Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
 Internal (dashboard plumbing, hidden from public docs):
 - ``POST /optimizations/bulk-cancel``
 - ``POST /optimizations/bulk-pin``
-- ``POST /optimizations/bulk-archive``
 """
 
 from __future__ import annotations
@@ -368,23 +367,3 @@ def register_lifecycle_routes(
         """
         return bulk_set_flag(job_store, req, flag="pinned", user=current_user)
 
-    @router.post(
-        "/optimizations/bulk-archive",
-        response_model=BulkMetadataResponse,
-        summary="Archive or unarchive many optimizations in one call",
-        tags=["agent"],
-    )
-    def bulk_archive_jobs(req: BulkMetadataRequest, current_user: AuthenticatedUserDep) -> BulkMetadataResponse:
-        """Archive or unarchive up to 100 optimizations in a single call.
-
-        Non-admin callers may only flag their own optimizations; ids they
-        don't own are surfaced as ``not_found`` skips.
-
-        Args:
-            req: Bulk-metadata request with ``optimization_ids`` and ``value``.
-            current_user: Authenticated caller resolved from the bearer token.
-
-        Returns:
-            A ``BulkMetadataResponse`` listing successful and skipped ids.
-        """
-        return bulk_set_flag(job_store, req, flag="archived", user=current_user)

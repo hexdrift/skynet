@@ -25,6 +25,7 @@ import { tutorialMessages } from "@/features/tutorial/messages";
 import { settingsMessages } from "@/features/settings/messages";
 import { authMessages } from "@/features/auth/messages";
 import { optimizationsMessages } from "@/features/optimizations/messages";
+import { trajectoryMessages } from "@/features/trajectory/messages";
 import { agentPanelMessages } from "@/features/agent-panel/messages";
 import { sharedMessages } from "@/shared/messages/messages";
 
@@ -39,6 +40,7 @@ export const MESSAGES = {
   ...settingsMessages,
   ...authMessages,
   ...optimizationsMessages,
+  ...trajectoryMessages,
   ...agentPanelMessages,
   ...sharedMessages,
 } as const;

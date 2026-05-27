@@ -298,7 +298,7 @@ def bulk_set_flag(
     flag: str,
     user: AuthenticatedUser,
 ) -> BulkMetadataResponse:
-    """Shared bulk-metadata update used by ``/bulk-pin`` and ``/bulk-archive``.
+    """Shared bulk-metadata update used by ``/bulk-pin``.
 
     Walks ``req.optimization_ids``, loading each row, setting ``overview[flag]``
     to ``req.value``, and writing it back. Duplicate ids are collapsed;
@@ -308,7 +308,7 @@ def bulk_set_flag(
     Args:
         job_store: Job-store the flag is written to.
         req: Bulk-metadata request body.
-        flag: Overview key to toggle (e.g. ``"pinned"``, ``"archived"``).
+        flag: Overview key to toggle (e.g. ``"pinned"``).
         user: Authenticated caller; non-admins are restricted to their own jobs.
 
     Returns:

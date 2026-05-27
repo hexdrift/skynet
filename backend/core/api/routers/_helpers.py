@@ -416,6 +416,7 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
         completed_pairs=completed_pairs,
         failed_pairs=failed_pairs,
         best_pair_label=best_pair_label,
+        summary_text=job_data.get("summary_text"),
     )
 
 

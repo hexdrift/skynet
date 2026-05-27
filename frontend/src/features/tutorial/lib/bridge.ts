@@ -79,6 +79,12 @@ export interface TutorialHooks {
    * place to revert.
    */
   setAdvancedMode: (enabled: boolean) => void;
+  /**
+   * Replay the demo optimization simulation. The deep-dive tour calls this
+   * when reaching the trajectory step so the user sees the tree grow live
+   * instead of jumping to the completed state.
+   */
+  replayDemoSimulation: () => void;
 }
 
 /**

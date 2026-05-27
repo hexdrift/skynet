@@ -36,6 +36,18 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
     (datasetProfile?.inputs ?? []).map((entry) => [entry.name, entry.kind]),
   );
 
+  // Inputs render above outputs (and ignored at the bottom) regardless of the
+  // dataset's native column order — users expect to read the schema as
+  // input→output, not whatever order pandas happened to produce.
+  const roleOrder = { input: 0, output: 1, ignore: 2 } as const;
+  const orderedColumns = parsedDataset
+    ? [...parsedDataset.columns].sort(
+        (a, b) =>
+          (roleOrder[columnRoles[a] ?? "ignore"] ?? 2) -
+          (roleOrder[columnRoles[b] ?? "ignore"] ?? 2),
+      )
+    : [];
+
   return (
     <Card
       className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg"
@@ -89,7 +101,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
                 {msg("auto.features.submit.components.steps.datasetstep.5")}
               </p>
               <div className="space-y-2">
-                {parsedDataset.columns.map((col) => {
+                {orderedColumns.map((col) => {
                   const isInput = columnRoles[col] === "input";
                   const kind = columnKinds[col] ?? "text";
                   const wasAutoImage = autoDetectedKinds.get(col) === "image";

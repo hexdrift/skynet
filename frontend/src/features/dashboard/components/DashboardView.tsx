@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { BarChart3, Compass, TableIcon } from "lucide-react";
-import { Skeleton as BoneyardSkeleton } from "@/shared/ui/bone-skeleton";
+import { BarChart3, TableIcon } from "lucide-react";
+import { DashboardSkeleton } from "./DashboardSkeleton";
 import { toast } from "react-toastify";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
@@ -15,9 +15,6 @@ import { getJobTypeLabel, getStatusLabel } from "@/shared/constants/job-status";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
 import type { DashboardAnalytics } from "@/shared/lib/api";
 import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
-import { ExploreView } from "@/features/explore";
-import { useUserPrefs } from "@/features/settings";
-import { dashboardBones } from "../lib/bones";
 import { transformChartData } from "../lib/transform-chart-data";
 import { useQueueStatus } from "../hooks/use-queue-status";
 import { getDashboardStats } from "../lib/get-dashboard-stats";
@@ -61,21 +58,15 @@ export function DashboardView() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const { prefs } = useUserPrefs();
-  const advancedMode = prefs.advancedMode;
-
   const [activeTab, setActiveTab] = useState("jobs");
   // Sync from URL on mount / when ?tab= changes (supports deep-linking from
   // UserFieldPreview and bookmarked tab URLs).
   const urlTab = searchParams.get("tab");
   useEffect(() => {
-    if (urlTab === "jobs" || urlTab === "analytics" || (urlTab === "explore" && advancedMode)) {
+    if (urlTab === "jobs" || urlTab === "analytics") {
       setActiveTab(urlTab);
     }
-  }, [urlTab, advancedMode]);
-  useEffect(() => {
-    if (!advancedMode && activeTab === "explore") setActiveTab("jobs");
-  }, [advancedMode, activeTab]);
+  }, [urlTab]);
   // Mirror the active tab back into ?tab= so reload / share-link / back-button
   // round-trip the user to the same tab they were on.
   const handleTabChange = useCallback(
@@ -200,43 +191,15 @@ export function DashboardView() {
     );
     return selectedItems.map((j) => j.optimization_id);
   }, [effectiveData, selectedIds]);
-  // Auto-expand to deduplicated runs: jobs that share a compare_fingerprint
-  // with anything in the selection use the same task AND the same test split,
-  // so they can be compared row-by-row without manually checking each box.
-  // ``task_fingerprint`` alone isn't enough — two jobs over the same dataset
-  // with different effective seeds land on different test rows. Capped at
-  // COMPARE_MAX; the user's explicit picks win over auto-added siblings
-  // when the cap forces a truncation.
-  const compareIdsWithSiblings = useMemo(() => {
-    if (!effectiveData || compareEligibleIds.length === 0) return [];
-    const eligibleSet = new Set(compareEligibleIds);
-    const fingerprints = new Set<string>();
-    const successItems = effectiveData.items.filter((j) => j.status === "success");
-    for (const j of successItems) {
-      if (eligibleSet.has(j.optimization_id) && j.compare_fingerprint) {
-        fingerprints.add(j.compare_fingerprint);
-      }
-    }
-    const ids: string[] = [...compareEligibleIds];
-    for (const j of successItems) {
-      if (ids.length >= COMPARE_MAX) break;
-      if (eligibleSet.has(j.optimization_id)) continue;
-      if (j.compare_fingerprint && fingerprints.has(j.compare_fingerprint)) {
-        ids.push(j.optimization_id);
-      }
-    }
-    return ids;
-  }, [effectiveData, compareEligibleIds]);
-  const autoAddedSiblings = compareIdsWithSiblings.length - compareEligibleIds.length;
-  const canCompare = compareIdsWithSiblings.length >= 2;
+  const canCompare = compareEligibleIds.length >= 2;
   const onCompare = useCallback(() => {
-    if (compareIdsWithSiblings.length < 2) return;
-    if (compareIdsWithSiblings.length > COMPARE_MAX) {
+    if (compareEligibleIds.length < 2) return;
+    if (compareEligibleIds.length > COMPARE_MAX) {
       toast.error(msg("compare.cap_reached"));
       return;
     }
-    router.push(`/compare?jobs=${compareIdsWithSiblings.join(",")}`);
-  }, [compareIdsWithSiblings, router]);
+    router.push(`/compare?jobs=${compareEligibleIds.join(",")}`);
+  }, [compareEligibleIds, router]);
 
   const filteredItems = useMemo(() => {
     if (!effectiveData) return [];
@@ -311,15 +274,13 @@ export function DashboardView() {
     [effectiveData, filteredItems, counts, effectiveAnalytics, activeTab],
   );
 
+  if (initialLoad && !effectiveData) {
+    return <DashboardSkeleton />;
+  }
+
   return (
-    <BoneyardSkeleton
-      name="dashboard"
-      loading={initialLoad && !effectiveData}
-      initialBones={dashboardBones}
-      color="var(--muted)"
-      animate="shimmer"
-    >
-      <div className="flex flex-col gap-8">
+    <>
+      <div className="flex flex-col gap-8 -mt-2 md:-mt-4">
         <DashboardHeader stats={stats} />
         <QueueStatusAlert queueStatus={queueStatus} />
 
@@ -342,15 +303,6 @@ export function DashboardView() {
                   <BarChart3 className="size-3.5" />
                   {msg("auto.features.dashboard.components.dashboardview.1")}
                 </TabsTrigger>
-                {advancedMode && (
-                  <TabsTrigger
-                    value="explore"
-                    className={DASHBOARD_TAB_CLASS}
-                  >
-                    <Compass className="size-3.5" />
-                    {msg("auto.features.dashboard.components.dashboardview.2")}
-                  </TabsTrigger>
-                )}
               </TabsList>
 
               <TabsContent value="jobs">
@@ -393,11 +345,6 @@ export function DashboardView() {
                 />
               </TabsContent>
 
-              {advancedMode && (
-                <TabsContent value="explore">
-                  <ExploreView />
-                </TabsContent>
-              )}
             </Tabs>
           )}
         </FadeIn>
@@ -406,7 +353,6 @@ export function DashboardView() {
           isAdmin={isAdmin}
           selectedCount={selectedIds.size}
           compareEligibleCount={compareEligibleIds.length}
-          autoAddedSiblings={autoAddedSiblings}
           canCompare={canCompare}
           onClear={clearSelection}
           onCompare={onCompare}
@@ -424,6 +370,6 @@ export function DashboardView() {
           selectedCount={selectedIds.size}
         />
       </div>
-    </BoneyardSkeleton>
+    </>
   );
 }

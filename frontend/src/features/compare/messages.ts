@@ -8,5 +8,5 @@ export const compareMessages = {
   "compare.cap_reached": `ניתן להשוות עד 4 ${TERMS.optimizationPlural} בבת אחת`,
   "compare.partial_load": "חלק מהריצות לא נטענו והושמטו מההשוואה",
   "compare.includes_siblings":
-    "{p1, plural, one {השווה (תוכלל גם ריצה אחת של אותה משימה)} two {השווה (יוכללו גם שתי ריצות של אותה משימה)} other {השווה (יוכללו גם # ריצות של אותה משימה)}}",
+    "{p1, plural, one {השוואה (תוכלל גם ריצה אחת של אותה משימה)} two {השוואה (יוכללו גם שתי ריצות של אותה משימה)} other {השוואה (יוכללו גם # ריצות של אותה משימה)}}",
 } as const;

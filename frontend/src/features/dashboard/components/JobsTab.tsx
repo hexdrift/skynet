@@ -18,7 +18,7 @@ import { PingDot } from "@/shared/ui/ping-dot";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import type { useColumnResize } from "@/shared/ui/excel-filter";
 import { ColumnHeader, ResetColumnsButton, type SortDir } from "@/shared/ui/excel-filter";
-import { formatDate, formatElapsed, formatId, formatRelativeTime } from "@/shared/lib";
+import { formatDate, formatId, formatRelativeTime } from "@/shared/lib";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 import { LiveElapsed } from "./LiveElapsed";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
@@ -357,12 +357,10 @@ export function JobsTab({
                       >
                         {formatRelativeTime(job.created_at)}
                       </TableCell>
-                      <TableCell
-                        className="text-xs tabular-nums truncate overflow-hidden"
-                        title={formatElapsed(job.elapsed_seconds) ?? ""}
-                      >
+                      <TableCell className="text-xs tabular-nums truncate overflow-hidden">
                         <LiveElapsed
                           startedAt={job.started_at}
+                          createdAt={job.created_at}
                           elapsedSeconds={job.elapsed_seconds}
                           isActive={ACTIVE_STATUSES.has(job.status)}
                         />

@@ -477,6 +477,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
     @router.get(
         "/optimizations/{optimization_id}/test-results",
         summary="Per-example baseline and optimized test scores",
+        tags=["agent"],
     )
     def get_test_results(optimization_id: str, current_user: AuthenticatedUserDep) -> dict:
         """Return stored per-example baseline and optimized test scores.
@@ -584,6 +585,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         "/optimizations/{optimization_id}/grid-result",
         response_model=GridSearchResponse,
         summary="Retrieve the full grid-search result with per-pair details",
+        tags=["agent"],
     )
     def get_grid_search_result(optimization_id: str, current_user: AuthenticatedUserDep) -> GridSearchResponse:
         """Return all pair results for a finished grid search, including ``best_pair``.
@@ -631,6 +633,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
     @router.get(
         "/optimizations/{optimization_id}/pair/{pair_index}/test-results",
         summary="Per-example test scores for one grid-search pair",
+        tags=["agent"],
     )
     def get_pair_test_results(
         optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep
