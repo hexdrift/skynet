@@ -18,9 +18,9 @@ export function extractScoresFromLogs(logs: Array<{ message: string }>): ScorePo
   for (const log of logs) {
     const msg = log.message;
 
-    // GEPA: "Iteration N: Full valset score for new program: 0.78"
+    // GEPA: "Iteration N: Valset score for new program: 0.78 (coverage X / Y)"
     const gepaScoreMatch = msg.match(
-      /Iteration (\d+):\s*Full valset score for new program:\s*([\d.]+)/,
+      /Iteration\s+(\d+):\s*(?:Full\s+)?Valset score for new program:\s*([\d.]+)/i,
     );
     if (gepaScoreMatch) {
       const iter = parseInt(gepaScoreMatch[1]!, 10);
@@ -32,7 +32,7 @@ export function extractScoresFromLogs(logs: Array<{ message: string }>): ScorePo
 
     // GEPA: "Iteration N: Base program full valset score: 0.65"
     const gepaBaseMatch = msg.match(
-      /Iteration (\d+):\s*Base program full valset score:\s*([\d.]+)/,
+      /Iteration (\d+):\s*Base program full valset score:\s*([\d.]+)/i,
     );
     if (gepaBaseMatch) {
       const iter = parseInt(gepaBaseMatch[1]!, 10);
