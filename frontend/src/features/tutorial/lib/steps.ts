@@ -344,13 +344,13 @@ const tutorialSteps: TutorialStep[] = [
       p2: TERMS.optimizerPlural,
       p3: TERMS.optimization,
     }),
-    target: "[data-tutorial='analytics-tab']",
-    placement: "bottom",
+    target: "[data-tutorial='analytics-content']",
+    placement: "top",
     beforeShow: async () => {
       await ensureDashboard();
       injectDemoDashboardData();
-      setTab("jobs");
-      await waitForElement("[data-tutorial='analytics-tab']");
+      setTab("analytics");
+      await waitForElement("[data-tutorial='analytics-content']");
       await new Promise((r) => setTimeout(r, 250));
     },
     track: "deep-dive",
