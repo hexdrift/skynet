@@ -7,6 +7,7 @@ The companion modules in this package handle the individual concerns;
 this file orchestrates them.
 """
 
+import functools
 import logging
 import threading
 from collections.abc import Callable
@@ -29,10 +30,13 @@ from ...constants import (
     META_OPTIMIZER,
     META_OPTIMIZER_KWARGS,
     PROGRESS_BASELINE,
+    PROGRESS_CANDIDATE,
     PROGRESS_GRID_PAIR_COMPLETED,
     PROGRESS_GRID_PAIR_FAILED,
     PROGRESS_GRID_PAIR_STARTED,
+    PROGRESS_MINIBATCH,
     PROGRESS_OPTIMIZED,
+    PROGRESS_REJECTED,
     PROGRESS_SPLITS_READY,
 )
 from ...exceptions import ServiceError
@@ -73,6 +77,13 @@ from .optimizers import (
     validate_optimizer_signature,
 )
 from .progress import capture_tqdm
+from .trajectory import (
+    capture_proposal_prompts,
+    emit_valset_event,
+    gepa_log_dir,
+    maybe_wrap_minibatch_recorder,
+    trajectory_watch,
+)
 from .timing import (
     STAGE_BASELINE,
     STAGE_EVALUATION,
@@ -144,6 +155,31 @@ class _GridPairContext:
     failed: int = 0
 
 
+def _tag_candidate_event(
+    callback: Callable[[str, dict[str, Any]], None],
+    pair_index: int,
+    event: str,
+    metrics: dict[str, Any],
+) -> None:
+    """Forward a progress event, stamping ``pair_index`` onto trajectory metrics.
+
+    Candidate and rejected-proposal events come out of the per-pair GEPA state
+    file unaware of which grid pair produced them; the frontend uses
+    ``pair_index`` to scope the trajectory tree to a single pair, so we
+    inject it here before forwarding. Other events pass through untouched.
+
+    Args:
+        callback: The downstream progress callback to forward into.
+        pair_index: Zero-based grid pair index to stamp onto trajectory metrics.
+        event: Event name as produced by ``TrajectoryWatcher``.
+        metrics: Event metrics dict from the watcher.
+    """
+    if event == PROGRESS_CANDIDATE or event == PROGRESS_REJECTED or event == PROGRESS_MINIBATCH:
+        callback(event, {**metrics, "pair_index": pair_index})
+    else:
+        callback(event, metrics)
+
+
 def _run_grid_pair(
     ctx: _GridPairContext,
     i: int,
@@ -196,15 +232,29 @@ def _run_grid_pair(
         if refl_timing is not None:
             callbacks.append(refl_timing)
 
-        with dspy.context(lm=language_model, callbacks=callbacks):
+        with dspy.context(lm=language_model, callbacks=callbacks), gepa_log_dir(
+            ctx.payload.optimizer_name
+        ) as trajectory_log_dir:
+            trajectory_callback: Callable[[str, dict[str, Any]], None] | None = (
+                functools.partial(_tag_candidate_event, ctx.progress_callback, i)
+                if ctx.progress_callback is not None
+                else None
+            )
+            training_metric = maybe_wrap_minibatch_recorder(
+                ctx.metric,
+                ctx.splits.val,
+                ctx.payload.optimizer_name,
+                trajectory_callback,
+            )
             optimizer = instantiate_optimizer(
                 ctx.optimizer_factory,
                 ctx.payload.optimizer_name,
                 ctx.payload.optimizer_kwargs,
-                ctx.metric,
+                training_metric,
                 gen_cfg,
                 ref_cfg,
                 reflection_lm=reflection_lm,
+                log_dir=trajectory_log_dir,
             )
             baseline = None
             baseline_test_results: list[dict] = []
@@ -225,7 +275,12 @@ def _run_grid_pair(
                         },
                     )
 
-            with capture_tqdm(ctx.progress_callback), track_stage(STAGE_TRAINING, *callbacks):
+            with (
+                capture_tqdm(ctx.progress_callback),
+                track_stage(STAGE_TRAINING, *callbacks),
+                capture_proposal_prompts(ctx.payload.optimizer_name),
+                trajectory_watch(trajectory_log_dir, trajectory_callback),
+            ):
                 compiled = compile_program(
                     optimizer=optimizer,
                     program=program,
@@ -441,15 +496,6 @@ class DspyService:
             else None
         )
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
-        optimizer = instantiate_optimizer(
-            optimizer_factory,
-            payload.optimizer_name,
-            payload.optimizer_kwargs,
-            metric,
-            payload.model_settings,
-            payload.reflection_model_settings,
-            reflection_lm=reflection_lm,
-        )
 
         examples = rows_to_examples(
             payload.dataset,
@@ -479,72 +525,95 @@ class DspyService:
                     DETAIL_TEST: len(splits.test),
                 },
             )
+            emit_valset_event(splits.val, progress_callback)
 
         gen_timing = GenLMTimingCallback(language_model)
         refl_timing = ReflectionLMTimingCallback(reflection_lm) if reflection_lm is not None else None
         callbacks: list[Any] = [gen_timing]
         if refl_timing is not None:
             callbacks.append(refl_timing)
-        with dspy.context(lm=language_model, callbacks=callbacks):
-            baseline_test_metric = None
-            baseline_test_results: list[dict] = []
-            if splits.test:
-                with track_stage(STAGE_BASELINE, *callbacks):
-                    baseline_test_metric, baseline_test_results = evaluate_on_test(
-                        program,
-                        splits.test,
-                        metric,
-                        collect_per_example=True,
-                    )
-                logger.info("Baseline test metric: %s", baseline_test_metric)
-                if progress_callback and baseline_test_metric is not None:
-                    progress_callback(
-                        PROGRESS_BASELINE,
-                        {DETAIL_BASELINE: baseline_test_metric},
-                    )
+        with gepa_log_dir(payload.optimizer_name) as trajectory_log_dir:
+            training_metric = maybe_wrap_minibatch_recorder(
+                metric,
+                splits.val,
+                payload.optimizer_name,
+                progress_callback,
+            )
+            optimizer = instantiate_optimizer(
+                optimizer_factory,
+                payload.optimizer_name,
+                payload.optimizer_kwargs,
+                training_metric,
+                payload.model_settings,
+                payload.reflection_model_settings,
+                reflection_lm=reflection_lm,
+                log_dir=trajectory_log_dir,
+            )
+            with dspy.context(lm=language_model, callbacks=callbacks):
+                baseline_test_metric = None
+                baseline_test_results: list[dict] = []
+                if splits.test:
+                    with track_stage(STAGE_BASELINE, *callbacks):
+                        baseline_test_metric, baseline_test_results = evaluate_on_test(
+                            program,
+                            splits.test,
+                            metric,
+                            collect_per_example=True,
+                        )
+                    logger.info("Baseline test metric: %s", baseline_test_metric)
+                    if progress_callback and baseline_test_metric is not None:
+                        progress_callback(
+                            PROGRESS_BASELINE,
+                            {DETAIL_BASELINE: baseline_test_metric},
+                        )
 
-            logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
-            with capture_tqdm(progress_callback), track_stage(STAGE_TRAINING, *callbacks):
-                compiled_program = compile_program(
-                    optimizer=optimizer,
-                    program=program,
-                    splits=splits,
-                    metric=metric,
-                    compile_kwargs=payload.compile_kwargs,
-                )
-            logger.info("Optimizer compile completed successfully")
-
-            optimized_test_metric = None
-            optimized_test_results: list[dict] = []
-            if splits.test:
-                with track_stage(STAGE_EVALUATION, *callbacks):
-                    optimized_test_metric, optimized_test_results = evaluate_on_test(
-                        compiled_program,
-                        splits.test,
-                        metric,
-                        collect_per_example=True,
+                logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
+                with (
+                    capture_tqdm(progress_callback),
+                    track_stage(STAGE_TRAINING, *callbacks),
+                    capture_proposal_prompts(payload.optimizer_name),
+                    trajectory_watch(trajectory_log_dir, progress_callback),
+                ):
+                    compiled_program = compile_program(
+                        optimizer=optimizer,
+                        program=program,
+                        splits=splits,
+                        metric=metric,
+                        compile_kwargs=payload.compile_kwargs,
                     )
-                logger.info("Optimized test metric: %s", optimized_test_metric)
-                if progress_callback and optimized_test_metric is not None:
-                    progress_callback(
-                        PROGRESS_OPTIMIZED,
-                        {DETAIL_OPTIMIZED: optimized_test_metric},
-                    )
+                logger.info("Optimizer compile completed successfully")
 
-            best_program = compiled_program
-            if (
-                baseline_test_metric is not None
-                and optimized_test_metric is not None
-                and optimized_test_metric < baseline_test_metric
-            ):
-                logger.warning(
-                    "Optimized program (%.4f) is worse than baseline (%.4f) — returning baseline program",
-                    optimized_test_metric,
-                    baseline_test_metric,
-                )
-                best_program = program
-                # Swap so the "optimized" metric reflects what we're actually returning
-                optimized_test_metric = baseline_test_metric
+                optimized_test_metric = None
+                optimized_test_results: list[dict] = []
+                if splits.test:
+                    with track_stage(STAGE_EVALUATION, *callbacks):
+                        optimized_test_metric, optimized_test_results = evaluate_on_test(
+                            compiled_program,
+                            splits.test,
+                            metric,
+                            collect_per_example=True,
+                        )
+                    logger.info("Optimized test metric: %s", optimized_test_metric)
+                    if progress_callback and optimized_test_metric is not None:
+                        progress_callback(
+                            PROGRESS_OPTIMIZED,
+                            {DETAIL_OPTIMIZED: optimized_test_metric},
+                        )
+
+                best_program = compiled_program
+                if (
+                    baseline_test_metric is not None
+                    and optimized_test_metric is not None
+                    and optimized_test_metric < baseline_test_metric
+                ):
+                    logger.warning(
+                        "Optimized program (%.4f) is worse than baseline (%.4f) — returning baseline program",
+                        optimized_test_metric,
+                        baseline_test_metric,
+                    )
+                    best_program = program
+                    # Swap so the "optimized" metric reflects what we're actually returning
+                    optimized_test_metric = baseline_test_metric
 
         program_artifact = persist_program(best_program, artifact_id)
         if program_artifact:
@@ -679,6 +748,7 @@ class DspyService:
                     "total_pairs": total_pairs,
                 },
             )
+            emit_valset_event(splits.val, progress_callback)
 
         pair_results: list[PairResult] = [None] * total_pairs  # type: ignore[list-item]
         grid_ctx = _GridPairContext(

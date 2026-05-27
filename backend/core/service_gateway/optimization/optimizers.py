@@ -16,6 +16,7 @@ import dspy
 from ...constants import (
     COMPILE_TRAINSET_KEY,
     COMPILE_VALSET_KEY,
+    OPTIMIZER_LOG_DIR_KEY,
     OPTIMIZER_METRIC_KEY,
     OPTIMIZER_NAME_GEPA,
     OPTIMIZER_REFLECTION_LM_KEY,
@@ -265,6 +266,7 @@ def instantiate_optimizer(
     reflection_model: ModelConfig | None,
     *,
     reflection_lm: Any | None = None,
+    log_dir: str | None = None,
 ) -> Any:
     """Instantiate an optimizer, injecting language models and metrics as needed.
 
@@ -272,6 +274,9 @@ def instantiate_optimizer(
     - All optimizers that expose a ``metric`` parameter receive it automatically.
     - GEPA additionally requires ``reflection_lm`` (built from ``reflection_model``)
       and defaults ``auto`` to ``"light"`` when no budget kwarg is supplied.
+    - GEPA receives ``log_dir`` when supplied so it persists per-iteration
+      state to ``<log_dir>/gepa_state.bin`` — required by the trajectory
+      watcher that surfaces candidate genealogy to the UI.
 
     Args:
         factory: The optimizer factory callable to invoke.
@@ -287,6 +292,9 @@ def instantiate_optimizer(
             supplied (e.g. so the caller can attach a timing callback
             bound to its identity), it bypasses construction from
             ``reflection_model``.
+        log_dir: Optional directory GEPA writes ``gepa_state.bin`` into. The
+            trajectory watcher polls this file to emit per-candidate
+            progress events. Ignored for non-GEPA optimizers.
 
     Returns:
         An instantiated optimizer ready for ``compile``.
@@ -309,6 +317,12 @@ def instantiate_optimizer(
         k in kwargs for k in ("auto", "max_full_evals", "max_metric_calls")
     ):
         kwargs["auto"] = "light"
+    if (
+        optimizer_key == OPTIMIZER_NAME_GEPA
+        and log_dir is not None
+        and OPTIMIZER_LOG_DIR_KEY not in kwargs
+    ):
+        kwargs[OPTIMIZER_LOG_DIR_KEY] = log_dir
     needs_reflection = optimizer_key in reflection_required_optimizers
     if OPTIMIZER_REFLECTION_LM_KEY not in kwargs:
         if reflection_lm is not None and needs_reflection:

@@ -10,10 +10,8 @@ import {
   Send,
   Tags,
   Trash2,
-  Search,
   PanelRightClose,
   PanelRightOpen,
-  X,
   MoreHorizontal,
   Share2,
   Pencil,
@@ -21,10 +19,10 @@ import {
   Loader2,
   Grid2x2,
   ChevronLeft,
+  Compass,
   CopyPlus,
 } from "lucide-react";
-import { Skeleton } from "@/shared/ui/bone-skeleton";
-import { sidebarMoreBones } from "../lib/bones";
+import { SidebarMoreSkeleton } from "./SidebarMoreSkeleton";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/primitives/button";
 import {
@@ -45,7 +43,7 @@ import type { SidebarJobItem } from "@/shared/lib/api";
 import { isActiveStatus } from "@/shared/constants/job-status";
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
-import { groupJobsByRecency, matchesJobSearch } from "@/features/sidebar";
+import { groupJobsByRecency } from "@/features/sidebar";
 import { SettingsTrigger, useUserPrefs } from "@/features/settings";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
@@ -58,6 +56,7 @@ const NAV_ITEMS = [
   },
   { href: "/tagger", label: msg("auto.features.sidebar.components.sidebar.literal.2"), icon: Tags },
   { href: "/submit", label: TERMS.notificationNewOpt, icon: Send },
+  { href: "/explore", label: msg("sidebar.nav.explore"), icon: Compass },
 ] as const;
 
 const PAGE_SIZE = 20;
@@ -95,7 +94,6 @@ export function Sidebar() {
 
   const [jobs, setJobs] = React.useState<SidebarJobItem[]>([]);
   const [activeCount, setActiveCount] = React.useState(0);
-  const [searchQuery, setSearchQuery] = React.useState("");
   const [loadedAll, setLoadedAll] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
   // Sidebar infinite scroll: fetchData (polling + external invalidation)
@@ -109,7 +107,6 @@ export function Sidebar() {
   const loadingMoreRef = React.useRef(false);
   const listRef = React.useRef<HTMLDivElement>(null);
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
-  const searchRef = React.useRef<HTMLInputElement>(null);
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -226,11 +223,7 @@ export function Sidebar() {
     }
   };
 
-  const filteredJobs = React.useMemo(
-    () => jobs.filter((j) => matchesJobSearch(j, searchQuery)),
-    [jobs, searchQuery],
-  );
-  const groupedJobs = React.useMemo(() => groupJobsByRecency(filteredJobs), [filteredJobs]);
+  const groupedJobs = React.useMemo(() => groupJobsByRecency(jobs), [jobs]);
 
   const deleteJobInfo = React.useMemo(() => {
     if (!deleteConfirm) return null;
@@ -366,40 +359,10 @@ export function Sidebar() {
           })}
         </nav>
 
+        <div aria-hidden="true" className="mx-3 h-px bg-sidebar-border/40" />
+
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          <div className="px-3 py-2">
-            <div className="relative">
-              <Search className="absolute end-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/40 pointer-events-none" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={msg("auto.features.sidebar.components.sidebar.literal.8")}
-                aria-label={formatMsg("auto.features.sidebar.components.sidebar.template.1", {
-                  p1: TERMS.optimizationPlural,
-                })}
-                dir="rtl"
-                className="w-full text-[0.6875rem] bg-sidebar-accent/30 border border-border/30 rounded-lg pe-7 ps-7 py-1.5 outline-none focus:border-primary/30 transition-colors placeholder:text-muted-foreground/40"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute start-2.5 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/40 hover:text-muted-foreground"
-                  aria-label={msg("auto.features.sidebar.components.sidebar.literal.9")}
-                >
-                  <X className="size-3" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div ref={listRef} className="flex-1 overflow-y-auto px-3 pb-2 no-scrollbar">
-            {groupedJobs.length === 0 && searchQuery && (
-              <p className="text-[0.625rem] text-muted-foreground/50 text-center py-4">
-                {msg("auto.features.sidebar.components.sidebar.2")}
-              </p>
-            )}
+          <div ref={listRef} className="flex-1 overflow-y-auto px-3 pt-2 pb-2 no-scrollbar">
             {groupedJobs.map((group) => (
               <div key={group.label} className="mb-2">
                 <p className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
@@ -424,18 +387,10 @@ export function Sidebar() {
             ))}
             {loadingMore && (
               <div className="px-1 pt-1 pb-2" aria-hidden="true">
-                <Skeleton
-                  name="sidebar-more"
-                  loading={true}
-                  initialBones={sidebarMoreBones}
-                  color="var(--muted)"
-                  animate="shimmer"
-                >
-                  <div />
-                </Skeleton>
+                <SidebarMoreSkeleton />
               </div>
             )}
-            {!loadedAll && !searchQuery && (
+            {!loadedAll && (
               <div ref={sentinelRef} aria-hidden="true" className="h-1 w-full" />
             )}
           </div>
@@ -452,7 +407,7 @@ export function Sidebar() {
           if (!open) setDeleteConfirm(null);
         }}
       >
-        <DialogContent className="max-w-sm sm:max-w-sm" showCloseButton={false}>
+        <DialogContent className="max-w-md sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
               {msg("auto.features.sidebar.components.sidebar.3")}
@@ -659,11 +614,8 @@ function JobRow({
           href={`/optimizations/${job.optimization_id}`}
           className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden"
         >
-          <StatusDot status={job.status} />
-          {job.pinned && <Pin className="size-2.5 text-muted-foreground/60 shrink-0" />}
           <span
-            className="truncate font-medium leading-tight min-w-0 block"
-            dir="auto"
+            className="truncate font-medium leading-tight min-w-0 block text-start flex-1"
             title={displayName}
           >
             {displayName}
@@ -679,6 +631,8 @@ function JobRow({
               {job.total_pairs ?? "?"}
             </span>
           )}
+          {job.pinned && <Pin className="size-2.5 text-muted-foreground/60 shrink-0" />}
+          <StatusDot status={job.status} />
         </Link>
         {isGridSearch && (
           <button

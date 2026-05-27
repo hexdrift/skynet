@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { LoadingState } from "@/shared/ui/loading-state";
+import { Skeleton } from "@/shared/ui/skeleton";
 import type { OptimizedPredictor } from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
 import { CopyButton } from "./ui-primitives";
@@ -15,7 +15,7 @@ import { msg } from "@/shared/lib/messages";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
-  loading: () => <LoadingState variant="block" className="h-[180px]" />,
+  loading: () => <Skeleton height={180} borderRadius={8} />,
 });
 
 export function CodeTab({

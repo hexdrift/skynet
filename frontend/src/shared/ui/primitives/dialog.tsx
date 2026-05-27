@@ -97,7 +97,7 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:justify-end", className)}
+      className={cn("grid grid-cols-2 gap-2", className)}
       {...props}
     >
       {children}

@@ -1,3 +1,4 @@
+import * as React from "react";
 import { X } from "lucide-react";
 import { getStatusLabel } from "@/shared/constants/job-status";
 import { msg } from "@/shared/lib/messages";
@@ -96,10 +97,17 @@ function FilterChip({
       </span>
       <button
         onClick={onClear}
-        className="size-5 rounded-md flex items-center justify-center text-[#3D2E22]/40 hover:text-[#3D2E22] hover:bg-[#3D2E22]/10 transition-colors cursor-pointer"
+        className="close-button"
+        style={
+          {
+            "--close-btn-size": "20px",
+            "--close-btn-radius": "6px",
+            "--close-btn-icon": "12px",
+          } as React.CSSProperties
+        }
         aria-label={ariaLabel}
       >
-        <X className="size-3" />
+        <X />
       </button>
     </span>
   );

@@ -37,7 +37,7 @@ export function DeleteDialogs({
           if (!open) setBulkDeleteOpen(false);
         }}
       >
-        <DialogContent className="max-w-sm sm:max-w-sm">
+        <DialogContent className="max-w-md sm:max-w-md">
           <DialogTitleRow
             title={
               selectedCount === 1
@@ -95,7 +95,7 @@ export function DeleteDialogs({
           if (!open) setDeleteTarget(null);
         }}
       >
-        <DialogContent className="max-w-sm sm:max-w-sm">
+        <DialogContent className="max-w-md sm:max-w-md">
           <DialogTitleRow
             title={
               <>

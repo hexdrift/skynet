@@ -1,9 +1,9 @@
 "use client";
 
-import { SessionProvider as NextAuthSessionProvider, useSession } from "next-auth/react";
+import { SessionProvider as NextAuthSessionProvider, useSession, getSession } from "next-auth/react";
 import type { ComponentProps } from "react";
 import * as React from "react";
-import { setApiAuthToken } from "@/shared/lib/api";
+import { setApiAuthToken, setApiAuthTokenRefresher } from "@/shared/lib/api";
 
 type SessionProviderProps = ComponentProps<typeof NextAuthSessionProvider>;
 
@@ -25,6 +25,14 @@ function ApiAuthTokenBridge() {
   React.useEffect(() => {
     setApiAuthToken(session?.backendAccessToken);
   }, [session?.backendAccessToken]);
+
+  React.useEffect(() => {
+    setApiAuthTokenRefresher(async () => {
+      const fresh = await getSession();
+      return fresh?.backendAccessToken;
+    });
+    return () => setApiAuthTokenRefresher(undefined);
+  }, []);
 
   return null;
 }

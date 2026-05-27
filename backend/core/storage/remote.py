@@ -58,6 +58,9 @@ class RemoteDBJobStore:
         self.vector_search_enabled = False
         self._max_progress_events = settings.progress_events_per_job_cap
         self._max_log_entries = settings.log_entries_per_job_cap
+        # Force every connection's session timezone to UTC so TZ-aware writes
+        # into TIMESTAMPTZ columns round-trip without offset rotation, and any
+        # naive value that slipped into legacy rows is interpreted as UTC.
         self._engine = create_engine(
             db_url,
             echo=False,
@@ -66,6 +69,7 @@ class RemoteDBJobStore:
             max_overflow=max_overflow,
             pool_recycle=3600,
             pool_timeout=30,
+            connect_args={"options": "-c timezone=UTC"},
         )
         if settings.embeddings_enabled:
             vector_extension_ready = self._bootstrap_pgvector()
@@ -317,6 +321,7 @@ class RemoteDBJobStore:
         try:
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).delete()
+            session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id == optimization_id).delete()
             session.query(JobModel).filter(JobModel.optimization_id == optimization_id).delete()
             session.commit()
         finally:
@@ -370,6 +375,9 @@ class RemoteDBJobStore:
                 synchronize_session=False
             )
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id.in_(optimization_ids)).delete(
+                synchronize_session=False
+            )
+            session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id.in_(optimization_ids)).delete(
                 synchronize_session=False
             )
             deleted = (
@@ -1138,12 +1146,27 @@ class RemoteDBJobStore:
                 else {}
             )
 
+            summary_texts: dict[str, str | None] = (
+                {
+                    row[0]: row[1]
+                    for row in session.query(
+                        JobEmbeddingModel.optimization_id,
+                        JobEmbeddingModel.summary_text,
+                    )
+                    .filter(JobEmbeddingModel.optimization_id.in_(optimization_ids))
+                    .all()
+                }
+                if optimization_ids
+                else {}
+            )
+
             result: list[JobRecord] = []
             for j in jobs:
                 d = self._job_to_dict(j)
                 oid = str(j.optimization_id)
                 d["progress_count"] = progress_counts.get(oid, 0)
                 d["log_count"] = log_counts.get(oid, 0)
+                d["summary_text"] = summary_texts.get(oid)
                 result.append(d)
             return result
         finally:

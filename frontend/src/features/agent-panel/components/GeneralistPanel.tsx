@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { PanelLeftClose, RotateCcw, Sparkles, Wand2 } from "lucide-react";
+import { PanelLeftClose, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/primitives/popover";
@@ -224,8 +224,33 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                     <Sparkles className="size-3" aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[0.8125rem] font-medium leading-tight">
-                      {msg("auto.features.agent.panel.components.generalistpanel.3")}
+                    <div className="flex items-center gap-1.5 leading-tight">
+                      <span className="text-[0.8125rem] font-medium">
+                        {msg("auto.features.agent.panel.components.generalistpanel.3")}
+                      </span>
+                      <Popover>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="rounded-md p-1 text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors cursor-pointer"
+                                aria-label={msg(
+                                  "auto.features.agent.panel.components.generalistpanel.literal.2",
+                                )}
+                              >
+                                <WandSparkles className="size-3.5" />
+                              </button>
+                            </PopoverTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" dir="rtl">
+                            {msg("auto.features.agent.panel.components.generalistpanel.4")}
+                          </TooltipContent>
+                        </Tooltip>
+                        <PopoverContent side="bottom" align="center" sideOffset={8} className="p-0">
+                          <ToolsCarousel />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     {agent.statusLabel && (
                       <div className="text-[0.6875rem] text-muted-foreground truncate">
@@ -235,29 +260,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Popover>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors cursor-pointer"
-                            aria-label={msg(
-                              "auto.features.agent.panel.components.generalistpanel.literal.2",
-                            )}
-                          >
-                            <Wand2 className="size-3.5" />
-                          </button>
-                        </PopoverTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" dir="rtl">
-                        {msg("auto.features.agent.panel.components.generalistpanel.4")}
-                      </TooltipContent>
-                    </Tooltip>
-                    <PopoverContent side="bottom" align="center" sideOffset={8} className="p-0">
-                      <ToolsCarousel />
-                    </PopoverContent>
-                  </Popover>
                   <TrustToggle mode={trustMode} onCycle={cycleTrust} />
                   {agent.messages.length > 0 && (
                     <Tooltip>

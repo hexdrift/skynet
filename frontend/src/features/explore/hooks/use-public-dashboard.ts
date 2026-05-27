@@ -4,14 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   getPublicDashboard,
   invalidateCache,
-  type PublicDashboardMeta,
   type PublicDashboardPoint,
 } from "@/shared/lib/api";
 import { POLL_CATCHUP_EPSILON_MS, POLL_INTERVAL_MS } from "../constants";
 
 export interface PublicDashboardState {
   points: PublicDashboardPoint[];
-  meta: PublicDashboardMeta | null;
   loading: boolean;
   error: string | null;
 }
@@ -19,7 +17,6 @@ export interface PublicDashboardState {
 export function usePublicDashboard(): PublicDashboardState {
   const [state, setState] = useState<PublicDashboardState>({
     points: [],
-    meta: null,
     loading: true,
     error: null,
   });
@@ -34,7 +31,7 @@ export function usePublicDashboard(): PublicDashboardState {
         const data = await getPublicDashboard();
         if (cancelled) return;
         lastTickRef.current = Date.now();
-        setState({ points: data.points, meta: data.meta, loading: false, error: null });
+        setState({ points: data.points, loading: false, error: null });
       } catch (err) {
         if (cancelled) return;
         setState((s) => ({

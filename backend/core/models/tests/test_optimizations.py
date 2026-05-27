@@ -54,12 +54,11 @@ def test_optimization_status_response_minimal() -> None:
     assert resp.grid_result is None
 
 
-def test_optimization_status_response_pinned_archived_defaults() -> None:
-    """Verify OptimizationStatusResponse defaults pinned/archived to False."""
+def test_optimization_status_response_pinned_default() -> None:
+    """Verify OptimizationStatusResponse defaults pinned to False."""
     resp = OptimizationStatusResponse.model_validate(_required_base_fields())
 
     assert resp.pinned is False
-    assert resp.archived is False
 
 
 def test_optimization_status_response_persists_column_mapping() -> None:

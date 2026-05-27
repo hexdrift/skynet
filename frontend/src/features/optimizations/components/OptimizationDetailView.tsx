@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   XCircle,
-  Trash2,
   Clock,
   Code,
   Terminal,
@@ -21,10 +21,8 @@ import {
 import { toast } from "react-toastify";
 
 import { Button } from "@/shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
-import { Separator } from "@/shared/ui/primitives/separator";
 import { PingDot } from "@/shared/ui/ping-dot";
 import { FadeIn } from "@/shared/ui/motion";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
@@ -37,22 +35,21 @@ import {
   serveProgramStream,
   servePairProgramStream,
 } from "@/shared/lib/api";
-import type { ServeInfoResponse } from "@/shared/types/api";
+import type { LMActivity, ServeInfoResponse } from "@/shared/types/api";
 import {
   DEMO_OPTIMIZATION_ID,
   DEMO_GRID_OPTIMIZATION_ID,
+  DEMO_TRAJECTORY_PREVIEW_LAYOUT,
   buildGridDemoJob,
+  resetDemoSimulation,
   startDemoSimulation,
 } from "@/features/tutorial";
-import { Skeleton } from "@/shared/ui/bone-skeleton";
-import { optimizationDetailBones } from "../lib/bones";
+import { OptimizationDetailSkeleton } from "./OptimizationDetailSkeleton";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-status";
 import { registerTutorialHook } from "@/features/tutorial";
-import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationStatusResponse, OptimizationPayloadResponse } from "@/shared/types/api";
 import type { PipelineStage } from "../constants";
 import { extractScoresFromLogs } from "../lib/extract-scores";
@@ -61,19 +58,35 @@ import { DataTab } from "./DataTab";
 import { LogsTab } from "./LogsTab";
 import { ExportMenu } from "./ExportMenu";
 import { DeleteJobDialog } from "./DeleteJobDialog";
-import { CopyButton } from "./ui-primitives";
 import { StatusBadge } from "@/shared/ui/status-badge";
-import { ServeCodeSnippets } from "./ServeCodeSnippets";
-import { ServeChat } from "./ServeChat";
 import { ConfigTab } from "./ConfigTab";
 import { CodeTab } from "./CodeTab";
 import { StageInfoModal } from "./StageInfoModal";
-import { PairDetailView } from "./PairDetailView";
+import { PairSelectionStrip } from "./PairSelectionStrip";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
 import { LMActivityTab } from "./LMActivityTab";
+import { RunPlayground } from "./RunPlayground";
 import { linkifyMessage } from "@/shared/lib/linkify";
 import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
+
+// Treat naive ISO timestamps (no trailing tz marker) as UTC — that matches the
+// backend, which stores UTC datetimes that Pydantic emits without a suffix.
+// Without this, browsers in a positive UTC offset parse them as local time
+// and the elapsed clock either jumps backward or stays at 00:00:00.
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
+  const ms = Date.parse(hasTz ? value : `${value}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function formatElapsed(seconds: number): string {
+  const h = String(Math.floor(seconds / 3600)).padStart(2, "0");
+  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+  const s = String(seconds % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
 
 export function OptimizationDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -88,15 +101,40 @@ export function OptimizationDetailView() {
   const isGridDemoMode = id === DEMO_GRID_OPTIMIZATION_ID;
   const isAnyDemoMode = isDemoMode || isGridDemoMode;
 
+  // The NextAuth session resolves asynchronously on the client. Without this
+  // gate the first getJob() fires before setApiAuthToken() runs, returns 401,
+  // and flashes the "not found" UI until SSE/poll refetches a few seconds
+  // later with the token now in place.
+  const { status: sessionStatus } = useSession();
+  const authReady = isAnyDemoMode || sessionStatus === "authenticated";
+
   const [job, setJob] = useState<OptimizationStatusResponse | null>(null);
   const [payload, setPayload] = useState<OptimizationPayloadResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Bump to replay the demo optimization simulation. The deep-dive tour
+  // triggers this when reaching the trajectory step so users watch the tree
+  // grow live instead of seeing the already-completed final state.
+  const [demoReplayKey, setDemoReplayKey] = useState(0);
+
+  useEffect(
+    () =>
+      registerTutorialHook("replayDemoSimulation", () => {
+        resetDemoSimulation();
+        setDemoReplayKey((k) => k + 1);
+      }),
+    [],
+  );
+
   useEffect(() => {
     if (!isDemoMode) return;
-    return startDemoSimulation({ setJob: (fn) => setJob(fn), setLoading });
-  }, [isDemoMode]);
+    const fromTrajectory = demoReplayKey > 0;
+    return startDemoSimulation(
+      { setJob: (fn) => setJob(fn), setLoading },
+      { fromTrajectory },
+    );
+  }, [isDemoMode, demoReplayKey]);
 
   useEffect(() => {
     if (!isGridDemoMode) return;
@@ -142,6 +180,7 @@ export function OptimizationDetailView() {
       ? null
       : (effectiveJob.grid_result.pair_results.find((p) => p.pair_index === activePairIndex) ??
         null);
+  const isPairContext = activePair != null;
 
   const pairScorePoints = (() => {
     if (activePairIndex === null || !job?.logs) return [];
@@ -174,10 +213,11 @@ export function OptimizationDetailView() {
 
   useEffect(() => {
     if (isAnyDemoMode) return;
+    if (!authReady) return;
     getOptimizationPayload(id)
       .then(setPayload)
       .catch(() => {});
-  }, [id, isAnyDemoMode]);
+  }, [id, isAnyDemoMode, authReady]);
 
   const jobRef = useRef(job);
   useEffect(() => {
@@ -187,13 +227,14 @@ export function OptimizationDetailView() {
 
   useEffect(() => {
     if (isAnyDemoMode) return;
+    if (!authReady) return;
     void fetchJob();
-  }, [id, isAnyDemoMode, fetchJob]);
+  }, [id, isAnyDemoMode, authReady, fetchJob]);
 
   const API = getRuntimeEnv().apiUrl;
   useStreamWithPollFallback({
     url: isAnyDemoMode ? "" : `${API}/optimizations/${encodeURIComponent(id)}/stream`,
-    enabled: !isAnyDemoMode,
+    enabled: !isAnyDemoMode && authReady,
     onMessage: (event) => {
       try {
         const sseData = JSON.parse(event.data);
@@ -422,67 +463,77 @@ export function OptimizationDetailView() {
 
   const scorePoints = job?.logs?.length ? extractScoresFromLogs(job.logs) : [];
 
-  const optimizedPrompt =
-    job?.result?.program_artifact?.optimized_prompt ??
-    job?.grid_result?.best_pair?.program_artifact?.optimized_prompt ??
-    null;
+  // Optimized prompt picks the pair's artifact in pair view, otherwise falls
+  // back to the run's artifact, otherwise to the grid's best pair (for the
+  // grid-root overview banner/code tab).
+  const optimizedPrompt = isPairContext
+    ? (activePair.program_artifact?.optimized_prompt ?? null)
+    : (job?.result?.program_artifact?.optimized_prompt ??
+       job?.grid_result?.best_pair?.program_artifact?.optimized_prompt ??
+       null);
 
-  // Live elapsed timer — ticks every second for active jobs (must be before early returns)
+  // Demos passed to the serve playground — pair-scoped in pair view.
+  const playgroundDemos = isPairContext
+    ? (activePair.program_artifact?.optimized_prompt?.demos ?? [])
+    : (job?.result?.program_artifact?.optimized_prompt?.demos ??
+       job?.grid_result?.best_pair?.program_artifact?.optimized_prompt?.demos ??
+       []);
+
+  // LM activity is pair-scoped in pair view, otherwise the run's.
+  const viewLmActivity: LMActivity | null = isPairContext
+    ? ((activePair.lm_activity as LMActivity | undefined) ?? null)
+    : ((job?.result?.lm_activity as LMActivity | undefined) ?? null);
+
   const isActive = job ? ACTIVE_STATUSES.has(job.status) : false;
-  const [liveElapsed, setLiveElapsed] = useState("00:00:00");
   const startedAt = job?.started_at ?? null;
   const createdAt = job?.created_at ?? null;
   const completedAt = job?.completed_at ?? null;
   const elapsedSeconds = job?.elapsed_seconds ?? null;
+  // `now` ticks once per second only while the job is active, driving the
+  // elapsed-time derivation in `liveElapsed`. Decoupling the tick from the
+  // timestamp deps keeps the interval alive across polling refreshes that
+  // replace identical timestamp strings.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const startStr = startedAt ?? createdAt;
-    if (!startStr) return;
-    const start = new Date(startStr).getTime();
-
-    // For completed/cancelled/failed jobs: use server-provided elapsed or completed_at
+    if (!isActive) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isActive]);
+  // Anchor on the server-computed elapsed_seconds so the live counter is
+  // immune to client/server clock skew — wall-clock derivation alone can go
+  // negative and stall the badge at 00:00:00.
+  const [elapsedAnchor, setElapsedAnchor] = useState<{ ms: number; sec: number } | null>(null);
+  useEffect(() => {
+    if (elapsedSeconds != null && Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0) {
+      setElapsedAnchor({ ms: Date.now(), sec: elapsedSeconds });
+    }
+  }, [elapsedSeconds]);
+  const liveElapsed = useMemo(() => {
     if (!isActive) {
       if (elapsedSeconds != null && elapsedSeconds > 0) {
-        const diff = Math.floor(elapsedSeconds);
-        const h = String(Math.floor(diff / 3600)).padStart(2, "0");
-        const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
-        const s = String(diff % 60).padStart(2, "0");
-        setLiveElapsed(`${h}:${m}:${s}`);
-      } else if (completedAt) {
-        const end = new Date(completedAt).getTime();
-        const diff = Math.max(0, Math.floor((end - start) / 1000));
-        const h = String(Math.floor(diff / 3600)).padStart(2, "0");
-        const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
-        const s = String(diff % 60).padStart(2, "0");
-        setLiveElapsed(`${h}:${m}:${s}`);
+        return formatElapsed(Math.floor(elapsedSeconds));
       }
-      return;
+      const start = parseTimestampMs(startedAt ?? createdAt);
+      const end = parseTimestampMs(completedAt);
+      if (start !== null && end !== null) {
+        return formatElapsed(Math.max(0, Math.floor((end - start) / 1000)));
+      }
+      return "00:00:00";
     }
+    // Take the larger of wallclock (now - started_at) and the server anchor so
+    // a stale upstream `elapsed_seconds` (e.g. cached 0) doesn't reset the
+    // header counter back to zero on every page reload.
+    const start = parseTimestampMs(startedAt ?? createdAt);
+    const wall = start !== null ? Math.max(0, (now - start) / 1000) : 0;
+    const anchored = elapsedAnchor
+      ? elapsedAnchor.sec + Math.max(0, (now - elapsedAnchor.ms) / 1000)
+      : 0;
+    return formatElapsed(Math.floor(Math.max(wall, anchored)));
+  }, [now, isActive, startedAt, createdAt, completedAt, elapsedSeconds, elapsedAnchor]);
 
-    // For active jobs: live tick from now
-    const fmt = () => {
-      const diff = Math.max(0, Math.floor((Date.now() - start) / 1000));
-      const h = String(Math.floor(diff / 3600)).padStart(2, "0");
-      const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
-      const s = String(diff % 60).padStart(2, "0");
-      setLiveElapsed(`${h}:${m}:${s}`);
-    };
-    fmt();
-    const id = setInterval(fmt, 1000);
-    return () => clearInterval(id);
-  }, [startedAt, createdAt, completedAt, elapsedSeconds, isActive]);
-
-  if (loading) {
-    return (
-      <Skeleton
-        name="optimization-detail"
-        loading
-        initialBones={optimizationDetailBones}
-        color="var(--muted)"
-        animate="shimmer"
-      >
-        <div className="min-h-[60vh]" />
-      </Skeleton>
-    );
+  if (loading || !authReady) {
+    return <OptimizationDetailSkeleton />;
   }
 
   if (error || !job) {
@@ -498,6 +549,41 @@ export function OptimizationDetailView() {
   }
 
   const isTerminal = TERMINAL_STATUSES.has(job.status);
+  // Pair-aware terminal: a pair is considered "available for data export" once
+  // it has either a program artifact or an error recorded. This mirrors the
+  // standalone job's "isTerminal" gate so the data/export surfaces appear
+  // identically in both contexts.
+  const isPairTerminal = isPairContext
+    ? !!(activePair.error || activePair.program_artifact || activePair.optimized_test_metric != null)
+    : false;
+
+  // Tab gating uniform across run and pair contexts.
+  const showPlaygroundTab =
+    job.status === "success" && (job.optimization_type === "grid_search" || !!serveInfo);
+  const showDataTab = isPairContext
+    ? isPairTerminal
+    : isTerminal && job.optimization_type !== "grid_search";
+  const showLogsTab = job.optimization_type !== "grid_search" || isPairContext;
+  const showLmActivityTab = viewLmActivity != null;
+
+  // Export-ready banner — pair-aware. Pair shows when it has its own artifact
+  // (no error). Standalone shows when the run terminated successfully with any
+  // artifact/log data to export.
+  const showExportBanner = isPairContext
+    ? !activePair.error && !!activePair.program_artifact
+    : isTerminal &&
+      job.status !== "cancelled" &&
+      !!(
+        optimizedPrompt ||
+        (job.logs && job.logs.length > 0) ||
+        job.result?.program_artifact?.program_pickle_base64 ||
+        job.grid_result?.best_pair?.program_artifact?.program_pickle_base64
+      );
+
+  const pairCount = effectiveJob?.grid_result?.pair_results.length ?? 0;
+  const isBestPair =
+    isPairContext &&
+    effectiveJob?.grid_result?.best_pair?.pair_index === activePair.pair_index;
 
   return (
     <div className="space-y-6 pb-12">
@@ -513,106 +599,124 @@ export function OptimizationDetailView() {
         </div>
       </FadeIn>
 
-      {!(job.optimization_type === "grid_search" && activePairIndex !== null) && (
-        <FadeIn delay={0.1}>
-          <div
-            className=" rounded-xl border border-border/40 bg-gradient-to-br from-card to-card/80 p-5"
-            data-tutorial="detail-header"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-2 min-w-0">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <StatusBadge status={job.status} />
-                  {job.name && (
-                    <h2 className="text-lg sm:text-xl font-bold tracking-tight" dir="auto">
-                      {job.name}
-                    </h2>
-                  )}
-                </div>
-                {job.description && (
-                  <p className="text-sm text-muted-foreground/70 leading-relaxed">
-                    {job.description}
-                  </p>
+      <FadeIn delay={0.1}>
+        <div
+          className=" rounded-xl border border-border/40 bg-gradient-to-br from-card to-card/80 p-5"
+          data-tutorial="detail-header"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <StatusBadge status={job.status} />
+                {job.name && (
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight" dir="auto">
+                    {job.name}
+                  </h2>
                 )}
-                <code
-                  className="text-xs font-mono text-muted-foreground/60 cursor-pointer hover:text-primary transition-colors break-all"
-                  title={msg("auto.app.optimizations.id.page.literal.1")}
-                  aria-label={formatMsg("auto.app.optimizations.id.page.template.3", {
-                    p1: TERMS.optimization,
-                  })}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
+              </div>
+              {job.description && (
+                <p className="text-sm text-muted-foreground/70 leading-relaxed">
+                  {job.description}
+                </p>
+              )}
+              <code
+                className="text-xs font-mono text-muted-foreground/60 cursor-pointer hover:text-primary transition-colors break-all"
+                title={msg("auto.app.optimizations.id.page.literal.1")}
+                aria-label={formatMsg("auto.app.optimizations.id.page.template.3", {
+                  p1: TERMS.optimization,
+                })}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  void navigator.clipboard.writeText(job.optimization_id);
+                  toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
                     void navigator.clipboard.writeText(job.optimization_id);
                     toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      void navigator.clipboard.writeText(job.optimization_id);
-                      toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
-                    }
-                  }}
-                >
-                  {job.optimization_id}
-                </code>
-                <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
-                  <Badge variant="secondary" className="text-[0.6875rem]">
-                    {job.optimization_type === "grid_search"
-                      ? msg("auto.app.optimizations.id.page.literal.2")
-                      : msg("auto.app.optimizations.id.page.literal.3")}
-                  </Badge>
-                  <span className="flex items-center gap-1.5 tabular-nums" dir="ltr">
-                    <Clock className="size-3.5" />
-                    {liveElapsed}
+                  }
+                }}
+              >
+                {job.optimization_id}
+              </code>
+              <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
+                <Badge variant="secondary" className="text-[0.6875rem]">
+                  {job.optimization_type === "grid_search"
+                    ? msg("auto.app.optimizations.id.page.literal.2")
+                    : msg("auto.app.optimizations.id.page.literal.3")}
+                </Badge>
+                <span className="flex items-center gap-1.5 tabular-nums" dir="ltr">
+                  <Clock className="size-3.5" />
+                  {liveElapsed}
+                </span>
+                {isActive && job.estimated_remaining && (
+                  <span className="flex items-center gap-1.5">
+                    <Timer className="size-3.5" />
+                    {msg("auto.app.optimizations.id.page.3")}
+                    {job.estimated_remaining}
                   </span>
-                  {isActive && job.estimated_remaining && (
-                    <span className="flex items-center gap-1.5">
-                      <Timer className="size-3.5" />
-                      {msg("auto.app.optimizations.id.page.3")}
-                      {job.estimated_remaining}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    onClick={() => router.push(`/submit?clone=${job.optimization_id}`)}
-                    aria-label={msg("auto.app.optimizations.id.page.literal.4")}
-                  >
-                    <CopyPlus className="size-4" />
-                  </Button>
-                </TooltipButton>
-                {isActive && (
-                  <TooltipButton tooltip={msg("auto.app.optimizations.id.page.5")}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
-                      onClick={handleCancel}
-                      aria-label={msg("auto.app.optimizations.id.page.literal.5")}
-                    >
-                      <XCircle className="size-4" />
-                    </Button>
-                  </TooltipButton>
-                )}
-                {isTerminal && (
-                  <DeleteJobDialog
-                    optimizationId={job.optimization_id}
-                    onDeleted={() => router.push("/")}
-                  />
                 )}
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => router.push(`/submit?clone=${job.optimization_id}`)}
+                  aria-label={msg("auto.app.optimizations.id.page.literal.4")}
+                >
+                  <CopyPlus className="size-4" />
+                </Button>
+              </TooltipButton>
+              {isActive && (
+                <TooltipButton tooltip={msg("auto.app.optimizations.id.page.5")}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0"
+                    onClick={handleCancel}
+                    aria-label={msg("auto.app.optimizations.id.page.literal.5")}
+                  >
+                    <XCircle className="size-4" />
+                  </Button>
+                </TooltipButton>
+              )}
+              {isTerminal && (
+                <DeleteJobDialog
+                  optimizationId={job.optimization_id}
+                  onDeleted={() => router.push("/")}
+                />
+              )}
+            </div>
           </div>
-        </FadeIn>
+        </div>
+      </FadeIn>
+
+      {isPairContext && effectiveJob?.grid_result && (
+        <PairSelectionStrip
+          job={effectiveJob}
+          activePair={activePair}
+          activePairIndex={activePair.pair_index}
+          pairCount={pairCount}
+          isBest={isBestPair}
+          jobActive={isActive}
+          jobTerminal={isTerminal}
+          onBack={() => router.push(`/optimizations/${id}`)}
+          onPrev={() => router.push(`/optimizations/${id}?pair=${activePair.pair_index - 1}`)}
+          onNext={() => router.push(`/optimizations/${id}?pair=${activePair.pair_index + 1}`)}
+          onClone={() =>
+            router.push(`/submit?clone=${effectiveJob.optimization_id}&pair=${activePair.pair_index}`)
+          }
+          onCancel={handleCancel}
+          onDeleted={() => router.push(`/optimizations/${id}`)}
+        />
       )}
 
-      {job.status === "failed" && (job.message || (metrics.error as string)) && (
+      {job.status === "failed" && !isPairContext && (job.message || (metrics.error as string)) && (
         <FadeIn delay={0.15}>
           <div className="p-5 rounded-xl border border-red-300/60 bg-gradient-to-br from-red-50 to-red-100/40 shadow-[0_0_15px_rgba(239,68,68,0.06)]">
             <div className="flex items-start gap-3">
@@ -642,7 +746,20 @@ export function OptimizationDetailView() {
         </FadeIn>
       )}
 
-      {job.status === "cancelled" && (
+      {isPairContext && activePair.error && (
+        <FadeIn delay={0.05}>
+          <div className="rounded-xl border border-[#B04030]/30 bg-[#B04030]/5 p-4">
+            <div className="text-sm font-medium text-[#B04030] mb-1">
+              {msg("auto.features.optimizations.components.pairdetailview.3")}
+            </div>
+            <pre className="text-xs font-mono text-[#B04030]/80 whitespace-pre-wrap" dir="ltr">
+              {activePair.error}
+            </pre>
+          </div>
+        </FadeIn>
+      )}
+
+      {job.status === "cancelled" && !isPairContext && (
         <FadeIn>
           <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-300 bg-stone-50 text-stone-700">
             <XCircle className="size-5 shrink-0" />
@@ -663,22 +780,20 @@ export function OptimizationDetailView() {
         </FadeIn>
       )}
 
-      {isTerminal &&
-        job.status !== "cancelled" &&
-        !(job.optimization_type === "grid_search" && activePairIndex !== null) &&
-        (optimizedPrompt ||
-          (job.logs && job.logs.length > 0) ||
-          job.result?.program_artifact?.program_pickle_base64 ||
-          job.grid_result?.best_pair?.program_artifact?.program_pickle_base64) && (
-          <FadeIn delay={0.25}>
-            <div className="flex items-center gap-3 p-5 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 shadow-[0_0_20px_rgba(var(--primary),0.06)]">
-              <div className="flex-1">
-                <p className="text-sm font-medium">{msg("auto.app.optimizations.id.page.9")}</p>
-              </div>
-              <ExportMenu job={job} optimizedPrompt={optimizedPrompt} />
+      {showExportBanner && (
+        <FadeIn delay={0.25}>
+          <div className="flex items-center gap-3 p-5 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 shadow-[0_0_20px_rgba(var(--primary),0.06)]">
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                {isPairContext
+                  ? msg("auto.features.optimizations.components.pairdetailview.2")
+                  : msg("auto.app.optimizations.id.page.9")}
+              </p>
             </div>
-          </FadeIn>
-        )}
+            <ExportMenu job={job} optimizedPrompt={optimizedPrompt} />
+          </div>
+        </FadeIn>
+      )}
 
       {job.optimization_type === "grid_search" &&
         activePairIndex !== null &&
@@ -702,157 +817,107 @@ export function OptimizationDetailView() {
           </FadeIn>
         )}
 
-      {effectiveJob?.optimization_type === "grid_search" &&
-        activePairIndex !== null &&
-        activePair &&
-        effectiveJob.grid_result && (
-          <PairDetailView
-            job={effectiveJob}
-            activePair={activePair}
-            activePairIndex={activePairIndex}
-            pairCount={effectiveJob.grid_result.pair_results.length}
-            pairFilteredLogs={pairFilteredLogs}
-            pairScorePoints={pairScorePoints}
-            initialTab={initialTab}
-            serveInfo={serveInfo}
-            runHistory={runHistory}
-            setRunHistory={setRunHistory}
-            streamingRun={streamingRun}
-            serveLoading={serveLoading}
-            serveError={serveError}
-            setServeError={setServeError}
-            textareaRefs={textareaRefs}
-            chatScrollRef={chatScrollRef}
-            handleServe={handleServe}
-            onBack={() => router.push(`/optimizations/${id}`)}
-            onPrev={() => router.push(`/optimizations/${id}?pair=${activePairIndex - 1}`)}
-            onNext={() => router.push(`/optimizations/${id}?pair=${activePairIndex + 1}`)}
-            onClone={() =>
-              router.push(
-                `/submit?clone=${effectiveJob.optimization_id}&pair=${activePair.pair_index}`,
-              )
-            }
-            onCancel={handleCancel}
-            onClearHistory={handleClearHistory}
-            onStageClick={setStageModal}
-            onDeleted={() => router.push(`/optimizations/${id}`)}
-          />
-        )}
-
-      {!(job.optimization_type === "grid_search" && activePairIndex !== null) &&
-        (() => {
-          const tabCls =
-            "relative px-2.5 sm:px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
-          return (
-            <Tabs value={detailTab} onValueChange={setDetailTab} dir="rtl">
-              <TabsList
-                variant="line"
-                className="border-b border-border/50 pb-0 gap-0 overflow-x-auto no-scrollbar"
-                data-tutorial="detail-tabs"
-              >
-                <TabsTrigger value="overview" className={tabCls}>
-                  <TrendingUp className="size-3.5" />
-                  {msg("auto.app.optimizations.id.page.14")}
-                  {isActive && <PingDot className="ms-1" />}
-                </TabsTrigger>
-                {job.status === "success" &&
-                  (job.optimization_type === "grid_search" || serveInfo) && (
-                    <TabsTrigger
-                      value="playground"
-                      className={tabCls}
-                      data-tutorial="playground-tab"
-                    >
-                      <Send className="size-3.5" />
-                      {msg("auto.app.optimizations.id.page.15")}
-                    </TabsTrigger>
-                  )}
-                {job.optimization_type !== "grid_search" && isTerminal && (
-                  <TabsTrigger value="data" className={tabCls} data-tutorial="data-tab-trigger">
-                    <Database className="size-3.5" />
-                    {msg("auto.app.optimizations.id.page.16")}
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value="code" className={tabCls}>
-                  <Code className="size-3.5" />
-                  {msg("auto.app.optimizations.id.page.17")}
-                </TabsTrigger>
-                {job.optimization_type !== "grid_search" && (
-                  <TabsTrigger value="logs" className={tabCls} data-tutorial="logs-tab-trigger">
-                    <Terminal className="size-3.5" />
-                    {msg("auto.app.optimizations.id.page.18")}
-                    {isActive && <PingDot className="ms-1" />}
-                  </TabsTrigger>
-                )}
-                {job.optimization_type !== "grid_search" && job.result?.lm_activity && (
-                  <TabsTrigger value="lm-activity" className={tabCls}>
-                    <Activity className="size-3.5" />
-                    {msg("auto.app.optimizations.id.page.lm_activity")}
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value="config" className={tabCls} data-tutorial="config-tab-trigger">
-                  <Settings className="size-3.5" />
-                  {msg("auto.app.optimizations.id.page.19")}
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-6 mt-4" data-tutorial="overview-tab">
-                <OverviewTab
-                  job={effectiveJob ?? job}
-                  isActive={isActive}
-                  scorePoints={scorePoints}
-                  activePairIndex={activePairIndex}
-                  onStageClick={setStageModal}
-                  onPairSelect={(pi) => router.push(`/optimizations/${id}?pair=${pi}`)}
-                  onPairDeleted={(pi) => {
-                    try {
-                      window.localStorage.removeItem(`grid-serve:pair:${id}`);
-                    } catch {
-                      /* localStorage unavailable — nothing to clean up */
-                    }
-                    if (activePairIndex === pi) {
-                      router.replace(`/optimizations/${id}`);
-                    }
-                    void fetchJob();
-                  }}
-                />
-              </TabsContent>
-
-              {job.status === "success" && job.optimization_type === "grid_search" && (
-                <TabsContent
+      {(() => {
+        const tabCls =
+          "relative px-2.5 sm:px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
+        // Pair view pings the trajectory/logs tabs only while the pair itself
+        // is still running, matching the standalone run's behaviour exactly.
+        const pingActive = isPairContext
+          ? isActive &&
+            !activePair.error &&
+            !(activePair.program_artifact || activePair.optimized_test_metric != null)
+          : isActive;
+        return (
+          <Tabs value={detailTab} onValueChange={setDetailTab} dir="rtl">
+            <TabsList
+              variant="line"
+              className="border-b border-border/50 pb-0 gap-0 overflow-x-auto no-scrollbar"
+              data-tutorial="detail-tabs"
+            >
+              <TabsTrigger value="overview" className={tabCls}>
+                <TrendingUp className="size-3.5" />
+                {msg("auto.app.optimizations.id.page.14")}
+                {pingActive && <PingDot className="ms-1" />}
+              </TabsTrigger>
+              {showPlaygroundTab && (
+                <TabsTrigger
                   value="playground"
-                  className="space-y-4 mt-4"
-                  data-tutorial="serve-playground"
+                  className={tabCls}
+                  data-tutorial="playground-tab"
                 >
-                  <GridServeTab job={job} />
-                </TabsContent>
+                  <Send className="size-3.5" />
+                  {msg("auto.app.optimizations.id.page.15")}
+                </TabsTrigger>
               )}
-              {serveInfo && job.optimization_type !== "grid_search" && (
-                <TabsContent
-                  value="playground"
-                  className="space-y-4 mt-4"
-                  data-tutorial="serve-playground"
-                >
-                  <FadeIn>
-                    <div className="flex items-center justify-between pb-3 border-b border-border/60">
-                      <p className="text-sm text-muted-foreground">
-                        {msg("auto.app.optimizations.id.page.20")}
-                      </p>
-                      {runHistory.length > 0 && (
-                        <TooltipButton tooltip={msg("auto.app.optimizations.id.page.21")}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={handleClearHistory}
-                            aria-label={msg("auto.app.optimizations.id.page.literal.6")}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </TooltipButton>
-                      )}
-                    </div>
-                  </FadeIn>
-                  <ServeChat
+              {showDataTab && (
+                <TabsTrigger value="data" className={tabCls} data-tutorial="data-tab-trigger">
+                  <Database className="size-3.5" />
+                  {msg("auto.app.optimizations.id.page.16")}
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="code" className={tabCls}>
+                <Code className="size-3.5" />
+                {msg("auto.app.optimizations.id.page.17")}
+              </TabsTrigger>
+              {showLogsTab && (
+                <TabsTrigger value="logs" className={tabCls} data-tutorial="logs-tab-trigger">
+                  <Terminal className="size-3.5" />
+                  {msg("auto.app.optimizations.id.page.18")}
+                  {pingActive && <PingDot className="ms-1" />}
+                </TabsTrigger>
+              )}
+              {showLmActivityTab && (
+                <TabsTrigger value="lm-activity" className={tabCls}>
+                  <Activity className="size-3.5" />
+                  {msg("auto.app.optimizations.id.page.lm_activity")}
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="config" className={tabCls} data-tutorial="config-tab-trigger">
+                <Settings className="size-3.5" />
+                {msg("auto.app.optimizations.id.page.19")}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent
+              value="overview"
+              className="space-y-6 mt-4"
+              data-tutorial={isPairContext ? "pair-detail" : "overview-tab"}
+            >
+              <OverviewTab
+                job={effectiveJob ?? job}
+                isActive={isActive}
+                scorePoints={isPairContext ? pairScorePoints : scorePoints}
+                activePairIndex={activePairIndex}
+                activePair={activePair}
+                onStageClick={setStageModal}
+                onPairSelect={(pi) => router.push(`/optimizations/${id}?pair=${pi}`)}
+                onPairDeleted={(pi) => {
+                  try {
+                    window.localStorage.removeItem(`grid-serve:pair:${id}`);
+                  } catch {
+                    /* localStorage unavailable — nothing to clean up */
+                  }
+                  if (activePairIndex === pi) {
+                    router.replace(`/optimizations/${id}`);
+                  }
+                  void fetchJob();
+                }}
+                trajectoryPreviewLayout={
+                  isDemoMode && !isPairContext ? DEMO_TRAJECTORY_PREVIEW_LAYOUT : undefined
+                }
+              />
+            </TabsContent>
+
+            {showPlaygroundTab && (
+              <TabsContent
+                value="playground"
+                className="space-y-4 mt-4"
+                data-tutorial="serve-playground"
+              >
+                {job.optimization_type === "grid_search" && !isPairContext ? (
+                  <GridServeTab job={job} />
+                ) : serveInfo ? (
+                  <RunPlayground
                     serveInfo={serveInfo}
                     runHistory={runHistory}
                     setRunHistory={setRunHistory}
@@ -863,87 +928,50 @@ export function OptimizationDetailView() {
                     textareaRefs={textareaRefs}
                     chatScrollRef={chatScrollRef}
                     handleServe={handleServe}
-                    demos={
-                      job?.result?.program_artifact?.optimized_prompt?.demos ??
-                      job?.grid_result?.best_pair?.program_artifact?.optimized_prompt?.demos ??
-                      []
-                    }
+                    demos={playgroundDemos}
+                    optimizationId={job.optimization_id}
+                    pairIndex={isPairContext ? activePair.pair_index : undefined}
+                    onClearHistory={handleClearHistory}
                   />
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">
-                        <HelpTip text={tip("serve.section_run")}>
-                          {msg("auto.app.optimizations.id.page.22")}
-                        </HelpTip>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-1.5">
-                        <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider">
-                          <HelpTip text={tip("serve.api_url_run")}>
-                            {msg("auto.app.optimizations.id.page.23")}
-                          </HelpTip>
-                        </p>
-                        <div className="rounded-lg bg-muted/40 p-2.5 pe-8 relative group" dir="ltr">
-                          <code className="text-xs font-mono break-all">
-                            {msg("auto.app.optimizations.id.page.24")}
-                            {getRuntimeEnv().apiUrl}
-                            {msg("auto.app.optimizations.id.page.25")}
-                            {id}
-                          </code>
-                          <CopyButton
-                            text={`${getRuntimeEnv().apiUrl}/serve/${id}`}
-                            className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100"
-                          />
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      <div className="space-y-2">
-                        <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider">
-                          <HelpTip text={tip("serve.integration_code")}>
-                            {msg("auto.app.optimizations.id.page.26")}
-                          </HelpTip>
-                        </p>
-                        <ServeCodeSnippets serveInfo={serveInfo} optimizationId={id} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              )}
-
-              <TabsContent value="data">
-                <DataTab job={job} />
+                ) : null}
               </TabsContent>
+            )}
 
-              <TabsContent value="code" className="space-y-6 mt-4">
-                <CodeTab
-                  signatureCode={signatureCode}
-                  metricCode={metricCode}
-                  optimizedPrompt={optimizedPrompt}
+            {showDataTab && (
+              <TabsContent value="data">
+                <DataTab job={job} pairIndex={isPairContext ? activePair.pair_index : undefined} />
+              </TabsContent>
+            )}
+
+            <TabsContent value="code" className="space-y-6 mt-4">
+              <CodeTab
+                signatureCode={signatureCode ?? ""}
+                metricCode={metricCode ?? ""}
+                optimizedPrompt={optimizedPrompt}
+              />
+            </TabsContent>
+
+            {showLogsTab && (
+              <TabsContent value="logs" data-tutorial="live-logs">
+                <LogsTab
+                  logs={isPairContext ? pairFilteredLogs : (job.logs ?? [])}
+                  live={isActive}
                 />
               </TabsContent>
+            )}
 
-              {job.optimization_type !== "grid_search" && (
-                <TabsContent value="logs" data-tutorial="live-logs">
-                  <LogsTab logs={job.logs} live={isActive} />
-                </TabsContent>
-              )}
-
-              {job.optimization_type !== "grid_search" && job.result?.lm_activity && (
-                <TabsContent value="lm-activity" className="mt-4">
-                  <LMActivityTab lmActivity={job.result.lm_activity} />
-                </TabsContent>
-              )}
-
-              <TabsContent value="config" className="mt-4" data-tutorial="config-section">
-                <ConfigTab job={job} payload={payload} />
+            {showLmActivityTab && viewLmActivity && (
+              <TabsContent value="lm-activity" className="mt-4">
+                <LMActivityTab lmActivity={viewLmActivity} />
               </TabsContent>
-            </Tabs>
-          );
-        })()}
+            )}
+
+            <TabsContent value="config" className="mt-4" data-tutorial="config-section">
+              <ConfigTab job={job} payload={payload} activePair={activePair ?? undefined} />
+            </TabsContent>
+          </Tabs>
+        );
+      })()}
 
       <StageInfoModal stage={stageModal} job={job} onClose={() => setStageModal(null)} />
     </div>

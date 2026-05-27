@@ -128,6 +128,7 @@ export interface OptimizationSummaryResponse {
   best_pair_label?: string | null;
   task_fingerprint?: string | null;
   compare_fingerprint?: string | null;
+  summary_text?: string | null;
 }
 
 export interface PaginatedJobsResponse {

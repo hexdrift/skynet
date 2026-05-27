@@ -19,9 +19,6 @@ export function SubmitNav({ w }: { w: SubmitWizardContext }) {
           <ChevronRight className="h-4 w-4" />
           {msg("auto.features.submit.components.submitnav.1")}
         </Button>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {step + 1} / {STEPS.length}
-        </span>
         <Button
           onClick={handleNext}
           disabled={advancing}

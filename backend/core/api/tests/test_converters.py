@@ -231,11 +231,10 @@ def test_overview_to_base_fields_picks_up_job_type() -> None:
     assert fields["optimization_type"] == "grid_search"
 
 
-def test_overview_to_base_fields_pinned_and_archived_default_false() -> None:
-    """``pinned`` and ``archived`` default to ``False``."""
+def test_overview_to_base_fields_pinned_default_false() -> None:
+    """``pinned`` defaults to ``False``."""
     fields = overview_to_base_fields({})
     assert fields["pinned"] is False
-    assert fields["archived"] is False
 
 
 def test_overview_to_base_fields_passes_through_model_name() -> None:
