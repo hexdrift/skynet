@@ -86,8 +86,9 @@ export function TaggerAnnotation({
 
   const doExport = useCallback(
     (format: "csv" | "json" | "xlsx" | "xls") => {
-      exportAnnotations(data, columns, annotations, config, format);
-      showConfettiBriefly();
+      void exportAnnotations(data, columns, annotations, config, format).then(
+        showConfettiBriefly,
+      );
     },
     [data, columns, annotations, config, showConfettiBriefly],
   );

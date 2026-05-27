@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { DataRow, Annotation, TaggerConfig } from "./types";
 
 type ExportFormat = "csv" | "json" | "xlsx" | "xls";
@@ -73,12 +72,15 @@ function exportJSON(rows: Array<Record<string, string>>, filename: string) {
   download(new Blob([json], { type: "application/json;charset=utf-8" }), filename);
 }
 
-function exportExcel(
+async function exportExcel(
   allCols: string[],
   rows: Array<Record<string, string>>,
   filename: string,
   bookType: "xlsx" | "xlml",
 ) {
+  // Lazy-load xlsx (~900KB) so it stays out of the initial tagger-route
+  // chunk — only pulled in when an Excel export is actually requested.
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(rows, { header: allCols });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Annotations");
@@ -90,7 +92,7 @@ function exportExcel(
   download(new Blob([buf], { type: mime }), filename);
 }
 
-export function exportAnnotations(
+export async function exportAnnotations(
   data: DataRow[],
   columns: string[],
   annotations: Record<string, Annotation>,
@@ -108,10 +110,10 @@ export function exportAnnotations(
       exportJSON(rows, `${base}.json`);
       break;
     case "xlsx":
-      exportExcel(allCols, rows, `${base}.xlsx`, "xlsx");
+      await exportExcel(allCols, rows, `${base}.xlsx`, "xlsx");
       break;
     case "xls":
-      exportExcel(allCols, rows, `${base}.xls`, "xlml");
+      await exportExcel(allCols, rows, `${base}.xls`, "xlml");
       break;
   }
 }
