@@ -23,5 +23,8 @@ export function useJobsRealtime({ data, fetchJobs }: UseJobsRealtimeArgs) {
     poll: () => void fetchJobs(),
     pollIntervalMs: POLL_FALLBACK_MS,
     pollOnlyOnClosed: false,
+    // Stream auth failed even after a token refresh — fall back to the
+    // self-healing fetchJobs() path instead of silently going stale.
+    onAuthError: () => void fetchJobs(),
   });
 }
