@@ -201,7 +201,10 @@ export function ConfigTab({
         )}
       </FadeIn>
       <div className="space-y-4">
-        <Card className="relative overflow-hidden shadow-[0_1px_3px_rgba(28,22,18,0.04),inset_0_1px_0_rgba(255,255,255,0.5)]">
+        <Card
+          data-tutorial="config-summary"
+          className="relative overflow-hidden shadow-[0_1px_3px_rgba(28,22,18,0.04),inset_0_1px_0_rgba(255,255,255,0.5)]"
+        >
           <div
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#C8A882]/40 to-transparent"
             aria-hidden="true"

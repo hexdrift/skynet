@@ -866,11 +866,12 @@ const tutorialSteps: TutorialStep[] = [
     description: formatMsg("auto.features.tutorial.lib.steps.template.38", {
       p1: TERMS.modelPlural,
     }),
-    target: "[data-tutorial='config-tab-trigger']",
-    placement: "bottom",
+    target: "[data-tutorial='config-summary']",
+    placement: "top",
     beforeShow: async () => {
       await ensureDemoDetail();
       setDetailTab("config");
+      await waitForElement("[data-tutorial='config-summary']");
     },
     track: "deep-dive",
     readingTimeSec: 7,
