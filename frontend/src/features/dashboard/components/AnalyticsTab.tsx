@@ -191,7 +191,7 @@ function AnalyticsTabImpl({
   }
 
   return (
-    <div className="space-y-6">
+    <div data-tutorial="analytics-content" className="space-y-6">
       <AnalyticsFilterChips filters={filters} />
 
       <AnimatePresence mode="wait">
