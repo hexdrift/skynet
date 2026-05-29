@@ -19,7 +19,12 @@ from core.storage.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # ``disable_existing_loggers=False`` keeps app loggers (e.g.
+    # ``core.worker.engine``) usable after Alembic configures its own
+    # logging, otherwise Python's ``logging.config.fileConfig`` marks
+    # every pre-existing logger as ``disabled=True`` and silently drops
+    # their records — breaking ``caplog`` capture in the test suite.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 env_url = os.environ.get("REMOTE_DB_URL")
 if env_url:

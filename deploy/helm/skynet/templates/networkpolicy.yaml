@@ -40,8 +40,17 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    {{- if .Values.pgbouncer.enabled }}
+    # PgBouncer transaction pooler.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "skynet.pgbouncer.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.pgbouncer.service.port }}
+    {{- else if .Values.postgres.enabled }}
     # In-cluster postgres (when bundled).
-    {{- if .Values.postgres.enabled }}
     - to:
         - podSelector:
             matchLabels:
@@ -153,9 +162,9 @@ spec:
             except:
               - 169.254.0.0/16
     {{- end }}
-{{- if .Values.postgres.enabled }}
+  {{- if .Values.postgres.enabled }}
 ---
-# Postgres ingress: only the backend pods may reach it.
+# Postgres ingress: backend pods connect directly unless PgBouncer is enabled.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -172,11 +181,73 @@ spec:
     - Ingress
   ingress:
     - from:
+        {{- if .Values.pgbouncer.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "skynet.pgbouncer.selectorLabels" . | nindent 14 }}
+        {{- end }}
         - podSelector:
             matchLabels:
               {{- include "skynet.backend.selectorLabels" . | nindent 14 }}
       ports:
         - protocol: TCP
           port: {{ .Values.postgres.service.port }}
-{{- end }}
+  {{- end }}
+  {{- if .Values.pgbouncer.enabled }}
+---
+# PgBouncer ingress: backend pods connect here; PgBouncer connects onward to Postgres.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "skynet.pgbouncer.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgbouncer
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "skynet.pgbouncer.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "skynet.backend.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.pgbouncer.service.port }}
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if .Values.postgres.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "skynet.postgres.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.service.port }}
+    {{- end }}
+    {{- if .Values.networkPolicy.egressCidrs }}
+    - to:
+        {{- range .Values.networkPolicy.egressCidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+    {{- else if not .Values.postgres.enabled }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
+    {{- end }}
+  {{- end }}
 {{- end }}

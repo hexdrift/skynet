@@ -1,0 +1,153 @@
+# Skynet load-test stack — isolated multi-pod environment for end-to-end
+# load testing without touching the dev or production DBs.
+#
+# Topology
+#   postgres  -> dedicated DB, separate volume, port published only locally
+#   migrate   -> one-shot alembic upgrade head, exits cleanly
+#   pgbouncer -> transaction-pooling proxy, matches the production topology
+#   mock-lm   -> OpenAI-compatible canned-response LM (no real provider calls)
+#   api       -> three backend replicas behind the host port range
+#
+# Usage
+#   cd backend
+#   docker compose -f load_tests/docker-compose.loadtest.yml up --build -d
+#   python load_tests/scenarios/<scenario>.py
+#   docker compose -f load_tests/docker-compose.loadtest.yml down -v
+
+name: skynet-loadtest
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: skynet_loadtest
+      POSTGRES_USER: skynet
+      POSTGRES_PASSWORD: loadtest
+    # Bind only to loopback so the test DB cannot accidentally be reached
+    # from another developer's machine on the LAN.
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - loadtest-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skynet -d skynet_loadtest"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      REMOTE_DB_URL: postgresql://skynet:loadtest@postgres:5432/skynet_loadtest
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    environment:
+      DATABASE_URL: postgresql://skynet:loadtest@postgres:5432/skynet_loadtest
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "1000"
+      DEFAULT_POOL_SIZE: "40"
+      AUTH_TYPE: plain
+    ports:
+      - "127.0.0.1:56432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U skynet -d skynet_loadtest || exit 0"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mock-lm:
+    build:
+      context: mock_lm
+      dockerfile: Dockerfile
+    environment:
+      MOCK_LM_LATENCY_MS: "5"
+      MOCK_LM_FAILURE_RATE: "0"
+    ports:
+      - "127.0.0.1:59000:9000"
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # Three replicas to exercise leader election, idempotent submissions
+    # across pods, and HPA-style scale assumptions. Named via project +
+    # service so the failure-injection scenario can target one by index.
+    deploy:
+      replicas: 3
+    environment:
+      # PgBouncer fronts every backend connection — same as the helm chart
+      # default once scaled. DB_PGBOUNCER_TRANSACTION_MODE=true disables
+      # session-scoped pool features incompatible with transaction pooling.
+      REMOTE_DB_URL: postgresql://skynet:loadtest@pgbouncer:5432/skynet_loadtest
+      DB_PGBOUNCER_TRANSACTION_MODE: "true"
+      DB_POOL_SIZE: "5"
+      DB_POOL_MAX_OVERFLOW: "10"
+      DB_POOL_TIMEOUT: "10"
+      # Shared HS256 signing secret matches what the load-test harness uses
+      # to mint bearer tokens; auth.py rejects every request otherwise.
+      BACKEND_AUTH_SECRET: loadtest-secret-do-not-use-in-production
+      # Unlimited quota for load-test users — every scenario uses one of
+      # these usernames so the per-user job cap never fires.
+      QUOTA_OVERRIDES: '{"load-user-0":null,"load-user-1":null,"load-user-2":null,"load-user-3":null,"load-user-4":null,"load-user-5":null,"load-user-6":null,"load-user-7":null,"load-user-burst":null,"load-user-lifecycle":null,"load-user-dashboard":null,"load-user-failure":null}'
+      OPENAI_API_KEY: fake-loadtest-key
+      OPENAI_API_BASE: http://mock-lm:9000/v1
+      WORKER_CONCURRENCY: "4"
+      WORKER_POLL_INTERVAL: "1.0"
+      LOG_LEVEL: WARNING
+      LOG_FORMAT: text
+      SKYNET_CODE_VERSION: loadtest
+      # Embeddings would otherwise hit the public Jina/OpenAI endpoint; the
+      # load test does not exercise the explore-map and disabling it keeps
+      # background tasks deterministic.
+      EMBEDDINGS_ENABLED: "false"
+    expose:
+      - "8000"
+    # No host ports — every host-side request goes through the nginx LB.
+    # The failure-injection scenario still targets individual replicas via
+    # `docker compose ps -q api`.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+      mock-lm:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status == 200 else 1)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  # Round-robin load balancer in front of the 3 api replicas. The
+  # orchestrator drives every scenario through this single host port so
+  # read load actually fans out across pods (not just the worker side).
+  lb:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:58000:80"
+    volumes:
+      - ./lb.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  loadtest-pgdata:
+
+networks:
+  default:
+    name: skynet-loadtest

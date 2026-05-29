@@ -35,6 +35,8 @@ COPY . .
 
 RUN UV_PYTHON_DOWNLOADS=never uv sync --frozen
 
+ARG GIT_SHA=unknown
+
 # Use UID 1001 with GID 0 — works everywhere (Docker, Podman, OpenShift restricted-v2 SCC).
 # OpenShift assigns a random UID at runtime but always with GID 0, so /app must be
 # group-0-owned and group-writable for the editable install metadata to be accessible.
@@ -47,8 +49,9 @@ USER 1001
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
-ENV WORKER_CONCURRENCY=2
+ENV WORKER_CONCURRENCY=4
 ENV WORKER_POLL_INTERVAL=2.0
+ENV SKYNET_CODE_VERSION=$GIT_SHA
 ENV LOG_LEVEL=INFO
 # Containerized runs default to structured logs; override to "text" only
 # when running the image interactively for debugging.
