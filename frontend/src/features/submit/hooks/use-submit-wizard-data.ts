@@ -43,9 +43,17 @@ export function useRecentModelConfigs() {
 
   const saveToRecent = useCallback((config: ModelConfig) => {
     if (!config.name) return;
+    // Strip api_key before persisting — recents go to localStorage and the
+    // key must never live on disk. The wizard repopulates a fresh key per
+    // submission anyway.
+    const { api_key: _omit, ...safeExtra } = config.extra ?? {};
+    const safeConfig: ModelConfig = {
+      ...config,
+      extra: Object.keys(safeExtra).length > 0 ? safeExtra : undefined,
+    };
     setRecentConfigs((prev) => {
-      const deduped = prev.filter((c) => c.name !== config.name);
-      const next = [config, ...deduped].slice(0, MAX_RECENT);
+      const deduped = prev.filter((c) => c.name !== safeConfig.name);
+      const next = [safeConfig, ...deduped].slice(0, MAX_RECENT);
       try {
         localStorage.setItem(RECENT_KEY, JSON.stringify(next));
       } catch {
@@ -64,7 +72,20 @@ export function useRecentModelConfigs() {
     }
   }, []);
 
-  return { recentConfigs, saveToRecent, clearRecentConfigs };
+  const removeRecentConfig = useCallback((name: string) => {
+    setRecentConfigs((prev) => {
+      const next = prev.filter((c) => c.name !== name);
+      try {
+        if (next.length === 0) localStorage.removeItem(RECENT_KEY);
+        else localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      } catch {
+        // Storage disabled — in-memory list is still updated.
+      }
+      return next;
+    });
+  }, []);
+
+  return { recentConfigs, saveToRecent, clearRecentConfigs, removeRecentConfig };
 }
 
 export function useModelCatalog() {

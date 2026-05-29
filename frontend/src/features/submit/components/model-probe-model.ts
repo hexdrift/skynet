@@ -88,21 +88,6 @@ export function scoreModel(value: string): number {
   return score;
 }
 
-export function smartDefaults(models: CatalogModel[]): Set<string> {
-  const eligible = models
-    .filter((m) => !EXCLUDE_PATTERN.test(m.value) && !DEPRECATED_PATTERN.test(m.value))
-    .sort((a, b) => scoreModel(b.value) - scoreModel(a.value));
-  const seen = new Set<string>();
-  const picks = new Set<string>();
-  for (const m of eligible) {
-    if (picks.size >= 5) break;
-    if (seen.has(m.provider)) continue;
-    seen.add(m.provider);
-    picks.add(m.value);
-  }
-  return picks;
-}
-
 export function groupByProvider(models: CatalogModel[]): Map<string, CatalogModel[]> {
   const out = new Map<string, CatalogModel[]>();
   for (const m of models) {
