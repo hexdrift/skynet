@@ -9,7 +9,7 @@ import { cn } from "@/shared/lib/utils";
 import type { AgentToolCall } from "@/shared/ui/agent/types";
 
 import { isPlainObject } from "../lib/entry-format";
-import { getToolMeta, prettifyToolName } from "../lib/tool-meta";
+import { getToolMeta, getToolTitle } from "../lib/tool-meta";
 
 import { EntryRow } from "./EntryRow";
 
@@ -47,11 +47,7 @@ export function ToolCallRow({
   customBody,
 }: ToolCallRowProps) {
   const meta = getToolMeta(call.tool);
-  const derivedTitle =
-    title ??
-    (meta.title === msg("auto.features.agent.panel.components.toolcallrow.literal.1")
-      ? prettifyToolName(call.tool)
-      : meta.title);
+  const derivedTitle = title ?? getToolTitle(call.tool);
   const Icon = icon ?? meta.icon;
 
   const initiallyOpen = call.status !== "done";
@@ -204,7 +200,7 @@ export function ToolCallRow({
                     </Section>
                   )}
                   {!hasArgs && !hasResult && call.status === "running" && (
-                    <div className="text-[0.75rem] text-muted-foreground italic">
+                    <div className="text-[0.75rem] italic text-muted-foreground/75 leading-snug">
                       {msg("auto.features.agent.panel.components.toolcallrow.2")}
                     </div>
                   )}
@@ -275,7 +271,9 @@ function StatusGlyph({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="mb-1 text-[0.6875rem] font-medium text-muted-foreground/75">{label}</div>
+      <div className="mb-1 text-[0.6875rem]/[1.55] font-medium text-muted-foreground/70">
+        {label}
+      </div>
       {children}
     </div>
   );
@@ -285,16 +283,16 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
   if (typeof result === "string") {
     const trimmed = result.trim();
     if (!trimmed) {
-      return <div className="text-[0.75rem] text-muted-foreground">—</div>;
+      return <EmptyPlaceholder />;
     }
     return (
       <div className="relative" dir="ltr">
         <pre
           className={cn(
-            "whitespace-pre-wrap break-words font-mono text-[0.6875rem] leading-relaxed max-h-52 overflow-y-auto rounded-md border p-2 pe-9",
+            "whitespace-pre-wrap break-words font-mono text-[0.6875rem]/[1.55] max-h-52 overflow-y-auto rounded-md border p-2 pe-9",
             isError
               ? "border-[#9B2C1F]/20 bg-[#FCEFEB]/60 text-[#7A1E13]"
-              : "border-border/40 bg-background/70 text-foreground",
+              : "border-border/40 bg-background/70 text-foreground/90",
           )}
         >
           {trimmed}
@@ -307,7 +305,7 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
   if (isPlainObject(result)) {
     const entries = Object.entries(result);
     if (entries.length === 0) {
-      return <div className="text-[0.75rem] text-muted-foreground">—</div>;
+      return <EmptyPlaceholder />;
     }
     return (
       <dl className="space-y-1.5">
@@ -320,7 +318,7 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
 
   if (Array.isArray(result)) {
     if (result.length === 0) {
-      return <div className="text-[0.75rem] text-muted-foreground">—</div>;
+      return <EmptyPlaceholder />;
     }
     return (
       <dl className="space-y-1.5">
@@ -328,7 +326,7 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
           <EntryRow key={idx} argKey={`${idx + 1}`} value={item} />
         ))}
         {result.length > 20 && (
-          <div className="text-[0.625rem] text-muted-foreground/70">
+          <div className="text-[0.625rem] italic text-muted-foreground/60">
             {msg("auto.features.agent.panel.components.toolcallrow.3")}
             {result.length - 20}…
           </div>
@@ -338,10 +336,14 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
   }
 
   return (
-    <div className="text-[0.75rem] font-mono text-foreground" dir="ltr">
+    <div className="font-mono text-[0.6875rem]/[1.55] text-foreground/90" dir="ltr">
       {String(result)}
     </div>
   );
+}
+
+function EmptyPlaceholder() {
+  return <div className="text-[0.6875rem]/[1.55] text-muted-foreground/60">—</div>;
 }
 
 function CopyButton({ text }: { text: string }) {

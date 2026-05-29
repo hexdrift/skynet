@@ -19,6 +19,12 @@ export interface GeneralistAgentRequest {
   chat_history: ChatTurn[];
   wizard_state: WizardState;
   trust_mode: TrustMode;
+  conversation_id?: string | null;
+}
+
+export interface ConversationMetaPayload {
+  conversation_id: string;
+  title: string;
 }
 
 export interface GeneralistAgentHandlers {
@@ -29,6 +35,7 @@ export interface GeneralistAgentHandlers {
   onPendingApproval?: (ev: PendingApprovalPayload) => void;
   onApprovalResolved?: (ev: ApprovalResolvedPayload) => void;
   onMessagePatch?: (chunk: string) => void;
+  onConversationMeta?: (ev: ConversationMetaPayload) => void;
   onDone: (result: { assistant_message: string; model: string | null }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
@@ -109,6 +116,12 @@ export async function streamGeneralistAgent(
         break;
       case "message_patch":
         handlers.onMessagePatch?.(String(data.chunk ?? ""));
+        break;
+      case "conversation_meta":
+        handlers.onConversationMeta?.({
+          conversation_id: String(data.conversation_id ?? ""),
+          title: String(data.title ?? ""),
+        });
         break;
       case "done": {
         const rawModel = data.model;

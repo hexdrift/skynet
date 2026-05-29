@@ -12,7 +12,6 @@ import { TERMS } from "@/shared/lib/terms";
 
 export const ARG_LABELS: Record<string, string> = {
   optimization_id: msg("auto.features.agent.panel.lib.entry.row.literal.1"),
-  template_id: msg("auto.features.agent.panel.lib.entry.row.literal.2"),
   job_id: msg("auto.features.agent.panel.lib.entry.row.literal.3"),
   ids: msg("auto.features.agent.panel.lib.entry.row.literal.4"),
   optimization_ids: msg("auto.features.agent.panel.lib.entry.row.literal.5"),

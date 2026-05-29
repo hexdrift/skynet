@@ -23,6 +23,7 @@ export interface WizardState {
   signature_code?: string;
   metric_code?: string;
   model_configured?: boolean;
+  staged_dataset_id?: string;
   overridden_fields?: string[];
   job_name?: string;
   job_description?: string;
