@@ -62,6 +62,10 @@ skills-lock.json
 
 # Tooling output
 /codedb.snapshot
+codedb.snapshot
+.tmp_buggy_conversation.txt
+.helm-out.yml
+backend/load_tests/results/
 frontend/perf-results/
 logs/
 *.log
