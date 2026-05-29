@@ -1,6 +1,6 @@
 """Generalist agent that drives the Skynet wizard via MCP tools.
 
-A :class:`dspy.ReAct` on top of the MCP surface exposed by
+A :class:`dspy.ReActV2` on top of the MCP surface exposed by
 ``backend/core/api/mcp_mount.py``. The agent observes the current wizard
 state, chooses from a phased tool list, and streams reasoning + sub-tool
 progress over the same SSE envelope used by :mod:`code_agent`.
@@ -8,11 +8,15 @@ progress over the same SSE envelope used by :mod:`code_agent`.
 Phased exposure (the gate):
 
 * Always available: read-only discovery tools (``list_models``,
-  ``list_templates``, ``get_registry_snapshot``, ``get_job_*``, analytics).
-* Unlocked once the dataset has columns + roles: ``edit_code``,
-  ``validate_code``, ``profile_datasets``.
-* Unlocked once signature + metric + model are all set: ``submit_job``,
-  ``submit_grid_search``.
+  ``get_registry_snapshot``, ``get_job_*``, analytics).
+* Unlocked once the dataset has columns + roles: ``validate_code``,
+  ``profile_datasets``.
+* Unlocked once the run is NAMED and the dataset is ready:
+  ``request_code_authoring`` (the Signature/Metric step). Mirrors the
+  wizard's Basics → Data → Params → Code order so the wizard is populated
+  and verifiable before any code exists.
+* Unlocked once name + signature + metric + model are all set:
+  ``submit_job``.
 * Always available post-submit: ``cancel_job``, rename/pin.
 
 Tool docstrings become the agent prompt, so we rely on the trimming in
@@ -42,7 +46,8 @@ from ...exceptions import ServiceError
 from ...i18n import t
 from ...models import ModelConfig
 from ..language_models import build_language_model
-from .code import ReasoningStreamListener, _format_agent_error
+from ..optimization.training_ground.registry import hash_tool_schema
+from .code import ReasoningStreamListener, _format_agent_error, _SubmitArgExtractor
 from .constants import REASONING_FIELD
 
 
@@ -74,6 +79,9 @@ def _build_generalist_lm() -> dspy.LM:
 
     - **Native MiniMax** (``minimax/...``): ``extra_body={"reasoning_split": true}``
       surfaces the interleaved ``<think>`` channel as ``reasoning_details``.
+    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``, the shipped default)
+      **and OpenRouter MiniMax**: reasoning streams inline in the
+      assistant content as ``<think>…</think>`` blocks; no provider-side knob.
     - **OpenAI reasoning models** (``openai/gpt-5.*``, ``openai/o1|o3|o4*``):
       pass ``reasoning_effort="medium"`` so the model emits reasoning content
       that LiteLLM normalizes to ``delta.reasoning_content``. DSPy validates
@@ -121,7 +129,6 @@ _DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
     {
         "delete_job_optimizations",
         "bulk_delete_jobs_optimizations_bulk_delete_post",
-        "delete_template_templates",
         "submit_job_run_post",
         "submit_grid_search_grid_search_post",
         "cancel_job_optimizations",
@@ -131,21 +138,16 @@ _DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-# Safe mutations — metadata toggles, local-only operations, template saves.
+# Safe mutations — metadata toggles, local-only operations.
 # Confirm in Ask mode; auto-approve in Auto-safe and YOLO.
 _SAFE_MUTATIONS: frozenset[str] = frozenset(
     {
         "rename_job_optimizations",
         "toggle_pin_job_optimizations",
-        "create_template_templates_post",
-        "update_template_templates",
-        "apply_template_templates",
         "edit_code_optimizations_edit_code_post",
         "validate_code_validate_code_post",
         "profile_datasets_profile_post",
         "discover_models_models_discover_post",
-        "serve_program_serve",
-        "stage_sample_dataset_datasets_samples",
         "set_column_roles_datasets_column_roles_post",
         "update_wizard_state",
         "bulk_pin_jobs_optimizations_bulk_pin_post",
@@ -276,6 +278,9 @@ class _ApprovalGatedTool:
         trust_mode: TrustMode,
         registry: ApprovalRegistry,
         emit: Callable[[dict], None],
+        outer_loop: asyncio.AbstractEventLoop,
+        staged_dataset_id: str | None = None,
+        wizard_state: WizardState | None = None,
     ) -> None:
         """Capture the underlying tool and the side-channel plumbing.
 
@@ -285,14 +290,50 @@ class _ApprovalGatedTool:
             trust_mode: The caller's trust level.
             registry: Approval registry used for gating.
             emit: Thread-safe callback for SSE events.
+            outer_loop: The asyncio event loop where the MCP ``ClientSession``
+                and approval futures live. DSPy 3.3 dispatches sync tool
+                calls from worker threads with no running loop; the body
+                must be marshalled back to ``outer_loop`` via
+                ``run_coroutine_threadsafe`` or the MCP socket hangs
+                because the session is bound to its original loop.
+            staged_dataset_id: If the wizard snapshot has a staged dataset
+                attached to this conversation, this wrapper auto-injects it
+                into submit-tool calls that omit it. Mirrors the OpenAI /
+                Anthropic Files API convention where uploaded files are
+                bound to the thread and tools pick them up automatically
+                instead of the LLM relaying the id on every turn.
+            wizard_state: Turn-start wizard snapshot, used to validate the
+                field order of ``update_wizard_state`` patches in real time
+                (so the agent can't populate a later-step field before its
+                earlier steps are complete). One ``update_wizard_state`` call
+                per turn means the snapshot is stable for the check.
         """
         self._original = original
         self._tool_name = tool_name
         self._trust_mode = trust_mode
         self._registry = registry
         self._emit = emit
+        self._outer_loop = outer_loop
+        self._staged_dataset_id = staged_dataset_id
+        self._wizard_state = wizard_state or {}
 
-    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Sync entrypoint — DSPy 3.3 ``Tool.__call__`` invokes this from a worker thread.
+
+        We don't run the async body here directly because the MCP session
+        and approval futures live on ``self._outer_loop`` (the FastAPI
+        request loop). Dispatching via ``run_coroutine_threadsafe`` keeps
+        all asyncio work on the loop that owns the session and blocks
+        the worker thread until the future resolves. ``Future.result()``
+        propagates exceptions naturally so DSPy's ReAct loop sees real
+        errors instead of timing out on a hung coroutine.
+        """
+        future = asyncio.run_coroutine_threadsafe(
+            self._async_body(*args, **kwargs), self._outer_loop
+        )
+        return future.result()
+
+    async def _async_body(self, *args: Any, **kwargs: Any) -> Any:
         """Run the wrapped tool, emitting approval and lifecycle events.
 
         Returns ``"User declined"`` when the gated approval is rejected;
@@ -313,6 +354,24 @@ class _ApprovalGatedTool:
                 when the underlying tool raises.
         """
         call_id = uuid.uuid4().hex[:12]
+        if self._tool_name in _READY_TO_SUBMIT_TOOLS:
+            if (
+                self._staged_dataset_id
+                and not kwargs.get("staged_dataset_id")
+                and not kwargs.get("dataset")
+            ):
+                kwargs["staged_dataset_id"] = self._staged_dataset_id
+            # Signature/Metric are authored and validated by
+            # ``request_code_authoring``; the validated source is mirrored into
+            # the wizard snapshot. The agent has historically re-typed its own
+            # broken code into submit args even after a clean authoring pass
+            # (3-arg metrics, unmatched braces), producing 400s that dead-ended
+            # at the user. Source the code from the snapshot and discard
+            # whatever the agent supplied so only validated code reaches submit.
+            for code_field in ("signature_code", "metric_code"):
+                snapshot_code = self._wizard_state.get(code_field)
+                if snapshot_code:
+                    kwargs[code_field] = snapshot_code
         self._emit(
             {
                 "event": "tool_start",
@@ -325,6 +384,21 @@ class _ApprovalGatedTool:
             }
         )
         try:
+            if self._tool_name == "update_wizard_state":
+                order_error = validate_wizard_patch_order(kwargs, self._wizard_state)
+                if order_error:
+                    self._emit(
+                        {
+                            "event": "tool_end",
+                            "data": {
+                                "id": call_id,
+                                "tool": self._tool_name,
+                                "status": "error",
+                                "result": order_error,
+                            },
+                        }
+                    )
+                    return order_error
             if _needs_approval(self._tool_name, self._trust_mode):
                 fut = self._registry.register(call_id)
                 self._emit(
@@ -404,6 +478,9 @@ def _wrap_tool_with_approval(
     trust_mode: TrustMode,
     registry: ApprovalRegistry,
     emit: Callable[[dict], None],
+    outer_loop: asyncio.AbstractEventLoop,
+    staged_dataset_id: str | None = None,
+    wizard_state: WizardState | None = None,
 ) -> dspy.Tool:
     """Replace ``tool.func`` with an approval-aware wrapper.
 
@@ -412,6 +489,14 @@ def _wrap_tool_with_approval(
         trust_mode: Caller's trust level.
         registry: Approval registry used for gating.
         emit: Thread-safe SSE event emitter.
+        outer_loop: Event loop owning the MCP session; the wrapper
+            marshals every tool call back to this loop via
+            ``run_coroutine_threadsafe`` because DSPy 3.3 dispatches
+            sync ``Tool.__call__`` from worker threads with no loop.
+        staged_dataset_id: Optional staged-dataset id auto-injected into
+            submit tool calls that omit it.
+        wizard_state: Turn-start wizard snapshot used to validate
+            ``update_wizard_state`` field ordering.
 
     Returns:
         The same ``tool`` instance with its ``func`` replaced.
@@ -422,6 +507,9 @@ def _wrap_tool_with_approval(
         trust_mode=trust_mode,
         registry=registry,
         emit=emit,
+        outer_loop=outer_loop,
+        staged_dataset_id=staged_dataset_id,
+        wizard_state=wizard_state,
     )
     return tool
 
@@ -434,18 +522,22 @@ class WizardState(TypedDict, total=False):
     ready". Mirrors a subset of the frontend ``SubmissionDraft`` state.
     """
 
+    job_name: str
     dataset_ready: bool
     columns_configured: bool
     signature_code: str
     metric_code: str
     model_configured: bool
+    staged_dataset_id: str
 
 
 _ALWAYS_TOOLS = frozenset(
     {
-        "list_models_models_get",
-        "list_templates_templates_get",
-        "get_template_templates",
+        # Agent-only model catalog: each row exposes a single canonical
+        # ``name`` (provider-prefixed) — no separate ``label`` field to copy
+        # by accident. The frontend keeps using ``/models``; the agent never
+        # sees that one.
+        "list_models_for_agent",
         "get_registry_snapshot_registry_get",
         "list_jobs_optimizations_get",
         "get_optimization_counts_optimizations_counts_get",
@@ -456,6 +548,12 @@ _ALWAYS_TOOLS = frozenset(
         "get_model_stats_analytics_models_get",
         "serve_info_serve",
         "serve_pair_info_serve",
+        # UI-trigger tool — calling it renders an inline inference-input
+        # card in the chat. The card fetches the field schema via
+        # /serve/{id}/info and runs the actual inference via /serve/{id};
+        # the agent NEVER calls serve_program directly because it cannot
+        # know the user's inputs.
+        "request_user_inference",
         "discover_models_models_discover_post",
         "rename_job_optimizations",
         "toggle_pin_job_optimizations",
@@ -464,18 +562,18 @@ _ALWAYS_TOOLS = frozenset(
         "retry_job_optimizations",
         "compare_jobs_optimizations_compare_post",
         "bulk_pin_jobs_optimizations_bulk_pin_post",
-        # Wizard-prefill tools — safe to expose before a dataset is uploaded
-        # since they *produce* a dataset or column map, they don't consume one.
-        "list_sample_datasets_datasets_samples_get",
-        "stage_sample_dataset_datasets_samples",
-        "apply_template_templates",
-        "update_template_templates",
+        # Wizard-prefill tools — safe to expose before a dataset is staged;
+        # they patch wizard state, they don't consume rows.
         "set_column_roles_datasets_column_roles_post",
+        # UI-trigger tool — calling it renders an inline upload card in the
+        # chat. The card handles parsing + column-role confirmation
+        # client-side and dispatches wizard:dataset-staged on confirm.
+        "request_user_dataset_datasets_request_upload_post",
         # Generalized wizard patch — any editable field, partial updates.
         "update_wizard_state",
         # Semantic + structured search across every public optimization. The
         # agent uses it to surface comparable runs ("find me sentiment jobs
-        # that beat 0.8 with MIPROv2") before the user has filled the wizard.
+        # that beat 0.8 with GEPA") before the user has filled the wizard.
         "public_search_dashboard_search_post",
         # Diagnostic readouts for finished runs — per-example baseline /
         # optimized scores and full grid-result detail. Read-only and safe
@@ -485,30 +583,62 @@ _ALWAYS_TOOLS = frozenset(
         "get_pair_test_results_optimizations",
     }
 )
+# Diagnostic tools unlocked the moment a dataset has columns + roles. These
+# inspect the data; they do not advance the wizard, so they don't depend on
+# the run being named yet.
 _DATASET_READY_TOOLS = frozenset(
     {
-        "edit_code_optimizations_edit_code_post",
         "validate_code_validate_code_post",
         "profile_datasets_profile_post",
     }
 )
-_READY_TO_SUBMIT_TOOLS = frozenset(
-    {
-        "submit_job_run_post",
-        "submit_grid_search_grid_search_post",
-    }
-)
+# UI-trigger tool — calling it renders an inline code-authoring card that runs
+# the dedicated code agent (streaming Signature + Metric with the wizard's
+# timeline) and writes the result back to the wizard. Replaces the old
+# block-and-return ``edit_code`` path so the generalist never hand-writes
+# signature/metric code. Gated behind a named run (see ``tools_for``) so the
+# agent fills the wizard in the same order the manual wizard enforces —
+# Basics (name) → Data → Params → Code — and the wizard is populated and
+# verifiable before any code is authored.
+_CODE_AUTHORING_TOOLS = frozenset({"request_code_authoring"})
+# Single-tool submit surface. ``submit_grid_search`` was historically here
+# alongside ``submit_job_run_post``; exposing both at the same time made
+# MiniMax oscillate between them and occasionally lapse into a "no submit
+# tool" hallucinated refusal. Grid search is still reachable from the UI
+# wizard for users who need it; the agent's flow is single-run only.
+_READY_TO_SUBMIT_TOOLS = frozenset({"submit_job_run_post"})
 _POST_SUBMIT_TOOLS = frozenset(
     {
         "cancel_job_optimizations",
         "bulk_cancel_jobs_optimizations_bulk_cancel_post",
         "delete_job_optimizations",
         "bulk_delete_jobs_optimizations_bulk_delete_post",
-        "serve_program_serve",
-        "create_template_templates_post",
-        "delete_template_templates",
     }
 )
+
+
+def _name_set(state: WizardState) -> bool:
+    """Return True when the run has a non-blank job name (Basics step)."""
+    name_val = state.get("job_name") or state.get("name") or ""
+    return bool(isinstance(name_val, str) and name_val.strip())
+
+
+def _dataset_ready(state: WizardState) -> bool:
+    """Return True when the dataset has columns + roles configured (Data step)."""
+    return bool(state.get("columns_configured") or state.get("dataset_ready"))
+
+
+def _code_ready(state: WizardState) -> bool:
+    """Return True when both Signature and Metric code are present (Code step)."""
+    return bool(state.get("signature_code") and state.get("metric_code"))
+
+
+def _model_ready(state: WizardState) -> bool:
+    """Return True when a generation model has been chosen (Model step)."""
+    model_cfg = state.get("model_config") or {}
+    return bool(state.get("model_configured")) or bool(
+        isinstance(model_cfg, dict) and model_cfg.get("name")
+    )
 
 
 def tools_for(state: WizardState) -> set[str]:
@@ -524,38 +654,265 @@ def tools_for(state: WizardState) -> set[str]:
         The set of MCP tool names allowed for this wizard state.
     """
     allowed = set(_ALWAYS_TOOLS) | set(_POST_SUBMIT_TOOLS)
-    dataset_ready = bool(state.get("dataset_ready") and state.get("columns_configured"))
+    dataset_ready = _dataset_ready(state)
+    name_set = _name_set(state)
     if dataset_ready:
         allowed |= _DATASET_READY_TOOLS
-    if dataset_ready and state.get("signature_code") and state.get("metric_code") and state.get("model_configured"):
+        # Mirror the wizard's step order: the Code step (Signature + Metric)
+        # only opens once the run is named and the dataset is in place. This
+        # keeps the wizard populated + verifiable before code exists, and
+        # stops the agent from authoring/submitting an unnamed run.
+        if name_set:
+            allowed |= _CODE_AUTHORING_TOOLS
+    if (
+        dataset_ready
+        and name_set
+        and _code_ready(state)
+        and _model_ready(state)
+    ):
         allowed |= _READY_TO_SUBMIT_TOOLS
     return allowed
 
 
-class GeneralistSig(dspy.Signature):
-    """You are the Skynet assistant driving a DSPy optimization wizard.
+# Field-level ordering for ``update_wizard_state`` patches. Each editable
+# field belongs to a wizard step; a field may only be set once every REQUIRED
+# earlier step is populated. This mirrors the manual wizard's sequential form
+# (Basics → Data → Params → Code → Model) at the field granularity, so the
+# agent gets a precise, actionable error the moment it tries to skip ahead —
+# rather than silently corrupting order. ``signature_code`` / ``metric_code``
+# (the Code step) are intentionally absent: ``update_wizard_state`` rejects
+# them outright (they are authored only via ``request_code_authoring``).
+_WIZARD_STEP_LABELS = ("Basics", "Data", "Params", "Code", "Model")
+_FIELD_STEP: dict[str, int] = {
+    "job_name": 0,
+    "job_description": 0,
+    "column_roles": 1,
+    "optimizer_name": 2,
+    "module_name": 2,
+    "job_type": 2,
+    "split_fractions": 2,
+    "split_mode": 2,
+    "seed": 2,
+    "shuffle": 2,
+    "optimizer_kwargs": 2,
+    "model_config": 4,
+    "reflection_model_config": 4,
+    "generation_models": 4,
+    "reflection_models": 4,
+    "use_all_generation_models": 4,
+    "use_all_reflection_models": 4,
+}
+# Steps that gate later ones. Params (2) and Model (4) never block an earlier
+# field, so they are not prerequisites for anything.
+_PREREQ_STEPS = (0, 1, 3)
+# What the agent must DO to satisfy each gating step (used in the error hint).
+_STEP_FIX_HINT = {
+    0: "set ``job_name`` via update_wizard_state",
+    1: "attach the dataset via request_user_dataset (then confirm column roles)",
+    3: "author the Signature + Metric via request_code_authoring",
+}
 
-    The user is typically non-technical and communicates in Hebrew (RTL).
+
+def _step_satisfied(step: int, state: WizardState, patch: dict[str, Any]) -> bool:
+    """Return True when wizard ``step`` is complete in ``state`` or this ``patch``.
+
+    Args:
+        step: Wizard step index (see ``_WIZARD_STEP_LABELS``).
+        state: Current wizard snapshot.
+        patch: The fields the agent is trying to set this call — a field set
+            here counts toward satisfying its own step (so name + dataset can
+            land in one patch).
+
+    Returns:
+        True when the step's required fields are present.
+    """
+    if step == 0:
+        return _name_set(state) or bool(str(patch.get("job_name") or "").strip())
+    if step == 1:
+        if _dataset_ready(state):
+            return True
+        roles = patch.get("column_roles")
+        if isinstance(roles, dict):
+            vals = set(roles.values())
+            return "input" in vals and "output" in vals
+        return False
+    if step == 3:
+        return _code_ready(state)
+    return True
+
+
+def validate_wizard_patch_order(patch: dict[str, Any], state: WizardState) -> str | None:
+    """Reject an ``update_wizard_state`` patch that skips wizard step order.
+
+    Enforces the manual wizard's sequential form at the field level: a field
+    may only be set once every REQUIRED earlier step is populated (in the
+    current ``state`` or by this same ``patch``). Returns an actionable error
+    string the ReAct loop reads as a tool observation so the agent can fix the
+    order itself — the "real-time intervention" the wizard's Next-button
+    gating gives a human.
+
+    Args:
+        patch: The keyword arguments of the ``update_wizard_state`` call.
+        state: The turn-start wizard snapshot.
+
+    Returns:
+        ``None`` when the patch respects the order; otherwise a one-line
+        English error naming the blocked field and the steps to do first.
+    """
+    touched = [(_FIELD_STEP[f], f) for f in patch if f in _FIELD_STEP]
+    if not touched:
+        return None
+    target_step = max(step for step, _ in touched)
+    blocked_field = next(field for step, field in touched if step == target_step)
+    missing = [
+        step
+        for step in _PREREQ_STEPS
+        if step < target_step and not _step_satisfied(step, state, patch)
+    ]
+    if not missing:
+        return None
+    steps_txt = "; ".join(f"{_WIZARD_STEP_LABELS[s]} — {_STEP_FIX_HINT[s]}" for s in missing)
+    return (
+        f"Out of order: ``{blocked_field}`` belongs to the "
+        f"{_WIZARD_STEP_LABELS[target_step]} step, but earlier required steps are "
+        f"incomplete. Do these first: {steps_txt}. Then set the "
+        f"{_WIZARD_STEP_LABELS[target_step]} field(s)."
+    )
+
+
+class GeneralistSig(dspy.Signature):
+    """Every turn ENDS with a ``submit`` tool call. No exceptions.
+
+    The user sees ONLY the text you pass as ``submit(assistant_message=…)``.
+    Reasoning, plans, and intentions are invisible until you call
+    ``submit``. A turn without a ``submit`` call renders as a blank
+    bubble — the user literally sees nothing and the conversation stalls.
+
+    FORBIDDEN reasoning patterns (these all cause blank bubbles):
+      • "No tools needed for a greeting" — WRONG. ``submit`` IS a tool;
+        a greeting is ONE ``submit`` call with the Hebrew greeting in
+        ``assistant_message``.
+      • "Let me craft a reply" then stopping without calling ``submit`` —
+        WRONG. Crafting in reasoning is invisible; the reply only exists
+        when you call ``submit(assistant_message=<your text>)``.
+      • "I'll respond directly" — WRONG. There is no "respond directly"
+        path. Responding == calling ``submit``.
+
+    Examples — every turn ends in submit:
+
+    User says "הי" → one tool call only:
+        submit(assistant_message="שלום! אני העוזר של Skynet לאופטימיזציית
+        DSPy. במה תרצה להתחיל — להעלות dataset, לשכפל הרצה קיימת, או
+        משהו אחר?")
+
+    User says "אני רוצה להעלות דאטה סט" → two tool calls in order:
+        1. request_user_dataset_datasets_request_upload_post(prompt="צרף
+           קובץ CSV או JSON.")
+        2. submit(assistant_message="הצגתי קארד להעלאה — צרף את הקובץ
+           שלך וממשיכים משם.")
+
+    User says "תגיש" with the wizard fully configured → two tool calls:
+        1. submit_job_run_post(name="…", …)
+        2. submit(assistant_message="ההגשה הוגשה. עוקבים אחר ההתקדמות
+           ביחד.")
+
+    You are the Skynet assistant driving a DSPy optimization wizard. The
+    user is typically non-technical and communicates in Hebrew (RTL).
     Your job is to move the user toward a successful optimization run by
     calling tools — one coherent action per turn, not a chain of every
-    possible step.
+    possible step. Every turn still ends with ``submit``.
 
     Rules:
     * Reply in Hebrew. Product terms (Signature, Metric, optimizer names)
       stay in English inside Hebrew prose.
     * Prefer calling tools over explaining. One tool call per turn is ideal.
+    * Opening turn (greeting): 2–3 short Hebrew sentences ending in a
+      single targeted question. Never enumerate specific model names from
+      memory — wait until the user is ready to pick a model, then call
+      ``list_models_for_agent`` and use THAT result.
+    * Batch ``update_wizard_state`` into one call per turn — it accepts
+      every wizard field at once. Don't fire 3–7 sequential identical
+      pills.
+    * WIZARD ORDER — mandatory, mirrors the manual wizard. Fill the wizard
+      in this sequence; earlier steps gate the tools for the later ones:
+        1. Basics — set ``job_name`` (a short descriptive Hebrew/English
+           name) via ``update_wizard_state``. Do this FIRST, before
+           authoring code or submitting, even when the user only described
+           the task in prose. NEVER leave the run unnamed.
+        2. Data — call ``request_user_dataset`` so the user attaches the
+           dataset and confirms column roles.
+        3. Params — set ``optimizer_name`` / ``module_name`` / split if the
+           user wants non-defaults (``gepa`` + ``predict`` are the
+           defaults).
+        4. Code — ``request_code_authoring`` becomes available ONLY after
+           the run is named AND the dataset is ready. If you want to author
+           code and the tool is NOT in your list this turn, the cause is a
+           missing ``job_name`` (or dataset) — set it first, then it
+           unlocks next turn.
+        5. Model — pick the model (``model_config``; for GEPA also
+           ``reflection_model_config``).
+        6. Submit — ``submit_job_run_post`` unlocks once name + dataset +
+           Signature + Metric + model are all present.
+      Do NOT skip ahead. Authoring code or submitting before the run is
+      named leaves the wizard unpopulated and unverifiable for the user.
+      Field order is ENFORCED: if you set an ``update_wizard_state`` field
+      whose earlier steps aren't filled yet (e.g. ``model_config`` before the
+      code is authored, or ``optimizer_name`` before the dataset), the call
+      is rejected with an "Out of order" error naming exactly which step to
+      complete first. Read that error, do that step, then continue — don't
+      repeat the rejected call.
     * If a tool returns an error, surface it to the user in Hebrew and ask
-      how to proceed — do not retry blindly.
-    * Never invent optimization IDs, template IDs, or model names. Get
-      them from the discovery tools first.
+      how to proceed — do not retry blindly. A 422/400 on submit is proof
+      a wizard field is missing, not proof the submit tool is unavailable.
+    * Never invent optimization IDs or model names. Get them from the
+      discovery tools first.
+    * When choosing a model, call ``list_models_for_agent`` and copy
+      each row's ``name`` field verbatim into ``model_name`` /
+      ``model_config.name``. Every ``name`` is already provider-prefixed
+      (e.g. ``openai/gpt-4o-mini``); never strip the prefix. ALWAYS pass
+      a ``query`` argument when the user named a specific model — e.g.
+      ``list_models_for_agent(query="gpt-5.4-nano")`` or
+      ``list_models_for_agent(query="claude")``. The unfiltered catalog
+      is ~18KB and 130 entries; reading it all costs ~15s of inference.
+      Filtering shrinks the response to a few hundred bytes and the call
+      returns in under a second.
+    * When the user says "תגיש" / "תשלח" / "יש אישור" / "submit": if
+      ``submit_job_run_post`` is in your tool list THIS turn, call it;
+      if it isn't, identify the missing wizard field and patch it via
+      ``update_wizard_state`` / ``set_column_roles`` /
+      ``request_user_dataset``. Never reply "אין לי גישה לכלי שליחת
+      האופטימיזציה" — that's a hallucinated refusal.
+
+    Supported backend capabilities (these are the ONLY valid values —
+    never claim, suggest, or pass any others, even if DSPy supports them
+    upstream):
+    * Optimizer (``optimizer_name``): ``gepa`` is the only supported
+      optimizer. Do not mention BootstrapFewShot, MIPRO/MIPROv2, COPRO,
+      BootstrapFinetune, Ensemble, or any other DSPy optimizer — they are
+      not wired into this backend.
+    * Module (``module_name``): ``predict`` (dspy.Predict) and ``cot``
+      (dspy.ChainOfThought) are the only supported modules.
+    * Metric: there are no preset metrics. The user writes a metric
+      function as Python source in ``metric_code`` (a callable taking
+      ``(example, pred, trace=None)`` and returning a float).
+    * If the user asks "which optimizers can I use?" answer GEPA only.
+      If the user names an unsupported optimizer/module, tell them in
+      Hebrew that it isn't wired into Skynet and offer the supported
+      alternative.
 
     Capabilities worth knowing about:
-    * First-run demos: when the user has no dataset, call
-      ``list_sample_datasets`` then ``stage_sample_dataset`` to prefill the
-      wizard with a curated demo (sentiment, email triage, Q&A).
-    * Templates: ``apply_template`` prefills the wizard from a saved config;
-      ``update_template`` edits one in place. ``create_template`` saves a
-      new one.
+    * Dataset uploads: when the user needs to provide a dataset (or you
+      determine one is required to proceed), call ``request_user_dataset``
+      with a short Hebrew ``prompt`` sentence asking the user to attach a
+      dataset file. That renders an upload card inline in the chat — the
+      user picks the file, the panel parses it, the user confirms which
+      columns are input/output, and the wizard hydrates automatically.
+      Do **not** ask the user to upload in plain text; always call this
+      tool so they get the rich upload affordance. After the card
+      reports back via the next user message (with filename, row count,
+      and the confirmed column roles), you can validate or refine the
+      configuration with ``set_column_roles`` if needed. Never invent
+      column names — use what the user confirms verbatim.
     * Existing jobs: ``clone_job`` duplicates a job (1–5 copies),
       ``retry_job`` re-runs a failed/cancelled one, ``compare_jobs`` gives
       a side-by-side snapshot of 2–5 optimizations, ``bulk_pin_jobs``
@@ -568,25 +925,140 @@ class GeneralistSig(dspy.Signature):
       of editable fields — optimizer_name, module_name, model_config
       (teacher/student), reflection_model_config, generation_models /
       reflection_models (grid search), split_fractions, split_mode, seed,
-      shuffle, optimizer_kwargs, job_name, job_description,
-      job_type, signature_code, metric_code. Supply only the fields you
-      want to change; everything else is left alone. Prefer it over the
-      narrow per-field tools when changing one thing, and combine edits
-      (e.g. optimizer + kwargs + split) in a single call.
+      shuffle, optimizer_kwargs, job_name, job_description, job_type.
+      Supply only the fields you want to change; everything else is left
+      alone. Prefer it over the narrow per-field tools when changing one
+      thing. Do NOT patch ``signature_code`` / ``metric_code`` here — they
+      are authored only by ``request_code_authoring`` (see below); the
+      ``update_wizard_state`` endpoint REJECTS those two fields.
+    * HARD RULE — one ``update_wizard_state`` call per turn. If you are
+      patching N fields this turn, bundle them into a single ``patch``
+      object on one call. Splitting "set optimizer, then set model, then
+      set signature" into three separate ``update_wizard_state`` calls
+      bloats the trajectory and never unlocks new tools mid-turn — the
+      tool list is computed once at turn start from the snapshot you
+      were handed. The unlock happens on the NEXT turn.
+    * When the user picks an optimizer that needs a reflection model
+      (e.g. ``gepa``), patch ``reflection_model_config`` in the SAME
+      ``update_wizard_state`` call as ``model_config`` — typically
+      mirroring the same ``name``. Submitting GEPA without
+      ``reflection_model_config`` is a known failure mode.
+    * Signature & Metric code: NEVER hand-write ``signature_code`` or
+      ``metric_code`` yourself — that path is error-prone (bad class
+      names, wrong metric arity) and is rejected by the wizard. Once the
+      run is NAMED (``job_name`` set) and the dataset + column roles are in
+      place, call ``request_code_authoring`` with a short ``goal`` (or
+      empty to seed from the data). The tool stays hidden until the run is
+      named — if it's missing, set ``job_name`` first. It renders an inline
+      card
+      that runs the dedicated code agent — the SAME one the submit wizard
+      uses — which streams the Signature then the Metric as it drafts them,
+      validates them, auto-fixes errors, and writes the finished code back
+      into the wizard. After you call it, END your turn: the authored code
+      lands in your NEXT turn's ``wizard_state`` (``signature_code`` +
+      ``metric_code``), and only then does ``submit_job_run_post`` unlock.
+      To refine later, call it again with a goal like "make the metric
+      give partial credit for close answers".
     * Logs: ``get_job_logs`` returns the log trail when the user is
       debugging a failed run.
     * Cross-corpus search: ``public_search`` does semantic + structured
       search over every public optimization (free-text query in any
       language, plus optional models / optimizers / optimization_types /
       date filters, sorted by relevance / recency / gain). Use it when the
-      user asks to find comparable runs ("הראה לי ריצות סנטימנט שעברו את
-      0.8") before reaching for the wizard.
+      user asks to find comparable runs (free-text Hebrew queries like
+      "show me sentiment runs that scored above 0.8") before reaching for
+      the wizard.
     * Run diagnostics: ``get_test_results`` returns per-example baseline
       and optimized test scores for a single run; ``get_grid_search_result``
       returns the full per-pair table for a finished grid search;
       ``get_pair_test_results`` zooms into one pair's per-example scores.
       Call them when the user asks why a run scored what it did or which
       examples regressed.
+    * Live inference: when the user wants to try the trained program on a
+      fresh input ("how would this run classify X?"), call
+      ``request_user_inference`` with the ``optimization_id``. That renders
+      an inline form in the chat — the user types the input values and
+      the frontend runs the inference itself. Do NOT try to call any
+      inference tool directly; you cannot know the user's inputs, and
+      guessing them would waste an LLM call. After ``request_user_inference``
+      returns, stop and wait for the next user message — the form result
+      arrives as a follow-up turn.
+    * Submitting an optimization: when the user asks to run / start /
+      submit / launch an optimization, you submit it yourself by calling
+      ``submit_job_run_post`` (single run) or
+      ``submit_grid_search_grid_search_post`` (grid search). These tools
+      become available only after the wizard is fully populated:
+      ``job_name`` AND ``dataset_ready`` AND ``columns_configured`` AND
+      ``signature_code`` AND ``metric_code`` AND a chosen model
+      (``model_config.name``) must all be present in the wizard snapshot. If a prerequisite is
+      missing, do NOT tell the user that you can't submit — identify
+      which fields are blank from the wizard_state snapshot and either
+      patch them via ``update_wizard_state`` / ``set_column_roles`` /
+      ``request_user_dataset``, or ask one targeted Hebrew question to
+      fill the single biggest gap, then submit on the next turn. Never
+      tell the user, in Hebrew or any other language, that you lack a
+      submit tool — submission is always reachable once the wizard fields
+      are in place, and you must drive the user there step by step rather
+      than refuse. Completing the wizard is NOT submitting: setting the
+      final field (typically the model) only UNLOCKS
+      ``submit_job_run_post`` on your NEXT turn. On the turn you fill that
+      last field, tell the user the run is ready and that you'll submit —
+      do NOT report it as submitted. A run is submitted ONLY when
+      ``submit_job_run_post`` returns a successful result in your
+      trajectory this turn.
+    * Dataset handoff for submit: never inline ``dataset`` rows into the
+      submit tool arguments. The wizard stages the parsed rows on the
+      backend after upload and surfaces a ``staged_dataset_id`` in the
+      wizard_state snapshot. You do NOT need to pass ``staged_dataset_id``
+      explicitly — the agent runtime auto-attaches the wizard's staged id
+      to every submit call you make (the same way OpenAI/Anthropic
+      Files-API attach files to a thread). Just call submit with the
+      other fields; leave ``dataset``, ``username``, and
+      ``staged_dataset_id`` unset. If ``staged_dataset_id`` is absent
+      from the wizard snapshot when the user asks to submit, the dataset
+      is not staged yet: call ``request_user_dataset`` and stop. Do NOT
+      ask the user to re-upload an already-staged dataset.
+    * Code handoff for submit: likewise never pass ``signature_code`` or
+      ``metric_code`` into the submit call. The runtime injects the
+      validated Signature/Metric authored by ``request_code_authoring``
+      from the wizard snapshot, overriding anything you supply — so
+      hand-typed code is discarded. Leave both unset. If they are blank
+      in the snapshot the code isn't authored yet: call
+      ``request_code_authoring`` and stop. Never re-type code from an
+      earlier failed submit; the authored snapshot is the only source.
+
+    CRITICAL — never fabricate tool results:
+    * If ``submit_job_run_post`` (or any other tool) is NOT in your
+      current tool list, you have NOT called it. Do not invent an
+      optimization ID, status payload, or confirmation message.
+      Fabricating a submission and reporting "the run was created
+      successfully" with a made-up ``opt_xxx`` id when no such call was
+      made is a critical failure.
+    * The only valid optimization IDs are the ones returned by an actual
+      successful ``submit_job_run_post`` / ``submit_grid_search_grid_search_post``
+      tool result that appeared in your trajectory THIS TURN. If you did
+      not see such a tool result, you have no ID to report.
+    * If you discover mid-turn that the submit tool is unavailable
+      because the wizard is incomplete, fix the wizard (via
+      ``update_wizard_state`` / ``set_column_roles``) or ask the user
+      one targeted question — but tell the truth about the current
+      state. Do not pretend a submission happened.
+
+    CRITICAL — never claim you lack a tool you actually have:
+    * Tool availability is determined ONLY by what appears in your
+      current tool list. If ``submit_job_run_post`` is in your tool
+      list this turn, you DO have access to it — full stop.
+    * A failure on a previous turn (e.g. an earlier ``submit_job_run_post``
+      returned a 422 because ``reflection_model_config`` was missing) is
+      NOT evidence that the tool is missing or unavailable. It is
+      evidence of a missing wizard field. Diagnose the field from the
+      previous tool result, patch it via ``update_wizard_state``, and
+      call submit again on the next turn.
+    * Never tell the user — in Hebrew, English, or any other language
+      — that you "do not have access to the submit tool" or "the
+      submit option is not exposed to me" when the tool is in fact in
+      your current tool list. That is a hallucinated refusal and it
+      breaks the user's trust.
     """
 
     wizard_state: str = dspy.InputField(desc="JSON snapshot of the current wizard state.")
@@ -712,32 +1184,62 @@ async def _drive_generalist_agent(
     async with _mcp_session(mcp_url, auth_header=auth_header) as session:
         listing = await session.list_tools()
         allowed_names = tools_for(wizard_state)
+        staged_id = wizard_state.get("staged_dataset_id") or None
+        # The MCP session is bound to THIS loop. ``streamify`` will dispatch
+        # tool calls from a worker thread (asyncify), so the wrapper has
+        # to marshal each call back here via run_coroutine_threadsafe.
+        outer_loop = asyncio.get_running_loop()
         dspy_tools = [
             _wrap_tool_with_approval(
                 dspy.Tool.from_mcp_tool(session, t),
                 trust_mode=trust_mode,
                 registry=registry,
                 emit=emit,
+                outer_loop=outer_loop,
+                staged_dataset_id=staged_id,
+                wizard_state=wizard_state,
             )
             for t in listing.tools
             if t.name in allowed_names
         ]
-        react = dspy.ReAct(GeneralistSig, tools=dspy_tools, max_iters=8)
-        # Two reasoning listeners: one on the iterative ReAct predict (fires
-        # once per loop step — allow_reuse=True is mandatory) and one on the
-        # final extract CoT. Reasoning tokens arrive on the raw LiteLLM chunk
-        # regardless of which predict is active; binding per-predict is how
-        # DSPy routes chunks to the listener at each stage.
+        # Snapshot the live tool surface for downstream training-ground
+        # persistence (training_ground_SPEC.md §4). The persistence wrapper
+        # consumes this event and writes the recorded values into
+        # ``agent_messages`` so the optimize CLI can reproduce phasing later.
+        emit(
+            {
+                "event": "turn_metadata",
+                "data": {
+                    "allowed_tools": sorted(t.name for t in dspy_tools),
+                    "tool_schema_hashes": {
+                        tool.name: hash_tool_schema(tool) for tool in dspy_tools
+                    },
+                },
+            }
+        )
+        react = dspy.ReActV2(GeneralistSig, tools=dspy_tools, max_iters=8)
+        # ReActV2 has a single inner predict (``react.react``). It emits both
+        # reasoning and tool_calls per loop iteration; the user's
+        # ``assistant_message`` is an argument of the internal ``submit``
+        # tool, so we listen on ``tool_calls`` and stitch the message back
+        # together via ``_SubmitArgExtractor``. ``allow_reuse=True`` is
+        # mandatory because the predict fires once per loop step.
+        # ``is_async_program=True`` would route through ``ReActV2.acall``,
+        # which DSPy 3.3 implements by delegating to ``self.aforward`` — a
+        # method ReActV2 doesn't define. The result was an AttributeError
+        # on the very first user turn. Leaving the flag at its default
+        # (False) lets ``streamify`` wrap the sync ``forward`` with
+        # ``asyncify``; streaming behaviour and listeners are unchanged.
         program = dspy.streamify(
             react,
             stream_listeners=[
-                dspy.streaming.StreamListener(signature_field_name="assistant_message", allow_reuse=True),
+                dspy.streaming.StreamListener(
+                    signature_field_name="tool_calls", predict=react.react, allow_reuse=True
+                ),
                 ReasoningStreamListener(predict=react.react, allow_reuse=True),
-                ReasoningStreamListener(predict=react.extract.predict, allow_reuse=True),
             ],
             status_message_provider=GeneralistStatusProvider(),
             async_streaming=True,
-            is_async_program=True,
         )
 
         inputs = {
@@ -746,6 +1248,7 @@ async def _drive_generalist_agent(
             "user_message": user_message,
         }
         reply_text = ""
+        reply_extractor = _SubmitArgExtractor("assistant_message")
         with dspy.context(lm=lm):
             async for chunk in program(**inputs):
                 if isinstance(chunk, dspy.streaming.StatusMessage):
@@ -753,9 +1256,13 @@ async def _drive_generalist_agent(
                 elif isinstance(chunk, dspy.streaming.StreamResponse):
                     if chunk.signature_field_name == REASONING_FIELD:
                         emit({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                    elif chunk.signature_field_name == "assistant_message":
-                        reply_text += chunk.chunk
-                        emit({"event": "message_patch", "data": {"chunk": chunk.chunk}})
+                    elif chunk.signature_field_name == "tool_calls":
+                        delta = reply_extractor.feed(chunk.chunk)
+                        if delta:
+                            reply_text += delta
+                            emit({"event": "message_patch", "data": {"chunk": delta}})
+                        if chunk.is_last_chunk:
+                            reply_extractor.reset()
                 elif isinstance(chunk, dspy.Prediction):
                     final = getattr(chunk, "assistant_message", "") or ""
                     if final and final != reply_text:
