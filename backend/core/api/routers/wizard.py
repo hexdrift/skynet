@@ -16,12 +16,24 @@ Hidden from the public Scalar reference (not in ``_SCALAR_PUBLIC_PATHS``).
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from typing import Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
+from ...registry import ResolverError, resolve_module_factory, resolve_optimizer_factory
 from ..errors import DomainError
+
+# GEPA's metric signature: ``(gold, pred, trace, pred_name, pred_trace)``.
+# The 3-arg DSPy default ``(example, pred, trace=None)`` fails GEPA's
+# validate-on-submit check, and the agent has historically tripped this
+# every other turn. We accept both shapes here (the optimizer-level check
+# still gates submission) but reject any function whose param count or
+# names don't look like a metric at all.
+_METRIC_DEF_RE = re.compile(r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
 
 _VALID_COLUMN_ROLES = frozenset({"input", "output", "ignore"})
 
@@ -41,12 +53,12 @@ class WizardUpdateRequest(BaseModel):
     optimizer_name: str | None = Field(
         default=None,
         max_length=80,
-        description="Optimizer algorithm, e.g. 'gepa', 'bootstrap_few_shot'.",
+        description="Optimizer algorithm. Only 'gepa' is supported.",
     )
     module_name: str | None = Field(
         default=None,
         max_length=80,
-        description="DSPy module to optimize, e.g. 'predict', 'cot'.",
+        description="DSPy module to optimize. Supported values: 'predict', 'cot'.",
     )
     job_type: Literal["run", "grid_search"] | None = Field(
         default=None,
@@ -118,7 +130,7 @@ class WizardUpdateResponse(BaseModel):
     wizard_state: dict[str, Any]
 
 
-def _validate_model_dict(v: Any, field_name: str) -> dict[str, Any]:
+def validate_model_config_dict(v: Any, field_name: str) -> dict[str, Any]:
     """Light-weight validation of a ``ModelConfig``-shaped dict.
 
     Allows partial dicts (``{"name": "openai/gpt-4o"}``) for progressive
@@ -143,7 +155,17 @@ def _validate_model_dict(v: Any, field_name: str) -> dict[str, Any]:
     if name is not None:
         if not isinstance(name, str) or not name.strip():
             raise DomainError("wizard.model_name_non_empty_string", status=422, field=field_name)
-        out["name"] = name.strip()
+        cleaned = name.strip()
+        # dspy.LM rejects un-prefixed ids; reject early with an actionable
+        # error so the agent self-corrects by re-reading list_models_for_agent.
+        if "/" not in cleaned:
+            raise DomainError(
+                "wizard.model_name_missing_prefix",
+                status=422,
+                field=field_name,
+                name=cleaned,
+            )
+        out["name"] = cleaned
     base_url = v.get("base_url")
     if base_url is not None:
         if not isinstance(base_url, str):
@@ -173,6 +195,43 @@ def _validate_model_dict(v: Any, field_name: str) -> dict[str, Any]:
     return out
 
 
+def _validate_resolvable_name(
+    raw: Any,
+    *,
+    field: str,
+    resolver: Callable[[str], Any],
+    error_key: str,
+) -> str:
+    """Trim ``raw`` and confirm it resolves via ``resolver``.
+
+    Mirrors the runtime resolution that ``service_gateway`` performs so the
+    agent gets a 422 with an actionable hint instead of crashing the worker
+    on an unknown optimizer or module.
+
+    Args:
+        raw: Candidate field value from the request.
+        field: Field label used in error messages.
+        resolver: ``resolve_optimizer_factory`` or ``resolve_module_factory``.
+        error_key: i18n key surfaced when ``resolver`` rejects ``raw``.
+
+    Returns:
+        The cleaned (stripped) name once resolution succeeds.
+
+    Raises:
+        DomainError: 422 with ``wizard.field_non_empty_string`` when ``raw``
+            is not a non-blank string, or ``error_key`` when ``resolver``
+            raises :class:`ResolverError`.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        raise DomainError("wizard.field_non_empty_string", status=422, field=field)
+    cleaned = raw.strip()
+    try:
+        resolver(cleaned)
+    except ResolverError as exc:
+        raise DomainError(error_key, status=422, name=cleaned) from exc
+    return cleaned
+
+
 def create_wizard_router() -> APIRouter:
     """Build the wizard-state router.
 
@@ -198,6 +257,15 @@ def create_wizard_router() -> APIRouter:
         Supply only the fields you want to change — the rest are left
         untouched on the frontend.
 
+        BATCHING — make ONE call per turn covering every field you intend
+        to set together. The body accepts every wizard field at once
+        (``optimizer_name`` + ``module_name`` + ``model_config`` +
+        ``reflection_model_config`` + ``generation_models`` +
+        ``reflection_models`` + …) — call once with the full merged
+        patch, not seven times with one field each. Sequential
+        same-turn calls render as duplicate spinner pills in the UI and
+        waste turns on identical round-trips.
+
         Args:
             req: The partial-update body (every field optional).
 
@@ -211,12 +279,28 @@ def create_wizard_router() -> APIRouter:
         supplied = req.model_dump(by_alias=True, exclude_unset=True)
         patch: dict[str, Any] = {}
 
-        for key in ("job_name", "job_description", "optimizer_name", "module_name"):
+        for key in ("job_name", "job_description"):
             if key in supplied and supplied[key] is not None:
                 val = supplied[key]
                 if not isinstance(val, str) or not val.strip():
                     raise DomainError("wizard.field_non_empty_string", status=422, field=key)
                 patch[key] = val.strip()
+
+        if "optimizer_name" in supplied and supplied["optimizer_name"] is not None:
+            patch["optimizer_name"] = _validate_resolvable_name(
+                supplied["optimizer_name"],
+                field="optimizer_name",
+                resolver=resolve_optimizer_factory,
+                error_key="wizard.optimizer_unknown",
+            )
+
+        if "module_name" in supplied and supplied["module_name"] is not None:
+            patch["module_name"] = _validate_resolvable_name(
+                supplied["module_name"],
+                field="module_name",
+                resolver=resolve_module_factory,
+                error_key="wizard.module_unknown",
+            )
 
         if "job_type" in supplied and supplied["job_type"] is not None:
             patch["job_type"] = supplied["job_type"]
@@ -239,13 +323,13 @@ def create_wizard_router() -> APIRouter:
             patch["columns_configured"] = bool(inputs) and bool(outputs)
 
         if "model_config" in supplied and supplied["model_config"] is not None:
-            cleaned = _validate_model_dict(supplied["model_config"], "model_config")
+            cleaned = validate_model_config_dict(supplied["model_config"], "model_config")
             patch["model_config"] = cleaned
             if cleaned.get("name"):
                 patch["model_configured"] = True
 
         if "reflection_model_config" in supplied and supplied["reflection_model_config"] is not None:
-            patch["reflection_model_config"] = _validate_model_dict(
+            patch["reflection_model_config"] = validate_model_config_dict(
                 supplied["reflection_model_config"], "reflection_model_config"
             )
 
@@ -254,7 +338,7 @@ def create_wizard_router() -> APIRouter:
                 items = supplied[list_key]
                 if not isinstance(items, list):
                     raise DomainError("wizard.field_must_be_list", status=422, field=list_key)
-                patch[list_key] = [_validate_model_dict(m, f"{list_key}[{i}]") for i, m in enumerate(items)]
+                patch[list_key] = [validate_model_config_dict(m, f"{list_key}[{i}]") for i, m in enumerate(items)]
 
         for bool_key in (
             "use_all_generation_models",
@@ -293,11 +377,17 @@ def create_wizard_router() -> APIRouter:
                 raise DomainError("wizard.optimizer_kwargs_not_object", status=422)
             patch["optimizer_kwargs"] = dict(ok)
 
-        if "signature_code" in supplied and supplied["signature_code"] is not None:
-            patch["signature_code"] = str(supplied["signature_code"])
-
-        if "metric_code" in supplied and supplied["metric_code"] is not None:
-            patch["metric_code"] = str(supplied["metric_code"])
+        # Signature/Metric code is authored ONLY via ``request_code_authoring``
+        # (the inline card runs the dedicated code agent, which validates and
+        # repairs the result before it lands in the wizard). Accepting them
+        # here would let the agent inject unvalidated code straight into a
+        # submission — the failure mode that produced syntactically-broken
+        # signatures at submit time — so the endpoint rejects them outright.
+        for code_field in ("signature_code", "metric_code"):
+            if supplied.get(code_field) is not None:
+                raise DomainError(
+                    "wizard.code_via_authoring_only", status=422, field=code_field
+                )
 
         return WizardUpdateResponse(wizard_state=patch)
 

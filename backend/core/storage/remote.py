@@ -6,11 +6,15 @@ Provides RemoteDBJobStore for persisting job state to a PostgreSQL database.
 from __future__ import annotations
 
 import logging
+import threading
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlparse
+from uuid import uuid4
 
-from sqlalchemy import Engine, create_engine, func, text
+from sqlalchemy import Engine, create_engine, func, or_, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -18,7 +22,9 @@ from ..config import settings
 from ..constants import STRUCTURAL_PROGRESS_EVENTS
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
 from .models import (
+    AgentStagedDatasetModel,
     Base,
+    ConversationEmbeddingModel,
     JobEmbeddingModel,
     JobModel,
     LogEntryModel,
@@ -26,12 +32,55 @@ from .models import (
     UserQuotaAuditModel,
     UserQuotaOverrideModel,
 )
+from .schema_lock import schema_bootstrap_lock
 
 logger = logging.getLogger(__name__)
 
 MAX_PROGRESS_EVENTS = 5000
 MAX_LOG_ENTRIES = 5000
-_IMMUTABLE_JOB_COLUMNS = frozenset({"optimization_id"})
+PROGRESS_TRIM_SAMPLE_RATE = 100
+_IMMUTABLE_JOB_COLUMNS = frozenset({"optimization_id", "notified_at", "idempotency_key"})
+
+
+def _build_connect_args(db_url: str) -> dict[str, Any]:
+    """Build DBAPI connection args for the configured SQLAlchemy driver.
+
+    Args:
+        db_url: SQLAlchemy database URL used to infer the selected driver.
+
+    Returns:
+        Keyword arguments passed through SQLAlchemy to the DBAPI connect call.
+    """
+    connect_args: dict[str, Any] = {"options": "-c timezone=UTC"}
+    if not settings.db_pgbouncer_transaction_mode:
+        return connect_args
+
+    driver = make_url(db_url).drivername
+    if driver in {"postgresql+psycopg", "postgresql+psycopg3"}:
+        connect_args["prepare_threshold"] = None
+    elif driver == "postgresql+asyncpg":
+        connect_args["prepared_statement_cache_size"] = 0
+    return connect_args
+
+
+def _build_engine_kwargs(db_url: str) -> dict[str, Any]:
+    """Return SQLAlchemy engine options sourced from settings.
+
+    Args:
+        db_url: SQLAlchemy database URL used for driver-specific connect args.
+
+    Returns:
+        Engine keyword arguments for :func:`sqlalchemy.create_engine`.
+    """
+    return {
+        "echo": False,
+        "pool_pre_ping": True,
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_pool_max_overflow,
+        "pool_recycle": settings.db_pool_recycle_seconds,
+        "pool_timeout": settings.db_pool_timeout_seconds,
+        "connect_args": _build_connect_args(db_url),
+    }
 
 
 class RemoteDBJobStore:
@@ -43,8 +92,9 @@ class RemoteDBJobStore:
     def __init__(self, db_url: str) -> None:
         """Build the SQLAlchemy engine and create tables.
 
-        Pool sizing follows ``settings.worker_threads`` with a conservative
-        floor so a configured worker pool has enough connections available.
+        Pool sizing is controlled by ``DB_POOL_SIZE`` and
+        ``DB_POOL_MAX_OVERFLOW`` so Kubernetes deployments can keep total
+        Postgres connection budgets below the server cap.
 
         pgvector bootstrap and the ``job_embeddings`` table are created only
         when ``settings.embeddings_enabled`` is true, so a plain PostgreSQL
@@ -53,36 +103,38 @@ class RemoteDBJobStore:
         Args:
             db_url: PostgreSQL DSN to connect to.
         """
-        pool_size = max(settings.worker_threads, 10)
-        max_overflow = max(settings.worker_threads, 20)
         self.vector_search_enabled = False
         self._max_progress_events = settings.progress_events_per_job_cap
         self._max_log_entries = settings.log_entries_per_job_cap
+        self._code_version = settings.code_version
+        self._progress_event_counters: defaultdict[str, int] = defaultdict(int)
+        self._progress_counter_lock = threading.Lock()
         # Force every connection's session timezone to UTC so TZ-aware writes
         # into TIMESTAMPTZ columns round-trip without offset rotation, and any
         # naive value that slipped into legacy rows is interpreted as UTC.
         self._engine = create_engine(
             db_url,
-            echo=False,
-            pool_pre_ping=True,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_recycle=3600,
-            pool_timeout=30,
-            connect_args={"options": "-c timezone=UTC"},
+            **_build_engine_kwargs(db_url),
         )
         if settings.embeddings_enabled:
             vector_extension_ready = self._bootstrap_pgvector()
-            Base.metadata.create_all(self._engine)
+            with schema_bootstrap_lock(self._engine) as conn:
+                Base.metadata.create_all(conn if conn is not None else self._engine)
             vector_indexes_ready = self._bootstrap_vector_indexes()
             self.vector_search_enabled = vector_extension_ready and vector_indexes_ready
         else:
+            embedding_tables = {
+                JobEmbeddingModel.__table__,
+                ConversationEmbeddingModel.__table__,
+            }
             non_embedding_tables = [
-                table
-                for table in Base.metadata.sorted_tables
-                if table is not JobEmbeddingModel.__table__
+                table for table in Base.metadata.sorted_tables if table not in embedding_tables
             ]
-            Base.metadata.create_all(self._engine, tables=non_embedding_tables)
+            with schema_bootstrap_lock(self._engine) as conn:
+                Base.metadata.create_all(
+                    conn if conn is not None else self._engine,
+                    tables=non_embedding_tables,
+                )
         self._session_factory = sessionmaker(bind=self._engine)
         parsed_url = urlparse(db_url)
         db_location = parsed_url.hostname or "<masked>"
@@ -99,6 +151,11 @@ class RemoteDBJobStore:
     def _log_entries_cap(self) -> int:
         """Return the per-job log-entry retention cap."""
         return getattr(self, "_max_log_entries", MAX_LOG_ENTRIES)
+
+    @property
+    def _current_code_version(self) -> str:
+        """Return the cached worker code version for this store."""
+        return getattr(self, "_code_version", settings.code_version)
 
     def _bootstrap_pgvector(self) -> bool:
         """Ensure the pgvector extension exists before creating Vector columns.
@@ -140,6 +197,10 @@ class RemoteDBJobStore:
             (
                 "CREATE INDEX IF NOT EXISTS idx_job_embeddings_schema_hnsw "
                 "ON job_embeddings USING hnsw (embedding_schema vector_cosine_ops)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_conversation_embeddings_summary_hnsw "
+                "ON conversation_embeddings USING hnsw (embedding_summary vector_cosine_ops)"
             ),
         ]
         try:
@@ -198,15 +259,29 @@ class RemoteDBJobStore:
                 "payload": job.payload,
                 "username": job.username,
                 "optimization_type": job.optimization_type,
+                "attempts": job.attempts,
+                "code_version": job.code_version,
             },
         )
 
-    def create_job(self, optimization_id: str, estimated_remaining_seconds: float | None = None) -> JobRecord:
+    def create_job(
+        self,
+        optimization_id: str,
+        estimated_remaining_seconds: float | None = None,
+        *,
+        username: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> JobRecord:
         """Create a new job record in the database.
 
         Args:
             optimization_id: Unique identifier for the new job.
             estimated_remaining_seconds: Initial ETA, or ``None`` if unknown.
+            username: Submitter recorded on the row up-front so the partial
+                unique index on ``(username, idempotency_key)`` can guard
+                against duplicate POSTs before ``set_payload_overview`` runs.
+            idempotency_key: Optional client-supplied dedup key; pairs with
+                ``username`` for the uniqueness check.
 
         Returns:
             The newly inserted row as a ``JobRecord``.
@@ -219,6 +294,10 @@ class RemoteDBJobStore:
             estimated_remaining_seconds=estimated_remaining_seconds,
             latest_metrics={},
             payload_overview={},
+            attempts=0,
+            code_version=self._current_code_version,
+            username=username,
+            idempotency_key=idempotency_key,
         )
         session = self._get_session()
         try:
@@ -229,12 +308,74 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
+    def find_job_by_idempotency_key(self, username: str, idempotency_key: str) -> str | None:
+        """Return the ``optimization_id`` previously submitted under this key.
+
+        Args:
+            username: Submitter to scope the lookup to.
+            idempotency_key: Client-supplied dedup key from the request header.
+
+        Returns:
+            The matching job id, or ``None`` when no prior submission used the key.
+        """
+        if not username or not idempotency_key:
+            return None
+        session = self._get_session()
+        try:
+            row = (
+                session.query(JobModel.optimization_id)
+                .filter(JobModel.username == username)
+                .filter(JobModel.idempotency_key == idempotency_key)
+                .first()
+            )
+            return row[0] if row else None
+        finally:
+            session.close()
+
+    def claim_completion_notification(self, optimization_id: str) -> bool:
+        """Atomically claim the right to send the completion notification.
+
+        Multiple paths can converge on a single job's completion: the worker
+        that finished it, a peer that orphan-recovered it after a lease
+        expiry, and the cancellation handler. Each one calls
+        ``notify_job_completed`` which would otherwise re-send the message
+        once per attempt. This method does a single ``UPDATE ... WHERE
+        notified_at IS NULL`` and reports whether the caller won the CAS;
+        only the winner should send the notification.
+
+        Args:
+            optimization_id: ID of the job whose notification is being sent.
+
+        Returns:
+            ``True`` if the caller won the race and should send the message,
+            ``False`` when a prior attempt already notified (or the job is
+            missing — there is nothing to notify about).
+        """
+        now = datetime.now(UTC)
+        session = self._get_session()
+        try:
+            rows = (
+                session.query(JobModel)
+                .filter(JobModel.optimization_id == optimization_id)
+                .filter(JobModel.notified_at.is_(None))
+                .update({JobModel.notified_at: now}, synchronize_session=False)
+            )
+            session.commit()
+            return rows > 0
+        finally:
+            session.close()
+
     def update_job(self, optimization_id: str, **kwargs: Any) -> None:
         """Update fields on an existing job.
 
         Datetime string values are automatically parsed from ISO format;
         ``latest_metrics`` is merged into the existing mapping rather
-        than replacing it.
+        than replacing it. The write is a non-locking ``UPDATE`` —
+        ``SELECT ... FOR UPDATE`` would serialise concurrent writers on
+        this row, which becomes a contention hotspot at scale and is
+        unnecessary because each optimization has a single worker writer
+        in flight (lifecycle cancellation is the only realistic peer and
+        last-writer-wins is acceptable for ``status``/``message``).
 
         Args:
             optimization_id: ID of the job to update.
@@ -250,25 +391,35 @@ class RemoteDBJobStore:
         if invalid_fields:
             raise ValueError(f"Unknown field '{invalid_fields[0]}' on JobModel")
 
+        merging_metrics = "latest_metrics" in kwargs
+        update_values: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if key in datetime_fields and isinstance(value, str):
+                value = datetime.fromisoformat(value)
+            update_values[key] = value
+
         session = self._get_session()
         try:
-            job = (
+            if merging_metrics:
+                existing = (
+                    session.query(JobModel.latest_metrics)
+                    .filter(JobModel.optimization_id == optimization_id)
+                    .first()
+                )
+                if existing is None:
+                    raise KeyError(f"Job '{optimization_id}' not found")
+                current_metrics = existing[0] or {}
+                merged = dict(current_metrics)
+                merged.update(update_values["latest_metrics"])
+                update_values["latest_metrics"] = merged
+
+            rows = (
                 session.query(JobModel)
                 .filter(JobModel.optimization_id == optimization_id)
-                .with_for_update()
-                .first()
+                .update(update_values, synchronize_session=False)
             )
-            if not job:
+            if rows == 0:
                 raise KeyError(f"Job '{optimization_id}' not found")
-            for key, value in kwargs.items():
-                if key in datetime_fields and isinstance(value, str):
-                    value = datetime.fromisoformat(value)
-                if key == "latest_metrics" and job.latest_metrics:
-                    merged = dict(job.latest_metrics)
-                    merged.update(value)
-                    setattr(job, key, merged)
-                else:
-                    setattr(job, key, value)
             session.commit()
         finally:
             session.close()
@@ -536,7 +687,7 @@ class RemoteDBJobStore:
             for (username,) in (*job_rows, *override_rows):
                 if username:
                     seen.add(username.strip().lower())
-            return sorted(seen)[:max(0, limit)]
+            return sorted(seen)[: max(0, limit)]
         finally:
             session.close()
 
@@ -607,13 +758,12 @@ class RemoteDBJobStore:
             session.close()
 
     def recover_orphaned_jobs(self) -> int:
-        """Reclaim jobs whose worker lease has expired.
+        """Re-queue or fail jobs whose worker lease has expired.
 
         With the DB-backed claim queue, a "stuck" job is one whose
         ``lease_expires_at`` is in the past — the previous worker is presumed
-        dead. Such jobs are transitioned to ``failed`` so the user isn't left
-        with a permanently "running" row, and a healthy peer pod is free to
-        accept new work in the freed slot.
+        dead. Such jobs are moved back to ``pending`` until they reach the
+        configured retry cap, letting a healthy peer pod claim the work.
 
         Rows that have *no* claim at all (``claimed_by IS NULL`` while still
         somehow in ``running``/``validating``) are also recovered, covering
@@ -621,7 +771,7 @@ class RemoteDBJobStore:
         in-memory queue.
 
         Returns:
-            The number of jobs transitioned to ``failed``.
+            The number of orphaned jobs handled.
         """
         session = self._get_session()
         try:
@@ -629,22 +779,33 @@ class RemoteDBJobStore:
             orphaned = (
                 session.query(JobModel)
                 .filter(JobModel.status.in_(["running", "validating"]))
-                .filter(
-                    (JobModel.lease_expires_at.is_(None)) | (JobModel.lease_expires_at < now)
-                )
+                .filter((JobModel.lease_expires_at.is_(None)) | (JobModel.lease_expires_at < now))
                 .all()
             )
             for job in orphaned:
-                job.status = "failed"  # type: ignore[assignment]
-                job.message = "Job interrupted by service restart"  # type: ignore[assignment]
-                job.completed_at = now  # type: ignore[assignment]
+                next_attempt = int(job.attempts or 0) + 1
+                job.attempts = next_attempt  # type: ignore[assignment]
                 job.claimed_by = None  # type: ignore[assignment]
                 job.claimed_at = None  # type: ignore[assignment]
                 job.lease_expires_at = None  # type: ignore[assignment]
+                if next_attempt >= settings.job_max_attempts:
+                    job.status = "failed"  # type: ignore[assignment]
+                    job.completed_at = now  # type: ignore[assignment]
+                    if job.code_version and job.code_version != self._current_code_version:
+                        job.message = (  # type: ignore[assignment]
+                            "No compatible worker version available "
+                            f"(job={job.code_version}, fleet={self._current_code_version})"
+                        )
+                    else:
+                        job.message = f"Job failed after pod failure (attempt {next_attempt})"  # type: ignore[assignment]
+                else:
+                    job.status = "pending"  # type: ignore[assignment]
+                    job.completed_at = None  # type: ignore[assignment]
+                    job.message = f"Re-queued after pod failure (attempt {next_attempt})"  # type: ignore[assignment]
             session.commit()
             count = len(orphaned)
             if count:
-                logger.warning("Recovered %d orphaned jobs (expired lease)", count)
+                logger.warning("Handled %d orphaned jobs (expired lease)", count)
             return count
         finally:
             session.close()
@@ -694,6 +855,7 @@ class RemoteDBJobStore:
             WHERE optimization_id = (
                 SELECT optimization_id FROM jobs
                 WHERE status = 'pending'
+                  AND (code_version IS NULL OR code_version = :code_version)
                 ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
@@ -706,7 +868,12 @@ class RemoteDBJobStore:
         with self._engine.begin() as conn:
             result = conn.execute(
                 sql,
-                {"worker_id": worker_id, "now": now, "lease_until": lease_until},
+                {
+                    "worker_id": worker_id,
+                    "now": now,
+                    "lease_until": lease_until,
+                    "code_version": self._current_code_version,
+                },
             )
             row = result.fetchone()
             if row is None:
@@ -731,6 +898,7 @@ class RemoteDBJobStore:
             job = (
                 session.query(JobModel)
                 .filter(JobModel.status == "pending")
+                .filter(or_(JobModel.code_version.is_(None), JobModel.code_version == self._current_code_version))
                 .order_by(JobModel.created_at.asc())
                 .first()
             )
@@ -815,7 +983,11 @@ class RemoteDBJobStore:
         session = self._get_session()
         try:
             jobs = (
-                session.query(JobModel).filter(JobModel.status == "pending").order_by(JobModel.created_at.asc()).all()
+                session.query(JobModel)
+                .filter(JobModel.status == "pending")
+                .filter(or_(JobModel.code_version.is_(None), JobModel.code_version == self._current_code_version))
+                .order_by(JobModel.created_at.asc())
+                .all()
             )
             return [str(j.optimization_id) for j in jobs]
         finally:
@@ -846,66 +1018,143 @@ class RemoteDBJobStore:
             session.close()
 
     def record_progress(self, optimization_id: str, message: str | None, metrics: dict[str, Any]) -> None:
-        """Record a progress event and merge metrics into the job's ``latest_metrics``.
+        """Record a progress event and refresh the job's latest metrics.
 
-        When the per-job event count hits the configured retention cap,
-        evicts the oldest non-structural event first so UI phase
-        markers (baseline, pair-started, etc.) survive the cap on
-        long runs. Silent no-op if the job has been deleted.
+        Event insertion and ``latest_metrics`` update are separate transactions
+        so a transient insert failure does not roll back the UI's latest metric
+        snapshot. Retention trimming runs on a sampled path to avoid counting
+        rows for every high-frequency progress event.
 
         Args:
             optimization_id: ID of the job emitting the event.
             message: Human-readable event marker, or ``None``.
-            metrics: Metric snapshot to merge into ``latest_metrics``.
+            metrics: Metric snapshot to store as ``latest_metrics``.
         """
         now = datetime.now(UTC)
+        inserted = False
+        try:
+            inserted = self._insert_progress_event(optimization_id, message, metrics or {}, now)
+        except SQLAlchemyError:
+            logger.warning("Failed to insert progress event for %s", optimization_id, exc_info=True)
+
+        if inserted and self._should_trim_progress_events(optimization_id):
+            try:
+                self._trim_progress_events(optimization_id)
+            except SQLAlchemyError:
+                logger.warning("Failed to trim progress events for %s", optimization_id, exc_info=True)
+
+        if metrics:
+            self._replace_latest_metrics(optimization_id, metrics)
+
+    def _insert_progress_event(
+        self,
+        optimization_id: str,
+        message: str | None,
+        metrics: dict[str, Any],
+        timestamp: datetime,
+    ) -> bool:
+        """Insert one progress event if the parent job still exists.
+
+        Args:
+            optimization_id: ID of the job emitting the event.
+            message: Human-readable event marker, or ``None``.
+            metrics: Metric payload to persist with the event.
+            timestamp: Timestamp assigned to the event row.
+
+        Returns:
+            Whether an event row was inserted.
+        """
         session = self._get_session()
         try:
-            job = (
-                session.query(JobModel)
-                .filter(JobModel.optimization_id == optimization_id)
-                .with_for_update()
-                .first()
+            exists = session.query(JobModel.optimization_id).filter(JobModel.optimization_id == optimization_id).first()
+            if exists is None:
+                return False
+            session.add(
+                ProgressEventModel(
+                    optimization_id=optimization_id,
+                    timestamp=timestamp,
+                    event=message,
+                    metrics=metrics,
+                )
             )
-            if not job:
-                return
+            session.commit()
+            return True
+        finally:
+            session.close()
 
+    def _replace_latest_metrics(self, optimization_id: str, metrics: dict[str, Any]) -> None:
+        """Replace the job's latest metrics snapshot without taking a row lock.
+
+        Args:
+            optimization_id: ID of the job to update.
+            metrics: Latest metric snapshot from the subprocess.
+        """
+        session = self._get_session()
+        try:
+            session.query(JobModel).filter(JobModel.optimization_id == optimization_id).update(
+                {JobModel.latest_metrics: metrics},
+                synchronize_session=False,
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    def _should_trim_progress_events(self, optimization_id: str) -> bool:
+        """Return whether this event should trigger a sampled retention trim.
+
+        Args:
+            optimization_id: ID of the job whose in-memory event counter is advanced.
+
+        Returns:
+            ``True`` every ``PROGRESS_TRIM_SAMPLE_RATE`` events for a job.
+        """
+        if not hasattr(self, "_progress_event_counters"):
+            self._progress_event_counters = defaultdict(int)
+            self._progress_counter_lock = threading.Lock()
+        with self._progress_counter_lock:
+            self._progress_event_counters[optimization_id] += 1
+            return self._progress_event_counters[optimization_id] % PROGRESS_TRIM_SAMPLE_RATE == 0
+
+    def _trim_progress_events(self, optimization_id: str) -> None:
+        """Delete the oldest excess progress events for a job in one batch.
+
+        Args:
+            optimization_id: ID of the job whose retained progress rows should
+                be brought back down to the configured cap.
+        """
+        session = self._get_session()
+        try:
             event_count = (
                 session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).count()
             )
-            if event_count >= self._progress_events_cap:
-                # Evict the oldest non-structural event first — keep phase
-                # markers (grid_pair_started, baseline_evaluated, etc.) so
-                # the UI can still determine pipeline stage on long runs.
-                # Only touch structural rows if nothing else is left.
-                oldest = (
-                    session.query(ProgressEventModel)
+            excess = event_count - self._progress_events_cap
+            if excess <= 0:
+                return
+
+            old_ids = [
+                row[0]
+                for row in session.query(ProgressEventModel.id)
+                .filter(ProgressEventModel.optimization_id == optimization_id)
+                .filter(ProgressEventModel.event.notin_(STRUCTURAL_PROGRESS_EVENTS))
+                .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
+                .limit(excess)
+                .all()
+            ]
+            if len(old_ids) < excess:
+                old_ids.extend(
+                    row[0]
+                    for row in session.query(ProgressEventModel.id)
                     .filter(ProgressEventModel.optimization_id == optimization_id)
-                    .filter(ProgressEventModel.event.notin_(STRUCTURAL_PROGRESS_EVENTS))
+                    .filter(ProgressEventModel.id.notin_(old_ids))
                     .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
-                    .first()
+                    .limit(excess - len(old_ids))
+                    .all()
                 )
-                if oldest is None:
-                    oldest = (
-                        session.query(ProgressEventModel)
-                        .filter(ProgressEventModel.optimization_id == optimization_id)
-                        .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
-                        .first()
-                    )
-                if oldest:
-                    session.delete(oldest)
-
-            event = ProgressEventModel(
-                optimization_id=optimization_id, timestamp=now, event=message, metrics=metrics or {}
-            )
-            session.add(event)
-
-            if metrics:
-                merged = dict(job.latest_metrics or {})
-                merged.update(metrics)
-                job.latest_metrics = merged  # type: ignore[assignment]
-
-            session.commit()
+            if old_ids:
+                session.query(ProgressEventModel).filter(ProgressEventModel.id.in_(old_ids)).delete(
+                    synchronize_session=False
+                )
+                session.commit()
         finally:
             session.close()
 
@@ -985,12 +1234,7 @@ class RemoteDBJobStore:
         ts = timestamp or datetime.now(UTC)
         session = self._get_session()
         try:
-            job = (
-                session.query(JobModel)
-                .filter(JobModel.optimization_id == optimization_id)
-                .with_for_update()
-                .first()
-            )
+            job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).with_for_update().first()
             if job is None:
                 logger.warning("Discarding log entry for missing job %s", optimization_id)
                 return
@@ -1197,3 +1441,133 @@ class RemoteDBJobStore:
             return q.scalar() or 0
         finally:
             session.close()
+
+    def get_queue_metrics(self) -> tuple[int, float]:
+        """Return pending-job depth and oldest pending-job age in seconds.
+
+        Returns:
+            ``(pending_count, queue_age_seconds)`` with age set to ``0.0`` when
+            no jobs are pending.
+        """
+        if self._engine.dialect.name == "postgresql":
+            with self._engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT
+                            count(*)::int AS pending_count,
+                            COALESCE(EXTRACT(EPOCH FROM (now() - min(created_at))), 0) AS queue_age_seconds
+                        FROM jobs
+                        WHERE status = 'pending'
+                        """
+                    )
+                ).one()
+            return int(row[0] or 0), float(row[1] or 0.0)
+
+        session = self._get_session()
+        try:
+            pending_count, oldest_created_at = (
+                session.query(func.count(JobModel.optimization_id), func.min(JobModel.created_at))
+                .filter(JobModel.status == "pending")
+                .one()
+            )
+            if oldest_created_at is None:
+                return int(pending_count or 0), 0.0
+            if oldest_created_at.tzinfo is None:
+                oldest_created_at = oldest_created_at.replace(tzinfo=UTC)
+            age_seconds = max(0.0, (datetime.now(UTC) - oldest_created_at).total_seconds())
+            return int(pending_count or 0), age_seconds
+        finally:
+            session.close()
+
+    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+        """Persist wizard-parsed dataset rows for an agent-driven submit.
+
+        Args:
+            username: Submitter who owns the staged copy.
+            dataset_filename: Original filename for diagnostics.
+            rows: Parsed dataset rows; must be non-empty.
+
+        Returns:
+            The opaque staged-dataset id used by ``/run``.
+
+        Raises:
+            ValueError: When ``rows`` is empty.
+        """
+        if not rows:
+            raise ValueError("staged dataset rows must be non-empty")
+        staged_id = uuid4().hex
+        session = self._get_session()
+        try:
+            session.add(
+                AgentStagedDatasetModel(
+                    id=staged_id,
+                    username=username,
+                    dataset_filename=dataset_filename,
+                    rows=rows,
+                    row_count=len(rows),
+                )
+            )
+            session.commit()
+            return staged_id
+        except SQLAlchemyError:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def get_staged_dataset(self, staged_dataset_id: str, username: str) -> list[dict[str, Any]] | None:
+        """Fetch staged rows by id, scoped to the calling user.
+
+        Args:
+            staged_dataset_id: Id previously returned by ``stage_dataset``.
+            username: Authenticated caller — scope guards against cross-user reads.
+
+        Returns:
+            The persisted rows, or ``None`` when the row is missing or owned
+            by another user.
+        """
+        session = self._get_session()
+        try:
+            row = (
+                session.query(AgentStagedDatasetModel)
+                .filter(
+                    AgentStagedDatasetModel.id == staged_dataset_id,
+                    AgentStagedDatasetModel.username == username,
+                )
+                .one_or_none()
+            )
+            if row is None:
+                return None
+            return list(row.rows)
+        finally:
+            session.close()
+
+    def delete_staged_dataset(self, staged_dataset_id: str, username: str) -> bool:
+        """Drop a staged dataset once it has been consumed.
+
+        Args:
+            staged_dataset_id: Id to evict.
+            username: Authenticated caller — scope guards against cross-user deletes.
+
+        Returns:
+            ``True`` when a row was deleted, ``False`` when none matched.
+        """
+        session = self._get_session()
+        try:
+            deleted = (
+                session.query(AgentStagedDatasetModel)
+                .filter(
+                    AgentStagedDatasetModel.id == staged_dataset_id,
+                    AgentStagedDatasetModel.username == username,
+                )
+                .delete(synchronize_session=False)
+            )
+            session.commit()
+            return bool(deleted)
+        except SQLAlchemyError:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+

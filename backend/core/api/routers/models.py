@@ -50,7 +50,7 @@ from ...service_gateway.optimization.optimizers import (
     evaluate_on_test,
     instantiate_optimizer,
 )
-from ..model_catalog import ModelCatalogResponse, get_catalog_cached
+from ..model_catalog import CatalogModel, ModelCatalogResponse, get_catalog_cached
 from ..response_limits import AGENT_MAX_LIST, AGENT_MAX_TEXT, cap_list, truncate_text
 from ._probe import (
     GEPAProgressHook,
@@ -134,6 +134,53 @@ class DiscoverModelsResponse(BaseModel):
     total: int | None = None
 
 
+class AgentModelEntry(BaseModel):
+    """Agent-safe model row: single canonical name, no display label.
+
+    The shared catalog model carries both ``value`` (provider-prefixed,
+    submit-ready) and ``label`` (display-only, no prefix). Exposing both to
+    the agent tempted it to copy ``label``, producing un-prefixed
+    ``model_name`` like ``gpt-4o-mini`` that dspy.LM rejects. This shape
+    drops ``label`` entirely so the agent has exactly one identifier to
+    pass to ``update_wizard_state`` / ``submit_job``.
+    """
+
+    name: str = Field(
+        description=(
+            "Pass this verbatim as ``model_name`` to update_wizard_state and "
+            "submit endpoints. Always provider-prefixed (e.g. ``openai/gpt-4o-mini``)."
+        ),
+    )
+    provider: str = Field(description="Provider slug (e.g. ``openai``, ``anthropic``).")
+    supports_thinking: bool = Field(default=False)
+    supports_vision: bool = Field(default=False)
+    max_input_tokens: int | None = Field(default=None)
+
+
+class AgentModelCatalogResponse(BaseModel):
+    """Envelope for ``GET /models/for-agent`` — only canonical, submit-ready names."""
+
+    models: list[AgentModelEntry]
+
+
+def _catalog_to_agent_entry(model: CatalogModel) -> AgentModelEntry:
+    """Project a catalog row to the agent-safe shape (drops label).
+
+    Args:
+        model: A row from the shared model catalog.
+
+    Returns:
+        An ``AgentModelEntry`` exposing only the canonical prefixed name.
+    """
+    return AgentModelEntry(
+        name=model.value,
+        provider=model.provider,
+        supports_thinking=model.supports_thinking,
+        supports_vision=model.supports_vision,
+        max_input_tokens=model.max_input_tokens,
+    )
+
+
 class ModelProbeRequest(BaseModel):
     """Request payload for POST /models/probe.
 
@@ -186,10 +233,13 @@ def create_models_router() -> APIRouter:
         "/models",
         response_model=ModelCatalogResponse,
         summary="List the curated model catalog",
-        tags=["agent"],
     )
     def list_models() -> ModelCatalogResponse:
-        """Return the curated model catalog with provider API-key status.
+        """List available models for the frontend (value + label + grouping).
+
+        Frontend-only: the agent must hit ``/models/for-agent`` instead, which
+        returns a single canonical ``name`` per row so the agent cannot pick
+        the display-only label and ship an un-prefixed ``model_name``.
 
         Response is effectively static per process lifetime (cached 5 min).
 
@@ -198,6 +248,33 @@ def create_models_router() -> APIRouter:
         """
         catalog = get_catalog_cached()
         return catalog
+
+    @router.get(
+        "/models/for-agent",
+        response_model=AgentModelCatalogResponse,
+        operation_id="list_models_for_agent",
+        summary="List submit-ready model names (provider-prefixed) for the generalist agent",
+        tags=["agent"],
+    )
+    def list_models_for_agent(query: str | None = None) -> AgentModelCatalogResponse:
+        """List models; copy each entry's ``name`` verbatim into ``model_name`` when submitting. Pass ``query`` to filter by name substring (case-insensitive, e.g. ``query="gpt-5.4"``) — the unfiltered catalog is ~18KB across 130 models, so always pass ``query`` when the user named a model.
+
+        Args:
+            query: Optional case-insensitive substring to filter model names.
+                Common patterns: a provider slug (``"openai"``), a family
+                (``"gpt-5"``), or an exact-ish model name
+                (``"gpt-5.4-nano"``). Omit to fetch the full catalog.
+
+        Returns:
+            The (optionally filtered) catalog projected to
+            ``{name, provider, …}`` rows.
+        """
+        catalog = get_catalog_cached()
+        entries = (_catalog_to_agent_entry(m) for m in catalog.models)
+        if query:
+            needle = query.lower()
+            entries = (entry for entry in entries if needle in entry.name.lower())
+        return AgentModelCatalogResponse(models=list(entries))
 
     @router.post(
         "/models/discover",

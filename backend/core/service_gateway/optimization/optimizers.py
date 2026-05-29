@@ -99,7 +99,8 @@ def evaluate_on_test(
     metric: Any,
     *,
     collect_per_example: Literal[True],
-) -> tuple[float | None, list[dict]]: ...
+) -> tuple[float | None, list[dict]]:
+    """Evaluate ``program`` and return aggregate score plus per-example breakdown."""
 
 
 @overload
@@ -109,7 +110,8 @@ def evaluate_on_test(
     metric: Any,
     *,
     collect_per_example: Literal[False] = ...,
-) -> float | None: ...
+) -> float | None:
+    """Evaluate ``program`` and return only the aggregate test score."""
 
 
 def evaluate_on_test(

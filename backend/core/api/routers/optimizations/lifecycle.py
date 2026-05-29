@@ -183,8 +183,10 @@ def register_lifecycle_routes(
             return BulkCancelResponse(cancelled=cancelled, skipped=skipped)
 
         allowed, denied = _filter_owned_ids(job_store, ordered_unique, current_user)
-        for optimization_id in denied:
-            skipped.append(BulkCancelSkipped(optimization_id=optimization_id, reason="not_found"))
+        skipped.extend(
+            BulkCancelSkipped(optimization_id=optimization_id, reason="not_found")
+            for optimization_id in denied
+        )
 
         if not allowed:
             return BulkCancelResponse(cancelled=cancelled, skipped=skipped)
