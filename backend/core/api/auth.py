@@ -6,19 +6,32 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import Header
+from fastapi import Header, Request
+from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..storage.models import ApiTokenModel
 from .errors import DomainError
 
 _EXPECTED_ALGORITHM = "HS256"
 _EXPECTED_AUDIENCE = "skynet-backend"
 _EXPECTED_ISSUER = "skynet-frontend"
+
+# Personal Access Token (PAT) — a long-lived, user-generated API credential
+# for programmatic backend access, distinct from the short-lived session JWT
+# the frontend mints. The ``skyd_`` prefix makes it identifiable in logs and
+# secret scanners and lets the auth dependency route it to the DB-backed path
+# instead of JWT verification. Stored only as a SHA-256 hash; the plaintext is
+# shown to the user exactly once at creation.
+API_TOKEN_PREFIX = "skyd_"
+_API_TOKEN_SECRET_BYTES = 32
 
 
 @dataclass(frozen=True)
@@ -117,10 +130,101 @@ def _normalise_groups(groups: Any) -> tuple[str, ...]:
     return tuple(str(group).strip().lower() for group in values if str(group).strip())
 
 
-def get_authenticated_user(authorization: str | None = Header(default=None)) -> AuthenticatedUser:
-    """Verify the bearer token and return the authenticated user.
+def generate_api_token() -> str:
+    """Return a fresh ``skyd_``-prefixed personal access token.
+
+    Returns:
+        A token string carrying 256 bits of CSPRNG entropy after the prefix.
+    """
+    return f"{API_TOKEN_PREFIX}{secrets.token_urlsafe(_API_TOKEN_SECRET_BYTES)}"
+
+
+def is_api_token(token: str) -> bool:
+    """Return whether ``token`` is shaped like a Skynet personal access token.
 
     Args:
+        token: Raw bearer credential (without the ``Bearer `` scheme prefix).
+
+    Returns:
+        True when ``token`` carries the PAT prefix.
+    """
+    return token.startswith(API_TOKEN_PREFIX)
+
+
+def hash_api_token(token: str) -> str:
+    """Return the hex SHA-256 hash persisted at rest for ``token``.
+
+    Args:
+        token: Raw token (with prefix).
+
+    Returns:
+        Lowercase hex SHA-256 digest of the token.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def token_last4(token: str) -> str:
+    """Return the last four characters of ``token`` for display.
+
+    Args:
+        token: Raw token.
+
+    Returns:
+        The trailing four characters.
+    """
+    return token[-4:]
+
+
+def _authenticate_api_token(request: Request, token: str) -> AuthenticatedUser:
+    """Resolve the user behind a personal access token.
+
+    Looks the token's SHA-256 hash up in ``api_tokens`` via the app-level job
+    store, stamps ``last_used_at``, and derives the role from the admin
+    username allowlist. Group-based admin doesn't apply to PATs — they carry a
+    bare user identity, not the SSO ``groups`` claim a session JWT does.
+
+    Args:
+        request: Incoming request, used to reach ``app.state.job_store``.
+        token: Raw ``skyd_`` token from the Authorization header.
+
+    Returns:
+        The authenticated user behind the token.
+
+    Raises:
+        DomainError: 500 when the store is unavailable; 401 when the token
+            matches no active row.
+    """
+    job_store = getattr(request.app.state, "job_store", None)
+    if job_store is None:
+        raise DomainError("auth.not_configured", status=500)
+    token_hash = hash_api_token(token)
+    with Session(job_store.engine) as session:
+        row = (
+            session.query(ApiTokenModel)
+            .filter(ApiTokenModel.token_hash == token_hash)
+            .one_or_none()
+        )
+        if row is None:
+            raise DomainError("auth.invalid_token", status=401)
+        username = str(row.username)
+        row.last_used_at = datetime.now(UTC)
+        session.commit()
+    role = "admin" if username in settings.admin_usernames_set else "user"
+    return AuthenticatedUser(username=username, role=role, groups=())
+
+
+def get_authenticated_user(
+    request: Request, authorization: str | None = Header(default=None)
+) -> AuthenticatedUser:
+    """Verify the bearer credential and return the authenticated user.
+
+    Accepts two credential types on ``Authorization: Bearer``: a long-lived
+    personal access token (``skyd_…``, resolved against the ``api_tokens``
+    table) for programmatic API access, or the short-lived HS256 session JWT
+    the frontend mints for the web app. The PAT prefix selects the path.
+
+    Args:
+        request: Incoming request (used to reach the store for PAT lookup).
         authorization: HTTP Authorization header.
 
     Returns:
@@ -131,12 +235,12 @@ def get_authenticated_user(authorization: str | None = Header(default=None)) -> 
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise DomainError("auth.missing_token", status=401)
+    token = authorization.removeprefix("Bearer ").strip()
+    if is_api_token(token):
+        return _authenticate_api_token(request, token)
     if settings.backend_auth_secret is None:
         raise DomainError("auth.not_configured", status=500)
-    payload = _verify_hs256(
-        authorization.removeprefix("Bearer ").strip(),
-        settings.backend_auth_secret.get_secret_value(),
-    )
+    payload = _verify_hs256(token, settings.backend_auth_secret.get_secret_value())
     username = str(payload.get("name") or payload.get("email") or payload.get("sub") or "").strip().lower()
     if not username:
         raise DomainError("auth.invalid_token", status=401)
@@ -158,9 +262,7 @@ def is_admin(user: AuthenticatedUser) -> bool:
     """
     if user.username in settings.admin_usernames_set:
         return True
-    if settings.admin_groups_set and settings.admin_groups_set.intersection(user.groups):
-        return True
-    return False
+    return bool(settings.admin_groups_set and settings.admin_groups_set.intersection(user.groups))
 
 
 def require_admin_user(user: AuthenticatedUser) -> AuthenticatedUser:

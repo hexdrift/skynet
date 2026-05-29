@@ -5,6 +5,9 @@ import { signOut, useSession } from "next-auth/react";
 import { toast } from "react-toastify";
 import {
   Columns2,
+  Check,
+  Copy,
+  KeyRound,
   ExternalLink,
   Keyboard,
   LogOut,
@@ -67,9 +70,13 @@ import { msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import {
   deleteUserQuotaOverride,
+  generateApiToken,
+  getApiToken,
   getUserQuotaOverrides,
+  revokeApiToken,
   searchAdminUsers,
   setUserQuotaOverride,
+  type ApiTokenInfo,
   type DirectoryUserMatch,
   type UserQuotaOverride,
 } from "@/shared/lib/api";
@@ -858,11 +865,202 @@ function AboutTab() {
   );
 }
 
+function ApiTab() {
+  const { data: session } = useSession();
+  const hasAuth = !!session?.backendAccessToken;
+  const [info, setInfo] = React.useState<ApiTokenInfo | null>(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [revealed, setRevealed] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  const [confirmingRegen, setConfirmingRegen] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    if (!hasAuth) {
+      setLoaded(true);
+      return;
+    }
+    try {
+      setInfo(await getApiToken());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoaded(true);
+    }
+  }, [hasAuth]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleGenerate = React.useCallback(async () => {
+    setBusy(true);
+    setConfirmingRegen(false);
+    try {
+      const created = await generateApiToken();
+      setRevealed(created.token);
+      setCopied(false);
+      setInfo({ last4: created.last4, created_at: created.created_at, last_used_at: null });
+      toast.success(msg("settings.api.generated_toast"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("settings.api.generate_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const handleRevoke = React.useCallback(async () => {
+    setBusy(true);
+    try {
+      await revokeApiToken();
+      setInfo(null);
+      setRevealed(null);
+      toast.success(msg("settings.api.revoked_toast"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("settings.api.revoke_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const handleCopy = React.useCallback(async () => {
+    if (!revealed) return;
+    try {
+      await navigator.clipboard.writeText(revealed);
+      setCopied(true);
+    } catch {
+      // Clipboard access can be blocked; the token stays visible to copy by hand.
+    }
+  }, [revealed]);
+
+  const formatTimestamp = (iso: string) => new Date(iso).toLocaleString("he-IL");
+
+  if (!hasAuth) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        {msg("settings.api.auth_missing")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <SettingsRow
+        icon={KeyRound}
+        label={msg("settings.api.title")}
+        description={msg("settings.api.description")}
+      >
+        <span />
+      </SettingsRow>
+
+      {revealed && (
+        <div className="space-y-2 rounded-md border border-[#C8A882]/40 bg-[#FAF8F5] px-3 py-3">
+          <div className="flex items-start gap-1.5 text-xs text-[#7A1E13]">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <span>{msg("settings.api.reveal_warning")}</span>
+          </div>
+          <div
+            dir="ltr"
+            className="flex items-center justify-between gap-2 rounded bg-[#3D2E22]/5 px-2 py-1.5"
+          >
+            <code className="min-w-0 flex-1 break-all font-mono text-xs text-[#3D2E22]">
+              {revealed}
+            </code>
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={handleCopy}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              <span>{copied ? msg("settings.api.copied") : msg("settings.api.copy")}</span>
+            </Button>
+          </div>
+          <Button size="sm" variant="ghost" className="w-full" onClick={() => setRevealed(null)}>
+            {msg("settings.api.done")}
+          </Button>
+        </div>
+      )}
+
+      {loaded && !revealed && info && (
+        <div className="space-y-2 rounded-md border border-border/50 px-3 py-3 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">{msg("settings.api.active_label")}</span>
+            <code dir="ltr" className="font-mono text-foreground">
+              {msg("settings.api.token_masked", { last4: info.last4 })}
+            </code>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">{msg("settings.api.created")}</span>
+            <span dir="ltr">{formatTimestamp(info.created_at)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">{msg("settings.api.last_used")}</span>
+            <span dir="ltr">
+              {info.last_used_at
+                ? formatTimestamp(info.last_used_at)
+                : msg("settings.api.never_used")}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {loaded && !revealed && !info && (
+        <p className="text-xs text-muted-foreground">{msg("settings.api.none")}</p>
+      )}
+
+      {loaded && !revealed && (
+        <div className="space-y-2">
+          {confirmingRegen ? (
+            <div className="flex flex-col gap-2 rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs">
+              <span className="text-amber-800">{msg("settings.api.confirm_regenerate")}</span>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleGenerate} disabled={busy}>
+                  {msg("settings.api.confirm")}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirmingRegen(false)}>
+                  {msg("settings.api.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="gap-1.5"
+                disabled={busy}
+                onClick={info ? () => setConfirmingRegen(true) : handleGenerate}
+              >
+                <KeyRound className="size-3.5" />
+                <span>{info ? msg("settings.api.regenerate") : msg("settings.api.generate")}</span>
+              </Button>
+              {info && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={handleRevoke}>
+                  {msg("settings.api.revoke")}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1 border-t border-border/40 pt-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          {msg("settings.api.usage_label")}
+        </span>
+        <code
+          dir="ltr"
+          className="block break-all rounded bg-muted px-2 py-1.5 font-mono text-xs text-foreground"
+        >
+          {msg("settings.api.usage_example")}
+        </code>
+      </div>
+    </div>
+  );
+}
+
+
 const SETTINGS_TAB_ORDER = [
   "wizard",
   "agent",
   "admin",
   "account",
+  "api",
   "about",
 ] as const;
 type SettingsTab = (typeof SETTINGS_TAB_ORDER)[number];
@@ -928,6 +1126,9 @@ export function SettingsModal() {
             <TabsTrigger value="account" className={SETTINGS_TAB_TRIGGER_CLASS}>
               {msg("settings.tab.account")}
             </TabsTrigger>
+            <TabsTrigger value="api" className={SETTINGS_TAB_TRIGGER_CLASS}>
+              {msg("settings.tab.api")}
+            </TabsTrigger>
             <TabsTrigger value="about" className={SETTINGS_TAB_TRIGGER_CLASS}>
               {msg("settings.tab.about")}
             </TabsTrigger>
@@ -947,6 +1148,9 @@ export function SettingsModal() {
             )}
             <TabsContent value="account">
               <AccountTab />
+            </TabsContent>
+            <TabsContent value="api">
+              <ApiTab />
             </TabsContent>
             <TabsContent value="about">
               <AboutTab />
