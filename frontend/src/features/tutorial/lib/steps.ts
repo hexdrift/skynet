@@ -749,6 +749,26 @@ const tutorialSteps: TutorialStep[] = [
     readingTimeSec: 8,
   },
   {
+    id: "dd-trajectory",
+    title: msg("auto.features.tutorial.lib.steps.literal.46"),
+    description: msg("auto.features.tutorial.lib.steps.literal.47"),
+    target: "[data-tutorial='trajectory-panel']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      setDetailTab("overview");
+      // Re-stream the candidates so the user sees the tree grow live (with
+      // the GEPA TQDM bar visible in the pipeline) instead of jumping to
+      // the completed graph. Placed right after dd-pipeline so the
+      // optimization stage is showcased end-to-end before we move on to
+      // the baseline-vs-final score comparison.
+      callTutorialHook("replayDemoSimulation");
+      await waitForElement("[data-tutorial='trajectory-panel']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 12,
+  },
+  {
     id: "dd-scores",
     title: formatMsg("auto.features.tutorial.lib.steps.template.31", { p1: TERMS.scorePlural }),
     description: formatMsg("auto.features.tutorial.lib.steps.template.32", {
@@ -764,23 +784,6 @@ const tutorialSteps: TutorialStep[] = [
     },
     track: "deep-dive",
     readingTimeSec: 5,
-  },
-  {
-    id: "dd-trajectory",
-    title: msg("auto.features.tutorial.lib.steps.literal.46"),
-    description: msg("auto.features.tutorial.lib.steps.literal.47"),
-    target: "[data-tutorial='trajectory-panel']",
-    placement: "top",
-    beforeShow: async () => {
-      await ensureDemoDetail();
-      setDetailTab("overview");
-      // Re-stream the candidates so the user sees the tree grow live instead
-      // of jumping straight to the completed graph.
-      callTutorialHook("replayDemoSimulation");
-      await waitForElement("[data-tutorial='trajectory-panel']");
-    },
-    track: "deep-dive",
-    readingTimeSec: 12,
   },
   {
     id: "dd-score-chart",
@@ -802,20 +805,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-playground",
     title: msg("auto.features.tutorial.lib.steps.literal.25"),
-    description: formatMsg("auto.features.tutorial.lib.steps.template.36", { p1: TERMS.model }),
-    target: "[data-tutorial='playground-tab']",
-    placement: "bottom",
-    beforeShow: async () => {
-      await ensureDemoDetail();
-      setDetailTab("playground");
-    },
-    track: "deep-dive",
-    readingTimeSec: 6,
-  },
-  {
-    id: "dd-serve",
-    title: msg("auto.features.tutorial.lib.steps.literal.40"),
-    description: msg("auto.features.tutorial.lib.steps.literal.41"),
+    description: `${formatMsg("auto.features.tutorial.lib.steps.template.36", { p1: TERMS.model })} ${msg("auto.features.tutorial.lib.steps.literal.41")}`,
     target: "[data-tutorial='serve-playground']",
     placement: "top",
     beforeShow: async () => {
@@ -824,7 +814,7 @@ const tutorialSteps: TutorialStep[] = [
       await waitForElement("[data-tutorial='serve-playground']");
     },
     track: "deep-dive",
-    readingTimeSec: 9,
+    readingTimeSec: 12,
   },
   {
     id: "dd-data-tab",
@@ -838,11 +828,12 @@ const tutorialSteps: TutorialStep[] = [
       p6: TERMS.splitTest,
       p7: TERMS.score,
     }),
-    target: "[data-tutorial='data-tab-trigger']",
-    placement: "bottom",
+    target: "[data-tutorial='data-table']",
+    placement: "top",
     beforeShow: async () => {
       await ensureDemoDetail();
       setDetailTab("data");
+      await waitForElement("[data-tutorial='data-table']");
     },
     track: "deep-dive",
     readingTimeSec: 9,
@@ -851,11 +842,12 @@ const tutorialSteps: TutorialStep[] = [
     id: "dd-logs",
     title: msg("auto.features.tutorial.lib.steps.literal.26"),
     description: formatMsg("auto.features.tutorial.lib.steps.template.37", { p1: TERMS.optimizer }),
-    target: "[data-tutorial='logs-tab-trigger']",
+    target: "[data-tutorial='live-logs']",
     placement: "bottom",
     beforeShow: async () => {
       await ensureDemoDetail();
       setDetailTab("logs");
+      await waitForElement("[data-tutorial='live-logs']");
     },
     track: "deep-dive",
     readingTimeSec: 6,
@@ -939,7 +931,7 @@ const tutorialSteps: TutorialStep[] = [
     title: msg("auto.features.tutorial.lib.steps.literal.29"),
     description: msg("auto.features.tutorial.lib.steps.literal.30"),
     target: "[data-tutorial='tagger-setup']",
-    placement: "top",
+    placement: "right",
     beforeShow: async () => {
       await ensureTagger();
       injectDemoTaggerData(0);
@@ -952,7 +944,7 @@ const tutorialSteps: TutorialStep[] = [
     title: msg("auto.features.tutorial.lib.steps.literal.31"),
     description: msg("auto.features.tutorial.lib.steps.literal.32"),
     target: "[data-tutorial='tagger-modes']",
-    placement: "top",
+    placement: "right",
     beforeShow: async () => {
       await ensureTagger();
       injectDemoTaggerData(1);
@@ -1042,7 +1034,6 @@ const ADVANCED_ONLY_STEP_IDS = new Set([
   "dd-score-chart",
   "dd-trajectory",
   "dd-playground",
-  "dd-serve",
   "dd-logs",
   "dd-config",
   "dd-grid-overview",

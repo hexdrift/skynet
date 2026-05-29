@@ -40,6 +40,7 @@ export const sidebarMessages = {
   "auto.features.sidebar.components.sidebar.literal.12": "הרחבת הריצות",
   "auto.features.sidebar.components.sidebar.literal.13": "הסרת הצמדה",
   "auto.features.sidebar.components.sidebar.literal.14": "הצמדה",
+  "auto.features.sidebar.components.sidebar.literal.15": "שינוי רוחב הסרגל",
   "auto.features.sidebar.components.sidebar.template.1": "חיפוש {p1}",
   "auto.features.sidebar.components.sidebar.template.2": "סריקה · {p1} זוגות",
   "auto.features.sidebar.components.sidebar.template.3": "אפשרויות עבור {p1}",

@@ -53,7 +53,7 @@ interface ScatterCanvasProps {
   // concentric ring and a hover hint pointing at the picker.
   multiVariationIds?: ReadonlySet<string>;
   // Number of variations per leader (when > 1). Used to format the
-  // hover hint as "{n} גרסאות — לחצו לבחירה".
+  // hover hint via the `explore.canvas.variations_hint` catalog entry.
   variationCountById?: ReadonlyMap<string, number>;
   // When non-null, points whose id is not in this set fade to ~15%. Lets
   // the map act as a secondary view of an active semantic search — matches

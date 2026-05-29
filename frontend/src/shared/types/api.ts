@@ -259,6 +259,17 @@ export interface ValidateCodeResponse {
   warnings: string[];
 }
 
+export interface ValidateDatasetRequest {
+  row_count: number;
+  fractions: SplitFractions;
+}
+
+export interface ValidateDatasetResponse {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
 export interface QueueStatusResponse {
   pending_jobs: number;
   active_jobs: number;
@@ -270,15 +281,6 @@ export interface OptimizationPayloadResponse {
   optimization_id: string;
   optimization_type: OptimizationType;
   payload: Record<string, unknown>;
-}
-
-export interface TemplateResponse {
-  template_id: string;
-  name: string;
-  description?: string | null;
-  username: string;
-  config: Record<string, unknown>;
-  created_at: string;
 }
 
 export interface DatasetRow {
@@ -306,6 +308,8 @@ export interface ServeInfoResponse {
   output_fields: string[];
   instructions?: string | null;
   demo_count: number;
+  /** Example input values (from a demo or the dataset) to prefill usage snippets. */
+  sample_inputs?: Record<string, string>;
 }
 
 export interface ServeResponse {

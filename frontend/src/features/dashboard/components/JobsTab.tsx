@@ -29,6 +29,20 @@ import { formatScore, typeBadge } from "../lib/status-badges";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import type { DeleteTarget } from "../hooks/use-bulk-delete";
 
+// Compact default widths so every column + actions fit a typical card scroller
+// (~956px) without horizontal scrolling. Users can still resize individually.
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  optimization_id: 90,
+  name: 130,
+  optimization_type: 75,
+  status: 95,
+  module_name: 95,
+  dataset_rows: 65,
+  created_at: 90,
+  elapsed_seconds: 75,
+  optimized_test_metric: 105,
+};
+
 type ColResize = ReturnType<typeof useColumnResize>;
 
 type JobsTabProps = {
@@ -137,7 +151,7 @@ export function JobsTab({
             className="overflow-x-auto rounded-2xl border border-border/40 bg-card/60"
             data-tutorial="dashboard-table"
           >
-            <Table style={{ minWidth: "800px" }}>
+            <Table style={{ minWidth: "640px" }}>
               <TableHeader className="bg-muted/20 [&_tr]:border-b-border/40">
                 <TableRow>
                   <TableHead className="w-10 px-3">
@@ -155,9 +169,7 @@ export function JobsTab({
                     />
                   </TableHead>
                   <ColumnHeader
-                    label={formatMsg("auto.features.dashboard.components.jobstab.template.1", {
-                      p1: TERMS.optimization,
-                    })}
+                    label={msg("auto.features.dashboard.components.jobstab.template.1")}
                     sortKey="optimization_id"
                     currentSort={sortKey}
                     sortDir={sortDir}
@@ -168,7 +180,7 @@ export function JobsTab({
                     onFilter={setColumnFilter}
                     openFilter={openFilter}
                     setOpenFilter={setOpenFilter}
-                    width={colResize.widths["optimization_id"]}
+                    width={colResize.widths["optimization_id"] ?? DEFAULT_COL_WIDTHS.optimization_id}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -183,7 +195,7 @@ export function JobsTab({
                     onFilter={setColumnFilter}
                     openFilter={openFilter}
                     setOpenFilter={setOpenFilter}
-                    width={colResize.widths["name"]}
+                    width={colResize.widths["name"] ?? DEFAULT_COL_WIDTHS.name}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -198,7 +210,7 @@ export function JobsTab({
                     onFilter={setColumnFilter}
                     openFilter={openFilter}
                     setOpenFilter={setOpenFilter}
-                    width={colResize.widths["optimization_type"]}
+                    width={colResize.widths["optimization_type"] ?? DEFAULT_COL_WIDTHS.optimization_type}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -213,7 +225,7 @@ export function JobsTab({
                     onFilter={setColumnFilter}
                     openFilter={openFilter}
                     setOpenFilter={setOpenFilter}
-                    width={colResize.widths["status"]}
+                    width={colResize.widths["status"] ?? DEFAULT_COL_WIDTHS.status}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -228,7 +240,7 @@ export function JobsTab({
                     onFilter={setColumnFilter}
                     openFilter={openFilter}
                     setOpenFilter={setOpenFilter}
-                    width={colResize.widths["module_name"]}
+                    width={colResize.widths["module_name"] ?? DEFAULT_COL_WIDTHS.module_name}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -237,7 +249,7 @@ export function JobsTab({
                     currentSort={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
-                    width={colResize.widths["dataset_rows"]}
+                    width={colResize.widths["dataset_rows"] ?? DEFAULT_COL_WIDTHS.dataset_rows}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -246,7 +258,7 @@ export function JobsTab({
                     currentSort={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
-                    width={colResize.widths["created_at"]}
+                    width={colResize.widths["created_at"] ?? DEFAULT_COL_WIDTHS.created_at}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -255,7 +267,7 @@ export function JobsTab({
                     currentSort={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
-                    width={colResize.widths["elapsed_seconds"]}
+                    width={colResize.widths["elapsed_seconds"] ?? DEFAULT_COL_WIDTHS.elapsed_seconds}
                     onResize={colResize.setColumnWidth}
                   />
                   <ColumnHeader
@@ -264,7 +276,7 @@ export function JobsTab({
                     currentSort={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
-                    width={colResize.widths["optimized_test_metric"]}
+                    width={colResize.widths["optimized_test_metric"] ?? DEFAULT_COL_WIDTHS.optimized_test_metric}
                     onResize={colResize.setColumnWidth}
                   />
                   <TableHead className="w-16" />
@@ -312,10 +324,15 @@ export function JobsTab({
                         />
                       </TableCell>
                       <TableCell
-                        className="max-w-[180px] truncate overflow-hidden"
+                        className="px-2 max-w-[100px]"
                         title={job.optimization_id}
                       >
-                        <div className="flex items-center gap-1.5">
+                        {/* ``min-w-0`` lets the flex item shrink so the
+                            cell's overflow-hidden + text-ellipsis can
+                            actually fire on the span below; without it
+                            the flex child claims its content's intrinsic
+                            width and overflows past the cell boundary. */}
+                        <div className="flex items-center gap-1.5 min-w-0">
                           {ACTIVE_STATUSES.has(job.status) && <PingDot className="shrink-0" />}
                           <span className="font-mono text-xs text-primary truncate">
                             {formatId(job.optimization_id)}
@@ -323,7 +340,7 @@ export function JobsTab({
                         </div>
                       </TableCell>
                       <TableCell
-                        className="max-w-[200px] text-sm truncate overflow-hidden"
+                        className="px-2 max-w-[140px] text-sm truncate overflow-hidden"
                         title={job.name ?? ""}
                         dir="auto"
                       >
@@ -333,31 +350,31 @@ export function JobsTab({
                           <span className="text-muted-foreground/60">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="truncate overflow-hidden">
+                      <TableCell className="px-2 truncate overflow-hidden">
                         {typeBadge(job.optimization_type)}
                       </TableCell>
-                      <TableCell className="truncate overflow-hidden">
+                      <TableCell className="px-2 truncate overflow-hidden">
                         <StatusBadge status={job.status} compact />
                       </TableCell>
                       <TableCell
-                        className="text-sm truncate overflow-hidden"
+                        className="px-2 max-w-[120px] text-sm truncate overflow-hidden"
                         title={job.module_name ?? ""}
                       >
                         {job.module_name ?? "-"}
                       </TableCell>
                       <TableCell
-                        className="text-sm tabular-nums truncate overflow-hidden"
+                        className="px-2 text-sm tabular-nums truncate overflow-hidden"
                         title={String(job.dataset_rows ?? "")}
                       >
                         {job.dataset_rows ?? "-"}
                       </TableCell>
                       <TableCell
-                        className="text-xs text-muted-foreground truncate overflow-hidden"
+                        className="px-2 text-xs text-muted-foreground truncate overflow-hidden whitespace-nowrap"
                         title={formatDate(job.created_at)}
                       >
                         {formatRelativeTime(job.created_at)}
                       </TableCell>
-                      <TableCell className="text-xs tabular-nums truncate overflow-hidden">
+                      <TableCell className="px-2 text-xs tabular-nums truncate overflow-hidden whitespace-nowrap">
                         <LiveElapsed
                           startedAt={job.started_at}
                           createdAt={job.created_at}
@@ -365,8 +382,8 @@ export function JobsTab({
                           isActive={ACTIVE_STATUSES.has(job.status)}
                         />
                       </TableCell>
-                      <TableCell className="truncate overflow-hidden">{formatScore(job)}</TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 truncate overflow-hidden">{formatScore(job)}</TableCell>
+                      <TableCell className="px-2">
                         <div className="flex items-center gap-0.5">
                           <TooltipButton
                             tooltip={msg("auto.features.dashboard.components.jobstab.9")}

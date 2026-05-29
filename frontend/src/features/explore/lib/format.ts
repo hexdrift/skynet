@@ -59,19 +59,19 @@ export function formatExploreDate(iso: string | null | undefined): string {
 const RTF_HE = new Intl.RelativeTimeFormat("he", { numeric: "auto" });
 
 /**
- * Hebrew relative time ("עכשיו", "אתמול", "לפני 3 ימים", "השבוע שעבר") that
+ * Hebrew relative time (now / yesterday / N days ago / last week) that
  * falls back to a short absolute date for items older than a month so the
  * row metadata never balloons. Returns "—" for missing/unparseable input.
  *
  * Uses Intl.RelativeTimeFormat with `numeric: "auto"` which already knows
- * the Hebrew dual form ("אתמול", "יומיים", "שבועיים") so we don't reinvent
- * the pluralization table.
+ * the Hebrew dual form (yesterday / two days / two weeks) so we don't
+ * reinvent the pluralization table.
  *
  * Future timestamps (server clock ahead of client) are clamped to "now"
  * rather than rendering "in N minutes" — a job's `created_at` should never
  * be in the future from the reader's perspective. Unit selection uses
  * `Math.floor` (completed units, matching date-fns convention) so
- * something 6h59m old reads as "לפני 6 שעות", not "7" that then races
+ * something 6h59m old reads as "6 hours ago", not "7" that then races
  * the day boundary.
  */
 export function formatRelativeDate(iso: string | null | undefined): string {

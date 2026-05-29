@@ -12,6 +12,7 @@ import { useUserPrefs } from "@/features/settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
+import { JobsStreamProvider } from "@/shared/hooks/use-jobs-stream";
 import { ParticleHero } from "@/shared/ui/particle-hero";
 import {
   GeneralistPanel,
@@ -239,12 +240,12 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
     </div>
   );
 
-  if (!generalistEnabled) return shell;
+  if (!generalistEnabled) return <JobsStreamProvider>{shell}</JobsStreamProvider>;
 
   return (
     <WizardStateProvider>
       <GeneralistPanelProvider>
-        {shell}
+        <JobsStreamProvider>{shell}</JobsStreamProvider>
         <GeneralistPanel />
       </GeneralistPanelProvider>
     </WizardStateProvider>

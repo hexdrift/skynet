@@ -1,30 +1,24 @@
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 import type { PaginatedJobsResponse } from "@/shared/types/api";
-import { getRuntimeEnv } from "@/shared/lib/runtime-env";
-import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
-
-const POLL_FALLBACK_MS = 15_000;
+import { useJobsStream } from "@/shared/hooks/use-jobs-stream";
 
 type UseJobsRealtimeArgs = {
   data: PaginatedJobsResponse | null;
   fetchJobs: () => Promise<void> | void;
 };
 
+/**
+ * Dashboard adapter over the shared jobs stream: keeps the live list in sync
+ * while any job is active. The SSE connection itself is owned by
+ * ``JobsStreamProvider`` and shared with the sidebar, so the dashboard no
+ * longer opens its own duplicate ``/optimizations/stream`` connection.
+ *
+ * Args:
+ *   data: The current paginated jobs page; its statuses decide whether the
+ *     shared stream needs to be open.
+ *   fetchJobs: Refetch the dashboard's list; fired on each shared stream tick.
+ */
 export function useJobsRealtime({ data, fetchJobs }: UseJobsRealtimeArgs) {
   const hasActive = data?.items.some((j) => ACTIVE_STATUSES.has(j.status)) ?? false;
-  const API = getRuntimeEnv().apiUrl;
-
-  useStreamWithPollFallback({
-    url: hasActive ? `${API}/optimizations/stream` : "",
-    enabled: hasActive,
-    onMessage: () => void fetchJobs(),
-    events: { idle: () => void fetchJobs() },
-    closeOnEvents: ["idle"],
-    poll: () => void fetchJobs(),
-    pollIntervalMs: POLL_FALLBACK_MS,
-    pollOnlyOnClosed: false,
-    // Stream auth failed even after a token refresh — fall back to the
-    // self-healing fetchJobs() path instead of silently going stale.
-    onAuthError: () => void fetchJobs(),
-  });
+  useJobsStream({ active: hasActive, onTick: () => void fetchJobs() });
 }

@@ -10,8 +10,6 @@ import {
   Send,
   Tags,
   Trash2,
-  PanelRightClose,
-  PanelRightOpen,
   MoreHorizontal,
   Share2,
   Pencil,
@@ -41,6 +39,7 @@ import {
 } from "@/shared/lib/api";
 import type { SidebarJobItem } from "@/shared/lib/api";
 import { isActiveStatus } from "@/shared/constants/job-status";
+import { useJobsStream } from "@/shared/hooks/use-jobs-stream";
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
 import { groupJobsByRecency } from "@/features/sidebar";
@@ -61,6 +60,15 @@ const NAV_ITEMS = [
 
 const PAGE_SIZE = 20;
 
+const SIDEBAR_MIN_WIDTH = 210;
+const SIDEBAR_MAX_WIDTH = 420;
+const SIDEBAR_DEFAULT_WIDTH = SIDEBAR_MIN_WIDTH;
+const SIDEBAR_WIDTH_STORAGE_KEY = "skynet.sidebar.width";
+
+function clampSidebarWidth(n: number): number {
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(n)));
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -71,31 +79,62 @@ export function Sidebar() {
   const { data: session } = useSession();
   const sessionUser = session?.user?.name ?? "";
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
-  const [collapsed, setCollapsed] = React.useState(false);
-
-  // Listen for external collapse requests (e.g. submit splash transition)
-  React.useEffect(() => {
-    const handler = () => setCollapsed(true);
-    window.addEventListener("sidebar:collapse", handler);
-    return () => window.removeEventListener("sidebar:collapse", handler);
-  }, []);
-
-  // Auto-collapse when viewport is narrow (< 1024px) — fires on threshold
-  // crossing only. Never auto-expands so manual expand is respected.
-  React.useEffect(() => {
-    const mql = window.matchMedia("(max-width: 1023px)");
-    if (mql.matches) setCollapsed(true);
-    const handler = (e: MediaQueryListEvent) => {
-      if (e.matches) setCollapsed(true);
-    };
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
 
   const [jobs, setJobs] = React.useState<SidebarJobItem[]>([]);
   const [activeCount, setActiveCount] = React.useState(0);
   const [loadedAll, setLoadedAll] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
+  const [width, setWidth] = React.useState<number>(SIDEBAR_DEFAULT_WIDTH);
+
+  // Hydrate the persisted width on the client only — SSR can't read
+  // localStorage, and reading it during initial render would mismatch.
+  React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+      const n = raw ? Number(raw) : NaN;
+      if (Number.isFinite(n)) setWidth(clampSidebarWidth(n));
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
+  const persistWidth = React.useCallback((next: number) => {
+    const clamped = clampSidebarWidth(next);
+    setWidth(clamped);
+    try {
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clamped));
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  // Drag-resize. The sidebar is pinned to the viewport's right edge, so
+  // the dragged left edge corresponds to ``window.innerWidth - clientX``.
+  const resizingRef = React.useRef(false);
+  const startResize = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      resizingRef.current = true;
+      const prevUserSelect = document.body.style.userSelect;
+      const prevCursor = document.body.style.cursor;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      const onMove = (ev: MouseEvent) => {
+        if (!resizingRef.current) return;
+        persistWidth(window.innerWidth - ev.clientX);
+      };
+      const onUp = () => {
+        resizingRef.current = false;
+        document.body.style.userSelect = prevUserSelect;
+        document.body.style.cursor = prevCursor;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [persistWidth],
+  );
   // Sidebar infinite scroll: fetchData (polling + external invalidation)
   // re-requests ``max(PAGE_SIZE, loadedItemsRef.current)`` rows so a
   // background 30s refresh doesn't truncate the user's scrolled position
@@ -147,6 +186,14 @@ export function Sidebar() {
       window.removeEventListener("optimizations-changed", onJobsChanged);
     };
   }, [fetchData]);
+
+  // Live updates while jobs are active: subscribe to the shared dashboard SSE
+  // stream (3s server cadence) so the running badge and per-job status pills
+  // refresh within seconds of a job finishing instead of waiting up to 30s for
+  // the background poll above. The 30s poll stays the baseline for the idle
+  // case — it also catches jobs created in other sessions and re-opens the
+  // shared stream by flipping ``activeCount`` below.
+  useJobsStream({ active: activeCount > 0, onTick: () => void fetchData() });
 
   const loadMore = React.useCallback(async () => {
     if (loadingMoreRef.current || loadedAll) return;
@@ -238,79 +285,19 @@ export function Sidebar() {
 
   return (
     <aside
-      className={cn(
-        "relative flex h-full shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar/80 backdrop-blur-xl overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-      )}
-      style={{ width: collapsed ? "3rem" : "clamp(200px, 16vw, 240px)" }}
+      className="relative flex h-full shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar/80 backdrop-blur-xl overflow-hidden"
+      style={{ width }}
       dir="rtl"
       data-tutorial="sidebar-full"
     >
-      <div
-        className={cn(
-          "absolute inset-0 flex flex-col items-center py-3 gap-2 transition-opacity duration-200",
-          collapsed ? "opacity-100 pointer-events-auto delay-150" : "opacity-0 pointer-events-none",
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          className="p-2 rounded-lg hover:bg-sidebar-accent/40 cursor-pointer transition-colors"
-          title={msg("auto.features.sidebar.components.sidebar.literal.3")}
-          aria-label={msg("auto.features.sidebar.components.sidebar.literal.4")}
-        >
-          <PanelRightOpen className="size-4 text-muted-foreground" />
-        </button>
-        <div className="w-6 h-px bg-border/40 my-1" />
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              {...(href === "/tagger" && collapsed ? { "data-tutorial": "sidebar-tagger" } : {})}
-              className={cn(
-                "p-2 rounded-lg transition-colors",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",
-              )}
-              title={label}
-              aria-label={label}
-            >
-              <Icon className="size-4" />
-            </Link>
-          );
-        })}
-        <div className="mt-auto" />
-        <SettingsTrigger collapsed />
-      </div>
-
-      <div
-        className={cn(
-          "flex flex-col h-full min-w-[14rem] transition-opacity duration-200",
-          collapsed ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto delay-150",
-        )}
-      >
-        <div className="flex items-center justify-between px-3 py-3 border-b border-sidebar-border/60">
-          <div className="flex items-center gap-2">
-            <div
-              className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80 px-2"
-              data-tutorial="sidebar-logo"
-            >
-              {msg("auto.features.sidebar.components.sidebar.1")}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setCollapsed(true)}
-            className="p-1.5 rounded-lg hover:bg-sidebar-accent/40 cursor-pointer transition-colors text-muted-foreground"
-            title={msg("auto.features.sidebar.components.sidebar.literal.5")}
-            aria-label={msg("auto.features.sidebar.components.sidebar.literal.6")}
-          >
-            <PanelRightClose className="size-3.5" />
-          </button>
-        </div>
-
+      <button
+        type="button"
+        onMouseDown={startResize}
+        aria-label={msg("auto.features.sidebar.components.sidebar.literal.15")}
+        tabIndex={-1}
+        className="absolute top-0 end-0 z-20 hidden h-full w-1 cursor-col-resize bg-transparent transition-colors hover:bg-primary/20 active:bg-primary/30 md:block"
+      />
+      <div className="flex flex-col h-full">
         <nav
           className="flex flex-col gap-1 px-3 py-3"
           role="navigation"
@@ -324,7 +311,7 @@ export function Sidebar() {
               <Link
                 key={href}
                 href={href}
-                {...(href === "/tagger" && !collapsed ? { "data-tutorial": "sidebar-tagger" } : {})}
+                {...(href === "/tagger" ? { "data-tutorial": "sidebar-tagger" } : {})}
                 className={cn(
                   "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                   active
@@ -340,16 +327,16 @@ export function Sidebar() {
                     transition={{ type: "spring", stiffness: 350, damping: 28 }}
                   />
                 )}
-                <span className="relative z-10 flex items-center gap-3 flex-1">
+                <span className="relative z-10 flex items-center gap-2.5 flex-1 min-w-0">
                   <Icon
                     className={cn(
-                      "size-4 transition-colors duration-200",
+                      "size-4 shrink-0 transition-colors duration-200",
                       active ? "text-primary" : "group-hover:text-sidebar-foreground",
                     )}
                   />
-                  {label}
+                  <span className="truncate flex-1">{label}</span>
                   {showBadge && (
-                    <span className="mr-auto text-[0.625rem] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full tabular-nums">
+                    <span className="shrink-0 text-[0.625rem] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full tabular-nums">
                       {activeCount}
                     </span>
                   )}
