@@ -14,7 +14,7 @@ import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
-import type { ArtifactStatus } from "../../hooks/use-code-agent";
+import type { ArtifactStatus } from "@/shared/hooks/use-code-agent";
 import { CodeAgentPanel, VersionStepper } from "./CodeAgentPanel";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {

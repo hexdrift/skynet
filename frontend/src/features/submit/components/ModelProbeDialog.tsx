@@ -42,7 +42,6 @@ import {
   rowAsymptote,
   rowRankingScore,
   scoreModel,
-  smartDefaults,
   type ModelRow,
   type ProbeLogEntry,
 } from "./model-probe-model";
@@ -536,7 +535,7 @@ export function ModelProbeDialog({
                           value={reflectionSearch}
                           onChange={(e) => setReflectionSearch(e.target.value)}
                           placeholder="Search models..."
-                          dir="ltr"
+                          dir="auto"
                           className="w-full rounded-md border border-border/60 bg-background py-1.5 pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground focus:border-primary/40"
                           autoFocus
                           onMouseDown={(e) => e.stopPropagation()}
@@ -628,14 +627,6 @@ export function ModelProbeDialog({
                       <span className="text-muted-foreground tabular-nums">
                         {selected.size}/{catalogModels.length}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(smartDefaults(catalogModels))}
-                        className="text-primary hover:underline cursor-pointer"
-                      >
-                        {msg("auto.features.submit.components.modelprobedialog.8")}
-                      </button>
-                      <span className="text-muted-foreground/50">·</span>
                       <button
                         type="button"
                         onClick={selectAllVisible}

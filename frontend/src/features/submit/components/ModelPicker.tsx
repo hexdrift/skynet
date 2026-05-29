@@ -250,7 +250,7 @@ export function ModelPicker({
             <Search className="size-3.5 shrink-0 text-muted-foreground" />
             <input
               ref={inputRef}
-              dir="ltr"
+              dir="auto"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search models..."

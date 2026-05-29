@@ -9,13 +9,16 @@ import {
   submitRun,
   submitGridSearch,
   validateCode,
+  validateDataset,
   getOptimizationPayload,
   getJob,
+  stageDatasetForAgent,
 } from "@/shared/lib/api";
 import type {
   ModelConfig,
   SplitFractions,
   ValidateCodeResponse,
+  ValidateDatasetResponse,
   DatasetProfile,
   SplitPlan,
   RunRequest,
@@ -31,7 +34,7 @@ import { STEPS, emptyModelConfig, defaultSplit } from "../constants";
 import { buildSignatureTemplate } from "../lib/build-signature";
 import { buildMetricTemplate } from "../lib/build-metric";
 import { buildOptimizerKwargs } from "../lib/build-kwargs";
-import { useCodeAgent } from "./use-code-agent";
+import { useCodeAgent } from "@/shared/hooks/use-code-agent";
 import {
   buildColumnMapping,
   useDatasetProfiling,
@@ -91,7 +94,8 @@ export function useSubmitWizard() {
     onSelectAllAvailable?: () => void;
   } | null>(null);
 
-  const { recentConfigs, saveToRecent, clearRecentConfigs } = useRecentModelConfigs();
+  const { recentConfigs, saveToRecent, clearRecentConfigs, removeRecentConfig } =
+    useRecentModelConfigs();
 
   const catalog = useModelCatalog();
 
@@ -144,6 +148,7 @@ export function useSubmitWizard() {
 
   const [signatureValidation, setSignatureValidation] = useState<ValidateCodeResponse | null>(null);
   const [metricValidation, setMetricValidation] = useState<ValidateCodeResponse | null>(null);
+  const [datasetValidation, setDatasetValidation] = useState<ValidateDatasetResponse | null>(null);
 
   const [autoLevel, setAutoLevel] = useState<string>("light");
   const [reflectionMinibatchSize, setReflectionMinibatchSize] = useState<string>("3");
@@ -195,6 +200,25 @@ export function useSubmitWizard() {
     agentPulseKeys: wizardCtx?.agentPulseKeys ?? [],
     sharedState: wizardCtx?.state,
   };
+
+  // After a successful submit, navigation unmounts this form. Clear the shared
+  // wizard state on that unmount so a later agent turn doesn't inherit the
+  // just-submitted run's readiness + staged dataset and offer a duplicate.
+  // Gated on ``submittedRef`` so merely navigating away from a half-filled
+  // wizard preserves the in-progress state. Deferred to unmount (rather than
+  // run inline in handleSubmit) so the outgoing sync effects below can't
+  // re-push the stale values back into the context after the reset.
+  const wizardCtxRef = useRef(wizardCtx);
+  useEffect(() => {
+    wizardCtxRef.current = wizardCtx;
+  }, [wizardCtx]);
+  const submittedRef = useRef(false);
+  useEffect(
+    () => () => {
+      if (submittedRef.current) wizardCtxRef.current?.reset();
+    },
+    [],
+  );
 
   // Incoming: apply agent patches to local state whenever the pulse bumps.
   useEffect(() => {
@@ -311,6 +335,44 @@ export function useSubmitWizard() {
       wizardCtx.setField("dataset_columns", columns, "user");
     }
   }, [parsedDataset, wizardCtx]);
+
+  // Stage the parsed rows on the backend so the agent can submit by id
+  // without inlining tens of thousands of rows into its tool arguments.
+  // Re-runs whenever the user uploads a new file or clones a different
+  // job; identity-equality on ``parsedDataset`` is enough — every parse
+  // path replaces the object.
+  const lastStagedDatasetRef = useRef<ParsedDataset | null>(null);
+  useEffect(() => {
+    if (!wizardCtx) return;
+    if (!parsedDataset || parsedDataset.rowCount === 0) {
+      if (wizardCtx.state.staged_dataset_id !== undefined) {
+        wizardCtx.clearField("staged_dataset_id");
+      }
+      lastStagedDatasetRef.current = null;
+      return;
+    }
+    if (lastStagedDatasetRef.current === parsedDataset) return;
+    lastStagedDatasetRef.current = parsedDataset;
+    let cancelled = false;
+    stageDatasetForAgent({
+      dataset: parsedDataset.rows as Array<Record<string, unknown>>,
+      dataset_filename: datasetFileName || "dataset.json",
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (lastStagedDatasetRef.current !== parsedDataset) return;
+        wizardCtx.setField("staged_dataset_id", res.staged_dataset_id, "user");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (lastStagedDatasetRef.current === parsedDataset) {
+          lastStagedDatasetRef.current = null;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [parsedDataset, datasetFileName, wizardCtx]);
 
   useEffect(() => {
     if (!wizardCtx) return;
@@ -468,33 +530,36 @@ export function useSubmitWizard() {
     }
   }, [autoLevel, maxFullEvals, reflectionMinibatchSize, useMerge, wizardCtx]);
 
-  // Agent-driven dataset staging: ``stage_sample_dataset`` returns a
-  // ``dataset`` array alongside a ``wizard_state`` patch.
-  // use-generalist-agent re-broadcasts the result on
-  // ``wizard:dataset-staged``; we consume it here to populate the live
-  // wizard dataset.
+  // Chat-driven dataset staging: when the user attaches a CSV/JSON/XLSX
+  // file in the agent panel and confirms the column roles, the panel
+  // dispatches ``wizard:dataset-staged`` with ``{dataset, dataset_filename,
+  // wizard_state: {dataset_columns, column_roles, column_kinds}}``. The
+  // panel ALSO stashes the same payload in sessionStorage under
+  // ``wizard:staged-dataset`` so navigating from /explore to /submit
+  // doesn't drop the event when the wizard hasn't mounted yet.
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail) return;
-      const rows = detail.dataset;
-      const ws = detail.wizard_state;
+    const applyStaged = (detail: unknown) => {
+      if (!detail || typeof detail !== "object") return;
+      const d = detail as Record<string, unknown>;
+      const rows = d.dataset;
+      const ws = (d.wizard_state ?? {}) as Record<string, unknown>;
       if (!Array.isArray(rows) || rows.length === 0) return;
+      const stagedColumns = ws.dataset_columns;
       const columns =
-        Array.isArray(ws?.dataset_columns) && ws.dataset_columns.length > 0
-          ? (ws.dataset_columns as string[])
-          : Object.keys(rows[0] ?? {});
+        Array.isArray(stagedColumns) && stagedColumns.length > 0
+          ? (stagedColumns as string[])
+          : Object.keys((rows[0] ?? {}) as Record<string, unknown>);
       setParsedDataset({
         columns,
         rows: rows as Array<Record<string, unknown>>,
         rowCount: rows.length,
       });
       const explicitFilename =
-        typeof detail.dataset_filename === "string" && detail.dataset_filename
-          ? detail.dataset_filename
+        typeof d.dataset_filename === "string" && d.dataset_filename
+          ? d.dataset_filename
           : null;
       const jobBasedFilename =
-        typeof ws?.job_name === "string" && ws.job_name ? `${ws.job_name}.json` : null;
+        typeof ws.job_name === "string" && ws.job_name ? `${ws.job_name}.json` : null;
       setDatasetFileName(explicitFilename ?? jobBasedFilename ?? "sample.json");
       const stagedDefaultMode = readPref("wizardSplitMode");
       splitModeRef.current = stagedDefaultMode;
@@ -503,7 +568,41 @@ export function useSubmitWizard() {
       setSplitPlan(null);
       setSignatureValidation(null);
       setMetricValidation(null);
+      if (ws.column_kinds && typeof ws.column_kinds === "object") {
+        const stagedKinds: Record<string, "text" | "image"> = {};
+        for (const [col, kind] of Object.entries(
+          ws.column_kinds as Record<string, unknown>,
+        )) {
+          stagedKinds[col] = kind === "image" ? "image" : "text";
+        }
+        setColumnKinds(stagedKinds);
+      }
+      if (ws.column_roles && typeof ws.column_roles === "object") {
+        const stagedRoles: Record<string, "input" | "output" | "ignore"> = {};
+        for (const [col, role] of Object.entries(
+          ws.column_roles as Record<string, unknown>,
+        )) {
+          if (role === "input" || role === "output" || role === "ignore") {
+            stagedRoles[col] = role;
+          }
+        }
+        if (Object.keys(stagedRoles).length > 0) setColumnRoles(stagedRoles);
+      }
     };
+
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem("wizard:staged-dataset");
+        if (raw) {
+          window.sessionStorage.removeItem("wizard:staged-dataset");
+          applyStaged(JSON.parse(raw));
+        }
+      } catch {
+        window.sessionStorage.removeItem("wizard:staged-dataset");
+      }
+    }
+
+    const handler = (e: Event) => applyStaged((e as CustomEvent).detail);
     window.addEventListener("wizard:dataset-staged", handler);
     return () => window.removeEventListener("wizard:dataset-staged", handler);
   }, []);
@@ -769,6 +868,10 @@ export function useSubmitWizard() {
         return true;
       }
       case 2:
+        if (datasetValidation && datasetValidation.errors.length > 0) {
+          if (showToast) toast.error(msg("submit.validation.split_too_small"));
+          return false;
+        }
         return true;
       case 3:
         if (!signatureCode.trim()) {
@@ -934,11 +1037,43 @@ export function useSubmitWizard() {
     }
   };
 
+  const handleValidateDataset = async (): Promise<boolean> => {
+    if (!parsedDataset || parsedDataset.rowCount === 0) {
+      toast.error(msg("submit.validation.dataset_required"));
+      return false;
+    }
+    const effectiveFractions =
+      splitModeRef.current === "auto" && splitPlan ? splitPlan.fractions : split;
+    const sum =
+      effectiveFractions.train + effectiveFractions.val + effectiveFractions.test;
+    if (Math.abs(sum - 1) > 0.001) {
+      toast.error(msg("submit.validation.split_must_sum_to_one"));
+      return false;
+    }
+    try {
+      const result = await validateDataset({
+        row_count: parsedDataset.rowCount,
+        fractions: effectiveFractions,
+      });
+      setDatasetValidation(result);
+      if (result.errors.length === 0) return true;
+      toast.error(msg("submit.validation.split_too_small"));
+      return false;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("submit.validation.split_too_small"));
+      return false;
+    }
+  };
+
   const handleNext = async () => {
     if (advancingRef.current) return;
     advancingRef.current = true;
     setAdvancing(true);
     try {
+      if (step === 2 && parsedDataset && parsedDataset.rowCount > 0) {
+        const passed = await handleValidateDataset();
+        if (!passed) return;
+      }
       if (step === 3 && signatureCode.trim() && metricCode.trim() && parsedDataset) {
         const passed = await handleValidateCode();
         if (!passed) return;
@@ -1136,6 +1271,23 @@ export function useSubmitWizard() {
         });
       }
 
+      // Wipe any pasted API key from the in-memory wizard state right
+      // after the submit succeeds. The wire payload already left the
+      // browser; keeping the plaintext in React state would leak it to
+      // the next submit, the recents cache, and any debug surface.
+      const stripKey = (cfg: ModelConfig): ModelConfig => {
+        if (!cfg.extra || !("api_key" in cfg.extra)) return cfg;
+        const { api_key: _omit, ...rest } = cfg.extra;
+        return { ...cfg, extra: Object.keys(rest).length > 0 ? rest : undefined };
+      };
+      setModelConfig(stripKey);
+      setSecondModelConfig((prev) => (prev ? stripKey(prev) : prev));
+      setGenerationModels((prev) => prev.map(stripKey));
+      setReflectionModels((prev) => prev.map(stripKey));
+
+      // Mark the submit so the unmount cleanup clears the shared wizard state
+      // once navigation tears this form down.
+      submittedRef.current = true;
       const jobUrl = `/optimizations/${result.optimization_id}`;
       setSubmitPhase("splash");
       // Collapse sidebar before navigating so the job page opens with full width
@@ -1244,6 +1396,7 @@ export function useSubmitWizard() {
     recentConfigs,
     saveToRecent,
     clearRecentConfigs,
+    removeRecentConfig,
     catalog,
     generationModels,
     setGenerationModels,
