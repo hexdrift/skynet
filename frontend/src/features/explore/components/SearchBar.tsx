@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { motion } from "framer-motion";
 import {
   Globe,
   List,
@@ -10,12 +11,15 @@ import {
   X,
 } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import type { ExploreCorpus, ExploreView } from "../hooks/use-semantic-search";
+
+const PILL_TRANSITION = { type: "tween", duration: 0.18, ease: [0.22, 1, 0.36, 1] } as const;
 
 interface SearchBarProps {
   /** The committed query — what's actually being searched (mirrors the URL). */
   text: string;
-  /** Fires on explicit submit (button click or Enter), or on clear. */
+  /** Fires on debounced typing pause, explicit Enter, or clear. */
   onSubmit: (next: string) => void;
   view: ExploreView;
   onViewChange: (next: ExploreView) => void;
@@ -27,16 +31,22 @@ interface SearchBarProps {
   onOpenFilters: () => void;
 }
 
+// Wait this long after the user stops typing before firing onSubmit. Sized
+// for the embedding API (Jina v4): long enough that a quick burst of
+// keystrokes collapses to one request, short enough that the result lands
+// while the user's attention is still on the field.
+const TYPING_DEBOUNCE_MS = 400;
+
 /**
  * The page's center of gravity. A segmented corpus toggle sits on top so the
  * user can pick where to search (their own jobs vs other users' public ones),
  * and the rounded input surface below carries the free-text query, view
  * toggle, and filters affordance. Keyboard: pressing "/" anywhere focuses
- * the input; Enter submits.
+ * the input; Enter fires the search immediately.
  *
- * The input keeps a local draft so typing doesn't fire a backend request per
- * keystroke (which rate-limits the embedding API). Search only runs when the
- * user explicitly submits or clears the input.
+ * Typing into the input auto-submits after a short pause so the embedding
+ * API isn't hammered with one request per keystroke — Enter exists as an
+ * escape hatch that skips the wait.
  */
 export function SearchBar({
   text,
@@ -56,6 +66,17 @@ export function SearchBar({
   }, [text]);
   const inputDir = detectInputDir(draft);
   const isActive = text.trim().length > 0 || filtersCount > 0;
+
+  // Debounce typing into committed submissions. Compare against the
+  // already-committed ``text`` so a draft that already matches the URL
+  // doesn't re-fire the search on focus changes or external resets.
+  React.useEffect(() => {
+    if (draft === text) return;
+    const handle = window.setTimeout(() => {
+      onSubmit(draft);
+    }, TYPING_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [draft, text, onSubmit]);
 
   const submitDraft = React.useCallback(() => {
     onSubmit(draft);
@@ -102,7 +123,7 @@ export function SearchBar({
       >
         <input
           ref={inputRef}
-          dir={inputDir}
+          dir="auto"
           type="text"
           inputMode="search"
           autoComplete="off"
@@ -236,28 +257,39 @@ function CorpusToggle({
         const Icon = seg.icon;
         const disabled = seg.disabled === true;
         return (
-          <button
-            key={seg.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={seg.aria}
-            disabled={disabled}
-            onClick={() => {
-              if (disabled) return;
-              if (!active) onChange(seg.value);
-            }}
-            className={`relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
-              active
-                ? "bg-background text-foreground shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
-                : disabled
-                ? "cursor-not-allowed text-foreground/30"
-                : "cursor-pointer text-foreground/60 hover:text-foreground"
-            }`}
-          >
-            <Icon className="size-3.5" aria-hidden="true" />
-            <span>{seg.label}</span>
-          </button>
+          <TooltipButton key={seg.value} tooltip={seg.aria} side="bottom">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={seg.aria}
+              disabled={disabled}
+              onClick={() => {
+                if (disabled) return;
+                if (!active) onChange(seg.value);
+              }}
+              className={`relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
+                active
+                  ? "text-foreground"
+                  : disabled
+                  ? "cursor-not-allowed text-foreground/30"
+                  : "cursor-pointer text-foreground/60 hover:text-foreground"
+              }`}
+            >
+              {active && (
+                <motion.span
+                  layoutId="explore-corpus-pill"
+                  className="absolute inset-0 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
+                  transition={PILL_TRANSITION}
+                  aria-hidden="true"
+                />
+              )}
+              <span className="relative z-10 inline-flex items-center gap-1.5">
+                <Icon className="size-3.5" aria-hidden="true" />
+                <span>{seg.label}</span>
+              </span>
+            </button>
+          </TooltipButton>
         );
       })}
     </div>
@@ -307,18 +339,26 @@ function ViewToggleButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={label}
-      className={`relative inline-flex size-8 items-center justify-center rounded-md transition-[background-color,color,box-shadow] duration-150 ease-out cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
-        active
-          ? "bg-background text-foreground shadow-sm"
-          : "text-foreground/55 hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
+    <TooltipButton tooltip={label} side="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        aria-label={label}
+        className={`relative inline-flex size-8 items-center justify-center rounded-md transition-colors duration-150 ease-out cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
+          active ? "text-foreground" : "text-foreground/55 hover:text-foreground"
+        }`}
+      >
+        {active && (
+          <motion.span
+            layoutId="explore-view-pill"
+            className="absolute inset-0 rounded-md bg-background shadow-sm"
+            transition={PILL_TRANSITION}
+            aria-hidden="true"
+          />
+        )}
+        <span className="relative z-10 inline-flex">{children}</span>
+      </button>
+    </TooltipButton>
   );
 }

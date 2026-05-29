@@ -95,6 +95,21 @@ function donutSegmentPath(
   startAngle: number,
   endAngle: number,
 ): string {
+  // A single SVG arc can't draw a closed circle — start and end coordinates
+  // coincide and the renderer drops the command, so the all-pass / all-fail
+  // donut would disappear when zoomed out (passes === total collapses both
+  // segments into one full sweep). Split into two semicircle arcs instead.
+  if (endAngle - startAngle >= 2 * Math.PI - 1e-6) {
+    return [
+      `M ${cx} ${cy - rOuter}`,
+      `A ${rOuter} ${rOuter} 0 1 1 ${cx} ${cy + rOuter}`,
+      `A ${rOuter} ${rOuter} 0 1 1 ${cx} ${cy - rOuter}`,
+      `M ${cx} ${cy - rInner}`,
+      `A ${rInner} ${rInner} 0 1 0 ${cx} ${cy + rInner}`,
+      `A ${rInner} ${rInner} 0 1 0 ${cx} ${cy - rInner}`,
+      "Z",
+    ].join(" ");
+  }
   const x1 = cx + rOuter * Math.cos(startAngle);
   const y1 = cy + rOuter * Math.sin(startAngle);
   const x2 = cx + rOuter * Math.cos(endAngle);

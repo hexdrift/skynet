@@ -18,7 +18,7 @@ import {
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { cn } from "@/shared/lib/utils";
 import { exportAnnotations } from "../lib/export-csv";
-import type { DataRow, Annotation, TaggerConfig } from "../lib/types";
+import type { DataField, DataRow, Annotation, TaggerConfig } from "../lib/types";
 import { msg } from "@/shared/lib/messages";
 
 interface Props {
@@ -197,10 +197,14 @@ export function TaggerAnnotation({
       <div className="flex flex-1 flex-col gap-3 p-5 overflow-hidden">
         <Card className="flex flex-1 min-h-0 flex-col">
           <CardContent
-            className="flex-1 overflow-y-auto px-6 py-5 text-base leading-relaxed text-foreground whitespace-pre-wrap"
+            className="flex-1 overflow-y-auto px-6 py-5 text-base leading-relaxed text-foreground"
             dir="auto"
           >
-            {item.text}
+            {item.fields && item.fields.length > 1 ? (
+              <FieldsView fields={item.fields} />
+            ) : (
+              <div className="whitespace-pre-wrap">{item.text}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -560,4 +564,138 @@ function Confetti() {
       ))}
     </div>
   );
+}
+
+function FieldsView({ fields }: { fields: DataField[] }) {
+  return (
+    <dl className="flex flex-col">
+      {fields.map((field, i) => (
+        <div
+          key={`${field.column}-${i}`}
+          className={cn(
+            "flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0",
+            i > 0 && "border-t border-border/40",
+          )}
+        >
+          <dt>
+            <span
+              dir="ltr"
+              className="inline-flex items-center rounded-md bg-muted/55 px-2 py-0.5 text-[10.5px] font-mono uppercase tracking-[0.08em] text-muted-foreground"
+            >
+              {field.column}
+            </span>
+          </dt>
+          <dd className="text-foreground" dir="auto">
+            <FieldValue value={field.value} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function FieldValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  if (value === null || value === undefined || value === "") {
+    return <Empty />;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <Empty />;
+    const primitive = value.every((v) => v === null || typeof v !== "object");
+    if (primitive) {
+      return (
+        <ul className="space-y-1 ps-5 list-disc marker:text-muted-foreground/50">
+          {value.map((item, i) => (
+            <li key={i} className="leading-relaxed">
+              <FieldValue value={item} depth={depth + 1} />
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return (
+      <ol className="space-y-1.5">
+        {value.map((item, i) => (
+          <li
+            key={i}
+            className="relative rounded-lg border border-border/40 bg-muted/30 px-3 py-2"
+          >
+            <span
+              dir="ltr"
+              className="absolute -top-2 start-2 rounded bg-background px-1.5 text-[10px] font-mono tabular-nums text-muted-foreground/80"
+            >
+              {i + 1}
+            </span>
+            <FieldValue value={item} depth={depth + 1} />
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return <Empty />;
+    return (
+      <dl
+        className={cn(
+          "grid gap-2",
+          depth === 0 && "rounded-lg border border-border/40 bg-muted/30 p-3",
+          depth > 0 && "border-s border-border/50 ps-3",
+        )}
+      >
+        {entries.map(([k, v]) => (
+          <div key={k} className="grid gap-1">
+            <dt>
+              <span
+                dir="ltr"
+                className="inline-flex items-center rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-[0.06em] text-muted-foreground"
+              >
+                {k}
+              </span>
+            </dt>
+            <dd className="min-w-0">
+              <FieldValue value={v} depth={depth + 1} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
+  if (typeof value === "boolean") {
+    return (
+      <span
+        dir="ltr"
+        className={cn(
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-mono",
+          value
+            ? "bg-emerald-600/10 text-emerald-700"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        {value ? "true" : "false"}
+      </span>
+    );
+  }
+  if (typeof value === "number") {
+    return <span className="font-mono tabular-nums">{value}</span>;
+  }
+  const str = String(value);
+  const trimmed = str.trim();
+  if (
+    (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+    (trimmed.startsWith("{") && trimmed.endsWith("}"))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed !== null && typeof parsed === "object") {
+        return <FieldValue value={parsed} depth={depth} />;
+      }
+    } catch {
+      /* not JSON — fall through to plain text */
+    }
+  }
+  return <span className="whitespace-pre-wrap break-words leading-relaxed">{str}</span>;
+}
+
+function Empty() {
+  return <span className="text-muted-foreground/55">—</span>;
 }

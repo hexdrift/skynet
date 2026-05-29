@@ -175,6 +175,7 @@ function coerceMinibatch(
   const score = metrics.score;
   const feedback = metrics.feedback;
   const prediction = metrics.prediction;
+  const iteration = metrics.iteration;
   if (typeof example_id !== "string") return null;
   if (typeof score !== "number") return null;
   if (typeof feedback !== "string") return null;
@@ -184,6 +185,7 @@ function coerceMinibatch(
     feedback,
     prediction: typeof prediction === "string" ? prediction : "",
     sequence,
+    iteration: typeof iteration === "number" ? iteration : null,
   };
 }
 

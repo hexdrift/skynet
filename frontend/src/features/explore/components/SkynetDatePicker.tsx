@@ -121,7 +121,7 @@ interface SkynetDatePickerProps {
 
 /**
  * Calendar-style date picker tailored to the Skynet visual language.
- * RTL-first: weekday labels read right-to-left starting on Sunday (א), the
+ * RTL-first: weekday labels read right-to-left starting on Sunday, the
  * "previous month" chevron points right and "next month" points left, and
  * dates are surfaced as YYYY-MM-DD ISO strings so callers stay timezone-safe.
  */

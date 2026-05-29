@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Runtime distribution chart
- * Displays runtime in minutes for each optimization job
- * Preserves exact styling, RTL layout, and hover interactions
- */
-
 import { useState } from "react";
 import {
   BarChart,

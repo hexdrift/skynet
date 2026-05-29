@@ -209,19 +209,22 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const handleStart = () => {
     if (!mode || !validateStep(0) || !validateStep(1) || !validateStep(2)) return;
     const mapped: DataRow[] = parsedRows.map((row, i) => {
-      const text = inputCols
-        .map((col) => {
-          const raw = row[col];
-          const value =
-            raw === undefined || raw === null
+      const fields = inputCols.map((col) => ({ column: col, value: row[col] }));
+      // ``text`` stays as a flat string for CSV export / search / single-col
+      // fallbacks. The structured ``fields`` array is what the annotation UI
+      // renders so JSON-shaped values (arrays, objects) get proper layout.
+      const text = fields
+        .map(({ column, value }) => {
+          const flat =
+            value === undefined || value === null
               ? ""
-              : typeof raw === "object"
-                ? JSON.stringify(raw)
-                : String(raw);
-          return `${col}: ${value}`;
+              : typeof value === "object"
+                ? JSON.stringify(value)
+                : String(value);
+          return inputCols.length > 1 ? `${column}: ${flat}` : flat;
         })
         .join("\n");
-      return { ...row, id: i + 1, text };
+      return { ...row, id: i + 1, text, fields };
     });
     const config: TaggerConfig = { mode, inputColumns: inputCols };
     if (mode === "binary") config.question = question;
@@ -393,7 +396,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
             onChange={(e) => setQuestion(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             placeholder={msg("auto.features.tagger.components.taggersetup.literal.15")}
-            dir="rtl"
+            dir="auto"
           />
         )}
         {mode === "multiclass" && (
@@ -406,7 +409,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                   onChange={(e) => updateCategory(cat.id, e.target.value)}
                   className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   placeholder={msg("auto.features.tagger.components.taggersetup.literal.16")}
-                  dir="rtl"
+                  dir="auto"
                 />
                 <Button
                   variant="ghost"
@@ -438,7 +441,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
             onChange={(e) => setPrompt(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             placeholder={msg("auto.features.tagger.components.taggersetup.literal.18")}
-            dir="rtl"
+            dir="auto"
           />
         )}
         {!mode && (

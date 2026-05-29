@@ -32,14 +32,16 @@ export function formatScore(job: OptimizationSummaryResponse): React.ReactNode {
           ? "text-[var(--danger)]"
           : "text-muted-foreground";
     const sign = improvement > 0 ? "+" : "";
+    const deltaPct = (Math.abs(improvement) > 1 ? improvement : improvement * 100).toFixed(1);
     return (
-      <span className="flex items-center gap-1 text-xs">
-        <span className="text-muted-foreground">{formatPercent(baseline)}</span>
-        <span className="text-muted-foreground/50">&larr;</span>
+      <span
+        className="inline-flex items-center gap-1 text-xs whitespace-nowrap"
+        title={`${formatPercent(baseline)} → ${formatPercent(optimized)}`}
+      >
         <span className="font-medium">{formatPercent(optimized)}</span>
         <span className={`${color} font-medium`}>
           ({sign}
-          {(Math.abs(improvement) > 1 ? improvement : improvement * 100).toFixed(1)}%)
+          {deltaPct}%)
         </span>
       </span>
     );

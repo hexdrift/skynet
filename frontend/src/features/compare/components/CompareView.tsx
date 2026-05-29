@@ -699,7 +699,7 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
     label: string;
     // Identity strings used for the "all same" collapse — must encode every
     // attribute that's surfaced in `renderCell` so visually distinct cells
-    // never collapse into a single "זהה בכל הריצות" row.
+    // never collapse into a single "same across all runs" row.
     values: string[];
     renderCell?: (index: number) => React.ReactNode;
   };

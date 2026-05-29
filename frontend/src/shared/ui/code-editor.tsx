@@ -29,9 +29,6 @@ import {
   ChevronDown,
   Play,
   Loader2,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
   X,
   Eraser,
 } from "lucide-react";
@@ -314,6 +311,7 @@ export function CodeEditor({
   }, [streaming, flashLines]);
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [consoleCopied, setConsoleCopied] = useState(false);
   const [running, setRunning] = useState(false);
   const [formatting, setFormatting] = useState(false);
   const [result, setResult] = useState<ValidationResult | null>(null);
@@ -333,6 +331,21 @@ export function CodeEditor({
       console.warn("Failed to copy editor contents", error);
     }
   }, [value]);
+
+  const handleCopyConsole = useCallback(async () => {
+    if (!result) return;
+    const lines: string[] = [];
+    for (const err of result.errors) lines.push(`[error] ${err}`);
+    for (const w of result.warnings) lines.push(`[warn]  ${w}`);
+    if (lines.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setConsoleCopied(true);
+      setTimeout(() => setConsoleCopied(false), 1500);
+    } catch (error) {
+      console.warn("Failed to copy console output", error);
+    }
+  }, [result]);
 
   const handleRun = useCallback(async () => {
     if (!onRun || running) return;
@@ -378,6 +391,8 @@ export function CodeEditor({
   );
 
   const hasOutput = result !== null || running;
+  const hasConsoleBody =
+    running || (result !== null && (result.errors.length > 0 || result.warnings.length > 0));
 
   return (
     <div
@@ -428,7 +443,7 @@ export function CodeEditor({
           onClick={handleCopy}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer"
         >
-          {copied ? <Check className="size-3 text-[#5A7247]" /> : <Copy className="size-3" />}
+          {copied ? <Check className="size-3 text-[#3D2E22]" /> : <Copy className="size-3" />}
           {copied ? msg("shared.code_editor.copied") : msg("shared.code_editor.copy")}
         </button>
       </div>
@@ -478,51 +493,97 @@ export function CodeEditor({
       )}
 
       {hasOutput && (
-        <div
-          dir="ltr"
-          className="bg-[#F5EDE4] border-t border-[#E5DDD4] px-4 py-3 space-y-2 text-left"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[0.625rem] text-[#8C7A6B] uppercase tracking-wider font-semibold">
-              {msg("shared.code_editor.validation")}
-            </span>
-            {!running && result && (
-              <button
-                type="button"
-                onClick={() => setResult(null)}
-                className="close-button"
-                aria-label={msg("shared.dialog.close")}
-              >
-                <X />
-              </button>
-            )}
-          </div>
-          {running && (
-            <div className="flex items-center gap-2 text-xs text-[#8C7A6B]">
-              <Loader2 className="size-3.5 animate-spin" />
-              {msg("shared.code_editor.validating")}
+        <div dir="ltr" className="bg-[#EFE5D5] border-t border-[#E5DDD4] text-left">
+          {!running && result && (
+            <div
+              className={`flex items-center justify-between gap-2 px-3 py-1.5 ${
+                hasConsoleBody ? "border-b border-[#E5DDD4]/60" : ""
+              }`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                {result.errors.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-medium px-2 py-0.5 rounded-full bg-[#E8D7C5] text-[#3D2E22] tabular-nums">
+                    <span className="size-1.5 rounded-full bg-[#6B4226]" aria-hidden="true" />
+                    {formatMsg("shared.code_editor.errors_count", { count: result.errors.length })}
+                  </span>
+                )}
+                {result.warnings.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-medium px-2 py-0.5 rounded-full bg-[#EBE0B8] text-[#5C4509] tabular-nums">
+                    <span className="size-1.5 rounded-full bg-[#8B6914]" aria-hidden="true" />
+                    {formatMsg("shared.code_editor.warnings_count", { count: result.warnings.length })}
+                  </span>
+                )}
+                {result.valid && result.errors.length === 0 && result.warnings.length === 0 && (
+                  <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-medium px-2 py-0.5 rounded-full bg-[#EDE4D8] text-[#3D2E22]">
+                    <span className="size-1.5 rounded-full bg-[#7C6350]" aria-hidden="true" />
+                    {msg("shared.code_editor.valid")}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                {(result.errors.length > 0 || result.warnings.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={handleCopyConsole}
+                    className="close-button"
+                    title={
+                      consoleCopied
+                        ? msg("shared.code_editor.console_copied")
+                        : msg("shared.code_editor.copy_console")
+                    }
+                    aria-label={msg("shared.code_editor.copy_console")}
+                  >
+                    {consoleCopied ? (
+                      <Check style={{ color: "#3D2E22" }} />
+                    ) : (
+                      <Copy />
+                    )}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setResult(null)}
+                  className="close-button"
+                  title={msg("shared.code_editor.console_clear")}
+                  aria-label={msg("shared.code_editor.console_clear")}
+                >
+                  <X />
+                </button>
+              </div>
             </div>
           )}
-          {result && result.valid && result.errors.length === 0 && (
-            <div className="flex items-start gap-2 text-xs">
-              <CheckCircle2 className="size-3.5 text-[#5A7247] shrink-0 mt-0.5" />
-              <span className="font-medium text-[#5A7247]">{msg("shared.code_editor.valid")}</span>
+          {hasConsoleBody && (
+            <div className="py-1 max-h-48 overflow-y-auto">
+              {running && (
+                <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-[#8C7A6B]">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {msg("shared.code_editor.validating")}
+                </div>
+              )}
+              {result?.errors.map((err, i) => (
+                <div
+                  key={`e${i}`}
+                  className="flex items-stretch border-l-2 border-[#6B4226] bg-[#E8D7C5]/35 hover:bg-[#E8D7C5]/60 transition-colors"
+                  role="alert"
+                >
+                  <div className="flex-1 min-w-0 pl-3 pr-4 py-1.5 text-xs font-mono leading-relaxed text-[#3D2E22] break-words">
+                    {linkifyMessage(err, "underline decoration-[#6B4226]/40 underline-offset-2 hover:decoration-[#6B4226] transition-colors")}
+                  </div>
+                </div>
+              ))}
+              {result?.warnings.map((w, i) => (
+                <div
+                  key={`w${i}`}
+                  className="flex items-stretch border-l-2 border-[#8B6914] bg-[#EBE0B8]/35 hover:bg-[#EBE0B8]/60 transition-colors"
+                  role="status"
+                >
+                  <div className="flex-1 min-w-0 pl-3 pr-4 py-1.5 text-xs font-mono leading-relaxed text-[#5C4509] break-words">
+                    {w}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-          {result?.errors.map((err, i) => (
-            <div key={`e${i}`} className="flex items-start gap-2 text-xs">
-              <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />
-              <span className="text-red-700">
-                {linkifyMessage(err, "underline hover:text-red-900 transition-colors")}
-              </span>
-            </div>
-          ))}
-          {result?.warnings.map((w, i) => (
-            <div key={`w${i}`} className="flex items-start gap-2 text-xs">
-              <AlertTriangle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
-              <span className="text-amber-700">{w}</span>
-            </div>
-          ))}
         </div>
       )}
     </div>

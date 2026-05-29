@@ -111,7 +111,7 @@ export const dashboardMessages = {
     "השוואת הנבחרים ({p1} לא מתאימות יושמטו)",
   "auto.features.dashboard.components.deletedialogs.template.1": "מחיקת {p1}",
   "auto.features.dashboard.components.deletedialogs.template.2": "מחיקת מספר {p1}",
-  "auto.features.dashboard.components.jobstab.template.1": "מזהה {p1}",
+  "auto.features.dashboard.components.jobstab.template.1": "מזהה",
   "auto.features.dashboard.components.jobstab.template.2": "בחרו {p1} {p2}",
   "auto.features.dashboard.components.jobstab.template.3": "פרטי {p1}",
   "auto.features.dashboard.components.jobstab.template.4": "מחיקת {p1}",

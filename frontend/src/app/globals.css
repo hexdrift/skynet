@@ -243,6 +243,15 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Placeholder text direction follows its own language, not the
+     inherited document direction. Combined with dir="auto" on the
+     input itself this also positions the placeholder on the correct
+     side (right for Hebrew, left for English). */
+  input::placeholder,
+  textarea::placeholder {
+    unicode-bidi: plaintext;
+    text-align: start;
+  }
 }
 
 *,

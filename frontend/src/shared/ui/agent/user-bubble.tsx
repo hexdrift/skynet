@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Pencil } from "lucide-react";
+import { Check, Clipboard, Pencil } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
@@ -15,6 +15,14 @@ interface UserBubbleProps {
 }
 
 export function UserBubble({ content, onEdit, editable = true }: UserBubbleProps) {
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = React.useCallback(() => {
+    if (!content) return;
+    void navigator.clipboard.writeText(content);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }, [content]);
+
   return (
     <div className="flex justify-start group/user">
       <div
@@ -23,20 +31,42 @@ export function UserBubble({ content, onEdit, editable = true }: UserBubbleProps
       >
         {content}
       </div>
-      {editable && onEdit && (
+      {/* Hover-revealed actions beside the bubble: copy (always) + edit (when
+          editable), mirroring the assistant reply's copy affordance. */}
+      <div
+        className={cn(
+          "self-center ms-1.5 flex items-center gap-0.5",
+          "opacity-0 group-hover/user:opacity-100 transition-opacity",
+        )}
+      >
         <button
           type="button"
-          onClick={onEdit}
-          className={cn(
-            "self-center ms-1.5 opacity-0 group-hover/user:opacity-100 transition-opacity",
-            "p-1.5 rounded-lg hover:bg-muted/60 cursor-pointer",
-          )}
-          title={msg("shared.agent.edit_and_resend")}
-          aria-label={msg("shared.agent.edit_and_resend")}
+          onClick={handleCopy}
+          className="p-1.5 rounded-lg hover:bg-muted/60 cursor-pointer"
+          title={msg(copied ? "shared.agent.copied" : "shared.agent.copy")}
+          aria-label={msg(copied ? "shared.agent.copied" : "shared.agent.copy")}
         >
-          <Pencil className="size-3 text-muted-foreground" />
+          {copied ? (
+            <Check className="size-3 text-muted-foreground" />
+          ) : (
+            <Clipboard className="size-3 text-muted-foreground" />
+          )}
         </button>
-      )}
+        {editable && onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="p-1.5 rounded-lg hover:bg-muted/60 cursor-pointer"
+            title={msg("shared.agent.edit_and_resend")}
+            aria-label={msg("shared.agent.edit_and_resend")}
+          >
+            <Pencil className="size-3 text-muted-foreground" />
+          </button>
+        )}
+        <span className="sr-only" role="status" aria-live="polite">
+          {copied ? msg("shared.agent.copied") : ""}
+        </span>
+      </div>
     </div>
   );
 }
