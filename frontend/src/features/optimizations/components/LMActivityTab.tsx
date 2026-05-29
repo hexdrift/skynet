@@ -1,6 +1,7 @@
 "use client";
 
-import { Activity } from "lucide-react";
+import type { ReactNode } from "react";
+import { Activity, MessageSquare, Timer } from "lucide-react";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { msg } from "@/shared/lib/messages";
@@ -67,35 +68,45 @@ function formatSeconds(ms: number | null | undefined): string {
   return `${seconds.toFixed(1)}s`;
 }
 
-function NumericCell({
+function MetricCells({
   calls,
   ms,
   emphasized = false,
+  groupStart = false,
 }: {
   calls: number;
   ms: number | null;
   emphasized?: boolean;
+  groupStart?: boolean;
 }) {
-  if (calls === 0) {
-    return <span className="text-[var(--text-3)]">—</span>;
-  }
+  const empty = calls === 0;
+  const numeric = emphasized ? "font-semibold text-foreground" : "font-normal text-foreground";
+  const numericMuted = emphasized ? "text-foreground" : "text-muted-foreground";
   return (
-    <div className="flex flex-col items-start gap-0.5">
-      <span
-        className={`font-mono tabular-nums text-sm text-foreground ${
-          emphasized ? "font-semibold" : "font-normal"
+    <>
+      <td
+        className={`px-3 py-2.5 text-end align-middle ${
+          groupStart ? "border-s border-border/50" : ""
         }`}
       >
-        {formatCalls(calls)}
-      </span>
-      <span
-        className={`font-mono tabular-nums text-xs ${
-          emphasized ? "text-foreground" : "text-muted-foreground"
-        }`}
-      >
-        {formatSeconds(ms)}
-      </span>
-    </div>
+        {empty ? (
+          <span className="text-[var(--text-3)]">—</span>
+        ) : (
+          <span className={`font-mono tabular-nums text-sm ${numeric}`} dir="ltr">
+            {formatCalls(calls)}
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-end align-middle">
+        {empty ? (
+          <span className="text-[var(--text-3)]">—</span>
+        ) : (
+          <span className={`font-mono tabular-nums text-sm ${numericMuted}`} dir="ltr">
+            {formatSeconds(ms)}
+          </span>
+        )}
+      </td>
+    </>
   );
 }
 
@@ -111,26 +122,24 @@ function StageRow({
   hasReflection: boolean;
 }) {
   return (
-    <tr className="border-t border-border/60">
+    <tr className="border-t border-border/40 transition-colors hover:bg-muted/30">
       <th
         scope="row"
         className="px-3 py-2.5 text-start text-sm font-medium text-foreground whitespace-nowrap"
       >
         <HelpTip text={tip(STAGE_TIP_KEYS[stage])}>{msg(STAGE_MESSAGE_KEYS[stage])}</HelpTip>
       </th>
-      <td className="px-3 py-2.5 text-start">
-        <NumericCell
-          calls={generation?.calls ?? 0}
-          ms={generation?.avg_response_time_ms ?? null}
-        />
-      </td>
+      <MetricCells
+        calls={generation?.calls ?? 0}
+        ms={generation?.avg_response_time_ms ?? null}
+        groupStart
+      />
       {hasReflection && (
-        <td className="px-3 py-2.5 text-start">
-          <NumericCell
-            calls={reflection?.calls ?? 0}
-            ms={reflection?.avg_response_time_ms ?? null}
-          />
-        </td>
+        <MetricCells
+          calls={reflection?.calls ?? 0}
+          ms={reflection?.avg_response_time_ms ?? null}
+          groupStart
+        />
       )}
     </tr>
   );
@@ -146,24 +155,60 @@ function TotalRow({
   hasReflection: boolean;
 }) {
   return (
-    <tr className="border-t border-border">
+    <tr className="border-t border-border bg-muted/20">
       <th
         scope="row"
-        className="px-3 py-2.5 text-start text-sm font-bold text-foreground whitespace-nowrap"
+        className="px-3 py-3 text-start text-sm font-bold text-foreground whitespace-nowrap"
       >
         <HelpTip text={tip("lm_activity.total_row")}>
           {msg("auto.features.optimizations.components.lmactivitytab.row_total")}
         </HelpTip>
       </th>
-      <td className="px-3 py-2.5 text-start">
-        <NumericCell calls={generation.calls} ms={generation.avg_response_time_ms} emphasized />
-      </td>
+      <MetricCells
+        calls={generation.calls}
+        ms={generation.avg_response_time_ms}
+        emphasized
+        groupStart
+      />
       {hasReflection && (
-        <td className="px-3 py-2.5 text-start">
-          <NumericCell calls={reflection.calls} ms={reflection.avg_response_time_ms} emphasized />
-        </td>
+        <MetricCells
+          calls={reflection.calls}
+          ms={reflection.avg_response_time_ms}
+          emphasized
+          groupStart
+        />
       )}
     </tr>
+  );
+}
+
+function SubHeader({
+  tipKey,
+  icon,
+  label,
+  groupStart = false,
+}: {
+  tipKey: "lm_activity.cell.calls" | "lm_activity.cell.avg_ms";
+  icon: ReactNode;
+  label: string;
+  groupStart?: boolean;
+}) {
+  return (
+    <th
+      scope="col"
+      className={`px-3 pb-2 pt-1 text-end text-[11px] font-medium uppercase tracking-wide text-muted-foreground whitespace-nowrap ${
+        groupStart ? "border-s border-border/50" : ""
+      }`}
+    >
+      <HelpTip text={tip(tipKey)}>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="text-muted-foreground/70">
+            {icon}
+          </span>
+          {label}
+        </span>
+      </HelpTip>
+    </th>
   );
 }
 
@@ -179,6 +224,15 @@ export function LMActivityTab({ lmActivity }: { lmActivity: LMActivity | null | 
 
   const genTotal = aggregateColumn(generation);
   const reflTotal = aggregateColumn(reflection);
+
+  const callsLabel = msg("auto.features.optimizations.components.lmactivitytab.cell_calls");
+  const avgMsLabel = msg("auto.features.optimizations.components.lmactivitytab.cell_avg_ms");
+  const stageLabel = msg("auto.features.optimizations.components.lmactivitytab.col_stage");
+  const genLabel = msg("auto.features.optimizations.components.lmactivitytab.col_generation");
+  const reflLabel = msg("auto.features.optimizations.components.lmactivitytab.col_reflection");
+
+  const callsIcon = <MessageSquare className="size-3" strokeWidth={1.75} />;
+  const avgIcon = <Timer className="size-3" strokeWidth={1.75} />;
 
   // Plain ``<section>`` instead of ``<Card>`` to opt out of the global
   // ``[data-slot="card"]`` chrome (gradient bg, backdrop-blur, mouse-spotlight,
@@ -211,53 +265,81 @@ export function LMActivityTab({ lmActivity }: { lmActivity: LMActivity | null | 
               {msg("auto.features.optimizations.components.lmactivitytab.no_data")}
             </p>
           ) : (
-            <table className="guide-table w-full text-sm" dir="rtl">
-              <thead>
-                <tr>
-                  <th scope="col" className="px-3 py-2 text-start">
-                    <span className="sr-only">
-                      {msg("auto.features.optimizations.components.lmactivitytab.col_stage")}
-                    </span>
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-3 py-2 text-start text-xs font-medium text-muted-foreground"
-                  >
-                    <HelpTip text={tip("lm_activity.column.generation")}>
-                      {msg("auto.features.optimizations.components.lmactivitytab.col_generation")}
-                    </HelpTip>
-                  </th>
-                  {hasReflection && (
+            <div className="overflow-x-auto -mx-2 px-2">
+              <table className="guide-table w-full text-sm" dir="rtl">
+                <thead>
+                  <tr className="bg-muted/20">
                     <th
                       scope="col"
-                      className="px-3 py-2 text-start text-xs font-medium text-muted-foreground"
+                      rowSpan={2}
+                      className="px-3 py-2 text-start text-[11px] font-semibold uppercase tracking-wide text-muted-foreground align-bottom whitespace-nowrap"
                     >
-                      <HelpTip text={tip("lm_activity.column.reflection")}>
-                        {msg(
-                          "auto.features.optimizations.components.lmactivitytab.col_reflection",
-                        )}
-                      </HelpTip>
+                      <span className="sr-only">{stageLabel}</span>
                     </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {STAGE_KEYS.map((stage) => (
-                  <StageRow
-                    key={stage}
-                    stage={stage}
-                    generation={generation[stage]}
-                    reflection={reflection[stage]}
+                    <th
+                      scope="colgroup"
+                      colSpan={2}
+                      className="px-3 pt-2 pb-1 text-center text-xs font-semibold text-foreground border-s border-border/50 whitespace-nowrap"
+                    >
+                      <HelpTip text={tip("lm_activity.column.generation")}>{genLabel}</HelpTip>
+                    </th>
+                    {hasReflection && (
+                      <th
+                        scope="colgroup"
+                        colSpan={2}
+                        className="px-3 pt-2 pb-1 text-center text-xs font-semibold text-foreground border-s border-border/50 whitespace-nowrap"
+                      >
+                        <HelpTip text={tip("lm_activity.column.reflection")}>{reflLabel}</HelpTip>
+                      </th>
+                    )}
+                  </tr>
+                  <tr className="bg-muted/20">
+                    <SubHeader
+                      tipKey="lm_activity.cell.calls"
+                      icon={callsIcon}
+                      label={callsLabel}
+                      groupStart
+                    />
+                    <SubHeader
+                      tipKey="lm_activity.cell.avg_ms"
+                      icon={avgIcon}
+                      label={avgMsLabel}
+                    />
+                    {hasReflection && (
+                      <>
+                        <SubHeader
+                          tipKey="lm_activity.cell.calls"
+                          icon={callsIcon}
+                          label={callsLabel}
+                          groupStart
+                        />
+                        <SubHeader
+                          tipKey="lm_activity.cell.avg_ms"
+                          icon={avgIcon}
+                          label={avgMsLabel}
+                        />
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {STAGE_KEYS.map((stage) => (
+                    <StageRow
+                      key={stage}
+                      stage={stage}
+                      generation={generation[stage]}
+                      reflection={reflection[stage]}
+                      hasReflection={hasReflection}
+                    />
+                  ))}
+                  <TotalRow
+                    generation={genTotal}
+                    reflection={reflTotal}
                     hasReflection={hasReflection}
                   />
-                ))}
-                <TotalRow
-                  generation={genTotal}
-                  reflection={reflTotal}
-                  hasReflection={hasReflection}
-                />
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </section>

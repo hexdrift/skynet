@@ -75,7 +75,6 @@ export function DataTab({
 
   useEffect(() => {
     if (isDemoMode) {
-      // Provide mock dataset for tutorial demo
       setDataset({
         total_rows: 12,
         splits: {

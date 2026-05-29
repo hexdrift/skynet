@@ -103,7 +103,10 @@ export function LogsTab({
   return (
     <div className="mt-4">
       <FadeIn>
-        <div className="flex items-center justify-between gap-3 mb-4">
+        <div
+          className="flex items-center justify-between gap-3 mb-4"
+          data-tutorial="live-logs"
+        >
           <p className="text-sm text-muted-foreground">
             {live
               ? ""

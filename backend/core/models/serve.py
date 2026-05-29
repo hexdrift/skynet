@@ -61,3 +61,4 @@ class ServeInfoResponse(BaseModel):
     output_fields: list[str]
     instructions: str | None = None
     demo_count: int = 0
+    sample_inputs: dict[str, str] = Field(default_factory=dict)
