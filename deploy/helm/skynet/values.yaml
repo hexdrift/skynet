@@ -64,17 +64,24 @@ backend:
     LOG_FORMAT: json
     API_HOST: 0.0.0.0
     API_PORT: "8000"
-    WORKER_CONCURRENCY: "2"
+    WORKER_CONCURRENCY: "4"
     WORKER_POLL_INTERVAL: "2.0"
     WORKER_STALE_THRESHOLD: "600"
     # SQLAlchemy pool budget per pod. Total connections = replicas ×
     # (DB_POOL_SIZE + DB_POOL_MAX_OVERFLOW). Keep total well below
-    # postgres.maxConnections (default 100) to leave room for migrations
+    # postgres.maxConnections (default 200) to leave room for migrations
     # and admin sessions.
     DB_POOL_SIZE: "10"
-    DB_POOL_MAX_OVERFLOW: "20"
+    DB_POOL_MAX_OVERFLOW: "10"
     DB_POOL_TIMEOUT: "30"
     DB_POOL_RECYCLE: "3600"
+    # Set true when backend pods connect through PgBouncer in transaction mode.
+    # The chart forces this to true when pgbouncer.enabled=true.
+    DB_PGBOUNCER_TRANSACTION_MODE: "false"
+    # Refuse to start if SKYNET_CODE_VERSION isn't baked into the image.
+    # Prevents multiple pods from claiming each other's "unknown"-tagged jobs
+    # during staged rollouts.
+    REQUIRE_CODE_VERSION: "true"
     ALLOWED_ORIGINS: ""
     RECOMMENDATIONS_ENABLED: "true"
     RECOMMENDATIONS_EMBEDDING_BASE_URL: ""
@@ -138,6 +145,15 @@ backend:
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: 0  # 0 = disabled
+    queueDepth:
+      enabled: true
+      # Requires Prometheus Adapter (or equivalent custom-metrics adapter) to
+      # expose the scraped Prometheus series as a Kubernetes External metric.
+      metricName: skynet_jobs_pending
+      # When empty, the chart targets backend.extraEnv.WORKER_CONCURRENCY so
+      # scale-up triggers once each pod's queue tops what it can process in
+      # parallel. Override with a constant when tuning by hand.
+      averageValue: ""
 
   podDisruptionBudget:
     enabled: true
@@ -159,6 +175,12 @@ backend:
   service:
     type: ClusterIP
     port: 8000
+    # MCP StreamableHTTP keeps session state in-process per pod. Round-robin
+    # routing breaks sessions when follow-up requests land on a different pod,
+    # surfacing as "McpError: Session terminated" in the client. ClientIP
+    # affinity pins each client to one pod for the affinity window.
+    sessionAffinity: ClientIP
+    sessionAffinityTimeoutSeconds: 10800
 
   # Graceful shutdown — backend handles SIGTERM and drains the worker queue.
   terminationGracePeriodSeconds: 60
@@ -315,6 +337,7 @@ postgres:
     existingSecret: ""
   service:
     port: 5432
+  maxConnections: 200
   persistence:
     enabled: true
     size: 20Gi
@@ -347,6 +370,46 @@ postgres:
   podDisruptionBudget:
     enabled: false
     minAvailable: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional PgBouncer transaction-pooler. Enable in production overrides when
+# backend replica × pool size would otherwise exceed Postgres connections.
+# Enabling this requires backend env DB_PGBOUNCER_TRANSACTION_MODE=true; this
+# chart sets that env var directly on backend pods when pgbouncer.enabled=true.
+# ─────────────────────────────────────────────────────────────────────────────
+pgbouncer:
+  enabled: false
+  replicas: 2
+  image:
+    repository: edoburu/pgbouncer
+    tag: v1.24.1-p1
+    pullPolicy: IfNotPresent
+  service:
+    port: 6432
+  maxClientConn: 1000
+  defaultPoolSize: 40
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # OpenShift Routes — preferred over Ingress on OCP.

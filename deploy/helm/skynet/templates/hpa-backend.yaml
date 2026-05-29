@@ -31,6 +31,20 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.backend.autoscaling.targetMemoryUtilizationPercentage }}
     {{- end }}
+    {{- if .Values.backend.autoscaling.queueDepth.enabled }}
+    {{- /* Default the per-pod queue target to WORKER_CONCURRENCY so scale-up
+           triggers when there's more work than the fleet can pull, not at a
+           hand-picked constant that drifts away from concurrency tuning. */ -}}
+    {{- $defaultTarget := (default (dict) .Values.backend.env).WORKER_CONCURRENCY | default "4" -}}
+    {{- $target := .Values.backend.autoscaling.queueDepth.averageValue | default $defaultTarget }}
+    - type: External
+      external:
+        metric:
+          name: {{ .Values.backend.autoscaling.queueDepth.metricName }}
+        target:
+          type: AverageValue
+          averageValue: {{ $target | quote }}
+    {{- end }}
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300

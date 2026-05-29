@@ -74,3 +74,26 @@ or wire CODE_AGENT_BASE_URL / GENERALIST_AGENT_BASE_URL to your internal LLM gat
 and unset OPENAI_API_KEY entirely.
 {{- end }}
 {{- end }}
+
+{{- $maxReplicas := .Values.backend.replicas | int -}}
+{{- if and .Values.backend.autoscaling .Values.backend.autoscaling.enabled -}}
+{{- $maxReplicas = .Values.backend.autoscaling.maxReplicas | int -}}
+{{- end }}
+{{- if and (gt $maxReplicas 2) (not .Values.pgbouncer.enabled) }}
+
+WARNING: backend can scale to {{ $maxReplicas }} replicas but pgbouncer.enabled=false.
+  Each pod opens up to (DB_POOL_SIZE + DB_POOL_MAX_OVERFLOW) connections; at
+  {{ $maxReplicas }} replicas this can exhaust Postgres max_connections (default 200).
+  Enable PgBouncer for safe horizontal scale:
+    helm upgrade {{ .Release.Name }} . --set pgbouncer.enabled=true \
+      {{- if .Values.openshift.routes.enabled }} --reuse-values{{- end }}
+{{- end }}
+
+{{- if and .Values.backend.autoscaling .Values.backend.autoscaling.enabled .Values.backend.autoscaling.queueDepth .Values.backend.autoscaling.queueDepth.enabled }}
+
+NOTE: HPA uses an External metric ({{ .Values.backend.autoscaling.queueDepth.metricName }}).
+  This requires Prometheus Adapter (or equivalent) to expose the Prometheus series
+  as a Kubernetes External metric. Without it, the HPA silently falls back to CPU.
+  Verify with:
+    kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1" | grep {{ .Values.backend.autoscaling.queueDepth.metricName }}
+{{- end }}

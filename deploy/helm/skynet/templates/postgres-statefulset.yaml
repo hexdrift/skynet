@@ -89,6 +89,9 @@ spec:
         - name: postgres
           image: {{ include "skynet.postgres.image" . }}
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          args:
+            - "-c"
+            - "max_connections={{ .Values.postgres.maxConnections }}"
           ports:
             - name: postgres
               containerPort: {{ .Values.postgres.service.port }}

@@ -1,0 +1,97 @@
+{{- if .Values.pgbouncer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "skynet.pgbouncer.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "skynet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgbouncer
+spec:
+  replicas: {{ .Values.pgbouncer.replicas }}
+  selector:
+    matchLabels:
+      {{- include "skynet.pgbouncer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "skynet.pgbouncer.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/pgbouncer-configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.pgbouncer.podSecurityContext | nindent 8 }}
+      {{- with .Values.pgbouncer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pgbouncer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pgbouncer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: pgbouncer
+          image: {{ include "skynet.pgbouncer.image" . }}
+          imagePullPolicy: {{ .Values.pgbouncer.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              printf '"%s" "%s"\n' "$DB_USER" "$DB_PASSWORD" > /etc/pgbouncer-generated/userlist.txt
+              exec pgbouncer /etc/pgbouncer/pgbouncer.ini
+          ports:
+            - name: pgbouncer
+              containerPort: {{ .Values.pgbouncer.service.port }}
+              protocol: TCP
+          securityContext:
+            {{- toYaml .Values.pgbouncer.securityContext | nindent 12 }}
+          env:
+            - name: DB_USER
+              value: {{ include "skynet.dbUser" . | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if and .Values.externalDatabase.enabled .Values.externalDatabase.existingSecret }}
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.existingSecretKey }}
+                  {{- else if .Values.externalDatabase.enabled }}
+                  name: {{ include "skynet.backend.secretName" . }}
+                  key: SKYNET_DB_PASSWORD
+                  {{- else }}
+                  name: {{ include "skynet.postgres.secretName" . }}
+                  key: password
+                  {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.pgbouncer.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pgbouncer
+              readOnly: true
+            - name: generated
+              mountPath: /etc/pgbouncer-generated
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "skynet.pgbouncer.fullname" . }}-config
+        - name: generated
+          emptyDir: {}
+{{- end }}

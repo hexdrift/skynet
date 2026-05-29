@@ -29,12 +29,13 @@ services:
         REGISTRY_PREFIX: ${REGISTRY_PREFIX:-docker.io}
         DEBIAN_MIRROR: ${DEBIAN_MIRROR-}
         PIP_INDEX_URL: ${PIP_INDEX_URL-}
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: skynet-api
     ports:
       - "8000:8000"
     environment:
       - REMOTE_DB_URL=postgresql://skynet:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/skynet
-      - WORKER_CONCURRENCY=2
+      - WORKER_CONCURRENCY=4
       - WORKER_POLL_INTERVAL=2.0
       - LOG_LEVEL=INFO
     env_file:

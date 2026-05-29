@@ -24,7 +24,7 @@ dependencies = [
     "uvicorn>=0.23",
     "pydantic>=2.5",
     "pydantic-settings>=2.0",
-    "dspy~=3.0",
+    "dspy==3.3.0b1",
     "litellm>=1.40",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
@@ -37,6 +37,7 @@ dependencies = [
     "scalar-fastapi>=1.8",
     "scipy>=1.15.3",
     "fastmcp>=3.0",
+    "prometheus-client>=0.20",
     "prometheus-fastapi-instrumentator>=7.0",
     "python-json-logger>=2.0",
 ]
@@ -53,6 +54,14 @@ load = [
 ]
 recommendations = [
     "umap-learn>=0.5",
+]
+training = [
+    # Optimizer-only: the training-ground harness applies MiniMax's chat
+    # template to score ECHO-style observation grounding 1:1 with serving.
+    # The FastAPI runtime never imports this. ``transformers`` renders the
+    # chat template; ``httpx`` drives the Fireworks echo-logprob scorer.
+    "transformers>=4.44",
+    "httpx>=0.25",
 ]
 
 [tool.ruff]
