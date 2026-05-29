@@ -8,38 +8,51 @@ from typing import cast
 import dspy
 import pytest
 
+from core.service_gateway.agents.code import _SubmitArgExtractor
 from core.service_gateway.agents.generalist import (
     ApprovalRegistry,
     WizardState,
     _needs_approval,
     _wrap_tool_with_approval,
     tools_for,
+    validate_wizard_patch_order,
 )
 
 
 def test_empty_state_hides_dataset_and_submit_tools() -> None:
     """An empty wizard state hides dataset/code/submit tools, exposing only discovery."""
     allowed = tools_for(WizardState())
-    assert "edit_code_optimizations_edit_code_post" not in allowed
+    assert "request_code_authoring" not in allowed
     assert "validate_code_validate_code_post" not in allowed
     assert "submit_job_run_post" not in allowed
     assert "submit_grid_search_grid_search_post" not in allowed
-    assert "list_models_models_get" in allowed
+    assert "list_models_for_agent" in allowed
 
 
-def test_dataset_ready_unlocks_code_tools_but_not_submit() -> None:
-    """``dataset_ready`` exposes code/profile tools but submit stays hidden."""
+def test_dataset_ready_unlocks_diagnostics_but_not_code_without_name() -> None:
+    """``dataset_ready`` exposes the diagnostic tools, but code authoring stays
+    hidden until the run is named — mirroring the wizard's Basics → Code order."""
     allowed = tools_for(WizardState(dataset_ready=True, columns_configured=True))
-    assert "edit_code_optimizations_edit_code_post" in allowed
     assert "validate_code_validate_code_post" in allowed
     assert "profile_datasets_profile_post" in allowed
+    assert "request_code_authoring" not in allowed
+    assert "submit_job_run_post" not in allowed
+
+
+def test_named_dataset_ready_unlocks_code_authoring() -> None:
+    """Naming the run (with the dataset ready) opens the Signature/Metric step."""
+    allowed = tools_for(
+        WizardState(job_name="Sentiment run", dataset_ready=True, columns_configured=True)
+    )
+    assert "request_code_authoring" in allowed
     assert "submit_job_run_post" not in allowed
 
 
 def test_full_readiness_unlocks_submit() -> None:
-    """Full readiness exposes the submit and grid-search tools."""
+    """Full readiness exposes the submit tool."""
     allowed = tools_for(
         WizardState(
+            job_name="My run",
             dataset_ready=True,
             columns_configured=True,
             signature_code="class S(dspy.Signature): ...",
@@ -48,29 +61,103 @@ def test_full_readiness_unlocks_submit() -> None:
         )
     )
     assert "submit_job_run_post" in allowed
-    assert "submit_grid_search_grid_search_post" in allowed
+    # Grid search is intentionally NOT exposed to the agent; users reach
+    # it through the wizard UI directly. See generalist._READY_TO_SUBMIT_TOOLS.
+    assert "submit_grid_search_grid_search_post" not in allowed
 
 
 def test_missing_any_submit_precondition_keeps_submit_hidden() -> None:
-    """Submit tools stay hidden when any single readiness key is missing."""
+    """Submit tools stay hidden when any single readiness criterion is missing.
+
+    Dataset readiness is satisfied by ``columns_configured`` OR ``dataset_ready``
+    (the wizard flips ``columns_configured`` once roles are assigned; a freshly
+    sample-staged dataset only sets ``dataset_ready``). Flipping both together
+    is what hides the submit tools, so this test groups them into one
+    "dataset_ready" criterion.
+    """
     base: dict[str, object] = {
+        "job_name": "My run",
         "dataset_ready": True,
         "columns_configured": True,
         "signature_code": "x",
         "metric_code": "y",
         "model_configured": True,
     }
-    for key in ("dataset_ready", "columns_configured", "signature_code", "metric_code", "model_configured"):
-        state = {**base, key: False if isinstance(base[key], bool) else ""}
+    criteria: dict[str, dict[str, object]] = {
+        "job_name": {"job_name": ""},
+        "dataset_ready": {"dataset_ready": False, "columns_configured": False},
+        "signature_code": {"signature_code": ""},
+        "metric_code": {"metric_code": ""},
+        "model_configured": {"model_configured": False},
+    }
+    for label, overrides in criteria.items():
+        state = {**base, **overrides}
         assert "submit_job_run_post" not in tools_for(cast(WizardState, state)), (
-            f"submit_job leaked with {key} missing"
+            f"submit_job leaked with {label} missing"
         )
+
+
+def test_order_allows_name_first() -> None:
+    """Setting ``job_name`` on an empty wizard is in order (Basics is first)."""
+    assert validate_wizard_patch_order({"job_name": "My run"}, WizardState()) is None
+
+
+def test_order_rejects_dataset_roles_before_name() -> None:
+    """Column roles (Data) require the run to be named first (Basics)."""
+    err = validate_wizard_patch_order(
+        {"column_roles": {"q": "input", "a": "output"}}, WizardState()
+    )
+    assert err is not None
+    assert "Basics" in err
+
+
+def test_order_allows_name_and_dataset_in_one_patch() -> None:
+    """A single patch may set the name AND column roles — each satisfies its own step."""
+    patch = {"job_name": "My run", "column_roles": {"q": "input", "a": "output"}}
+    assert validate_wizard_patch_order(patch, WizardState()) is None
+
+
+def test_order_rejects_params_before_dataset() -> None:
+    """Params can't be set before the dataset is ready, even with a name set."""
+    err = validate_wizard_patch_order(
+        {"optimizer_name": "gepa"}, WizardState(job_name="My run")
+    )
+    assert err is not None
+    assert "Data" in err
+
+
+def test_order_rejects_model_before_code() -> None:
+    """The Model step is gated on the Code step being authored first."""
+    state = WizardState(job_name="My run", dataset_ready=True, columns_configured=True)
+    err = validate_wizard_patch_order({"model_config": {"name": "openai/gpt-4o"}}, state)
+    assert err is not None
+    assert "Code" in err
+
+
+def test_order_allows_model_after_code() -> None:
+    """With name + dataset + code present, setting the model is in order."""
+    state = WizardState(
+        job_name="My run",
+        dataset_ready=True,
+        columns_configured=True,
+        signature_code="class S(dspy.Signature): ...",
+        metric_code="def m(): return 1.0",
+    )
+    assert (
+        validate_wizard_patch_order({"model_config": {"name": "openai/gpt-4o"}}, state)
+        is None
+    )
+
+
+def test_order_ignores_unmapped_fields() -> None:
+    """A patch with no step-mapped fields passes (code fields are rejected elsewhere)."""
+    assert validate_wizard_patch_order({"signature_code": "x"}, WizardState()) is None
 
 
 def test_always_tools_include_discovery_and_post_submit() -> None:
     """The always-on toolset includes discovery and post-submit lifecycle tools."""
     allowed = tools_for(WizardState())
-    assert "list_models_models_get" in allowed
+    assert "list_models_for_agent" in allowed
     assert "get_registry_snapshot_registry_get" in allowed
     assert "list_jobs_optimizations_get" in allowed
     assert "cancel_job_optimizations" in allowed
@@ -93,7 +180,7 @@ def test_ask_gates_every_mutation() -> None:
 def test_auto_safe_gates_only_destructive() -> None:
     """Auto-safe gates only destructive operations."""
     assert _needs_approval("rename_job_optimizations", "auto_safe") is False
-    assert _needs_approval("create_template_templates_post", "auto_safe") is False
+    assert _needs_approval("toggle_pin_job_optimizations", "auto_safe") is False
     assert _needs_approval("delete_job_optimizations", "auto_safe") is True
     assert _needs_approval("submit_job_run_post", "auto_safe") is True
 
@@ -116,8 +203,13 @@ async def test_wrap_bypasses_when_no_approval_needed() -> None:
         trust_mode="auto_safe",
         registry=registry,
         emit=events.append,
+        outer_loop=asyncio.get_running_loop(),
     )
-    result = await tool.func()
+    # Drive the async body directly: the sync ``__call__`` schedules onto
+    # ``outer_loop`` via ``run_coroutine_threadsafe`` for DSPy's worker-thread
+    # dispatch, but inside the test loop we exercise the same logic by awaiting
+    # ``_async_body`` so we don't deadlock blocking on the running loop.
+    result = await tool.func._async_body()
     assert result == "renamed"
     event_names = [e["event"] for e in events]
     assert "pending_approval" not in event_names
@@ -134,8 +226,9 @@ async def test_wrap_emits_pending_and_runs_on_approve() -> None:
         trust_mode="ask",
         registry=registry,
         emit=events.append,
+        outer_loop=asyncio.get_running_loop(),
     )
-    call_task = asyncio.create_task(tool.func())
+    call_task = asyncio.create_task(tool.func._async_body())
     for _ in range(20):
         await asyncio.sleep(0)
         if any(e["event"] == "pending_approval" for e in events):
@@ -161,8 +254,9 @@ async def test_denial_returns_observation_not_exception() -> None:
         trust_mode="ask",
         registry=registry,
         emit=events.append,
+        outer_loop=asyncio.get_running_loop(),
     )
-    call_task = asyncio.create_task(tool.func())
+    call_task = asyncio.create_task(tool.func._async_body())
     for _ in range(20):
         await asyncio.sleep(0)
         if events:
@@ -173,7 +267,146 @@ async def test_denial_returns_observation_not_exception() -> None:
     assert result == "User declined"
 
 
+def _make_recording_tool(name: str) -> tuple[dspy.Tool, dict]:
+    """Build a ``dspy.Tool`` whose async ``func`` records the kwargs it receives.
+
+    Args:
+        name: Registered tool name.
+
+    Returns:
+        The tool and the dict its ``func`` populates with received kwargs.
+    """
+    seen: dict = {}
+
+    async def func(**kwargs):
+        seen.update(kwargs)
+        return "ok"
+
+    tool = dspy.Tool(func=func, name=name, desc="test tool", args={}, arg_types={}, arg_desc={})
+    return tool, seen
+
+
+@pytest.mark.asyncio
+async def test_submit_injects_validated_code_over_agent_supplied() -> None:
+    """Submit sources Signature/Metric from the snapshot, discarding agent code."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    wizard_state = cast(
+        WizardState,
+        {
+            "signature_code": "class Good(dspy.Signature): ...",
+            "metric_code": "def good(gold, pred, trace, pred_name, pred_trace): return 1.0",
+            "staged_dataset_id": "ds_123",
+        },
+    )
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        staged_dataset_id="ds_123",
+        wizard_state=wizard_state,
+    )
+    await tool.func._async_body(
+        signature_code="BROKEN {",
+        metric_code="def m(example, prediction, trace): return 1.0",
+    )
+    assert seen["signature_code"] == "class Good(dspy.Signature): ..."
+    assert seen["metric_code"] == (
+        "def good(gold, pred, trace, pred_name, pred_trace): return 1.0"
+    )
+    assert seen["staged_dataset_id"] == "ds_123"
+
+
+@pytest.mark.asyncio
+async def test_submit_without_snapshot_code_leaves_agent_args() -> None:
+    """With no authored code in the snapshot, submit args pass through unchanged."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(WizardState, {}),
+    )
+    await tool.func._async_body(signature_code="agent_sig", metric_code="agent_metric")
+    assert seen["signature_code"] == "agent_sig"
+    assert seen["metric_code"] == "agent_metric"
+
+
+@pytest.mark.asyncio
+async def test_non_submit_tool_does_not_inject_code() -> None:
+    """Code injection is scoped to submit tools; other tools are untouched."""
+    tool, seen = _make_recording_tool("update_wizard_state")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(WizardState, {"signature_code": "snap", "metric_code": "snap"}),
+    )
+    await tool.func._async_body(job_name="x")
+    assert "signature_code" not in seen
+    assert "metric_code" not in seen
+
+
 def test_registry_resolve_unknown_returns_false() -> None:
     """Resolving an unknown call id returns ``False``."""
     registry = ApprovalRegistry()
     assert registry.resolve("does-not-exist", True) is False
+
+
+def test_submit_arg_extractor_streams_value_incrementally() -> None:
+    """Incremental chunks of a submit tool_calls payload yield growing deltas."""
+    ext = _SubmitArgExtractor("assistant_message")
+    deltas: list[str] = []
+    for chunk in (
+        '{"tool_calls": [',
+        '{"name": "submit", "args": ',
+        '{"assistant_message": "',
+        "Shal",
+        "om, ",
+        "Gilad",
+        '!"}}]}',
+    ):
+        delta = ext.feed(chunk)
+        if delta:
+            deltas.append(delta)
+    assert "".join(deltas) == "Shalom, Gilad!"
+
+
+def test_submit_arg_extractor_ignores_non_submit_calls() -> None:
+    """A non-submit tool call produces no delta, and reset clears the buffer."""
+    ext = _SubmitArgExtractor("assistant_message")
+    assert ext.feed('{"tool_calls": [{"name": "list_models", "args": {}}]}') is None
+    ext.reset()
+    delta = ext.feed(
+        '{"tool_calls": [{"name": "submit", "args": {"assistant_message": "Done!"}}]}'
+    )
+    assert delta == "Done!"
+
+
+def test_submit_arg_extractor_handles_malformed_json() -> None:
+    """A partial / malformed chunk returns ``None`` without raising."""
+    ext = _SubmitArgExtractor("reply")
+    assert ext.feed('{"tool_calls": [{"name": "submit') is None
+
+
+def test_submit_arg_extractor_picks_submit_among_parallel_calls() -> None:
+    """Parallel tool calls including submit still resolve to the submit arg."""
+    ext = _SubmitArgExtractor("reply")
+    parallel = (
+        '{"tool_calls": [{"name": "foo", "args": {}}, '
+        '{"name": "submit", "args": {"reply": "yo"}}]}'
+    )
+    assert ext.feed(parallel) == "yo"
+
+
+def test_submit_arg_extractor_is_idempotent_on_repeat_feed() -> None:
+    """Re-feeding the same buffer or an empty chunk yields no new delta."""
+    ext = _SubmitArgExtractor("reply")
+    full = '{"tool_calls": [{"name": "submit", "args": {"reply": "hi"}}]}'
+    assert ext.feed(full) == "hi"
+    assert ext.feed("") is None

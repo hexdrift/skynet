@@ -20,8 +20,27 @@ class FakeJobStore:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._logs: dict[str, list[dict[str, Any]]] = {}
         self._progress: dict[str, list[tuple[str | None, dict[str, Any]]]] = {}
+        self._notified: set[str] = set()
         self.append_log_calls: list[dict[str, Any]] = []
         self.record_progress_calls: list[tuple[str, str | None, dict[str, Any]]] = []
+
+    def claim_completion_notification(self, optimization_id: str) -> bool:
+        """Atomically claim the notification right for ``optimization_id``.
+
+        Mirrors the real ``RemoteDBJobStore.claim_completion_notification``:
+        the first caller for each id returns ``True``; later callers (or
+        callers for unseeded ids) return ``False``.
+
+        Args:
+            optimization_id: ID of the job whose notification is being claimed.
+
+        Returns:
+            ``True`` exactly once per id; ``False`` thereafter or when missing.
+        """
+        if optimization_id not in self._jobs or optimization_id in self._notified:
+            return False
+        self._notified.add(optimization_id)
+        return True
 
     def seed_job(self, optimization_id: str, **fields: Any) -> dict[str, Any]:
         """Create a queued job row with optional overrides and return it.

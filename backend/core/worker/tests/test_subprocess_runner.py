@@ -75,6 +75,7 @@ def test_safe_queue_put_suppresses_exception_from_broken_queue() -> None:
     """``safe_queue_put`` swallows exceptions raised by the queue."""
     class _BrokenQueue:
         def put(self, item: object) -> None:
+            """Always raise to simulate a broken queue."""
             raise RuntimeError("queue full")
 
     # Should not raise.
@@ -193,6 +194,7 @@ def test_subprocess_log_handler_falls_back_to_get_message_on_format_error() -> N
 
     class _FailFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
+            """Always raise to drive ``emit`` into its fallback branch."""
             raise RuntimeError("formatter exploded")
 
     handler.setFormatter(_FailFormatter())
@@ -206,6 +208,7 @@ def test_subprocess_log_handler_suppresses_broken_queue_errors() -> None:
     """The handler swallows queue ``put`` errors so logging never crashes the run."""
     class _BrokenQueue:
         def put(self, item: object) -> None:
+            """Always raise to simulate a broken pipe to the parent process."""
             raise OSError("pipe broken")
 
     handler = SubprocessLogHandler(event_queue=_BrokenQueue())

@@ -262,7 +262,6 @@ def test_overview_to_base_fields_legacy_job_type_key_is_ignored() -> None:
     'run' is returned when only the legacy key is present.
     """
     fields = overview_to_base_fields({"job_type": "grid_search"})
-    # 'job_type' is not the active key, so we get the default
     assert fields["optimization_type"] == "run"
 
 

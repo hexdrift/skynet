@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from core.config import Settings
+from core.config import DEFAULT_AGENT_MODEL_ID, Settings
 
 _SETTINGS_ENV_VARS = (
     "REMOTE_DB_URL",
@@ -20,10 +20,16 @@ _SETTINGS_ENV_VARS = (
     "WORKER_CONCURRENCY",
     "WORKER_POLL_INTERVAL",
     "WORKER_STALE_THRESHOLD",
+    "JOB_MAX_ATTEMPTS",
     "PROGRESS_EVENTS_PER_JOB_CAP",
     "LOG_ENTRIES_PER_JOB_CAP",
     "CANCEL_POLL_INTERVAL",
     "JOB_RUN_START_METHOD",
+    "DB_POOL_SIZE",
+    "DB_POOL_MAX_OVERFLOW",
+    "DB_POOL_RECYCLE",
+    "DB_PGBOUNCER_TRANSACTION_MODE",
+    "SKYNET_CODE_VERSION",
     "ARTIFACTS_DIR",
     "LOGS_DIR",
     "DEFAULT_TIMEOUT",
@@ -82,6 +88,13 @@ def test_settings_defaults_storage_retention_caps() -> None:
     assert s.log_entries_per_job_cap == 5000
 
 
+def test_settings_defaults_job_max_attempts() -> None:
+    """Default job retry cap is 3 attempts."""
+    s = Settings(_env_file=None)
+
+    assert s.job_max_attempts == 3
+
+
 def test_settings_defaults_cancel_poll_interval() -> None:
     """Default ``cancel_poll_interval`` is 1.0 second."""
     s = Settings(_env_file=None)
@@ -94,6 +107,16 @@ def test_settings_defaults_job_run_start_method() -> None:
     s = Settings(_env_file=None)
 
     assert s.job_run_start_method == "fork"
+
+
+def test_settings_defaults_db_pool_config() -> None:
+    """Default DB pool settings are production-safe single-pod values."""
+    s = Settings(_env_file=None)
+
+    assert s.db_pool_size == 10
+    assert s.db_pool_max_overflow == 20
+    assert s.db_pool_recycle_seconds == 3600
+    assert s.db_pgbouncer_transaction_mode is False
 
 
 def test_settings_defaults_artifacts_dir() -> None:
@@ -172,6 +195,39 @@ def test_settings_env_override_storage_retention_caps(monkeypatch: pytest.Monkey
 
     assert s.progress_events_per_job_cap == 123
     assert s.log_entries_per_job_cap == 456
+
+
+def test_settings_env_override_job_max_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``JOB_MAX_ATTEMPTS`` env var overrides the retry cap."""
+    monkeypatch.setenv("JOB_MAX_ATTEMPTS", "5")
+
+    s = Settings(_env_file=None)
+
+    assert s.job_max_attempts == 5
+
+
+def test_settings_env_override_db_pool_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DB pool settings are configurable via environment."""
+    monkeypatch.setenv("DB_POOL_SIZE", "12")
+    monkeypatch.setenv("DB_POOL_MAX_OVERFLOW", "8")
+    monkeypatch.setenv("DB_POOL_RECYCLE", "900")
+    monkeypatch.setenv("DB_PGBOUNCER_TRANSACTION_MODE", "true")
+
+    s = Settings(_env_file=None)
+
+    assert s.db_pool_size == 12
+    assert s.db_pool_max_overflow == 8
+    assert s.db_pool_recycle_seconds == 900
+    assert s.db_pgbouncer_transaction_mode is True
+
+
+def test_settings_code_version_prefers_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``SKYNET_CODE_VERSION`` provides the cached build version."""
+    monkeypatch.setenv("SKYNET_CODE_VERSION", "abcdef123456")
+
+    s = Settings(_env_file=None)
+
+    assert s.code_version == "abcdef123456"
 
 
 def test_settings_env_override_port(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -538,8 +594,6 @@ def test_quota_overrides_property_parses_once(monkeypatch: pytest.MonkeyPatch) -
 
 def test_settings_default_agent_models_use_shared_constant() -> None:
     """Both agents default to ``DEFAULT_AGENT_MODEL_ID`` so a single swap covers both."""
-    from core.config import DEFAULT_AGENT_MODEL_ID
-
     s = Settings(_env_file=None)
 
     assert s.code_agent_model == DEFAULT_AGENT_MODEL_ID

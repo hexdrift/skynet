@@ -412,18 +412,20 @@ def test_count_jobs_filters(
     assert store.count_jobs(**filter_kwargs) == expected_count
 
 
-def test_recover_orphaned_jobs_marks_running_as_failed(store: FakeJobStore) -> None:
-    """``recover_orphaned_jobs`` transitions ``running`` to ``failed``."""
+def test_recover_orphaned_jobs_requeues_running_job(store: FakeJobStore) -> None:
+    """``recover_orphaned_jobs`` transitions ``running`` to ``pending``."""
     store.seed_job("r1", status="running")
     store.recover_orphaned_jobs()
-    assert store.get_job("r1")["status"] == "failed"
+    job = store.get_job("r1")
+    assert job["status"] == "pending"
+    assert job["attempts"] == 1
 
 
-def test_recover_orphaned_jobs_marks_validating_as_failed(store: FakeJobStore) -> None:
-    """``recover_orphaned_jobs`` transitions ``validating`` to ``failed``."""
+def test_recover_orphaned_jobs_requeues_validating_job(store: FakeJobStore) -> None:
+    """``recover_orphaned_jobs`` transitions ``validating`` to ``pending``."""
     store.seed_job("r2", status="validating")
     store.recover_orphaned_jobs()
-    assert store.get_job("r2")["status"] == "failed"
+    assert store.get_job("r2")["status"] == "pending"
 
 
 def test_recover_orphaned_jobs_leaves_terminal_jobs_intact(store: FakeJobStore) -> None:
