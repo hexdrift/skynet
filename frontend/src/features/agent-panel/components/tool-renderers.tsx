@@ -6,6 +6,7 @@ import { TERMS } from "@/shared/lib/terms";
 
 import { UUID_RE } from "../lib/entry-format";
 
+import { SearchResultsCard } from "./SearchResultsCard";
 import { SubmitSummaryCard } from "./SubmitSummaryCard";
 
 export interface ToolRenderer {
@@ -30,9 +31,7 @@ function shortId(v: unknown): string | undefined {
 }
 
 function pickId(args: Record<string, unknown>): string | undefined {
-  return shortId(
-    args.id ?? args.optimization_id ?? args.job_id ?? args.template_id ?? args.sample_id,
-  );
+  return shortId(args.id ?? args.optimization_id ?? args.job_id ?? args.sample_id);
 }
 
 function pickIds(args: Record<string, unknown>): string[] {
@@ -55,16 +54,6 @@ function truncate(s: string, n: number): string {
 }
 
 const RENDERERS: Record<string, ToolRenderer> = {
-  submit_optimization: {
-    card: (call) => <SubmitSummaryCard call={call} />,
-    summary: (call) =>
-      call.status === "running"
-        ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.1", {
-            p1: TERMS.optimization,
-          })
-        : null,
-  },
-
   delete_job_optimizations: {
     summary: (call) => {
       const id = pickId(getArgs(call));
@@ -222,6 +211,7 @@ const RENDERERS: Record<string, ToolRenderer> = {
   },
 
   submit_job_run_post: {
+    card: (call) => <SubmitSummaryCard call={call} />,
     summary: (call) => {
       const args = getArgs(call);
       const raw = typeof args.job_name === "string" ? args.job_name : undefined;
@@ -248,6 +238,7 @@ const RENDERERS: Record<string, ToolRenderer> = {
   },
 
   submit_grid_search_grid_search_post: {
+    card: (call) => <SubmitSummaryCard call={call} />,
     summary: (call) =>
       byStatus(call, {
         running: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.29", {
@@ -282,48 +273,6 @@ const RENDERERS: Record<string, ToolRenderer> = {
         ? `${count} ${TERMS.optimizationPlural}`
         : msg("auto.features.agent.panel.lib.tool.renderers.literal.27");
     },
-  },
-
-  create_template_templates_post: {
-    summary: (call) => {
-      const args = getArgs(call);
-      const raw = typeof args.name === "string" ? args.name : undefined;
-      const name = raw ? truncate(raw, 24) : undefined;
-      return byStatus(call, {
-        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.28"),
-        done: name
-          ? formatMsg("auto.features.agent.panel.lib.tool.renderers.template.33", { p1: name })
-          : msg("auto.features.agent.panel.lib.tool.renderers.literal.29"),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.30"),
-      });
-    },
-  },
-
-  update_template_templates: {
-    summary: (call) =>
-      byStatus(call, {
-        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.31"),
-        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.32"),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.33"),
-      }),
-  },
-
-  delete_template_templates: {
-    summary: (call) =>
-      byStatus(call, {
-        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.34"),
-        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.35"),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.36"),
-      }),
-  },
-
-  apply_template_templates: {
-    summary: (call) =>
-      byStatus(call, {
-        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.37"),
-        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.38"),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.39"),
-      }),
   },
 
   compare_jobs_optimizations_compare_post: {
@@ -387,19 +336,6 @@ const RENDERERS: Record<string, ToolRenderer> = {
       }),
   },
 
-  stage_sample_dataset_datasets_samples: {
-    summary: (call) =>
-      byStatus(call, {
-        running: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.37", {
-          p1: TERMS.dataset,
-        }),
-        done: formatMsg("auto.features.agent.panel.lib.tool.renderers.template.38", {
-          p1: TERMS.dataset,
-        }),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.56"),
-      }),
-  },
-
   set_column_roles_datasets_column_roles_post: {
     summary: (call) =>
       byStatus(call, {
@@ -409,14 +345,10 @@ const RENDERERS: Record<string, ToolRenderer> = {
       }),
   },
 
-  serve_program_serve: {
-    summary: (call) =>
-      byStatus(call, {
-        running: msg("auto.features.agent.panel.lib.tool.renderers.literal.60"),
-        done: msg("auto.features.agent.panel.lib.tool.renderers.literal.61"),
-        error: msg("auto.features.agent.panel.lib.tool.renderers.literal.62"),
-      }),
+  public_search_dashboard_search_post: {
+    card: (call) => <SearchResultsCard call={call} />,
   },
+
 };
 
 export function getToolRenderer(tool: string): ToolRenderer | undefined {

@@ -23,16 +23,23 @@ interface SubmitResult {
 
 function extractResult(call: AgentToolCall): SubmitResult | null {
   const payload = (call.payload ?? {}) as Record<string, unknown>;
-  const result = (payload.result ?? null) as SubmitResult | null;
-  if (result && typeof result === "object") return result;
-  const top = payload as Record<string, unknown>;
-  const hasKeys = ["id", "job_name", "status", "detail"].some((k) => k in top);
-  if (!hasKeys) return null;
+  // The submit endpoints return ``OptimizationSubmissionResponse``
+  // (``optimization_id`` + ``name``); error/legacy payloads may instead carry
+  // ``id`` / ``job_name`` / ``detail``. Read from ``payload.result`` when the
+  // tool nests its output there, else from the payload top level, and accept
+  // either field name so the link and title always resolve.
+  const raw = (
+    payload.result && typeof payload.result === "object" ? payload.result : payload
+  ) as Record<string, unknown>;
+  const id = raw.optimization_id ?? raw.id;
+  const jobName = raw.name ?? raw.job_name;
+  const { status, detail } = raw;
+  if ([id, jobName, status, detail].every((v) => v === undefined)) return null;
   return {
-    id: typeof top.id === "string" ? top.id : undefined,
-    job_name: typeof top.job_name === "string" ? top.job_name : undefined,
-    status: typeof top.status === "string" ? top.status : undefined,
-    detail: typeof top.detail === "string" ? top.detail : undefined,
+    id: typeof id === "string" ? id : undefined,
+    job_name: typeof jobName === "string" ? jobName : undefined,
+    status: typeof status === "string" ? status : undefined,
+    detail: typeof detail === "string" ? detail : undefined,
   };
 }
 

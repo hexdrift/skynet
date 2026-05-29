@@ -1,27 +1,25 @@
 import {
-  AlertTriangle,
   BarChart3,
+  Check,
   CheckCircle2,
   Code2,
   Copy,
   Database,
   FileSearch,
   GitCompare,
-  Layers,
   ListChecks,
   Pencil,
   Pin,
   Play,
   RefreshCw,
-  Save,
   ScanSearch,
   ScrollText,
   Search,
+  Sparkles,
   Square,
   Tags,
   Trash2,
   Wand2,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { TERMS } from "@/shared/lib/terms";
@@ -57,13 +55,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
       p1: TERMS.optimizationPlural,
     }),
     confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.2"),
-    severity: "destructive",
-    icon: Trash2,
-  },
-  delete_template_templates: {
-    title: msg("auto.features.agent.panel.lib.tool.meta.literal.3"),
-    description: msg("auto.features.agent.panel.lib.tool.meta.literal.4"),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.5"),
     severity: "destructive",
     icon: Trash2,
   },
@@ -127,13 +118,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     severity: "info",
     icon: Pin,
   },
-  create_template_templates_post: {
-    title: msg("auto.features.agent.panel.lib.tool.meta.literal.15"),
-    description: msg("auto.features.agent.panel.lib.tool.meta.literal.16"),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.17"),
-    severity: "info",
-    icon: Save,
-  },
   edit_code_optimizations_edit_code_post: {
     title: msg("auto.features.agent.panel.lib.tool.meta.literal.18"),
     description: formatMsg("auto.features.agent.panel.lib.tool.meta.template.14", {
@@ -166,13 +150,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.26"),
     severity: "info",
     icon: Search,
-  },
-  serve_program_serve: {
-    title: msg("auto.features.agent.panel.lib.tool.meta.literal.27"),
-    description: msg("auto.features.agent.panel.lib.tool.meta.literal.28"),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.29"),
-    severity: "warning",
-    icon: Zap,
   },
   clone_job_optimizations: {
     title: formatMsg("auto.features.agent.panel.lib.tool.meta.template.17", {
@@ -211,29 +188,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.36"),
     severity: "info",
     icon: Pin,
-  },
-  update_template_templates: {
-    title: msg("auto.features.agent.panel.lib.tool.meta.literal.39"),
-    description: msg("auto.features.agent.panel.lib.tool.meta.literal.40"),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.41"),
-    severity: "info",
-    icon: Pencil,
-  },
-  apply_template_templates: {
-    title: msg("auto.features.agent.panel.lib.tool.meta.literal.42"),
-    description: msg("auto.features.agent.panel.lib.tool.meta.literal.43"),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.44"),
-    severity: "info",
-    icon: Layers,
-  },
-  stage_sample_dataset_datasets_samples: {
-    title: formatMsg("auto.features.agent.panel.lib.tool.meta.template.23", { p1: TERMS.dataset }),
-    description: formatMsg("auto.features.agent.panel.lib.tool.meta.template.24", {
-      p1: TERMS.dataset,
-    }),
-    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.45"),
-    severity: "info",
-    icon: Database,
   },
   set_column_roles_datasets_column_roles_post: {
     title: msg("auto.features.agent.panel.lib.tool.meta.literal.46"),
@@ -286,14 +240,61 @@ export const TOOL_META: Record<string, ToolMeta> = {
     severity: "info",
     icon: BarChart3,
   },
+  request_user_inference: {
+    title: msg("auto.features.agent.panel.lib.tool.meta.literal.70"),
+    description: msg("auto.features.agent.panel.lib.tool.meta.literal.71"),
+    confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.72"),
+    severity: "info",
+    icon: Sparkles,
+  },
 };
 
+// Read-only / lookup tools (no TOOL_META entry, no approval card) fall through
+// here. The icon is the "done" glyph rendered by ``StatusGlyph`` in
+// ``ToolCallRow``; ``running`` shows a pulse and ``error`` shows its own
+// triangle, so the default must communicate "completed successfully" — a plain
+// check, not a warning triangle which used to mis-render every finished
+// read-only call as if it were a danger pill (see PER-?? screenshots).
 export const DEFAULT_META: ToolMeta = {
   title: msg("auto.features.agent.panel.lib.tool.meta.literal.51"),
   description: msg("auto.features.agent.panel.lib.tool.meta.literal.52"),
   confirmLabel: msg("auto.features.agent.panel.lib.tool.meta.literal.53"),
   severity: "warning",
-  icon: AlertTriangle,
+  icon: Check,
+};
+
+// Hebrew display labels for tools that aren't in TOOL_META — read-only
+// discovery / lookup tools that never trigger an approval card, so they
+// don't need icon/severity/description. Keeps tool rows from falling back
+// to an English-looking prettified snake_case (e.g. "list models for agent").
+const TOOL_TITLES: Record<string, string> = {
+  list_models_for_agent: formatMsg("auto.features.agent.panel.lib.tool.meta.template.28", {
+    p1: TERMS.modelPlural,
+  }),
+  get_registry_snapshot_registry_get: msg("auto.features.agent.panel.lib.tool.meta.literal.73"),
+  get_optimization_counts_optimizations_counts_get: formatMsg(
+    "auto.features.agent.panel.lib.tool.meta.template.29",
+    { p1: TERMS.optimizationPlural },
+  ),
+  get_job_summary_optimizations: formatMsg(
+    "auto.features.agent.panel.lib.tool.meta.template.30",
+    { p1: TERMS.optimization },
+  ),
+  get_optimizer_stats_analytics_optimizers_get: formatMsg(
+    "auto.features.agent.panel.lib.tool.meta.template.31",
+    { p1: TERMS.optimizer },
+  ),
+  get_model_stats_analytics_models_get: formatMsg(
+    "auto.features.agent.panel.lib.tool.meta.template.31",
+    { p1: TERMS.modelPlural },
+  ),
+  serve_info_serve: msg("auto.features.agent.panel.lib.tool.meta.literal.74"),
+  serve_pair_info_serve: msg("auto.features.agent.panel.lib.tool.meta.literal.75"),
+  request_user_dataset_datasets_request_upload_post: msg(
+    "auto.features.agent.panel.lib.tool.meta.literal.76",
+  ),
+  get_grid_search_result_optimizations: msg("auto.features.agent.panel.lib.tool.meta.literal.77"),
+  get_pair_test_results_optimizations: msg("auto.features.agent.panel.lib.tool.meta.literal.78"),
 };
 
 export function prettifyToolName(tool: string): string {
@@ -308,5 +309,5 @@ export function getToolMeta(tool: string): ToolMeta {
 }
 
 export function getToolTitle(tool: string): string {
-  return TOOL_META[tool]?.title ?? prettifyToolName(tool);
+  return TOOL_META[tool]?.title ?? TOOL_TITLES[tool] ?? prettifyToolName(tool);
 }

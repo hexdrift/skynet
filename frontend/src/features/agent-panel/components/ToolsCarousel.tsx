@@ -34,9 +34,6 @@ const FEATURED_TOOLS: readonly string[] = [
   "list_jobs_optimizations_get",
   "rename_job_optimizations",
   "toggle_pin_job_optimizations",
-  "apply_template_templates",
-  "create_template_templates_post",
-  "stage_sample_dataset_datasets_samples",
   "set_column_roles_datasets_column_roles_post",
   "profile_datasets_profile_post",
   "edit_code_optimizations_edit_code_post",
@@ -44,10 +41,10 @@ const FEATURED_TOOLS: readonly string[] = [
   "discover_models_models_discover_post",
   "submit_job_run_post",
   "submit_grid_search_grid_search_post",
+  "request_user_inference",
   "clone_job_optimizations",
   "retry_job_optimizations",
   "cancel_job_optimizations",
-  "serve_program_serve",
   "delete_job_optimizations",
 ];
 
@@ -82,10 +79,6 @@ const TOUR_DESCRIPTIONS: Record<string, string> = {
     "auto.features.agent.panel.components.toolscarousel.template.6",
     { p1: TERMS.optimizationPlural },
   ),
-  create_template_templates_post: msg(
-    "auto.features.agent.panel.components.toolscarousel.literal.6",
-  ),
-  apply_template_templates: msg("auto.features.agent.panel.components.toolscarousel.literal.7"),
   edit_code_optimizations_edit_code_post: formatMsg(
     "auto.features.agent.panel.components.toolscarousel.template.7",
     { p1: TERMS.signature, p2: TERMS.metric },
@@ -97,19 +90,13 @@ const TOUR_DESCRIPTIONS: Record<string, string> = {
     "auto.features.agent.panel.components.toolscarousel.template.8",
     { p1: TERMS.dataset },
   ),
-  stage_sample_dataset_datasets_samples: formatMsg(
-    "auto.features.agent.panel.components.toolscarousel.template.9",
-    { p1: TERMS.dataset },
-  ),
   set_column_roles_datasets_column_roles_post: msg(
     "auto.features.agent.panel.components.toolscarousel.literal.9",
   ),
   discover_models_models_discover_post: msg(
     "auto.features.agent.panel.components.toolscarousel.literal.10",
   ),
-  serve_program_serve: formatMsg("auto.features.agent.panel.components.toolscarousel.template.10", {
-    p1: TERMS.optimization,
-  }),
+  request_user_inference: msg("auto.features.agent.panel.components.toolscarousel.literal.17"),
 };
 
 const SEVERITY: Record<ApprovalSeverity, { color: string; label: string | null }> = {

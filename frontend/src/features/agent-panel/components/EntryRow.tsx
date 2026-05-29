@@ -51,21 +51,23 @@ interface EntryRowProps {
 export function EntryRow({
   argKey,
   value,
-  labelClassName = "text-muted-foreground",
+  labelClassName = "text-muted-foreground/70",
 }: EntryRowProps) {
   const hebrewLabel = hasHebrewLabel(argKey);
   const label = ARG_LABELS[argKey] ?? argKey;
   const labelDir = hebrewLabel ? undefined : "ltr";
   const labelFont = hebrewLabel ? "" : "font-mono";
+  const labelBase = cn("text-[0.6875rem]/[1.55]", labelFont, labelClassName);
+  const valueClasses = "text-foreground/90 text-[0.6875rem]/[1.55]";
 
   if (CODE_KEYS.has(argKey) && typeof value === "string" && value.length > 0) {
     return (
       <div className="min-w-0">
-        <dt className={cn("mb-1 text-[0.6875rem]", labelFont, labelClassName)} dir={labelDir}>
+        <dt className={cn("mb-1", labelBase)} dir={labelDir}>
           {label}
         </dt>
         <pre
-          className="whitespace-pre-wrap break-words font-mono text-[0.6875rem] leading-relaxed max-h-52 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2 text-foreground"
+          className="whitespace-pre-wrap break-words font-mono text-[0.6875rem]/[1.55] max-h-52 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2 text-foreground/90"
           dir="ltr"
         >
           {value}
@@ -79,19 +81,21 @@ export function EntryRow({
     if (objEntries.length === 0) {
       return (
         <div className="flex items-baseline gap-2 min-w-0">
-          <dt className={cn("shrink-0 text-[0.6875rem]", labelFont, labelClassName)} dir={labelDir}>
+          <dt className={cn("shrink-0", labelBase)} dir={labelDir}>
             {label}
           </dt>
-          <dd className="text-foreground min-w-0 flex-1 truncate">—</dd>
+          <dd className="min-w-0 flex-1 truncate text-[0.6875rem]/[1.55] text-muted-foreground/60">
+            —
+          </dd>
         </div>
       );
     }
     return (
       <div className="min-w-0">
-        <dt className={cn("mb-1 text-[0.6875rem]", labelFont, labelClassName)} dir={labelDir}>
+        <dt className={cn("mb-1", labelBase)} dir={labelDir}>
           {label}
         </dt>
-        <dl className="ms-2 space-y-0.5 border-s border-border/40 ps-2">
+        <dl className="ms-2 space-y-1 border-s border-border/40 ps-2">
           {objEntries.map(([k, v]) => {
             const innerIsUuid = typeof v === "string" && UUID_RE.test(v);
             const innerHasHebrew = hasHebrewLabel(k);
@@ -100,7 +104,7 @@ export function EntryRow({
               <div key={k} className="flex items-baseline gap-2 min-w-0">
                 <dt
                   className={cn(
-                    "shrink-0 text-[0.6875rem]",
+                    "shrink-0 text-[0.6875rem]/[1.55]",
                     innerHasHebrew ? "" : "font-mono",
                     labelClassName,
                   )}
@@ -109,7 +113,7 @@ export function EntryRow({
                   {innerLabel}
                 </dt>
                 <dd
-                  className="text-foreground min-w-0 flex-1 break-words font-mono text-[0.6875rem]"
+                  className={cn(valueClasses, "min-w-0 flex-1 break-words font-mono")}
                   dir={innerIsUuid ? "ltr" : "auto"}
                 >
                   {typeof v === "boolean" ? <BooleanChip value={v} /> : formatValue(v)}
@@ -125,7 +129,7 @@ export function EntryRow({
   if (typeof value === "boolean") {
     return (
       <div className="flex items-baseline gap-2 min-w-0">
-        <dt className={cn("shrink-0 text-[0.6875rem]", labelFont, labelClassName)} dir={labelDir}>
+        <dt className={cn("shrink-0", labelBase)} dir={labelDir}>
           {label}
         </dt>
         <dd className="min-w-0 flex-1">
@@ -137,16 +141,22 @@ export function EntryRow({
 
   const isArray = Array.isArray(value);
   const isUuid = typeof value === "string" && UUID_RE.test(value);
+  const isNumber = typeof value === "number";
   const hasUuidItems = isArray && value.some((x) => typeof x === "string" && UUID_RE.test(x));
+  const isEmpty = value == null || value === "";
+  const useMono = isArray || isUuid || isNumber;
   return (
     <div className="flex items-baseline gap-2 min-w-0">
-      <dt className={cn("shrink-0 text-[0.6875rem]", labelFont, labelClassName)} dir={labelDir}>
+      <dt className={cn("shrink-0", labelBase)} dir={labelDir}>
         {label}
       </dt>
       <dd
         className={cn(
-          "text-foreground min-w-0 flex-1",
-          isArray ? "break-words font-mono text-[0.6875rem]" : "truncate",
+          valueClasses,
+          "min-w-0 flex-1",
+          isArray ? "break-words" : "truncate",
+          useMono && "font-mono",
+          isEmpty && "text-muted-foreground/60",
         )}
         dir={isUuid || hasUuidItems ? "ltr" : "auto"}
       >
