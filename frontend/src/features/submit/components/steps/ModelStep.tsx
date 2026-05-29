@@ -89,7 +89,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
     setEditingModel,
     saveToRecent,
     recentConfigs,
-    clearRecentConfigs,
+    removeRecentConfig,
     catalog,
   } = w;
 
@@ -344,7 +344,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
           }
           catalogModels={catalog?.models}
           recentConfigs={recentConfigs}
-          onClearRecent={clearRecentConfigs}
+          onRemoveRecent={removeRecentConfig}
           onSelectAllAvailable={
             editingModel?.onSelectAllAvailable
               ? () => {

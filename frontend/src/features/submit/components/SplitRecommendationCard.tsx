@@ -30,6 +30,8 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
   const { fractions, counts, rationale } = splitPlan;
   const warnings = datasetProfile?.warnings ?? [];
   const hasRationale = rationale.length > 0;
+  const hasWarnings = warnings.length > 0;
+  const hasInfo = hasRationale || hasWarnings;
 
   return (
     <div
@@ -45,7 +47,7 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
             <span className="text-[13px] font-semibold tracking-tight">
               {msg("submit.split.recommended_title")}
             </span>
-            {hasRationale && (
+            {hasInfo && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -60,20 +62,45 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
                   side="bottom"
                   sideOffset={8}
                   dir="rtl"
-                  className="max-w-[300px] rounded-xl border border-[#C8B9A8]/60 bg-[#FAF8F5] px-4 py-3 text-right text-[#3D2E22] shadow-[0_8px_24px_-8px_rgba(61,46,34,0.2)] [&>svg]:fill-[#FAF8F5] [&>svg]:bg-[#FAF8F5]"
+                  className="max-w-[320px] rounded-xl border border-[#C8B9A8]/60 bg-[#FAF8F5] px-4 py-3 text-right text-[#3D2E22] shadow-[0_8px_24px_-8px_rgba(61,46,34,0.2)] [&>span]:hidden"
                 >
-                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8C7A6B]">
-                    <Sparkles className="h-3 w-3 text-[#C8A882]" />
-                    {msg("submit.split.rationale_title")}
-                  </div>
-                  <ul className="space-y-1.5 text-[12px] leading-relaxed text-[#3D2E22]">
-                    {rationale.map((line, idx) => (
-                      <li key={idx} className="flex gap-2">
-                        <span className="mt-[7px] inline-block h-1 w-1 shrink-0 rounded-full bg-[#C8A882]" />
-                        <span>{line}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {hasRationale && (
+                    <>
+                      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8C7A6B]">
+                        <Sparkles className="h-3 w-3 text-[#C8A882]" />
+                        {msg("submit.split.rationale_title")}
+                      </div>
+                      <ul className="space-y-1.5 text-[12px] leading-relaxed text-[#3D2E22]">
+                        {rationale.map((line, idx) => (
+                          <li key={idx} className="flex gap-2">
+                            <span className="mt-[7px] inline-block h-1 w-1 shrink-0 rounded-full bg-[#C8A882]" />
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {hasWarnings && (
+                    <>
+                      <div
+                        className={cn(
+                          "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8C7A6B]",
+                          hasRationale ? "mt-3 mb-2 border-t border-[#DDD6CC]/60 pt-2.5" : "mb-2",
+                        )}
+                      >
+                        <AlertTriangle className="h-3 w-3 text-[#C8924A]" />
+                        {msg("submit.split.warnings_title")}
+                      </div>
+                      <ul className="space-y-1.5 text-[12px] leading-relaxed text-[#7A5A38]">
+                        {warnings.map((warning) => (
+                          <li key={warning.code} className="flex gap-2">
+                            <span className="mt-[7px] inline-block h-1 w-1 shrink-0 rounded-full bg-[#C8924A]" />
+                            <span>{warning.message}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
                 </TooltipContent>
               </Tooltip>
             )}
@@ -129,22 +156,6 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
           </div>
         </div>
       </div>
-
-      {warnings.length > 0 && (
-        <div className="border-t border-[#DDD6CC]/60 bg-[#F5EBDC]/40 px-3.5 py-2.5">
-          <ul className="space-y-1.5">
-            {warnings.map((warning) => (
-              <li
-                key={warning.code}
-                className="flex items-start gap-2 text-[11px] leading-relaxed text-[#7A5A38]"
-              >
-                <AlertTriangle className="h-3 w-3 mt-[3px] shrink-0 text-[#C8924A]" />
-                <span>{warning.message}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

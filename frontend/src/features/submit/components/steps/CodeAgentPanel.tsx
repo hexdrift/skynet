@@ -1,27 +1,19 @@
 "use client";
 
 import * as React from "react";
-import {
-  Bot,
-  XCircle,
-  RotateCcw,
-  Check,
-  Ruler,
-  FileCode2,
-  Loader2,
-  MessageSquarePlus,
-} from "lucide-react";
+import { Bot, XCircle, RotateCcw, Ruler, FileCode2, MessageSquarePlus } from "lucide-react";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { AgentThread, ChatTranscript, Composer } from "@/shared/ui/agent";
+import { ActivityBreadcrumb } from "@/shared/ui/agent/activity-breadcrumb";
 import type { AgentToolCall as SharedAgentToolCall } from "@/shared/ui/agent";
 import { EmptyState as SharedEmptyState } from "@/shared/ui/empty-state";
 import { IndexPager } from "@/shared/ui/index-pager";
 import { ToolCallRow } from "@/features/agent-panel";
 
-import type { AgentToolCall, CodeAgentState } from "../../hooks/use-code-agent";
+import type { AgentToolCall, CodeAgentState } from "@/shared/hooks/use-code-agent";
 
 interface Props {
   agent: CodeAgentState;
@@ -112,14 +104,17 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
             <>
               {!isEditingAny && streaming && agent.mode === "seed" && (
                 <div className="flex items-center justify-center pt-1">
-                  <ActivityBreadcrumb agent={agent} />
+                  <ActivityBreadcrumb
+                    signatureStatus={agent.signatureStatus}
+                    metricStatus={agent.metricStatus}
+                  />
                 </div>
               )}
 
               {agent.error && agent.status === "error" && (
-                <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-2 text-xs text-red-600 space-y-1.5">
+                <div className="rounded-lg bg-[#FCEFEB]/60 border border-[#9B2C1F]/20 px-2.5 py-2 text-xs text-[#7A1E13] space-y-1.5">
                   <div className="flex items-start gap-1.5">
-                    <XCircle className="size-3 shrink-0 mt-0.5" />
+                    <XCircle className="size-3 shrink-0 mt-0.5 text-[#9B2C1F]" />
                     <span className="flex-1 break-words min-w-0" dir="auto">
                       {agent.error}
                     </span>
@@ -128,7 +123,7 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
                     <button
                       type="button"
                       onClick={agent.retry}
-                      className="inline-flex items-center gap-1 text-[0.6875rem] text-red-700 bg-red-100 hover:bg-red-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      className="inline-flex items-center gap-1 text-[0.6875rem] text-[#7A1E13] bg-[#9B2C1F]/10 hover:bg-[#9B2C1F]/20 px-2 py-0.5 rounded cursor-pointer transition-colors"
                     >
                       <RotateCcw className="size-3" />
                       {msg("auto.features.submit.components.steps.codeagentpanel.2")}
@@ -136,7 +131,7 @@ export function CodeAgentPanel({ agent, disabled, disabledReason, className }: P
                     <button
                       type="button"
                       onClick={agent.fallbackToManual}
-                      className="text-[0.6875rem] text-red-700 hover:bg-red-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      className="text-[0.6875rem] text-[#7A1E13] hover:bg-[#9B2C1F]/10 px-2 py-0.5 rounded cursor-pointer transition-colors"
                     >
                       {msg("auto.features.submit.components.steps.codeagentpanel.3")}
                     </button>
@@ -182,88 +177,9 @@ export function VersionStepper({
       currentIndex={versionIndex}
       total={versions.length}
       onChange={goTo}
-      prevLabel="Previous version"
-      nextLabel="Next version"
+      prevLabel={msg("auto.features.submit.components.steps.codeagentpanel.literal.6")}
+      nextLabel={msg("auto.features.submit.components.steps.codeagentpanel.literal.7")}
     />
-  );
-}
-
-type StepState = "pending" | "active" | "done";
-
-function ActivityBreadcrumb({ agent }: { agent: CodeAgentState }) {
-  const steps = React.useMemo<Array<{ label: string; state: StepState }>>(() => {
-    const sig = agent.signatureStatus;
-    const met = agent.metricStatus;
-    const readingState: StepState = sig === "waiting" && met === "waiting" ? "active" : "done";
-    const sigState: StepState = sig === "writing" ? "active" : sig === "done" ? "done" : "pending";
-    const metState: StepState = met === "writing" ? "active" : met === "done" ? "done" : "pending";
-    return [
-      {
-        label: formatMsg("auto.features.submit.components.steps.codeagentpanel.template.1", {
-          p1: TERMS.dataset,
-        }),
-        state: readingState,
-      },
-      {
-        label: msg("auto.features.submit.components.steps.codeagentpanel.literal.5"),
-        state: sigState,
-      },
-      { label: TERMS.metric, state: metState },
-    ];
-  }, [agent.signatureStatus, agent.metricStatus]);
-
-  const lastReachedIdx = steps.reduce((acc, s, i) => (s.state === "pending" ? acc : i), -1);
-  const fillPct = lastReachedIdx < 0 ? 0 : (lastReachedIdx / (steps.length - 1)) * 100;
-
-  return (
-    <div
-      className="relative flex w-full max-w-[240px] items-start justify-between"
-      aria-live="polite"
-    >
-      <div className="absolute top-[9px] start-[9px] end-[9px] h-px bg-border/70" />
-      <div
-        className="absolute top-[9px] start-[9px] h-px bg-[#3D2E22]/55 transition-[width] duration-500 ease-out"
-        style={{ width: `calc(${fillPct}% - 18px)` }}
-        aria-hidden
-      />
-      {steps.map((step) => (
-        <div key={step.label} className="relative z-[1] flex min-w-0 flex-col items-center gap-1.5">
-          <StepNode state={step.state} />
-          <span
-            className={cn(
-              "whitespace-nowrap text-[0.625rem] leading-none tracking-wide transition-colors duration-200",
-              step.state === "pending" && "text-muted-foreground/45",
-              step.state === "active" && "text-[#3D2E22] font-semibold",
-              step.state === "done" && "text-[#3D2E22]/75",
-            )}
-          >
-            {step.label}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StepNode({ state }: { state: StepState }) {
-  if (state === "done") {
-    return (
-      <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-[#3D2E22] text-white transition-colors">
-        <Check className="size-2.5" strokeWidth={3.5} />
-      </span>
-    );
-  }
-  if (state === "active") {
-    return (
-      <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-[#3D2E22] text-white shadow-[0_0_0_3px_rgba(61,46,34,0.12)] transition-colors motion-reduce:shadow-none">
-        <Loader2 className="size-2.5 animate-spin motion-reduce:animate-none" strokeWidth={3} />
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-[#E5DDD4] transition-colors">
-      <span className="size-1 rounded-full bg-[#8C7A6B]/70" />
-    </span>
   );
 }
 

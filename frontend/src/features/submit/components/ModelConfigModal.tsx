@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Boxes } from "lucide-react";
+import { Boxes, X } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
 import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Button } from "@/shared/ui/primitives/button";
@@ -29,8 +29,8 @@ interface ModelConfigModalProps {
   catalogModels?: CatalogModel[];
   /** Recently used configs — shown as quick-select at top */
   recentConfigs?: ModelConfig[];
-  /** Clear all recent configs */
-  onClearRecent?: () => void;
+  /** Remove a single recent config by its model name (rendered as a per-row X). */
+  onRemoveRecent?: (name: string) => void;
   /**
    * When provided, renders a pinned "all available models" sentinel row at the
    * top of the dialog body. Clicking it closes the modal and invokes the
@@ -47,7 +47,7 @@ export function ModelConfigModal({
   roleLabel = msg("auto.features.submit.components.modelconfigmodal.literal.1"),
   catalogModels,
   recentConfigs,
-  onClearRecent,
+  onRemoveRecent,
   onSelectAllAvailable,
 }: ModelConfigModalProps) {
   const [draft, setDraft] = React.useState<ModelConfig>(config);
@@ -140,37 +140,49 @@ export function ModelConfigModal({
 
           {recentConfigs && recentConfigs.length > 0 && (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
-                  {msg("auto.features.submit.components.modelconfigmodal.2")}
-                </Label>
-                {onClearRecent && (
-                  <button
-                    type="button"
-                    onClick={onClearRecent}
-                    className="text-[0.625rem] text-muted-foreground/60 hover:text-destructive transition-colors cursor-pointer"
-                  >
-                    {msg("auto.features.submit.components.modelconfigmodal.3")}
-                  </button>
-                )}
-              </div>
+              <Label className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
+                {msg("auto.features.submit.components.modelconfigmodal.2")}
+              </Label>
               <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin" dir="ltr">
-                {recentConfigs.map((rc, i) => (
-                  <button
-                    key={`${rc.name}-${i}`}
-                    type="button"
-                    onClick={() => setDraft({ ...rc })}
-                    className={cn(
-                      "flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.6875rem] font-mono transition-all cursor-pointer",
-                      draft.name === rc.name
-                        ? "border-primary/50 bg-primary/5 text-foreground"
-                        : "border-border/40 bg-muted/30 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/50",
-                    )}
-                  >
-                    <span className="truncate max-w-[120px]">{rc.name.split("/").pop()}</span>
-                    <span className="text-[9px] opacity-60">{rc.temperature?.toFixed(1)}</span>
-                  </button>
-                ))}
+                {recentConfigs.map((rc, i) => {
+                  const isActive = draft.name === rc.name;
+                  return (
+                    <div
+                      key={`${rc.name}-${i}`}
+                      className={cn(
+                        "group/recent flex shrink-0 items-center gap-1.5 rounded-md border ps-2 pe-1 py-1 text-[0.6875rem] font-mono transition-all",
+                        isActive
+                          ? "border-primary/50 bg-primary/5 text-foreground"
+                          : "border-border/40 bg-muted/30 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/50",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setDraft({ ...rc })}
+                        className="flex items-center gap-1.5 cursor-pointer outline-none"
+                      >
+                        <span className="truncate max-w-[120px]">{rc.name.split("/").pop()}</span>
+                        <span className="text-[9px] opacity-60">{rc.temperature?.toFixed(1)}</span>
+                      </button>
+                      {onRemoveRecent && (
+                        <button
+                          type="button"
+                          aria-label={formatMsg(
+                            "auto.features.submit.components.modelconfigmodal.recent.remove",
+                            { model: rc.name.split("/").pop() ?? rc.name },
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveRecent(rc.name);
+                          }}
+                          className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <Separator />
             </div>
@@ -182,7 +194,6 @@ export function ModelConfigModal({
               value={draft.name}
               onChange={(next) => {
                 setDraft((p) => ({ ...p, name: next }));
-                // Reset thinking if new model doesn't support it
                 if (!modelSupportsThinking(next, catalogModels)) {
                   setDraft((p) => {
                     const rest = { ...p.extra };
@@ -195,47 +206,30 @@ export function ModelConfigModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="modelConfigBaseUrl">
-                {msg("auto.features.submit.components.steps.modelstep.8")}
-              </Label>
-              <Input
-                id="modelConfigBaseUrl"
-                dir="ltr"
-                value={draft.base_url ?? ""}
-                onChange={(e) =>
-                  setDraft((p) => ({ ...p, base_url: e.target.value || null }))
-                }
-              />
-              <p className="text-[0.625rem] text-muted-foreground">
-                {msg("auto.features.submit.components.steps.modelstep.9")}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="modelConfigApiKey">
-                {msg("auto.features.submit.components.steps.modelstep.10")}
-              </Label>
-              <Input
-                id="modelConfigApiKey"
-                dir="ltr"
-                type="password"
-                placeholder="sk-..."
-                value={(draft.extra?.api_key as string | undefined) ?? ""}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setDraft((p) => {
-                    const rest = { ...p.extra };
-                    if (next) rest.api_key = next;
-                    else delete rest.api_key;
-                    return { ...p, extra: Object.keys(rest).length ? rest : undefined };
-                  });
-                }}
-              />
-              <p className="text-[0.625rem] text-muted-foreground">
-                {msg("auto.features.submit.components.steps.modelstep.11")}
-              </p>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="modelConfigApiKey">
+              {msg("auto.features.submit.components.steps.modelstep.10")}
+            </Label>
+            <Input
+              id="modelConfigApiKey"
+              dir="ltr"
+              type="password"
+              placeholder="sk-..."
+              autoComplete="new-password"
+              value={(draft.extra?.api_key as string | undefined) ?? ""}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDraft((p) => {
+                  const rest = { ...p.extra };
+                  if (next) rest.api_key = next;
+                  else delete rest.api_key;
+                  return { ...p, extra: Object.keys(rest).length ? rest : undefined };
+                });
+              }}
+            />
+            <p className="text-[0.625rem] text-muted-foreground">
+              {msg("auto.features.submit.components.steps.modelstep.11")}
+            </p>
           </div>
 
           <Separator />
@@ -259,7 +253,7 @@ export function ModelConfigModal({
               value={draft.temperature ?? 0.7}
               onChange={(e) => setDraft((p) => ({ ...p, temperature: parseFloat(e.target.value) }))}
               className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
-              dir="ltr"
+              dir="auto"
             />
           </div>
 
@@ -282,7 +276,7 @@ export function ModelConfigModal({
               value={draft.top_p ?? 1}
               onChange={(e) => setDraft((p) => ({ ...p, top_p: parseFloat(e.target.value) }))}
               className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
-              dir="ltr"
+              dir="auto"
             />
           </div>
 
