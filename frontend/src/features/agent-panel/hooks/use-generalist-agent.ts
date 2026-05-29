@@ -24,11 +24,14 @@ export interface GeneralistAgentState {
   reasoningEndedAt: number | null;
   error: string | null;
   pendingApproval: PendingApprovalPayload | null;
-  send: (message: string) => void;
+  conversationId: string | null;
+  send: (message: string, wizardStateOverride?: WizardState) => void;
   editAndResend: (messageIndex: number, content: string) => void;
+  retry: () => void;
   stop: () => void;
   reset: () => void;
   confirmApproval: (approved: boolean) => Promise<void>;
+  loadConversation: (id: string, messages: AgentMessage[]) => void;
 }
 
 export interface UseGeneralistAgentArgs {
@@ -36,6 +39,7 @@ export interface UseGeneralistAgentArgs {
   trustMode: TrustMode;
   onToolStart?: (ev: ToolStartPayload) => void;
   onToolEnd?: (ev: ToolEndPayload) => void;
+  onConversationMeta?: (id: string, title: string) => void;
 }
 
 // MCP tool names that mutate the user's optimization set. When one of these
@@ -56,18 +60,13 @@ const OPTIMIZATION_MUTATING_TOOLS: ReadonlySet<string> = new Set([
   "bulk_pin_jobs_optimizations_bulk_pin_post",
 ]);
 
-// MCP tool names that mutate the user's template library. A successful call
-// dispatches ``templates-changed`` so the template picker re-fetches.
-const TEMPLATE_MUTATING_TOOLS: ReadonlySet<string> = new Set([
-  "create_template_templates_post",
-  "update_template_templates",
-  "delete_template_templates",
+// Submit tools whose success consumes the staged dataset + readiness. After
+// one fires we drop the sticky wizard overlay so the next turn starts clean
+// rather than re-carrying the just-submitted run's dataset id and flags.
+const SUBMIT_TOOLS: ReadonlySet<string> = new Set([
+  "submit_job_run_post",
+  "submit_grid_search_grid_search_post",
 ]);
-
-// Sample-dataset staging. When this tool succeeds we broadcast the full
-// result (rows + wizard_state patch) so the submit wizard can hydrate its
-// ParsedDataset in one step.
-const SAMPLE_DATASET_TOOL = "stage_sample_dataset_datasets_samples";
 
 export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgentState {
   const { wizardState, trustMode } = args;
@@ -80,6 +79,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
   const [reasoningEndedAt, setReasoningEndedAt] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = React.useState<PendingApprovalPayload | null>(null);
+  const [conversationId, setConversationId] = React.useState<string | null>(null);
 
   const abortRef = React.useRef<AbortController | null>(null);
   const reasoningBufRef = React.useRef("");
@@ -88,19 +88,40 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
   React.useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+  const conversationIdRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   const snapshotRef = React.useRef({ wizardState, trustMode });
   React.useEffect(() => {
     snapshotRef.current = { wizardState, trustMode };
   }, [wizardState, trustMode]);
 
+  // Sticky overlay of wizard fields derived synchronously this session
+  // (e.g. ``staged_dataset_id`` from an in-panel upload). The panel-only
+  // flow has no ``wizardCtx`` to write into, so without this every turn
+  // after the upload would lose the staged dataset and the agent would
+  // ask the user to re-upload. Cleared on ``reset`` so a fresh thread
+  // starts clean.
+  const persistentExtrasRef = React.useRef<Partial<WizardState>>({});
+
   const callbacksRef = React.useRef<{
     onToolStart: UseGeneralistAgentArgs["onToolStart"];
     onToolEnd: UseGeneralistAgentArgs["onToolEnd"];
-  }>({ onToolStart: args.onToolStart, onToolEnd: args.onToolEnd });
+    onConversationMeta: UseGeneralistAgentArgs["onConversationMeta"];
+  }>({
+    onToolStart: args.onToolStart,
+    onToolEnd: args.onToolEnd,
+    onConversationMeta: args.onConversationMeta,
+  });
   React.useEffect(() => {
-    callbacksRef.current = { onToolStart: args.onToolStart, onToolEnd: args.onToolEnd };
-  }, [args.onToolStart, args.onToolEnd]);
+    callbacksRef.current = {
+      onToolStart: args.onToolStart,
+      onToolEnd: args.onToolEnd,
+      onConversationMeta: args.onConversationMeta,
+    };
+  }, [args.onToolStart, args.onToolEnd, args.onConversationMeta]);
 
   // Abort any in-flight stream when the hook unmounts so callbacks can't
   // resume firing into a torn-down React tree (setState-on-unmounted warnings,
@@ -159,7 +180,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
   );
 
   const runAgent = React.useCallback(
-    (userMessage: string, history: AgentMessage[]) => {
+    (userMessage: string, history: AgentMessage[], wizardStateOverride?: WizardState) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -184,7 +205,16 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
       const chatHistory: ChatTurn[] = history
         .filter((m) => m.content.trim().length > 0)
         .map((m) => ({ role: m.role, content: m.content }));
-      const { wizardState: ws, trustMode: tm } = snapshotRef.current;
+      // Merge order: snapshot (from wizardCtx if mounted) <- sticky extras
+      // (accumulated across turns from panel-side derivations like
+      // ``staged_dataset_id``) <- this-turn override. The sticky layer
+      // is what survives between turns when there's no wizardCtx writer.
+      const { wizardState: snapshotWs, trustMode: tm } = snapshotRef.current;
+      const ws = {
+        ...snapshotWs,
+        ...persistentExtrasRef.current,
+        ...(wizardStateOverride ?? {}),
+      };
 
       // Every stream callback short-circuits on ``controller.signal.aborted``
       // so a slow stream replaced by a fresh ``send`` (or by the unmount-time
@@ -195,9 +225,16 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
           chat_history: chatHistory,
           wizard_state: ws,
           trust_mode: tm,
+          conversation_id: conversationIdRef.current,
         },
         {
           signal: controller.signal,
+          onConversationMeta: (ev) => {
+            if (controller.signal.aborted) return;
+            if (!ev.conversation_id) return;
+            setConversationId(ev.conversation_id);
+            callbacksRef.current.onConversationMeta?.(ev.conversation_id, ev.title);
+          },
           onReasoningPatch: (chunk) => {
             if (controller.signal.aborted) return;
             if (reasoningBufRef.current === "") {
@@ -235,13 +272,8 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
               if (OPTIMIZATION_MUTATING_TOOLS.has(ev.tool)) {
                 window.dispatchEvent(new Event("optimizations-changed"));
               }
-              if (TEMPLATE_MUTATING_TOOLS.has(ev.tool)) {
-                window.dispatchEvent(new Event("templates-changed"));
-              }
-              if (ev.tool === SAMPLE_DATASET_TOOL && ev.result) {
-                window.dispatchEvent(
-                  new CustomEvent("wizard:dataset-staged", { detail: ev.result }),
-                );
+              if (SUBMIT_TOOLS.has(ev.tool)) {
+                persistentExtrasRef.current = {};
               }
             }
             callbacksRef.current.onToolEnd?.(ev);
@@ -294,10 +326,27 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             setError(message);
             setMessages((prev) => {
               const last = prev[prev.length - 1];
-              if (last && last.role === "assistant" && !last.content && !last.toolCalls?.length) {
+              if (!last || last.role !== "assistant") return prev;
+              if (!last.content && !last.toolCalls?.length) {
+                // Nothing rendered yet — drop the empty assistant placeholder.
                 return prev.slice(0, -1);
               }
-              return prev;
+              // Mark any in-flight tool pills as errored so they stop
+              // spinning forever when the SSE socket dies mid-tool (e.g.
+              // backend restart, network drop). Without this the chip
+              // sits at "פועל כעת" indefinitely with no recovery path.
+              const hasRunning = last.toolCalls?.some((t) => t.status === "running");
+              if (!hasRunning) return prev;
+              const next = prev.slice();
+              next[next.length - 1] = {
+                ...last,
+                toolCalls: last.toolCalls?.map((t) =>
+                  t.status === "running"
+                    ? { ...t, status: "error", endedAt: Date.now() }
+                    : t,
+                ),
+              };
+              return next;
             });
           },
         },
@@ -307,10 +356,16 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
   );
 
   const send = React.useCallback(
-    (message: string) => {
+    (message: string, wizardStateOverride?: WizardState) => {
       const trimmed = message.trim();
       if (!trimmed) return;
-      runAgent(trimmed, messagesRef.current);
+      if (wizardStateOverride) {
+        persistentExtrasRef.current = {
+          ...persistentExtrasRef.current,
+          ...wizardStateOverride,
+        };
+      }
+      runAgent(trimmed, messagesRef.current, wizardStateOverride);
     },
     [runAgent],
   );
@@ -329,6 +384,29 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     [runAgent],
   );
 
+  // Re-run the most recent user turn (used by the error-banner retry button
+  // and by the end-of-conversation regenerate action). Truncates back to the
+  // user message so we don't re-feed a failed assistant turn into history.
+  const retry = React.useCallback(() => {
+    const current = messagesRef.current;
+    let lastUserIndex = -1;
+    for (let i = current.length - 1; i >= 0; i--) {
+      if (current[i]?.role === "user") {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    if (lastUserIndex === -1) return;
+    const lastUser = current[lastUserIndex];
+    if (!lastUser) return;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    const truncated = current.slice(0, lastUserIndex);
+    setMessages(truncated);
+    messagesRef.current = truncated;
+    runAgent(lastUser.content, truncated);
+  }, [runAgent]);
+
   const stop = React.useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -341,6 +419,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     abortRef.current = null;
     reasoningBufRef.current = "";
     replyBufRef.current = "";
+    persistentExtrasRef.current = {};
     setMessages([]);
     setStatus("idle");
     setStatusLabel("");
@@ -349,7 +428,32 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     setReasoningEndedAt(null);
     setError(null);
     setPendingApproval(null);
+    setConversationId(null);
   }, []);
+
+  // Replace the in-memory state with a persisted conversation's id +
+  // messages, so the panel can switch threads without losing rehydrated
+  // tool-call rendering. The next ``send`` will continue this conversation
+  // by passing the id back to the server.
+  const loadConversation = React.useCallback(
+    (id: string, loaded: AgentMessage[]) => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      reasoningBufRef.current = "";
+      replyBufRef.current = "";
+      persistentExtrasRef.current = {};
+      setMessages(loaded);
+      setStatus("idle");
+      setStatusLabel("");
+      setReasoning("");
+      setReasoningStartedAt(null);
+      setReasoningEndedAt(null);
+      setError(null);
+      setPendingApproval(null);
+      setConversationId(id);
+    },
+    [],
+  );
 
   const confirmApproval = React.useCallback(
     async (approved: boolean) => {
@@ -370,10 +474,13 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     reasoningEndedAt,
     error,
     pendingApproval,
+    conversationId,
     send,
     editAndResend,
+    retry,
     stop,
     reset,
     confirmApproval,
+    loadConversation,
   };
 }

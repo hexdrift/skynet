@@ -28,7 +28,8 @@ type WizardKey =
   | "seed"
   | "shuffle"
   | "is_private"
-  | "optimizer_kwargs";
+  | "optimizer_kwargs"
+  | "staged_dataset_id";
 type WriteSource = "user" | "agent";
 
 interface WizardStateContextValue {
@@ -45,6 +46,12 @@ interface WizardStateContextValue {
   setField: (key: WizardKey, value: WizardState[WizardKey], source?: WriteSource) => void;
   applyAgentPatch: (patch: Partial<WizardState>) => void;
   clearField: (key: WizardKey) => void;
+  /**
+   * Wipe all shared wizard state back to empty. Called after a submit so the
+   * next optimization (and the agent's readiness gate) starts clean instead of
+   * inheriting the just-submitted run's dataset, code, and readiness flags.
+   */
+  reset: () => void;
 }
 
 const Ctx = React.createContext<WizardStateContextValue | null>(null);
@@ -137,6 +144,16 @@ export function WizardStateProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
+  const reset = React.useCallback(() => {
+    agentWrittenRef.current = new Set();
+    setState({});
+    setOverridden(new Set());
+    // Clear the pulse keys (but don't bump the tick) so a wizard mounting
+    // afterwards early-returns from its incoming-sync effect instead of
+    // replaying the last agent write onto an otherwise-empty form.
+    setPulseKeys([]);
+  }, []);
+
   const overriddenFields = React.useMemo(() => Array.from(overridden).sort(), [overridden]);
 
   const value = React.useMemo<WizardStateContextValue>(
@@ -148,8 +165,9 @@ export function WizardStateProvider({ children }: { children: React.ReactNode })
       setField,
       applyAgentPatch,
       clearField,
+      reset,
     }),
-    [state, overriddenFields, pulseTick, pulseKeys, setField, applyAgentPatch, clearField],
+    [state, overriddenFields, pulseTick, pulseKeys, setField, applyAgentPatch, clearField, reset],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

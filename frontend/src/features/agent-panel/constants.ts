@@ -8,9 +8,9 @@
  * drifting between sites.
  */
 
-export const DEFAULT_WIDTH = 420;
-export const MIN_WIDTH = 320;
+export const MIN_WIDTH = 480;
 export const MAX_WIDTH = 720;
+export const DEFAULT_WIDTH = MIN_WIDTH;
 
 export const NARROW_VIEWPORT_QUERY = "(max-width: 1023px)";
 
