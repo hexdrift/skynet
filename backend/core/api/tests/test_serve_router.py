@@ -17,7 +17,7 @@ from ...models import ProgramArtifact
 
 # noinspection PyProtectedMember
 from ..routers import _helpers
-from ..routers.serve import create_serve_router
+from ..routers.serve import _coerce_sample_value, _collect_sample, create_serve_router
 from .conftest import bypass_auth
 from .mocks import (
     _BaseFakeJobStore,
@@ -35,6 +35,7 @@ def _wire_http_handler(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def _http_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+        """Mirror the production HTTPException handler so ``code``/``params`` round-trip."""
         content: dict[str, object] = {"detail": exc.detail}
         code = getattr(exc, "code", None)
         if code:
@@ -614,3 +615,24 @@ def test_serve_pair_stream_fallback_when_streamify_raises(pair_stream_client: Te
     assert "event: final" in raw
     payload = json.loads(raw.split("data: ", 1)[1].split("\n")[0])
     assert payload["streaming_fallback"] is True
+
+
+def test_coerce_sample_value_keeps_clean_values_and_drops_unusable() -> None:
+    """Short single-line strings and numbers are inlined; junk is dropped."""
+    assert _coerce_sample_value("What is the capital of Australia?") == (
+        "What is the capital of Australia?"
+    )
+    assert _coerce_sample_value(42) == "42"
+    assert _coerce_sample_value("  spaced  ") == "spaced"
+    assert _coerce_sample_value("line1\nline2") is None
+    assert _coerce_sample_value("x" * 201) is None
+    assert _coerce_sample_value("") is None
+    assert _coerce_sample_value(None) is None
+
+
+def test_collect_sample_reads_fields_directly_and_via_mapping() -> None:
+    """Values resolve by field name, or via the column mapping when renamed."""
+    row = {"question": "Q1", "answer": "A1", "raw_col": "mapped"}
+    assert _collect_sample(row, ["question"]) == {"question": "Q1"}
+    assert _collect_sample(row, ["q"], {"raw_col": "q"}) == {"q": "mapped"}
+    assert _collect_sample(row, ["missing"]) == {}

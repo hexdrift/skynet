@@ -18,6 +18,7 @@ from typing import Annotated, Any
 import dspy
 from dspy.streaming import StreamListener, StreamResponse
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from ...constants import (
@@ -31,11 +32,29 @@ from ...service_gateway.language_models import build_language_model
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 from ..response_limits import AGENT_MAX_INSTRUCTIONS, AGENT_MAX_TEXT, truncate_text
-from ._helpers import load_pair_program, load_program, sse_from_events
+from ._helpers import load_job_for_user, load_pair_program, load_program, sse_from_events
 
 logger = logging.getLogger(__name__)
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
+
+
+class RequestUserInferenceRequest(BaseModel):
+    """Request body for ``POST /serve/{id}/request-form``."""
+
+    prompt: str = Field(
+        default="",
+        max_length=400,
+        description="Short Hebrew sentence explaining why inference is being offered.",
+    )
+
+
+class RequestUserInferenceResponse(BaseModel):
+    """Envelope for ``POST /serve/{id}/request-form`` — UI-trigger marker."""
+
+    optimization_id: str
+    awaiting_inputs: bool
+    prompt: str
 
 
 def _cap_serve_outputs(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -77,6 +96,104 @@ def _artifact_prompt_fields(artifact: Any) -> tuple[list[str], list[str], str | 
         prompt.instructions,
         len(prompt.demos),
     )
+
+
+# Long or multi-line example values make the usage snippet unwieldy and can
+# break single-line shells, so the sample helpers drop them in favour of a
+# ``<field>`` placeholder the frontend renders.
+_MAX_SAMPLE_LEN = 200
+
+
+def _coerce_sample_value(value: Any) -> str | None:
+    """Return a snippet-safe string for a sample value, or ``None`` to skip it.
+
+    Args:
+        value: A raw input value from a demo or a dataset row.
+
+    Returns:
+        The trimmed string for short single-line strings (and stringified
+        numbers/bools), or ``None`` when the value is unsuitable for inlining.
+    """
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if trimmed and len(trimmed) <= _MAX_SAMPLE_LEN and "\n" not in trimmed:
+            return trimmed
+        return None
+    if isinstance(value, (int, float)):  # bool is an int subclass; str() is fine
+        return str(value)
+    return None
+
+
+def _collect_sample(
+    source: dict[str, Any], input_fields: list[str], mapping: dict[str, Any] | None = None
+) -> dict[str, str]:
+    """Pick snippet-safe example values for ``input_fields`` from one row/demo.
+
+    Reads each field directly, falling back to the column-mapping (in either
+    direction) when the signature field name differs from the dataset column.
+
+    Args:
+        source: A single demo's ``inputs`` dict or a dataset row.
+        input_fields: Declared signature input field names.
+        mapping: Optional ``column_mapping['inputs']`` for field↔column lookup.
+
+    Returns:
+        A ``{field: value}`` map containing only the fields with usable values.
+    """
+    result: dict[str, str] = {}
+    for field in input_fields:
+        raw = source.get(field)
+        if raw is None and mapping:
+            for key, val in mapping.items():
+                if val == field and key in source:
+                    raw = source[key]
+                    break
+                if key == field and isinstance(val, str) and val in source:
+                    raw = source[val]
+                    break
+        coerced = _coerce_sample_value(raw)
+        if coerced is not None:
+            result[field] = coerced
+    return result
+
+
+def _sample_inputs(
+    job_store: Any,
+    optimization_id: str,
+    user: AuthenticatedUser,
+    artifact: Any,
+    input_fields: list[str],
+) -> dict[str, str]:
+    """Build example input values to prefill the integration snippet.
+
+    Prefers a real example baked into the program (a demo); falls back to the
+    first dataset row so optimizers that carry no demos — GEPA evolves
+    instructions and ships zero — still yield copy-paste-ready values.
+
+    Args:
+        job_store: Store used to read the dataset for the fallback path.
+        optimization_id: Optimization whose dataset is the fallback source.
+        user: Authenticated caller; ownership is re-checked on the dataset read.
+        artifact: Program artifact whose demos are the preferred source.
+        input_fields: Declared signature input field names.
+
+    Returns:
+        A ``{field: value}`` map (possibly partial or empty).
+    """
+    prompt = getattr(artifact, "optimized_prompt", None)
+    demos = list(getattr(prompt, "demos", []) or []) if prompt is not None else []
+    if demos:
+        demo_inputs = getattr(demos[0], "inputs", None) or {}
+        sample = _collect_sample(demo_inputs, input_fields)
+        if sample:
+            return sample
+    job_data = load_job_for_user(job_store, optimization_id, user)
+    payload = job_data.get("payload") or {}
+    dataset = payload.get("dataset") or []
+    if not dataset or not isinstance(dataset[0], dict):
+        return {}
+    mapping = (payload.get("column_mapping") or {}).get("inputs") or {}
+    return _collect_sample(dataset[0], input_fields, mapping)
 
 
 async def _stream_program_inference(
@@ -225,6 +342,52 @@ def create_serve_router(*, job_store) -> APIRouter:
             output_fields=output_fields,
             instructions=truncate_text(instructions, AGENT_MAX_INSTRUCTIONS),
             demo_count=demo_count,
+            sample_inputs=_sample_inputs(
+                job_store, optimization_id, current_user, artifact, input_fields
+            ),
+        )
+
+    @router.post(
+        "/serve/{optimization_id}/request-form",
+        response_model=RequestUserInferenceResponse,
+        operation_id="request_user_inference",
+        summary="Ask the user to fill an inference form; the chat panel renders an input card",
+        tags=["agent"],
+    )
+    def request_user_inference(
+        optimization_id: str,
+        req: RequestUserInferenceRequest,
+        current_user: AuthenticatedUserDep,
+    ) -> RequestUserInferenceResponse:
+        """Signal the chat UI to render an inline inference-input card.
+
+        Stateless: the endpoint exists only so the agent can call a named
+        tool that the frontend recognizes via its ``tool_start`` SSE event.
+        Access is gated by the same ``load_program`` permission check used
+        by ``serve_info`` / ``serve_program`` so the agent can't render a
+        form for an optimization the caller doesn't own. The card itself
+        hits ``/serve/{id}/info`` for the field schema and ``/serve/{id}``
+        for the actual inference call — the agent never needs to invoke
+        ``serve_program`` directly.
+
+        Args:
+            optimization_id: Optimization id whose form should be rendered.
+            req: Optional prompt describing why inference is being offered.
+            current_user: Authenticated caller resolved from the bearer token.
+
+        Returns:
+            A :class:`RequestUserInferenceResponse` carrying the prompt back
+            so the upload card can display it.
+
+        Raises:
+            DomainError: 404 if unknown or inaccessible, 409 if the
+                optimization is not in a serveable state.
+        """
+        load_program(job_store, optimization_id, current_user)
+        return RequestUserInferenceResponse(
+            optimization_id=optimization_id,
+            awaiting_inputs=True,
+            prompt=req.prompt.strip(),
         )
 
     @router.post(
@@ -421,6 +584,9 @@ def create_serve_router(*, job_store) -> APIRouter:
             output_fields=output_fields,
             instructions=truncate_text(instructions, AGENT_MAX_INSTRUCTIONS),
             demo_count=demo_count,
+            sample_inputs=_sample_inputs(
+                job_store, optimization_id, current_user, artifact, input_fields
+            ),
         )
 
     @router.post(

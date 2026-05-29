@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Timer,
   Send,
+  Copy,
   CopyPlus,
   Database,
   Settings,
@@ -736,6 +737,26 @@ export function OptimizationDetailView() {
               <p className="text-sm font-semibold text-red-800">
                 {msg("auto.app.optimizations.id.page.6")}
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const parts = [job.message ?? ""];
+                  if (
+                    typeof metrics.error === "string" &&
+                    !job.message?.includes(metrics.error)
+                  ) {
+                    parts.push(String(metrics.error));
+                  }
+                  void navigator.clipboard.writeText(parts.filter(Boolean).join("\n\n"));
+                  toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
+                }}
+                className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-red-300/60 bg-red-100/50 px-2 py-1 text-[0.6875rem] font-medium text-red-700 hover:bg-red-100 transition-colors cursor-pointer"
+                title={msg("shared.agent.copy")}
+                aria-label={msg("shared.agent.copy")}
+              >
+                <Copy className="size-3" />
+                {msg("shared.agent.copy")}
+              </button>
             </div>
             <pre
               className="text-xs text-red-700 mt-3 whitespace-pre-wrap break-words font-mono leading-relaxed"
@@ -852,17 +873,13 @@ export function OptimizationDetailView() {
                 {pingActive && <PingDot className="ms-1" />}
               </TabsTrigger>
               {showPlaygroundTab && (
-                <TabsTrigger
-                  value="playground"
-                  className={tabCls}
-                  data-tutorial="playground-tab"
-                >
+                <TabsTrigger value="playground" className={tabCls}>
                   <Send className="size-3.5" />
                   {msg("auto.app.optimizations.id.page.15")}
                 </TabsTrigger>
               )}
               {showDataTab && (
-                <TabsTrigger value="data" className={tabCls} data-tutorial="data-tab-trigger">
+                <TabsTrigger value="data" className={tabCls}>
                   <Database className="size-3.5" />
                   {msg("auto.app.optimizations.id.page.16")}
                 </TabsTrigger>
@@ -872,7 +889,7 @@ export function OptimizationDetailView() {
                 {msg("auto.app.optimizations.id.page.17")}
               </TabsTrigger>
               {showLogsTab && (
-                <TabsTrigger value="logs" className={tabCls} data-tutorial="logs-tab-trigger">
+                <TabsTrigger value="logs" className={tabCls}>
                   <Terminal className="size-3.5" />
                   {msg("auto.app.optimizations.id.page.18")}
                   {pingActive && <PingDot className="ms-1" />}
@@ -884,7 +901,7 @@ export function OptimizationDetailView() {
                   {msg("auto.app.optimizations.id.page.lm_activity")}
                 </TabsTrigger>
               )}
-              <TabsTrigger value="config" className={tabCls} data-tutorial="config-tab-trigger">
+              <TabsTrigger value="config" className={tabCls}>
                 <Settings className="size-3.5" />
                 {msg("auto.app.optimizations.id.page.19")}
               </TabsTrigger>
@@ -921,11 +938,7 @@ export function OptimizationDetailView() {
             </TabsContent>
 
             {showPlaygroundTab && (
-              <TabsContent
-                value="playground"
-                className="space-y-4 mt-4"
-                data-tutorial="serve-playground"
-              >
+              <TabsContent value="playground" className="space-y-4 mt-4">
                 {job.optimization_type === "grid_search" && !isPairContext ? (
                   <GridServeTab job={job} />
                 ) : serveInfo ? (
@@ -964,7 +977,7 @@ export function OptimizationDetailView() {
             </TabsContent>
 
             {showLogsTab && (
-              <TabsContent value="logs" data-tutorial="live-logs">
+              <TabsContent value="logs">
                 <LogsTab
                   logs={isPairContext ? pairFilteredLogs : (job.logs ?? [])}
                   live={isActive}
