@@ -8,10 +8,11 @@ Two distinct modes share this module:
   the rest of the wizard. A short English intro message is composed at the
   end from the finished code.
 
-* **Chat** (``user_message`` is set): a :class:`dspy.ReAct` agent with two
-  tools — ``edit_signature`` and ``edit_metric``. Simple questions don't
-  touch the editor; the model answers in the ``reply`` field and no tool
-  fires. When a tool does fire, the backend emits ``tool_start`` /
+* **Chat** (``user_message`` is set): a :class:`dspy.ReActV2` agent with
+  two tools — ``edit_signature`` and ``edit_metric``. Simple questions
+  don't touch the editor; the model answers in the ``reply`` field via
+  the internal ``submit`` tool and no user-facing tool fires. When a
+  user-facing tool does fire, the backend emits ``tool_start`` /
   ``signature_replace`` (or ``metric_replace``) / ``tool_end`` around the
   call so the UI can render a tool-call card and swap the code atomically.
 
@@ -31,6 +32,7 @@ from functools import partial
 from typing import Any
 
 import dspy
+import jiter
 
 from ...config import settings
 from ...exceptions import ServiceError
@@ -375,6 +377,34 @@ class GenerateSeedMessage(dspy.Signature):
     )
 
 
+class FixCodeArtifact(dspy.Signature):
+    """Repair a DSPy code artifact that failed validation.
+
+    You are given a Signature class or metric function that does NOT pass
+    validation, together with the exact validator error. Return the
+    corrected full source with the SAME intent — make the smallest change
+    that resolves the error (e.g. delete a stray brace, fix an identifier,
+    correct the function arity). Preserve the docstring, field names, and
+    semantics; only fix what the error points at. Output ONLY the code: no
+    markdown fences, no commentary, no surrounding prose.
+    """
+
+    artifact_kind: str = dspy.InputField(desc="Either 'signature' or 'metric'.")
+    broken_code: str = dspy.InputField(desc="The current source that failed validation.")
+    validation_error: str = dspy.InputField(desc="The validator's error message to resolve.")
+    dataset_columns: list[str] = dspy.InputField(desc="Every column name in the dataset.")
+    column_roles: str = dspy.InputField(
+        desc="JSON object mapping column name → 'input' | 'output' | 'ignore'.",
+    )
+
+    fixed_code: str = dspy.OutputField(
+        desc=(
+            "The corrected full source for the artifact. No markdown fences, "
+            "no prose — just the Python code."
+        ),
+    )
+
+
 class CodeAssistant(dspy.Signature):
     """Chat assistant attached to a DSPy Signature + metric-function editor.
 
@@ -556,6 +586,85 @@ def _extract_reasoning_token(chunk: object) -> str | None:
     return None
 
 
+class _SubmitArgExtractor:
+    """Recover token-level streaming of a ReActV2 submit argument.
+
+    ReActV2 dropped V1's separate ``extract`` step: the user's output fields
+    are now arguments of an internal ``submit`` tool call carried in the
+    ``tool_calls`` field of the inner predict. The raw text streamed for
+    that field is JSON of the shape
+    ``{"tool_calls": [{"name": "submit", "args": {<arg>: "..."}}]}``. We
+    feed every chunk from a regular ``StreamListener`` bound to
+    ``tool_calls`` through ``feed``; partial JSON parsing pulls out the
+    growing value of ``args[<target_arg>]`` so we can re-emit
+    token-by-token deltas the same way V1's ``extract.predict`` listener
+    did.
+
+    One instance per agent turn. Call ``reset`` whenever the bound stream
+    listener finishes a field (its ``is_last_chunk`` signal) so the next
+    loop iteration starts with a clean accumulator.
+    """
+
+    def __init__(self, target_arg: str):
+        """Bind the extractor to a specific submit argument name.
+
+        Args:
+            target_arg: Name of the ``submit`` arg to extract — e.g.
+                ``assistant_message`` for the generalist agent or
+                ``reply`` for the code agent.
+        """
+        self._target_arg = target_arg
+        self._buffer = ""
+        self._emitted_chars = 0
+
+    def feed(self, chunk: str) -> str | None:
+        """Append a chunk and return the newly streamed slice of the target arg.
+
+        Args:
+            chunk: Latest streaming chunk from the ``tool_calls`` listener.
+
+        Returns:
+            The new characters of ``args[target_arg]`` since the last
+            successful feed, or ``None`` when the partial JSON has not
+            yet exposed any additional content for the target arg.
+        """
+        if not chunk:
+            return None
+        self._buffer += chunk
+        try:
+            parsed = jiter.from_json(
+                self._buffer.encode("utf-8"),
+                partial_mode="trailing-strings",
+            )
+        except ValueError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        tool_calls = parsed.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            return None
+        for call in tool_calls:
+            if not isinstance(call, dict) or call.get("name") != "submit":
+                continue
+            args = call.get("args")
+            if not isinstance(args, dict):
+                continue
+            value = args.get(self._target_arg)
+            if not isinstance(value, str):
+                continue
+            if len(value) <= self._emitted_chars:
+                return None
+            delta = value[self._emitted_chars :]
+            self._emitted_chars = len(value)
+            return delta
+        return None
+
+    def reset(self) -> None:
+        """Drop accumulated state between ReAct loop iterations."""
+        self._buffer = ""
+        self._emitted_chars = 0
+
+
 class ReasoningStreamListener(dspy.streaming.StreamListener):
     """StreamListener subclass that harvests provider reasoning tokens.
 
@@ -626,9 +735,10 @@ def _build_agent_lm() -> dspy.LM:
       ``extra_body={"reasoning_split": true}`` so the provider emits its
       interleaved ``<think>`` reasoning in a clean ``reasoning_details``
       channel. Thinking depth is always max on this endpoint — no knob.
-    - **Fireworks-hosted MiniMax** (``fireworks_ai/.../minimax-*``):
+    - **OpenRouter MiniMax** (``openrouter/minimax/...``, the shipped default)
+      **and Fireworks-hosted MiniMax** (``fireworks_ai/.../minimax-*``):
       reasoning arrives inline in the assistant content as ``<think>…</think>``
-      blocks. Fireworks rejects ``reasoning_split``, so we send nothing.
+      blocks. Neither host honours ``reasoning_split``, so we send nothing.
     - **Everything else** (``openai/gpt-4o-mini`` etc.): no reasoning knob.
 
     Returns:
@@ -685,6 +795,108 @@ async def _pump_seed_stream(
             results[field] = getattr(chunk, field, "") or ""
 
 
+def _run_code_fixer(
+    *,
+    lm: dspy.LM,
+    artifact_kind: str,
+    broken_code: str,
+    validation_error: str,
+    dataset_columns: list[str],
+    column_roles_json: str,
+) -> str:
+    """Run the one-shot ``FixCodeArtifact`` predictor under ``lm``.
+
+    Runs synchronously (invoked via ``asyncio.to_thread``) so the dspy LM
+    round-trip never blocks the event loop, and binds ``lm`` explicitly so
+    the repair uses the same model as the seed regardless of contextvar
+    propagation across the thread hop.
+
+    Args:
+        lm: Language model driving the repair.
+        artifact_kind: ``"signature"`` or ``"metric"``.
+        broken_code: Source that failed validation.
+        validation_error: Validator error message to resolve.
+        dataset_columns: Dataset column names for context.
+        column_roles_json: JSON column → role map for context.
+
+    Returns:
+        The repaired source (stripped), or an empty string when the
+        predictor yields nothing usable.
+    """
+    fixer = dspy.Predict(FixCodeArtifact)
+    with dspy.context(lm=lm):
+        pred = fixer(
+            artifact_kind=artifact_kind,
+            broken_code=broken_code,
+            validation_error=validation_error,
+            dataset_columns=dataset_columns,
+            column_roles=column_roles_json,
+        )
+    return (getattr(pred, "fixed_code", "") or "").strip()
+
+
+async def _validate_and_repair_artifact(
+    *,
+    lm: dspy.LM,
+    artifact_kind: str,
+    code: str,
+    validator: Callable[[str], str],
+    dataset_columns: list[str],
+    column_roles_json: str,
+    queue: asyncio.Queue[dict | None],
+    replace_event: str,
+    max_attempts: int = 2,
+) -> tuple[str, str]:
+    """Validate ``code`` and repair it in a bounded loop when it fails.
+
+    The seed predictors emit unvalidated code, so without this a stray
+    brace or bad identifier would reach submit unchecked (the chat path
+    gets this guarantee from ``edit_signature``/``edit_metric``; the seed
+    path did not). Each repaired revision is published via ``replace_event``
+    so the editor reflects the fix live, and the subprocess validator runs
+    off-thread to keep the loop responsive.
+
+    Args:
+        lm: Language model used for repair attempts.
+        artifact_kind: ``"signature"`` or ``"metric"`` (passed to the fixer).
+        code: Freshly generated source to validate.
+        validator: ``_validate_signature_code`` / ``_validate_metric_code`` —
+            returns an empty string on success or an error message.
+        dataset_columns: Dataset column names for repair context.
+        column_roles_json: JSON column → role map for repair context.
+        queue: SSE queue receiving the ``replace_event`` updates.
+        replace_event: ``"signature_replace"`` or ``"metric_replace"``.
+        max_attempts: Maximum repair attempts before giving up.
+
+    Returns:
+        A ``(code, error)`` tuple — the best source produced and the final
+        validator error (empty string once valid).
+    """
+    error = await asyncio.to_thread(validator, code)
+    attempts = 0
+    while error and attempts < max_attempts:
+        attempts += 1
+        try:
+            candidate = await asyncio.to_thread(
+                _run_code_fixer,
+                lm=lm,
+                artifact_kind=artifact_kind,
+                broken_code=code,
+                validation_error=error,
+                dataset_columns=dataset_columns,
+                column_roles_json=column_roles_json,
+            )
+        except Exception:
+            logger.exception("seed code repair attempt failed")
+            break
+        if not candidate or candidate == code:
+            break
+        code = candidate
+        queue.put_nowait({"event": replace_event, "data": {"code": code}})
+        error = await asyncio.to_thread(validator, code)
+    return code, error
+
+
 async def _run_seed(
     *,
     lm: dspy.LM,
@@ -693,7 +905,7 @@ async def _run_seed(
     column_kinds_json: str,
     sample_rows_json: str,
     queue: asyncio.Queue[dict | None],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Run the non-agentic seed: Signature + metric in parallel, then intro.
 
     Signature and metric tokens are streamed as ``signature_patch`` /
@@ -711,8 +923,11 @@ async def _run_seed(
         queue: SSE event queue to push token events onto.
 
     Returns:
-        Mapping with keys ``signature_code``, ``metric_code``, and
-        ``assistant_message`` carrying the seed output.
+        Mapping with keys ``signature_code``, ``metric_code`` (both
+        validated and repaired when needed), ``assistant_message``, the
+        boolean ``signature_valid`` / ``metric_valid`` flags, and an
+        optional ``validation_error`` string when an artifact could not be
+        repaired within the attempt budget.
     """
     sig_predict = dspy.Predict(GenerateSignatureCode)
     met_predict = dspy.Predict(GenerateMetricCode)
@@ -739,7 +954,7 @@ async def _run_seed(
         "column_kinds": column_kinds_json,
         "sample_rows": sample_rows_json,
     }
-    results: dict[str, str] = {"signature_code": "", "metric_code": "", "assistant_message": ""}
+    results: dict[str, Any] = {"signature_code": "", "metric_code": "", "assistant_message": ""}
 
     msg_predict = dspy.Predict(GenerateSeedMessage)
     msg_program = dspy.streamify(
@@ -769,6 +984,43 @@ async def _run_seed(
                 results=results,
             ),
         )
+
+        # The seed predictors stream raw, unvalidated code. Validate (and
+        # repair) both artifacts here so the editor + the wizard receive
+        # code that already passes the same check submit runs — otherwise a
+        # stray brace or bad identifier surfaces only as a 400 at submit.
+        sig_code, sig_err = await _validate_and_repair_artifact(
+            lm=lm,
+            artifact_kind="signature",
+            code=results["signature_code"],
+            validator=_validate_signature_code,
+            dataset_columns=dataset_columns,
+            column_roles_json=column_roles_json,
+            queue=queue,
+            replace_event="signature_replace",
+        )
+        met_code, met_err = await _validate_and_repair_artifact(
+            lm=lm,
+            artifact_kind="metric",
+            code=results["metric_code"],
+            validator=_validate_metric_code,
+            dataset_columns=dataset_columns,
+            column_roles_json=column_roles_json,
+            queue=queue,
+            replace_event="metric_replace",
+        )
+        results["signature_code"] = sig_code
+        results["metric_code"] = met_code
+        results["signature_valid"] = not sig_err
+        results["metric_valid"] = not met_err
+        if sig_err or met_err:
+            parts = []
+            if sig_err:
+                parts.append(f"Signature: {sig_err}")
+            if met_err:
+                parts.append(f"Metric: {met_err}")
+            results["validation_error"] = " | ".join(parts)
+
         async for chunk in msg_program(
             dataset_columns=dataset_columns,
             column_roles=column_roles_json,
@@ -1076,26 +1328,28 @@ async def _run_agent(
     )
 
     # Keep max_iters tight. A normal turn is: (1) think → (2) edit_* OR
-    # finish. A validator-driven retry may need one more iteration if the
+    # submit. A validator-driven retry may need one more iteration if the
     # first edit fails validation: (1) edit fails → (2) edit succeeds →
-    # extract produces reply. max_iters=3 covers the worst case without
+    # submit carries reply. max_iters=3 covers the worst case without
     # room to run away.
-    react = dspy.ReAct(
+    react = dspy.ReActV2(
         CodeAssistant,
         tools=[session.edit_signature, session.edit_metric],
         max_iters=3,
     )
-    # Two reasoning listeners: one for the iterative ReAct predict (fires
-    # once per loop step; allow_reuse=True is required), and one for the
-    # final extract CoT (fires once). Reasoning tokens from reasoning-capable
-    # providers arrive on the raw LiteLLM chunk regardless of which predict
-    # is active — binding per-predict is how DSPy routes chunks to listeners.
+    # ReActV2 has a single inner predict (``react.react``). It emits both
+    # reasoning and tool_calls per loop iteration; the user's ``reply`` is
+    # an argument of the internal ``submit`` tool, so we listen on
+    # ``tool_calls`` and stitch the message back together via
+    # ``_SubmitArgExtractor``. ``allow_reuse=True`` is mandatory because
+    # the predict fires once per loop step.
     program = dspy.streamify(
         react,
         stream_listeners=[
-            dspy.streaming.StreamListener(signature_field_name="reply", allow_reuse=True),
+            dspy.streaming.StreamListener(
+                signature_field_name="tool_calls", predict=react.react, allow_reuse=True
+            ),
             ReasoningStreamListener(predict=react.react, allow_reuse=True),
-            ReasoningStreamListener(predict=react.extract.predict, allow_reuse=True),
         ],
         async_streaming=True,
     )
@@ -1116,14 +1370,19 @@ async def _run_agent(
     }
 
     reply_text = ""
+    reply_extractor = _SubmitArgExtractor("reply")
     with dspy.context(lm=lm):
         async for chunk in program(**inputs):
             if isinstance(chunk, dspy.streaming.StreamResponse):
                 if chunk.signature_field_name == REASONING_FIELD:
                     await queue.put({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                elif chunk.signature_field_name == "reply":
-                    reply_text += chunk.chunk
-                    await queue.put({"event": "message_patch", "data": {"chunk": chunk.chunk}})
+                elif chunk.signature_field_name == "tool_calls":
+                    delta = reply_extractor.feed(chunk.chunk)
+                    if delta:
+                        reply_text += delta
+                        await queue.put({"event": "message_patch", "data": {"chunk": delta}})
+                    if chunk.is_last_chunk:
+                        reply_extractor.reset()
             elif isinstance(chunk, dspy.Prediction):
                 final = getattr(chunk, "reply", "") or ""
                 if final and final != reply_text:
@@ -1247,7 +1506,9 @@ async def run_code_agent(
       replacement when a tool runs.
     * ``tool_end`` — ``{id, tool, status}``, after the tool returns.
     * ``message_patch`` — chat-mode reply token stream.
-    * ``done`` — ``{signature_code, metric_code, assistant_message}``.
+    * ``done`` — ``{signature_code, metric_code, assistant_message}``; the
+      seed path additionally carries ``signature_valid`` / ``metric_valid``
+      booleans and an optional ``validation_error``.
     * ``error`` — ``{error}``.
 
     Args:
