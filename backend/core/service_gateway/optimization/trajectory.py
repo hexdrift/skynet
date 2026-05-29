@@ -25,13 +25,14 @@ optimizer instead of the raw metric.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import logging
-import os
 import pickle
 import tempfile
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import cloudpickle
@@ -179,6 +180,17 @@ MINIBATCH_FEEDBACK_CHAR_CAP = 4096
 MINIBATCH_PREDICTION_CHAR_CAP = 1024
 
 
+# Set by capture_proposal_prompts while a single GEPA reflective propose() is
+# running, so MinibatchRecorder events emitted from inside that call can be
+# attributed to the iteration the engine just appended to full_program_trace.
+# Outside a propose() call (e.g. baseline / full-valset evaluation) it stays
+# at None, and the frontend treats the event as run-wide.
+_current_proposal_iteration: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "_current_proposal_iteration",
+    default=None,
+)
+
+
 def _extract_feedback(result: Any) -> str:
     """Return the feedback string GEPA attaches to a ``dspy.Prediction`` result.
 
@@ -308,6 +320,7 @@ class MinibatchRecorder:
 
         feedback = _extract_feedback(result)
         if feedback:
+            iteration = _current_proposal_iteration.get()
             try:
                 self._progress_callback(
                     PROGRESS_MINIBATCH,
@@ -316,6 +329,7 @@ class MinibatchRecorder:
                         "score": score,
                         "feedback": feedback[:MINIBATCH_FEEDBACK_CHAR_CAP],
                         "prediction": prediction_text,
+                        "iteration": iteration,
                     },
                 )
             except Exception:
@@ -431,7 +445,13 @@ def capture_proposal_prompts(optimizer_name: str) -> Iterator[None]:
         yield
         return
     if ReflectiveMutationProposer is None:
-        logger.debug("GEPA reflective proposer not importable; skipping prompt capture")
+        # Invisible at default log level used to hide a real failure mode —
+        # a GEPA package reshuffle would leave the rejected-proposal drawer
+        # silently empty with no clue why.
+        logger.warning(
+            "GEPA reflective proposer not importable; rejected proposals will "
+            "have no prompt snapshot for this run"
+        )
         yield
         return
 
@@ -439,29 +459,38 @@ def capture_proposal_prompts(optimizer_name: str) -> Iterator[None]:
 
     def wrapped_propose(self: Any, state: Any) -> Any:
         """Forward to the original propose, then snapshot prompts into the trace."""
-        proposal = original_propose(self, state)
+        iter_val = getattr(state, "i", None)
+        token = _current_proposal_iteration.set(
+            iter_val if isinstance(iter_val, int) else None
+        )
         try:
-            trace = getattr(state, "full_program_trace", None)
-            if not isinstance(trace, list) or not trace:
-                return proposal
-            entry = trace[-1]
-            if not isinstance(entry, dict):
-                return proposal
-            parent_idx = entry.get("selected_program_candidate")
-            candidates = getattr(state, "program_candidates", None)
-            if (
-                isinstance(parent_idx, int)
-                and isinstance(candidates, list)
-                and 0 <= parent_idx < len(candidates)
-                and isinstance(candidates[parent_idx], dict)
-            ):
-                entry["parent_prompt_snapshot"] = dict(candidates[parent_idx])
-            proposed = getattr(proposal, "candidate", None) if proposal is not None else None
-            if isinstance(proposed, dict):
-                entry["proposed_prompt_snapshot"] = dict(proposed)
-        except Exception:
-            logger.exception("Failed to snapshot proposal prompts onto trace entry")
-        return proposal
+            proposal = original_propose(self, state)
+            try:
+                trace = getattr(state, "full_program_trace", None)
+                if not isinstance(trace, list) or not trace:
+                    return proposal
+                entry = trace[-1]
+                if not isinstance(entry, dict):
+                    return proposal
+                parent_idx = entry.get("selected_program_candidate")
+                candidates = getattr(state, "program_candidates", None)
+                if (
+                    isinstance(parent_idx, int)
+                    and isinstance(candidates, list)
+                    and 0 <= parent_idx < len(candidates)
+                    and isinstance(candidates[parent_idx], dict)
+                ):
+                    entry["parent_prompt_snapshot"] = dict(candidates[parent_idx])
+                proposed = (
+                    getattr(proposal, "candidate", None) if proposal is not None else None
+                )
+                if isinstance(proposed, dict):
+                    entry["proposed_prompt_snapshot"] = dict(proposed)
+            except Exception:
+                logger.exception("Failed to snapshot proposal prompts onto trace entry")
+            return proposal
+        finally:
+            _current_proposal_iteration.reset(token)
 
     ReflectiveMutationProposer.propose = wrapped_propose  # type: ignore[method-assign]
     try:
@@ -735,7 +764,7 @@ def _compute_depths(parents: list[list[int | None] | None]) -> list[int]:
         Depth for each candidate, in index order.
     """
     depths: list[int] = []
-    for idx, parent_list in enumerate(parents):
+    for _idx, parent_list in enumerate(parents):
         if not parent_list or parent_list[0] is None:
             depths.append(0)
             continue
@@ -873,7 +902,7 @@ def _load_state(state_path: str) -> dict[str, Any] | None:
         unreadable.
     """
     try:
-        with open(state_path, "rb") as fh:
+        with Path(state_path).open("rb") as fh:
             data = fh.read()
     except OSError:
         return None
@@ -997,9 +1026,9 @@ class TrajectoryWatcher:
                 the final drain after ``stop()``.
         """
         with self._tick_lock:
-            state_path = os.path.join(self._run_dir, GEPA_STATE_FILENAME)
+            state_path = Path(self._run_dir) / GEPA_STATE_FILENAME
             try:
-                mtime = os.path.getmtime(state_path)
+                mtime = state_path.stat().st_mtime
             except OSError:
                 return
             if not force and mtime == self._last_mtime:

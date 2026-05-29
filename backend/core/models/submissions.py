@@ -24,7 +24,13 @@ class _OptimizationRequestBase(BaseModel):
     description: str | None = Field(
         default=None, max_length=280, description="Short description of the optimization goal (max 280 characters)."
     )
-    username: str
+    username: str | None = Field(
+        default=None,
+        description=(
+            "Submitter identity. Optional on the wire — the API always overwrites it from the authenticated session, "
+            "so clients (including MCP tool callers) can omit it."
+        ),
+    )
     module_name: str
     module_kwargs: dict[str, Any] = Field(default_factory=dict)
     signature_code: str
@@ -32,7 +38,20 @@ class _OptimizationRequestBase(BaseModel):
     optimizer_name: str
     optimizer_kwargs: dict[str, Any] = Field(default_factory=dict)
     compile_kwargs: dict[str, Any] = Field(default_factory=dict)
-    dataset: list[dict[str, Any]]
+    dataset: list[dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Inline dataset rows. Optional when ``staged_dataset_id`` is provided — the server then loads the rows "
+            "from the staged copy. Exactly one of ``dataset`` or ``staged_dataset_id`` must be present."
+        ),
+    )
+    staged_dataset_id: str | None = Field(
+        default=None,
+        description=(
+            "Opaque id returned by ``POST /datasets/stage-for-agent``. Used by agent-driven submits so the model "
+            "does not have to inline tens of thousands of dataset rows into its tool arguments."
+        ),
+    )
     column_mapping: ColumnMapping
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
@@ -45,16 +64,21 @@ class _OptimizationRequestBase(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_dataset(self) -> _OptimizationRequestBase:
-        """Reject requests with an empty dataset.
+        """Reject requests that supply neither ``dataset`` nor ``staged_dataset_id``.
 
         Returns:
             The validated request instance.
 
         Raises:
-            ValueError: When ``dataset`` is empty.
+            ValueError: When both ``dataset`` and ``staged_dataset_id`` are missing
+                or when both are supplied at the same time.
         """
-        if not self.dataset:
-            raise ValueError("Dataset must contain at least one row.")
+        has_inline = bool(self.dataset)
+        has_staged = bool(self.staged_dataset_id)
+        if has_inline and has_staged:
+            raise ValueError("Provide either dataset or staged_dataset_id, not both.")
+        if not has_inline and not has_staged:
+            raise ValueError("Dataset must contain at least one row, or staged_dataset_id must be provided.")
         return self
 
 

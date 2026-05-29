@@ -194,7 +194,12 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             grid_result=grid_result,
         )
 
-        etag_src = f"{_RESPONSE_SCHEMA_VERSION}:{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}"
+        # Rename / pin / description edits change ``payload_overview`` without
+        # touching logs, progress, or metrics — so they must be mixed into the
+        # ETag, otherwise the next revalidation returns 304 against a body
+        # that's still carrying the old name and the UI never updates.
+        overview_sig = overview.get("name"), overview.get("description"), overview.get("pinned")
+        etag_src = f"{_RESPONSE_SCHEMA_VERSION}:{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}:{overview_sig!s}"
         etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
         if_none_match = request.headers.get("if-none-match")
         if if_none_match == etag:

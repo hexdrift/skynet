@@ -112,3 +112,27 @@ class ProfileDatasetResponse(BaseModel):
 
     profile: DatasetProfile
     plan: SplitPlan
+
+
+class ValidateDatasetRequest(BaseModel):
+    """Inbound body for ``POST /datasets/validate``.
+
+    Mirrors the ``ValidateCode`` preflight: a small payload the submit
+    wizard sends before advancing past the dataset step so the user can't
+    enqueue a job whose chosen split is unrunnable.
+    """
+
+    row_count: int = Field(ge=0)
+    fractions: SplitFractions
+
+
+class ValidateDatasetResponse(BaseModel):
+    """Outbound body for ``POST /datasets/validate``.
+
+    Shape matches :class:`ValidateCodeResponse` so the wizard can treat
+    both preflights identically.
+    """
+
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

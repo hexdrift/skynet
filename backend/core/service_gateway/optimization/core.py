@@ -29,6 +29,7 @@ from ...constants import (
     META_MODULE_KWARGS,
     META_OPTIMIZER,
     META_OPTIMIZER_KWARGS,
+    OPTIMIZER_NAME_GEPA,
     PROGRESS_BASELINE,
     PROGRESS_CANDIDATE,
     PROGRESS_GRID_PAIR_COMPLETED,
@@ -77,6 +78,14 @@ from .optimizers import (
     validate_optimizer_signature,
 )
 from .progress import capture_tqdm
+from .timing import (
+    STAGE_BASELINE,
+    STAGE_EVALUATION,
+    STAGE_TRAINING,
+    GenLMTimingCallback,
+    ReflectionLMTimingCallback,
+    track_stage,
+)
 from .trajectory import (
     capture_proposal_prompts,
     emit_valset_event,
@@ -84,21 +93,39 @@ from .trajectory import (
     maybe_wrap_minibatch_recorder,
     trajectory_watch,
 )
-from .timing import (
-    STAGE_BASELINE,
-    STAGE_EVALUATION,
-    STAGE_ORDER,
-    STAGE_TRAINING,
-    GenLMTimingCallback,
-    ReflectionLMTimingCallback,
-    track_stage,
-)
 from .validators import (
     require_mapping_columns_in_dataset,
     require_mapping_matches_signature,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _require_metric_compatible_with_optimizer(optimizer_name: str, param_names: list[str]) -> None:
+    """Reject metrics whose arity is incompatible with the chosen optimizer.
+
+    GEPA hands the metric 5 positional args during reflection —
+    ``(gold, pred, trace, pred_name, pred_trace)``. Any shorter signature
+    raises ``TypeError`` on every iteration, leaving GEPA unable to propose
+    a new candidate and the optimized score pinned to the baseline. The
+    API ``/validate-code`` route already enforces this, but submissions
+    bypassing the wizard (the generalist agent, direct ``POST /run``)
+    used to slip through to a "successful" no-op run.
+
+    Args:
+        optimizer_name: The optimizer key from the run/grid-search payload.
+        param_names: Metric parameter names returned by ``validate_metric_code``.
+
+    Raises:
+        ServiceError: When the metric signature is incompatible with the optimizer.
+    """
+    if optimizer_name == OPTIMIZER_NAME_GEPA and len(param_names) < 5:
+        raise ServiceError(
+            "GEPA metric must accept 5 arguments: "
+            "(gold, pred, trace, pred_name, pred_trace). "
+            f"Found {len(param_names)}: ({', '.join(param_names)}). "
+            "See https://dspy.ai/api/optimizers/GEPA for details."
+        )
 
 
 def _build_lm_activity(
@@ -174,7 +201,7 @@ def _tag_candidate_event(
         event: Event name as produced by ``TrajectoryWatcher``.
         metrics: Event metrics dict from the watcher.
     """
-    if event == PROGRESS_CANDIDATE or event == PROGRESS_REJECTED or event == PROGRESS_MINIBATCH:
+    if event in (PROGRESS_CANDIDATE, PROGRESS_REJECTED, PROGRESS_MINIBATCH):
         callback(event, {**metrics, "pair_index": pair_index})
     else:
         callback(event, metrics)
@@ -831,7 +858,8 @@ class DspyService:
         intro = validate_signature_code(payload.signature_code)
         require_mapping_matches_signature(payload.column_mapping, intro.input_fields, intro.output_fields)
         require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
-        validate_metric_code(payload.metric_code)
+        metric_info = validate_metric_code(payload.metric_code)
+        _require_metric_compatible_with_optimizer(payload.optimizer_name, metric_info.param_names)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         validate_optimizer_signature(optimizer_factory, payload.optimizer_name)
@@ -865,7 +893,8 @@ class DspyService:
         intro = validate_signature_code(payload.signature_code)
         require_mapping_matches_signature(payload.column_mapping, intro.input_fields, intro.output_fields)
         require_mapping_columns_in_dataset(payload.column_mapping, payload.dataset)
-        validate_metric_code(payload.metric_code)
+        metric_info = validate_metric_code(payload.metric_code)
+        _require_metric_compatible_with_optimizer(payload.optimizer_name, metric_info.param_names)
         self._get_module_factory(payload.module_name)
         optimizer_factory = self._get_optimizer_factory(payload.optimizer_name)
         validate_optimizer_signature(optimizer_factory, payload.optimizer_name)

@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
+from threading import Lock, Thread
 
 import litellm
 from pydantic import BaseModel, Field
@@ -29,8 +29,22 @@ logger = logging.getLogger(__name__)
 class CatalogModel(BaseModel):
     """A single model entry exposed to the frontend."""
 
-    value: str = Field(..., description="Canonical LiteLLM model ID (e.g. 'gpt-4o-mini').")
-    label: str = Field(..., description="Human-friendly display name.")
+    value: str = Field(
+        ...,
+        description=(
+            "Fully-qualified LiteLLM model id including the provider prefix "
+            "(e.g. 'openai/gpt-4o-mini', 'anthropic/claude-3-5-sonnet'). Pass "
+            "this string verbatim when submitting a run or writing model_name "
+            "into wizard_state — dspy.LM rejects un-prefixed ids."
+        ),
+    )
+    label: str = Field(
+        ...,
+        description=(
+            "Display-only label (provider prefix stripped). Never use as a "
+            "model_name; use ``value`` instead."
+        ),
+    )
     provider: str = Field(..., description="Provider slug for grouping (e.g. 'openai').")
     data_center: str | None = Field(
         default=None,
@@ -475,35 +489,110 @@ def get_catalog() -> ModelCatalogResponse:
 _cached_response: ModelCatalogResponse | None = None
 _cached_at_monotonic: float = 0.0
 _cache_lock = Lock()
+_refresh_in_flight = False
+
+
+def _refresh_catalog_in_background() -> None:
+    """Rebuild the catalog and swap it into the cache; never raises.
+
+    Run from a daemon thread by :func:`get_catalog_cached` when the cache
+    is stale-but-present and by :func:`prewarm_catalog` at server boot.
+    The ``_refresh_in_flight`` guard makes repeated concurrent triggers
+    no-ops so a burst of requests doesn't spawn a thundering herd of
+    refresh threads.
+    """
+    global _cached_response, _cached_at_monotonic, _refresh_in_flight
+    try:
+        fresh = get_catalog()
+    except Exception:
+        logger.exception("Model catalog background refresh failed; keeping previous snapshot")
+        return
+    finally:
+        # Clear the flag regardless so the next stale read can re-trigger.
+        pass
+    with _cache_lock:
+        _cached_response = fresh
+        _cached_at_monotonic = time.monotonic()
+        _refresh_in_flight = False
+    logger.info(
+        "Model catalog refreshed in background: %d providers, %d models",
+        len(fresh.providers),
+        len(fresh.models),
+    )
+
+
+def _kick_background_refresh() -> None:
+    """Spawn the background refresh thread if one isn't already running."""
+    global _refresh_in_flight
+    with _cache_lock:
+        if _refresh_in_flight:
+            return
+        _refresh_in_flight = True
+    Thread(target=_refresh_catalog_in_background, name="catalog-refresh", daemon=True).start()
 
 
 def get_catalog_cached() -> ModelCatalogResponse:
-    """Return the catalog, refreshing it after ``model_catalog_ttl_seconds``.
+    """Return the catalog with stale-while-revalidate semantics.
 
-    A TTL of ``0`` disables caching (every call rebuilds). The lock makes
-    concurrent first-call requests share a single rebuild instead of all
-    racing into the same probe.
+    Behaviour matrix:
+      * Cache present + fresh (within ``model_catalog_ttl_seconds``) →
+        return immediately.
+      * Cache present + stale → return the stale snapshot immediately and
+        kick off a background refresh. Subsequent calls keep returning
+        the stale snapshot until the refresh lands, then they see the
+        new one. A single in-flight refresh guard prevents thundering
+        herds.
+      * Cache absent (true cold start) → synchronously build. This path
+        only fires when the boot-time :func:`prewarm_catalog` hasn't
+        landed yet — under normal operation the boot prewarm beats any
+        user request.
+      * TTL of ``0`` disables caching entirely (every call rebuilds).
 
     Returns:
-        The cached ``ModelCatalogResponse``, rebuilt when stale.
+        The cached ``ModelCatalogResponse`` — possibly stale but never
+        empty after the first successful build.
     """
     global _cached_response, _cached_at_monotonic
     ttl = float(settings.model_catalog_ttl_seconds)
     now = time.monotonic()
-    if ttl > 0.0 and _cached_response is not None and (now - _cached_at_monotonic) < ttl:
+    fresh = (
+        ttl > 0.0
+        and _cached_response is not None
+        and (now - _cached_at_monotonic) < ttl
+    )
+    if fresh:
+        return _cached_response  # type: ignore[return-value]
+    if _cached_response is not None:
+        # Stale but usable — serve it now, refresh in the background.
+        if ttl > 0.0:
+            _kick_background_refresh()
         return _cached_response
 
     with _cache_lock:
         # Re-check under the lock so we don't rebuild twice when callers
-        # race in during the first miss.
-        now = time.monotonic()
-        if ttl > 0.0 and _cached_response is not None and (now - _cached_at_monotonic) < ttl:
+        # race in during the first cold-start miss.
+        if _cached_response is not None:
             return _cached_response
         _cached_response = get_catalog()
-        _cached_at_monotonic = now
+        _cached_at_monotonic = time.monotonic()
         logger.info(
-            "Model catalog built: %d providers, %d models",
+            "Model catalog built (cold start): %d providers, %d models",
             len(_cached_response.providers),
             len(_cached_response.models),
         )
         return _cached_response
+
+
+def prewarm_catalog() -> None:
+    """Trigger the first catalog build in a background thread.
+
+    Called from the FastAPI lifespan startup hook so the cache is hot
+    by the time the first ``list_models_for_agent`` request lands. The
+    boot itself is unaffected (we don't await this); workers come online
+    in parallel with the catalog probe.
+    """
+    if _cached_response is not None:
+        return
+    _kick_background_refresh()
+
+

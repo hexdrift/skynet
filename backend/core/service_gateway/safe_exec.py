@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import inspect
 import multiprocessing as mp
+import threading
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -39,10 +40,40 @@ from .optimization.data import (
     load_signature_from_code,
 )
 
-_DEFAULT_PARSE_TIMEOUT_SECONDS = 10.0
-_DEFAULT_PROBE_TIMEOUT_SECONDS = 15.0
+_DEFAULT_PARSE_TIMEOUT_SECONDS = 30.0
+_DEFAULT_PROBE_TIMEOUT_SECONDS = 45.0
 _TERMINATE_GRACE_SECONDS = 2.0
 _QUEUE_READ_SECONDS = 5.0
+
+# Dogpile-safe per-process caches: identical user code is validated once per
+# replica, and concurrent submissions of the same code share that one
+# subprocess-spawn cost instead of racing N fresh interpreters that all pay
+# the multi-second ``import dspy`` price. Keyed on the raw source string —
+# the cost of holding source in memory is trivial next to the spawn cost it
+# avoids. Per-key locks live in ``_dogpile_locks``; ``_locks_mutex`` guards
+# only the locks dict, not the heavy validation itself.
+_signature_cache: dict[str, SignatureIntrospection] = {}
+_metric_cache: dict[str, MetricIntrospection] = {}
+_dogpile_locks: dict[str, threading.Lock] = {}
+_locks_mutex = threading.Lock()
+
+
+def _dogpile_lock(key: str) -> threading.Lock:
+    """Return the lock for ``key``, creating it under ``_locks_mutex`` if absent.
+
+    Args:
+        key: Stable key (cache namespace plus code string) the caller will use
+            to gate its cache miss.
+
+    Returns:
+        A ``threading.Lock`` unique to ``key`` across the process.
+    """
+    with _locks_mutex:
+        lock = _dogpile_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _dogpile_locks[key] = lock
+        return lock
 
 
 @dataclass(frozen=True)
@@ -199,6 +230,9 @@ def validate_signature_code(
 ) -> SignatureIntrospection:
     """Parse user-authored signature code in a subprocess and return its shape.
 
+    Memoized per-process: concurrent submissions of the same signature share
+    one subprocess spawn instead of dogpiling N spawn+import-dspy cycles.
+
     Args:
         code: User-authored signature class source.
         timeout_seconds: Maximum time to wait for the child to finish.
@@ -209,19 +243,28 @@ def validate_signature_code(
     Raises:
         ServiceError: When the user code fails to load or the child errors.
     """
-    result = _run_in_subprocess(
-        _signature_worker,
-        (code,),
-        timeout_seconds=timeout_seconds,
-    )
-    if not result.get("ok"):
-        _raise_child_error(result)
-    return SignatureIntrospection(
-        class_name=result["class_name"],
-        input_fields=list(result["input_fields"]),
-        output_fields=list(result["output_fields"]),
-        image_input_fields=list(result.get("image_input_fields") or []),
-    )
+    cached = _signature_cache.get(code)
+    if cached is not None:
+        return cached
+    with _dogpile_lock(f"sig:{code}"):
+        cached = _signature_cache.get(code)
+        if cached is not None:
+            return cached
+        result = _run_in_subprocess(
+            _signature_worker,
+            (code,),
+            timeout_seconds=timeout_seconds,
+        )
+        if not result.get("ok"):
+            _raise_child_error(result)
+        introspection = SignatureIntrospection(
+            class_name=result["class_name"],
+            input_fields=list(result["input_fields"]),
+            output_fields=list(result["output_fields"]),
+            image_input_fields=list(result.get("image_input_fields") or []),
+        )
+        _signature_cache[code] = introspection
+        return introspection
 
 
 def _metric_worker(code: str, queue: Any) -> None:
@@ -253,6 +296,9 @@ def validate_metric_code(
 ) -> MetricIntrospection:
     """Parse user-authored metric code in a subprocess and return its shape.
 
+    Memoized per-process: concurrent submissions of the same metric share
+    one subprocess spawn instead of dogpiling N spawn+import-dspy cycles.
+
     Args:
         code: User-authored metric callable source.
         timeout_seconds: Maximum time to wait for the child to finish.
@@ -263,17 +309,26 @@ def validate_metric_code(
     Raises:
         ServiceError: When the user code fails to load or the child errors.
     """
-    result = _run_in_subprocess(
-        _metric_worker,
-        (code,),
-        timeout_seconds=timeout_seconds,
-    )
-    if not result.get("ok"):
-        _raise_child_error(result)
-    return MetricIntrospection(
-        callable_name=result["callable_name"],
-        param_names=list(result["param_names"]),
-    )
+    cached = _metric_cache.get(code)
+    if cached is not None:
+        return cached
+    with _dogpile_lock(f"met:{code}"):
+        cached = _metric_cache.get(code)
+        if cached is not None:
+            return cached
+        result = _run_in_subprocess(
+            _metric_worker,
+            (code,),
+            timeout_seconds=timeout_seconds,
+        )
+        if not result.get("ok"):
+            _raise_child_error(result)
+        introspection = MetricIntrospection(
+            callable_name=result["callable_name"],
+            param_names=list(result["param_names"]),
+        )
+        _metric_cache[code] = introspection
+        return introspection
 
 
 def _probe_worker(
