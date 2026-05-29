@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException
@@ -15,6 +15,10 @@ from pydantic import SecretStr
 
 from .. import auth as auth_mod
 from ..auth import AuthenticatedUser, get_authenticated_user, require_admin_user
+
+# The JWT path of ``get_authenticated_user`` never reads ``request`` (only the
+# PAT branch does), so these unit tests pass a placeholder for that parameter.
+_NO_REQUEST = cast(Any, None)
 
 
 def _base64url(value: bytes) -> str:
@@ -60,7 +64,7 @@ def test_get_authenticated_user_accepts_valid_signed_token(monkeypatch: pytest.M
     monkeypatch.setattr(auth_mod.settings, "backend_auth_secret", SecretStr("test-secret"))
     token = _sign(_payload())
 
-    user = get_authenticated_user(f"Bearer {token}")
+    user = get_authenticated_user(_NO_REQUEST, f"Bearer {token}")
 
     assert user.username == "alice@example.com"
     assert user.groups == ("skynet-admins",)
@@ -69,7 +73,7 @@ def test_get_authenticated_user_accepts_valid_signed_token(monkeypatch: pytest.M
 def test_get_authenticated_user_rejects_missing_token() -> None:
     """A missing Authorization header is rejected."""
     with pytest.raises(HTTPException) as exc:
-        get_authenticated_user(None)
+        get_authenticated_user(_NO_REQUEST, None)
 
     assert exc.value.status_code == 401
 
@@ -80,7 +84,7 @@ def test_get_authenticated_user_rejects_bad_signature(monkeypatch: pytest.Monkey
     token = _sign(_payload(), secret="wrong-secret")
 
     with pytest.raises(HTTPException) as exc:
-        get_authenticated_user(f"Bearer {token}")
+        get_authenticated_user(_NO_REQUEST, f"Bearer {token}")
 
     assert exc.value.status_code == 401
 
