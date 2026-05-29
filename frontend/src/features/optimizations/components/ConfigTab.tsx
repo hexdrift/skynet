@@ -194,11 +194,6 @@ export function ConfigTab({
           {TERMS.model}, {TERMS.optimizer}
           {msg("auto.features.optimizations.components.configtab.4")}
         </p>
-        {job.description && (
-          <p className="text-sm text-foreground/70 leading-relaxed mb-4 border-s-2 border-[#C8A882]/40 ps-3">
-            {job.description}
-          </p>
-        )}
       </FadeIn>
       <div className="space-y-4">
         <Card

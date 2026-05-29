@@ -72,19 +72,21 @@ export function RunPlayground({
           )}
         </div>
       </FadeIn>
-      <ServeChat
-        serveInfo={serveInfo}
-        runHistory={runHistory}
-        setRunHistory={setRunHistory}
-        streamingRun={streamingRun}
-        serveLoading={serveLoading}
-        serveError={serveError}
-        setServeError={setServeError}
-        textareaRefs={textareaRefs}
-        chatScrollRef={chatScrollRef}
-        handleServe={handleServe}
-        demos={demos}
-      />
+      <div data-tutorial="serve-playground">
+        <ServeChat
+          serveInfo={serveInfo}
+          runHistory={runHistory}
+          setRunHistory={setRunHistory}
+          streamingRun={streamingRun}
+          serveLoading={serveLoading}
+          serveError={serveError}
+          setServeError={setServeError}
+          textareaRefs={textareaRefs}
+          chatScrollRef={chatScrollRef}
+          handleServe={handleServe}
+          demos={demos}
+        />
+      </div>
 
       <Card>
         <CardHeader className="pb-2">
