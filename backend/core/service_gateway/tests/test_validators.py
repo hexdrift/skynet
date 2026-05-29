@@ -62,7 +62,6 @@ def test_require_mapping_columns_in_dataset_missing() -> None:
 def test_require_mapping_columns_in_dataset_merges_row_keys() -> None:
     """Different rows can contribute different columns to the available set."""
     m = _mapping({"question": "q"}, {"answer": "a"})
-    # Different rows contribute columns to the available set.
     require_mapping_columns_in_dataset(m, [{"q": "hi"}, {"a": "hello"}])
 
 

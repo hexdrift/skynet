@@ -17,7 +17,7 @@ from ..routers.models import create_models_router
 from ..routers.optimizations_meta import create_optimizations_meta_router
 from .mocks import FakeJobStore
 
-__all__ = ["FakeJobStore", "TEST_USER", "bypass_auth"]
+__all__ = ["TEST_USER", "FakeJobStore", "bypass_auth"]
 
 
 TEST_USER = AuthenticatedUser(username="alice", role="admin", groups=("skynet-admins",))
@@ -83,8 +83,6 @@ def router_app(job_store: FakeJobStore) -> FastAPI:
     app.include_router(create_optimizations_meta_router(job_store=job_store))
     bypass_auth(app)
 
-    # Templates needs a job_store.engine for SQLAlchemy. Skip it here —
-    # covered by a separate integration test.
     return app
 
 

@@ -232,7 +232,7 @@ def test_embed_finished_job_writes_summary_row(monkeypatch) -> None:
     session.query.return_value.filter.return_value.first.return_value = None
 
     added: list[Any] = []
-    session.add.side_effect = lambda obj: added.append(obj)
+    session.add.side_effect = added.append
 
     with (
         patch.object(pipeline.settings, "embeddings_enabled", True),

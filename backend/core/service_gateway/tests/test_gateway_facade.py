@@ -169,3 +169,40 @@ def test_validate_payload_optimizer_kwargs_validated_against_signature() -> None
 
     with pytest.raises(ServiceError, match="unsupported entries"):
         service.validate_payload(payload)
+
+
+def test_validate_payload_gepa_rejects_short_metric_arity() -> None:
+    """GEPA payloads with a 2-3 arg metric raise before enqueue.
+
+    Regression: the generalist agent (and any direct ``POST /run`` caller)
+    could previously submit a ``def metric(example, prediction, trace=None)``
+    metric with ``optimizer_name=gepa``. GEPA's reflection step calls the
+    metric with 5 positional args, so every iteration failed silently and
+    the run completed "successfully" with no improvement.
+    """
+    service = _service()
+    payload = _payload(
+        optimizer_name="gepa",
+        metric_code="def metric(example, prediction, trace=None): return 1.0",
+        reflection_model_config=_MODEL_CFG,
+    )
+
+    with pytest.raises(ServiceError, match="GEPA metric must accept 5 arguments"):
+        service.validate_payload(payload)
+
+
+def test_validate_payload_gepa_accepts_five_arg_metric() -> None:
+    """GEPA payloads with a 5-arg metric returning ``dspy.Prediction`` pass validation."""
+    service = _service()
+    five_arg_metric = (
+        "import dspy\n"
+        "def metric(gold, pred, trace, pred_name, pred_trace):\n"
+        "    return dspy.Prediction(score=1.0, feedback='ok')\n"
+    )
+    payload = _payload(
+        optimizer_name="gepa",
+        metric_code=five_arg_metric,
+        reflection_model_config=_MODEL_CFG,
+    )
+
+    service.validate_payload(payload)

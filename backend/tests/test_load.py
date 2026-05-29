@@ -176,7 +176,7 @@ class TestWriteEndpointLoad:
             "signature_code": (
                 "import dspy\nclass S(dspy.Signature):\n    q: str = dspy.InputField()\n    a: str = dspy.OutputField()"
             ),
-            "metric_code": "def metric(e, p, t=None): return 1.0",
+            "metric_code": "def metric(gold, pred, trace=None, pred_name=None, pred_trace=None): return 1.0",
             "optimizer_name": "gepa",
             "dataset": [{"q": "hi", "a": "bye"}],
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
@@ -238,7 +238,7 @@ class TestMixedWorkload:
             "signature_code": (
                 "import dspy\nclass S(dspy.Signature):\n    q: str = dspy.InputField()\n    a: str = dspy.OutputField()"
             ),
-            "metric_code": "def metric(e, p, t=None): return 1.0",
+            "metric_code": "def metric(gold, pred, trace=None, pred_name=None, pred_trace=None): return 1.0",
             "optimizer_name": "gepa",
             "dataset": [{"q": "hi", "a": "bye"}],
             "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},

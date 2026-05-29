@@ -25,14 +25,14 @@ from ..routers._helpers import (
     load_program,
     strip_api_key,
 )
-
-_TEST_USER = AuthenticatedUser(username="alice", role="admin", groups=("skynet-admins",))
 from ..routers.constants import (
     TERMINAL_STATUSES,
     VALID_OPTIMIZATION_TYPES,
     VALID_STATUSES,
 )
 from .mocks import load_fixture
+
+_TEST_USER = AuthenticatedUser(username="alice", role="admin", groups=("skynet-admins",))
 
 
 def test_strip_api_key_removes_nested() -> None:

@@ -209,6 +209,7 @@ def test_persist_program_raises_service_error_when_save_fails() -> None:
 def test_persist_program_raises_service_error_when_json_missing() -> None:
     """A missing ``program.json`` produces the load-failure ``ServiceError``."""
     def _save_nothing(path: str, save_program: bool = False) -> None:
+        """Stand in for ``program.save`` while writing no file."""
         # Deliberately write no file so read_text() raises FileNotFoundError.
         return
 
@@ -247,6 +248,7 @@ def test_persist_program_cleans_up_tempdir_on_success() -> None:
         state = {"demos": [], "metadata": {"dspy_version": "0"}}
 
         def _save_state(path: str, save_program: bool = False) -> None:
+            """Stand in for ``program.save`` by writing ``state`` to ``path``."""
             Path(path).write_text(json.dumps(state))
 
         program = MagicMock()
@@ -285,6 +287,7 @@ def _fake_save_program(state: dict) -> MagicMock:
     """Return a fake program whose ``save`` writes ``state`` to the requested JSON path."""
 
     def _save(path: str, save_program: bool = False) -> None:
+        """Write ``state`` as JSON to ``path`` in place of a real save."""
         Path(path).write_text(json.dumps(state))
 
     program = MagicMock()

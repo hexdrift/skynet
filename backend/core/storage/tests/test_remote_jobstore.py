@@ -15,6 +15,7 @@ here with a clear reason:
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -107,6 +108,7 @@ def test_create_job_default_fields_are_empty(store: SQLiteJobStore) -> None:
     assert result["message"] is None
     assert result["started_at"] is None
     assert result["completed_at"] is None
+    assert result["attempts"] == 0
 
 
 def test_get_job_raises_key_error_for_unknown(store: SQLiteJobStore) -> None:
@@ -298,12 +300,13 @@ def test_record_progress_none_message_allowed(store: SQLiteJobStore) -> None:
     assert store.get_progress_count("p2") == 1
 
 
-def test_record_progress_merges_metrics_into_job(store: SQLiteJobStore) -> None:
-    """Record progress merges metrics into job."""
+def test_record_progress_replaces_latest_metrics_snapshot(store: SQLiteJobStore) -> None:
+    """Record progress replaces latest metrics snapshot."""
     store.create_job("p3")
     store.record_progress("p3", "step", {"acc": 0.9})
+    store.record_progress("p3", "next", {"loss": 0.2})
     job = store.get_job("p3")
-    assert job["latest_metrics"].get("acc") == 0.9
+    assert job["latest_metrics"] == {"loss": 0.2}
 
 
 def test_record_progress_json_metrics_roundtrip(store: SQLiteJobStore) -> None:
@@ -572,20 +575,23 @@ def test_count_jobs_zero_when_empty(store: SQLiteJobStore) -> None:
     assert store.count_jobs() == 0
 
 
-def test_recover_orphaned_jobs_marks_running_as_failed(store: SQLiteJobStore) -> None:
-    """Recover orphaned jobs marks running as failed."""
+def test_recover_orphaned_jobs_requeues_running_job(store: SQLiteJobStore) -> None:
+    """Recover orphaned jobs requeues a first-attempt running job."""
     store.create_job("r1")
     store.update_job("r1", status="running")
     store.recover_orphaned_jobs()
-    assert store.get_job("r1")["status"] == "failed"
+    job = store.get_job("r1")
+    assert job["status"] == "pending"
+    assert job["attempts"] == 1
+    assert job["message"] == "Re-queued after pod failure (attempt 1)"
 
 
-def test_recover_orphaned_jobs_marks_validating_as_failed(store: SQLiteJobStore) -> None:
-    """Recover orphaned jobs marks validating as failed."""
+def test_recover_orphaned_jobs_requeues_validating_job(store: SQLiteJobStore) -> None:
+    """Recover orphaned jobs requeues a first-attempt validating job."""
     store.create_job("r2")
     store.update_job("r2", status="validating")
     store.recover_orphaned_jobs()
-    assert store.get_job("r2")["status"] == "failed"
+    assert store.get_job("r2")["status"] == "pending"
 
 
 def test_recover_orphaned_jobs_leaves_terminal_jobs_intact(store: SQLiteJobStore) -> None:
@@ -610,13 +616,33 @@ def test_recover_orphaned_jobs_returns_count(store: SQLiteJobStore) -> None:
     assert store.recover_orphaned_jobs() == 2
 
 
-def test_recover_orphaned_jobs_sets_completed_at(store: SQLiteJobStore) -> None:
-    """Recover orphaned jobs sets completed at."""
+def test_recover_orphaned_jobs_fails_at_max_attempts(store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Recover orphaned jobs fails the row when the retry cap is reached."""
+    monkeypatch.setattr(remote_mod.settings, "job_max_attempts", 3)
     store.create_job("r8")
-    store.update_job("r8", status="running")
+    store.update_job("r8", status="running", attempts=2)
     store.recover_orphaned_jobs()
     job = store.get_job("r8")
+    assert job["status"] == "failed"
+    assert job["attempts"] == 3
+    assert job["message"] == "Job failed after pod failure (attempt 3)"
     assert job["completed_at"] is not None
+
+
+def test_recover_orphaned_jobs_reports_version_skew_at_max_attempts(
+    store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recover orphaned jobs explains incompatible code versions at the retry cap."""
+    monkeypatch.setattr(remote_mod.settings, "job_max_attempts", 3)
+    monkeypatch.setattr(remote_mod.settings, "code_version", "v2", raising=False)
+    store.create_job("r-version")
+    store.update_job("r-version", status="running", attempts=2, code_version="v1")
+
+    store.recover_orphaned_jobs()
+
+    job = store.get_job("r-version")
+    assert job["status"] == "failed"
+    assert job["message"] == "No compatible worker version available (job=v1, fleet=v2)"
 
 
 def test_recover_orphaned_jobs_returns_zero_when_none_present(store: SQLiteJobStore) -> None:
@@ -634,6 +660,17 @@ def test_recover_pending_jobs_returns_only_pending(store: SQLiteJobStore) -> Non
     pending = store.recover_pending_jobs()
     assert "rp1" in pending
     assert "rp2" not in pending
+
+
+def test_recover_pending_jobs_skips_incompatible_code_version(
+    store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pending local restart hints exclude jobs for a different code version."""
+    monkeypatch.setattr(remote_mod.settings, "code_version", "v2", raising=False)
+    store.create_job("rp-versioned")
+    store.update_job("rp-versioned", code_version="v1")
+
+    assert "rp-versioned" not in store.recover_pending_jobs()
 
 
 def test_recover_pending_jobs_returns_list_of_strings(store: SQLiteJobStore) -> None:
@@ -664,6 +701,7 @@ def test_duplicate_optimization_id_raises_on_insert(store: SQLiteJobStore) -> No
                 created_at=datetime.now(UTC),
                 latest_metrics={},
                 payload_overview={},
+                attempts=0,
             )
             session.add(job)
             session.commit()
@@ -675,6 +713,27 @@ def test_duplicate_optimization_id_raises_on_insert(store: SQLiteJobStore) -> No
 def test_remote_db_job_store_satisfies_job_store_protocol() -> None:
     """Remote db job store satisfies job store protocol."""
     assert isinstance(SQLiteJobStore(), JobStore)
+
+
+def test_claim_next_job_skips_incompatible_code_version(store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A v2 worker cannot claim a job submitted by v1."""
+    monkeypatch.setattr(remote_mod.settings, "code_version", "v2", raising=False)
+    store.create_job("claim-v1")
+    store.update_job("claim-v1", code_version="v1")
+
+    assert store.claim_next_job("pod-v2", lease_seconds=60.0) is None
+
+
+def test_claim_next_job_accepts_null_code_version(store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Jobs without a code version remain claimable by any worker."""
+    monkeypatch.setattr(remote_mod.settings, "code_version", "v2", raising=False)
+    store.create_job("claim-null")
+    store.update_job("claim-null", code_version=None)
+
+    row = store.claim_next_job("pod-v2", lease_seconds=60.0)
+
+    assert row is not None
+    assert row["optimization_id"] == "claim-null"
 
 
 def test_update_job_unknown_field_raises_value_error(store: SQLiteJobStore) -> None:
@@ -736,6 +795,7 @@ def test_progress_eviction_oldest_entry_removed_when_cap_reached(
 ) -> None:
     """Progress eviction oldest entry removed when cap reached."""
     monkeypatch.setattr(remote_mod, "MAX_PROGRESS_EVENTS", 3)
+    monkeypatch.setattr(remote_mod, "PROGRESS_TRIM_SAMPLE_RATE", 1)
 
     store.create_job("evict-prog-1")
     for i in range(3):
@@ -753,6 +813,7 @@ def test_progress_eviction_oldest_entry_removed_when_cap_reached(
 def test_progress_eviction_count_stays_at_cap(store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch) -> None:
     """Progress eviction count stays at cap."""
     monkeypatch.setattr(remote_mod, "MAX_PROGRESS_EVENTS", 3)
+    monkeypatch.setattr(remote_mod, "PROGRESS_TRIM_SAMPLE_RATE", 1)
 
     store.create_job("evict-prog-2")
     for i in range(5):
@@ -764,6 +825,7 @@ def test_progress_eviction_count_stays_at_cap(store: SQLiteJobStore, monkeypatch
 def test_progress_eviction_preserves_structural_events(store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch) -> None:
     """Structural phase markers survive eviction while high-volume rows get dropped."""
     monkeypatch.setattr(remote_mod, "MAX_PROGRESS_EVENTS", 3)
+    monkeypatch.setattr(remote_mod, "PROGRESS_TRIM_SAMPLE_RATE", 1)
 
     store.create_job("evict-prog-3")
     store.record_progress("evict-prog-3", "grid_pair_started", {"pair_index": 0})
@@ -788,6 +850,7 @@ def test_progress_eviction_structural_dropped_only_as_last_resort(
 ) -> None:
     """When every existing row is structural, the oldest structural row is evicted."""
     monkeypatch.setattr(remote_mod, "MAX_PROGRESS_EVENTS", 2)
+    monkeypatch.setattr(remote_mod, "PROGRESS_TRIM_SAMPLE_RATE", 1)
 
     store.create_job("evict-prog-4")
     store.record_progress("evict-prog-4", "grid_pair_started", {"pair_index": 0})
@@ -800,3 +863,125 @@ def test_progress_eviction_structural_dropped_only_as_last_resort(
     assert "grid_pair_started" not in names
     assert "baseline_evaluated" in names
     assert "optimized_evaluated" in names
+
+
+def test_record_progress_does_not_lock_parent_job_row() -> None:
+    """``record_progress`` does not use ``SELECT ... FOR UPDATE`` on jobs."""
+    source = inspect.getsource(RemoteDBJobStore.record_progress)
+
+    assert "with_for_update" not in source
+
+
+def test_update_job_does_not_lock_parent_job_row() -> None:
+    """``update_job`` does not use ``SELECT ... FOR UPDATE`` on jobs.
+
+    Row-level locks held across a SELECT+UPDATE round-trip serialise every
+    writer touching the same id and become a contention hotspot at scale.
+    ``record_progress`` already uses a non-locking pattern; ``update_job``
+    must too.
+    """
+    source = inspect.getsource(RemoteDBJobStore.update_job)
+
+    assert "with_for_update" not in source
+
+
+def test_progress_trim_is_sampled_and_batched(store: SQLiteJobStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sampled trimming allows a small overshoot but keeps rows near the cap."""
+    monkeypatch.setattr(remote_mod, "MAX_PROGRESS_EVENTS", 5000)
+    monkeypatch.setattr(remote_mod, "PROGRESS_TRIM_SAMPLE_RATE", 100)
+
+    store.create_job("sampled-trim")
+    for i in range(5200):
+        store.record_progress("sampled-trim", "optimizer_progress", {"i": i})
+
+    assert 5000 <= store.get_progress_count("sampled-trim") <= 5100
+
+
+def test_engine_kwargs_use_configured_pool_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Engine kwargs read DB pool settings from configuration."""
+    monkeypatch.setattr(remote_mod.settings, "db_pool_size", 12)
+    monkeypatch.setattr(remote_mod.settings, "db_pool_max_overflow", 7)
+    monkeypatch.setattr(remote_mod.settings, "db_pool_recycle_seconds", 600)
+
+    kwargs = remote_mod._build_engine_kwargs("postgresql://user:pass@localhost/skynet")
+
+    assert kwargs["pool_size"] == 12
+    assert kwargs["max_overflow"] == 7
+    assert kwargs["pool_recycle"] == 600
+
+
+def test_pgbouncer_transaction_mode_disables_psycopg_prepared_statements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Psycopg3 URLs disable server-side prepared statements for PgBouncer."""
+    monkeypatch.setattr(remote_mod.settings, "db_pgbouncer_transaction_mode", True)
+
+    connect_args = remote_mod._build_connect_args("postgresql+psycopg://user:pass@localhost/skynet")
+
+    assert connect_args["prepare_threshold"] is None
+
+
+def test_create_job_persists_username_and_idempotency_key(store: SQLiteJobStore) -> None:
+    """``create_job`` records the submitter and dedup key when supplied."""
+    store.create_job("idem-create-1", username="alice", idempotency_key="abc-123")
+
+    row = store.get_job("idem-create-1")
+    assert row["username"] == "alice"
+
+
+def test_find_job_by_idempotency_key_returns_prior_submission(store: SQLiteJobStore) -> None:
+    """Looking up a prior ``(username, idempotency_key)`` pair returns its job id."""
+    store.create_job("idem-find-1", username="bob", idempotency_key="key-xyz")
+
+    found = store.find_job_by_idempotency_key("bob", "key-xyz")
+
+    assert found == "idem-find-1"
+
+
+def test_find_job_by_idempotency_key_scopes_by_username(store: SQLiteJobStore) -> None:
+    """Two users sharing the same key resolve to distinct jobs."""
+    store.create_job("idem-scope-a", username="alice", idempotency_key="shared")
+    store.create_job("idem-scope-b", username="bob", idempotency_key="shared")
+
+    assert store.find_job_by_idempotency_key("alice", "shared") == "idem-scope-a"
+    assert store.find_job_by_idempotency_key("bob", "shared") == "idem-scope-b"
+
+
+def test_find_job_by_idempotency_key_returns_none_for_unknown(store: SQLiteJobStore) -> None:
+    """Unknown key returns ``None`` rather than raising."""
+    assert store.find_job_by_idempotency_key("alice", "never-seen") is None
+
+
+def test_find_job_by_idempotency_key_rejects_empty_inputs(store: SQLiteJobStore) -> None:
+    """Empty username or key short-circuits to ``None`` (no wildcard match)."""
+    store.create_job("idem-empty-1", username="alice", idempotency_key="real-key")
+
+    assert store.find_job_by_idempotency_key("", "real-key") is None
+    assert store.find_job_by_idempotency_key("alice", "") is None
+
+
+def test_claim_completion_notification_first_caller_wins(store: SQLiteJobStore) -> None:
+    """The first caller to claim a job's notification wins."""
+    store.create_job("notify-claim-1")
+
+    assert store.claim_completion_notification("notify-claim-1") is True
+
+
+def test_claim_completion_notification_second_caller_loses(store: SQLiteJobStore) -> None:
+    """The second caller for the same job loses the CAS race."""
+    store.create_job("notify-claim-2")
+
+    store.claim_completion_notification("notify-claim-2")
+
+    assert store.claim_completion_notification("notify-claim-2") is False
+
+
+def test_claim_completion_notification_missing_job_returns_false(store: SQLiteJobStore) -> None:
+    """A missing job id reports ``False`` rather than raising."""
+    assert store.claim_completion_notification("no-such-job") is False
+
+
+def test_immutable_columns_include_notification_and_idempotency_fields() -> None:
+    """``_IMMUTABLE_JOB_COLUMNS`` guards the new dedup columns from ``update_job``."""
+    assert "notified_at" in remote_mod._IMMUTABLE_JOB_COLUMNS
+    assert "idempotency_key" in remote_mod._IMMUTABLE_JOB_COLUMNS
