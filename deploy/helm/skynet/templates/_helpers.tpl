@@ -36,6 +36,10 @@ Standard naming + labelling helpers for the skynet chart.
 {{- printf "%s-postgres" (include "skynet.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "skynet.pgbouncer.fullname" -}}
+{{- printf "%s-pgbouncer" (include "skynet.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{/* Common labels applied to all resources */}}
 {{- define "skynet.labels" -}}
 helm.sh/chart: {{ include "skynet.chart" . }}
@@ -69,6 +73,11 @@ app.kubernetes.io/component: frontend
 {{- define "skynet.postgres.selectorLabels" -}}
 {{ include "skynet.selectorLabels" . }}
 app.kubernetes.io/component: postgres
+{{- end -}}
+
+{{- define "skynet.pgbouncer.selectorLabels" -}}
+{{ include "skynet.selectorLabels" . }}
+app.kubernetes.io/component: pgbouncer
 {{- end -}}
 
 {{/* Service account names */}}
@@ -115,6 +124,17 @@ default
 {{- $reg := .Values.global.imageRegistry -}}
 {{- $repo := .Values.postgres.image.repository -}}
 {{- $tag := .Values.postgres.image.tag -}}
+{{- if $reg -}}
+{{- printf "%s/%s:%s" $reg $repo $tag -}}
+{{- else -}}
+{{- printf "%s:%s" $repo $tag -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "skynet.pgbouncer.image" -}}
+{{- $reg := .Values.global.imageRegistry -}}
+{{- $repo := .Values.pgbouncer.image.repository -}}
+{{- $tag := .Values.pgbouncer.image.tag -}}
 {{- if $reg -}}
 {{- printf "%s/%s:%s" $reg $repo $tag -}}
 {{- else -}}
@@ -170,6 +190,22 @@ imagePullSecrets:
 {{- .Values.externalDatabase.port -}}
 {{- else -}}
 {{- .Values.postgres.service.port -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "skynet.backendDbHost" -}}
+{{- if .Values.pgbouncer.enabled -}}
+{{- include "skynet.pgbouncer.fullname" . -}}
+{{- else -}}
+{{- include "skynet.dbHost" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "skynet.backendDbPort" -}}
+{{- if .Values.pgbouncer.enabled -}}
+{{- .Values.pgbouncer.service.port -}}
+{{- else -}}
+{{- include "skynet.dbPort" . -}}
 {{- end -}}
 {{- end -}}
 

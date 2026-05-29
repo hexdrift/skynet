@@ -8,6 +8,14 @@ metadata:
     app.kubernetes.io/component: backend
 spec:
   type: {{ .Values.backend.service.type }}
+  {{- with .Values.backend.service.sessionAffinity }}
+  sessionAffinity: {{ . }}
+  {{- end }}
+  {{- if and (eq (.Values.backend.service.sessionAffinity | default "") "ClientIP") .Values.backend.service.sessionAffinityTimeoutSeconds }}
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ .Values.backend.service.sessionAffinityTimeoutSeconds }}
+  {{- end }}
   ports:
     - name: http
       port: {{ .Values.backend.service.port }}

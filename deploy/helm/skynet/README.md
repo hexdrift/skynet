@@ -33,6 +33,7 @@ helm upgrade --install skynet deploy/helm/skynet \
 |-----------|---------------------------|------------------|-----------|
 | backend   | Deployment + Service + Route + HPA + PDB + NetworkPolicy | 2 | 2–8 |
 | frontend  | Deployment + Service + Route + HPA + PDB + NetworkPolicy | 2 | 2–4 |
+| pgbouncer | Deployment + Service (optional, transaction pooling) | 2 | n/a |
 | postgres  | StatefulSet + headless Service (gated by `postgres.enabled`) | 1 | n/a |
 | migrate   | Job (pre-install / pre-upgrade hook, weight -5) | one-shot | n/a |
 
@@ -69,7 +70,7 @@ helm upgrade skynet deploy/helm/skynet --reuse-values \
 
 | Value | Purpose |
 |-------|---------|
-| `backend.env.WORKER_CONCURRENCY` | Threaded worker fan-out per replica (default 2). |
+| `backend.env.WORKER_CONCURRENCY` | Threaded worker fan-out per replica (default 4). |
 | `backend.env.WORKER_POLL_INTERVAL` | DB poll cadence in seconds (default 2.0). |
 | `backend.env.RECOMMENDATIONS_ENABLED` | Master switch for the embedding/recommendation pipeline. |
 | `backend.env.RECOMMENDATIONS_EMBEDDING_BASE_URL` | Internal OpenAI-compatible embedding API base URL. |
@@ -77,6 +78,8 @@ helm upgrade skynet deploy/helm/skynet --reuse-values \
 | `backend.env.CODE_AGENT_BASE_URL` | Override for internal OpenAI-compatible gateway. |
 | `frontend.env.API_URL` | Runtime backend address. Empty → in-cluster service. |
 | `openshift.routes.backend.annotations` | Default `haproxy.router.openshift.io/timeout: 5m` for long optimization runs. |
+| `backend.autoscaling.queueDepth` | External metric target for pending jobs; requires Prometheus Adapter. CPU remains as fallback. |
+| `pgbouncer.enabled` | Optional transaction-pooler in front of Postgres; backend pods set `DB_PGBOUNCER_TRANSACTION_MODE=true` when enabled. |
 | `migration.command` | Will switch to `["alembic", "upgrade", "head"]` after Wave 3. |
 
 ## Uninstall
