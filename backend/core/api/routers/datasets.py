@@ -13,21 +13,31 @@ so non-technical users can try the product end-to-end with zero setup.
 and return a ``wizard_state`` patch so the agent can configure column
 roles on the user's behalf.
 
+``POST /datasets/request-upload`` — agent-callable signal that the chat
+UI should render an inline upload card so the user can attach a dataset
+file. Stateless; the upload itself is handled client-side.
+
 All endpoints are hidden from the public Scalar reference (none are in
 ``_SCALAR_PUBLIC_PATHS``) — they exist to support the in-app wizard.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from ...i18n import SAMPLE_DATASETS
-from ...models import ProfileDatasetRequest, ProfileDatasetResponse
+from ...models import (
+    ProfileDatasetRequest,
+    ProfileDatasetResponse,
+    ValidateDatasetRequest,
+    ValidateDatasetResponse,
+)
 from ...service_gateway.datasets.planner import recommend_split
 from ...service_gateway.datasets.profiler import profile_dataset
+from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 
 
@@ -75,11 +85,49 @@ class ColumnRolesResponse(BaseModel):
     wizard_state: dict[str, Any]
 
 
+class RequestUserDatasetRequest(BaseModel):
+    """Request body for ``POST /datasets/request-upload``."""
+
+    prompt: str = Field(
+        default="",
+        max_length=400,
+        description="Short Hebrew sentence explaining why a dataset is needed.",
+    )
+
+
+class RequestUserDatasetResponse(BaseModel):
+    """Envelope for ``POST /datasets/request-upload`` — UI-trigger marker."""
+
+    awaiting_upload: bool
+    prompt: str
+
+
+class StageDatasetForAgentRequest(BaseModel):
+    """Request body for ``POST /datasets/stage-for-agent``."""
+
+    dataset: list[dict[str, Any]] = Field(min_length=1, max_length=200_000)
+    dataset_filename: str = Field(min_length=1, max_length=255)
+
+
+class StageDatasetForAgentResponse(BaseModel):
+    """Envelope for ``POST /datasets/stage-for-agent`` — opaque staged id."""
+
+    staged_dataset_id: str
+    row_count: int
+
+
 _VALID_COLUMN_ROLES = {"input", "output", "ignore"}
 
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
-def create_datasets_router() -> APIRouter:
+
+def create_datasets_router(*, job_store) -> APIRouter:
     """Build the datasets router.
+
+    Args:
+        job_store: Backend used by ``POST /datasets/stage-for-agent`` to persist
+            wizard-parsed rows so the generalist agent can submit jobs without
+            inlining the dataset into its tool arguments.
 
     Returns:
         A configured :class:`APIRouter` exposing the dataset profile, sample,
@@ -113,6 +161,43 @@ def create_datasets_router() -> APIRouter:
         dataset_profile = profile_dataset(payload.dataset, payload.column_mapping)
         plan = recommend_split(dataset_profile, seed=payload.seed)
         return ProfileDatasetResponse(profile=dataset_profile, plan=plan)
+
+    @router.post(
+        "/datasets/validate",
+        response_model=ValidateDatasetResponse,
+        summary="Pre-submit validation that the chosen split is runnable",
+        tags=["agent"],
+    )
+    def validate(payload: ValidateDatasetRequest) -> ValidateDatasetResponse:
+        """Block submissions whose split leaves zero held-out examples.
+
+        Mirrors ``POST /validate-code``: a small synchronous preflight the
+        submit wizard runs before letting the user advance past the
+        dataset step. A split with ``val=0`` and ``test=0`` produces no
+        held-out data for evaluation, so the optimization can't measure
+        improvement and must be rejected here rather than failing later.
+
+        Args:
+            payload: Request containing the dataset row count and the
+                chosen train/val/test fractions.
+
+        Returns:
+            A :class:`ValidateDatasetResponse` with ``valid``, ``errors``,
+            and ``warnings`` lists.
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+        total = payload.row_count
+        if total <= 0:
+            errors.append("Dataset is empty.")
+        else:
+            val_count = int(total * payload.fractions.val)
+            test_count = int(total * payload.fractions.test)
+            if val_count + test_count == 0:
+                errors.append(
+                    "Dataset is too small to run optimization: chosen split has 0 validation and 0 test rows."
+                )
+        return ValidateDatasetResponse(valid=not errors, errors=errors, warnings=warnings)
 
     @router.get(
         "/datasets/samples",
@@ -258,5 +343,67 @@ def create_datasets_router() -> APIRouter:
             wizard_state["job_name"] = req.job_name.strip()
 
         return ColumnRolesResponse(wizard_state=wizard_state)
+
+    @router.post(
+        "/datasets/request-upload",
+        response_model=RequestUserDatasetResponse,
+        summary="Ask the user to upload a dataset; the chat panel renders an upload card",
+        tags=["agent"],
+    )
+    def request_user_dataset(req: RequestUserDatasetRequest) -> RequestUserDatasetResponse:
+        """Signal the chat UI to render an inline dataset-upload card.
+
+        Stateless: the endpoint exists only so the agent can call a named
+        tool that the frontend recognizes via its ``tool_start`` SSE event.
+        The actual file parsing, role mapping, and wizard hydration happen
+        client-side in the rendered card. The agent should call this once
+        and then wait for the user to attach the file in the chat.
+
+        Args:
+            req: Optional prompt describing why the dataset is needed.
+
+        Returns:
+            A :class:`RequestUserDatasetResponse` carrying the prompt back
+            so it can render inside the upload card.
+        """
+        return RequestUserDatasetResponse(
+            awaiting_upload=True,
+            prompt=req.prompt.strip(),
+        )
+
+    @router.post(
+        "/datasets/stage-for-agent",
+        response_model=StageDatasetForAgentResponse,
+        summary="Persist parsed wizard rows so the agent can submit by id",
+        operation_id="stage_dataset_for_agent",
+    )
+    def stage_dataset_for_agent(
+        req: StageDatasetForAgentRequest,
+        current_user: AuthenticatedUserDep,
+    ) -> StageDatasetForAgentResponse:
+        """Persist a parsed dataset under the caller's identity and return an opaque id.
+
+        The wizard calls this immediately after a successful upload+parse so a
+        later ``POST /run`` from the generalist agent can pass
+        ``staged_dataset_id`` instead of inlining the rows. Each staged row is
+        scoped to the authenticated submitter and is evicted on first use.
+
+        Args:
+            req: The parsed dataset rows and original filename.
+            current_user: Authenticated submitter resolved from the bearer token.
+
+        Returns:
+            A :class:`StageDatasetForAgentResponse` carrying the staged id and
+            the number of rows persisted.
+        """
+        staged_id = job_store.stage_dataset(
+            username=current_user.username,
+            dataset_filename=req.dataset_filename,
+            rows=req.dataset,
+        )
+        return StageDatasetForAgentResponse(
+            staged_dataset_id=staged_id,
+            row_count=len(req.dataset),
+        )
 
     return router

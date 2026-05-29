@@ -191,5 +191,5 @@ def track_stage(
     try:
         yield
     finally:
-        for cb, prev in zip(callbacks, previous):
+        for cb, prev in zip(callbacks, previous, strict=False):
             cb.set_stage(prev)

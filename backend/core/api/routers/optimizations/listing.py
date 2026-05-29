@@ -101,7 +101,8 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
             le=AGENT_MAX_LIST,
             description=(
                 f"Page size (default {AGENT_DEFAULT_LIST}, ceiling {AGENT_MAX_LIST}). "
-                "Paginate with offset — the agent context stays small that way."
+                "Use the default unless the user explicitly asks for fewer; "
+                "paginate with offset."
             ),
         ),
         offset: int = Query(

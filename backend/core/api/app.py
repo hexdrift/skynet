@@ -42,19 +42,44 @@ except ImportError:  # Optional dep: tests/CI can run without the Scalar docs UI
     DocumentDownloadType = None  # type: ignore[assignment, misc]
     get_scalar_api_reference = None  # type: ignore[assignment]
 
+from ..config import settings
 from ..exceptions import AppError
 from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..registry import ServiceRegistry
+from ..registry.resolvers import (
+    MODULE_ALIASES,
+    OPTIMIZER_ALIASES,
+    resolve_module_factory,
+    resolve_optimizer_factory,
+)
 from ..service_gateway import DspyService
-from ..service_gateway.embedding_pipeline import backfill_missing_embeddings, purge_orphan_embeddings
+from ..service_gateway.embedding_pipeline import (
+    backfill_missing_conversation_embeddings,
+    backfill_missing_embeddings,
+    purge_orphan_conversation_embeddings,
+    purge_orphan_embeddings,
+)
 from ..storage import get_job_store
 from ..worker.engine import BackgroundWorker, get_worker
 from .directory_client import build_directory_client
 from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
-from .observability import get_request_id, install_metrics, install_request_id_middleware
+from .model_catalog import prewarm_catalog
+from .observability import (
+    STARTUP_WORK_LOCK_KEY,
+    advisory_lock,
+    get_request_id,
+    install_metrics,
+    install_request_id_middleware,
+    start_event_loop_lag_monitor,
+    start_orphan_recovery_sweeper,
+    start_queue_metrics_refresher,
+    start_stale_conversation_sweeper,
+)
 from .routers.admin import create_admin_router
+from .routers.agent_history import create_agent_history_router
 from .routers.analytics import create_analytics_router
+from .routers.api_tokens import create_api_tokens_router
 from .routers.code_agent import create_code_agent_router
 from .routers.code_validation import create_code_validation_router
 from .routers.dashboard import create_dashboard_router
@@ -66,7 +91,6 @@ from .routers.optimizations_meta import create_optimizations_meta_router
 from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
 from .routers.submissions import create_submissions_router
-from .routers.templates import create_templates_router, ensure_template_schema
 from .routers.wizard import create_wizard_router
 
 logger = logging.getLogger(__name__)
@@ -426,7 +450,6 @@ _OPENAPI_TAGS = [
     {"name": "Analytics", "description": "Aggregate stats across jobs, optimizers, and models."},
     {"name": "Models", "description": "Model catalog and provider discovery."},
     {"name": "Datasets", "description": "Profile uploaded datasets and recommend split plans."},
-    {"name": "Templates", "description": "Save and reuse job configuration templates."},
     {"name": "Code Validation", "description": "Format and validate user-supplied Python code."},
     {"name": "System", "description": "Health and queue status for readiness probes."},
 ]
@@ -504,6 +527,17 @@ def create_app(
         The fully wired :class:`FastAPI` application.
     """
     registry = registry or ServiceRegistry()
+    # Mirror the alias-backed factories from the resolver into the registry
+    # so ``get_registry_snapshot`` reflects the actually-supported names
+    # rather than empty lists. Skipped on names already registered so a
+    # pre-built ``registry`` (tests, custom deployments) wins.
+    for _alias in OPTIMIZER_ALIASES:
+        if _alias not in registry.optimizers:
+            registry.register_optimizer(_alias, resolve_optimizer_factory(_alias))
+    for _alias in MODULE_ALIASES:
+        if _alias not in registry.modules:
+            _factory, _ = resolve_module_factory(_alias)
+            registry.register_module(_alias, _factory)
     service = service or DspyService(
         registry,
         **(service_kwargs or {}),
@@ -512,6 +546,10 @@ def create_app(
     job_store = get_job_store()
 
     worker: BackgroundWorker | None = None
+    queue_metrics_refresher = None
+    orphan_sweeper = None
+    stale_conversation_sweeper = None
+    loop_lag_monitor = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -523,14 +561,12 @@ def create_app(
         Yields:
             ``None`` once the worker is running; stops the worker on exit.
         """
-        nonlocal worker
-        # DDL belongs at startup, not router construction — keeps the
-        # router factory side-effect-free and concentrates schema setup
-        # in a single observable place.
-        ensure_template_schema(job_store)
+        nonlocal loop_lag_monitor, orphan_sweeper, queue_metrics_refresher, stale_conversation_sweeper, worker
         # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
         # this only fails rows whose ``lease_expires_at`` is in the past — a
-        # peer pod's in-flight job is not orphaned and is left alone.
+        # peer pod's in-flight job is not orphaned and is left alone. The
+        # periodic sweeper (below) covers steady-state; this one-shot keeps
+        # boot latency low when a single replica restarts.
         job_store.recover_orphaned_jobs()
         # ``recover_pending_jobs`` is no longer required for correctness because
         # any pod can claim a pending row via ``claim_next_job`` on its next
@@ -538,23 +574,62 @@ def create_app(
         # resumes work without waiting a full poll interval.
         pending_ids = job_store.recover_pending_jobs()
         worker = get_worker(job_store, service=service, pending_optimization_ids=pending_ids)
+        queue_metrics_refresher = start_queue_metrics_refresher(job_store)
+        # Without a periodic sweeper, a pod that dies mid-job leaves its
+        # leases ticking down with no peer scanning for them — the row is
+        # only requeued at the next pod restart. The sweeper is gated by a
+        # Postgres advisory lock so only one replica per tick does the work.
+        orphan_sweeper = start_orphan_recovery_sweeper(job_store)
+        stale_conversation_sweeper = start_stale_conversation_sweeper(
+            getattr(job_store, "engine", None)
+        )
+        if settings.event_loop_lag_monitor_enabled:
+            loop_lag_monitor = start_event_loop_lag_monitor()
+            logger.info("Event-loop lag monitor enabled (threshold %.0fms)", settings.event_loop_lag_threshold_ms)
         if pending_ids:
             logger.info("Re-queued %d pending jobs from previous run (local hint)", len(pending_ids))
         logger.info("Background worker started")
 
-        # Embedding the explore-map vector is on a daemon thread when a job
-        # succeeds; a crashed thread (LLM creds, API blip) leaves the row
-        # missing forever and the map silently drops the job. A startup
-        # backfill drains the gap so the index heals after a restart, and a
-        # one-shot orphan sweep cleans up any rows whose job was deleted
-        # before the deletion path cascaded into job_embeddings.
-        try:
-            purge_orphan_embeddings(job_store)
-            queued = backfill_missing_embeddings(job_store)
-            if queued:
-                logger.info("Embedding backfill queued for %d job(s)", queued)
-        except Exception as exc:
-            logger.warning("Embedding backfill scan failed: %s", exc)
+        # Probe every provider's /v1/models endpoint in a background thread
+        # so the catalog is hot by the time the first agent turn arrives.
+        # Without this the first ``list_models_for_agent`` request waits
+        # ~15-20s for the cold-cache parallel probe to settle.
+        prewarm_catalog()
+
+        # Embedding maintenance below is idempotent but redundantly expensive
+        # across a rolling deploy. The advisory lock makes one replica the
+        # leader so the work runs once per restart, not once per pod. Peers
+        # skip the block and trust the leader's writes (visible in the
+        # shared DB before they begin serving traffic).
+        engine = getattr(job_store, "engine", None)
+        with advisory_lock(engine, STARTUP_WORK_LOCK_KEY) as is_startup_leader:
+            if is_startup_leader:
+                # The explore-map vector is embedded on a daemon thread when
+                # a job succeeds; a crashed thread (LLM creds, API blip)
+                # leaves the row missing forever and the map silently drops
+                # the job. A startup backfill drains the gap; the orphan
+                # purge cleans up rows whose job was deleted before the
+                # cascade into job_embeddings completed.
+                try:
+                    purge_orphan_embeddings(job_store)
+                    queued = backfill_missing_embeddings(job_store)
+                    if queued:
+                        logger.info("Embedding backfill queued for %d job(s)", queued)
+                except Exception as exc:
+                    logger.warning("Embedding backfill scan failed: %s", exc)
+                if engine is not None:
+                    try:
+                        purge_orphan_conversation_embeddings(engine)
+                        conv_queued = backfill_missing_conversation_embeddings(engine)
+                        if conv_queued:
+                            logger.info(
+                                "Conversation embedding backfill queued for %d row(s)",
+                                conv_queued,
+                            )
+                    except Exception as exc:
+                        logger.warning("Conversation embedding backfill scan failed: %s", exc)
+            else:
+                logger.info("Embedding maintenance skipped — peer replica is leader")
 
         # SIGTERM handler can only be registered on the main interpreter
         # thread. ``threading.current_thread()`` lets us detect when the
@@ -576,6 +651,14 @@ def create_app(
             if worker:
                 worker.stop()
                 logger.info("Background worker stopped")
+            if queue_metrics_refresher:
+                queue_metrics_refresher.stop()
+            if orphan_sweeper:
+                orphan_sweeper.stop()
+            if stale_conversation_sweeper:
+                stale_conversation_sweeper.stop()
+            if loop_lag_monitor:
+                loop_lag_monitor.stop()
 
     app = FastAPI(
         title="Skynet",
@@ -715,7 +798,12 @@ def create_app(
         """
         body: dict[str, Any] = {
             "type": f"https://errors.skynet.app/{code}" if code else "about:blank",
-            "title": title or (code.replace("_", " ").replace(".", " ").capitalize() if code else error_type.replace("_", " ").capitalize()),
+            "title": title
+            or (
+                code.replace("_", " ").replace(".", " ").capitalize()
+                if code
+                else error_type.replace("_", " ").capitalize()
+            ),
             "status": status,
             "detail": detail,
             "instance": request.url.path,
@@ -930,6 +1018,11 @@ def create_app(
             workers_alive=worker.threads_alive(),
         )
 
+    # Expose the store on app.state so the auth dependency can resolve
+    # personal access tokens against the api_tokens table at request time —
+    # the only request-reachable handle to the store (routers otherwise get it
+    # via closure, which a module-level dependency can't reach).
+    app.state.job_store = job_store
     app.include_router(create_models_router(), tags=["Models"])
     app.include_router(
         create_admin_router(job_store=job_store, directory_client=build_directory_client()),
@@ -938,8 +1031,10 @@ def create_app(
     app.include_router(create_registry_router(registry=registry), tags=["Registry"])
     app.include_router(create_code_validation_router(), tags=["Code Validation"])
     app.include_router(create_code_agent_router(), tags=["Code Validation"])
-    app.include_router(create_generalist_agent_router(), tags=["Optimizations"])
-    app.include_router(create_datasets_router(), tags=["Datasets"])
+    app.include_router(create_generalist_agent_router(job_store=job_store), tags=["Optimizations"])
+    app.include_router(create_agent_history_router(job_store=job_store), tags=["Optimizations"])
+    app.include_router(create_api_tokens_router(job_store=job_store), tags=["Settings"])
+    app.include_router(create_datasets_router(job_store=job_store), tags=["Datasets"])
     app.include_router(create_wizard_router(), tags=["Wizard"])
     app.include_router(
         create_submissions_router(service=service, job_store=job_store),
@@ -951,7 +1046,6 @@ def create_app(
         tags=["Optimizations"],
     )
     app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
-    app.include_router(create_templates_router(job_store=job_store), tags=["Templates"])
     app.include_router(
         create_dashboard_router(job_store=job_store),
         tags=["Dashboard"],

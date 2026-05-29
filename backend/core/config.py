@@ -7,6 +7,7 @@ validates environment variables at startup and provides typed access.
 from __future__ import annotations
 
 import json
+import subprocess
 from functools import cached_property
 from pathlib import Path
 from typing import Literal
@@ -15,6 +16,7 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).parent.parent / ".env"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Both agents (submit-wizard code agent + Cmd/Ctrl+J generalist) default
 # to this one model id, so a single swap covers both; override per agent
@@ -23,8 +25,9 @@ _ENV_FILE = Path(__file__).parent.parent / ".env"
 # TODO: On-prem / air-gap — set this to whatever LiteLLM identifier your
 # internal gateway exposes (e.g. "openai/<model>") and point
 # CODE_AGENT_BASE_URL / GENERALIST_AGENT_BASE_URL at the gateway via env.
-# The shipped default is Fireworks-hosted and only works when the host
-# has egress to api.fireworks.ai.
+# The shipped default is Fireworks-hosted MiniMax M2p7 — pinned to
+# Fireworks (not OpenRouter) so tool-calling fidelity is consistent.
+# Requires FIREWORKS_AI_API_KEY in the env.
 DEFAULT_AGENT_MODEL_ID = "fireworks_ai/accounts/fireworks/models/minimax-m2p7"
 
 
@@ -47,6 +50,14 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr | None = Field(default=None, description="OpenAI API key for model access")
     anthropic_api_key: SecretStr | None = Field(default=None, description="Anthropic API key for Claude models")
+    fireworks_ai_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Fireworks API key. LiteLLM reads it from the env for serving; the "
+            "training-ground grounding scorer reads it here to call the echo "
+            "completions endpoint directly."
+        ),
+    )
 
     worker_threads: int = Field(
         default=4, ge=1, le=32, description="Number of concurrent worker threads", alias="WORKER_CONCURRENCY"
@@ -56,6 +67,49 @@ class Settings(BaseSettings):
     )
     worker_stale_threshold: float = Field(
         default=600.0, ge=60.0, description="Seconds of inactivity before worker flagged as stuck"
+    )
+    job_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Maximum orphan-recovery attempts before a job is marked failed",
+        alias="JOB_MAX_ATTEMPTS",
+    )
+    orphan_sweep_interval_seconds: float = Field(
+        default=30.0,
+        ge=5.0,
+        le=600.0,
+        description="Seconds between periodic orphan-recovery sweeps (advisory-lock-gated)",
+        alias="ORPHAN_SWEEP_INTERVAL",
+    )
+    stale_conversation_threshold_days: int = Field(
+        default=30,
+        ge=1,
+        le=3650,
+        description="Days of inactivity before an unpinned agent conversation is auto-purged",
+        alias="STALE_CONVERSATION_THRESHOLD_DAYS",
+    )
+    stale_conversation_sweep_interval_seconds: float = Field(
+        default=86400.0,
+        ge=300.0,
+        description="Seconds between stale-conversation purge sweeps (advisory-lock-gated)",
+        alias="STALE_CONVERSATION_SWEEP_INTERVAL",
+    )
+    event_loop_lag_monitor_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable an asyncio task that measures event-loop scheduling lag. "
+            "Lag > threshold means a handler is doing sync CPU work and "
+            "blocking the loop — diagnostic only, leave off in prod."
+        ),
+        alias="EVENT_LOOP_LAG_MONITOR",
+    )
+    event_loop_lag_threshold_ms: float = Field(
+        default=100.0,
+        ge=10.0,
+        le=10000.0,
+        description="Warn when event-loop lag exceeds this many milliseconds.",
+        alias="EVENT_LOOP_LAG_THRESHOLD_MS",
     )
     progress_events_per_job_cap: int = Field(
         default=5000,
@@ -72,6 +126,42 @@ class Settings(BaseSettings):
     )
     job_run_start_method: Literal["fork", "spawn", "forkserver"] = Field(
         default="fork", description="Multiprocessing start method for job execution"
+    )
+    db_pool_size: int = Field(default=10, ge=1, le=200, description="SQLAlchemy pool size", alias="DB_POOL_SIZE")
+    db_pool_max_overflow: int = Field(
+        default=20,
+        ge=0,
+        le=200,
+        description="SQLAlchemy max overflow connections",
+        alias="DB_POOL_MAX_OVERFLOW",
+    )
+    db_pool_recycle_seconds: int = Field(
+        default=3600,
+        ge=60,
+        description="Seconds before SQLAlchemy recycles a pooled DB connection",
+        alias="DB_POOL_RECYCLE",
+    )
+    db_pool_timeout_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description="Seconds SQLAlchemy waits for a free pool connection before erroring",
+        alias="DB_POOL_TIMEOUT",
+    )
+    db_pgbouncer_transaction_mode: bool = Field(
+        default=False,
+        description="Disable driver features incompatible with PgBouncer transaction pooling",
+        alias="DB_PGBOUNCER_TRANSACTION_MODE",
+    )
+    skynet_code_version: str = Field(
+        default="",
+        description="Build git SHA used to keep queued jobs on compatible workers",
+        alias="SKYNET_CODE_VERSION",
+    )
+    require_code_version: bool = Field(
+        default=False,
+        description="Refuse to start if code_version can't be resolved (production safety)",
+        alias="REQUIRE_CODE_VERSION",
     )
 
     artifacts_dir: str = Field(default="artifacts", description="Directory for storing optimized program artifacts")
@@ -133,7 +223,7 @@ class Settings(BaseSettings):
         default=DEFAULT_AGENT_MODEL_ID,
         description=(
             "LiteLLM model id used by the submit-wizard code agent. "
-            "Defaults to DEFAULT_AGENT_MODEL_ID (Fireworks-hosted); "
+            "Defaults to DEFAULT_AGENT_MODEL_ID (Fireworks-hosted MiniMax M2p7); "
             "override via CODE_AGENT_MODEL for on-prem deployments."
         ),
     )
@@ -153,14 +243,14 @@ class Settings(BaseSettings):
         default=DEFAULT_AGENT_MODEL_ID,
         description=(
             "LiteLLM model id used by the generalist agent (Cmd/Ctrl+J "
-            "panel). Defaults to DEFAULT_AGENT_MODEL_ID; the shipped "
-            "default emits <think> reasoning that streams visibly to the "
-            "chat UI."
+            "panel). Defaults to DEFAULT_AGENT_MODEL_ID (Fireworks-hosted "
+            "MiniMax M2p7); the shipped default emits <think> reasoning that "
+            "streams visibly to the chat UI."
         ),
     )
     # TODO: On-prem / air-gap — set GENERALIST_AGENT_BASE_URL to your internal
     # OpenAI-compatible gateway. The default empty string lets LiteLLM choose
-    # the public Fireworks endpoint, which an air-gapped host cannot reach.
+    # the public OpenRouter endpoint, which an air-gapped host cannot reach.
     generalist_agent_base_url: str = Field(
         default="",
         description="Optional custom base URL for the generalist agent LM (e.g. internal OpenAI-compatible gateway)",
@@ -280,9 +370,7 @@ class Settings(BaseSettings):
             # bool is an int subclass, so reject it explicitly to avoid silently
             # treating ``true``/``false`` as quota 1/0.
             if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
-                raise ValueError(
-                    f"QUOTA_OVERRIDES['{key}'] must be int or null, got {type(value).__name__}"
-                )
+                raise ValueError(f"QUOTA_OVERRIDES['{key}'] must be int or null, got {type(value).__name__}")
             normalised[key.strip().lower()] = value
         return json.dumps(normalised)
 
@@ -310,6 +398,45 @@ class Settings(BaseSettings):
         normalises the JSON to lowercase keys.
         """
         return json.loads(self.quota_overrides_json)
+
+    @cached_property
+    def code_version(self) -> str:
+        """Return the build version used for job-claim compatibility checks.
+
+        Resolution order: ``SKYNET_CODE_VERSION`` env, then a local git lookup,
+        then the literal ``"unknown"``. With ``REQUIRE_CODE_VERSION=true``,
+        falling through to ``"unknown"`` raises — production builds must bake
+        the SHA into the image so staged rollouts don't have multiple pods
+        claiming each other's ``"unknown"``-tagged work.
+
+        Raises:
+            RuntimeError: When the fallback resolves to ``"unknown"`` and
+                ``require_code_version`` is enabled.
+        """
+        configured = self.skynet_code_version.strip()
+        if configured:
+            return configured[:40]
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=_REPO_ROOT,
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=2,
+            )
+            resolved = result.stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            resolved = ""
+        if resolved:
+            return resolved[:40]
+        if self.require_code_version:
+            raise RuntimeError(
+                "SKYNET_CODE_VERSION is unset and no git checkout is available — "
+                "set REQUIRE_CODE_VERSION=false for local dev, or bake the SHA "
+                "into the image (Dockerfile passes GIT_SHA build arg).",
+            )
+        return "unknown"
 
     def get_user_quota(self, username: str) -> int | None:
         """Return the effective job quota for a user.

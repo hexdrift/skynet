@@ -251,7 +251,8 @@ def _fetch_projection_rows(session: Session) -> list[dict[str, Any]]:
         session.execute(
             text(
                 "SELECT je.optimization_id, je.optimization_type, je.winning_model, "
-                "je.baseline_metric, je.optimized_metric, je.summary_text, je.task_name, "
+                "je.baseline_metric, je.optimized_metric, je.summary_text, "
+                f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
                 "je.module_name, je.optimizer_name, je.created_at, "
                 "je.embedding_summary::text AS embedding_summary_text, "
                 "j.payload_overview AS payload_overview "
@@ -524,7 +525,7 @@ def _dedup_ranked_rows(
         if not isinstance(overview, dict):
             overview = {}
         compare_fp = compute_compare_fingerprint(opt_id, overview)
-        key = compare_fp if compare_fp else f"_no_fp:{opt_id}"
+        key = compare_fp or f"_no_fp:{opt_id}"
         if key in seen:
             continue
         seen.add(key)
@@ -805,11 +806,15 @@ def _search_semantic(
 
         page_rows: list[Mapping[str, Any]] = []
         if page_ids:
+            # COALESCE the user-renamable fields against payload_overview so a
+            # job that was renamed after embedding shows the current name in
+            # the search results, not the stale embedded snapshot.
             page_rows = (
                 session.execute(
                     text(
                         "SELECT je.optimization_id, je.optimization_type, je.winning_model, "
-                        "je.baseline_metric, je.optimized_metric, je.summary_text, je.task_name, "
+                        "je.baseline_metric, je.optimized_metric, je.summary_text, "
+                        f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
                         "je.module_name, je.optimizer_name, je.created_at "
                         f"{from_sql} "
                         "WHERE je.optimization_id = ANY(:page_ids)"

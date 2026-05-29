@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Annotated, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
@@ -54,6 +54,7 @@ from ...models import (
     RunRequest,
 )
 from ...models.common import ModelConfig, OptimizationType
+from ...models.submissions import _OptimizationRequestBase
 from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
@@ -67,6 +68,57 @@ from ._helpers import compute_task_fingerprint, enforce_user_quota, stable_seed,
 logger = logging.getLogger(__name__)
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
+IdempotencyKeyHeader = Annotated[
+    str | None,
+    Header(
+        alias="Idempotency-Key",
+        description=(
+            "Optional client-supplied dedup key. When the same key is reused "
+            "for the same authenticated submitter, the original submission "
+            "response is returned and no new job is enqueued."
+        ),
+        max_length=128,
+    ),
+]
+
+
+def _existing_submission_response(
+    job_store, optimization_id: str
+) -> OptimizationSubmissionResponse | None:
+    """Rehydrate a previous submission's response from the persisted overview.
+
+    Used when an ``Idempotency-Key`` header matches a prior submission so the
+    retry returns the same shape it did the first time without re-enqueuing.
+
+    Args:
+        job_store: Source of the persisted job + payload overview.
+        optimization_id: Identifier matched via :meth:`find_job_by_idempotency_key`.
+
+    Returns:
+        The rebuilt response, or ``None`` if the job vanished between the
+        lookup and the rehydration (treated as no-dedup-hit by callers).
+    """
+    try:
+        job = job_store.get_job(optimization_id)
+    except KeyError:
+        return None
+    overview = job.get("payload_overview") or {}
+    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) or OPTIMIZATION_TYPE_RUN
+    status_value = job.get("status") or OptimizationStatus.pending.value
+    try:
+        status_enum = OptimizationStatus(status_value)
+    except ValueError:
+        status_enum = OptimizationStatus.pending
+    return OptimizationSubmissionResponse(
+        optimization_id=optimization_id,
+        optimization_type=cast(OptimizationType, optimization_type),
+        status=status_enum,
+        created_at=job.get("created_at") or datetime.now(UTC),
+        name=overview.get(PAYLOAD_OVERVIEW_NAME, ""),
+        username=overview.get(PAYLOAD_OVERVIEW_USERNAME, ""),
+        module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME, ""),
+        optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME, ""),
+    )
 
 
 def _catalog_models_as_configs() -> list[ModelConfig]:
@@ -132,6 +184,66 @@ def _enforce_vision_capability(
         )
 
 
+def _materialize_staged_dataset(
+    payload: _OptimizationRequestBase,
+    *,
+    job_store,
+    username: str,
+) -> str | None:
+    """Inline a staged dataset into ``payload.dataset`` ahead of validation.
+
+    Agent-driven submits arrive with ``staged_dataset_id`` set instead of an
+    inline ``dataset`` so the model never has to ferry tens of thousands of
+    rows through its tool arguments. This helper loads the persisted rows
+    and swaps them onto ``payload.dataset``; eviction happens in
+    :func:`_evict_staged_dataset`, called only after the job has been
+    successfully created. Keeping the row alive across validation lets a
+    failed submit (e.g. missing reflection_model_config) be retried without
+    forcing the user to re-upload — historically the eager delete here
+    silently consumed the staged row on the first 422 and the next attempt
+    hit 400 ``staged_dataset_not_found``.
+
+    Args:
+        payload: The validated request body (mutated in place).
+        job_store: Backend exposing ``get_staged_dataset``.
+        username: Authenticated submitter; staging rows are scoped to one owner.
+
+    Returns:
+        The staged id when one was consumed (caller passes it to
+        :func:`_evict_staged_dataset` after the job lands), or ``None`` for
+        inline payloads.
+
+    Raises:
+        DomainError: 400 ``submission.staged_dataset_not_found`` when the id is
+            unknown or owned by another user.
+    """
+    staged_id = payload.staged_dataset_id
+    if not staged_id:
+        return None
+    rows = job_store.get_staged_dataset(staged_id, username)
+    if not rows:
+        raise DomainError(
+            I18nKey.SUBMISSION_STAGED_DATASET_NOT_FOUND,
+            status=400,
+            staged_dataset_id=staged_id,
+        )
+    payload.dataset = rows
+    payload.staged_dataset_id = None
+    return staged_id
+
+
+def _evict_staged_dataset(job_store, staged_id: str | None, username: str) -> None:
+    """Drop the staged row after the job has been committed; never raises."""
+    if not staged_id:
+        return
+    try:
+        job_store.delete_staged_dataset(staged_id, username)
+    except Exception:
+        logger.warning(
+            "Failed to evict staged dataset %s after consumption", staged_id, exc_info=True
+        )
+
+
 def _expand_catalog_grid_payload(payload: GridSearchRequest) -> None:
     """Populate generation/reflection model lists from the catalog when flagged.
 
@@ -176,7 +288,11 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         summary="Submit a single DSPy optimization run",
         tags=["agent"],
     )
-    def submit_job(payload: RunRequest, current_user: AuthenticatedUserDep) -> OptimizationSubmissionResponse:
+    def submit_job(
+        payload: RunRequest,
+        current_user: AuthenticatedUserDep,
+        idempotency_key: IdempotencyKeyHeader = None,
+    ) -> OptimizationSubmissionResponse:
         """Queue one end-to-end DSPy optimization for background execution.
 
         Validates synchronously, persists a job row, and enqueues the
@@ -200,6 +316,24 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         """
         payload.username = current_user.username
 
+        normalized_key = (idempotency_key or "").strip() or None
+        if normalized_key:
+            existing_id = job_store.find_job_by_idempotency_key(payload.username, normalized_key)
+            if existing_id:
+                cached = _existing_submission_response(job_store, existing_id)
+                if cached is not None:
+                    logger.info(
+                        "Idempotent retry hit: returning existing %s for user=%s key=%s",
+                        existing_id,
+                        payload.username,
+                        normalized_key,
+                    )
+                    return cached
+
+        staged_id = _materialize_staged_dataset(
+            payload, job_store=job_store, username=payload.username
+        )
+
         try:
             service.validate_payload(payload)
         except (ServiceError, RegistryError) as exc:
@@ -221,7 +355,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         if payload.seed is None:
             payload.seed = stable_seed(task_fingerprint)
 
-        job_store.create_job(optimization_id)
+        job_store.create_job(optimization_id, username=payload.username, idempotency_key=normalized_key)
         job_store.set_payload_overview(
             optimization_id,
             {
@@ -255,6 +389,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_IS_PRIVATE: payload.is_private,
             },
         )
+        _evict_staged_dataset(job_store, staged_id, payload.username)
 
         current_worker = get_worker(job_store, service=service)
         current_worker.submit_job(optimization_id, payload)
@@ -296,6 +431,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
     def submit_grid_search(
         payload: GridSearchRequest,
         current_user: AuthenticatedUserDep,
+        idempotency_key: IdempotencyKeyHeader = None,
     ) -> OptimizationSubmissionResponse:
         """Queue a sweep over ``(generation_model, reflection_model)`` pairs.
 
@@ -322,6 +458,24 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         payload.username = current_user.username
         _expand_catalog_grid_payload(payload)
 
+        normalized_key = (idempotency_key or "").strip() or None
+        if normalized_key:
+            existing_id = job_store.find_job_by_idempotency_key(payload.username, normalized_key)
+            if existing_id:
+                cached = _existing_submission_response(job_store, existing_id)
+                if cached is not None:
+                    logger.info(
+                        "Idempotent grid-search retry hit: returning existing %s for user=%s key=%s",
+                        existing_id,
+                        payload.username,
+                        normalized_key,
+                    )
+                    return cached
+
+        staged_id = _materialize_staged_dataset(
+            payload, job_store=job_store, username=payload.username
+        )
+
         if hasattr(service, "validate_grid_search_payload"):
             try:
                 service.validate_grid_search_payload(payload)
@@ -343,7 +497,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
 
         task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
 
-        job_store.create_job(optimization_id)
+        job_store.create_job(optimization_id, username=payload.username, idempotency_key=normalized_key)
         job_store.set_payload_overview(
             optimization_id,
             {
@@ -370,6 +524,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_IS_PRIVATE: payload.is_private,
             },
         )
+        _evict_staged_dataset(job_store, staged_id, payload.username)
 
         current_worker = get_worker(job_store, service=service)
         current_worker.submit_job(optimization_id, payload)

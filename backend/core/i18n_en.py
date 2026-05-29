@@ -109,13 +109,10 @@ ENGLISH_MESSAGES: dict[str, str] = {
     "serve.no_declared_inputs": "Artifact has no declared input fields; cannot safely validate inputs.",
     "serve.no_model_config": "No model config found for the run. Provide model_config_override.",
     "submission.module_resolve_failed": "Module load failed: {error}",
+    "submission.staged_dataset_not_found": "staged_dataset_id '{staged_dataset_id}' not found for this user — re-upload the dataset and retry.",
     "submission.validation_failed": "Payload validation failed: {error}",
     "submission.vision_required": "Dataset contains image columns ({fields}) but the selected model ('{model}') does not support image inputs. Pick a vision-capable model.",
     "submit.no_models_available": "No models available in the catalog — configure a provider API key first.",
-    "template.cannot_delete_others": "You can only delete your own templates.",
-    "template.cannot_update_others": "You can only update your own templates.",
-    "template.not_found": "Template not found.",
-    "template.update_requires_field": "Provide at least one of 'name', 'description', or 'config' to update.",
     "wizard.column_roles_not_object": "column_roles must be an object.",
     "wizard.field_must_be_list": "{field} must be a list.",
     "wizard.field_non_empty_string": "{field} must be a non-empty string.",
@@ -123,10 +120,40 @@ ENGLISH_MESSAGES: dict[str, str] = {
     "wizard.model_base_url_not_string": "{field}.base_url must be a string.",
     "wizard.model_extra_not_object": "{field}.extra must be an object.",
     "wizard.model_max_tokens_int": "{field}.max_tokens must be an integer.",
+    "wizard.model_name_missing_prefix": (
+        "{field}.name '{name}' is missing a provider prefix. dspy.LM requires "
+        "fully-qualified ids like 'openai/gpt-4o-mini'. Call list_models_for_agent "
+        "and copy the entry's ``name`` field verbatim."
+    ),
     "wizard.model_name_non_empty_string": "{field}.name must be a non-empty string.",
     "wizard.model_not_json_object": "{field} must be a JSON object.",
     "wizard.model_number_required": "{field}.{key} must be a number.",
     "wizard.optimizer_kwargs_not_object": "optimizer_kwargs must be an object.",
+    "wizard.signature_code_syntax_error": (
+        "signature_code is not valid Python: {error}. The class name must be a "
+        "single identifier without spaces (e.g. QASignature, not 'QA Signature')."
+    ),
+    "wizard.signature_code_no_class": (
+        "signature_code must define at least one class inheriting from dspy.Signature."
+    ),
+    "wizard.metric_code_syntax_error": "metric_code is not valid Python: {error}.",
+    "wizard.metric_code_no_callable": (
+        "metric_code must define a top-level function (def …)."
+    ),
+    "wizard.code_via_authoring_only": (
+        "{field} cannot be set through update_wizard_state. Signature and "
+        "Metric code are authored only via request_code_authoring, which "
+        "validates the result before it reaches the wizard."
+    ),
+    "wizard.optimizer_unknown": (
+        "'{name}' is not a recognized optimizer. Call get_registry_snapshot for "
+        "registered names, or use the alias 'gepa' or a fully qualified dotted "
+        "path like 'dspy.teleprompt.GEPA'."
+    ),
+    "wizard.module_unknown": (
+        "'{name}' is not a recognized DSPy module. Use the aliases 'predict' or "
+        "'cot', or a fully qualified dotted path like 'dspy.Predict'."
+    ),
     "wizard.split_fractions_negative": "split_fractions must be non-negative.",
     "wizard.split_fractions_not_number": "split_fractions values must be numbers: {error}",
     "wizard.split_fractions_not_object": "split_fractions must be an object with train/val/test keys.",

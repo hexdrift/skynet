@@ -30,6 +30,8 @@ class JobRecord(TypedDict, total=False):
     payload: dict[str, Any] | None
     username: str | None
     optimization_type: str | None
+    attempts: int
+    code_version: str | None
     progress_count: int
     log_count: int
 
@@ -374,5 +376,51 @@ class JobStore(Protocol):
 
         Returns:
             ``True`` when claim metadata was cleared.
+        """
+        ...
+
+    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+        """Persist wizard-parsed dataset rows for an agent-driven submit.
+
+        The frontend stages each parsed dataset right after upload so the
+        generalist agent can call ``submit_job_run_post`` with a tiny
+        ``staged_dataset_id`` instead of inlining the rows into its tool
+        arguments.
+
+        Args:
+            username: Submitter who owns the staged copy.
+            dataset_filename: Original filename for diagnostics.
+            rows: Parsed dataset rows; must be non-empty.
+
+        Returns:
+            The opaque staged-dataset id used by ``/run``.
+
+        Raises:
+            ValueError: When ``rows`` is empty.
+        """
+        ...
+
+    def get_staged_dataset(self, staged_dataset_id: str, username: str) -> list[dict[str, Any]] | None:
+        """Fetch staged rows by id, scoped to the calling user.
+
+        Args:
+            staged_dataset_id: Id previously returned by ``stage_dataset``.
+            username: Authenticated caller — scope guards against cross-user reads.
+
+        Returns:
+            The persisted rows, or ``None`` when the row is missing or owned
+            by another user.
+        """
+        ...
+
+    def delete_staged_dataset(self, staged_dataset_id: str, username: str) -> bool:
+        """Drop a staged dataset once it has been consumed.
+
+        Args:
+            staged_dataset_id: Id to evict.
+            username: Authenticated caller — scope guards against cross-user deletes.
+
+        Returns:
+            ``True`` when a row was deleted, ``False`` when none matched.
         """
         ...

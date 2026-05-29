@@ -179,10 +179,7 @@ class BackgroundWorker:
         """
         with self._queue_lock:
             self._cancel_events.setdefault(optimization_id, threading.Event())
-            if (
-                optimization_id not in self._pending_jobs
-                and optimization_id not in self._processing_jobs
-            ):
+            if optimization_id not in self._pending_jobs and optimization_id not in self._processing_jobs:
                 self._pending_jobs.append(optimization_id)
                 logger.info("Optimization %s enqueued (local hint)", optimization_id)
 
@@ -201,6 +198,7 @@ class BackgroundWorker:
         self._job_store.update_job(
             optimization_id,
             payload=payload.model_dump(mode="json", by_alias=True),
+            code_version=settings.code_version,
         )
         with self._queue_lock:
             self._cancel_events[optimization_id] = threading.Event()
@@ -482,14 +480,15 @@ class BackgroundWorker:
                     _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "")
                     _baseline = result_dict.get("baseline_test_metric") if isinstance(result_dict, dict) else None
                     _optimized = result_dict.get("optimized_test_metric") if isinstance(result_dict, dict) else None
-                    notify_job_completed(
-                        optimization_id=optimization_id,
-                        username=_username,
-                        status=final_status,
-                        message=final_message,
-                        baseline_score=_baseline,
-                        optimized_score=_optimized,
-                    )
+                    if self._job_store.claim_completion_notification(optimization_id):
+                        notify_job_completed(
+                            optimization_id=optimization_id,
+                            username=_username,
+                            status=final_status,
+                            message=final_message,
+                            baseline_score=_baseline,
+                            optimized_score=_optimized,
+                        )
                     if final_status == "success":
                         self._schedule_embedding_indexing(optimization_id)
                 except KeyError:
@@ -529,7 +528,8 @@ class BackgroundWorker:
             _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "") if isinstance(overview, dict) else ""
             if is_cancelled:
                 # Cancel endpoint already set status to "cancelled"; no further DB action needed.
-                notify_job_completed(optimization_id=optimization_id, username=_username, status="cancelled")
+                if self._job_store.claim_completion_notification(optimization_id):
+                    notify_job_completed(optimization_id=optimization_id, username=_username, status="cancelled")
             else:
                 # Failed jobs are retained so users can inspect the error
                 now = datetime.now(UTC).isoformat()
@@ -539,12 +539,13 @@ class BackgroundWorker:
                     )
                 except Exception:  # isolation boundary: a DB hiccup must not prevent the notification below
                     logger.exception("Optimization %s: failed to update status to %s", optimization_id, final_status)
-                notify_job_completed(
-                    optimization_id=optimization_id,
-                    username=_username,
-                    status=final_status,
-                    message=error_message,
-                )
+                if self._job_store.claim_completion_notification(optimization_id):
+                    notify_job_completed(
+                        optimization_id=optimization_id,
+                        username=_username,
+                        status=final_status,
+                        message=error_message,
+                    )
             if is_shutdown:
                 raise
 
@@ -625,9 +626,7 @@ class BackgroundWorker:
             current_job = self._thread_current_job.get(worker_id)
         if current_job is not None and current_job in self._claimed_jobs:
             try:
-                still_owned = self._job_store.extend_lease(
-                    current_job, self._pod_name, self._lease_seconds
-                )
+                still_owned = self._job_store.extend_lease(current_job, self._pod_name, self._lease_seconds)
             except AttributeError:
                 still_owned = True
             except Exception:
@@ -832,7 +831,7 @@ class BackgroundWorker:
                 # Pending jobs never reach _mark_job_done; clean up event here.
                 self._cancel_events.pop(optimization_id, None)
                 return True
-        return event is not None  # True if was running
+        return event is not None
 
     def queue_size(self) -> int:
         """Return the number of jobs waiting to be processed.

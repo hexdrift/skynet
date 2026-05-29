@@ -38,6 +38,8 @@ from .dataset import (
     ProfileWarningCode,
     SplitPlan,
     TargetColumnProfile,
+    ValidateDatasetRequest,
+    ValidateDatasetResponse,
 )
 from .infra import HealthResponse, QueueStatusResponse
 from .optimizations import (
@@ -60,7 +62,6 @@ from .results import GridSearchResponse, LMActivity, LMStageStats, PairResult, R
 from .serve import ServeInfoResponse, ServeRequest, ServeResponse
 from .submissions import GridSearchRequest, OptimizationSubmissionResponse, RunRequest
 from .telemetry import JobLogEntry, ProgressEvent
-from .templates import TemplateCreateRequest, TemplateResponse
 from .validation import ValidateCodeRequest, ValidateCodeResponse
 
 __all__ = [
@@ -120,8 +121,8 @@ __all__ = [
     "SplitFractions",
     "SplitPlan",
     "TargetColumnProfile",
-    "TemplateCreateRequest",
-    "TemplateResponse",
     "ValidateCodeRequest",
     "ValidateCodeResponse",
+    "ValidateDatasetRequest",
+    "ValidateDatasetResponse",
 ]

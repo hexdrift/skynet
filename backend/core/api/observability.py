@@ -24,17 +24,26 @@ Three concerns live here:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import socket
+import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any
 
 from fastapi import FastAPI
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
+
+from ..config import settings
+from .routers.agent_history import purge_stale_conversations
 
 # python-json-logger ships its formatter under two different names depending
 # on the wheel version available in the local artifactory. Prefer the new
@@ -55,10 +64,61 @@ try:
 except ImportError:
     _Instrumentator = None  # type: ignore[assignment]
 
+try:
+    from prometheus_client import REGISTRY as _REGISTRY
+    from prometheus_client import Gauge as _Gauge
+except ImportError:
+    _Gauge = None  # type: ignore[assignment]
+    _REGISTRY = None  # type: ignore[assignment]
+
+
+def _make_gauge(name: str, documentation: str) -> Any:
+    """Create a Prometheus gauge, reusing the live one when already registered.
+
+    The module is reloaded in tests via ``importlib.reload``, which re-executes
+    module-level statements. Prometheus's global registry rejects duplicate
+    metric names, so a naive ``Gauge(...)`` call raises on the second import.
+    This helper looks the collector up first and returns the existing one when
+    present.
+
+    Args:
+        name: Prometheus metric name.
+        documentation: Help text shown on ``/metrics``.
+
+    Returns:
+        The shared :class:`prometheus_client.Gauge` instance, or ``None`` when
+        ``prometheus-client`` isn't installed.
+    """
+    if _Gauge is None:
+        return None
+    if _REGISTRY is not None:
+        existing = _REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    return _Gauge(name, documentation)
+
 logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
+QUEUE_METRICS_REFRESH_SECONDS = 5.0
+# Postgres pg_try_advisory_lock takes a bigint. Each constant is a stable,
+# fleet-wide key for a specific cross-replica gate.
+#
+# ``ORPHAN_SWEEP`` — leader election for the periodic orphan-recovery sweeper.
+# ``STARTUP_WORK`` — one-pod-only gate for idempotent startup tasks (schema
+# touch-ups, embedding backfill/purge) so a rolling deploy of N replicas runs
+# the work once, not N times.
+ORPHAN_SWEEP_LOCK_KEY = 742137000001
+STARTUP_WORK_LOCK_KEY = 742137000002
+STALE_CONVERSATION_SWEEP_LOCK_KEY = 742137000003
 _request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+
+_jobs_pending_gauge = _make_gauge(
+    "skynet_jobs_pending", "Number of Skynet jobs waiting to be claimed"
+)
+_queue_age_gauge = _make_gauge(
+    "skynet_queue_age_seconds", "Age in seconds of the oldest pending Skynet job"
+)
 
 
 def _resolve_pod_name() -> str:
@@ -192,6 +252,369 @@ def install_metrics(app: FastAPI) -> None:
         should_ignore_untemplated=True,
         excluded_handlers=["/health", "/metrics"],
     ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
+
+class QueueMetricsRefresher:
+    """Refresh cached queue-depth gauges from the job store."""
+
+    def __init__(self, job_store: Any, interval_seconds: float = QUEUE_METRICS_REFRESH_SECONDS) -> None:
+        """Initialize the refresher.
+
+        Args:
+            job_store: Store exposing ``get_queue_metrics()``.
+            interval_seconds: Seconds between DB reads.
+        """
+        self._job_store = job_store
+        self._interval_seconds = max(1.0, interval_seconds)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background refresh loop after one immediate refresh."""
+        if _jobs_pending_gauge is None or _queue_age_gauge is None:
+            logger.warning("prometheus-client not installed; queue gauges disabled")
+            return
+        self.refresh_once()
+        self._thread = threading.Thread(target=self._run, name="queue-metrics-refresher", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the background refresh loop."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def refresh_once(self) -> None:
+        """Read queue metrics once and update the cached gauges."""
+        if _jobs_pending_gauge is None or _queue_age_gauge is None:
+            return
+        try:
+            pending_count, queue_age_seconds = self._job_store.get_queue_metrics()
+        except AttributeError:
+            pending_count = int(self._job_store.count_jobs(status="pending"))
+            queue_age_seconds = 0.0
+        except Exception:
+            logger.warning("Queue metrics refresh failed", exc_info=True)
+            return
+        _jobs_pending_gauge.set(pending_count)
+        _queue_age_gauge.set(queue_age_seconds)
+
+    def _run(self) -> None:
+        """Run the refresh loop until stopped."""
+        while not self._stop_event.wait(self._interval_seconds):
+            self.refresh_once()
+
+
+def start_queue_metrics_refresher(job_store: Any) -> QueueMetricsRefresher:
+    """Start and return the queue metrics refresher for ``job_store``.
+
+    Args:
+        job_store: Store used to read pending queue metrics.
+
+    Returns:
+        The started refresher; callers should invoke ``stop()`` during shutdown.
+    """
+    refresher = QueueMetricsRefresher(job_store)
+    refresher.start()
+    return refresher
+
+
+@contextmanager
+def advisory_lock(engine: Any, key: int) -> Iterator[bool]:
+    """Best-effort Postgres advisory lock for cross-replica work serialization.
+
+    On PostgreSQL, attempts ``pg_try_advisory_lock(key)`` on a dedicated
+    connection and yields whether the lock was acquired. The lock is released
+    via ``pg_advisory_unlock`` on context exit. The caller is expected to gate
+    its work on the yielded boolean — peer pods that lost the race should
+    treat the leader's run as authoritative and skip.
+
+    On non-PostgreSQL dialects (tests / SQLite) the function is a no-op that
+    yields ``True`` so single-process callers run the work unconditionally.
+
+    Args:
+        engine: SQLAlchemy engine used to source the lock-holding connection.
+        key: Stable ``bigint`` lock identifier; see the module-level constants.
+
+    Yields:
+        ``True`` when this replica won the lock (and should do the work),
+        ``False`` when a peer already holds it.
+    """
+    if engine is None or engine.dialect.name != "postgresql":
+        yield True
+        return
+    with engine.connect() as conn:
+        acquired = bool(
+            conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": key}).scalar()
+        )
+        conn.commit()
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
+                conn.commit()
+
+
+class OrphanRecoverySweeper:
+    """Periodically re-queue jobs whose worker lease expired.
+
+    The startup-only sweep in :func:`backend.core.api.app.lifespan` only fires
+    once. If a worker dies mid-job after the fleet has booted, the lease ticks
+    down but nothing scans for the dropped row until the next restart. This
+    sweeper closes that gap by running ``recover_orphaned_jobs`` on a schedule
+    in every backend replica. Leader election uses a Postgres advisory lock so
+    only one replica per tick actually performs the work — peers fall through
+    cheaply when ``pg_try_advisory_lock`` returns false.
+
+    On non-PostgreSQL dialects (tests / SQLite) the lock check is skipped and
+    the sweep runs unconditionally; tests run single-threaded so there is no
+    race to mediate.
+    """
+
+    def __init__(self, job_store: Any, interval_seconds: float | None = None) -> None:
+        """Initialize the sweeper.
+
+        Args:
+            job_store: Store exposing ``recover_orphaned_jobs()`` and ``engine``.
+            interval_seconds: Override for the polling interval; defaults to
+                ``settings.orphan_sweep_interval_seconds``.
+        """
+        self._job_store = job_store
+        resolved = interval_seconds if interval_seconds is not None else settings.orphan_sweep_interval_seconds
+        self._interval_seconds = max(5.0, float(resolved))
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background sweep loop."""
+        self._thread = threading.Thread(target=self._run, name="orphan-recovery-sweeper", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the background sweep loop."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def sweep_once(self) -> int:
+        """Acquire the leader-election lock and run one orphan-recovery pass.
+
+        Returns:
+            The number of orphans handled by the sweep, or ``0`` if this
+            replica did not win the advisory lock (peer is sweeping).
+        """
+        engine = getattr(self._job_store, "engine", None)
+        if engine is None or engine.dialect.name != "postgresql":
+            try:
+                return int(self._job_store.recover_orphaned_jobs())
+            except Exception:
+                logger.warning("Orphan recovery sweep failed", exc_info=True)
+                return 0
+        try:
+            with engine.begin() as conn:
+                acquired = conn.execute(
+                    text("SELECT pg_try_advisory_xact_lock(:k)"),
+                    {"k": ORPHAN_SWEEP_LOCK_KEY},
+                ).scalar()
+                if not acquired:
+                    return 0
+                return int(self._job_store.recover_orphaned_jobs())
+        except Exception:
+            logger.warning("Orphan recovery sweep failed", exc_info=True)
+            return 0
+
+    def _run(self) -> None:
+        """Run the sweep loop until stopped."""
+        while not self._stop_event.wait(self._interval_seconds):
+            self.sweep_once()
+
+
+def start_orphan_recovery_sweeper(job_store: Any) -> OrphanRecoverySweeper:
+    """Start and return the orphan-recovery sweeper for ``job_store``.
+
+    Args:
+        job_store: Store used to recover orphaned jobs.
+
+    Returns:
+        The started sweeper; callers should invoke ``stop()`` during shutdown.
+    """
+    sweeper = OrphanRecoverySweeper(job_store)
+    sweeper.start()
+    return sweeper
+
+
+class StaleConversationSweeper:
+    """Periodically delete unpinned agent conversations past the staleness threshold.
+
+    The thread polls at ``settings.stale_conversation_sweep_interval_seconds``
+    (default 24 h). The actual purge is a small bounded ``DELETE`` so a long
+    interval is fine — the goal is "users don't have to manage stale threads",
+    not "react in seconds." Leader election uses a Postgres advisory lock so
+    only one replica per tick actually deletes; peers fall through cheaply.
+
+    On non-PostgreSQL dialects (tests / SQLite) the lock check is skipped and
+    the sweep runs unconditionally.
+    """
+
+    def __init__(self, engine: Any, interval_seconds: float | None = None) -> None:
+        """Initialize the sweeper.
+
+        Args:
+            engine: SQLAlchemy engine the conversations table is bound to.
+            interval_seconds: Override for the polling interval; defaults to
+                ``settings.stale_conversation_sweep_interval_seconds``.
+        """
+        self._engine = engine
+        resolved = (
+            interval_seconds
+            if interval_seconds is not None
+            else settings.stale_conversation_sweep_interval_seconds
+        )
+        self._interval_seconds = max(60.0, float(resolved))
+        self._threshold_days = int(settings.stale_conversation_threshold_days)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background sweep loop."""
+        self._thread = threading.Thread(
+            target=self._run, name="stale-conversation-sweeper", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the background sweep loop."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def sweep_once(self) -> int:
+        """Acquire the leader-election lock and run one stale-conversation pass.
+
+        Returns:
+            The number of conversations deleted by the sweep, or ``0`` if this
+            replica did not win the advisory lock (peer is sweeping).
+        """
+        if self._engine is None:
+            return 0
+        if self._engine.dialect.name != "postgresql":
+            try:
+                return purge_stale_conversations(
+                    self._engine, threshold_days=self._threshold_days
+                )
+            except Exception:
+                logger.warning("Stale conversation sweep failed", exc_info=True)
+                return 0
+        try:
+            with self._engine.begin() as conn:
+                acquired = conn.execute(
+                    text("SELECT pg_try_advisory_xact_lock(:k)"),
+                    {"k": STALE_CONVERSATION_SWEEP_LOCK_KEY},
+                ).scalar()
+                if not acquired:
+                    return 0
+            return purge_stale_conversations(
+                self._engine, threshold_days=self._threshold_days
+            )
+        except Exception:
+            logger.warning("Stale conversation sweep failed", exc_info=True)
+            return 0
+
+    def _run(self) -> None:
+        """Run the sweep loop until stopped."""
+        # Run once immediately so a fresh process drains accumulated staleness
+        # without waiting a full interval (default 24 h is too long for that).
+        self.sweep_once()
+        while not self._stop_event.wait(self._interval_seconds):
+            self.sweep_once()
+
+
+def start_stale_conversation_sweeper(engine: Any) -> StaleConversationSweeper:
+    """Start and return the stale-conversation sweeper bound to ``engine``.
+
+    Args:
+        engine: SQLAlchemy engine the conversations table is bound to.
+
+    Returns:
+        The started sweeper; callers should invoke ``stop()`` during shutdown.
+    """
+    sweeper = StaleConversationSweeper(engine)
+    sweeper.start()
+    return sweeper
+
+
+class EventLoopLagMonitor:
+    """Diagnostic: measure asyncio event-loop scheduling lag.
+
+    A coroutine that ``await``\\s only on IO returns control to the loop
+    promptly; a coroutine that runs sync CPU between awaits holds the loop and
+    delays every other task. This monitor schedules itself every
+    ``interval_seconds`` and records the gap between when the next tick was
+    scheduled and when it actually fired. Sustained gaps above
+    ``threshold_ms`` indicate blocking — the kind that multi-worker uvicorn
+    would parallelize at the cost of breaking in-process MCP sessions.
+
+    Gated by ``settings.event_loop_lag_monitor_enabled``; off by default so
+    prod pods don't run the extra task. Intended as a short diagnostic run,
+    not a permanent metric.
+    """
+
+    def __init__(
+        self,
+        interval_seconds: float = 0.05,
+        threshold_ms: float | None = None,
+    ) -> None:
+        """Initialize the monitor.
+
+        Args:
+            interval_seconds: How often to wake and sample. 50 ms is short
+                enough to catch sub-second blocks without measurable cost.
+            threshold_ms: Override for the warn threshold; defaults to
+                ``settings.event_loop_lag_threshold_ms``.
+        """
+        self._interval = float(interval_seconds)
+        resolved = threshold_ms if threshold_ms is not None else settings.event_loop_lag_threshold_ms
+        self._threshold = float(resolved) / 1000.0
+        self._task: asyncio.Task[None] | None = None
+
+    def start(self) -> None:
+        """Schedule the monitor task on the current running loop."""
+        self._task = asyncio.create_task(self._run(), name="event-loop-lag-monitor")
+
+    def stop(self) -> None:
+        """Cancel the monitor task; safe to call when not running."""
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+
+    async def _run(self) -> None:
+        """Sample loop lag forever; warn when a sample exceeds the threshold."""
+        loop = asyncio.get_running_loop()
+        expected = loop.time() + self._interval
+        try:
+            while True:
+                await asyncio.sleep(self._interval)
+                now = loop.time()
+                lag = now - expected
+                if lag > self._threshold:
+                    logger.warning(
+                        "event loop lag: %.0fms (a handler is doing sync CPU work)",
+                        lag * 1000,
+                    )
+                expected = now + self._interval
+        except asyncio.CancelledError:
+            return
+
+
+def start_event_loop_lag_monitor() -> EventLoopLagMonitor:
+    """Start and return an event-loop lag monitor on the current loop.
+
+    Returns:
+        The started monitor; callers should invoke ``stop()`` during shutdown.
+    """
+    monitor = EventLoopLagMonitor()
+    monitor.start()
+    return monitor
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
