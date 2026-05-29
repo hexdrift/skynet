@@ -20,7 +20,6 @@ class _FakeLM:
 
 def test_records_only_target_lm_calls() -> None:
     """Calls from non-target LMs are filtered out — only the target's durations are recorded."""
-    # Non-target LM calls are filtered by id() — only `target`'s timings should be recorded.
     target = _FakeLM()
     other = _FakeLM()
     cb = GenLMTimingCallback(target)
@@ -53,8 +52,7 @@ def test_summary_averages_durations() -> None:
 
 def test_end_without_start_is_ignored() -> None:
     """``on_lm_end`` without a matching ``on_lm_start`` is a no-op."""
-    # on_lm_end without a matching on_lm_start is a no-op (occurs for non-target LM calls
-    # that were filtered at on_lm_start time).
+    # This path is hit in production by non-target LM calls that were filtered at on_lm_start time.
     cb = GenLMTimingCallback(_FakeLM())
     cb.on_lm_end("never-started", outputs=None)
     assert cb.durations_ms == []
@@ -196,9 +194,8 @@ def test_stage_visible_from_worker_thread() -> None:
         cb.on_lm_start(call_id, target, {})
         cb.on_lm_end(call_id, outputs={"ok": True})
 
-    with track_stage(STAGE_TRAINING, cb):
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            list(ex.map(worker, [f"call-{i}" for i in range(8)]))
+    with track_stage(STAGE_TRAINING, cb), ThreadPoolExecutor(max_workers=4) as ex:
+        list(ex.map(worker, [f"call-{i}" for i in range(8)]))
 
     summary = cb.stage_summary()
     assert STAGE_TRAINING in summary

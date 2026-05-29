@@ -31,6 +31,7 @@ from core.service_gateway.optimization.trajectory import (
     CandidateEvent,
     MinibatchRecorder,
     RejectedEvent,
+    _current_proposal_iteration,
     _load_state,
     capture_proposal_prompts,
     emit_valset_event,
@@ -431,6 +432,7 @@ class TestEmitValsetEvent:
     def test_callback_exception_is_swallowed(self) -> None:
         """A raising callback must not abort the optimization."""
         def raising(event: str, metrics: dict) -> None:
+            """Progress callback that always raises to exercise the swallow path."""
             raise RuntimeError("downstream broke")
 
         emit_valset_event(
@@ -472,6 +474,24 @@ class TestMinibatchRecorder:
         assert metrics["score"] == 0.4
         assert metrics["feedback"] == "needs more context"
         assert "prediction" in metrics
+        assert metrics["iteration"] is None
+
+    def test_iteration_is_carried_from_contextvar_when_set(self) -> None:
+        """A propose()-scoped iteration leaks onto feedback events via contextvar."""
+        events: list[tuple[str, dict]] = []
+        ex = dspy.Example(q="a").with_inputs("q")
+        recorder = MinibatchRecorder(
+            lambda *_, **__: dspy.Prediction(score=0.5, feedback="reflect"),
+            [ex],
+            lambda event, metrics: events.append((event, metrics)),
+        )
+        token = _current_proposal_iteration.set(7)
+        try:
+            recorder(ex, dspy.Prediction(answer="x"))
+        finally:
+            _current_proposal_iteration.reset(token)
+        minibatch_events = [m for e, m in events if e == PROGRESS_MINIBATCH]
+        assert minibatch_events[0]["iteration"] == 7
 
     def test_returns_underlying_metric_value_unchanged(self) -> None:
         """Wrapper is transparent — the optimizer sees exactly what the metric returned."""
@@ -527,6 +547,7 @@ class TestMinibatchRecorder:
         """A raising progress callback never aborts the optimizer's metric call."""
         ex = dspy.Example(q="a").with_inputs("q")
         def raising(event: str, metrics: dict) -> None:
+            """Progress callback that always raises to test that the metric still returns."""
             raise RuntimeError("downstream broke")
 
         recorder = MinibatchRecorder(
@@ -543,6 +564,7 @@ class TestMinibatchRecorder:
         ex = dspy.Example(q="a").with_inputs("q")
 
         def metric(example: Any, prediction: Any, *args: Any, **kwargs: Any) -> float:
+            """Stand-in metric that records the extra args/kwargs the recorder forwards."""
             seen["args"] = args
             seen["kwargs"] = kwargs
             return 0.5
@@ -654,6 +676,7 @@ class TestCaptureProposalPrompts:
             """Minimal stand-in for GEPAState that exposes the fields we touch."""
 
             def __init__(self) -> None:
+                """Seed candidate and trace fields the wrapped propose call reads."""
                 self.program_candidates = [{"qa": "Answer the question."}]
                 self.full_program_trace: list[dict] = [
                     {"i": 0, "selected_program_candidate": 0}
@@ -691,3 +714,35 @@ class TestCaptureProposalPrompts:
         with capture_proposal_prompts("gepa"):
             assert ReflectiveMutationProposer.propose is not original
         assert ReflectiveMutationProposer.propose is original
+
+    def test_iteration_contextvar_is_set_to_state_i_during_propose(self) -> None:
+        """Inside the wrapped propose ``_current_proposal_iteration`` matches ``state.i``."""
+
+        class _FakeState:
+            """Stand-in for GEPAState carrying only the fields wrapped_propose reads."""
+
+            def __init__(self) -> None:
+                """Seed iteration counter plus the candidate and trace lists."""
+                self.i = 11
+                self.program_candidates = [{"qa": "p"}]
+                self.full_program_trace: list[dict] = [
+                    {"i": 11, "selected_program_candidate": 0}
+                ]
+
+        seen: dict[str, int | None] = {"value": -1}
+
+        def fake_original(self: object, state: object) -> CandidateProposal | None:
+            """Record the contextvar visible to a metric call running inside propose."""
+            seen["value"] = _current_proposal_iteration.get()
+            return None
+
+        original = ReflectiveMutationProposer.propose
+        ReflectiveMutationProposer.propose = fake_original  # type: ignore[method-assign]
+        try:
+            with capture_proposal_prompts("gepa"):
+                ReflectiveMutationProposer.propose(None, _FakeState())  # type: ignore[arg-type]
+        finally:
+            ReflectiveMutationProposer.propose = original  # type: ignore[method-assign]
+
+        assert seen["value"] == 11
+        assert _current_proposal_iteration.get() is None

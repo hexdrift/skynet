@@ -62,13 +62,27 @@ class _FakeJobStore:
         """
         return self._count
 
-    def create_job(self, optimization_id: str) -> None:
+    def create_job(
+        self,
+        optimization_id: str,
+        estimated_remaining_seconds: float | None = None,
+        *,
+        username: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> None:
         """Record a new job entry under ``optimization_id``.
 
         Args:
             optimization_id: Identifier of the new job.
+            estimated_remaining_seconds: Ignored; matches the real signature.
+            username: Owner stored for idempotency lookups.
+            idempotency_key: Optional dedup key stored alongside the row.
         """
-        self._jobs[optimization_id] = {}
+        self._jobs[optimization_id] = {
+            "username": username,
+            "idempotency_key": idempotency_key,
+            "overview": {},
+        }
 
     def set_payload_overview(self, optimization_id: str, overview: dict) -> None:
         """Persist an overview dict against an existing job id.
@@ -79,6 +93,45 @@ class _FakeJobStore:
         """
         self._jobs.setdefault(optimization_id, {})["overview"] = dict(overview)
 
+    def find_job_by_idempotency_key(self, username: str, idempotency_key: str) -> str | None:
+        """Return the first job id matching ``(username, idempotency_key)``.
+
+        Args:
+            username: Submitter scope.
+            idempotency_key: Client-supplied dedup key.
+
+        Returns:
+            The matching optimization id or ``None`` when not present.
+        """
+        if not username or not idempotency_key:
+            return None
+        for job_id, row in self._jobs.items():
+            if row.get("username") == username and row.get("idempotency_key") == idempotency_key:
+                return job_id
+        return None
+
+    def get_job(self, optimization_id: str) -> dict:
+        """Return a copy of the stored job row plus its rehydrated overview.
+
+        Args:
+            optimization_id: Identifier of the job to fetch.
+
+        Returns:
+            A dict shaped like the real ``JobRecord`` consumed by the
+            idempotency rehydration helper.
+
+        Raises:
+            KeyError: When the job does not exist.
+        """
+        row = self._jobs[optimization_id]
+        return {
+            "optimization_id": optimization_id,
+            "status": row.get("status", "pending"),
+            "created_at": row.get("created_at"),
+            "payload_overview": row.get("overview", {}),
+            "username": row.get("username"),
+        }
+
     def created_ids(self) -> list[str]:
         """Return all job ids that were created via ``create_job``.
 
@@ -86,6 +139,61 @@ class _FakeJobStore:
             List of optimization ids in insertion order.
         """
         return list(self._jobs.keys())
+
+    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+        """Persist staged rows and return an opaque id.
+
+        Args:
+            username: Submitter owner.
+            dataset_filename: Original filename (kept for diagnostics).
+            rows: Non-empty dataset rows.
+
+        Returns:
+            Newly minted staged dataset id.
+
+        Raises:
+            ValueError: When ``rows`` is empty.
+        """
+        if not rows:
+            raise ValueError("staged dataset rows must be non-empty")
+        staged = getattr(self, "_staged", None) or {}
+        staged_id = f"staged-{len(staged) + 1}"
+        staged[staged_id] = {"username": username, "filename": dataset_filename, "rows": list(rows)}
+        self._staged = staged
+        return staged_id
+
+    def get_staged_dataset(self, staged_dataset_id: str, username: str) -> list[dict[str, Any]] | None:
+        """Return staged rows when owned by ``username``.
+
+        Args:
+            staged_dataset_id: Id previously returned by ``stage_dataset``.
+            username: Authenticated caller.
+
+        Returns:
+            The staged rows, or ``None`` when the id is unknown or owned by
+            another user.
+        """
+        row = getattr(self, "_staged", {}).get(staged_dataset_id)
+        if row is None or row["username"] != username:
+            return None
+        return list(row["rows"])
+
+    def delete_staged_dataset(self, staged_dataset_id: str, username: str) -> bool:
+        """Drop a staged row by id when owned by ``username``.
+
+        Args:
+            staged_dataset_id: Id to evict.
+            username: Authenticated caller.
+
+        Returns:
+            ``True`` when a row was deleted.
+        """
+        staged = getattr(self, "_staged", {})
+        row = staged.get(staged_dataset_id)
+        if row is None or row["username"] != username:
+            return False
+        del staged[staged_dataset_id]
+        return True
 
 
 class _FakeService:
@@ -204,6 +312,7 @@ def _make_client(
 
     @app.exception_handler(HTTPException)
     async def _http_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+        """Mirror the production HTTPException handler so ``code``/``params`` round-trip."""
         content: dict[str, object] = {"detail": exc.detail}
         code = getattr(exc, "code", None)
         if code:
@@ -297,7 +406,24 @@ def test_submit_run_returns_409_when_user_at_quota(monkeypatch: pytest.MonkeyPat
 
 
 def test_submit_run_returns_422_on_missing_required_field(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A run payload missing ``username`` returns a 422."""
+    """A run payload missing ``signature_code`` returns a 422.
+
+    ``username`` is intentionally optional on the wire — the server overwrites
+    it from the authenticated session — so the contract test instead drops
+    ``signature_code`` to exercise the schema's still-required surface.
+    """
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = _run_payload()
+    del payload["signature_code"]
+
+    resp = client.post("/run", json=payload)
+
+    assert resp.status_code == 422
+
+
+def test_submit_run_accepts_payload_without_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run payload that omits ``username`` succeeds — auth fills it in."""
     store = _FakeJobStore()
     client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
     payload = _run_payload()
@@ -305,7 +431,74 @@ def test_submit_run_returns_422_on_missing_required_field(monkeypatch: pytest.Mo
 
     resp = client.post("/run", json=payload)
 
-    assert resp.status_code == 422
+    assert resp.status_code == 201
+    assert resp.json()["username"] == "alice"
+
+
+def test_submit_run_accepts_staged_dataset_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run payload with ``staged_dataset_id`` hydrates the dataset server-side."""
+    store = _FakeJobStore()
+    rows = [{"q": "q", "a": "a"}]
+    staged_id = store.stage_dataset(username="alice", dataset_filename="x.json", rows=rows)
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = _run_payload()
+    del payload["dataset"]
+    payload["staged_dataset_id"] = staged_id
+
+    resp = client.post("/run", json=payload)
+
+    assert resp.status_code == 201
+    assert store.get_staged_dataset(staged_id, "alice") is None
+
+
+def test_submit_run_rejects_unknown_staged_dataset_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unknown ``staged_dataset_id`` produces a 400."""
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = _run_payload()
+    del payload["dataset"]
+    payload["staged_dataset_id"] = "does-not-exist"
+
+    resp = client.post("/run", json=payload)
+
+    assert resp.status_code == 400
+
+
+def test_submit_run_retains_staged_dataset_when_validation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A staged row survives a failed submit so the user can retry without re-uploading.
+
+    Reproduces the chat-flow bug: the agent submits with an invalid payload
+    (e.g. missing reflection_model_config). The materialization step used to
+    delete the staged row eagerly, so a corrected retry then 400'd with
+    staged_dataset_not_found.
+    """
+
+    class _RejectingService:
+        """Service stub whose ``validate_payload`` always rejects."""
+
+        def validate_payload(self, _payload: Any) -> None:
+            """Reject any run payload to simulate a failed submit.
+
+            Raises:
+                ServiceError: Always, mimicking a missing reflection model config.
+            """
+            raise ServiceError("missing reflection_model_config")
+
+    store = _FakeJobStore()
+    rows = [{"q": "q", "a": "a"}]
+    staged_id = store.stage_dataset(username="alice", dataset_filename="x.json", rows=rows)
+    client = _make_client(_RejectingService(), store, monkeypatch=monkeypatch)
+    payload = _run_payload()
+    del payload["dataset"]
+    payload["staged_dataset_id"] = staged_id
+
+    resp = client.post("/run", json=payload)
+
+    assert resp.status_code == 400
+    # The staged row must survive so a corrected retry can reuse it.
+    assert store.get_staged_dataset(staged_id, "alice") == rows
 
 
 def test_submit_run_returns_422_on_invalid_split_fractions(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -747,3 +940,66 @@ def test_submit_grid_search_accepts_image_signature_when_all_models_support_visi
     resp = client.post("/grid-search", json=payload)
 
     assert resp.status_code == 201
+
+
+def test_submit_run_idempotent_retry_returns_same_optimization_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reposting with the same ``Idempotency-Key`` returns the original id without re-enqueuing."""
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    headers = {"Idempotency-Key": "run-dedup-1"}
+
+    first = client.post("/run", json=_run_payload(), headers=headers)
+    second = client.post("/run", json=_run_payload(), headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["optimization_id"] == second.json()["optimization_id"]
+    assert len(store.created_ids()) == 1
+
+
+def test_submit_run_without_idempotency_header_creates_separate_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two posts without an ``Idempotency-Key`` produce two distinct jobs."""
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+
+    first = client.post("/run", json=_run_payload())
+    second = client.post("/run", json=_run_payload())
+
+    assert first.json()["optimization_id"] != second.json()["optimization_id"]
+    assert len(store.created_ids()) == 2
+
+
+def test_submit_run_blank_idempotency_header_does_not_dedupe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A whitespace-only ``Idempotency-Key`` is treated as absent."""
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    headers = {"Idempotency-Key": "   "}
+
+    first = client.post("/run", json=_run_payload(), headers=headers)
+    second = client.post("/run", json=_run_payload(), headers=headers)
+
+    assert first.json()["optimization_id"] != second.json()["optimization_id"]
+    assert len(store.created_ids()) == 2
+
+
+def test_submit_grid_search_idempotent_retry_returns_same_optimization_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The grid-search route honours ``Idempotency-Key`` the same way ``/run`` does."""
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    headers = {"Idempotency-Key": "grid-dedup-1"}
+
+    first = client.post("/grid-search", json=_grid_payload(), headers=headers)
+    second = client.post("/grid-search", json=_grid_payload(), headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["optimization_id"] == second.json()["optimization_id"]
+    assert len(store.created_ids()) == 1

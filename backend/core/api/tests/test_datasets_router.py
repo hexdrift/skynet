@@ -24,12 +24,13 @@ def datasets_client() -> TestClient:
         validation handlers wired in to mirror production behaviour.
     """
     app = FastAPI()
-    app.include_router(create_datasets_router())
+    app.include_router(create_datasets_router(job_store=object()))
 
     # Mirror the app-level AppError handler so ValidationError (400) surfaces
     # as a proper HTTP response instead of bubbling up as a 500.
     @app.exception_handler(AppError)
     async def _app_error_handler(_request, exc: AppError) -> JSONResponse:
+        """Map ``AppError`` to a JSON envelope mirroring production behaviour."""
         content = {"error": exc.error_code.lower(), "detail": exc.message}
         if exc.code:
             content["code"] = exc.code
@@ -38,6 +39,7 @@ def datasets_client() -> TestClient:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(_request, exc: RequestValidationError) -> JSONResponse:
+        """Map Pydantic validation errors to a 422 JSON response (test mirror)."""
         return JSONResponse(status_code=422, content={"error": "invalid_request", "detail": exc.errors()})
 
     return TestClient(app, raise_server_exceptions=False)

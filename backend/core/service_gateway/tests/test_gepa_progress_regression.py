@@ -142,9 +142,11 @@ def test_gepa_recognized_bar_under_capture_tqdm_emits_progress_to_callback() -> 
     events: list[tuple[str, dict]] = []
 
     def _cb(event: str, metrics: dict) -> None:
+        """Record every progress event the callback receives."""
         events.append((event, metrics))
 
     def _compile_side_effect(**kwargs: Any) -> Any:
+        """Drive a GEPA-shaped bar through capture_tqdm during compile."""
         # GEPA constructs and drives its valset bar during compile; the
         # active capture_tqdm patch wraps it in the real _TqdmProxy.
         bar = progress_mod.tqdm.tqdm(total=10, desc="GEPA", unit="rollouts")

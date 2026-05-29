@@ -105,6 +105,7 @@ def test_load_callable_non_callable_attribute_raises_resolver_error() -> None:
 def test_wrap_callable_preserves_call_behavior() -> None:
     """Wrap callable preserves call behavior."""
     def add(a: int, b: int) -> int:
+        """Return the sum of two integers (sample callable to wrap)."""
         return a + b
 
     wrapped = _wrap_callable(add)
@@ -115,7 +116,7 @@ def test_wrap_callable_preserves_call_behavior() -> None:
 def test_wrap_callable_copies_signature() -> None:
     """Wrap callable copies signature."""
     def my_fn(x: int, y: str = "hello") -> None:
-        pass
+        """Sample callable whose signature should survive wrapping."""
 
     wrapped = _wrap_callable(my_fn)
 
@@ -192,6 +193,7 @@ def test_resolve_module_factory_alias_first_path_fails_second_succeeds() -> None
     call_log: list[str] = []
 
     def selective_load(path: str) -> Callable[..., Any]:
+        """Fail the first alias path and resolve the rest, recording each attempt."""
         call_log.append(path)
         # "cot" has two paths: dspy.modules.ChainOfThought and dspy.ChainOfThought
         if path == "dspy.modules.ChainOfThought":
@@ -211,6 +213,7 @@ def test_resolve_module_factory_alias_first_path_fails_second_succeeds() -> None
 def test_resolve_module_factory_alias_all_paths_fail_raises_resolver_error() -> None:
     """Resolve module factory alias all paths fail raises resolver error."""
     def always_fail(path: str) -> Callable[..., Any]:
+        """Reject every alias path so the resolver exhausts all of them."""
         raise ResolverError(f"cannot load {path}")
 
     with patch_loader(side_effect=always_fail), pytest.raises(ResolverError, match=REAL_MODULE_NAME):
@@ -220,6 +223,7 @@ def test_resolve_module_factory_alias_all_paths_fail_raises_resolver_error() -> 
 def test_resolve_module_factory_alias_all_paths_fail_error_mentions_name() -> None:
     """Resolve module factory alias all paths fail error mentions name."""
     def always_fail(path: str) -> Callable[..., Any]:
+        """Reject every alias path so the resolver raises mentioning the name."""
         raise ResolverError(f"nope: {path}")
 
     with patch_loader(side_effect=always_fail), pytest.raises(ResolverError) as exc_info:

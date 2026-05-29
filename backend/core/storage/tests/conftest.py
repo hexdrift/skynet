@@ -9,6 +9,7 @@ omitted (create_job, record_progress, append_log, bulk helpers, recovery).
 import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
@@ -42,6 +43,8 @@ class FakeJobStore:
             "result": None,
             "latest_metrics": {},
             "message": None,
+            "attempts": 0,
+            "code_version": None,
             **fields,
         }
         self._jobs[optimization_id] = job
@@ -68,6 +71,8 @@ class FakeJobStore:
             "result": None,
             "latest_metrics": {},
             "message": None,
+            "attempts": 0,
+            "code_version": None,
         }
         self._jobs[optimization_id] = job
         self._logs[optimization_id] = []
@@ -229,7 +234,9 @@ class FakeJobStore:
             lease_dt = datetime.fromisoformat(lease_iso) if isinstance(lease_iso, str) else None
             if lease_dt is None or lease_dt < now:
                 job["status"] = "failed"
-                job["message"] = "Job interrupted by service restart"
+                job["attempts"] = int(job.get("attempts") or 0) + 1
+                job["message"] = f"Re-queued after pod failure (attempt {job['attempts']})"
+                job["status"] = "pending"
                 job["claimed_by"] = None
                 job["claimed_at"] = None
                 job["lease_expires_at"] = None
@@ -250,7 +257,7 @@ class FakeJobStore:
             now = datetime.now(UTC)
             lease_until = (now + timedelta(seconds=lease_seconds)).isoformat()
             pending = sorted(
-                (j for j in self._jobs.values() if j["status"] == "pending"),
+                (j for j in self._jobs.values() if j["status"] == "pending" and j.get("code_version") is None),
                 key=lambda j: j["created_at"],
             )
             if not pending:
@@ -270,9 +277,7 @@ class FakeJobStore:
             job = self._jobs.get(optimization_id)
             if job is None or job.get("claimed_by") != worker_id:
                 return False
-            job["lease_expires_at"] = (
-                datetime.now(UTC) + timedelta(seconds=lease_seconds)
-            ).isoformat()
+            job["lease_expires_at"] = (datetime.now(UTC) + timedelta(seconds=lease_seconds)).isoformat()
             return True
 
     def release_job(self, optimization_id: str, worker_id: str) -> bool:
@@ -285,6 +290,35 @@ class FakeJobStore:
             job["claimed_at"] = None
             job["lease_expires_at"] = None
             return True
+
+    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+        """Persist staged rows and return an opaque id."""
+        if not rows:
+            raise ValueError("staged dataset rows must be non-empty")
+        if not hasattr(self, "_staged_datasets"):
+            self._staged_datasets: dict[str, dict[str, Any]] = {}
+        staged_id = uuid4().hex
+        self._staged_datasets[staged_id] = {
+            "username": username,
+            "dataset_filename": dataset_filename,
+            "rows": list(rows),
+        }
+        return staged_id
+
+    def get_staged_dataset(self, staged_dataset_id: str, username: str) -> list[dict[str, Any]] | None:
+        """Return staged rows by id when owned by ``username``."""
+        row = getattr(self, "_staged_datasets", {}).get(staged_dataset_id)
+        if row is None or row["username"] != username:
+            return None
+        return list(row["rows"])
+
+    def delete_staged_dataset(self, staged_dataset_id: str, username: str) -> bool:
+        """Drop staged rows by id when owned by ``username``."""
+        row = getattr(self, "_staged_datasets", {}).get(staged_dataset_id)
+        if row is None or row["username"] != username:
+            return False
+        del self._staged_datasets[staged_dataset_id]
+        return True
 
 
 @pytest.fixture

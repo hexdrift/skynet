@@ -96,6 +96,7 @@ def _build_test_app() -> FastAPI:
 
     @app.exception_handler(AppError)
     async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+        """Map ``AppError`` to a Problem Details response (test mirror)."""
         return _problem_response(
             request,
             status=exc.status_code,
@@ -107,6 +108,7 @@ def _build_test_app() -> FastAPI:
 
     @app.exception_handler(HTTPException)
     async def _http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        """Map ``HTTPException`` to a Problem Details response (test mirror)."""
         return _problem_response(
             request,
             status=exc.status_code,
@@ -119,7 +121,9 @@ def _build_test_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        """Map Pydantic validation errors to a 422 Problem Details response."""
         def _format_field(loc: Iterable[Any]) -> str:
+            """Join a Pydantic error location tuple into a dotted field path."""
             parts: list[str] = []
             for entry in loc:
                 if entry in {"body", "__root__"}:
@@ -151,6 +155,7 @@ def _build_test_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def _generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Map unhandled exceptions to a generic 500 Problem Details response."""
         return _problem_response(
             request,
             status=500,
@@ -165,28 +170,34 @@ def _build_test_app() -> FastAPI:
         @field_validator("value")
         @classmethod
         def _positive(cls, v: int) -> int:
+            """Reject negative values to exercise the validation handler."""
             if v < 0:
                 raise ValueError("value must be non-negative")
             return v
 
     @app.get("/raise-http/{code}")
     def raise_http(code: int):
+        """Probe route that raises ``HTTPException`` with the given status code."""
         raise HTTPException(status_code=code, detail=f"simulated {code}")
 
     @app.get("/raise-http-with-headers/{code}")
     def raise_http_with_headers(code: int, header_name: str, header_value: str):
+        """Probe route that raises ``HTTPException`` with custom response headers."""
         raise HTTPException(status_code=code, detail=f"simulated {code}", headers={header_name: header_value})
 
     @app.get("/raise-app-error")
     def raise_app_error():
+        """Probe route that raises a domain ``AppError`` to exercise its handler."""
         raise AppError("domain broke", status_code=400, error_code="DOMAIN_ERROR")
 
     @app.get("/raise-unhandled")
     def raise_unhandled():
+        """Probe route that raises an unhandled exception to hit the 500 path."""
         raise RuntimeError("unexpected boom")
 
     @app.post("/body-validation")
     def body_validation(item: _Item):
+        """Probe route used to trigger ``RequestValidationError`` on bad input."""
         return {"ok": True}
 
     return app

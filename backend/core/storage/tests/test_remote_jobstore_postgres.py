@@ -16,6 +16,7 @@ unaffected.
 from __future__ import annotations
 
 import os
+import time
 import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -115,49 +116,51 @@ def seeded_jobs(store: RemoteDBJobStore) -> Iterator[list[str]]:
         store.delete_jobs(ids)
 
 
-def test_concurrent_claimers_never_collide(
-    store: RemoteDBJobStore, seeded_jobs: list[str]
-) -> None:
+def test_concurrent_claimers_never_collide(store: RemoteDBJobStore, seeded_jobs: list[str]) -> None:
     """Twenty pending rows + ten concurrent claimers → every claim is unique.
 
-    The pool launches more workers than rows so that some workers MUST
-    receive ``None``. We assert (a) no two workers received the same
-    ``optimization_id`` and (b) the count of successful claims equals the
-    seed count.
+    Each worker drains aggressively (stops only after several consecutive
+    empty responses) because ``FOR UPDATE SKIP LOCKED`` can transiently
+    return ``None`` while a peer transaction holds the row lock during
+    commit — a single ``None`` does not mean the queue is empty. We assert
+    (a) no two workers received the same ``optimization_id`` and (b) every
+    seeded job was claimed exactly once.
     """
     expected_ids = set(seeded_jobs)
     worker_count = 10
-    claims_per_worker = 3
+    empty_streak_to_stop = 5
 
-    def worker(worker_idx: int) -> list[str | None]:
+    def worker(worker_idx: int) -> list[str]:
+        """Drain the pending queue from this worker until the streak threshold."""
         worker_id = f"pod-{worker_idx}"
-        out: list[str | None] = []
-        for _ in range(claims_per_worker):
+        out: list[str] = []
+        empty_streak = 0
+        while empty_streak < empty_streak_to_stop:
             row = store.claim_next_job(worker_id, lease_seconds=60.0)
-            out.append(row["optimization_id"] if row else None)
+            if row is None:
+                empty_streak += 1
+                time.sleep(0.01)
+                continue
+            empty_streak = 0
+            out.append(row["optimization_id"])
         return out
 
     with ThreadPoolExecutor(max_workers=worker_count) as pool:
         results = list(pool.map(worker, range(worker_count)))
 
-    claimed: list[str] = [oid for batch in results for oid in batch if oid is not None]
+    claimed: list[str] = [oid for batch in results for oid in batch]
 
     assert len(claimed) == len(set(claimed)), (
         f"Duplicate claim detected — FOR UPDATE SKIP LOCKED failed. "
         f"Got {len(claimed)} claims but only {len(set(claimed))} unique IDs."
     )
-    assert set(claimed).issubset(expected_ids), (
-        "Claim returned an unexpected ID — test bled into other rows."
-    )
+    assert set(claimed).issubset(expected_ids), "Claim returned an unexpected ID — test bled into other rows."
     assert len(claimed) == len(expected_ids), (
-        f"Expected all {len(expected_ids)} seeded jobs to be claimed, "
-        f"got {len(claimed)}."
+        f"Expected all {len(expected_ids)} seeded jobs to be claimed, got {len(claimed)}."
     )
 
 
-def test_claim_records_owner_and_lease(
-    store: RemoteDBJobStore, seeded_jobs: list[str]
-) -> None:
+def test_claim_records_owner_and_lease(store: RemoteDBJobStore, seeded_jobs: list[str]) -> None:
     """A successful claim must persist ``claimed_by`` and ``lease_expires_at``.
 
     This is the read-back path the orphan-recovery loop relies on; if
@@ -171,10 +174,7 @@ def test_claim_records_owner_and_lease(
 
     with store.engine.connect() as conn:
         result = conn.execute(
-            text(
-                "SELECT claimed_by, claimed_at, lease_expires_at "
-                "FROM jobs WHERE optimization_id = :oid"
-            ),
+            text("SELECT claimed_by, claimed_at, lease_expires_at FROM jobs WHERE optimization_id = :oid"),
             {"oid": row["optimization_id"]},
         ).fetchone()
 
@@ -184,3 +184,28 @@ def test_claim_records_owner_and_lease(
     assert claimed_at is not None
     assert lease_expires_at is not None
     assert lease_expires_at > claimed_at
+
+
+def test_parallel_progress_writers_finish_quickly(store: RemoteDBJobStore) -> None:
+    """Parallel progress writers for distinct jobs avoid parent-row lock serialization."""
+    prefix = f"progress-test-{uuid.uuid4().hex[:8]}"
+    ids = [f"{prefix}-a", f"{prefix}-b"]
+    for oid in ids:
+        store.create_job(oid)
+
+    def write_events(optimization_id: str) -> None:
+        """Write a fixed batch of progress events for a job."""
+        for i in range(100):
+            store.record_progress(optimization_id, "optimizer_progress", {"i": i})
+
+    try:
+        started = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(write_events, ids))
+        elapsed = time.perf_counter() - started
+
+        assert elapsed < 2.0
+        assert store.get_progress_count(ids[0]) == 100
+        assert store.get_progress_count(ids[1]) == 100
+    finally:
+        store.delete_jobs(ids)
