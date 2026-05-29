@@ -42,15 +42,10 @@ export const trajectoryMessages = {
   "trajectory.drawer.rejected.prompt_title": "הפרומפט שהוצע ונדחה",
   "trajectory.drawer.rejected.prompt_title.explain": "ההבדל בין פרומפט ההורה לבין הפרומפט שמודל הרפלקציה יצר ונדחה. שורות בירוק נוספו, שורות באדום הוסרו.",
   "trajectory.drawer.rejected.prompt_unavailable": "טקסט ההצעה לא נשמר בריצה זו",
-  "trajectory.drawer.rejected.per_example_title": "ציון לכל דוגמה ב-mini-batch",
-  "trajectory.drawer.rejected.per_example_title.explain": "השוואה בין ההורה להצעה בכל דוגמה ב-mini-batch. ירוק = תשובה נכונה, אדום = תשובה שגויה.",
-  "trajectory.drawer.rejected.row_parent_label": "הורה",
-  "trajectory.drawer.rejected.row_proposal_label": "הצעה",
   "trajectory.drawer.rejected.peers_title": "הצעות אחרות מאותו הורה שהתקבלו",
   "trajectory.drawer.rejected.peers_title.explain": "מועמדים אחרים שמודל הרפלקציה יצר מאותו הורה והתקבלו לעץ — הם קיבלו ציון גבוה יותר מההורה ב-mini-batch שלהם.",
   "trajectory.drawer.rejected.no_peers": "עדיין לא התקבלו הצעות מההורה הזה",
   "trajectory.drawer.rejected.peer_score": "ציון {score}",
-  "trajectory.drawer.rejected.subsample_id": "דוגמה #{id}",
 
   "trajectory.pareto.cell_detail_pending": "תוכן הדוגמה עדיין לא הגיע מהשרת",
   "trajectory.pareto.cell.inputs_label": "קלט",
@@ -87,7 +82,7 @@ export const trajectoryMessages = {
   "trajectory.node.header.parent_minibatch": "ההורה קיבל ציון של {score} באותו mini-batch",
   "trajectory.node.header.label.iteration": "סבב",
   "trajectory.node.header.label.score_valset": "ציון האימות",
-  "trajectory.node.header.label.score_minibatch": "ציון ה-mini-batch",
+  "trajectory.node.header.label.score_minibatch": "ציון ההצעה שנדחתה",
   "trajectory.node.header.label.parent_score": "ציון ההורה",
   "trajectory.node.header.sub.examples": "{n} דוגמאות",
 
@@ -107,7 +102,6 @@ export const trajectoryMessages = {
   "trajectory.node.section.no_adopted_from_parent": "עדיין לא אומצה אף הצעה מההורה הזה",
   "trajectory.node.section.prompt": "הפרומפט",
   "trajectory.node.section.score_detail.valset": "ציונים לכל דוגמת אימות",
-  "trajectory.node.section.score_detail.minibatch": "הורה מול הצעה לכל דוגמה",
   "trajectory.node.kind.accepted": "התקבל",
   "trajectory.node.kind.rejected": "נדחתה",
 

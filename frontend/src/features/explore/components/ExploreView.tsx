@@ -179,7 +179,7 @@ export function ExploreView() {
 
   return (
     <div dir="rtl" className="pb-16">
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
         {isPublicCorpus && corpusError && (
           <div
             className="flex items-start gap-3 rounded-lg border border-border bg-accent-muted/50 px-4 py-3 text-xs text-foreground"

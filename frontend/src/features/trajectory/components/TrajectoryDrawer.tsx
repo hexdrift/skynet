@@ -66,8 +66,6 @@ interface NodeView {
   parentPrompt: Record<string, string>;
   // Populated for accepted candidates (full valset).
   perExample: PerExampleScore[];
-  // Populated for rejected proposals (parent vs proposal on subsample).
-  parentVsProposal: Array<{ id: string; parent: number | null; proposal: number | null }>;
 }
 
 function toNodeView(selection: NonNullable<DrawerSelection>): NodeView {
@@ -86,19 +84,9 @@ function toNodeView(selection: NonNullable<DrawerSelection>): NodeView {
       prompt: node.prompt,
       parentPrompt: selection.parent?.prompt ?? {},
       perExample: node.per_example,
-      parentVsProposal: [],
     };
   }
   const ghost = selection.ghost;
-  const ids =
-    ghost.subsample_ids.length > 0
-      ? ghost.subsample_ids
-      : Array.from({ length: ghost.per_example_parent.length }, (_, i) => String(i));
-  const pairs = ids.map((id, idx) => ({
-    id,
-    parent: ghost.per_example_parent[idx]?.score ?? null,
-    proposal: ghost.per_example_proposal[idx]?.score ?? null,
-  }));
   return {
     kind: "rejected",
     rawId: ghost.rejection_id,
@@ -112,7 +100,6 @@ function toNodeView(selection: NonNullable<DrawerSelection>): NodeView {
     prompt: ghost.proposal_prompt,
     parentPrompt: ghost.parent_prompt,
     perExample: [],
-    parentVsProposal: pairs,
   };
 }
 
@@ -298,15 +285,6 @@ function NodeBody({
           </Section>
         ) : null}
 
-        {view.kind === "rejected" && view.parentVsProposal.length > 0 ? (
-          <Section
-            title={msg("trajectory.node.section.score_detail.minibatch")}
-            info={msg("trajectory.drawer.rejected.per_example_title.explain")}
-          >
-            <PerExampleCompareGrid pairs={view.parentVsProposal} />
-          </Section>
-        ) : null}
-
         {view.kind === "rejected" || promptEntries.length > 0 ? (
           <Section
             title={
@@ -357,7 +335,11 @@ function NodeBody({
           title={msg("trajectory.drawer.section.minibatch")}
           info={msg("trajectory.drawer.section.minibatch.explain")}
         >
-          <MinibatchPanel entries={minibatch} valsetRows={valsetRows} />
+          <MinibatchPanel
+            entries={minibatch}
+            valsetRows={valsetRows}
+            iteration={view.iteration}
+          />
         </Section>
       </div>
     </>
@@ -548,74 +530,28 @@ function ScoreChip({
   );
 }
 
-function PerExampleCompareGrid({
-  pairs,
-}: {
-  pairs: Array<{ id: string; parent: number | null; proposal: number | null }>;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-[1fr_auto_auto] gap-3 items-center px-2 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-        <span aria-hidden="true" />
-        <span className="text-center w-7">
-          {msg("trajectory.drawer.rejected.row_parent_label")}
-        </span>
-        <span className="text-center w-7">
-          {msg("trajectory.drawer.rejected.row_proposal_label")}
-        </span>
-      </div>
-      {pairs.map((row) => (
-        <div
-          key={row.id}
-          className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded border border-[#DDD4C8]/40 bg-background/70 px-2 py-1.5"
-        >
-          <span className="font-mono text-[10px] text-muted-foreground" dir="ltr">
-            {formatMsg("trajectory.drawer.rejected.subsample_id", { id: row.id })}
-          </span>
-          <ScoreDot value={row.parent} />
-          <ScoreDot value={row.proposal} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ScoreDot({ value }: { value: number | null }) {
-  if (value === null) {
-    return (
-      <span
-        aria-label="—"
-        className="block rounded-sm border border-dashed border-[#DDD4C8]/60"
-        style={{ width: 24, height: 24 }}
-      />
-    );
-  }
-  const ok = value > 0;
-  return (
-    <span
-      aria-label={value.toFixed(2)}
-      className="flex items-center justify-center rounded-sm font-mono text-[8px] tabular-nums leading-none"
-      style={{
-        width: 24,
-        height: 24,
-        background: ok ? PARETO_PASS : PARETO_FAIL,
-        color: ok ? "#2a3812" : "#4a1c0a",
-      }}
-    >
-      <span className="font-semibold opacity-75">{value.toFixed(2)}</span>
-    </span>
-  );
-}
-
 function MinibatchPanel({
   entries,
   valsetRows,
+  iteration,
 }: {
   entries: MinibatchEntry[];
   valsetRows: ValsetRow[];
+  // GEPA iteration of the selected node. When set, the panel shows only the
+  // feedback events emitted while that iteration's propose() was running —
+  // the 3-ish entries that actually informed accepting / rejecting the node.
+  // null (seed candidate, or backend versions before iteration plumbing)
+  // falls back to the run-wide most-recent view.
+  iteration: number | null;
 }) {
   const RECENT = 8;
-  const recent = useMemo(() => entries.slice(-RECENT).reverse(), [entries]);
+  const recent = useMemo(() => {
+    const filtered =
+      iteration === null
+        ? entries
+        : entries.filter((e) => e.iteration === iteration);
+    return filtered.slice(-RECENT).reverse();
+  }, [entries, iteration]);
   const valsetById = useMemo(() => {
     const m = new Map<string, ValsetRow>();
     for (const row of valsetRows) m.set(row.id, row);

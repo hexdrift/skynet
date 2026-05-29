@@ -2,7 +2,7 @@
 // RejectedEvent.to_metrics() in backend/core/service_gateway/optimization/trajectory.py.
 
 // The backend keys candidates by their GEPA list index (0-based). The UI
-// shifts this by 1 so the seed reads as "מועמד 1" rather than "מועמד 0".
+// shifts this by 1 so the seed reads as candidate 1 rather than candidate 0.
 export function displayCandidateId(id: string): string {
   const n = Number(id);
   return Number.isFinite(n) ? String(n + 1) : id;
@@ -52,6 +52,10 @@ export interface MinibatchEntry {
   feedback: string;
   prediction: string;
   sequence: number;
+  // GEPA iteration the reflective propose() was on when this feedback fired.
+  // null when the event predates iteration plumbing or fires outside a
+  // propose() call (baseline / full-valset evaluation).
+  iteration: number | null;
 }
 
 export interface ValsetPrediction {

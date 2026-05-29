@@ -14,8 +14,9 @@ import type {
   RunRequest,
   ServeInfoResponse,
   ServeResponse,
-  TemplateResponse,
   ValidateCodeResponse,
+  ValidateDatasetRequest,
+  ValidateDatasetResponse,
 } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { tI18n } from "@/shared/lib/i18n";
@@ -105,47 +106,6 @@ export async function fetchWithAuthRetry(url: string, init: RequestInit): Promis
   if (res.status !== 401) return res;
   const fresh = await refreshAuthTokenOn401();
   if (!fresh) return res;
-  return send(fresh);
-}
-
-let _authTokenRefresher: (() => Promise<string | undefined>) | undefined;
-
-/**
- * Register an async refresher that mints a fresh backend bearer token (e.g.
- * by re-fetching the NextAuth session). Used to recover from a 401 when the
- * cached token expired while a tab sat idle during a long optimization run.
- */
-export function setApiAuthTokenRefresher(
-  refresher: (() => Promise<string | undefined>) | undefined,
-) {
-  _authTokenRefresher = refresher;
-}
-
-/**
- * `fetch` for raw SSE callers that can't go through `request`. Attaches the
- * cached bearer token and, on a 401, transparently refreshes the token and
- * retries once — the in-memory token has a short TTL and goes stale while a
- * long run keeps the tab idle/backgrounded.
- */
-async function fetchWithAuthRetry(url: string, init: RequestInit): Promise<Response> {
-  const send = (token: string | undefined) =>
-    fetch(url, {
-      ...init,
-      headers: {
-        ...(init.headers as Record<string, string> | undefined),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-  const res = await send(_authToken);
-  if (res.status !== 401 || !_authTokenRefresher) return res;
-  let fresh: string | undefined;
-  try {
-    fresh = await _authTokenRefresher();
-  } catch {
-    return res;
-  }
-  if (!fresh || fresh === _authToken) return res;
-  _authToken = fresh;
   return send(fresh);
 }
 
@@ -352,6 +312,39 @@ export function deleteUserQuotaOverride(username: string) {
   });
 }
 
+export interface ApiTokenInfo {
+  last4: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface ApiTokenCreated {
+  token: string;
+  last4: string;
+  created_at: string;
+}
+
+/** Fetch metadata for the caller's active API token, or ``null`` if none exists. */
+export function getApiToken() {
+  return request<ApiTokenInfo | null>("/settings/api-token");
+}
+
+/** Generate (or rotate) the caller's API token; the plaintext is returned once. */
+export function generateApiToken() {
+  return request<ApiTokenCreated>("/settings/api-token", { method: "POST" });
+}
+
+/** Revoke the caller's active API token. Idempotent; the route returns 204. */
+export async function revokeApiToken(): Promise<void> {
+  const res = await fetchWithAuthRetry(`${API}/settings/api-token`, { method: "DELETE" });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.1", { p1: res.status }),
+    );
+  }
+}
+
 export interface DirectoryUserMatch {
   username: string;
   display_name?: string | null;
@@ -519,6 +512,19 @@ export function profileDataset(payload: ProfileDatasetRequest) {
   });
 }
 
+export function stageDatasetForAgent(payload: {
+  dataset: Array<Record<string, unknown>>;
+  dataset_filename: string;
+}) {
+  return request<{ staged_dataset_id: string; row_count: number }>(
+    "/datasets/stage-for-agent",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export function validateCode(payload: {
   signature_code?: string;
   metric_code?: string;
@@ -527,6 +533,13 @@ export function validateCode(payload: {
   optimizer_name?: string;
 }) {
   return request<ValidateCodeResponse>("/validate-code", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function validateDataset(payload: ValidateDatasetRequest) {
+  return request<ValidateDatasetResponse>("/datasets/validate", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -894,6 +907,15 @@ export interface CodeAgentHandlers {
     metric_code: string;
     assistant_message: string;
     model: string | null;
+    /**
+     * Seed-path validation outcome. The seed runner validates (and repairs)
+     * the generated code; these flags are absent on the chat path (where
+     * ``edit_signature``/``edit_metric`` already validate every edit), so a
+     * missing flag is treated as valid.
+     */
+    signatureValid?: boolean;
+    metricValid?: boolean;
+    validationError?: string | null;
   }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
@@ -962,6 +984,12 @@ export async function streamCodeAgent(
         metric_code: String(data.metric_code ?? ""),
         assistant_message: String(data.assistant_message ?? ""),
         model: typeof rawModel === "string" && rawModel.length > 0 ? rawModel : null,
+        // Absent on the chat path → treat as valid; the seed path sends
+        // explicit booleans after its validate-and-repair pass.
+        signatureValid: data.signature_valid !== false,
+        metricValid: data.metric_valid !== false,
+        validationError:
+          typeof data.validation_error === "string" ? data.validation_error : null,
       });
     } else if (event === "error") {
       handlers.onError(String(data.error ?? msg("auto.shared.lib.api.literal.12")));
@@ -974,65 +1002,6 @@ export async function streamCodeAgent(
       handlers.onError(err instanceof Error ? err.message : msg("auto.shared.lib.api.literal.10"));
     }
   }
-}
-
-let _templatesCache: TemplateResponse[] | null = null;
-let _templatesFlight: Promise<TemplateResponse[]> | null = null;
-
-export function listTemplates(username?: string): Promise<TemplateResponse[]> {
-  if (!username) {
-    if (_templatesCache) return Promise.resolve(_templatesCache);
-    if (_templatesFlight) return _templatesFlight;
-    _templatesFlight = request<TemplateResponse[]>("/templates")
-      .then((r) => {
-        _templatesCache = r;
-        return r;
-      })
-      .finally(() => {
-        _templatesFlight = null;
-      });
-    return _templatesFlight;
-  }
-  const q = `?username=${encodeURIComponent(username)}`;
-  return request<TemplateResponse[]>(`/templates${q}`);
-}
-
-if (typeof window !== "undefined") {
-  listTemplates().catch(() => {});
-}
-
-function _invalidateTemplatesCache() {
-  _templatesCache = null;
-}
-
-// Agent-driven template mutations (update/apply) fire ``templates-changed``;
-// other tabs and dialogs fire the same event. Invalidate the cache globally
-// so the next ``listTemplates()`` call re-fetches from the server.
-if (typeof window !== "undefined") {
-  window.addEventListener("templates-changed", _invalidateTemplatesCache);
-}
-
-export async function createTemplate(payload: {
-  name: string;
-  description?: string;
-  username: string;
-  config: Record<string, unknown>;
-}) {
-  const result = await request<TemplateResponse>("/templates", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  _invalidateTemplatesCache();
-  return result;
-}
-
-export async function deleteTemplate(templateId: string, username: string) {
-  const result = await request<{ template_id: string; deleted: boolean }>(
-    `/templates/${templateId}?username=${encodeURIComponent(username)}`,
-    { method: "DELETE" },
-  );
-  _invalidateTemplatesCache();
-  return result;
 }
 
 export interface PublicDashboardPoint {

@@ -77,11 +77,18 @@ function TableHead({ className, scope = "col", ...props }: React.ComponentProps<
 }
 
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+  // ``overflow-hidden text-ellipsis`` (+ the existing ``whitespace-nowrap``)
+  // makes every cell width-truncate dynamically — when the caller sets a
+  // ``max-w-*`` on the cell, overflowing content gets the ``…`` rendered
+  // by the browser at the exact column boundary instead of by a manual
+  // ``slice(0, N)`` upstream. Cells that need to wrap (long copy, code
+  // blocks) opt in with ``whitespace-normal break-words``; cells with no
+  // ``max-w`` simply expand to content and never overflow.
   return (
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2.5 align-middle whitespace-nowrap [&:has([role=checkbox])]:pe-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "p-2.5 align-middle whitespace-nowrap overflow-hidden text-ellipsis [&:has([role=checkbox])]:pe-0 [&>[role=checkbox]]:translate-y-[2px]",
         className,
       )}
       {...props}
