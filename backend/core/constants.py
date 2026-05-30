@@ -97,6 +97,11 @@ TQDM_RATE_KEY = "tqdm_rate"
 TQDM_REMAINING_KEY = "tqdm_remaining"
 TQDM_DESC_KEY = "tqdm_desc"
 
+# Every optimizer-progress snapshot key shares this prefix; the job store carries
+# the family forward across interleaved non-tqdm events so the live progress bar
+# does not blink out between rollout ticks.
+TQDM_KEY_PREFIX = "tqdm_"
+
 COMPILE_TRAINSET_KEY = "trainset"
 COMPILE_VALSET_KEY = "valset"
 OPTIMIZER_METRIC_KEY = "metric"

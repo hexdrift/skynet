@@ -116,6 +116,15 @@ class StageDatasetForAgentResponse(BaseModel):
     row_count: int
 
 
+class StagedDatasetResponse(BaseModel):
+    """Rehydration payload for ``GET /datasets/staged/{id}`` — rows + columns."""
+
+    staged_dataset_id: str
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    row_count: int
+
+
 _VALID_COLUMN_ROLES = {"input", "output", "ignore"}
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
@@ -404,6 +413,48 @@ def create_datasets_router(*, job_store) -> APIRouter:
         return StageDatasetForAgentResponse(
             staged_dataset_id=staged_id,
             row_count=len(req.dataset),
+        )
+
+    @router.get(
+        "/datasets/staged/{staged_dataset_id}",
+        response_model=StagedDatasetResponse,
+        summary="Fetch staged dataset rows by id so the wizard can rehydrate",
+        operation_id="get_staged_dataset",
+    )
+    def get_staged_dataset(
+        staged_dataset_id: str,
+        current_user: AuthenticatedUserDep,
+    ) -> StagedDatasetResponse:
+        """Return the rows a chat-side upload staged so the wizard can mirror it.
+
+        The shared wizard state carries only the opaque ``staged_dataset_id``
+        (the rows are too large to thread through it). When the wizard sees an
+        id it isn't already showing — e.g. the user attached a file in the
+        agent panel — it calls this to materialise the same dataset preview.
+        Column order is derived from the first row so it matches what the user
+        confirmed.
+
+        Args:
+            staged_dataset_id: Id previously returned by
+                ``POST /datasets/stage-for-agent``.
+            current_user: Authenticated caller; staged rows are scoped to them.
+
+        Returns:
+            A :class:`StagedDatasetResponse` with the rows, derived columns,
+            and row count.
+
+        Raises:
+            DomainError: 404 when no staged dataset matches the id for this user.
+        """
+        rows = job_store.get_staged_dataset(staged_dataset_id, current_user.username)
+        if rows is None:
+            raise DomainError("dataset.staged.not_found", status=404)
+        columns = list(rows[0].keys()) if rows else []
+        return StagedDatasetResponse(
+            staged_dataset_id=staged_dataset_id,
+            columns=columns,
+            rows=rows,
+            row_count=len(rows),
         )
 
     return router

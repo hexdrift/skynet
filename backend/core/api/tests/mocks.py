@@ -28,6 +28,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 from ...models import (
     GridSearchResponse,
@@ -245,10 +246,50 @@ class _BaseFakeJobStore:
     """
 
     def __init__(self) -> None:
-        """Initialise empty job, log, and progress dictionaries."""
+        """Initialise empty job, log, progress, and staged-dataset dictionaries."""
         self._jobs: dict[str, dict] = {}
         self._logs: dict[str, list] = {}
         self._progress: dict[str, list] = {}
+        self._staged: dict[str, dict] = {}
+
+    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict]) -> str:
+        """Persist staged rows in memory and return their opaque id.
+
+        Args:
+            username: Owner of the staged copy.
+            dataset_filename: Original filename (kept for parity with prod).
+            rows: Non-empty parsed rows.
+
+        Returns:
+            The staged-dataset id.
+
+        Raises:
+            ValueError: When ``rows`` is empty.
+        """
+        if not rows:
+            raise ValueError("staged dataset rows must be non-empty")
+        staged_id = uuid4().hex
+        self._staged[staged_id] = {
+            "username": username,
+            "dataset_filename": dataset_filename,
+            "rows": list(rows),
+        }
+        return staged_id
+
+    def get_staged_dataset(self, staged_dataset_id: str, username: str) -> list[dict] | None:
+        """Return staged rows scoped to ``username``, or None when unmatched.
+
+        Args:
+            staged_dataset_id: Id from :meth:`stage_dataset`.
+            username: Authenticated caller; guards cross-user reads.
+
+        Returns:
+            The persisted rows, or None when missing or owned by another user.
+        """
+        entry = self._staged.get(staged_dataset_id)
+        if entry is None or entry["username"] != username:
+            return None
+        return list(entry["rows"])
 
     def seed_job(self, optimization_id: str, **fields: Any) -> dict:
         """Insert a job row, with sensible defaults for any fields not given.
