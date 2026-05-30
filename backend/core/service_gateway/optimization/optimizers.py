@@ -29,6 +29,83 @@ from .data import DatasetSplits
 logger = logging.getLogger(__name__)
 
 
+PREFLIGHT_SAMPLE_SIZE = 5
+
+
+def _perfect_prediction_score(metric: Any, example: Any, output_fields: list[str]) -> float:
+    """Score a metric against a perfect prediction built from an example's gold outputs.
+
+    Constructs a ``dspy.Prediction`` whose output-field values equal the
+    example's gold values, then invokes ``metric(example, pred, trace=None)``.
+    A metric return of ``dspy.Prediction`` (or any object exposing ``.score``)
+    is unwrapped to its ``.score``; otherwise the result is coerced to ``float``.
+
+    Args:
+        metric: The user-supplied DSPy metric callable.
+        example: A ``dspy.Example`` carrying gold output values.
+        output_fields: Signature output field names to copy from the gold
+            example into the perfect prediction.
+
+    Returns:
+        The numeric metric score, or ``0.0`` when the metric raises or returns
+        a non-numeric, non-``.score`` value. Per-example failures are swallowed
+        so the caller can still render the aggregate all-zero verdict.
+    """
+
+    perfect_outputs = {field: example.get(field) for field in output_fields}
+    perfect_pred = dspy.Prediction(**perfect_outputs)
+    try:
+        result = metric(example, perfect_pred, trace=None)
+    except Exception:
+        return 0.0
+    score = getattr(result, "score", result)
+    try:
+        return float(score)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def preflight_metric_check(
+    metric: Any,
+    examples: list[Any],
+    output_fields: list[str],
+    *,
+    sample_size: int = PREFLIGHT_SAMPLE_SIZE,
+) -> None:
+    """Abort fast when the metric scores a perfect prediction as 0 for every sample.
+
+    A correct metric ALWAYS scores a perfect prediction (one whose output
+    fields equal the gold values) above 0, so this check never blocks a
+    legitimately hard task — only a structurally broken metric (wrong field
+    names, ``isinstance(gold, dict)`` gating, etc.) trips it. This runs before
+    the expensive optimizer so a broken metric fails with an actionable message
+    instead of grinding the whole budget at 0%.
+
+    Args:
+        metric: The user-supplied DSPy metric callable.
+        examples: The trainset (``dspy.Example`` instances carrying gold outputs).
+        output_fields: Signature output field names used to build perfect predictions.
+        sample_size: Maximum number of examples to score (kept small and cheap).
+
+    Raises:
+        ServiceError: When every sampled perfect prediction scores ``<= 0``
+            (sample non-empty), indicating the metric mis-reads the data.
+    """
+
+    if metric is None or not examples or not output_fields:
+        return
+
+    sample = examples[:sample_size]
+    scores = [_perfect_prediction_score(metric, example, output_fields) for example in sample]
+    if all(score <= 0 for score in scores):
+        raise ServiceError(
+            f"Pre-flight check failed: the metric scored 0 on a correct (perfect) prediction "
+            f"for all {len(sample)} sampled examples. The metric mis-reads the data — e.g. wrong "
+            f"field names, or gating on isinstance(gold, dict) (gold is a dspy.Example, not a dict). "
+            f"Fix the metric or column mapping and resubmit."
+        )
+
+
 def compile_program(
     *,
     optimizer: Any,

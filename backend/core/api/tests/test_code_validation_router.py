@@ -189,6 +189,53 @@ def test_validate_code_gepa_accepts_metric_with_five_params(cv_client: TestClien
     assert not any("GEPA" in e for e in body["errors"])
 
 
+def test_validate_code_gepa_rejects_metric_that_scores_perfect_prediction_zero(cv_client: TestClient) -> None:
+    """A GEPA metric that mis-reads gold (isinstance(gold, dict) is always False) scores a
+    correct prediction as 0 and must be rejected with the score-zero error."""
+    metric = (
+        "import dspy\n"
+        "def metric(gold, pred, trace=None, pred_name=None, pred_trace=None):\n"
+        "    g = getattr(gold, 'answer', None) or gold.get('answer') if isinstance(gold, dict) else None\n"
+        "    p = getattr(pred, 'answer', None)\n"
+        "    return dspy.Prediction(score=float(g == p), feedback='')\n"
+    )
+    payload = {
+        "metric_code": metric,
+        "optimizer_name": "gepa",
+        "column_mapping": {"inputs": {"question": "question"}, "outputs": {"answer": "answer"}},
+        "sample_row": {"question": "Capital of France?", "answer": "Paris"},
+    }
+
+    resp = cv_client.post("/validate-code", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["valid"] is False
+    assert any("scored a correct prediction" in e for e in body["errors"])
+
+
+def test_validate_code_gepa_accepts_metric_with_correct_dot_access(cv_client: TestClient) -> None:
+    """A GEPA metric reading gold/pred with dot access scores a correct prediction > 0 and passes."""
+    metric = (
+        "import dspy\n"
+        "def metric(gold, pred, trace=None, pred_name=None, pred_trace=None):\n"
+        "    return dspy.Prediction(score=float(gold.answer == pred.answer), feedback='')\n"
+    )
+    payload = {
+        "metric_code": metric,
+        "optimizer_name": "gepa",
+        "column_mapping": {"inputs": {"question": "question"}, "outputs": {"answer": "answer"}},
+        "sample_row": {"question": "Capital of France?", "answer": "Paris"},
+    }
+
+    resp = cv_client.post("/validate-code", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["valid"] is True
+    assert body["errors"] == []
+
+
 def test_validate_code_returns_422_on_missing_column_mapping(cv_client: TestClient) -> None:
     """``column_mapping`` is required; its absence is a 422."""
     resp = cv_client.post("/validate-code", json={"signature_code": "x = 1"})
