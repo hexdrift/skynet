@@ -309,6 +309,30 @@ def test_record_progress_replaces_latest_metrics_snapshot(store: SQLiteJobStore)
     assert job["latest_metrics"] == {"loss": 0.2}
 
 
+def test_record_progress_carries_tqdm_progress_across_non_tqdm_events(store: SQLiteJobStore) -> None:
+    """Optimizer tqdm progress persists in latest_metrics across interleaved non-tqdm events."""
+    store.create_job("p3-tqdm")
+    store.record_progress("p3-tqdm", "optimizer_progress", {"tqdm_percent": 30.0, "tqdm_n": 3, "tqdm_total": 10})
+    store.record_progress("p3-tqdm", "minibatch_feedback", {"score": 1.0, "iteration": 2})
+    job = store.get_job("p3-tqdm")
+    assert job["latest_metrics"]["score"] == 1.0
+    assert job["latest_metrics"]["iteration"] == 2
+    assert job["latest_metrics"]["tqdm_percent"] == 30.0
+    assert job["latest_metrics"]["tqdm_n"] == 3
+    assert job["latest_metrics"]["tqdm_total"] == 10
+
+
+def test_record_progress_refreshes_sticky_tqdm_on_new_optimizer_tick(store: SQLiteJobStore) -> None:
+    """A newer optimizer_progress event replaces the carried tqdm snapshot without accumulating fields."""
+    store.create_job("p3-tqdm2")
+    store.record_progress("p3-tqdm2", "optimizer_progress", {"tqdm_percent": 30.0})
+    store.record_progress("p3-tqdm2", "minibatch_feedback", {"score": 0.5})
+    store.record_progress("p3-tqdm2", "optimizer_progress", {"tqdm_percent": 70.0})
+    job = store.get_job("p3-tqdm2")
+    assert job["latest_metrics"]["tqdm_percent"] == 70.0
+    assert "score" not in job["latest_metrics"]
+
+
 def test_record_progress_json_metrics_roundtrip(store: SQLiteJobStore) -> None:
     """Record progress json metrics roundtrip."""
     store.create_job("p4")

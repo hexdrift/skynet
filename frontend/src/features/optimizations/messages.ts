@@ -5,4 +5,5 @@ export const optimizationsMessages = {
   "optimization.cancel.failed": "ביטול נכשל",
   "optimization.delete.failed": "מחיקה נכשלה",
   "optimization.file.parse_error": "שגיאה בפענוח הקובץ",
+  "optimization.progress.gepa": "אופטימיזציית GEPA",
 } as const;

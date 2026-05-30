@@ -18,6 +18,11 @@ from typing import Any
 import tqdm
 import tqdm.auto as tqdm_auto
 
+try:
+    import gepa.core.engine as _gepa_engine
+except ImportError:  # GEPA optimizer extra not installed
+    _gepa_engine = None
+
 from ...constants import (
     PROGRESS_OPTIMIZER,
     TQDM_DESC_KEY,
@@ -36,6 +41,7 @@ _tqdm_capture_lock = _threading.Lock()
 _tqdm_capture_refs: int = 0
 _tqdm_original: Any = None
 _tqdm_auto_original: Any = None
+_gepa_tqdm_original: Any = None
 _tqdm_thread_local = _threading.local()
 
 
@@ -107,7 +113,7 @@ def capture_tqdm(progress_callback: Callable[[str, dict[str, Any]], None] | None
         yield
         return
 
-    global _tqdm_capture_refs, _tqdm_original, _tqdm_auto_original
+    global _tqdm_capture_refs, _tqdm_original, _tqdm_auto_original, _gepa_tqdm_original
 
     _tqdm_thread_local.progress_callback = progress_callback
 
@@ -118,6 +124,14 @@ def capture_tqdm(progress_callback: Callable[[str, dict[str, Any]], None] | None
             _tqdm_auto_original = tqdm_auto.tqdm
             tqdm.tqdm = _thread_aware_wrap(_tqdm_original)
             tqdm_auto.tqdm = _thread_aware_wrap(_tqdm_auto_original)
+            # GEPA's engine bound the tqdm factory by value via
+            # ``from tqdm import tqdm`` at import time, so the module-attribute
+            # swaps above never reach its ``GEPA Optimization`` rollouts bar —
+            # the only bar this proxy emits from. Wrap the engine's bound name
+            # too, or its progress never reaches latest_metrics.tqdm_*.
+            if _gepa_engine is not None and getattr(_gepa_engine, "tqdm", None) is not None:
+                _gepa_tqdm_original = _gepa_engine.tqdm
+                _gepa_engine.tqdm = _thread_aware_wrap(_gepa_tqdm_original)
 
     try:
         yield
@@ -128,6 +142,9 @@ def capture_tqdm(progress_callback: Callable[[str, dict[str, Any]], None] | None
             if _tqdm_capture_refs == 0:
                 tqdm.tqdm = _tqdm_original
                 tqdm_auto.tqdm = _tqdm_auto_original
+                if _gepa_engine is not None and _gepa_tqdm_original is not None:
+                    _gepa_engine.tqdm = _gepa_tqdm_original
+                    _gepa_tqdm_original = None
 
 
 class _TqdmProxy:

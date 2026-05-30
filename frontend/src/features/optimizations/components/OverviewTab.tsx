@@ -1,7 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { Activity, Clock, Database, MessageSquare, Timer, TrendingUp, Zap } from "lucide-react";
+import { Gauge, Hourglass, MessageSquare, Timer, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
@@ -23,6 +24,25 @@ const ScoreChart = dynamic(() => import("@/shared/ui/score-chart").then((m) => m
   ssr: false,
   loading: () => <div className="h-full" />,
 });
+
+/**
+ * One live-telemetry metric: a muted icon + label over the value, sized to fill
+ * an equal share of the panel width. The icon inherits the label's muted color
+ * so it reads as quiet wayfinding, not decoration.
+ */
+function LiveStat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="flex items-center gap-1.5 text-[#A89680]">
+        {icon}
+        <span className="truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em]">
+          {label}
+        </span>
+      </span>
+      <span className="truncate text-sm font-semibold tabular-nums text-[#1C1612]">{value}</span>
+    </div>
+  );
+}
 
 export function OverviewTab({
   job,
@@ -87,7 +107,8 @@ export function OverviewTab({
         (e) =>
           e.event === "optimized_evaluated" && e.metrics?.pair_index === activePair.pair_index,
       )?.metrics?.optimized_test_metric as number | undefined)
-    : undefined;
+    : (job.progress_events?.find((e) => e.event === "optimized_evaluated")?.metrics
+        ?.optimized_test_metric as number | undefined);
   const runResult = isPairContext ? activePair : job.result;
   const baseline = runResult?.baseline_test_metric ?? baselineFromEvents;
   const optimized = runResult?.optimized_test_metric ?? optimizedFromEvents;
@@ -97,6 +118,16 @@ export function OverviewTab({
   const scoresReady =
     runResult != null && baseline != null && optimized != null && !activePair?.error;
   const lmActivity: LMActivity | null = (runResult?.lm_activity as LMActivity | undefined) ?? null;
+
+  // The score cards stream the real evaluated metrics as they land — the
+  // baseline from baseline_evaluated, the optimized score from
+  // optimized_evaluated — and show "—" until each metric is genuinely
+  // evaluated. Never a stale or interpolated value, so a stalled or
+  // unfinished run reads honestly. Improvement only resolves once both the
+  // baseline and the optimized score exist, keeping the three cards coherent.
+  const displayImprovement =
+    baseline != null && optimized != null ? (improvement ?? optimized - baseline) : undefined;
+  const showScoreCards = scoresReady || (stagesActive && baseline != null);
 
   // Status text reflects what the user is looking at — for a pair, that is
   // the pair's own state (running/done/failed), not the parent grid.
@@ -142,102 +173,72 @@ export function OverviewTab({
         stagesActive &&
         (() => {
           const tqdmPercent = metrics.tqdm_percent as number | undefined;
-          const tqdmDesc = metrics.tqdm_desc as string | undefined;
-          const tqdmN = metrics.tqdm_n as number | undefined;
-          const tqdmTotal = metrics.tqdm_total as number | undefined;
-          return tqdmPercent != null ? (
-            <FadeIn>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{tqdmDesc || TERMS.optimization}</span>
-                  <span className="font-mono tabular-nums">
-                    {tqdmN ?? 0}/{tqdmTotal ?? "?"} ({tqdmPercent.toFixed(0)}%)
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-border/50 overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all duration-500"
-                    style={{ width: `${tqdmPercent}%` }}
-                  />
-                </div>
-              </div>
-            </FadeIn>
-          ) : null;
-        })()}
-
-      {renderRunBlocks &&
-        stagesActive &&
-        (() => {
+          if (tqdmPercent == null) return null;
           const tqdmN = metrics.tqdm_n as number | undefined;
           const tqdmTotal = metrics.tqdm_total as number | undefined;
           const tqdmElapsed = metrics.tqdm_elapsed as number | undefined;
           const tqdmRemaining = metrics.tqdm_remaining as number | undefined;
           const tqdmRate = metrics.tqdm_rate as number | undefined;
-          const baselineScore = baseline;
-          const splitsEvent = job.progress_events?.find((e) => e.event === "dataset_splits_ready");
-          const trainCount = (splitsEvent?.metrics?.train_examples ?? metrics.train_examples) as
-            | number
-            | undefined;
-          const valCount = (splitsEvent?.metrics?.val_examples ?? metrics.val_examples) as
-            | number
-            | undefined;
-          const testCount = (splitsEvent?.metrics?.test_examples ?? metrics.test_examples) as
-            | number
-            | undefined;
-          const hasAny =
-            tqdmN != null || tqdmElapsed != null || baselineScore != null || trainCount != null;
-          if (!hasAny) return null;
+          const stats: Array<{ key: string; icon: ReactNode; label: string; value: string }> = [];
+          if (tqdmElapsed != null)
+            stats.push({
+              key: "elapsed",
+              icon: <Timer className="size-3.5 shrink-0" />,
+              label: msg("auto.features.optimizations.components.overviewtab.literal.2"),
+              value: formatDuration(tqdmElapsed),
+            });
+          if (tqdmRemaining != null)
+            stats.push({
+              key: "remaining",
+              icon: <Hourglass className="size-3.5 shrink-0" />,
+              label: msg("auto.features.optimizations.components.overviewtab.literal.3"),
+              value: formatDuration(Number(tqdmRemaining)),
+            });
+          if (tqdmRate != null)
+            stats.push({
+              key: "rate",
+              icon: <Gauge className="size-3.5 shrink-0" />,
+              label: msg("auto.features.optimizations.components.overviewtab.literal.4"),
+              value: formatMsg("auto.features.optimizations.components.overviewtab.template.5", {
+                p1: tqdmRate.toFixed(2),
+              }),
+            });
+
           return (
-            <div
-              className="grid gap-2.5"
-              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(120px, 100%), 1fr))" }}
-            >
-              {tqdmN != null && tqdmTotal != null && (
-                <InfoCard
-                  label={msg("auto.features.optimizations.components.overviewtab.literal.1")}
-                  value={`${tqdmN}/${tqdmTotal}`}
-                  icon={<Activity className="size-3.5" />}
-                />
-              )}
-              {tqdmElapsed != null && (
-                <InfoCard
-                  label={msg("auto.features.optimizations.components.overviewtab.literal.2")}
-                  value={formatDuration(tqdmElapsed)}
-                  icon={<Timer className="size-3.5" />}
-                />
-              )}
-              {tqdmRemaining != null && (
-                <InfoCard
-                  label={msg("auto.features.optimizations.components.overviewtab.literal.3")}
-                  value={formatDuration(Number(tqdmRemaining))}
-                  icon={<Clock className="size-3.5" />}
-                />
-              )}
-              {tqdmRate != null && (
-                <InfoCard
-                  label={msg("auto.features.optimizations.components.overviewtab.literal.4")}
-                  value={formatMsg(
-                    "auto.features.optimizations.components.overviewtab.template.5",
-                    { p1: tqdmRate.toFixed(2) },
-                  )}
-                  icon={<Zap className="size-3.5" />}
-                />
-              )}
-              {baselineScore != null && (
-                <InfoCard
-                  label={TERMS.baselineScore}
-                  value={formatPercent(baselineScore)}
-                  icon={<TrendingUp className="size-3.5" />}
-                />
-              )}
-              {trainCount != null && (
-                <InfoCard
-                  label={msg("auto.features.optimizations.components.overviewtab.literal.5")}
-                  value={`${trainCount}/${valCount}/${testCount}`}
-                  icon={<Database className="size-3.5" />}
-                />
-              )}
-            </div>
+            <FadeIn>
+              <div className="rounded-xl border border-[#E3DCD0] bg-[#FBF9F4] px-4 py-3.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#1C1612]">
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-[var(--warning)] motion-safe:animate-pulse"
+                      aria-hidden="true"
+                    />
+                    {msg("optimization.progress.gepa")}
+                  </span>
+                  <span dir="ltr" className="flex items-baseline gap-1.5 font-mono tabular-nums">
+                    <span className="text-sm font-semibold text-[#1C1612]">
+                      {tqdmPercent.toFixed(0)}%
+                    </span>
+                    <span className="text-[0.6875rem] text-[#A89680]">
+                      {tqdmN ?? 0}/{tqdmTotal ?? "?"}
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E3DCD0]/70">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+                    style={{ width: `${tqdmPercent}%` }}
+                  />
+                </div>
+                {stats.length > 0 && (
+                  <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-[#E3DCD0]/70 pt-3.5 sm:grid-cols-3">
+                    {stats.map((s) => (
+                      <LiveStat key={s.key} icon={s.icon} label={s.label} value={s.value} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </FadeIn>
           );
         })()}
 
@@ -292,7 +293,7 @@ export function OverviewTab({
           </FadeIn>
         )}
 
-      {renderRunBlocks && scoresReady && (
+      {renderRunBlocks && showScoreCards && (
         <div data-tutorial="score-cards">
           <StaggerContainer className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <StaggerItem>
@@ -317,7 +318,7 @@ export function OverviewTab({
             </StaggerItem>
             <StaggerItem>
               <TiltCard
-                className={`rounded-xl border p-6 text-center ${(improvement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
+                className={`rounded-xl border p-6 text-center ${(displayImprovement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
               >
                 <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
                   <HelpTip text={tip("score.improvement")}>
@@ -325,9 +326,9 @@ export function OverviewTab({
                   </HelpTip>
                 </p>
                 <p
-                  className={`text-3xl font-mono font-bold tabular-nums ${(improvement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
+                  className={`text-3xl font-mono font-bold tabular-nums ${(displayImprovement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
                 >
-                  {formatImprovement(improvement)}
+                  {formatImprovement(displayImprovement)}
                 </p>
               </TiltCard>
             </StaggerItem>
