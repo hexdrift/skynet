@@ -6,6 +6,7 @@ import logging
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+import dspy
 import pytest
 
 from core.exceptions import ServiceError
@@ -19,6 +20,7 @@ from core.service_gateway.optimization.optimizers import (
     evaluate_on_test,
     instantiate_optimizer,
     optimizer_requires_metric,
+    preflight_metric_check,
     validate_optimizer_kwargs,
     validate_optimizer_signature,
 )
@@ -597,3 +599,67 @@ def test_evaluate_on_test_per_example_bare_except_fallback() -> None:
     assert entry["score"] == pytest.approx(0.0)
     assert entry["pass"] is False
     assert entry["outputs"] == {}
+
+
+def _gold_examples() -> list[Any]:
+    """Build two ``dspy.Example`` instances with a single ``answer`` output field."""
+    return [
+        dspy.Example(question="q1", answer="a1").with_inputs("question"),
+        dspy.Example(question="q2", answer="a2").with_inputs("question"),
+    ]
+
+
+def _correct_metric(example: Any, prediction: Any, trace: Any = None) -> float:
+    """Exact-match metric reading gold via DSPy dot access — perfect prediction scores 1.0."""
+    return 1.0 if prediction.answer == example.answer else 0.0
+
+
+def _broken_isinstance_metric(example: Any, prediction: Any, trace: Any = None) -> float:
+    """Canonical broken metric: gates on ``isinstance(gold, dict)`` so it always scores 0."""
+    if not isinstance(example, dict):
+        return 0.0
+    return 1.0 if prediction.answer == example["answer"] else 0.0
+
+
+def test_preflight_passes_for_correct_metric() -> None:
+    """A correct metric scores a perfect prediction > 0, so the pre-flight is a no-op."""
+    preflight_metric_check(_correct_metric, _gold_examples(), ["answer"])
+
+
+def test_preflight_aborts_when_metric_always_returns_zero() -> None:
+    """A metric that always returns 0 trips the all-zero verdict and aborts."""
+    always_zero = lambda example, prediction, trace=None: 0.0  # noqa: E731
+
+    with pytest.raises(ServiceError, match="Pre-flight check failed"):
+        preflight_metric_check(always_zero, _gold_examples(), ["answer"])
+
+
+def test_preflight_aborts_for_isinstance_gold_dict_gate() -> None:
+    """The ``isinstance(gold, dict)`` mis-read aborts, with field-name guidance in the message."""
+    with pytest.raises(ServiceError, match="isinstance"):
+        preflight_metric_check(_broken_isinstance_metric, _gold_examples(), ["answer"])
+
+
+def test_preflight_unwraps_prediction_score_return() -> None:
+    """A metric returning a ``dspy.Prediction`` with ``.score`` is unwrapped to that score."""
+    def scored(example: Any, prediction: Any, trace: Any = None) -> Any:
+        return dspy.Prediction(score=1.0)
+
+    preflight_metric_check(scored, _gold_examples(), ["answer"])
+
+
+def test_preflight_swallows_exceptions_but_surfaces_all_zero() -> None:
+    """A metric raising on every example is treated as score 0 and still aborts."""
+    def raising(example: Any, prediction: Any, trace: Any = None) -> float:
+        raise RuntimeError("boom")
+
+    with pytest.raises(ServiceError, match="Pre-flight check failed"):
+        preflight_metric_check(raising, _gold_examples(), ["answer"])
+
+
+def test_preflight_noop_when_sample_empty_or_no_output_fields() -> None:
+    """No examples, no output fields, or no metric is a silent no-op (never blocks)."""
+    always_zero = lambda example, prediction, trace=None: 0.0  # noqa: E731
+    preflight_metric_check(always_zero, [], ["answer"])
+    preflight_metric_check(always_zero, _gold_examples(), [])
+    preflight_metric_check(None, _gold_examples(), ["answer"])
