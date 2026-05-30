@@ -4,6 +4,7 @@ import * as React from "react";
 import { signOut, useSession } from "next-auth/react";
 import { toast } from "react-toastify";
 import {
+  BookOpen,
   Columns2,
   Check,
   Copy,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Sparkles,
   Table as TableIcon,
+  Trash2,
   User,
   Info,
   X,
@@ -84,32 +86,7 @@ import {
 import { useUserPrefs } from "../hooks/use-user-prefs";
 import { useSettingsModal } from "../hooks/use-settings-modal";
 import { ShortcutRecorder } from "./ShortcutRecorder";
-
-interface SettingsRowProps {
-  label: string;
-  description?: string;
-  icon?: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}
-
-function SettingsRow({ label, description, icon: Icon, children }: SettingsRowProps) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3 border-b border-border/40 last:border-b-0">
-      <div className="flex items-start gap-3 flex-1 min-w-0">
-        {Icon && (
-          <Icon className="size-4 mt-0.5 text-muted-foreground shrink-0" aria-hidden="true" />
-        )}
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          {description && (
-            <span className="text-xs text-muted-foreground/80">{description}</span>
-          )}
-        </div>
-      </div>
-      <div className="shrink-0 flex items-center gap-2">{children}</div>
-    </div>
-  );
-}
+import { SettingsRow } from "@/shared/ui/settings-row";
 
 function WizardTab() {
   const { prefs, setPref } = useUserPrefs();
@@ -802,7 +779,6 @@ function AdminTab() {
 function AboutTab() {
   const { resetAll } = useUserPrefs();
   const { apiUrl, appVersion: version } = getRuntimeEnv();
-  const docsUrl = `${apiUrl}/scalar`;
 
   const handleResetAll = React.useCallback(() => {
     resetAll();
@@ -821,24 +797,6 @@ function AboutTab() {
         <span className="text-xs font-mono text-muted-foreground" dir="ltr">
           {apiUrl}
         </span>
-      </SettingsRow>
-
-      <SettingsRow icon={ExternalLink} label={msg("settings.about.docs.label")}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              asChild
-              aria-label={msg("settings.about.docs.action")}
-            >
-              <a href={docsUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="size-3.5" />
-              </a>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{msg("settings.about.docs.action")}</TooltipContent>
-        </Tooltip>
       </SettingsRow>
 
       <SettingsRow
@@ -873,7 +831,6 @@ function ApiTab() {
   const [busy, setBusy] = React.useState(false);
   const [revealed, setRevealed] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
-  const [confirmingRegen, setConfirmingRegen] = React.useState(false);
 
   const load = React.useCallback(async () => {
     if (!hasAuth) {
@@ -895,7 +852,6 @@ function ApiTab() {
 
   const handleGenerate = React.useCallback(async () => {
     setBusy(true);
-    setConfirmingRegen(false);
     try {
       const created = await generateApiToken();
       setRevealed(created.token);
@@ -934,6 +890,7 @@ function ApiTab() {
   }, [revealed]);
 
   const formatTimestamp = (iso: string) => new Date(iso).toLocaleString("he-IL");
+  const docsUrl = `${getRuntimeEnv().apiUrl}/scalar`;
 
   if (!hasAuth) {
     return (
@@ -945,12 +902,41 @@ function ApiTab() {
 
   return (
     <div className="space-y-4">
-      <SettingsRow
-        icon={KeyRound}
-        label={msg("settings.api.title")}
-        description={msg("settings.api.description")}
-      >
-        <span />
+      <SettingsRow icon={KeyRound} label={msg("settings.api.title")}>
+        {loaded &&
+          !revealed &&
+          (info ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={handleRevoke}
+                  className="text-destructive hover:text-destructive"
+                  aria-label={msg("settings.api.revoke")}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{msg("settings.api.revoke")}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={busy}
+                  onClick={handleGenerate}
+                  aria-label={msg("settings.api.generate")}
+                >
+                  <KeyRound className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{msg("settings.api.generate")}</TooltipContent>
+            </Tooltip>
+          ))}
       </SettingsRow>
 
       {revealed && (
@@ -966,14 +952,32 @@ function ApiTab() {
             <code className="min-w-0 flex-1 break-all font-mono text-xs text-[#3D2E22]">
               {revealed}
             </code>
-            <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={handleCopy}>
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-              <span>{copied ? msg("settings.api.copied") : msg("settings.api.copy")}</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={handleCopy}
+                  aria-label={copied ? msg("settings.api.copied") : msg("settings.api.copy")}
+                >
+                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {copied ? msg("settings.api.copied") : msg("settings.api.copy")}
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <Button size="sm" variant="ghost" className="w-full" onClick={() => setRevealed(null)}>
-            {msg("settings.api.done")}
-          </Button>
+          <button
+            type="button"
+            onClick={() => setRevealed(null)}
+            className="group relative inline-flex w-full cursor-pointer rounded-lg bg-muted p-1 transform-gpu transition-transform duration-75 ease-out active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <span className="flex-1 rounded-md bg-background px-4 py-2.5 text-center text-sm font-medium text-foreground shadow-sm transition-[box-shadow,transform] duration-150 ease-out group-hover:-translate-y-px group-hover:shadow-md">
+              {msg("settings.api.done")}
+            </span>
+          </button>
         </div>
       )}
 
@@ -1004,52 +1008,27 @@ function ApiTab() {
         <p className="text-xs text-muted-foreground">{msg("settings.api.none")}</p>
       )}
 
-      {loaded && !revealed && (
-        <div className="space-y-2">
-          {confirmingRegen ? (
-            <div className="flex flex-col gap-2 rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs">
-              <span className="text-amber-800">{msg("settings.api.confirm_regenerate")}</span>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleGenerate} disabled={busy}>
-                  {msg("settings.api.confirm")}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirmingRegen(false)}>
-                  {msg("settings.api.cancel")}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="gap-1.5"
-                disabled={busy}
-                onClick={info ? () => setConfirmingRegen(true) : handleGenerate}
-              >
-                <KeyRound className="size-3.5" />
-                <span>{info ? msg("settings.api.regenerate") : msg("settings.api.generate")}</span>
-              </Button>
-              {info && (
-                <Button size="sm" variant="outline" disabled={busy} onClick={handleRevoke}>
-                  {msg("settings.api.revoke")}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-1 border-t border-border/40 pt-3">
-        <span className="text-xs font-medium text-muted-foreground">
-          {msg("settings.api.usage_label")}
-        </span>
-        <code
-          dir="ltr"
-          className="block break-all rounded bg-muted px-2 py-1.5 font-mono text-xs text-foreground"
-        >
-          {msg("settings.api.usage_example")}
-        </code>
-      </div>
+      <SettingsRow
+        icon={BookOpen}
+        label={msg("settings.api.docs_label")}
+        description={msg("settings.api.docs_description")}
+      >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              asChild
+              aria-label={msg("settings.api.docs_action")}
+            >
+              <a href={docsUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-3.5" />
+              </a>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{msg("settings.api.docs_action")}</TooltipContent>
+        </Tooltip>
+      </SettingsRow>
     </div>
   );
 }
@@ -1066,7 +1045,7 @@ const SETTINGS_TAB_ORDER = [
 type SettingsTab = (typeof SETTINGS_TAB_ORDER)[number];
 
 const SETTINGS_TAB_TRIGGER_CLASS =
-  "relative z-10 w-full min-w-0 whitespace-nowrap text-center text-[clamp(0.75rem,2.2vw,0.875rem)] rounded-md px-1.5 py-2 font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5 leading-tight";
+  "relative z-10 w-full shrink-0 whitespace-nowrap text-center text-[clamp(0.75rem,2.2vw,0.875rem)] rounded-md px-1.5 py-2 font-medium cursor-pointer border-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none data-[state=active]:border-none gap-1.5 leading-tight";
 
 export function SettingsModal() {
   const { open, setOpen } = useSettingsModal();
@@ -1102,8 +1081,8 @@ export function SettingsModal() {
           className="px-6 pb-6 pt-2"
         >
           <TabsList
-            className="relative grid w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto items-stretch"
-            style={{ gridTemplateColumns: `repeat(${tabCount}, minmax(0, 1fr))` }}
+            className="relative grid w-full rounded-lg bg-muted p-1 gap-1 border-none shadow-none h-auto items-stretch overflow-x-auto no-scrollbar"
+            style={{ gridTemplateColumns: `repeat(${tabCount}, minmax(max-content, 1fr))` }}
           >
             <div
               className="absolute top-1 bottom-1 rounded-md bg-[#3D2E22] shadow-sm transition-[inset-inline-start] duration-200 ease-out"

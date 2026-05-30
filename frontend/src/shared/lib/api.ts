@@ -445,6 +445,116 @@ export function getTestResults(optimizationId: string) {
   }>(`/optimizations/${optimizationId}/test-results`);
 }
 
+/** Member tier role on a shared optimization (full-access tiers). */
+export type ShareRole = "viewer" | "editor" | "owner";
+
+/** General-access policy on the active share link. */
+export type GeneralAccess = "restricted" | "anyone";
+
+/** One invited member of an optimization (username + tier role). */
+export interface SharingMember {
+  username: string;
+  role: ShareRole;
+}
+
+/** Owner/editor-facing sharing config for one optimization. */
+export interface SharingState {
+  general_access: GeneralAccess;
+  token: string | null;
+  share_path: string | null;
+  owner: string | null;
+  members: SharingMember[];
+}
+
+/** Envelope for ``GET /users/search`` — matching distinct usernames. */
+export interface UserSearchResponse {
+  usernames: string[];
+}
+
+/**
+ * Composite, access-gated read behind a ``/share/<token>`` page.
+ *
+ * `role` is the caller's effective access: `"view"` (anonymous, read-only,
+ * owner hidden, no inference/clone) or `viewer`/`editor`/`owner` (real owner
+ * shown, inference + clone enabled). `serve_info` is only populated for
+ * viewer+; it is `null` for the anonymous `view` role.
+ */
+export interface SharedOptimizationData {
+  optimization_id: string;
+  role: "view" | ShareRole;
+  owner: string | null;
+  status: OptimizationStatusResponse;
+  payload: Record<string, unknown>;
+  dataset: OptimizationDatasetResponse | null;
+  test_results: { baseline: EvalExampleResult[]; optimized: EvalExampleResult[] } | null;
+  serve_info: ServeInfoResponse | null;
+}
+
+/** Fetch the current sharing config (general access + members) for an optimization. */
+export function getSharing(optimizationId: string) {
+  return request<SharingState>(`/optimizations/${optimizationId}/sharing`);
+}
+
+/** Set the general-access policy (restricted vs anyone-with-link); mints a link if needed. */
+export function putSharing(optimizationId: string, body: { general_access: GeneralAccess }) {
+  return request<SharingState>(`/optimizations/${optimizationId}/sharing`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Invite a user (add or replace a member grant). */
+export function addShareMember(
+  optimizationId: string,
+  body: { username: string; role: ShareRole },
+) {
+  return request<SharingState>(`/optimizations/${optimizationId}/sharing/members`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Change an existing member's tier role. */
+export function updateShareMember(
+  optimizationId: string,
+  username: string,
+  body: { role: ShareRole },
+) {
+  return request<SharingState>(
+    `/optimizations/${optimizationId}/sharing/members/${encodeURIComponent(username)}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+/** Remove a member's grant from the optimization. */
+export function removeShareMember(optimizationId: string, username: string) {
+  return request<SharingState>(
+    `/optimizations/${optimizationId}/sharing/members/${encodeURIComponent(username)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Autocomplete distinct known usernames by prefix (any authed caller). */
+export function searchUsers(q: string) {
+  return request<UserSearchResponse>(`/users/search?q=${encodeURIComponent(q)}`);
+}
+
+/** Public read — no auth token required; the token in the path is the capability. */
+export function getSharedOptimization(token: string) {
+  return request<SharedOptimizationData>(`/share/${encodeURIComponent(token)}`);
+}
+
+/**
+ * Run one inference through the owner's stored model on a shared optimization.
+ * Requires an effective role of viewer or higher (403 for anonymous `view`).
+ */
+export function serveSharedOptimization(token: string, inputs: Record<string, string>) {
+  return request<ServeResponse>(`/share/${encodeURIComponent(token)}/serve`, {
+    method: "POST",
+    body: JSON.stringify({ inputs }),
+  });
+}
+
 export async function cancelJob(optimizationId: string) {
   const res = await request<{ optimization_id: string; status: string }>(
     `/optimizations/${optimizationId}/cancel`,
@@ -522,6 +632,24 @@ export function stageDatasetForAgent(payload: {
       method: "POST",
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export interface StagedDatasetResponse {
+  staged_dataset_id: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  row_count: number;
+}
+
+/**
+ * Fetch the rows a chat-side upload staged, by id, so the /submit wizard can
+ * mirror the exact dataset the agent is working with. The shared wizard state
+ * only carries the opaque `staged_dataset_id`; this materialises its rows.
+ */
+export function getStagedDataset(stagedDatasetId: string) {
+  return request<StagedDatasetResponse>(
+    `/datasets/staged/${encodeURIComponent(stagedDatasetId)}`,
   );
 }
 

@@ -18,6 +18,8 @@ export interface RunPlaygroundProps extends ServeChatProps {
   optimizationId: string;
   pairIndex?: number;
   onClearHistory: () => void;
+  /** Public share view: hide the owner-gated /serve API-URL + code snippets. */
+  isShare?: boolean;
 }
 
 export function RunPlayground({
@@ -35,6 +37,7 @@ export function RunPlayground({
   optimizationId,
   pairIndex,
   onClearHistory,
+  isShare = false,
 }: RunPlaygroundProps) {
   const apiBase = getRuntimeEnv().apiUrl;
   const servePath = pairIndex != null ? `/serve/${optimizationId}/pair/${pairIndex}` : `/serve/${optimizationId}`;
@@ -88,6 +91,7 @@ export function RunPlayground({
         />
       </div>
 
+      {!isShare && (
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">
@@ -128,6 +132,7 @@ export function RunPlayground({
           </div>
         </CardContent>
       </Card>
+      )}
     </>
   );
 }
