@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
@@ -291,72 +291,95 @@ async def _wrap_with_persistence(
     wizard_state_after: dict[str, Any] = (
         dict(wizard_state_before) if wizard_state_before else {}
     )
+    persisted = False
 
-    async for event in source:
-        name = event.get("event")
-        data = event.get("data") or {}
-        if name == "message_patch":
-            chunk = data.get("chunk")
-            if isinstance(chunk, str):
-                assistant_buf.append(chunk)
-        elif name == "turn_metadata":
-            raw_allowed = data.get("allowed_tools")
-            if isinstance(raw_allowed, list):
-                allowed_tools = [str(t) for t in raw_allowed]
-            raw_hashes = data.get("tool_schema_hashes")
-            if isinstance(raw_hashes, dict):
-                tool_schema_hashes = {str(k): str(v) for k, v in raw_hashes.items()}
-            # Internal envelope — never forward to the frontend.
-            continue
-        elif name == "tool_start":
-            tid = str(data.get("id", ""))
-            if tid:
-                tool_calls[tid] = {
-                    "id": tid,
-                    "tool": data.get("tool", ""),
-                    "reason": data.get("reason", ""),
-                    "status": "running",
-                    "startedAt": int(datetime.now(UTC).timestamp() * 1000),
-                    "endedAt": None,
-                    "payload": {"arguments": data.get("arguments", {})},
-                }
-                tool_order.append(tid)
-        elif name == "tool_end":
-            tid = str(data.get("id", ""))
-            existing = tool_calls.get(tid)
-            if existing is not None:
-                existing["status"] = "done" if data.get("status") == "ok" else "error"
-                existing["endedAt"] = int(datetime.now(UTC).timestamp() * 1000)
-                payload = existing.get("payload") or {}
-                result = data.get("result")
-                payload["result"] = result
-                existing["payload"] = payload
-                _merge_wizard_patch(wizard_state_after, result)
-        elif name == "done":
-            final_text = data.get("assistant_message")
-            content = (
-                final_text if isinstance(final_text, str) and final_text else "".join(assistant_buf)
+    def _do_persist(content: str) -> None:
+        """Write the accumulated turn exactly once; never raise.
+
+        Args:
+            content: Final assistant message text for the row.
+        """
+        nonlocal persisted
+        if persisted or not (conversation_id and job_store is not None):
+            return
+        ordered_tools = [tool_calls[tid] for tid in tool_order if tid in tool_calls]
+        try:
+            _persist_assistant_turn(
+                job_store,
+                conversation_id,
+                content,
+                ordered_tools,
+                model_used,
+                wizard_state_before=wizard_state_before,
+                wizard_state_after=wizard_state_after or None,
+                allowed_tools=allowed_tools,
+                tool_schema_hashes=tool_schema_hashes,
+                router_metadata=None,
             )
-            raw_model = data.get("model")
-            model_used = raw_model if isinstance(raw_model, str) and raw_model else None
-            if conversation_id and job_store is not None:
-                ordered_tools = [tool_calls[tid] for tid in tool_order if tid in tool_calls]
-                try:
-                    _persist_assistant_turn(
-                        job_store,
-                        conversation_id,
-                        content,
-                        ordered_tools,
-                        model_used,
-                        wizard_state_before=wizard_state_before,
-                        wizard_state_after=wizard_state_after or None,
-                        allowed_tools=allowed_tools,
-                        tool_schema_hashes=tool_schema_hashes,
-                        router_metadata=None,
-                    )
-                except Exception:
-                    logger.exception("Failed to persist assistant turn")
-        yield event
+        except Exception:
+            logger.exception("Failed to persist assistant turn")
+        persisted = True
+
+    try:
+        async for event in source:
+            name = event.get("event")
+            data = event.get("data") or {}
+            if name == "message_patch":
+                chunk = data.get("chunk")
+                if isinstance(chunk, str):
+                    assistant_buf.append(chunk)
+            elif name == "turn_metadata":
+                raw_allowed = data.get("allowed_tools")
+                if isinstance(raw_allowed, list):
+                    allowed_tools = [str(t) for t in raw_allowed]
+                raw_hashes = data.get("tool_schema_hashes")
+                if isinstance(raw_hashes, dict):
+                    tool_schema_hashes = {str(k): str(v) for k, v in raw_hashes.items()}
+                # Internal envelope — never forward to the frontend.
+                continue
+            elif name == "tool_start":
+                tid = str(data.get("id", ""))
+                if tid:
+                    tool_calls[tid] = {
+                        "id": tid,
+                        "tool": data.get("tool", ""),
+                        "reason": data.get("reason", ""),
+                        "status": "running",
+                        "startedAt": int(datetime.now(UTC).timestamp() * 1000),
+                        "endedAt": None,
+                        "payload": {"arguments": data.get("arguments", {})},
+                    }
+                    tool_order.append(tid)
+            elif name == "tool_end":
+                tid = str(data.get("id", ""))
+                existing = tool_calls.get(tid)
+                if existing is not None:
+                    existing["status"] = "done" if data.get("status") == "ok" else "error"
+                    existing["endedAt"] = int(datetime.now(UTC).timestamp() * 1000)
+                    payload = existing.get("payload") or {}
+                    result = data.get("result")
+                    payload["result"] = result
+                    existing["payload"] = payload
+                    _merge_wizard_patch(wizard_state_after, result)
+            elif name == "done":
+                final_text = data.get("assistant_message")
+                content = (
+                    final_text if isinstance(final_text, str) and final_text else "".join(assistant_buf)
+                )
+                raw_model = data.get("model")
+                model_used = raw_model if isinstance(raw_model, str) and raw_model else None
+                _do_persist(content)
+            yield event
+    finally:
+        # The frontend tears down the SSE stream the moment ``submit_job_run_post``
+        # succeeds, so ``done`` often never arrives and the wrapped generator is
+        # closed (GeneratorExit / CancelledError). Salvage the turn here when it
+        # carries real content; an empty greeting turn writes nothing.
+        if not persisted and (
+            assistant_buf
+            or any(c["status"] in ("done", "error") for c in tool_calls.values())
+        ):
+            _do_persist("".join(assistant_buf))
 
 
 def _merge_wizard_patch(
@@ -402,6 +425,7 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         summary="Stream generalist-agent events for one user turn",
     )
     async def generalist_agent(
+        request: Request,
         req: GeneralistAgentRequest,
         authorization: str | None = Header(default=None),
     ) -> StreamingResponse:
@@ -413,6 +437,8 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         ``done``, ``error``.
 
         Args:
+            request: Incoming request, forwarded to ``get_authenticated_user``
+                so the PAT branch can reach ``app.state.job_store``.
             req: Request body with user message, chat history, wizard
                 snapshot, trust mode, and optional ``conversation_id``.
             authorization: Caller's bearer token, forwarded into the agent's
@@ -428,7 +454,7 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         username: str | None = None
         if job_store is not None and authorization:
             try:
-                user = get_authenticated_user(authorization=authorization)
+                user = get_authenticated_user(request, authorization=authorization)
                 username = user.username
             except Exception:
                 username = None
