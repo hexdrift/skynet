@@ -90,6 +90,7 @@ from .routers.optimizations import create_optimizations_router
 from .routers.optimizations_meta import create_optimizations_meta_router
 from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
+from .routers.share import create_share_router
 from .routers.submissions import create_submissions_router
 from .routers.wizard import create_wizard_router
 
@@ -1046,6 +1047,7 @@ def create_app(
         tags=["Optimizations"],
     )
     app.include_router(create_serve_router(job_store=job_store), tags=["Inference"])
+    app.include_router(create_share_router(job_store=job_store), tags=["Optimizations"])
     app.include_router(
         create_dashboard_router(job_store=job_store),
         tags=["Dashboard"],
