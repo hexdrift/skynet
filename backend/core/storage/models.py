@@ -42,6 +42,56 @@ class ApiTokenModel(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class OptimizationShareLinkModel(Base):
+    """Per-optimization sharing config keyed by a public link token.
+
+    The ``token`` is the unguessable capability identifier embedded in the
+    public ``/share/<token>`` URL. It is stored in plaintext because it IS the
+    public identifier (like a ChatGPT share id), not a credential hash. The
+    active (``revoked_at IS NULL``) row per optimization holds the sharing
+    config; ``general_access`` selects the anonymous-link policy:
+    ``'restricted'`` (owner + invited members only) or ``'anyone'`` (anyone
+    with the link gets a view-only, inference-free snapshot). Revoking sets
+    ``revoked_at`` so the public route returns 404 thereafter. Rows are removed
+    when the optimization is deleted.
+    """
+
+    __tablename__ = "optimization_share_links"
+
+    token: Mapped[str] = mapped_column(String(48), primary_key=True)
+    optimization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    general_access: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="restricted", server_default="restricted"
+    )
+
+
+class OptimizationShareGrantModel(Base):
+    """A single per-user access grant on a shared optimization.
+
+    Each row invites one ``grantee_username`` to an optimization with a tier
+    ``role`` (``'viewer'`` / ``'editor'`` / ``'owner'``). The pair
+    ``(optimization_id, grantee_username)`` is the primary key, so re-inviting a
+    user replaces their existing grant. ``general_access`` on the link and these
+    per-user grants coexist: an anyone-link can be on while named members hold
+    higher roles. Rows are removed when the optimization is deleted.
+    """
+
+    __tablename__ = "optimization_share_grants"
+
+    optimization_id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
+    grantee_username: Mapped[str] = mapped_column(String(255), primary_key=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class JobModel(Base):
     """SQLAlchemy model for the jobs table.
 

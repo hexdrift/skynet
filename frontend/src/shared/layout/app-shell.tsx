@@ -4,14 +4,12 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Menu, LogOut, GraduationCap, BookOpen, Lightbulb } from "lucide-react";
+import { Menu, LogOut, GraduationCap, Lightbulb } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { useTutorialContext, ConceptsGuide } from "@/features/tutorial";
-import { useUserPrefs } from "@/features/settings";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
-import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { JobsStreamProvider } from "@/shared/hooks/use-jobs-stream";
 import { ParticleHero } from "@/shared/ui/particle-hero";
 import {
@@ -29,6 +27,16 @@ const DESKTOP_BP = "(min-width: 768px)";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Public read-only share pages render bare — no sidebar, agent panel, or any
+  // authed chrome, since the viewer may be anonymous.
+  if (pathname.startsWith("/share/")) {
+    return (
+      <main className="min-h-screen" dir="rtl">
+        {children}
+      </main>
+    );
+  }
 
   if (pathname === "/login") {
     return (
@@ -51,9 +59,7 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const { startDeepDive } = useTutorialContext();
-  const { prefs } = useUserPrefs();
   const generalistEnabled = isGeneralistAgentEnabled();
-  const scalarDocsUrl = React.useMemo(() => `${getRuntimeEnv().apiUrl}/scalar`, []);
   const progressRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -158,24 +164,6 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
               {msg("app.shell.concepts_tooltip")}
             </TooltipContent>
           </Tooltip>
-          {prefs.advancedMode && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  href={scalarDocsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg p-1.5 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
-                  aria-label={msg("app.shell.api_docs_aria")}
-                >
-                  <BookOpen className="size-4" />
-                </a>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" dir="rtl">
-                {msg("app.shell.api_docs_tooltip")}
-              </TooltipContent>
-            </Tooltip>
-          )}
         </div>
 
         <div className="flex items-center gap-1.5">

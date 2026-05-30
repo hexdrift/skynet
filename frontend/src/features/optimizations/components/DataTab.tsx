@@ -45,9 +45,15 @@ function scoreColor(score: number): string {
 export function DataTab({
   job,
   pairIndex,
+  sharedDataset,
+  sharedTestResults,
 }: {
   job: OptimizationStatusResponse;
   pairIndex?: number | null;
+  /** Public share view: render this injected split instead of fetching (no per-example scores). */
+  sharedDataset?: OptimizationDatasetResponse | null;
+  /** Public share view: inject baseline/optimized eval results instead of fetching them. */
+  sharedTestResults?: { baseline: EvalExampleResult[]; optimized: EvalExampleResult[] } | null;
 }) {
   const [dataset, setDataset] = useState<OptimizationDatasetResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,14 +166,30 @@ export function DataTab({
       setLoading(false);
       return;
     }
+    if (sharedDataset) {
+      setDataset(sharedDataset);
+      setLoading(false);
+      return;
+    }
     getOptimizationDataset(job.optimization_id)
       .then(setDataset)
       .catch(() => setError(msg("auto.features.optimizations.components.datatab.literal.1")))
       .finally(() => setLoading(false));
-  }, [job.optimization_id, isDemoMode]);
+  }, [job.optimization_id, isDemoMode, sharedDataset]);
+
+  // Share view: index the injected baseline/optimized results by example index
+  // (mirrors the fetch path's reshaping) instead of calling the authed endpoint.
+  useEffect(() => {
+    if (!sharedTestResults) return;
+    const optimized: Record<number, EvalExampleResult> = {};
+    const baseline: Record<number, EvalExampleResult> = {};
+    for (const r of sharedTestResults.optimized ?? []) optimized[r.index] = r;
+    for (const r of sharedTestResults.baseline ?? []) baseline[r.index] = r;
+    setTestResults({ optimized, baseline });
+  }, [sharedTestResults]);
 
   useEffect(() => {
-    if (isDemoMode || job.status !== "success") return;
+    if (isDemoMode || sharedDataset || job.status !== "success") return;
     setTestResultsLoading(true);
     const fetchResults =
       pairIndex != null
@@ -187,7 +209,7 @@ export function DataTab({
         console.warn("test results fetch failed:", err);
       })
       .finally(() => setTestResultsLoading(false));
-  }, [job.optimization_id, job.status, pairIndex, isDemoMode]);
+  }, [job.optimization_id, job.status, pairIndex, isDemoMode, sharedDataset]);
 
   const inputFields = useMemo(
     () => (dataset ? Object.values(dataset.column_mapping.inputs) : []),

@@ -12,7 +12,9 @@ import {
   validateDataset,
   getOptimizationPayload,
   getJob,
+  getSharedOptimization,
   stageDatasetForAgent,
+  getStagedDataset,
 } from "@/shared/lib/api";
 import type {
   ModelConfig,
@@ -342,6 +344,13 @@ export function useSubmitWizard() {
   // job; identity-equality on ``parsedDataset`` is enough — every parse
   // path replaces the object.
   const lastStagedDatasetRef = useRef<ParsedDataset | null>(null);
+  // Staged id that the current ``parsedDataset`` already corresponds to —
+  // set when this wizard stages its own upload, or when it hydrates a dataset
+  // the chat staged. Lets the incoming hydration effect below skip a dataset
+  // we're already showing, and stops the outgoing effect from re-staging
+  // (which would mint a *different* id for identical rows and ping-pong the
+  // shared context against the panel).
+  const parsedDatasetStagedIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!wizardCtx) return;
     if (!parsedDataset || parsedDataset.rowCount === 0) {
@@ -349,6 +358,7 @@ export function useSubmitWizard() {
         wizardCtx.clearField("staged_dataset_id");
       }
       lastStagedDatasetRef.current = null;
+      parsedDatasetStagedIdRef.current = null;
       return;
     }
     if (lastStagedDatasetRef.current === parsedDataset) return;
@@ -361,6 +371,7 @@ export function useSubmitWizard() {
       .then((res) => {
         if (cancelled) return;
         if (lastStagedDatasetRef.current !== parsedDataset) return;
+        parsedDatasetStagedIdRef.current = res.staged_dataset_id;
         wizardCtx.setField("staged_dataset_id", res.staged_dataset_id, "user");
       })
       .catch(() => {
@@ -373,6 +384,66 @@ export function useSubmitWizard() {
       cancelled = true;
     };
   }, [parsedDataset, datasetFileName, wizardCtx]);
+
+  // Incoming (chat → wizard): when the shared context points at a staged
+  // dataset this wizard isn't already showing — e.g. the user attached a file
+  // in the agent panel — fetch those exact rows and mirror them here. The
+  // shared context survives client-side navigation (it lives in the app shell),
+  // so this reliably rehydrates whether the wizard was already mounted or the
+  // user navigated to /submit afterwards, with no dependence on sessionStorage.
+  const hydratingStagedIdRef = useRef<string | null>(null);
+  const sharedStagedId = sharedState?.staged_dataset_id;
+  useEffect(() => {
+    if (!wizardCtx) return;
+    if (typeof sharedStagedId !== "string" || !sharedStagedId) return;
+    if (sharedStagedId === parsedDatasetStagedIdRef.current) return;
+    if (sharedStagedId === hydratingStagedIdRef.current) return;
+    hydratingStagedIdRef.current = sharedStagedId;
+    let cancelled = false;
+    getStagedDataset(sharedStagedId)
+      .then((res) => {
+        if (cancelled || !res || res.rows.length === 0) return;
+        const hydrated: ParsedDataset = {
+          columns: res.columns.length > 0 ? res.columns : Object.keys(res.rows[0] ?? {}),
+          rows: res.rows,
+          rowCount: res.row_count,
+        };
+        // Mark the rows as already-staged under this id BEFORE setting them so
+        // the outgoing staging effect early-returns instead of re-staging.
+        parsedDatasetStagedIdRef.current = sharedStagedId;
+        lastStagedDatasetRef.current = hydrated;
+        setParsedDataset(hydrated);
+        setDatasetFileName((prev) => prev ?? "dataset.json");
+        setDatasetProfile(null);
+        setSplitPlan(null);
+        // The agent staged this dataset, so it owns code authoring for the
+        // session (via request_code_authoring in the panel). Mark code as
+        // already-authored so the wizard's own useCodeAgent auto-seed stands
+        // down instead of authoring a second, racing Signature/Metric. The
+        // agent's authored code then arrives as an applyAgentPatch.
+        setSignatureManuallyEdited(true);
+        setMetricManuallyEdited(true);
+        const roles = wizardCtx.state.column_roles;
+        if (roles && typeof roles === "object") {
+          const next: Record<string, "input" | "output" | "ignore"> = {};
+          for (const [col, role] of Object.entries(roles)) {
+            if (role === "input" || role === "output" || role === "ignore") next[col] = role;
+          }
+          if (Object.keys(next).length > 0) setColumnRoles(next);
+        }
+      })
+      .catch(() => {
+        /* best-effort: a failed fetch leaves the wizard's own dataset intact */
+      })
+      .finally(() => {
+        if (!cancelled && hydratingStagedIdRef.current === sharedStagedId) {
+          hydratingStagedIdRef.current = null;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedStagedId, wizardCtx]);
 
   useEffect(() => {
     if (!wizardCtx) return;
@@ -549,11 +620,18 @@ export function useSubmitWizard() {
         Array.isArray(stagedColumns) && stagedColumns.length > 0
           ? (stagedColumns as string[])
           : Object.keys((rows[0] ?? {}) as Record<string, unknown>);
-      setParsedDataset({
+      const parsed: ParsedDataset = {
         columns,
         rows: rows as Array<Record<string, unknown>>,
         rowCount: rows.length,
-      });
+      };
+      // This same-page fast path already carries the rows; record the staged
+      // id (when present) so the outgoing effect doesn't re-stage identical
+      // rows under a new id and the incoming hydration effect skips a refetch.
+      const eventStagedId = typeof d.staged_dataset_id === "string" ? d.staged_dataset_id : null;
+      if (eventStagedId) parsedDatasetStagedIdRef.current = eventStagedId;
+      lastStagedDatasetRef.current = parsed;
+      setParsedDataset(parsed);
       const explicitFilename =
         typeof d.dataset_filename === "string" && d.dataset_filename
           ? d.dataset_filename
@@ -568,6 +646,12 @@ export function useSubmitWizard() {
       setSplitPlan(null);
       setSignatureValidation(null);
       setMetricValidation(null);
+      // This dataset was staged by the agent panel; the agent owns code
+      // authoring (request_code_authoring), so suppress the wizard's own
+      // auto-seed to avoid a second, racing Signature/Metric. The agent's
+      // authored code lands here via an applyAgentPatch.
+      setSignatureManuallyEdited(true);
+      setMetricManuallyEdited(true);
       if (ws.column_kinds && typeof ws.column_kinds === "object") {
         const stagedKinds: Record<string, "text" | "image"> = {};
         for (const [col, kind] of Object.entries(
@@ -653,9 +737,17 @@ export function useSubmitWizard() {
     cloneRan.current = true;
     const pairParam = searchParams.get("pair");
     const clonePairIndex = pairParam == null ? null : Number(pairParam);
+    const shareToken = searchParams.get("shareToken");
     setCloneLoading(true);
-    Promise.all([getOptimizationPayload(cloneId), getJob(cloneId).catch(() => null)])
-      .then(([{ optimization_type, payload }, jobData]) => {
+
+    // Maps a cloned optimization payload into wizard state. Shared between the
+    // authed clone path and the token-gated share clone path; the latter passes
+    // a synthetic payload whose ``dataset`` is rebuilt from the public split.
+    const applyClone = (
+      optimization_type: string,
+      payload: Record<string, unknown>,
+      jobData: Awaited<ReturnType<typeof getJob>> | null,
+    ) => {
         const clonePair =
           Number.isInteger(clonePairIndex) && jobData?.grid_result
             ? (jobData.grid_result.pair_results.find((p) => p.pair_index === clonePairIndex) ??
@@ -782,7 +874,37 @@ export function useSubmitWizard() {
         }
 
         toast.success(msg("submit.clone.success"));
-      })
+    };
+
+    // Share clone: hydrate from the public, token-gated composite. The payload
+    // is scrubbed (no api_key/base_url/username) and carries no dataset rows, so
+    // reconstruct them from the full train/val/test split sorted by index.
+    const source = shareToken
+      ? getSharedOptimization(shareToken).then((shared) => {
+          const splits = shared.dataset?.splits;
+          const rows = splits
+            ? [...splits.train, ...splits.val, ...splits.test]
+                .sort((a, b) => a.index - b.index)
+                .map((entry) => entry.row)
+            : [];
+          const payload: Record<string, unknown> = {
+            ...shared.payload,
+            ...(rows.length > 0 ? { dataset: rows } : {}),
+            // The dataset endpoint carries the mapping too; fall back to it so
+            // column roles hydrate even if the scrubbed payload omitted it.
+            ...(shared.payload?.column_mapping == null && shared.dataset?.column_mapping
+              ? { column_mapping: shared.dataset.column_mapping }
+              : {}),
+          };
+          applyClone(shared.status.optimization_type, payload, shared.status);
+        })
+      : Promise.all([getOptimizationPayload(cloneId), getJob(cloneId).catch(() => null)]).then(
+          ([{ optimization_type, payload }, jobData]) => {
+            applyClone(optimization_type, payload as Record<string, unknown>, jobData);
+          },
+        );
+
+    source
       .catch(() => {
         toast.error(msg("submit.clone.failed"));
       })
