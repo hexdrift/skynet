@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -10,7 +9,6 @@ import {
   Code,
   Terminal,
   TrendingUp,
-  ChevronLeft,
   Timer,
   Send,
   Copy,
@@ -35,6 +33,7 @@ import {
   getPairServeInfo,
   serveProgramStream,
   servePairProgramStream,
+  serveSharedOptimization,
 } from "@/shared/lib/api";
 import type { LMActivity, ServeInfoResponse } from "@/shared/types/api";
 import {
@@ -52,6 +51,7 @@ import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-status";
 import { registerTutorialHook } from "@/features/tutorial";
 import type { OptimizationStatusResponse, OptimizationPayloadResponse } from "@/shared/types/api";
+import type { SharedOptimizationData } from "@/shared/lib/api";
 import type { PipelineStage } from "../constants";
 import { extractScoresFromLogs } from "../lib/extract-scores";
 import { reconstructGridResult } from "../lib/reconstruct-grid";
@@ -59,6 +59,7 @@ import { DataTab } from "./DataTab";
 import { LogsTab } from "./LogsTab";
 import { ExportMenu } from "./ExportMenu";
 import { DeleteJobDialog } from "./DeleteJobDialog";
+import { ShareDialog } from "./ShareDialog";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { ConfigTab } from "./ConfigTab";
 import { CodeTab } from "./CodeTab";
@@ -89,8 +90,16 @@ function formatElapsed(seconds: number): string {
   return `${h}:${m}:${s}`;
 }
 
-export function OptimizationDetailView() {
-  const { id } = useParams<{ id: string }>();
+export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimizationData } = {}) {
+  const params = useParams<{ id?: string; token?: string }>();
+  const isShare = !!shareData;
+  const id = shareData?.optimization_id ?? (params.id as string);
+  // The /share/[token] route carries the capability token in the URL; the
+  // shared serve + clone-with-token paths need it. shareData itself omits it.
+  const shareToken = params.token ?? null;
+  const shareRole = shareData?.role ?? null;
+  // viewer/editor/owner get inference + clone; the anonymous "view" role does not.
+  const shareCanInteract = isShare && shareRole != null && shareRole !== "view";
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") ?? "overview";
@@ -101,13 +110,15 @@ export function OptimizationDetailView() {
   const isDemoMode = id === DEMO_OPTIMIZATION_ID;
   const isGridDemoMode = id === DEMO_GRID_OPTIMIZATION_ID;
   const isAnyDemoMode = isDemoMode || isGridDemoMode;
+  // Public read-only share view: seed from props; never call authed endpoints.
+  const skipNetwork = isAnyDemoMode || isShare;
 
   // The NextAuth session resolves asynchronously on the client. Without this
   // gate the first getJob() fires before setApiAuthToken() runs, returns 401,
   // and flashes the "not found" UI until SSE/poll refetches a few seconds
   // later with the token now in place.
   const { status: sessionStatus } = useSession();
-  const authReady = isAnyDemoMode || sessionStatus === "authenticated";
+  const authReady = isAnyDemoMode || isShare || sessionStatus === "authenticated";
 
   const [job, setJob] = useState<OptimizationStatusResponse | null>(null);
   const [payload, setPayload] = useState<OptimizationPayloadResponse | null>(null);
@@ -142,6 +153,17 @@ export function OptimizationDetailView() {
     setJob(buildGridDemoJob());
     setLoading(false);
   }, [isGridDemoMode]);
+
+  // Seed the read-only share view from the public composite; no fetching.
+  useEffect(() => {
+    if (!shareData) return;
+    setJob(shareData.status);
+    setPayload({
+      optimization_type: shareData.status.optimization_type,
+      payload: shareData.payload,
+    } as unknown as OptimizationPayloadResponse);
+    setLoading(false);
+  }, [shareData]);
 
   const [serveInfo, setServeInfo] = useState<ServeInfoResponse | null>(null);
   const [serveInfoError, setServeInfoError] = useState<string | null>(null);
@@ -214,7 +236,7 @@ export function OptimizationDetailView() {
   }, [id]);
 
   useEffect(() => {
-    if (isAnyDemoMode) return;
+    if (skipNetwork) return;
     if (!authReady) return;
     getOptimizationPayload(id)
       .then(setPayload)
@@ -228,15 +250,15 @@ export function OptimizationDetailView() {
   const lastCountsRef = useRef({ logs: 0, progress: 0 });
 
   useEffect(() => {
-    if (isAnyDemoMode) return;
+    if (skipNetwork) return;
     if (!authReady) return;
     void fetchJob();
   }, [id, isAnyDemoMode, authReady, fetchJob]);
 
   const API = getRuntimeEnv().apiUrl;
   useStreamWithPollFallback({
-    url: isAnyDemoMode ? "" : `${API}/optimizations/${encodeURIComponent(id)}/stream`,
-    enabled: !isAnyDemoMode && authReady,
+    url: skipNetwork ? "" : `${API}/optimizations/${encodeURIComponent(id)}/stream`,
+    enabled: !skipNetwork && authReady,
     onMessage: (event) => {
       try {
         const sseData = JSON.parse(event.data);
@@ -279,7 +301,7 @@ export function OptimizationDetailView() {
   });
 
   useEffect(() => {
-    if (isAnyDemoMode) return;
+    if (skipNetwork) return;
     const onRenamed = (e: Event) => {
       const { optimizationId, name } = (e as CustomEvent).detail;
       if (optimizationId === id) setJob((prev) => (prev ? { ...prev, name } : prev));
@@ -297,7 +319,7 @@ export function OptimizationDetailView() {
   }, [id, fetchJob, isAnyDemoMode]);
 
   const handleCancel = async () => {
-    if (isAnyDemoMode) return;
+    if (skipNetwork) return;
     try {
       await cancelJob(id);
       toast.success(msg("optimization.cancel.sent"));
@@ -335,8 +357,16 @@ export function OptimizationDetailView() {
     }
   }, [isDemoMode, isGridDemoMode, id, job?.status, job?.grid_result]);
 
+  // Share view: seed the playground serve info from the public composite.
+  // It is non-null only for viewer+ (the backend nulls it for anonymous view).
   useEffect(() => {
-    if (isAnyDemoMode) return;
+    if (!shareData) return;
+    setServeInfo(shareData.serve_info ?? null);
+    setServeInfoError(null);
+  }, [shareData]);
+
+  useEffect(() => {
+    if (skipNetwork) return;
     if (job?.status !== "success") return;
     // A failure here used to be swallowed as `setServeInfo(null)`, which
     // silently blanked the Usage tab (e.g. when an expired bearer 401'd).
@@ -378,6 +408,9 @@ export function OptimizationDetailView() {
   }, []);
 
   useEffect(() => {
+    // Share view has no pair switching; skip so the seeded share serveInfo
+    // (set from the public composite above) is not clobbered to null on mount.
+    if (isShare) return;
     streamAbortRef.current?.abort();
     setRunHistory([]);
     setStreamingRun(null);
@@ -385,7 +418,7 @@ export function OptimizationDetailView() {
     setServeError(null);
     setServeInfo(null);
     setServeInfoError(null);
-  }, [activePairIndex]);
+  }, [activePairIndex, isShare]);
 
   const readServeInputs = () => {
     const vals: Record<string, string> = {};
@@ -424,6 +457,35 @@ export function OptimizationDetailView() {
       });
     }
     const isStale = () => reqId !== streamReqIdRef.current;
+
+    // Share view runs inference through the token-gated, non-streaming
+    // /share/{token}/serve endpoint (owner key applied server-side).
+    if (isShare) {
+      if (!shareToken) {
+        setStreamingRun(null);
+        setServeLoading(false);
+        return;
+      }
+      try {
+        const res = await serveSharedOptimization(shareToken, inputs);
+        if (isStale()) return;
+        setRunHistory((prev) => {
+          const next = [
+            { inputs: { ...inputs }, outputs: res.outputs, model: res.model_used, ts: Date.now() },
+            ...prev,
+          ];
+          return next.length > 50 ? next.slice(0, 50) : next;
+        });
+        setStreamingRun(null);
+      } catch (err) {
+        if (isStale()) return;
+        setServeError(err instanceof Error ? err.message : msg("share.inference_failed"));
+        setStreamingRun(null);
+      } finally {
+        if (!isStale()) setServeLoading(false);
+      }
+      return;
+    }
     const streamFn =
       job?.optimization_type === "grid_search" && activePairIndex != null
         ? (i: Record<string, string>, h: Parameters<typeof serveProgramStream>[2]) =>
@@ -571,11 +633,18 @@ export function OptimizationDetailView() {
     : false;
 
   // Tab gating uniform across run and pair contexts.
-  const showPlaygroundTab =
-    job.status === "success" && (job.optimization_type === "grid_search" || !!serveInfo);
-  const showDataTab = isPairContext
-    ? isPairTerminal
-    : isTerminal && job.optimization_type !== "grid_search";
+  // Share view: only viewer+ may run inference, and only through the single
+  // non-streaming /share serve endpoint, so it needs a seeded serveInfo
+  // (the backend nulls serve_info for the anonymous view role).
+  const showPlaygroundTab = isShare
+    ? shareCanInteract && job.status === "success" && !!serveInfo
+    : job.status === "success" &&
+      (job.optimization_type === "grid_search" || !!serveInfo);
+  const showDataTab = isShare
+    ? !!shareData?.dataset
+    : isPairContext
+      ? isPairTerminal
+      : isTerminal && job.optimization_type !== "grid_search";
   const showLogsTab = job.optimization_type !== "grid_search" || isPairContext;
   const showLmActivityTab = viewLmActivity != null;
 
@@ -600,18 +669,6 @@ export function OptimizationDetailView() {
 
   return (
     <div className="space-y-6 pb-12">
-      <FadeIn>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/" className="hover:text-foreground transition-colors">
-            {msg("auto.app.optimizations.id.page.2")}
-          </Link>
-          <ChevronLeft className="h-3 w-3" />
-          <span className="text-foreground font-medium text-xs sm:text-sm break-all" dir="auto">
-            {job.name || job.optimization_id.slice(0, 8)}
-          </span>
-        </div>
-      </FadeIn>
-
       <FadeIn delay={0.1}>
         <div
           className=" rounded-xl border border-border/40 bg-gradient-to-br from-card to-card/80 p-5"
@@ -673,7 +730,9 @@ export function OptimizationDetailView() {
                 )}
               </div>
             </div>
+            {!isShare && (
             <div className="flex items-center gap-2">
+              <ShareDialog optimizationId={job.optimization_id} />
               <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
                 <Button
                   variant="ghost"
@@ -705,6 +764,28 @@ export function OptimizationDetailView() {
                 />
               )}
             </div>
+            )}
+            {shareCanInteract && (
+              <div className="flex items-center gap-2">
+                <TooltipButton tooltip={msg("share.clone_tooltip")}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() =>
+                      router.push(
+                        `/submit?clone=${job.optimization_id}&shareToken=${encodeURIComponent(
+                          shareToken ?? "",
+                        )}`,
+                      )
+                    }
+                    aria-label={msg("share.clone")}
+                  >
+                    <CopyPlus className="size-4" />
+                  </Button>
+                </TooltipButton>
+              </div>
+            )}
           </div>
         </div>
       </FadeIn>
@@ -939,7 +1020,7 @@ export function OptimizationDetailView() {
 
             {showPlaygroundTab && (
               <TabsContent value="playground" className="space-y-4 mt-4">
-                {job.optimization_type === "grid_search" && !isPairContext ? (
+                {!isShare && job.optimization_type === "grid_search" && !isPairContext ? (
                   <GridServeTab job={job} />
                 ) : serveInfo ? (
                   <RunPlayground
@@ -957,6 +1038,7 @@ export function OptimizationDetailView() {
                     optimizationId={job.optimization_id}
                     pairIndex={isPairContext ? activePair.pair_index : undefined}
                     onClearHistory={handleClearHistory}
+                    isShare={isShare}
                   />
                 ) : null}
               </TabsContent>
@@ -964,7 +1046,12 @@ export function OptimizationDetailView() {
 
             {showDataTab && (
               <TabsContent value="data">
-                <DataTab job={job} pairIndex={isPairContext ? activePair.pair_index : undefined} />
+                <DataTab
+                  job={job}
+                  pairIndex={isPairContext ? activePair.pair_index : undefined}
+                  sharedDataset={shareData?.dataset ?? undefined}
+                  sharedTestResults={shareData?.test_results ?? undefined}
+                />
               </TabsContent>
             )}
 
