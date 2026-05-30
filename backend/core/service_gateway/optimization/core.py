@@ -74,6 +74,7 @@ from .optimizers import (
     compile_program,
     evaluate_on_test,
     instantiate_optimizer,
+    preflight_metric_check,
     validate_optimizer_kwargs,
     validate_optimizer_signature,
 )
@@ -601,6 +602,13 @@ class DspyService:
                             PROGRESS_BASELINE,
                             {DETAIL_BASELINE: baseline_test_metric},
                         )
+
+                # Fail fast on a structurally broken metric (e.g. wrong field
+                # names or isinstance(gold, dict) gating) before spending the
+                # optimizer budget grinding at 0%. A correct metric always
+                # scores a perfect prediction > 0, so legitimately hard tasks
+                # are never blocked.
+                preflight_metric_check(metric, splits.train, signature_outputs)
 
                 logger.info("Compiling program via optimizer=%s", payload.optimizer_name)
                 with (
