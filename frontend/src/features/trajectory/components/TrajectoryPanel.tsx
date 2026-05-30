@@ -190,11 +190,11 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
             >
               <span className="relative inline-flex size-2" aria-hidden="true">
                 <motion.span
-                  className="absolute inset-0 rounded-full bg-[#7C8B5A]/40"
+                  className="absolute inset-0 rounded-full bg-[var(--warning)]/40"
                   animate={{ scale: [1, 2, 1], opacity: [0.6, 0, 0.6] }}
                   transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
                 />
-                <span className="relative inline-block size-2 rounded-full bg-[#7C8B5A]" />
+                <span className="relative inline-block size-2 rounded-full bg-[var(--warning)]" />
               </span>
               <span className="tabular-nums">{candidates.length}</span>
               <span>{TERMS.candidatePlural}</span>

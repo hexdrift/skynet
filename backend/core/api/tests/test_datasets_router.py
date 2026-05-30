@@ -12,7 +12,9 @@ from core.exceptions import AppError
 from core.i18n_en import t_en
 from core.i18n_keys import I18nKey
 
+from ..auth import AuthenticatedUser, get_authenticated_user
 from ..routers.datasets import create_datasets_router
+from .mocks import FakeJobStore
 
 
 @pytest.fixture
@@ -118,3 +120,64 @@ def test_profile_omitted_seed_is_still_populated(datasets_client: TestClient) ->
 
     assert resp.status_code == 200
     assert isinstance(resp.json()["plan"]["seed"], int)
+
+
+@pytest.fixture
+def staged_client() -> tuple[TestClient, FakeJobStore]:
+    """Build a datasets ``TestClient`` with a fake store and a fixed auth user.
+
+    Returns:
+        The bound client and the backing ``FakeJobStore`` so tests can stage
+        rows directly and assert the GET rehydration path.
+    """
+    store = FakeJobStore()
+    app = FastAPI()
+    app.include_router(create_datasets_router(job_store=store))
+    app.dependency_overrides[get_authenticated_user] = lambda: AuthenticatedUser(
+        username="alice", role="user", groups=()
+    )
+    return TestClient(app, raise_server_exceptions=False), store
+
+
+def test_get_staged_dataset_round_trips_rows_and_columns(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """A staged dataset is fetchable by id with rows + first-row column order."""
+    client, store = staged_client
+    rows = [{"q": "q1", "a": "yes"}, {"q": "q2", "a": "no"}]
+    staged_id = store.stage_dataset(username="alice", dataset_filename="d.json", rows=rows)
+
+    resp = client.get(f"/datasets/staged/{staged_id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["staged_dataset_id"] == staged_id
+    assert body["columns"] == ["q", "a"]
+    assert body["rows"] == rows
+    assert body["row_count"] == 2
+
+
+def test_get_staged_dataset_unknown_id_returns_404(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """An unknown staged id is a 404, not an empty 200."""
+    client, _ = staged_client
+
+    resp = client.get("/datasets/staged/does-not-exist")
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "dataset.staged.not_found"
+
+
+def test_get_staged_dataset_is_scoped_to_owner(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """A dataset staged by another user is invisible (404), not readable."""
+    client, store = staged_client
+    staged_id = store.stage_dataset(
+        username="mallory", dataset_filename="d.json", rows=[{"q": "x", "a": "y"}]
+    )
+
+    resp = client.get(f"/datasets/staged/{staged_id}")
+
+    assert resp.status_code == 404

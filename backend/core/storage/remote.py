@@ -19,7 +19,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import settings
-from ..constants import STRUCTURAL_PROGRESS_EVENTS
+from ..constants import STRUCTURAL_PROGRESS_EVENTS, TQDM_KEY_PREFIX
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
 from .models import (
     AgentStagedDatasetModel,
@@ -1044,7 +1044,10 @@ class RemoteDBJobStore:
                 logger.warning("Failed to trim progress events for %s", optimization_id, exc_info=True)
 
         if metrics:
-            self._replace_latest_metrics(optimization_id, metrics)
+            self._replace_latest_metrics(
+                optimization_id,
+                self._latest_metrics_with_sticky_tqdm(optimization_id, metrics),
+            )
 
     def _insert_progress_event(
         self,
@@ -1098,6 +1101,40 @@ class RemoteDBJobStore:
             session.commit()
         finally:
             session.close()
+
+    def _latest_metrics_with_sticky_tqdm(self, optimization_id: str, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Splice the last-seen optimizer tqdm progress into a metric snapshot.
+
+        ``latest_metrics`` is replaced wholesale on every progress event, but
+        tqdm-driven optimizers (e.g. GEPA) tick their ``tqdm_*`` rollout bar only
+        on ``optimizer_progress`` events while emitting many interleaved
+        ``minibatch_feedback``/candidate events that carry no ``tqdm_*`` keys.
+        Without carry-forward those interleaved events erase the progress bar and
+        its stat cards between ticks. Remember the last-seen ``tqdm_*`` family per
+        job and splice it back in so the bar persists for the life of the run.
+
+        Args:
+            optimization_id: ID of the job whose tqdm state is tracked.
+            metrics: The incoming event's metric snapshot.
+
+        Returns:
+            ``metrics`` unchanged when it already carries ``tqdm_*`` keys (the
+            sticky cache is refreshed in that case) or when no tqdm state has been
+            seen yet; otherwise a new dict with the last-seen ``tqdm_*`` keys
+            spliced beneath the incoming fields.
+        """
+        if not hasattr(self, "_tqdm_sticky"):
+            self._tqdm_sticky = {}
+            self._tqdm_sticky_lock = threading.Lock()
+        incoming_tqdm = {key: value for key, value in metrics.items() if key.startswith(TQDM_KEY_PREFIX)}
+        with self._tqdm_sticky_lock:
+            if incoming_tqdm:
+                self._tqdm_sticky[optimization_id] = incoming_tqdm
+                return metrics
+            carried = self._tqdm_sticky.get(optimization_id)
+        if not carried:
+            return metrics
+        return {**carried, **metrics}
 
     def _should_trim_progress_events(self, optimization_id: str) -> bool:
         """Return whether this event should trigger a sampled retention trim.
