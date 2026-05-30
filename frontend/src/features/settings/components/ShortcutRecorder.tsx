@@ -60,7 +60,7 @@ export function ShortcutRecorder() {
       >
         {recording ? msg("settings.agent.shortcut.recording") : display}
       </button>
-      <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
+      <span className="text-[10px] text-muted-foreground/70 text-end leading-snug">
         {msg("settings.agent.shortcut.hint")}
       </span>
     </div>

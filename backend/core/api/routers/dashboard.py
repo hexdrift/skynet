@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ...service_gateway.dashboard import (
@@ -166,12 +166,16 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
         tags=["agent"],
     )
     def public_search(
+        http_request: Request,
         request: SearchRequest,
         authorization: str | None = Header(default=None),
     ) -> SearchResponse:
         """Rank embedded jobs by pgvector similarity (or recency / gain).
 
         Args:
+            http_request: Incoming request, forwarded to
+                ``get_authenticated_user`` so the PAT branch can reach
+                ``app.state.job_store`` when ``owner_username`` is set.
             request: The query, filters, sort, and paging parameters.
             authorization: Bearer token, required only when ``owner_username``
                 is set so the mine corpus can include the user's private rows.
@@ -184,7 +188,9 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
                 unauthenticated or targets a different user than the session.
         """
         sort = request.sort if request.sort in SEARCH_SORTS else SEARCH_SORT_RELEVANCE
-        owner_username = _resolve_owner_username(request.owner_username, authorization)
+        owner_username = _resolve_owner_username(
+            http_request, request.owner_username, authorization
+        )
         data = search_optimizations(
             job_store=job_store,
             query=request.query,
@@ -209,11 +215,13 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
 
 
 def _resolve_owner_username(
-    requested: str | None, authorization: str | None
+    request: Request, requested: str | None, authorization: str | None
 ) -> str | None:
     """Verify a requested owner scope matches the authenticated session.
 
     Args:
+        request: Incoming request, forwarded to ``get_authenticated_user`` so
+            the PAT branch can reach ``app.state.job_store``.
         requested: The ``owner_username`` value from the request body, or None
             when the caller is searching the public corpus.
         authorization: Raw ``Authorization`` header.
@@ -227,7 +235,7 @@ def _resolve_owner_username(
     """
     if requested is None:
         return None
-    user = get_authenticated_user(authorization=authorization)
+    user = get_authenticated_user(request, authorization=authorization)
     normalized = requested.strip().lower()
     if not normalized:
         return None

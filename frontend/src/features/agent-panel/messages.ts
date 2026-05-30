@@ -289,9 +289,9 @@ export const agentPanelMessages = {
   "auto.features.agent.panel.components.inferenceformcard.literal.8": "טוען שדות…",
   "auto.features.agent.panel.components.inferenceformcard.template.1": "מודל: {p1}",
   "auto.features.agent.panel.components.generalistpanel.dataset_note":
-    "Attached dataset: `{p1}` ({p2} rows).\n\nField mapping:\n{p3}",
+    "ה-dataset שלך צורף: `{p1}` ({p2} שורות).\n\nמיפוי שדות:\n{p3}",
   "auto.features.agent.panel.components.generalistpanel.code_ready_note":
-    "The Signature and Metric are written and validated. Continue to the model step and submit the run.",
+    "ה-Signature וה-Metric נכתבו ואומתו. אפשר להמשיך לשלב ה-model ולהריץ את האופטימיזציה.",
   "auto.features.agent.panel.hooks.use.generalist.agent.literal.1": "חושב…",
   "auto.features.agent.panel.hooks.use.generalist.agent.literal.2": "ממתין לאישור…",
   "auto.features.agent.panel.hooks.use.generalist.agent.literal.3": "ממשיך…",

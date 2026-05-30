@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { CheckCircle2, CircleAlert, ExternalLink } from "lucide-react";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -98,7 +99,7 @@ export function SubmitSummaryCard({ call, className }: SubmitSummaryCardProps) {
       </div>
 
       {!isError && jobId && (
-        <a
+        <Link
           href={`/optimizations/${jobId}`}
           className={cn(
             "flex items-center justify-between gap-2 px-4 py-2.5",
@@ -110,7 +111,7 @@ export function SubmitSummaryCard({ call, className }: SubmitSummaryCardProps) {
             {msg("auto.features.agent.panel.components.submitsummarycard.1")}
             <ExternalLink className="size-3" aria-hidden="true" />
           </span>
-        </a>
+        </Link>
       )}
 
       {isError && result?.detail && (

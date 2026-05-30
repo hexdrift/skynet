@@ -204,6 +204,10 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
     patch.columns_configured = wrap.columns_configured;
   if (typeof wrap.model_configured === "boolean") patch.model_configured = wrap.model_configured;
 
+  if (typeof wrap.staged_dataset_id === "string" && wrap.staged_dataset_id) {
+    patch.staged_dataset_id = wrap.staged_dataset_id;
+  }
+
   if (typeof wrap.signature_code === "string") patch.signature_code = wrap.signature_code;
   if (typeof wrap.metric_code === "string") patch.metric_code = wrap.metric_code;
 

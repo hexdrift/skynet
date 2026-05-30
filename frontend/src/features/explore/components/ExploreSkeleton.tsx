@@ -8,7 +8,7 @@ export function ExploreSkeleton() {
       <div className="space-y-6">
         <section className="space-y-4">
           <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card/70 p-2 shadow-sm">
-            <div className="pointer-events-none absolute inset-y-2 end-2 z-20 flex w-14 flex-col gap-1 rounded-lg border-s border-border/60 bg-background/90 p-2 shadow-sm">
+            <div className="pointer-events-none absolute inset-y-2 start-2 z-20 flex w-14 flex-col gap-1 rounded-lg border-e border-border/60 bg-background/90 p-2 shadow-sm">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} height={40} borderRadius={6} />
               ))}

@@ -304,7 +304,7 @@ function CopyBtn({ text }: { text: string }) {
     <button
       type="button"
       onClick={copy}
-      className="absolute top-2 right-2 p-1.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/5"
+      className="absolute top-2 end-2 p-1.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/5"
       aria-label={msg("auto.app.compare.page.literal.8")}
     >
       {copied ? (

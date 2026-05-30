@@ -74,8 +74,8 @@ export function PairSelectionStrip({
   return (
     <>
       <FadeIn>
-        <div data-tutorial="pair-detail-summary" className="flex items-center justify-between rounded-xl border border-[#C8A882]/30 bg-gradient-to-l from-[#FAF8F5] to-[#F5F1EC] p-3">
-          <div className="flex items-center gap-3">
+        <div data-tutorial="pair-detail-summary" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#C8A882]/30 bg-gradient-to-l from-[#FAF8F5] to-[#F5F1EC] p-3">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={onBack}
@@ -85,20 +85,20 @@ export function PairSelectionStrip({
               <span>{msg("auto.features.optimizations.components.pairdetailview.1")}</span>
             </button>
             <span className="text-[0.6875rem] text-muted-foreground/60">|</span>
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {isBest && <Crown className="size-3.5 text-[#C8A882]" />}
-              <span className="text-sm font-semibold text-foreground">
+              <span className="text-sm font-semibold text-foreground truncate">
                 {activePair.generation_model.split("/").pop()}
               </span>
               <ReasoningPill value={activePair.generation_reasoning_effort} size="sm" />
               <span className="text-[0.6875rem] text-muted-foreground/50">×</span>
-              <span className="text-sm font-semibold text-foreground">
+              <span className="text-sm font-semibold text-foreground truncate">
                 {activePair.reflection_model.split("/").pop()}
               </span>
               <ReasoningPill value={activePair.reflection_reasoning_effort} size="sm" />
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
               <Button
                 variant="ghost"
