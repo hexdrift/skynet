@@ -6,6 +6,8 @@ conversion, and image-field detection.
 
 from __future__ import annotations
 
+import typing
+
 import dspy
 import pytest
 
@@ -183,6 +185,33 @@ class B(dspy.Signature):
 """
     with pytest.raises(ServiceError, match="exactly one"):
         load_signature_from_code(code)
+
+
+def test_load_signature_from_code_resolves_generic_annotations() -> None:
+    """Dotted generic annotations resolve to real types, not ``ForwardRef``.
+
+    Regression: ``data.py`` carries ``from __future__ import annotations``, and
+    ``exec`` inherits that PEP 563 flag unless compiled with ``dont_inherit``.
+    Without the fix a field typed ``typing.List[str]`` survived as an
+    unresolved ``ForwardRef``, crashing GEPA's ``with_instructions`` rebuild
+    with "Field types must be types, but received: ForwardRef(...)".
+    """
+    code = """
+import dspy
+import typing
+class PredictDecade(dspy.Signature):
+    title: str = dspy.InputField()
+    subcategories: typing.List[str] = dspy.InputField()
+    inventor_count: int = dspy.InputField()
+    decade: str = dspy.OutputField()
+"""
+    sig = load_signature_from_code(code)
+
+    assert not any(
+        isinstance(f.annotation, typing.ForwardRef) for f in sig.model_fields.values()
+    )
+    assert sig.model_fields["subcategories"].annotation == typing.List[str]
+    sig.with_instructions("rebuilt")  # GEPA rebuild path must not raise
 
 
 def test_load_metric_from_code_returns_callable() -> None:
