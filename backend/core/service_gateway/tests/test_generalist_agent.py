@@ -11,8 +11,10 @@ import pytest
 from core.service_gateway.agents.code import _SubmitArgExtractor
 from core.service_gateway.agents.generalist import (
     ApprovalRegistry,
+    GeneralistSig,
     WizardState,
     _needs_approval,
+    _TurnAuthoringFlag,
     _wrap_tool_with_approval,
     tools_for,
     validate_wizard_patch_order,
@@ -58,12 +60,140 @@ def test_full_readiness_unlocks_submit() -> None:
             signature_code="class S(dspy.Signature): ...",
             metric_code="def metric(): return 1.0",
             model_configured=True,
+            # GEPA (the default optimizer) reflects on a second model, so the
+            # gate requires a reflection model alongside the generation one.
+            reflection_model_config={"name": "openai/gpt-4o-mini"},
         )
     )
     assert "submit_job_run_post" in allowed
     # Grid search is intentionally NOT exposed to the agent; users reach
     # it through the wizard UI directly. See generalist._READY_TO_SUBMIT_TOOLS.
     assert "submit_grid_search_grid_search_post" not in allowed
+
+
+def test_gepa_without_reflection_model_keeps_submit_locked() -> None:
+    """GEPA with a generation model but no reflection model must NOT unlock submit.
+
+    Mirrors the manual wizard's ``reflection_model_required`` gate: submitting
+    GEPA without a ``reflection_model_config`` is a known 422, so the agent's
+    submit tool stays hidden until the reflection model is set.
+    """
+    base = WizardState(
+        job_name="My run",
+        dataset_ready=True,
+        columns_configured=True,
+        signature_code=(
+            'class Sentiment(dspy.Signature):\n'
+            '    review: str = dspy.InputField()\n'
+            '    label: str = dspy.OutputField()\n'
+        ),
+        metric_code="def metric(gold, pred, trace=None): return 1.0",
+        model_config={"name": "openai/gpt-4o-mini"},
+    )
+    assert "submit_job_run_post" not in tools_for(base)
+    with_reflection = {**base, "reflection_model_config": {"name": "openai/gpt-4o-mini"}}
+    assert "submit_job_run_post" in tools_for(cast(WizardState, with_reflection))
+
+
+# Un-edited templates the frontend seeds into the wizard from the first turn
+# (frontend/src/features/submit/lib/build-signature.ts and build-metric.ts,
+# fallback branch with no columns mapped). Submitting these triggers the
+# server's "Missing inputs: ['input_field']" 400, so the gate must reject them.
+_PLACEHOLDER_SIGNATURE = (
+    'class MySignature(dspy.Signature):\n'
+    '    """Describe the task here."""\n\n'
+    '    # inputs\n'
+    '    input_field: str = dspy.InputField(desc="")\n\n'
+    '    # outputs\n'
+    '    output_field: str = dspy.OutputField(desc="")\n'
+)
+_PLACEHOLDER_METRIC = (
+    'def metric(gold: dspy.Example, pred: dspy.Prediction, trace: bool = None,'
+    ' pred_name: str = None, pred_trace: list = None) -> dspy.Prediction:\n'
+    '    fields = ["output_field"]\n'
+    '    total = len(fields)\n'
+    '    correct = 0\n'
+    '    return dspy.Prediction(score=correct / total if total else 0.0)\n'
+)
+
+
+def test_placeholder_code_keeps_submit_locked() -> None:
+    """The seeded placeholder Signature/Metric must NOT unlock submit.
+
+    Everything else is ready (name + dataset + model), but the wizard still
+    holds the frontend's un-edited templates rather than authored code.
+    """
+    allowed = tools_for(
+        WizardState(
+            job_name="My run",
+            dataset_ready=True,
+            columns_configured=True,
+            signature_code=_PLACEHOLDER_SIGNATURE,
+            metric_code=_PLACEHOLDER_METRIC,
+            model_configured=True,
+        )
+    )
+    assert "submit_job_run_post" not in allowed
+    assert "request_code_authoring" in allowed
+
+
+def test_authored_code_unlocks_submit() -> None:
+    """Replacing the placeholders with real authored code unlocks submit."""
+    allowed = tools_for(
+        WizardState(
+            job_name="My run",
+            dataset_ready=True,
+            columns_configured=True,
+            signature_code=(
+                'class Sentiment(dspy.Signature):\n'
+                '    """Classify the sentiment of a review."""\n\n'
+                '    review: str = dspy.InputField(desc="the review text")\n'
+                '    label: str = dspy.OutputField(desc="positive or negative")\n'
+            ),
+            metric_code=(
+                'def metric(gold, pred, trace=None):\n'
+                '    return float(gold.label.strip().lower() == str(pred.label).strip().lower())\n'
+            ),
+            model_configured=True,
+            reflection_model_config={"name": "openai/gpt-4o-mini"},
+        )
+    )
+    assert "submit_job_run_post" in allowed
+
+
+def test_column_mapped_template_unlocks_submit() -> None:
+    """A column-mapped template with the default docstring is NOT a placeholder.
+
+    Once the user maps columns, build-signature.ts emits real field names
+    (e.g. question/answer) but keeps the default ``"Describe the task here."``
+    docstring. That is a valid, submittable Signature — its fields match the
+    column mapping — so the gate must not key on the docstring. Regression for
+    the agent looping back into ``request_code_authoring`` instead of advancing
+    to the Model step after the code card produced a column-mapped signature.
+    """
+    allowed = tools_for(
+        WizardState(
+            job_name="My run",
+            dataset_ready=True,
+            columns_configured=True,
+            signature_code=(
+                'class MySignature(dspy.Signature):\n'
+                '    """Describe the task here."""\n\n'
+                '    # inputs\n'
+                '    question: str = dspy.InputField(desc="")\n\n'
+                '    # outputs\n'
+                '    answer: str = dspy.OutputField(desc="")\n'
+            ),
+            metric_code=(
+                'def metric(gold, pred, trace=None):\n'
+                '    fields = ["answer"]\n'
+                '    return float(getattr(pred, "answer", None) == gold.answer)\n'
+            ),
+            model_configured=True,
+            reflection_model_config={"name": "openai/gpt-4o-mini"},
+        )
+    )
+    assert "submit_job_run_post" in allowed
 
 
 def test_missing_any_submit_precondition_keeps_submit_hidden() -> None:
@@ -82,13 +212,18 @@ def test_missing_any_submit_precondition_keeps_submit_hidden() -> None:
         "signature_code": "x",
         "metric_code": "y",
         "model_configured": True,
+        "reflection_model_config": {"name": "openai/gpt-4o-mini"},
     }
+    # Sanity-check the base is genuinely submittable, so each removal below is
+    # the sole reason submit disappears (not a second missing precondition).
+    assert "submit_job_run_post" in tools_for(cast(WizardState, base))
     criteria: dict[str, dict[str, object]] = {
         "job_name": {"job_name": ""},
         "dataset_ready": {"dataset_ready": False, "columns_configured": False},
         "signature_code": {"signature_code": ""},
         "metric_code": {"metric_code": ""},
         "model_configured": {"model_configured": False},
+        "reflection_model_config": {"reflection_model_config": {}},
     }
     for label, overrides in criteria.items():
         state = {**base, **overrides}
@@ -145,6 +280,31 @@ def test_order_allows_model_after_code() -> None:
     )
     assert (
         validate_wizard_patch_order({"model_config": {"name": "openai/gpt-4o"}}, state)
+        is None
+    )
+
+
+def test_order_allows_model_after_column_mapped_template() -> None:
+    """Setting the model is in order once a column-mapped template is present.
+
+    Regression for the agent rejecting ``model_config`` with "Do these first:
+    Code" — and looping back into authoring — when the Code step already held a
+    valid column-mapped signature that merely kept the default docstring.
+    """
+    state = WizardState(
+        job_name="My run",
+        dataset_ready=True,
+        columns_configured=True,
+        signature_code=(
+            'class MySignature(dspy.Signature):\n'
+            '    """Describe the task here."""\n\n'
+            '    question: str = dspy.InputField(desc="")\n'
+            '    answer: str = dspy.OutputField(desc="")\n'
+        ),
+        metric_code='def metric(gold, pred, trace=None):\n    fields = ["answer"]\n    return 1.0\n',
+    )
+    assert (
+        validate_wizard_patch_order({"model_config": {"name": "openai/gpt-5.4-nano"}}, state)
         is None
     )
 
@@ -410,3 +570,67 @@ def test_submit_arg_extractor_is_idempotent_on_repeat_feed() -> None:
     full = '{"tool_calls": [{"name": "submit", "args": {"reply": "hi"}}]}'
     assert ext.feed(full) == "hi"
     assert ext.feed("") is None
+
+
+@pytest.mark.asyncio
+async def test_submit_blocked_when_authoring_requested_same_turn() -> None:
+    """A submit that follows request_code_authoring in one turn is denied.
+
+    ``request_code_authoring`` writes its authored code back to the wizard
+    asynchronously, so the new Signature/Metric is not in this turn's snapshot.
+    The shared turn flag must cause the same-turn submit to short-circuit with
+    a denial observation rather than ship stale code into a doomed run.
+    """
+    flag = _TurnAuthoringFlag()
+    authoring, _ = _make_recording_tool("request_code_authoring")
+    submit, submit_seen = _make_recording_tool("submit_job_run_post")
+    common = {
+        "trust_mode": "yolo",
+        "registry": ApprovalRegistry(),
+        "emit": lambda _e: None,
+        "outer_loop": asyncio.get_running_loop(),
+        "wizard_state": cast(WizardState, {}),
+        "authoring_flag": flag,
+    }
+    _wrap_tool_with_approval(authoring, **common)
+    _wrap_tool_with_approval(submit, **common)
+
+    await authoring.func._async_body(goal="fix the signature field names")
+    result = await submit.func._async_body(name="My run")
+
+    assert "Submit blocked" in result
+    assert submit_seen == {}
+
+
+@pytest.mark.asyncio
+async def test_submit_runs_when_no_authoring_this_turn() -> None:
+    """Submit runs normally when request_code_authoring did NOT fire this turn.
+
+    The happy path — submit on a later turn, once the authored code is in the
+    snapshot — must be unaffected by the same-turn backstop.
+    """
+    flag = _TurnAuthoringFlag()
+    submit, submit_seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        submit,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(WizardState, {}),
+        authoring_flag=flag,
+    )
+    result = await submit.func._async_body(name="My run")
+    assert result == "ok"
+    assert submit_seen["name"] == "My run"
+
+
+def test_system_prompt_forbids_submit_in_authoring_turn() -> None:
+    """The system prompt must keep the never-submit-in-an-authoring-turn rule.
+
+    Guards against a future prompt edit silently dropping the ordering rule that
+    is the primary defense for this bug.
+    """
+    prompt = GeneralistSig.__doc__ or ""
+    assert "NEVER call ``submit_job_run_post`` in the SAME turn as" in prompt
+    assert "request_code_authoring" in prompt

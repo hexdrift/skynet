@@ -93,6 +93,11 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
     conversationIdRef.current = conversationId;
   }, [conversationId]);
 
+  // Effect ordering guarantees this snapshot is current at send time: this
+  // child hook's effects run before the parent panel's, so any same-commit
+  // programmatic send (e.g. the code-authoring handoff) sees the latest props.
+  // Same-tick sends that must carry not-yet-committed values pass them via the
+  // ``wizardStateOverride`` argument instead (see the dataset/code handoffs).
   const snapshotRef = React.useRef({ wizardState, trustMode });
   React.useEffect(() => {
     snapshotRef.current = { wizardState, trustMode };

@@ -145,10 +145,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   const wizardCtx = useWizardStateOptional();
   const effectiveWizard: WizardState = (() => {
     const base = wizardCtx?.state ?? {};
-    const merged = wizardState ? { ...base, ...wizardState } : base;
-    return wizardCtx?.overriddenFields?.length
-      ? { ...merged, overridden_fields: wizardCtx.overriddenFields }
-      : merged;
+    return wizardState ? { ...base, ...wizardState } : base;
   })();
 
   // Agent-submit splash: a successful submit tool plays the same full-screen
@@ -272,6 +269,22 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     store.setActiveId(null);
   }, [agent, store]);
 
+  // Deleting the conversation you're currently viewing must drop you back to a
+  // clean slate — otherwise the panel keeps showing the just-deleted thread and
+  // the next message would try to append to a row that no longer exists (404).
+  // Deleting some *other* thread from the drawer leaves the active one alone.
+  const handleDeleteConversation = React.useCallback(
+    async (id: string) => {
+      const wasActive = id === (agent.conversationId ?? store.activeId);
+      await store.remove(id);
+      if (wasActive) {
+        agent.reset();
+        store.setActiveId(null);
+      }
+    },
+    [agent, store],
+  );
+
   const thinking: AgentThinking = {
     reasoning: agent.reasoning,
     startedAt: agent.reasoningStartedAt,
@@ -308,8 +321,21 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
 
   // Drop any prior authoring session when the conversation changes (new chat or
   // one loaded from history) so its code + timer don't leak across threads.
+  //
+  // Guard against the *handoff turn itself* tripping this reset: the agentSend
+  // below assigns a fresh conversation id (null → realId) for a brand-new
+  // thread, and that materialization must NOT clear the just-set handoff latch
+  // (it would let the completion effect re-fire and double-send code_ready_note
+  // ~31ms apart). So reset only on a genuine thread switch — a change between
+  // two distinct known ids, or a drop back to null (new chat / delete) — never
+  // on the initial null → id assignment of the current thread.
   const codeAgentReset = codeAgent.reset;
+  const lastConvIdRef = React.useRef<string | null>(agent.conversationId);
   React.useEffect(() => {
+    const prev = lastConvIdRef.current;
+    lastConvIdRef.current = agent.conversationId;
+    if (prev === agent.conversationId) return;
+    if (prev === null && agent.conversationId !== null) return;
     setCodeArmed(false);
     handedOffRef.current = false;
     codeAgentReset();
@@ -332,11 +358,21 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     if (!sigVal || sigVal.errors.length > 0) return;
     if (!metVal || metVal.errors.length > 0) return;
     handedOffRef.current = true;
-    applyAgentPatch?.({
+    // Ride the authored code on this SAME nudge turn as an explicit override,
+    // not just via applyAgentPatch. agentSend reads a render-lagged snapshot,
+    // so without the override the code_ready_note turn would ship a
+    // wizard_state with empty signature_code/metric_code — the agent would see
+    // "Code incomplete", reject the Model step as out-of-order, and loop back
+    // into request_code_authoring. Mirrors the dataset handoff above.
+    const authoredCode = {
       signature_code: codeAgent.signatureCode,
       metric_code: codeAgent.metricCode,
-    });
-    agentSend(msg("auto.features.agent.panel.components.generalistpanel.code_ready_note"));
+    };
+    applyAgentPatch?.(authoredCode);
+    agentSend(
+      msg("auto.features.agent.panel.components.generalistpanel.code_ready_note"),
+      authoredCode,
+    );
   }, [
     codeArmed,
     agent.status,
@@ -393,8 +429,17 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
       window.dispatchEvent(
         new CustomEvent("wizard:dataset-staged", { detail: stagedDetail }),
       );
+      // Write the whole dataset descriptor into the shared context (not just
+      // the id) so it is the single source of truth: a wizard mounted on
+      // /submit hydrates the same rows from ``staged_dataset_id`` and reads
+      // columns + roles straight from here, instead of depending on the
+      // (quota-fragile) sessionStorage replay.
       if (stagedDatasetId && wizardCtx) {
         wizardCtx.setField("staged_dataset_id", stagedDatasetId, "user");
+        wizardCtx.setField("dataset_columns", confirmed.columns, "user");
+        wizardCtx.setField("column_roles", confirmed.columnRoles, "user");
+        wizardCtx.setField("dataset_ready", true, "user");
+        wizardCtx.setField("columns_configured", true, "user");
       }
       const mappingLine = confirmed.columns
         .map((c) => {
@@ -739,7 +784,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
         onPick={handlePickConversation}
         onRename={store.rename}
         onTogglePin={store.togglePin}
-        onDelete={store.remove}
+        onDelete={handleDeleteConversation}
       />
 
       <SubmitSplashOverlay show={submitSplash} />

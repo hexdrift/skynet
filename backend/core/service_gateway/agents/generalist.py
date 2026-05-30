@@ -239,6 +239,23 @@ def _needs_approval(tool_name: str, trust_mode: TrustMode) -> bool:
     return trust_mode == "ask" and tool_name in _SAFE_MUTATIONS
 
 
+class _TurnAuthoringFlag:
+    """Turn-scoped flag recording whether ``request_code_authoring`` fired.
+
+    One instance is created per user turn in :func:`_drive_generalist_agent`
+    and shared across every :class:`_ApprovalGatedTool` wrapper for that turn.
+    ``request_code_authoring`` writes its authored Signature/Metric back to the
+    wizard asynchronously (a later turn), so a ``submit_job_run_post`` in the
+    SAME turn would ship stale code into a doomed run. The wrapper sets this
+    flag when authoring is (re)requested and denies any submit that follows in
+    the same turn. The prompt is the primary guard; this is the backstop.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the flag as not-yet-requested for this turn."""
+        self.authoring_requested = False
+
+
 def _serialize_tool_result(v: Any) -> Any:
     """Best-effort JSON-friendly conversion for SSE ``tool_end.result``.
 
@@ -281,6 +298,7 @@ class _ApprovalGatedTool:
         outer_loop: asyncio.AbstractEventLoop,
         staged_dataset_id: str | None = None,
         wizard_state: WizardState | None = None,
+        authoring_flag: _TurnAuthoringFlag | None = None,
     ) -> None:
         """Capture the underlying tool and the side-channel plumbing.
 
@@ -307,6 +325,11 @@ class _ApprovalGatedTool:
                 (so the agent can't populate a later-step field before its
                 earlier steps are complete). One ``update_wizard_state`` call
                 per turn means the snapshot is stable for the check.
+            authoring_flag: Turn-scoped flag shared across all wrappers in this
+                turn. Set when ``request_code_authoring`` fires; checked to
+                deny a ``submit_job_run_post`` that follows it in the same turn
+                (the authored code is written back asynchronously, so it is not
+                yet in this turn's snapshot).
         """
         self._original = original
         self._tool_name = tool_name
@@ -316,6 +339,7 @@ class _ApprovalGatedTool:
         self._outer_loop = outer_loop
         self._staged_dataset_id = staged_dataset_id
         self._wizard_state = wizard_state or {}
+        self._authoring_flag = authoring_flag or _TurnAuthoringFlag()
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Sync entrypoint — DSPy 3.3 ``Tool.__call__`` invokes this from a worker thread.
@@ -354,7 +378,17 @@ class _ApprovalGatedTool:
                 when the underlying tool raises.
         """
         call_id = uuid.uuid4().hex[:12]
-        if self._tool_name in _READY_TO_SUBMIT_TOOLS:
+        # ``request_code_authoring`` writes the authored Signature/Metric back
+        # to the wizard asynchronously (a later turn), so a submit in the same
+        # turn would ship stale/unauthored code. The prompt forbids this; this
+        # is the runtime backstop.
+        if self._tool_name in _CODE_AUTHORING_TOOLS:
+            self._authoring_flag.authoring_requested = True
+        submit_after_authoring = (
+            self._tool_name in _READY_TO_SUBMIT_TOOLS
+            and self._authoring_flag.authoring_requested
+        )
+        if self._tool_name in _READY_TO_SUBMIT_TOOLS and not submit_after_authoring:
             if (
                 self._staged_dataset_id
                 and not kwargs.get("staged_dataset_id")
@@ -384,6 +418,25 @@ class _ApprovalGatedTool:
             }
         )
         try:
+            if submit_after_authoring:
+                denial = (
+                    "Submit blocked: request_code_authoring ran this turn, so the "
+                    "authored Signature/Metric is not in the wizard yet. End the "
+                    "turn with a status message and submit on a later turn once "
+                    "the code is reflected in wizard_state."
+                )
+                self._emit(
+                    {
+                        "event": "tool_end",
+                        "data": {
+                            "id": call_id,
+                            "tool": self._tool_name,
+                            "status": "error",
+                            "result": denial,
+                        },
+                    }
+                )
+                return denial
             if self._tool_name == "update_wizard_state":
                 order_error = validate_wizard_patch_order(kwargs, self._wizard_state)
                 if order_error:
@@ -481,6 +534,7 @@ def _wrap_tool_with_approval(
     outer_loop: asyncio.AbstractEventLoop,
     staged_dataset_id: str | None = None,
     wizard_state: WizardState | None = None,
+    authoring_flag: _TurnAuthoringFlag | None = None,
 ) -> dspy.Tool:
     """Replace ``tool.func`` with an approval-aware wrapper.
 
@@ -497,6 +551,9 @@ def _wrap_tool_with_approval(
             submit tool calls that omit it.
         wizard_state: Turn-start wizard snapshot used to validate
             ``update_wizard_state`` field ordering.
+        authoring_flag: Turn-scoped flag shared across all wrappers in the
+            turn, used to block a submit that follows
+            ``request_code_authoring`` in the same turn.
 
     Returns:
         The same ``tool`` instance with its ``func`` replaced.
@@ -510,6 +567,7 @@ def _wrap_tool_with_approval(
         outer_loop=outer_loop,
         staged_dataset_id=staged_dataset_id,
         wizard_state=wizard_state,
+        authoring_flag=authoring_flag,
     )
     return tool
 
@@ -529,6 +587,9 @@ class WizardState(TypedDict, total=False):
     metric_code: str
     model_configured: bool
     staged_dataset_id: str
+    optimizer_name: str
+    model_config: dict[str, Any]
+    reflection_model_config: dict[str, Any]
 
 
 _ALWAYS_TOOLS = frozenset(
@@ -628,17 +689,107 @@ def _dataset_ready(state: WizardState) -> bool:
     return bool(state.get("columns_configured") or state.get("dataset_ready"))
 
 
+# Sentinels seeded by the frontend's un-mapped code templates (see
+# frontend/src/features/submit/lib/build-signature.ts and build-metric.ts).
+# Before any dataset columns are mapped the signature template declares the
+# ``input_field``/``output_field`` field names and the metric falls back to
+# ``fields = ["output_field"]``. Those field names never match a real column
+# mapping, so a submit built from them fails validation — that is the only
+# not-yet-ready state we gate on. We deliberately do NOT key on the template's
+# ``"Describe the task here."`` docstring: build-signature.ts keeps that
+# docstring even after columns are mapped, when the same template carries real
+# field names and is a valid, submittable signature.
+_PLACEHOLDER_SENTINEL_FIELDS = ("input_field", "output_field")
+# The no-columns metric fallback emits exactly ``fields = ["output_field"]``.
+_PLACEHOLDER_METRIC_FALLBACK = 'fields = ["output_field"]'
+
+
+def _is_placeholder_signature(code: str) -> bool:
+    """Return True when ``code`` is the wizard's un-mapped Signature template.
+
+    The frontend seeds a Signature whose fields are the ``input_field`` /
+    ``output_field`` sentinels until the user maps dataset columns; those names
+    never match a real column mapping, so a submit built from them fails
+    validation. Detect that un-mapped template by its sentinel field names.
+    The template's default docstring is intentionally NOT a signal: once
+    columns are mapped the same template carries real field names and is a
+    valid, submittable Signature even if the docstring is left unchanged.
+
+    Args:
+        code: The ``signature_code`` value from the wizard state.
+
+    Returns:
+        True if ``code`` still declares the un-mapped sentinel fields.
+    """
+    if not code:
+        return False
+    return all(field in code for field in _PLACEHOLDER_SENTINEL_FIELDS)
+
+
+def _is_placeholder_metric(code: str) -> bool:
+    """Return True when ``code`` is the wizard's un-edited Metric template.
+
+    The metric template only degrades to the ``output_field`` sentinel when no
+    output columns are mapped; once real columns exist the generated metric is
+    genuinely valid. Match the full fallback ``fields`` literal rather than a
+    bare ``output_field`` substring so a dataset that legitimately has a column
+    named ``output_field`` is not misclassified as not-yet-authored.
+
+    Args:
+        code: The ``metric_code`` value from the wizard state.
+
+    Returns:
+        True if ``code`` still contains the seeded ``output_field`` fallback.
+    """
+    if not code:
+        return False
+    return _PLACEHOLDER_METRIC_FALLBACK in code
+
+
 def _code_ready(state: WizardState) -> bool:
-    """Return True when both Signature and Metric code are present (Code step)."""
-    return bool(state.get("signature_code") and state.get("metric_code"))
+    """Return True when authored Signature and Metric code are present (Code step).
+
+    A non-empty value is not enough: the frontend seeds placeholder templates
+    into the wizard, so the gate must reject those un-edited placeholders and
+    stay locked until the user authors real code.
+    """
+    signature = state.get("signature_code") or ""
+    metric = state.get("metric_code") or ""
+    if not signature or not metric:
+        return False
+    if _is_placeholder_signature(signature) or _is_placeholder_metric(metric):
+        return False
+    return True
 
 
 def _model_ready(state: WizardState) -> bool:
-    """Return True when a generation model has been chosen (Model step)."""
+    """Return True when the Model step is complete for the chosen optimizer.
+
+    A generation model is always required. GEPA additionally reflects on a
+    second model, and submitting it without a ``reflection_model_config`` is a
+    known 422 — so the gate mirrors the manual wizard's
+    ``reflection_model_required`` check and stays locked until both are set.
+    GEPA is the only supported optimizer, so an absent ``optimizer_name``
+    defaults to it (the strict path).
+
+    Args:
+        state: Current wizard snapshot.
+
+    Returns:
+        True when the generation model (and, for GEPA, the reflection model)
+        are present.
+    """
     model_cfg = state.get("model_config") or {}
-    return bool(state.get("model_configured")) or bool(
+    has_generation = bool(state.get("model_configured")) or bool(
         isinstance(model_cfg, dict) and model_cfg.get("name")
     )
+    if not has_generation:
+        return False
+    optimizer = str(state.get("optimizer_name") or "gepa").strip().lower()
+    if optimizer == "gepa":
+        reflection_cfg = state.get("reflection_model_config") or {}
+        return bool(isinstance(reflection_cfg, dict) and reflection_cfg.get("name"))
+    return True
 
 
 def tools_for(state: WizardState) -> set[str]:
@@ -859,8 +1010,22 @@ class GeneralistSig(dspy.Signature):
       whose earlier steps aren't filled yet (e.g. ``model_config`` before the
       code is authored, or ``optimizer_name`` before the dataset), the call
       is rejected with an "Out of order" error naming exactly which step to
-      complete first. Read that error, do that step, then continue — don't
-      repeat the rejected call.
+      complete first. On an "Out of order" error, do EXACTLY this, then STOP:
+        1. Do the ONE named step (e.g. "Do these first: Code" → call
+           ``request_code_authoring`` once).
+        2. END THE TURN with a short Hebrew status line via ``submit``.
+      Then OBEY these hard NEVERs on an out-of-order rejection:
+        • NEVER re-fire the rejected patch. The field that was rejected
+          (e.g. ``model_config``) belongs to a LATER step — do not retry it
+          this turn or next turn; it unlocks on its own once the earlier
+          step propagates into a future ``wizard_state`` snapshot.
+        • NEVER re-request ``request_code_authoring`` just because a
+          later-step field was rejected. A later-step rejection means an
+          earlier step is still PROPAGATING, NOT that code is missing.
+          Re-requesting authoring on a model_config rejection is the exact
+          loop that doubles the turn — do not do it.
+      Re-firing the rejected patch or re-requesting authoring in response to
+      an out-of-order error is a forbidden loop.
     * If a tool returns an error, surface it to the user in Hebrew and ask
       how to proceed — do not retry blindly. A 422/400 on submit is proof
       a wizard field is missing, not proof the submit tool is unavailable.
@@ -869,13 +1034,19 @@ class GeneralistSig(dspy.Signature):
     * When choosing a model, call ``list_models_for_agent`` and copy
       each row's ``name`` field verbatim into ``model_name`` /
       ``model_config.name``. Every ``name`` is already provider-prefixed
-      (e.g. ``openai/gpt-4o-mini``); never strip the prefix. ALWAYS pass
-      a ``query`` argument when the user named a specific model — e.g.
-      ``list_models_for_agent(query="gpt-5.4-nano")`` or
-      ``list_models_for_agent(query="claude")``. The unfiltered catalog
-      is ~18KB and 130 entries; reading it all costs ~15s of inference.
-      Filtering shrinks the response to a few hundred bytes and the call
-      returns in under a second.
+      (e.g. ``openai/gpt-4o-mini``); never strip the prefix. Obey these
+      hard rules on every ``list_models_for_agent`` call:
+        • ALWAYS pass a ``query`` argument — the model the user named, or
+          a keyword (provider/family). E.g.
+          ``list_models_for_agent(query="gpt-5.4-nano")`` or
+          ``list_models_for_agent(query="claude")``.
+        • NEVER call it with no query / NEVER fetch the full catalog. The
+          unfiltered catalog is ~18KB and ~130 entries; reading it all
+          costs ~15s of inference. A query shrinks the response to a few
+          hundred bytes and returns in under a second.
+        • Call it AT MOST ONCE per turn and REUSE that result for the rest
+          of the turn. Do not re-call it to look up a second model — the
+          first response already lists the matches.
     * When the user says "תגיש" / "תשלח" / "יש אישור" / "submit": if
       ``submit_job_run_post`` is in your tool list THIS turn, call it;
       if it isn't, identify the missing wizard field and patch it via
@@ -959,6 +1130,18 @@ class GeneralistSig(dspy.Signature):
       ``metric_code``), and only then does ``submit_job_run_post`` unlock.
       To refine later, call it again with a goal like "make the metric
       give partial credit for close answers".
+    * NEVER call ``submit_job_run_post`` in the SAME turn as
+      ``request_code_authoring``. ``request_code_authoring`` authors the
+      Signature + Metric in an inline card and writes the result back to the
+      wizard ASYNCHRONOUSLY — the new code is NOT in this turn's
+      ``wizard_state``, so submitting now ships stale or wrong code that
+      dead-ends in a doomed run. The instant you (re)request authoring —
+      whether to seed code or to FIX a problem you just found in the existing
+      Signature/Metric — END the turn with a short Hebrew status line and
+      submit ONLY on a LATER turn, once the authored code is reflected in the
+      ``wizard_state`` snapshot you are handed. Requesting authoring and
+      submitting in one turn is a contradiction: you cannot submit code you
+      just flagged as wrong.
     * Logs: ``get_job_logs`` returns the log trail when the user is
       debugging a failed run.
     * Cross-corpus search: ``public_search`` does semantic + structured
@@ -1189,6 +1372,9 @@ async def _drive_generalist_agent(
         # tool calls from a worker thread (asyncify), so the wrapper has
         # to marshal each call back here via run_coroutine_threadsafe.
         outer_loop = asyncio.get_running_loop()
+        # One flag per turn, shared across every wrapper, so a submit can see
+        # whether request_code_authoring already fired earlier in this turn.
+        authoring_flag = _TurnAuthoringFlag()
         dspy_tools = [
             _wrap_tool_with_approval(
                 dspy.Tool.from_mcp_tool(session, t),
@@ -1198,6 +1384,7 @@ async def _drive_generalist_agent(
                 outer_loop=outer_loop,
                 staged_dataset_id=staged_id,
                 wizard_state=wizard_state,
+                authoring_flag=authoring_flag,
             )
             for t in listing.tools
             if t.name in allowed_names

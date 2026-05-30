@@ -24,7 +24,6 @@ export interface WizardState {
   metric_code?: string;
   model_configured?: boolean;
   staged_dataset_id?: string;
-  overridden_fields?: string[];
   job_name?: string;
   job_description?: string;
   job_type?: "run" | "grid_search";
