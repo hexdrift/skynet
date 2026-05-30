@@ -215,6 +215,7 @@ def create_code_validation_router() -> APIRouter:
                     errors.append(_bounded_error(f"Error running metric on sample row: {exc}"))
                 else:
                     is_gepa = payload.optimizer_name == "gepa"
+                    probe_errors_before = len(errors)
                     if probe.error is not None:
                         errors.append(_bounded_error(f"Error running metric on sample row: {probe.error}"))
                     elif probe.result_kind == "none":
@@ -245,6 +246,24 @@ def create_code_validation_router() -> APIRouter:
                                 "GEPA requires dspy.Prediction with score and feedback fields."
                                 if is_gepa
                                 else "Expected a numeric (float) or boolean return value."
+                            )
+                        )
+
+                    # The probe always runs pred == gold, so a correct prediction must score > 0.
+                    # A <= 0 score means the metric mis-reads the gold/pred fields (e.g. treating
+                    # a dspy.Example as a dict). Only flag if the kind checks did not already fail.
+                    if (
+                        probe.error is None
+                        and probe.score is not None
+                        and probe.score <= 0
+                        and len(errors) == probe_errors_before
+                    ):
+                        errors.append(
+                            _bounded_error(
+                                f"Your metric scored a correct prediction (pred == gold) as {probe.score}. "
+                                "A correct answer must score > 0 — the metric likely mis-reads the gold/pred "
+                                "fields. In GEPA gold is a dspy.Example (NOT a dict, so isinstance(gold, dict) "
+                                "is always False); read fields with dot access like gold.<column> / pred.<field>."
                             )
                         )
 

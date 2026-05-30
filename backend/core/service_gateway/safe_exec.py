@@ -107,12 +107,16 @@ class MetricProbeResult:
     - ``"other"``      — the metric returned something else (e.g. a string).
     - ``"error"``      — the metric itself raised when invoked; ``error`` is
       the stringified exception.
+
+    ``score`` is the metric's numeric output as a float (the ``.score`` of a
+    prediction, or the numeric value itself), or ``None`` when unavailable.
     """
 
     result_kind: str
     result_type_name: str
     has_score_attr: bool
     error: str | None
+    score: float | None
 
 
 def _run_in_subprocess(
@@ -371,6 +375,7 @@ def _probe_worker(
                     "result_type_name": type(call_exc).__name__,
                     "has_score_attr": False,
                     "error": str(call_exc),
+                    "score": None,
                 }
             )
             return
@@ -384,6 +389,17 @@ def _probe_worker(
         else:
             kind = "other"
 
+        score: float | None
+        try:
+            if kind == "prediction":
+                score = float(result.score)
+            elif kind == "numeric":
+                score = float(result)
+            else:
+                score = None
+        except BaseException:  # non-numeric .score / unconvertible value — treat as no score
+            score = None
+
         queue.put(
             {
                 "ok": True,
@@ -391,6 +407,7 @@ def _probe_worker(
                 "result_type_name": type(result).__name__,
                 "has_score_attr": hasattr(result, "score"),
                 "error": None,
+                "score": score,
             }
         )
     except BaseException as exc:  # code failed to parse or dspy setup failed — report, don't raise
@@ -439,9 +456,11 @@ def probe_metric_on_sample(
     )
     if not result.get("ok"):
         _raise_child_error(result)
+    raw_score = result.get("score")
     return MetricProbeResult(
         result_kind=str(result["result_kind"]),
         result_type_name=str(result["result_type_name"]),
         has_score_attr=bool(result["has_score_attr"]),
         error=result.get("error"),
+        score=float(raw_score) if raw_score is not None else None,
     )

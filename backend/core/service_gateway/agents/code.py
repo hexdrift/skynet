@@ -145,9 +145,12 @@ class GenerateSignatureCode(dspy.Signature):
 
     ## Types inferred from the sample rows
 
-    Pick the narrowest type that fits EVERY sample (import from
-    ``typing`` as needed):
+    Read the actual values in ``sample_rows`` for each role-mapped
+    column and pick the narrowest type that fits EVERY sample you see —
+    do not guess from the column name. Import from ``typing`` as needed:
     * small finite vocabulary in outputs → ``Literal["a", "b", "c"]``
+      (enumerate ONLY the distinct values present in the samples — do
+      not invent extra members)
     * integer-only values → ``int``
     * numeric with decimals → ``float``
     * "yes"/"no" or "true"/"false" → ``bool``
@@ -155,7 +158,8 @@ class GenerateSignatureCode(dspy.Signature):
     * everything else → ``str``.
 
     Types constrain the parser and reduce failures — prefer them over
-    ``str`` whenever the samples support it.
+    ``str`` whenever the samples support it. If the samples are mixed or
+    ambiguous, fall back to ``str`` rather than over-constraining.
 
     ## Image inputs (``dspy.Image``)
 
@@ -247,12 +251,25 @@ class GenerateMetricCode(dspy.Signature):
 
     ## Reading gold and pred
 
-    * ``pred.<field>`` for the predicted values — fields match the
-      ``output`` columns.
-    * ``gold.<column>`` OR ``gold["<column>"]`` for ground truth —
-      support BOTH (``getattr(gold, col, None) or gold.get(col)``)
-      because ``gold`` may arrive as a ``dspy.Example`` or a plain
-      dict.
+    ``gold`` is a ``dspy.Example`` and ``pred`` is a ``dspy.Prediction``.
+    Read BOTH by plain dot access:
+
+    * ``gold.<output_column>`` for each ground-truth value — the
+      attribute name is the ``output`` column name verbatim.
+    * ``pred.<output_field>`` for each predicted value — the field name
+      matches the same ``output`` column.
+
+    This is DSPy's canonical idiom
+    (e.g. ``gold.answer.lower() == pred.answer.lower()``).
+
+    NEVER write ``isinstance(gold, dict)`` (or ``isinstance(pred, dict)``).
+    A ``dspy.Example`` is NOT a ``dict`` subclass, so such a check is
+    always False and silently zeroes the metric. Do NOT branch on the
+    type of ``gold``/``pred`` and do NOT use a
+    ``getattr(...) or gold.get(...)`` chain — just dot access. Missing
+    or malformed values are handled by the ``try/except`` below
+    (return ``dspy.Prediction(score=0.0, feedback=...)``), never by
+    type checks.
 
     ## Comparison logic (pick per-field from the samples)
 
@@ -269,6 +286,16 @@ class GenerateMetricCode(dspy.Signature):
     If the signature has MULTIPLE output fields, compute a per-field
     sub-score, average into the final score, AND include every field's
     verdict in the feedback so GEPA sees which component failed.
+
+    ## Keep it concise
+
+    Write the SMALLEST metric that does the job: one clear comparison
+    per output field plus the feedback string. Do NOT emit speculative
+    prefix-stripping, regex "variation" tables, synonym maps, or dead
+    branches unless the sample rows clearly demand them — that is the
+    comparison logic for the data you actually see, nothing more. Aim
+    for tight, readable code (a single-field metric is typically a dozen
+    lines, not sixty of scaffolding).
 
     ## Feedback content — the core of a good GEPA metric
 
