@@ -15,6 +15,7 @@ buys nothing here.
 from __future__ import annotations
 
 import random
+import typing
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -235,7 +236,14 @@ def load_signature_from_code(code: str) -> type[dspy.Signature]:
         # code_agent) run in the API process. Treat this as class-body
         # evaluation only — the signature class itself is invoked later under
         # the subprocess boundary. See backend/core/worker/subprocess_runner.py.
-        exec(code, namespace)
+        #
+        # dont_inherit=True: this module's ``from __future__ import annotations``
+        # (PEP 563) would otherwise leak into the exec'd code and stringize the
+        # signature's field annotations. DSPy resolves bare builtins (``str``,
+        # ``int``) but leaves dotted generics like ``typing.List[str]`` as an
+        # unresolved ForwardRef, which later crashes GEPA's signature rebuild
+        # ("Field types must be types, but received: ForwardRef(...)").
+        exec(compile(code, "<signature_code>", "exec", dont_inherit=True), namespace)
     except SyntaxError as exc:
         raise ServiceError(f"signature_code has a syntax error: {exc}") from exc
     signature_classes = [
@@ -247,7 +255,49 @@ def load_signature_from_code(code: str) -> type[dspy.Signature]:
         raise ServiceError("signature_code must define a dspy.Signature subclass.")
     if len(signature_classes) > 1:
         raise ServiceError("signature_code must define exactly one dspy.Signature subclass.")
-    return signature_classes[0]
+    signature_cls = signature_classes[0]
+    _resolve_signature_annotations(signature_cls, namespace)
+    return signature_cls
+
+
+def _resolve_signature_annotations(
+    signature_cls: type[dspy.Signature],
+    namespace: dict[str, Any],
+) -> None:
+    """Force-resolve a signature's field annotations into concrete types in place.
+
+    When the authored code carries ``from __future__ import annotations`` (PEP 563)
+    Pydantic stores each field annotation as a ``ForwardRef`` string instead of the
+    resolved type. DSPy's ``with_instructions`` / ``make_signature`` rebuild the
+    signature from ``cls.fields`` and reject those refs ("Field types must be types,
+    but received: ForwardRef(...)"). Resolving names against the exec namespace as
+    ``globalns`` (so ``typing``/``List`` etc. bind) and writing the concrete types
+    back onto the Pydantic ``FieldInfo`` objects makes DSPy's rebuild — which reads
+    ``cls.fields`` (those FieldInfos), not the raw class ``__annotations__`` — accept
+    them, regardless of future-import state. We deliberately do not call
+    ``model_rebuild``: Pydantic re-evaluates the stringized ``__annotations__``
+    against the class's own module globals (where ``List`` etc. are absent) and
+    would crash. Resolution failures are left untouched so a signature that merely
+    references an unresolvable name still loads as before.
+
+    Args:
+        signature_cls: The loaded ``dspy.Signature`` subclass to mutate in place.
+        namespace: The exec namespace the signature was defined in, used as the
+            global scope for name resolution.
+    """
+    try:
+        hints = typing.get_type_hints(signature_cls, globalns=namespace)
+    except Exception:
+        return
+    fields_mapping = getattr(signature_cls, "model_fields", None) or getattr(
+        signature_cls, "__pydantic_fields__", None
+    )
+    if not fields_mapping:
+        return
+    for field_name, field_info in fields_mapping.items():
+        resolved = hints.get(field_name)
+        if resolved is not None and getattr(field_info, "annotation", None) is not resolved:
+            field_info.annotation = resolved
 
 
 def load_metric_from_code(code: str) -> Callable[..., Any]:
@@ -277,7 +327,11 @@ def load_metric_from_code(code: str) -> Callable[..., Any]:
         # but runs in-process during validation (code_validation router,
         # validate_payload, code_agent). Module-level def evaluation only;
         # the metric callable itself is invoked later inside the subprocess.
-        exec(code, namespace)
+        #
+        # dont_inherit=True: keep this module's PEP 563 ``from __future__ import
+        # annotations`` from stringizing the metric's annotations, matching
+        # load_signature_from_code so user code always sees eager annotations.
+        exec(compile(code, "<metric_code>", "exec", dont_inherit=True), namespace)
     except SyntaxError as exc:
         raise ServiceError(f"metric_code has a syntax error: {exc}") from exc
     metric = namespace.get("metric")
