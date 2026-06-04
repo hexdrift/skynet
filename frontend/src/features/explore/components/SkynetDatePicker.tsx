@@ -283,7 +283,7 @@ export function SkynetDatePicker({
       <PopoverContent
         align="start"
         sideOffset={8}
-        className="w-[296px] p-0"
+        className="w-[min(296px,92vw)] p-0"
       >
         <div dir="rtl" className="flex flex-col">
           <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">

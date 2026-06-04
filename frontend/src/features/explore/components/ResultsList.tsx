@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUp, ArrowDown, Minus, Sparkles, Type } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import type { SearchResult } from "@/shared/lib/api";
 import type { SearchType } from "../hooks/use-semantic-search";
@@ -14,6 +14,10 @@ interface ResultsListProps {
   highlight: string;
   /** Which backend branch served the query — drives the per-row source badge. */
   searchType: SearchType | null;
+  /** Keyboard-highlighted row index, or -1. Driven by the search input's ↑/↓. */
+  activeIndex: number;
+  /** Fired when a row is opened — the explicit-commit signal for query trending. */
+  onResultOpen: () => void;
 }
 
 /**
@@ -27,13 +31,26 @@ interface ResultsListProps {
  * what each field is. Hover lifts the title to full-opacity; the row itself
  * is the open affordance.
  */
-export function ResultsList({ results, highlight, searchType }: ResultsListProps) {
+export function ResultsList({
+  results,
+  highlight,
+  searchType,
+  activeIndex,
+  onResultOpen,
+}: ResultsListProps) {
   const tokens = React.useMemo(() => tokenize(highlight), [highlight]);
   return (
-    <ul dir="rtl" className="divide-y divide-border/55">
-      {results.map((row) => (
+    <ul id="explore-results" dir="rtl" className="divide-y divide-border/55">
+      {results.map((row, index) => (
         <li key={row.optimization_id}>
-          <ResultRow row={row} tokens={tokens} searchType={searchType} />
+          <ResultRow
+            row={row}
+            index={index}
+            active={index === activeIndex}
+            tokens={tokens}
+            searchType={searchType}
+            onOpen={onResultOpen}
+          />
         </li>
       ))}
     </ul>
@@ -42,23 +59,40 @@ export function ResultsList({ results, highlight, searchType }: ResultsListProps
 
 function ResultRow({
   row,
+  index,
+  active,
   tokens,
   searchType,
+  onOpen,
 }: {
   row: SearchResult;
+  index: number;
+  active: boolean;
   tokens: string[];
   searchType: SearchType | null;
+  onOpen: () => void;
 }) {
   const title = row.task_name?.trim() || msg("explore.row.no_summary");
   const gain = formatGain(row.baseline_metric, row.optimized_metric);
   const dateText = formatRelativeDate(row.created_at);
   const summary = row.summary_text?.trim();
+  const ref = React.useRef<HTMLAnchorElement | null>(null);
+
+  React.useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   return (
     <Link
+      ref={ref}
+      id={`explore-result-${index}`}
       href={`/optimizations/${row.optimization_id}`}
+      onClick={onOpen}
       aria-label={formatMsg("explore.row.open_aria", { name: title })}
-      className="group relative flex flex-col gap-2 rounded-lg px-3 py-4 transition-[background-color,transform] duration-150 ease-out cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:bg-accent/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8A882]/45"
+      data-active={active || undefined}
+      className={`group relative flex flex-col gap-2 rounded-lg px-3 py-4 transition-[background-color,transform] duration-150 ease-out cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:bg-accent/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8A882]/45 ${
+        active ? "bg-accent/40 ring-2 ring-inset ring-[#C8A882]/45" : ""
+      }`}
     >
       <div className="flex items-baseline justify-between gap-4">
         <h3 className="min-w-0 flex-1 text-start text-[15.5px] font-medium leading-snug tracking-tight text-foreground/90 transition-colors group-hover:text-foreground">
@@ -74,7 +108,6 @@ function ResultRow({
       )}
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-foreground/50">
-        {searchType && <SearchTypeBadge kind={searchType} />}
         {searchType === "semantic" && row.relevance != null && (
           <RelevanceBadge relevance={row.relevance} />
         )}
@@ -90,21 +123,6 @@ function ResultRow({
         </time>
       </div>
     </Link>
-  );
-}
-
-function SearchTypeBadge({ kind }: { kind: SearchType }) {
-  const isSemantic = kind === "semantic";
-  const Icon = isSemantic ? Sparkles : Type;
-  const label = isSemantic ? msg("explore.row.type.semantic") : msg("explore.row.type.lexical");
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full border border-foreground/12 bg-foreground/[0.04] px-2 py-0.5 text-[10.5px] font-medium leading-none text-foreground/65"
-      title={label}
-    >
-      <Icon className="size-2.5" strokeWidth={2} aria-hidden="true" />
-      <span>{label}</span>
-    </span>
   );
 }
 

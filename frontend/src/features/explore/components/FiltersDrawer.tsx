@@ -148,7 +148,7 @@ export function FiltersDrawer({
                 icon={Calendar}
                 selectedCount={(dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
               >
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <DateRangeField
                     label={msg("explore.filters.date.from")}
                     value={dateFrom}
@@ -394,7 +394,7 @@ function SelectableChip({
       onClick={onClick}
       aria-pressed={active}
       dir={dir}
-      className={`group inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12.5px] transition-[background-color,border-color,color] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
+      className={`group inline-flex max-w-full items-center gap-1 rounded-full border px-3 py-1.5 text-[12.5px] transition-[background-color,border-color,color] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
         active
           ? "border-foreground/40 bg-foreground/[0.06] text-foreground"
           : "border-border bg-background text-foreground/70 hover:border-foreground/30 hover:text-foreground"
@@ -402,12 +402,12 @@ function SelectableChip({
     >
       {active && (
         <Check
-          className="size-3 text-foreground/70"
+          className="size-3 shrink-0 text-foreground/70"
           aria-hidden="true"
           strokeWidth={2.25}
         />
       )}
-      <span className="tabular-nums">{label}</span>
+      <span className="min-w-0 truncate tabular-nums">{label}</span>
     </button>
   );
 }
