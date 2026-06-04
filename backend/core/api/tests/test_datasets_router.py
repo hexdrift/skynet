@@ -27,6 +27,9 @@ def datasets_client() -> TestClient:
     """
     app = FastAPI()
     app.include_router(create_datasets_router(job_store=object()))
+    app.dependency_overrides[get_authenticated_user] = lambda: AuthenticatedUser(
+        username="alice", role="user", groups=()
+    )
 
     # Mirror the app-level AppError handler so ValidationError (400) surfaces
     # as a proper HTTP response instead of bubbling up as a 500.
@@ -181,3 +184,63 @@ def test_get_staged_dataset_is_scoped_to_owner(
     resp = client.get(f"/datasets/staged/{staged_id}")
 
     assert resp.status_code == 404
+
+
+def test_profile_rehydrates_staged_dataset_by_id(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """Profiling with only a staged id rehydrates the rows and returns a profile."""
+    client, store = staged_client
+    rows = [{"q": f"q{i}", "a": "yes" if i % 2 else "no"} for i in range(60)]
+    staged_id = store.stage_dataset(username="alice", dataset_filename="d.json", rows=rows)
+
+    resp = client.post(
+        "/datasets/profile",
+        json={
+            "staged_dataset_id": staged_id,
+            "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["profile"]["row_count"] == 60
+
+
+def test_profile_unknown_staged_id_returns_404(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """An unknown staged id surfaces a 404 rather than an empty-dataset 400."""
+    client, _ = staged_client
+
+    resp = client.post(
+        "/datasets/profile",
+        json={
+            "staged_dataset_id": "does-not-exist",
+            "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+        },
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "dataset.staged.not_found"
+
+
+def test_profile_inline_dataset_ignores_staged_id(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """An inline dataset wins; a staged id alongside it is not rehydrated."""
+    client, store = staged_client
+    staged_id = store.stage_dataset(
+        username="alice", dataset_filename="d.json", rows=[{"q": "x", "a": "y"}]
+    )
+
+    resp = client.post(
+        "/datasets/profile",
+        json={
+            "dataset": [{"q": f"q{i}", "a": "yes"} for i in range(40)],
+            "staged_dataset_id": staged_id,
+            "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["profile"]["row_count"] == 40

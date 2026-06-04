@@ -154,6 +154,33 @@ def parse_overview(job_data: dict) -> dict:
     return overview
 
 
+def job_owner(job_data: dict) -> str | None:
+    """Return the lowercased owner username for a job row, or ``None`` if absent.
+
+    Lives here (beside :func:`parse_overview`) rather than in ``routers._helpers``
+    so the access layer (:mod:`core.api.sharing_access`) can resolve ownership
+    without importing the heavyweight ``_helpers`` module — keeping the share /
+    grant resolver a leaf and breaking what would otherwise be an import cycle.
+
+    Args:
+        job_data: Raw job row from the job store.
+
+    Returns:
+        The job owner's lowercased username, or ``None`` when neither the
+        payload nor the overview carry one.
+    """
+    payload = job_data.get("payload")
+    if isinstance(payload, dict):
+        raw = payload.get("username")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip().lower()
+    overview = parse_overview(job_data)
+    raw = overview.get(PAYLOAD_OVERVIEW_USERNAME)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip().lower()
+    return None
+
+
 def extract_estimated_remaining(job_data: dict) -> str | None:
     """Read the tqdm-derived remaining-time metric and format it as ``HH:MM:SS``.
 

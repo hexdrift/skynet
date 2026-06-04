@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -615,6 +616,60 @@ def test_serve_pair_stream_fallback_when_streamify_raises(pair_stream_client: Te
     assert "event: final" in raw
     payload = json.loads(raw.split("data: ", 1)[1].split("\n")[0])
     assert payload["streaming_fallback"] is True
+
+
+async def _fake_react_chat_stream(**_kwargs):
+    """Yield a minimal react-chat SSE envelope for route wiring tests."""
+    yield {"event": "reasoning_patch", "data": {"chunk": "thinking"}}
+    yield {"event": "done", "data": {"assistant_message": "hi", "model": "openai/gpt-4o-mini"}}
+
+
+def test_serve_chat_returns_404_for_unknown_id(serve_client: TestClient) -> None:
+    """A chat request against an unknown id returns 404."""
+    resp = serve_client.post("/serve/ghost/chat", json={"user_message": "hi"})
+    assert resp.status_code == 404
+
+
+def test_serve_chat_returns_409_for_non_react_run(serve_client: TestClient, serve_store: _FakeJobStore) -> None:
+    """A non-react run rejects the chat with 409 ``serve.chat_not_react``."""
+    _seed_run_job(serve_store, "plain")
+    resp = serve_client.post("/serve/plain/chat", json={"user_message": "hi"})
+    assert resp.status_code == 409
+    assert resp.json()["code"] == I18nKey.SERVE_CHAT_NOT_REACT.value
+
+
+def test_serve_chat_streams_react_turn(serve_client: TestClient, serve_store: _FakeJobStore) -> None:
+    """A react run streams the chat turn through ``run_react_chat`` as SSE."""
+    overlay = SimpleNamespace(tool_source={"kind": "live_mcp", "mcp_url": "http://mcp.local"})
+    with (
+        patch(
+            "core.api.routers.serve.load_react_chat_inputs",
+            return_value=(object, "{}", overlay, {"model_name": "openai/gpt-4o-mini"}),
+        ),
+        patch("core.api.routers.serve.build_language_model", return_value=MagicMock()),
+        patch("core.api.routers.serve.run_react_chat", side_effect=lambda **_kw: _fake_react_chat_stream()),
+    ):
+        resp = serve_client.post("/serve/anything/chat", json={"user_message": "hi", "trust_mode": "ask"})
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    assert "event: done" in resp.text
+
+
+def test_serve_chat_confirm_returns_404_for_unknown_id(serve_client: TestClient) -> None:
+    """Confirming against an unknown run returns 404 before touching the registry."""
+    resp = serve_client.post("/serve/ghost/chat/confirm", json={"call_id": "x", "approved": True})
+    assert resp.status_code == 404
+
+
+def test_serve_chat_confirm_returns_404_for_unknown_call_id(
+    serve_client: TestClient, serve_store: _FakeJobStore
+) -> None:
+    """An owned run with an unregistered call id returns 404 ``unknown_call_id``."""
+    _seed_run_job(serve_store, "plain")
+    resp = serve_client.post("/serve/plain/chat/confirm", json={"call_id": "never-registered", "approved": True})
+    assert resp.status_code == 404
+    assert resp.json()["code"] == I18nKey.AGENT_APPROVAL_UNKNOWN_CALL_ID.value
 
 
 def test_coerce_sample_value_keeps_clean_values_and_drops_unusable() -> None:

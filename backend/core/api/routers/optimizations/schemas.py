@@ -24,6 +24,9 @@ class SidebarJobItem(BaseModel):
     pinned: bool = False
     optimization_type: str | None = None
     total_pairs: int | None = None
+    # Caller's share role on this run ("viewer"/"editor"/"owner"); only set on
+    # the "shared with me" listing, None for the caller's own optimizations.
+    role: str | None = None
 
 
 class SidebarJobsResponse(BaseModel):

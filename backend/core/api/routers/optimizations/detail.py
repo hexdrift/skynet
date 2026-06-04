@@ -22,10 +22,11 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 import dspy
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from ....config import settings
 from ....constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
@@ -61,6 +62,7 @@ from ...converters import (
     status_to_job_status,
 )
 from ...errors import DomainError
+from ...sharing_access import ShareRole
 from .._helpers import (
     _artifact_has_payload,
     _materialize_program,
@@ -68,6 +70,7 @@ from .._helpers import (
     build_summary,
     compute_compare_fingerprint,
     load_job_for_user,
+    load_job_with_role,
     stable_seed,
 )
 from ..constants import TERMINAL_STATUSES
@@ -80,8 +83,38 @@ AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_us
 # Bumped whenever the GET /optimizations/{id} response shape changes in a way
 # that adds, removes, or renames fields. Mixed into the ETag so cached 304s
 # can't serve a pre-change body that's missing the new fields. Last bump:
-# task_fingerprint moved onto _JobResponseBase (compare-gate fix).
-_RESPONSE_SCHEMA_VERSION = "v3"
+# added progress_offset / logs_offset for delta (tail) stream fetches.
+_RESPONSE_SCHEMA_VERSION = "v5"
+
+
+def _delta_offset(raw: str | None, count: int, cap: int) -> int:
+    """Resolve a client stream cursor to a safe slice offset.
+
+    Position cursors are exact only while a stream is append-only, which holds
+    precisely below the retention cap: ``count`` climbs monotonically to ``cap``
+    and then plateaus as each insert evicts the oldest row, shifting every
+    position. So at/past the cap, or when the cursor runs past ``count`` (a
+    stale or shrunk stream), the full stream is sent so the client never
+    silently misses post-eviction rows.
+
+    Args:
+        raw: The raw ``since_*`` query-param value, or ``None`` when absent.
+        count: Current number of rows in the stream.
+        cap: Per-job retention cap for the stream.
+
+    Returns:
+        The parsed cursor when it is a valid position into an append-only
+        (sub-cap) stream; ``0`` (send everything) otherwise.
+    """
+    if raw is None:
+        return 0
+    try:
+        since = int(raw)
+    except ValueError:
+        return 0
+    if since <= 0 or since > count or count >= cap:
+        return 0
+    return since
 
 
 def register_detail_routes(router: APIRouter, *, job_store) -> None:
@@ -107,10 +140,13 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         """Return full optimization detail with logs, progress, metrics, and result.
 
         Supports conditional GET via ``If-None-Match`` / ``ETag`` (304 when
-        unchanged). Grid searches include partial ``grid_result`` while still
-        running. Corrupted result data is omitted with a warning rather than
-        raising 500. 404 if the optimization id is unknown or the caller
-        doesn't own it (non-admins).
+        unchanged) and delta fetches via the optional ``since_progress`` /
+        ``since_log`` query params, which return only the stream rows past the
+        given offsets (the response echoes the honored start index in
+        ``progress_offset`` / ``logs_offset``). Grid searches include partial
+        ``grid_result`` while still running. Corrupted result data is omitted
+        with a warning rather than raising 500. 404 if the optimization id is
+        unknown or the caller doesn't own it (non-admins).
 
         Args:
             optimization_id: The id of the optimization to fetch.
@@ -127,14 +163,57 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
                 inaccessible to the caller.
         """
 
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, role = load_job_with_role(job_store, optimization_id, current_user)
+        # Null for the owner's own view (implicitly owner); the grant tier when a
+        # member reached this run via sharing, so the UI can gate actions.
+        effective_role = None if role == ShareRole.owner else str(role)
 
         status = status_to_job_status(job_data.get("status", "pending"))
 
-        progress_events = job_store.get_progress_events(optimization_id)
-        logs = job_store.get_logs(optimization_id)
-
         overview = parse_overview(job_data)
+        latest_metrics = job_data.get("latest_metrics", {})
+
+        # Compute the ETag from cheap COUNT queries and short-circuit a 304
+        # *before* materializing the full progress/log streams — which can be
+        # thousands of rows / multi-MB on a long run and were previously fetched
+        # only to be thrown away on every revalidation hit. The counts equal the
+        # lengths of the unbounded stream fetches below, so the ETag is unchanged.
+        log_count = job_store.get_log_count(optimization_id)
+        progress_count = job_store.get_progress_count(optimization_id)
+        # Rename / pin / description edits change ``payload_overview`` without
+        # touching logs, progress, or metrics — so they must be mixed into the
+        # ETag, otherwise the next revalidation returns 304 against a body
+        # that's still carrying the old name and the UI never updates. The
+        # caller's role is folded in too so two users sharing a run (different
+        # tiers) never collide on a cached 304 with the wrong effective_role.
+        overview_sig = overview.get("name"), overview.get("description"), overview.get("pinned")
+        etag_src = f"{_RESPONSE_SCHEMA_VERSION}:{status}:{log_count}:{progress_count}:{latest_metrics!s}:{overview_sig!s}:{effective_role}"
+        etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == etag:
+            # A 304 must carry no body — ``JSONResponse(content=None)`` renders
+            # ``b"null"`` (4 bytes), which h11 rejects with "Too much data for
+            # declared Content-Length" since the framing for 304 allows zero body
+            # bytes. A bodyless ``Response`` is the correct not-modified reply.
+            return Response(status_code=304, headers={"ETag": etag})
+
+        # Delta tail: an active-run client re-polls this endpoint on every
+        # progress tick. ``since_progress`` / ``since_log`` let it say "I already
+        # hold N rows", so we return only the newer tail instead of re-sending
+        # the entire (capped, but still multi-thousand-row) history each time.
+        # ``_delta_offset`` falls back to a full send when the cursor isn't a
+        # safe position (stale, or the stream has saturated its eviction cap).
+        # ``progress_offset`` / ``logs_offset`` echo the honored start index so
+        # the client knows whether to splice the tail on or replace wholesale.
+        progress_offset = _delta_offset(
+            request.query_params.get("since_progress"), progress_count, settings.progress_events_per_job_cap
+        )
+        logs_offset = _delta_offset(
+            request.query_params.get("since_log"), log_count, settings.log_entries_per_job_cap
+        )
+        progress_events = job_store.get_progress_events(optimization_id, since=progress_offset)
+        logs = job_store.get_logs(optimization_id, offset=logs_offset)
+
         optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
 
         result = None
@@ -157,7 +236,6 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         if status not in TERMINAL_STATUSES:
             est_remaining = extract_estimated_remaining(job_data)
 
-        latest_metrics = job_data.get("latest_metrics", {})
         completed_pairs = None
         failed_pairs = None
         if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
@@ -189,21 +267,13 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             completed_pairs=completed_pairs,
             failed_pairs=failed_pairs,
             progress_events=progress_events,
+            progress_offset=progress_offset,
             logs=[JobLogEntry(**log) for log in logs],
+            logs_offset=logs_offset,
             result=result,
             grid_result=grid_result,
+            effective_role=effective_role,
         )
-
-        # Rename / pin / description edits change ``payload_overview`` without
-        # touching logs, progress, or metrics — so they must be mixed into the
-        # ETag, otherwise the next revalidation returns 304 against a body
-        # that's still carrying the old name and the UI never updates.
-        overview_sig = overview.get("name"), overview.get("description"), overview.get("pinned")
-        etag_src = f"{_RESPONSE_SCHEMA_VERSION}:{status}:{len(logs)}:{len(progress_events)}:{latest_metrics!s}:{overview_sig!s}"
-        etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:12] + '"'
-        if_none_match = request.headers.get("if-none-match")
-        if if_none_match == etag:
-            return JSONResponse(status_code=304, content=None, headers={"ETag": etag})
 
         headers = {"ETag": etag}
         # ``no-cache`` (not ``no-store``) tells the browser to revalidate via

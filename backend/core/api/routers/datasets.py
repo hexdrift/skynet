@@ -150,7 +150,10 @@ def create_datasets_router(*, job_store) -> APIRouter:
         summary="Profile a dataset and recommend a split plan",
         tags=["agent"],
     )
-    def profile(payload: ProfileDatasetRequest) -> ProfileDatasetResponse:
+    def profile(
+        payload: ProfileDatasetRequest,
+        current_user: AuthenticatedUserDep,
+    ) -> ProfileDatasetResponse:
         """Return a ``DatasetProfile`` and a recommended ``SplitPlan``.
 
         The profiler walks the rows once to compute size, duplicate count,
@@ -158,16 +161,33 @@ def create_datasets_router(*, job_store) -> APIRouter:
         fractions tuned to the size tier. Users can accept the plan or
         override ``split_fractions`` when submitting the actual optimization.
 
-        Errors: 400 (empty dataset), 422 (malformed body).
+        Agent callers profiling a staged dataset pass ``staged_dataset_id``
+        instead of inline rows (the rows are too large to ferry through tool
+        arguments); the rows are rehydrated from staging here. Rehydration is
+        read-only — unlike submit, profiling never evicts the staged dataset,
+        so the user can profile it repeatedly before committing.
+
+        Errors: 400 (empty dataset), 404 (unknown staged id), 422 (malformed body).
 
         Args:
-            payload: Profiling request with dataset rows, column mapping, and seed.
+            payload: Profiling request carrying either inline rows or a
+                ``staged_dataset_id``, plus the column mapping and seed.
+            current_user: Authenticated caller; staged rows are scoped to them.
 
         Returns:
             A :class:`ProfileDatasetResponse` containing the profile and the
             recommended split plan.
+
+        Raises:
+            DomainError: 404 when ``staged_dataset_id`` matches no staged
+                dataset owned by this user.
         """
-        dataset_profile = profile_dataset(payload.dataset, payload.column_mapping)
+        rows = payload.dataset
+        if payload.staged_dataset_id and not rows:
+            rows = job_store.get_staged_dataset(payload.staged_dataset_id, current_user.username)
+            if not rows:
+                raise DomainError("dataset.staged.not_found", status=404)
+        dataset_profile = profile_dataset(rows, payload.column_mapping)
         plan = recommend_split(dataset_profile, seed=payload.seed)
         return ProfileDatasetResponse(profile=dataset_profile, plan=plan)
 

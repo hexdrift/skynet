@@ -108,3 +108,12 @@ def test_require_admin_user_rejects_non_admin(monkeypatch: pytest.MonkeyPatch) -
         require_admin_user(user)
 
     assert exc.value.status_code == 403
+
+
+def test_require_admin_user_accepts_signed_role_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The frontend's signed role=="admin" claim grants backend admin access."""
+    monkeypatch.setattr(auth_mod.settings, "admin_usernames", "")
+    monkeypatch.setattr(auth_mod.settings, "admin_groups", "")
+    user = AuthenticatedUser(username="alice@example.com", role="admin", groups=())
+
+    assert require_admin_user(user) is user

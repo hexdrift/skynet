@@ -7,18 +7,24 @@ import pickle
 from collections.abc import Generator
 from datetime import UTC, datetime
 
+import dspy
 import pytest
 from fastapi import HTTPException
 
 from ...constants import TQDM_REMAINING_KEY
 from ...models import OptimizationStatus
+from ...models.artifacts import ProgramArtifact, ReactOverlay
+from ...service_gateway.optimization.tool_overlay import hash_tool_schema
 from ..auth import AuthenticatedUser
+from ..errors import DomainError
 
 # noinspection PyProtectedMember
 from ..routers import _helpers as _helpers_mod
 
 # noinspection PyProtectedMember
 from ..routers._helpers import (
+    _materialize_program,
+    _stable_hash,
     build_summary,
     clear_program_cache,
     enforce_user_quota,
@@ -460,3 +466,219 @@ def test_load_program_call_exception_propagates_and_cache_entry_is_retained() ->
 
     # The cache entry must still be present after the failed call.
     assert "direct-inject" in _helpers_mod._program_cache
+
+
+_REACT_SIGNATURE_CODE = (
+    "import dspy\n"
+    "class ServeSig(dspy.Signature):\n"
+    "    '''Answer the question.'''\n"
+    "    question: str = dspy.InputField()\n"
+    "    answer: str = dspy.OutputField()\n"
+)
+
+
+def _canned_react_tool() -> dspy.Tool:
+    """Build a single real ``dspy.Tool`` for serve-react rebuild fixtures.
+
+    A real tool (not a stub) is required so :func:`hash_tool_schema` produces a
+    deterministic digest the drift check can compare against.
+
+    Returns:
+        A ``dspy.Tool`` named ``echo`` with a stable schema.
+    """
+
+    def echo(query: str) -> str:
+        """Echo the query back unchanged."""
+        return query
+
+    return dspy.Tool(echo, name="echo", desc="Echo the query back unchanged.")
+
+
+def _react_artifact(tool: dspy.Tool, schema_hashes: dict[str, str]) -> ProgramArtifact:
+    """Build a ``ProgramArtifact`` carrying a react overlay and a real program state.
+
+    The program state comes from a freshly dumped ``ReActV2`` so ``load_state``
+    round-trips exactly as the serve path expects.
+
+    Args:
+        tool: The roster tool the seed program was built around.
+        schema_hashes: Persisted ``{tool_name: sha256}`` snapshot to embed on
+            the overlay — drives the serve-time drift check.
+
+    Returns:
+        A ``ProgramArtifact`` with ``program_state_json`` and ``react_overlay``.
+    """
+    signature_cls = _helpers_mod.load_signature_from_code(_REACT_SIGNATURE_CODE)
+    seed = dspy.ReActV2(signature_cls, tools=[tool], max_iters=4)
+    return ProgramArtifact(
+        program_state_json=seed.dump_state(),
+        react_overlay=ReactOverlay(
+            tool_descriptions={"echo": "GEPA-optimized echo wording."},
+            tool_arg_descriptions={"echo": {"query": "GEPA-optimized arg wording."}},
+            tool_schema_hashes=schema_hashes,
+            max_iters=4,
+            tool_source={"kind": "live_mcp", "mcp_url": "http://mcp.local"},
+        ),
+    )
+
+
+def test_materialize_react_program_rebuilds_reactv2_with_overlays(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_materialize_program`` re-sources a react artifact into a ``ReActV2`` with overlays.
+
+    The live MCP roster is monkeypatched to a canned tool whose schema matches
+    the persisted snapshot, so the drift check passes and the optimized per-tool
+    and per-arg wording is re-applied onto the rebuilt program's tools.
+    """
+    tool = _canned_react_tool()
+    schema_hashes = {"echo": hash_tool_schema(tool)}
+    artifact = _react_artifact(tool, schema_hashes)
+    overview = {"signature_code": _REACT_SIGNATURE_CODE}
+
+    canned = _canned_react_tool()
+    monkeypatch.setattr(
+        _helpers_mod,
+        "resolve_react_tools",
+        lambda *_a, **_k: ([canned], {"echo": hash_tool_schema(canned)}),
+    )
+
+    program = _materialize_program(artifact, overview)
+
+    assert isinstance(program, dspy.ReActV2)
+    assert canned.desc == "GEPA-optimized echo wording."
+    assert canned.args["query"]["description"] == "GEPA-optimized arg wording."
+
+
+def test_materialize_react_program_renames_roster_from_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persisted ``tool_names`` overlay renames the served roster after drift+overlays.
+
+    Drift-check and desc/arg overlays still key on the canonical ``echo`` name
+    (the schema hash is canonical), then the proposed display name is applied so
+    ``ReActV2`` re-keys its tool map under the agent-facing name.
+    """
+    tool = _canned_react_tool()
+    schema_hashes = {"echo": hash_tool_schema(tool)}
+    artifact = _react_artifact(tool, schema_hashes)
+    artifact.react_overlay.tool_names = {"echo": "search_records"}
+    overview = {"signature_code": _REACT_SIGNATURE_CODE}
+
+    canned = _canned_react_tool()
+    monkeypatch.setattr(
+        _helpers_mod,
+        "resolve_react_tools",
+        lambda *_a, **_k: ([canned], {"echo": hash_tool_schema(canned)}),
+    )
+
+    program = _materialize_program(artifact, overview)
+
+    assert isinstance(program, dspy.ReActV2)
+    # Drift+desc/arg overlays applied under the canonical name before the rename.
+    assert canned.desc == "GEPA-optimized echo wording."
+    assert canned.name == "search_records"
+    assert "search_records" in program.tools
+
+
+def test_materialize_react_program_none_tool_names_keeps_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``tool_names`` is unset the served roster keeps canonical names (back-compat)."""
+    tool = _canned_react_tool()
+    schema_hashes = {"echo": hash_tool_schema(tool)}
+    artifact = _react_artifact(tool, schema_hashes)
+    overview = {"signature_code": _REACT_SIGNATURE_CODE}
+
+    canned = _canned_react_tool()
+    monkeypatch.setattr(
+        _helpers_mod,
+        "resolve_react_tools",
+        lambda *_a, **_k: ([canned], {"echo": hash_tool_schema(canned)}),
+    )
+
+    program = _materialize_program(artifact, overview)
+
+    assert canned.name == "echo"
+    assert "echo" in program.tools
+
+
+def test_materialize_react_program_drift_raises_409(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persisted schema hash that mismatches the live roster fails serve with 409.
+
+    The overlay records a hash that no live tool produces, so
+    ``_assert_tool_set_matches`` raises ``ToolSchemaDriftError`` which the serve
+    path surfaces as a 409 ``optimization.tool_schema_drift`` ``DomainError``.
+    """
+    tool = _canned_react_tool()
+    artifact = _react_artifact(tool, {"echo": "stale-hash-from-an-older-mcp-surface"})
+    overview = {"signature_code": _REACT_SIGNATURE_CODE}
+
+    canned = _canned_react_tool()
+    monkeypatch.setattr(
+        _helpers_mod,
+        "resolve_react_tools",
+        lambda *_a, **_k: ([canned], {"echo": hash_tool_schema(canned)}),
+    )
+
+    with pytest.raises(DomainError) as exc_info:
+        _materialize_program(artifact, overview)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.code == "optimization.tool_schema_drift"
+
+
+def test_load_program_react_cache_key_includes_roster_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``load_program`` folds the react roster hash into the cache key.
+
+    The key is ``f"{optimization_id}:{stable_hash(tool_schema_hashes)}"`` so a
+    re-sourced or drifted roster never serves a stale cached program; the bare
+    ``optimization_id`` must not appear as a key on its own.
+    """
+    tool = _canned_react_tool()
+    schema_hashes = {"echo": hash_tool_schema(tool)}
+    artifact = _react_artifact(tool, schema_hashes)
+
+    canned = _canned_react_tool()
+    monkeypatch.setattr(
+        _helpers_mod,
+        "resolve_react_tools",
+        lambda *_a, **_k: ([canned], {"echo": hash_tool_schema(canned)}),
+    )
+
+    now = datetime.now(UTC).isoformat()
+    store = _JobStoreWithDelete()
+    store.seed(
+        "react-job",
+        {
+            "optimization_id": "react-job",
+            "status": "success",
+            "created_at": now,
+            "started_at": now,
+            "completed_at": now,
+            "payload_overview": {
+                "optimization_type": "run",
+                "signature_code": _REACT_SIGNATURE_CODE,
+            },
+            "payload": {},
+            "result": {
+                "module_name": "ReActV2",
+                "optimizer_name": "GEPA",
+                "metric_name": "general",
+                "split_counts": {"train": 70, "val": 15, "test": 15},
+                "program_artifact": artifact.model_dump(),
+            },
+            "latest_metrics": {},
+            "message": None,
+        },
+    )
+
+    program, _, _ = load_program(store, "react-job", _TEST_USER)
+
+    expected_key = f"react-job:{_stable_hash(schema_hashes)}"
+    assert isinstance(program, dspy.ReActV2)
+    assert expected_key in _helpers_mod._program_cache
+    assert "react-job" not in _helpers_mod._program_cache

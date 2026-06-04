@@ -318,3 +318,36 @@ def test_format_code_roundtrip_is_stable(cv_client: TestClient) -> None:
 
     assert second_body["changed"] is False
     assert second_body["code"] == first_body["code"]
+
+
+def test_validate_code_react_metric_accepts_two_arg_signature(cv_client: TestClient) -> None:
+    """A react run accepts a ``(example, rollout)`` metric, skipping the GEPA gate + probe."""
+    payload = {
+        "metric_code": "def metric(example, rollout):\n    return 1.0\n",
+        "column_mapping": {"inputs": {"q": "question"}, "outputs": {"a": "answer"}},
+        "sample_row": {"question": "hi", "answer": "yo"},
+        "optimizer_name": "gepa",
+        "module_name": "react",
+    }
+
+    resp = cv_client.post("/validate-code", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["valid"] is True, body["errors"]
+
+
+def test_validate_code_non_react_two_arg_metric_hits_gepa_gate(cv_client: TestClient) -> None:
+    """The same 2-arg metric on a non-react GEPA run is rejected by the 5-arg gate."""
+    payload = {
+        "metric_code": "def metric(example, rollout):\n    return 1.0\n",
+        "column_mapping": {"inputs": {"q": "question"}, "outputs": {"a": "answer"}},
+        "optimizer_name": "gepa",
+    }
+
+    resp = cv_client.post("/validate-code", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["valid"] is False
+    assert any("5 arguments" in e for e in body["errors"])

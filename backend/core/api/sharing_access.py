@@ -8,15 +8,21 @@ role (or ``None`` for no access).
 
 Two sharing modes coexist on one optimization:
 
-* ``general_access`` on the active link selects the anonymous policy:
-  ``restricted`` (owner + invited members only) or ``anyone`` (anyone holding
-  the link gets a view-only, inference-free snapshot).
-* Member grants invite specific users at a tier role (``viewer`` / ``editor``
-  / ``owner``) regardless of the anonymous policy.
+* The active link selects a policy: ``general_access`` is ``restricted`` (owner
+  + invited members only) or ``anyone`` (any signed-in user holding the link
+  has access), and ``general_role`` is the tier an ``anyone`` link grants such a
+  visitor (``viewer`` or ``editor``). Access is login-gated, so an ``anyone``
+  link never grants past the editor tier and a bare URL grants nothing on its
+  own.
+* Member grants invite specific users at a tier role (``viewer`` or ``editor``)
+  regardless of the link policy. Ownership is never granted — an optimization
+  has one owner (its creator), reassigned only by outright transfer — so
+  ``owner`` is not a member-grant role.
 
-The resolver is intentionally pure to ``(session, token, user)``: it reads the
-job owner straight from the ``jobs`` row on the same session so no router or
-job-store wiring leaks into the access layer.
+A caller's effective role is the highest any rule grants. The resolver is
+intentionally pure to ``(session, token, user)``: it reads the job owner
+straight from the ``jobs`` row on the same session so no router or job-store
+wiring leaks into the access layer.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from sqlalchemy.orm import Session
 
 from ..storage.models import JobModel, OptimizationShareGrantModel, OptimizationShareLinkModel
 from .auth import AuthenticatedUser, is_admin
-from .routers._helpers import job_owner
+from .converters import job_owner
 
 
 class ShareRole(StrEnum):
@@ -36,13 +42,16 @@ class ShareRole(StrEnum):
 
     Ordered loosest-to-tightest privilege:
 
-    * ``view`` — anonymous, read-only composite (owner hidden, no inference).
-    * ``viewer`` — read (real owner shown) + run inference + clone.
-    * ``editor`` — viewer + rename + manage sharing + cancel/retry.
-    * ``owner`` — editor + delete; the actual creator and admins are owners.
+    * ``viewer`` — read (real owner shown) + clone; no inference (that spends
+      the owner's key, so it is reserved for ``editor`` and above).
+    * ``editor`` — viewer + run inference/chat + rename + cancel/retry.
+    * ``owner`` — editor + manage sharing + transfer + delete. The creator and
+      admins are owners; an optimization has exactly one.
+
+    Access is login-gated: every caller is authenticated, so the floor is
+    ``viewer`` (which shows the real owner). There is no anonymous tier.
     """
 
-    view = "view"
     viewer = "viewer"
     editor = "editor"
     owner = "owner"
@@ -52,9 +61,46 @@ class ShareRole(StrEnum):
 GENERAL_ACCESS_RESTRICTED = "restricted"
 GENERAL_ACCESS_ANYONE = "anyone"
 
-# Roles a member grant may carry. ``view`` is never a stored grant role — it is
-# only the anonymous effective role derived from an ``anyone`` link.
-MEMBER_ROLES: frozenset[str] = frozenset({ShareRole.viewer, ShareRole.editor, ShareRole.owner})
+# Roles a member grant may carry. ``owner`` is excluded — an optimization has
+# exactly one owner (its creator), reassigned by outright transfer rather than
+# granted (see the ``/sharing/transfer`` route).
+MEMBER_ROLES: frozenset[str] = frozenset({ShareRole.viewer, ShareRole.editor})
+
+# Tiers an ``anyone`` link may grant a signed-in visitor. Ownership is never
+# transferred by link, so ``owner`` is excluded (mirrors Google Drive, whose
+# link sharing tops out at Editor).
+LINK_ROLES: frozenset[str] = frozenset({ShareRole.viewer, ShareRole.editor})
+
+# Sentinel stored in a grant's ``created_by`` to mark a *link-derived* membership
+# (someone who reached the run through an ``anyone`` link) as opposed to a named
+# invite. These rows exist only to (a) list the run in the member's table and
+# (b) carry the link's current tier; they are kept in sync with the link and
+# deleted when the link is restricted/revoked, so link access tracks the link the
+# way Google Drive does — unlike a named invite, which is authoritative and
+# untouched by link changes. Double-underscored so it can never collide with a
+# real username.
+LINK_GRANT_MARKER = "__link__"
+
+# Loosest-to-tightest privilege ordering, used to compare an effective role
+# against a route's minimum required tier.
+_ROLE_RANK: dict[str, int] = {
+    ShareRole.viewer: 0,
+    ShareRole.editor: 1,
+    ShareRole.owner: 2,
+}
+
+
+def role_rank(role: ShareRole | str) -> int:
+    """Return the privilege rank of a role (higher is more privileged).
+
+    Args:
+        role: A :class:`ShareRole` (or its string value).
+
+    Returns:
+        The integer rank: ``viewer`` 0, ``editor`` 1, ``owner`` 2. Unknown
+        roles rank ``-1`` so they never satisfy a minimum tier.
+    """
+    return _ROLE_RANK.get(str(role), -1)
 
 
 def _normalize_username(username: str) -> str:
@@ -127,6 +173,33 @@ def list_grants(session: Session, optimization_id: str) -> list[OptimizationShar
     )
 
 
+def list_grants_for_user(
+    session: Session, optimization_ids: list[str], username: str
+) -> dict[str, str]:
+    """Map ``optimization_id -> role`` for one user's grants among given ids.
+
+    A single batched query backing tier checks over a set of ids (bulk
+    actions); returns only ids the user actually holds a grant on.
+
+    Args:
+        session: Open DB session.
+        optimization_ids: Ids to scope the lookup to (empty -> ``{}``).
+        username: Grantee username (compared case-insensitively).
+
+    Returns:
+        ``{optimization_id: role}`` for the user's grants intersecting the ids.
+    """
+    if not optimization_ids:
+        return {}
+    rows = session.scalars(
+        select(OptimizationShareGrantModel).where(
+            OptimizationShareGrantModel.grantee_username == _normalize_username(username),
+            OptimizationShareGrantModel.optimization_id.in_(list(optimization_ids)),
+        )
+    )
+    return {grant.optimization_id: grant.role for grant in rows}
+
+
 def get_grant(
     session: Session, optimization_id: str, username: str
 ) -> OptimizationShareGrantModel | None:
@@ -172,45 +245,76 @@ def _job_owner_for(session: Session, optimization_id: str) -> str | None:
     return job_owner({"payload": payload, "payload_overview": payload_overview})
 
 
+def resolve_effective_role(
+    session: Session, optimization_id: str, user: AuthenticatedUser
+) -> ShareRole | None:
+    """Resolve a logged-in caller's effective role on an optimization, token-free.
+
+    The owner/admin/member-grant core of :func:`resolve_share_access`, factored
+    out so the logged-in app (the normal ``/optimizations/{id}`` routes and the
+    sidebar) can resolve access the same way the ``/share/<token>`` page does —
+    without requiring a share token. Returns ``None`` for a caller with no
+    ownership and no grant.
+
+    Args:
+        session: Open DB session backing the jobs and grant tables.
+        optimization_id: Optimization to resolve access on.
+        user: Authenticated caller.
+
+    Returns:
+        :attr:`ShareRole.owner` for the creator or an admin, the grant's role
+        for an invited member, or ``None`` when the caller has neither.
+    """
+    username = _normalize_username(user.username)
+    owner = _job_owner_for(session, optimization_id)
+    if (owner is not None and owner == username) or is_admin(user):
+        return ShareRole.owner
+    grant = get_grant(session, optimization_id, username)
+    if grant is not None and grant.role in MEMBER_ROLES:
+        return ShareRole(grant.role)
+    return None
+
+
 def resolve_share_access(
-    session: Session, token: str, user: AuthenticatedUser | None
+    session: Session, token: str, user: AuthenticatedUser
 ) -> ShareRole | None:
     """Resolve the effective role a caller has on a shared optimization.
 
-    Resolution order (first match wins):
+    The caller gets the *highest* tier any applicable rule grants (Google
+    Drive's "best of your accesses" semantics), assembled from:
 
-    1. Resolve the active (non-revoked) link by ``token`` to its optimization
-       and ``general_access`` policy; an unknown/revoked token grants nothing.
-    2. The job owner or any admin -> :attr:`ShareRole.owner`.
-    3. A user holding a member grant -> that grant's role.
-    4. ``general_access == 'anyone'`` -> :attr:`ShareRole.view` (anonymous,
-       view-only).
-    5. Otherwise -> ``None`` (no access; caller 404s).
+    1. The active (non-revoked) link by ``token``; an unknown/revoked token
+       grants nothing (``None``).
+    2. The job owner / admin / invited member's resolved role (via
+       :func:`resolve_effective_role`).
+    3. Under an ``'anyone'`` link: the link's ``general_role`` (``viewer`` or
+       ``editor``). Access is login-gated, so there is no anonymous floor — a
+       bare URL never resolves to access on its own.
+
+    With no applicable rule the caller gets ``None`` (404).
 
     Args:
         session: Open DB session backing the jobs and share tables.
         token: The public share token from the ``/share/<token>`` URL.
-        user: Authenticated caller, or ``None`` for an anonymous visitor.
+        user: Authenticated caller.
 
     Returns:
         The caller's effective :class:`ShareRole`, or ``None`` when the token is
-        invalid or the caller has no access under either sharing mode.
+        invalid or the caller has no access under any rule.
     """
     link = get_link_by_token(session, token)
     if link is None:
         return None
-    optimization_id = link.optimization_id
 
-    if user is not None:
-        username = _normalize_username(user.username)
-        owner = _job_owner_for(session, optimization_id)
-        if (owner is not None and owner == username) or is_admin(user):
-            return ShareRole.owner
-        grant = get_grant(session, optimization_id, username)
-        if grant is not None and grant.role in MEMBER_ROLES:
-            return ShareRole(grant.role)
+    candidates: list[ShareRole] = []
+    resolved = resolve_effective_role(session, link.optimization_id, user)
+    if resolved is not None:
+        candidates.append(resolved)
 
     if link.general_access == GENERAL_ACCESS_ANYONE:
-        return ShareRole.view
+        link_role = link.general_role if link.general_role in LINK_ROLES else ShareRole.viewer
+        candidates.append(ShareRole(link_role))
 
-    return None
+    if not candidates:
+        return None
+    return max(candidates, key=role_rank)

@@ -2,7 +2,7 @@
 
 Exercises the owner/editor-gated management surface (general-access policy,
 member CRUD, role gating), the access-gated public composite read
-(``GET /share/{token}``), and the viewer+-only inference path
+(``GET /share/{token}``), and the editor+-only inference path
 (``POST /share/{token}/serve``).
 
 The store mirrors the in-memory SQLite pattern of the sibling routers: a
@@ -28,7 +28,8 @@ from ...storage.models import Base, JobModel
 from ...storage.remote import RemoteDBJobStore
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..routers import share as share_module
-from ..routers.share import create_share_router, get_optional_user
+from ..routers.share import create_share_router
+from ..sharing_access import get_grant
 from .mocks import make_artifact, make_run_result
 
 
@@ -100,11 +101,10 @@ def _seed_job(store: _MemStore, optimization_id: str = "opt-share-1", username: 
 def _client(store: _MemStore, user: str | None = "alice") -> TestClient:
     """Build a TestClient over the share router, optionally authed as ``user``.
 
-    The public share routes resolve the caller via ``get_optional_user`` (which
-    inspects the Authorization header and so cannot see a ``get_authenticated_user``
-    override), so both dependencies are overridden: management routes read the
-    former, the public ``/share`` routes read the latter. ``None`` leaves the
-    caller anonymous (``get_optional_user`` returns ``None``).
+    Every route (management and public ``/share``) resolves the caller via
+    ``get_authenticated_user``, so a single dependency override sets the
+    identity. ``None`` leaves the client anonymous (no override, no bearer) — the
+    login-gated routes then 401.
 
     Args:
         store: Job store wired into the router factory.
@@ -118,23 +118,32 @@ def _client(store: _MemStore, user: str | None = "alice") -> TestClient:
     if user is not None:
         identity = AuthenticatedUser(username=user, role="user", groups=())
         app.dependency_overrides[get_authenticated_user] = lambda: identity
-        app.dependency_overrides[get_optional_user] = lambda: identity
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _enable_anyone(store: _MemStore, optimization_id: str = "opt-share-1", user: str = "alice") -> str:
+def _enable_anyone(
+    store: _MemStore,
+    optimization_id: str = "opt-share-1",
+    user: str = "alice",
+    role: str | None = None,
+) -> str:
     """Set ``general_access`` to ``anyone`` and return the minted token.
 
     Args:
         store: The seeded store.
         optimization_id: Optimization to switch to an anyone-link.
         user: Owner/editor making the change.
+        role: Optional link tier (``viewer``/``editor``) to grant signed-in
+            visitors; ``None`` leaves the default (``viewer``).
 
     Returns:
         The active share token.
     """
     owner = _client(store, user=user)
-    resp = owner.put(f"/optimizations/{optimization_id}/sharing", json={"general_access": "anyone"})
+    body: dict[str, str] = {"general_access": "anyone"}
+    if role is not None:
+        body["general_role"] = role
+    resp = owner.put(f"/optimizations/{optimization_id}/sharing", json=body)
     assert resp.status_code == 200
     return resp.json()["token"]
 
@@ -176,47 +185,60 @@ def test_get_sharing_non_owner_404() -> None:
     assert stranger.get("/optimizations/opt-share-1/sharing").status_code == 404
 
 
-def test_anonymous_get_anyone_link_view_role_hides_owner_and_serve_info() -> None:
-    """Anonymous read of an anyone-link resolves to view: owner null, serve_info null."""
+def test_put_visibility_toggles_is_private() -> None:
+    """The owner can flip explore-corpus visibility, and it round-trips through GET sharing."""
+    store = _MemStore()
+    _seed_job(store)
+    owner = _client(store, user="alice")
+
+    assert owner.get("/optimizations/opt-share-1/sharing").json()["is_private"] is False
+
+    to_private = owner.put("/optimizations/opt-share-1/visibility", json={"is_private": True})
+    assert to_private.status_code == 200
+    assert to_private.json()["is_private"] is True
+    assert owner.get("/optimizations/opt-share-1/sharing").json()["is_private"] is True
+
+    back = owner.put("/optimizations/opt-share-1/visibility", json={"is_private": False})
+    assert back.status_code == 200
+    assert back.json()["is_private"] is False
+
+
+def test_put_visibility_non_owner_404() -> None:
+    """A stranger cannot change visibility (existence is not leaked)."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    stranger = _client(store, user="bob")
+    assert (
+        stranger.put("/optimizations/opt-share-1/visibility", json={"is_private": True}).status_code
+        == 404
+    )
+
+
+def test_anonymous_get_is_unauthorized() -> None:
+    """An anonymous caller cannot read a shared run: the app is login-gated (401)."""
     store = _MemStore()
     _seed_job(store, username="alice")
     token = _enable_anyone(store)
 
     public = _client(store, user=None)
-    resp = public.get(f"/share/{token}")
-    assert resp.status_code == 200
-    body = resp.json()
-
-    assert body["role"] == "view"
-    assert body["owner"] is None
-    assert body["serve_info"] is None
-    assert body["status"]["username"] is None
+    assert public.get(f"/share/{token}").status_code == 401
 
 
-def test_anonymous_get_restricted_link_404() -> None:
-    """Anonymous read of a restricted optimization 404s (no anyone fallback)."""
+def test_restricted_link_404_for_non_member() -> None:
+    """A restricted link grants nothing: a signed-in non-member 404s (no anyone fallback)."""
     store = _MemStore()
     _seed_job(store, username="alice")
     # A token exists but general access stays restricted.
     owner = _client(store, user="alice")
     token = owner.put("/optimizations/opt-share-1/sharing", json={"general_access": "restricted"}).json()["token"]
 
-    public = _client(store, user=None)
-    assert public.get(f"/share/{token}").status_code == 404
+    stranger = _client(store, user="bob")
+    assert stranger.get(f"/share/{token}").status_code == 404
 
 
-def test_member_viewer_sees_owner_and_serve_info() -> None:
-    """A viewer member sees the real owner; serve_info is populated for viewer+."""
-    store = _MemStore()
-    _seed_job(store, username="alice")
-    token = _enable_anyone(store)
-
-    owner = _client(store, user="alice")
-    assert owner.post(
-        "/optimizations/opt-share-1/sharing/members", json={"username": "carol", "role": "viewer"}
-    ).status_code == 200
-
-    info = ServeInfoResponse(
+def _serve_info_stub() -> ServeInfoResponse:
+    """Return a canned ``ServeInfoResponse`` for share-view serve_info tests."""
+    return ServeInfoResponse(
         optimization_id="opt-share-1",
         module_name="predict",
         optimizer_name="gepa",
@@ -226,8 +248,21 @@ def test_member_viewer_sees_owner_and_serve_info() -> None:
         instructions="Be helpful.",
         demo_count=0,
     )
+
+
+def test_member_viewer_sees_owner_but_not_serve_info() -> None:
+    """A viewer member sees the real owner, but serve_info stays null (serve is editor+)."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store)
+
+    owner = _client(store, user="alice")
+    assert owner.post(
+        "/optimizations/opt-share-1/sharing/members", json={"username": "carol", "role": "viewer"}
+    ).status_code == 200
+
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(share_module, "_serve_info", lambda *_args, **_kw: info)
+        mp.setattr(share_module, "_serve_info", lambda *_args, **_kw: _serve_info_stub())
         viewer = _client(store, user="carol")
         resp = viewer.get(f"/share/{token}")
 
@@ -235,8 +270,227 @@ def test_member_viewer_sees_owner_and_serve_info() -> None:
     body = resp.json()
     assert body["role"] == "viewer"
     assert body["owner"] == "alice"
+    assert body["serve_info"] is None
+    assert body["status"]["username"] == "alice"
+
+
+def test_member_editor_sees_owner_and_serve_info() -> None:
+    """An editor member sees the real owner and serve_info (editor+ may serve)."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store)
+
+    owner = _client(store, user="alice")
+    assert owner.post(
+        "/optimizations/opt-share-1/sharing/members", json={"username": "erin", "role": "editor"}
+    ).status_code == 200
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(share_module, "_serve_info", lambda *_args, **_kw: _serve_info_stub())
+        editor = _client(store, user="erin")
+        resp = editor.get(f"/share/{token}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["role"] == "editor"
+    assert body["owner"] == "alice"
     assert body["serve_info"]["input_fields"] == ["question"]
     assert body["status"]["username"] == "alice"
+
+
+def test_claim_anyone_link_persists_grant_and_makes_run_visible() -> None:
+    """Redeeming an anyone-link durably grants the link tier and surfaces the run.
+
+    The transient anyone-link tier becomes a stored member grant, so the run
+    then shows up in the redeemer's unified table (``list_jobs_visible_to``) —
+    Google-Drive "open the link, it lands in your account" semantics.
+    """
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    dan = _client(store, user="dan")
+    resp = dan.post(f"/share/{token}/claim")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["optimization_id"] == "opt-share-1"
+    assert body["role"] == "editor"
+
+    with Session(store.engine) as session:
+        grant = get_grant(session, "opt-share-1", "dan")
+    assert grant is not None
+    assert grant.role == "editor"
+
+    visible = {row["optimization_id"] for row in store.list_jobs_visible_to("dan")}
+    assert "opt-share-1" in visible
+
+
+def test_claim_restricted_link_non_member_404_no_grant() -> None:
+    """Redeeming a restricted link as a stranger 404s and persists no grant."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    token = owner.put(
+        "/optimizations/opt-share-1/sharing", json={"general_access": "restricted"}
+    ).json()["token"]
+
+    stranger = _client(store, user="mallory")
+    assert stranger.post(f"/share/{token}/claim").status_code == 404
+
+    with Session(store.engine) as session:
+        assert get_grant(session, "opt-share-1", "mallory") is None
+
+
+def test_claim_does_not_downgrade_existing_higher_grant() -> None:
+    """A viewer-tier link never lowers an existing editor grant on redeem."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="viewer")
+
+    owner = _client(store, user="alice")
+    assert owner.post(
+        "/optimizations/opt-share-1/sharing/members", json={"username": "frank", "role": "editor"}
+    ).status_code == 200
+
+    frank = _client(store, user="frank")
+    resp = frank.post(f"/share/{token}/claim")
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "editor"
+
+    with Session(store.engine) as session:
+        grant = get_grant(session, "opt-share-1", "frank")
+    assert grant is not None
+    assert grant.role == "editor"
+
+
+def test_claim_owner_redeems_without_self_grant() -> None:
+    """The owner redeeming their own link gets owner access and no grant row."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    owner = _client(store, user="alice")
+    resp = owner.post(f"/share/{token}/claim")
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "owner"
+
+    with Session(store.engine) as session:
+        assert get_grant(session, "opt-share-1", "alice") is None
+
+
+def test_claim_unauthenticated_401() -> None:
+    """Redeeming without a bearer is rejected — there is no anonymous claim."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    public = _client(store, user=None)
+    assert public.post(f"/share/{token}/claim").status_code == 401
+
+
+def test_link_member_role_tracks_link_downgrade() -> None:
+    """Flipping the link editor→viewer downgrades an existing link member live."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    dan = _client(store, user="dan")
+    assert dan.post(f"/share/{token}/claim").json()["role"] == "editor"
+
+    owner = _client(store, user="alice")
+    assert owner.put(
+        "/optimizations/opt-share-1/sharing",
+        json={"general_access": "anyone", "general_role": "viewer"},
+    ).status_code == 200
+
+    with Session(store.engine) as session:
+        grant = get_grant(session, "opt-share-1", "dan")
+    assert grant is not None
+    assert grant.role == "viewer"
+    visible = {row["optimization_id"] for row in store.list_jobs_visible_to("dan")}
+    assert "opt-share-1" in visible
+
+
+def test_link_member_removed_when_link_restricted() -> None:
+    """Restricting the link revokes a link member and drops the run from their table."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    dan = _client(store, user="dan")
+    assert dan.post(f"/share/{token}/claim").status_code == 200
+
+    owner = _client(store, user="alice")
+    assert owner.put(
+        "/optimizations/opt-share-1/sharing", json={"general_access": "restricted"}
+    ).status_code == 200
+
+    with Session(store.engine) as session:
+        assert get_grant(session, "opt-share-1", "dan") is None
+    visible = {row["optimization_id"] for row in store.list_jobs_visible_to("dan")}
+    assert "opt-share-1" not in visible
+    # The link itself still 404s for the ex-member (restricted = invite-only).
+    assert dan.get(f"/share/{token}").status_code == 404
+
+
+def test_invited_member_unaffected_by_link_changes() -> None:
+    """A named invite is authoritative: link role changes/restrict never touch it."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    _enable_anyone(store, role="editor")
+
+    owner = _client(store, user="alice")
+    assert owner.post(
+        "/optimizations/opt-share-1/sharing/members", json={"username": "carol", "role": "viewer"}
+    ).status_code == 200
+    # Downgrade then restrict the link — carol's named viewer grant must persist.
+    owner.put("/optimizations/opt-share-1/sharing", json={"general_access": "anyone", "general_role": "editor"})
+    owner.put("/optimizations/opt-share-1/sharing", json={"general_access": "restricted"})
+
+    with Session(store.engine) as session:
+        grant = get_grant(session, "opt-share-1", "carol")
+    assert grant is not None
+    assert grant.role == "viewer"
+
+
+def test_link_member_excluded_from_members_list() -> None:
+    """Link members are covered by the link row, not shown in the people list."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    owner = _client(store, user="alice")
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "erin", "role": "editor"})
+    _client(store, user="dan").post(f"/share/{token}/claim")
+
+    members = {m["username"] for m in owner.get("/optimizations/opt-share-1/sharing").json()["members"]}
+    assert "erin" in members
+    assert "dan" not in members
+
+
+def test_named_invite_supersedes_link_membership() -> None:
+    """Inviting a link member by name promotes them to an authoritative invite."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    dan = _client(store, user="dan")
+    dan.post(f"/share/{token}/claim")
+
+    owner = _client(store, user="alice")
+    assert owner.post(
+        "/optimizations/opt-share-1/sharing/members", json={"username": "dan", "role": "editor"}
+    ).status_code == 200
+    # Restricting the link must NOT drop dan now — his access is a named invite.
+    owner.put("/optimizations/opt-share-1/sharing", json={"general_access": "restricted"})
+
+    with Session(store.engine) as session:
+        grant = get_grant(session, "opt-share-1", "dan")
+    assert grant is not None
+    assert grant.role == "editor"
+    assert grant.created_by == "alice"
+    members = {m["username"] for m in owner.get("/optimizations/opt-share-1/sharing").json()["members"]}
+    assert "dan" in members
 
 
 def test_public_view_payload_is_scrubbed() -> None:
@@ -245,8 +499,8 @@ def test_public_view_payload_is_scrubbed() -> None:
     _seed_job(store, username="alice")
     token = _enable_anyone(store)
 
-    public = _client(store, user=None)
-    body = public.get(f"/share/{token}").json()
+    reader = _client(store, user="bob")
+    body = reader.get(f"/share/{token}").json()
     payload = body["payload"]
 
     assert payload["signature_code"].startswith("class S")
@@ -264,8 +518,8 @@ def test_public_view_dataset_is_full_not_capped() -> None:
     _seed_job(store, username="alice")
     token = _enable_anyone(store)
 
-    public = _client(store, user=None)
-    body = public.get(f"/share/{token}").json()
+    reader = _client(store, user="bob")
+    body = reader.get(f"/share/{token}").json()
     dataset = body["dataset"]
 
     assert dataset["total_rows"] == 40
@@ -341,27 +595,97 @@ def test_viewer_member_cannot_manage_sharing_404() -> None:
     ).status_code == 404
 
 
-def test_editor_member_can_manage_sharing() -> None:
-    """An editor-tier member can read and mutate the sharing config."""
+def test_editor_member_cannot_manage_sharing_404() -> None:
+    """Management is owner-only: an editor-tier member 404s on the sharing endpoints."""
     store = _MemStore()
     _seed_job(store, username="alice")
     owner = _client(store, user="alice")
     owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "erin", "role": "editor"})
 
     editor = _client(store, user="erin")
-    assert editor.get("/optimizations/opt-share-1/sharing").status_code == 200
-    added = editor.post(
+    assert editor.get("/optimizations/opt-share-1/sharing").status_code == 404
+    assert editor.post(
         "/optimizations/opt-share-1/sharing/members", json={"username": "dave", "role": "viewer"}
+    ).status_code == 404
+
+
+def test_grant_owner_role_400() -> None:
+    """Owner is no longer a grantable member tier — granting it is rejected."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    resp = owner.post(
+        "/optimizations/opt-share-1/sharing/members", json={"username": "dave", "role": "owner"}
     )
-    assert added.status_code == 200
-    assert {"username": "dave", "role": "viewer"} in added.json()["members"]
+    assert resp.status_code == 400
+
+
+def test_patch_member_to_owner_400() -> None:
+    """A member can't be promoted to owner via PATCH — owner isn't a grant tier."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "dave", "role": "viewer"})
+    resp = owner.patch("/optimizations/opt-share-1/sharing/members/dave", json={"role": "owner"})
+    assert resp.status_code == 400
+
+
+def test_transfer_ownership_demotes_old_owner_and_promotes_member() -> None:
+    """Transfer flips the owner, demotes the old owner to editor, drops the new owner's grant."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "dave", "role": "viewer"})
+
+    transferred = owner.post("/optimizations/opt-share-1/sharing/transfer", json={"username": "dave"})
+    assert transferred.status_code == 200
+    body = transferred.json()
+    assert body["owner"] == "dave"
+    assert {"username": "alice", "role": "editor"} in body["members"]
+    assert all(m["username"] != "dave" for m in body["members"])
+
+    # The owner flip took effect: dave manages now, alice (now an editor) does not.
+    assert _client(store, user="dave").get("/optimizations/opt-share-1/sharing").status_code == 200
+    assert _client(store, user="alice").get("/optimizations/opt-share-1/sharing").status_code == 404
+
+
+def test_transfer_to_non_member_404() -> None:
+    """Transferring to someone who isn't already a member is rejected (Drive parity)."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    resp = owner.post("/optimizations/opt-share-1/sharing/transfer", json={"username": "stranger"})
+    assert resp.status_code == 404
+
+
+def test_transfer_to_current_owner_400() -> None:
+    """Transferring to the current owner is a no-op error."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    resp = owner.post("/optimizations/opt-share-1/sharing/transfer", json={"username": "alice"})
+    assert resp.status_code == 400
+
+
+def test_transfer_by_non_owner_404() -> None:
+    """A non-owner member cannot transfer ownership (404 — existence not leaked)."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "dave", "role": "editor"})
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "erin", "role": "viewer"})
+
+    resp = _client(store, user="dave").post(
+        "/optimizations/opt-share-1/sharing/transfer", json={"username": "erin"}
+    )
+    assert resp.status_code == 404
 
 
 def test_unknown_token_404() -> None:
-    """An unknown share token returns 404."""
+    """An unknown share token returns 404 (for a signed-in caller; anonymous 401s)."""
     store = _MemStore()
-    public = _client(store, user=None)
-    assert public.get("/share/does-not-exist").status_code == 404
+    reader = _client(store, user="alice")
+    assert reader.get("/share/does-not-exist").status_code == 404
 
 
 def test_user_search_matches_prefix() -> None:
@@ -378,6 +702,22 @@ def test_user_search_matches_prefix() -> None:
     assert "alice" in names
     assert "albert" in names
     assert "bob" not in names
+
+
+def test_user_search_excludes_synthetic_local_accounts() -> None:
+    """Synthetic ``.local`` test/load usernames never surface in the picker."""
+    store = _MemStore()
+    _seed_job(store, optimization_id="opt-real", username="analytics")
+    _seed_job(store, optimization_id="opt-fake-1", username="analytics-1-1@s.local")
+    _seed_job(store, optimization_id="opt-fake-2", username="probe@sampler.local")
+    caller = _client(store, user="analytics")
+
+    names = caller.get("/users/search", params={"q": "analytics"}).json()["usernames"]
+    assert "analytics" in names
+    assert "analytics-1-1@s.local" not in names
+
+    # A prefix that matches only synthetic accounts returns an empty list.
+    assert caller.get("/users/search", params={"q": "probe@"}).json()["usernames"] == []
 
 
 class _FakePrediction:
@@ -411,21 +751,21 @@ def _seed_serveable(store: _MemStore, optimization_id: str = "opt-share-1") -> t
     return program, result, overview
 
 
-def test_serve_allowed_for_viewer_member() -> None:
-    """A viewer member can run inference; the owner key is used server-side."""
+def test_serve_allowed_for_editor_member() -> None:
+    """An editor member can run inference; the owner key is used server-side."""
     store = _MemStore()
     _seed_job(store, username="alice")
     token = _enable_anyone(store)
     owner = _client(store, user="alice")
-    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "carol", "role": "viewer"})
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "erin", "role": "editor"})
 
     program, result, overview = _seed_serveable(store)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(share_module, "load_program", lambda *_a, **_k: (program, result, overview))
         mp.setattr(share_module, "build_language_model", lambda _cfg: object())
         mp.setattr(share_module.dspy, "context", lambda **_kw: nullcontext())
-        viewer = _client(store, user="carol")
-        resp = viewer.post(f"/share/{token}/serve", json={"inputs": {"question": "hi"}})
+        editor = _client(store, user="erin")
+        resp = editor.post(f"/share/{token}/serve", json={"inputs": {"question": "hi"}})
 
     assert resp.status_code == 200
     body = resp.json()
@@ -437,12 +777,136 @@ def test_serve_allowed_for_viewer_member() -> None:
     assert "secret.internal" not in resp.text
 
 
-def test_serve_forbidden_for_anonymous_view_role() -> None:
-    """An anonymous view-role caller is forbidden from inference (403)."""
+def test_serve_forbidden_for_viewer_member() -> None:
+    """A viewer member is forbidden from inference (403) — serving is editor+."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store)
+    owner = _client(store, user="alice")
+    owner.post("/optimizations/opt-share-1/sharing/members", json={"username": "carol", "role": "viewer"})
+
+    viewer = _client(store, user="carol")
+    resp = viewer.post(f"/share/{token}/serve", json={"inputs": {"question": "hi"}})
+    assert resp.status_code == 403
+
+
+def test_serve_unauthorized_for_anonymous() -> None:
+    """Anonymous inference is rejected at the login gate (401), before any role check."""
     store = _MemStore()
     _seed_job(store, username="alice")
     token = _enable_anyone(store)
 
     public = _client(store, user=None)
     resp = public.post(f"/share/{token}/serve", json={"inputs": {"question": "hi"}})
-    assert resp.status_code == 403
+    assert resp.status_code == 401
+
+
+def test_put_general_role_sets_link_tier() -> None:
+    """The owner can set the anyone-link tier (viewer/editor), echoed in the state."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+
+    resp = owner.put(
+        "/optimizations/opt-share-1/sharing",
+        json={"general_access": "anyone", "general_role": "editor"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["general_access"] == "anyone"
+    assert body["general_role"] == "editor"
+
+    # The tier persists even when flipping back to restricted.
+    back = owner.put("/optimizations/opt-share-1/sharing", json={"general_access": "restricted"})
+    assert back.status_code == 200
+    assert back.json()["general_role"] == "editor"
+
+
+def test_put_invalid_general_role_400() -> None:
+    """A general_role outside {viewer, editor} (e.g. owner) is rejected with 400."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    owner = _client(store, user="alice")
+    resp = owner.put(
+        "/optimizations/opt-share-1/sharing",
+        json={"general_access": "anyone", "general_role": "owner"},
+    )
+    assert resp.status_code == 400
+
+
+def test_signed_in_stranger_gets_editor_link_role_and_can_serve() -> None:
+    """An ``anyone -> editor`` link makes a signed-in non-member an editor who can serve."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="editor")
+
+    stranger = _client(store, user="bob")
+    read = stranger.get(f"/share/{token}")
+    assert read.status_code == 200
+    assert read.json()["role"] == "editor"
+    assert read.json()["owner"] == "alice"
+
+    program, result, overview = _seed_serveable(store)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(share_module, "load_program", lambda *_a, **_k: (program, result, overview))
+        mp.setattr(share_module, "build_language_model", lambda _cfg: object())
+        mp.setattr(share_module.dspy, "context", lambda **_kw: nullcontext())
+        served = stranger.post(f"/share/{token}/serve", json={"inputs": {"question": "hi"}})
+    assert served.status_code == 200
+
+
+def test_signed_in_stranger_viewer_link_cannot_serve() -> None:
+    """An ``anyone -> viewer`` link gives a signed-in stranger viewer: read yes, serve no."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    token = _enable_anyone(store, role="viewer")
+
+    stranger = _client(store, user="bob")
+    read = stranger.get(f"/share/{token}")
+    assert read.status_code == 200
+    assert read.json()["role"] == "viewer"
+
+    served = stranger.post(f"/share/{token}/serve", json={"inputs": {"question": "hi"}})
+    assert served.status_code == 403
+
+
+def test_public_view_of_public_optimization_is_readable_and_scrubbed() -> None:
+    """Any caller can read a public (is_private=false) optimization, secrets stripped.
+
+    Backs the Explore "public" tab: a non-owner with no grant gets the ``viewer``
+    tier (read + clone) — owner shown for attribution, ``serve_info`` null (no
+    inference), and the payload free of api_key / base_url / username.
+    """
+    store = _MemStore()
+    _seed_job(store, username="alice")
+
+    stranger = _client(store, user="bob")
+    resp = stranger.get("/optimizations/opt-share-1/public")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["role"] == "viewer"
+    assert body["owner"] == "alice"
+    assert body["serve_info"] is None
+    payload = body["payload"]
+    assert "username" not in payload
+    assert "base_url" not in payload["model_config"]
+    assert "api_key" not in payload["model_config"]["extra"]
+
+
+def test_public_view_of_private_optimization_404() -> None:
+    """A private optimization is not publicly viewable."""
+    store = _MemStore()
+    _seed_job(store, username="alice")
+    job_data = store.get_job("opt-share-1")
+    overview = {**job_data["payload_overview"], "is_private": True}
+    store.update_job("opt-share-1", payload_overview=overview)
+
+    stranger = _client(store, user="bob")
+    assert stranger.get("/optimizations/opt-share-1/public").status_code == 404
+
+
+def test_public_view_unknown_optimization_404() -> None:
+    """Reading a public view of an unknown id 404s."""
+    store = _MemStore()
+    stranger = _client(store, user="bob")
+    assert stranger.get("/optimizations/does-not-exist/public").status_code == 404

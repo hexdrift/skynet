@@ -1,8 +1,8 @@
 """Public anonymous dashboard routes (PER-11 Feature B). [INTERNAL]
 
-``GET /dashboard/public`` returns the full corpus scatter map. ``POST
+``GET /dashboard/public`` returns the full corpus point list. ``POST
 /dashboard/search`` runs semantic + structured search and returns ranked
-results plus the matched-id set the map uses to dim non-matches.
+results plus the matched-id set the list view uses to scope filters.
 
 Hidden from the public Scalar reference (none are in
 ``_SCALAR_PUBLIC_PATHS``) — the response shapes are bound to the /explore
@@ -18,18 +18,21 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ...service_gateway.dashboard import (
+    POPULAR_QUERIES_LIMIT_DEFAULT,
     SEARCH_PAGE_SIZE_DEFAULT,
     SEARCH_PAGE_SIZE_MAX,
     SEARCH_SORT_RELEVANCE,
     SEARCH_SORTS,
+    fetch_popular_queries,
     fetch_public_dashboard,
+    record_public_search_query,
     search_optimizations,
 )
 from ..auth import get_authenticated_user
 
 
 class PublicDashboardPoint(BaseModel):
-    """One scatter-plot point per embedded job.
+    """One point in the public optimization corpus.
 
     Heavy fields like ``signature_code``, ``optimizer_kwargs``, and
     ``metric_name`` were dropped from the public payload — they are not
@@ -46,8 +49,6 @@ class PublicDashboardPoint(BaseModel):
     module_name: str | None = None
     optimizer_name: str | None = None
     created_at: str | None = None
-    x: float = 0.0
-    y: float = 0.0
     # Older optimization_ids that share this point's identity (same task
     # signature + module + optimizer + type). Empty when the leader is
     # unique. Used by the explore UI to offer a "compare with previous
@@ -60,14 +61,10 @@ class PublicDashboardPoint(BaseModel):
     # Stronger key: same task AND byte-identical train/val/test splits.
     # Backend uses this for dedup; one ``compare_fingerprint`` = one leader.
     compare_fingerprint: str | None = None
-    # False for successful jobs that haven't been embedded yet — they
-    # appear in the corpus count and in lexical search results, but the
-    # frontend should not render them on the scatter map (x/y are stubs).
-    has_coordinates: bool = True
 
 
 class PublicDashboardResponse(BaseModel):
-    """Envelope for ``GET /dashboard/public`` — the cross-user scatter map."""
+    """Envelope for ``GET /dashboard/public`` — the cross-user optimization corpus."""
 
     points: list[PublicDashboardPoint]
 
@@ -121,12 +118,36 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
     total: int
     # Every ``optimization_id`` that satisfies the query + filters, capped
-    # at SEARCH_MATCHED_IDS_CAP. Used by the map view to dim non-matches.
+    # at SEARCH_MATCHED_IDS_CAP.
     matched_ids: list[str]
     # Which dispatch branch the gateway took. The /explore UI surfaces this
     # on every result row so users see whether they got embedding-ranked or
     # ILIKE-matched hits.
     search_type: Literal["semantic", "lexical"] | None = None
+
+
+class SearchLogRequest(BaseModel):
+    """Body for ``POST /dashboard/search/log`` — one explicitly-committed query.
+
+    Sent by the /explore UI only on an explicit commit (Enter or opening a
+    result), never on debounced typing, so trending counts reflect intent
+    rather than every half-typed prefix.
+    """
+
+    query: str
+
+
+class PopularQuery(BaseModel):
+    """One trending public search query and how often it was run."""
+
+    query: str
+    count: int
+
+
+class PopularQueriesResponse(BaseModel):
+    """Envelope for ``GET /dashboard/search/popular`` — trending public queries."""
+
+    queries: list[PopularQuery]
 
 
 def create_dashboard_router(*, job_store: Any) -> APIRouter:
@@ -145,13 +166,14 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
         "/dashboard/public",
         response_model=PublicDashboardResponse,
         status_code=200,
-        summary="Anonymous cross-user scatter map",
+        summary="Anonymous cross-user corpus",
     )
     def public_dashboard() -> PublicDashboardResponse:
-        """UMAP-projected job points for the /explore page.
+        """Public corpus points for the /explore page.
 
         Returns:
-            A :class:`PublicDashboardResponse` with one point per embedded job.
+            A :class:`PublicDashboardResponse` with one point per public
+            success-state job.
         """
         data = fetch_public_dashboard(job_store=job_store)
         return PublicDashboardResponse(
@@ -181,7 +203,7 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
                 is set so the mine corpus can include the user's private rows.
 
         Returns:
-            Ranked page plus the full matched-id set for map dimming.
+            Ranked page plus the full matched-id set for explore-page dimming.
 
         Raises:
             HTTPException: When ``owner_username`` is set but the request is
@@ -210,6 +232,41 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
             matched_ids=list(data["matched_ids"]),
             search_type=data.get("search_type"),
         )
+
+    @router.post(
+        "/dashboard/search/log",
+        status_code=204,
+        summary="Record an explicitly-committed public search query",
+    )
+    def log_search_query(request: SearchLogRequest) -> None:
+        """Record one public query for trending on an explicit commit.
+
+        Fire-and-forget from the /explore UI (Enter or opening a result). The
+        gateway normalizes and best-effort writes the row; failures are
+        swallowed so logging never affects the user.
+
+        Args:
+            request: The committed query to record.
+        """
+        record_public_search_query(job_store, request.query)
+
+    @router.get(
+        "/dashboard/search/popular",
+        response_model=PopularQueriesResponse,
+        status_code=200,
+        summary="Trending public search queries",
+    )
+    def popular_searches() -> PopularQueriesResponse:
+        """Most-run public-corpus search queries over a recent window.
+
+        Returns:
+            A :class:`PopularQueriesResponse` ranked by occurrence count, most
+            popular first. Empty until the public corpus has been searched.
+        """
+        rows = fetch_popular_queries(
+            job_store=job_store, limit=POPULAR_QUERIES_LIMIT_DEFAULT
+        )
+        return PopularQueriesResponse(queries=[PopularQuery(**r) for r in rows])
 
     return router
 

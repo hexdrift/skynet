@@ -37,10 +37,8 @@ from typing import Any
 
 from fastapi import FastAPI
 from sqlalchemy import text
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.types import ASGIApp
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..config import settings
 from .routers.agent_history import purge_stale_conversations
@@ -617,8 +615,15 @@ def start_event_loop_lag_monitor() -> EventLoopLagMonitor:
     return monitor
 
 
-class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Bind a stable request id to every request for log correlation."""
+class RequestIDMiddleware:
+    """Bind a stable request id to every request for log correlation.
+
+    Pure ASGI (not ``BaseHTTPMiddleware``) so it never buffers the response
+    body. ``BaseHTTPMiddleware`` re-emits responses through an internal memory
+    stream, which corrupts long-lived ``StreamingResponse``/SSE framing when the
+    client disconnects — uvicorn/h11 then raises ``Too much data for declared
+    Content-Length``. Header-only work belongs in pure ASGI middleware.
+    """
 
     def __init__(self, app: ASGIApp, header_name: str = REQUEST_ID_HEADER) -> None:
         """Wrap ``app`` so each request has a request id bound on a ContextVar.
@@ -627,29 +632,35 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             app: The downstream ASGI application.
             header_name: Inbound and outbound header name carrying the id.
         """
-        super().__init__(app)
+        self.app = app
         self._header_name = header_name
 
-    async def dispatch(self, request: Request, call_next):
-        """Read or mint the request id, publish it on the contextvar, propagate it.
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Mint/propagate the request id and stamp it on the response start.
+
+        Non-HTTP scopes (lifespan, websocket) pass straight through unstamped.
 
         Args:
-            request: The incoming Starlette request.
-            call_next: The downstream ASGI handler.
-
-        Returns:
-            The downstream :class:`starlette.responses.Response`, with the
-            request id stamped on the configured response header.
+            scope: The ASGI connection scope.
+            receive: The ASGI receive channel.
+            send: The ASGI send channel.
         """
-        incoming = request.headers.get(self._header_name)
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        incoming = Headers(scope=scope).get(self._header_name)
         request_id = incoming or uuid.uuid4().hex
         token = _request_id_ctx.set(request_id)
+
+        async def send_with_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)[self._header_name] = request_id
+            await send(message)
+
         try:
-            response: Response = await call_next(request)
+            await self.app(scope, receive, send_with_id)
         finally:
             _request_id_ctx.reset(token)
-        response.headers[self._header_name] = request_id
-        return response
 
 
 def install_request_id_middleware(app: FastAPI) -> None:

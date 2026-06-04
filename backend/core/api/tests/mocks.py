@@ -435,16 +435,17 @@ class _BaseFakeJobStore:
         """
         return len(self._logs.get(optimization_id, []))
 
-    def get_progress_events(self, optimization_id: str) -> list:
-        """Return the stored progress events for a job.
+    def get_progress_events(self, optimization_id: str, *, since: int = 0) -> list:
+        """Return the stored progress events for a job, skipping ``since`` leading rows.
 
         Args:
             optimization_id: Identifier of the job to inspect.
+            since: Number of leading events to skip for delta fetches.
 
         Returns:
-            A copy of the progress event list.
+            The progress event list from offset ``since`` onward.
         """
-        return list(self._progress.get(optimization_id, []))
+        return list(self._progress.get(optimization_id, []))[since:]
 
     def get_progress_count(self, optimization_id: str) -> int:
         """Return the number of stored progress events for a job.

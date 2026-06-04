@@ -15,10 +15,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ...config import settings
 from ...models.artifacts import ProgramArtifact
 from ...models.common import SplitCounts
 from ...models.results import RunResponse
+from ..errors import DomainError
 from ..routers.optimizations import create_optimizations_router
+from ..routers.optimizations._local import clone_payload
 from .conftest import bypass_auth
 from .mocks import _BaseFakeJobStore, real_grid_response_dict
 
@@ -118,6 +121,97 @@ def test_get_job_returns_304_when_etag_matches(opt_client: TestClient, store: _E
     second = opt_client.get("/optimizations/e1", headers={"if-none-match": etag})
 
     assert second.status_code == 304
+    # A 304 must carry no body: a ``JSONResponse(content=None)`` would emit
+    # ``b"null"``, which real uvicorn/h11 rejects with "Too much data for
+    # declared Content-Length". The TestClient transport doesn't enforce that
+    # framing, so assert the empty body directly to guard the regression.
+    assert second.content == b""
+    assert second.headers.get("etag") == etag
+
+
+def _seed_streamed_job(
+    store: _ExtendedFakeJobStore, optimization_id: str, *, n_progress: int, n_logs: int
+) -> None:
+    """Seed a running job with synthetic, ordered progress events and log rows.
+
+    Args:
+        store: Fake job store to populate.
+        optimization_id: Identifier for the synthesised job.
+        n_progress: Number of progress events to attach (tagged ``ev0``..).
+        n_logs: Number of log rows to attach (messaged ``log0``..).
+    """
+    store.seed_job(optimization_id, status="running")
+    store._progress[optimization_id] = [
+        {"timestamp": f"2026-01-01T00:00:{i:02d}+00:00", "event": f"ev{i}", "metrics": {}}
+        for i in range(n_progress)
+    ]
+    store._logs[optimization_id] = [
+        {"timestamp": f"2026-01-01T00:00:{i:02d}+00:00", "level": "INFO", "logger": "test", "message": f"log{i}"}
+        for i in range(n_logs)
+    ]
+
+
+def test_get_job_full_fetch_reports_zero_offsets(
+    opt_client: TestClient, store: _ExtendedFakeJobStore
+) -> None:
+    """A cursorless fetch returns the whole stream with zero offsets."""
+    _seed_streamed_job(store, "d0", n_progress=5, n_logs=4)
+
+    resp = opt_client.get("/optimizations/d0")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["progress_offset"] == 0
+    assert body["logs_offset"] == 0
+    assert len(body["progress_events"]) == 5
+    assert len(body["logs"]) == 4
+
+
+def test_get_job_delta_cursor_returns_tail_only(
+    opt_client: TestClient, store: _ExtendedFakeJobStore
+) -> None:
+    """A valid since_* cursor returns only the rows past the offset, echoing it back."""
+    _seed_streamed_job(store, "d1", n_progress=5, n_logs=4)
+
+    resp = opt_client.get("/optimizations/d1?since_progress=3&since_log=2")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["progress_offset"] == 3
+    assert body["logs_offset"] == 2
+    assert [e["event"] for e in body["progress_events"]] == ["ev3", "ev4"]
+    assert [log["message"] for log in body["logs"]] == ["log2", "log3"]
+
+
+def test_get_job_stale_cursor_falls_back_to_full(
+    opt_client: TestClient, store: _ExtendedFakeJobStore
+) -> None:
+    """A cursor past the current count re-sends the whole stream at offset 0."""
+    _seed_streamed_job(store, "d2", n_progress=3, n_logs=3)
+
+    resp = opt_client.get("/optimizations/d2?since_progress=99&since_log=99")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["progress_offset"] == 0
+    assert body["logs_offset"] == 0
+    assert len(body["progress_events"]) == 3
+    assert len(body["logs"]) == 3
+
+
+def test_get_job_delta_cursor_falls_back_at_retention_cap(
+    opt_client: TestClient, store: _ExtendedFakeJobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At the eviction cap positions stop being stable, so cursors re-send everything."""
+    monkeypatch.setattr(settings, "progress_events_per_job_cap", 5)
+    _seed_streamed_job(store, "d3", n_progress=5, n_logs=4)
+
+    resp = opt_client.get("/optimizations/d3?since_progress=3")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["progress_offset"] == 0
+    assert len(body["progress_events"]) == 5
 
 
 def test_get_summary_returns_404_for_unknown_id(opt_client: TestClient) -> None:
@@ -1230,3 +1324,18 @@ def test_delete_pair_happy_path_removes_pair_and_recomputes_counts(
     stored = store.get_job("gs_delete_ok")
     stored_indices = [pr["pair_index"] for pr in stored["result"]["pair_results"]]
     assert removed_index not in stored_indices
+
+
+def test_clone_payload_raises_409_when_saved_payload_no_longer_validates() -> None:
+    """A stored payload that fails its request model surfaces a 409, not a 500.
+
+    Regression: schema drift (a now-required field missing from an older saved
+    payload) was raised as an opaque HTTP 500 ``internal_error`` from both the
+    retry and clone routes. It is a state condition on the saved resource, so it
+    must be a 4xx the caller can act on — not a server fault.
+    """
+    with pytest.raises(DomainError) as exc_info:
+        clone_payload({"username": "alice"}, optimization_type="run", new_name="retry")
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.code == "optimization.cannot_resubmit_payload"

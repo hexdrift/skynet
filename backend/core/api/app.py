@@ -21,7 +21,7 @@ import logging
 import os
 import signal
 import threading
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from functools import partial
@@ -34,6 +34,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.middleware.gzip import GZipMiddleware, GZipResponder
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 try:
     from scalar_fastapi import AgentScalarConfig, DocumentDownloadType, get_scalar_api_reference
@@ -508,6 +511,127 @@ def _format_validation_loc(loc: Iterable[Any]) -> str:
     return ".".join(parts) if parts else "body"
 
 
+def _cache_control_for(path: str, query_string: bytes) -> str | None:
+    """Return the ``Cache-Control`` value for a GET path, or ``None`` to skip.
+
+    Args:
+        path: Request path.
+        query_string: Raw query-string bytes (used to detect a ``status`` filter
+            on the job list, which must not be cached).
+
+    Returns:
+        The ``Cache-Control`` header value, or ``None`` when the path is not
+        cached.
+    """
+    if path == "/models":
+        return "public, max-age=300, stale-while-revalidate=600"
+    if path == "/health":
+        return "no-cache, max-age=0"
+    if path == "/queue":
+        return "private, max-age=5"
+    if path == "/optimizations" and b"status" not in query_string:
+        return "private, max-age=2, stale-while-revalidate=10"
+    return None
+
+
+class CacheControlMiddleware:
+    """Attach ``Cache-Control`` to selected GET endpoints.
+
+    Pure ASGI rather than ``@app.middleware("http")`` (which is
+    ``BaseHTTPMiddleware``) so it never buffers response bodies and stays out of
+    the way of SSE/streaming endpoints — see :class:`RequestIDMiddleware` for the
+    framing-corruption this avoids.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        """Wrap ``app`` to stamp cache headers on matching GET responses.
+
+        Args:
+            app: The downstream ASGI application.
+        """
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Stamp ``Cache-Control`` on matching GET responses; pass others through.
+
+        Args:
+            scope: The ASGI connection scope.
+            receive: The ASGI receive channel.
+            send: The ASGI send channel.
+        """
+        if scope["type"] != "http" or scope["method"] != "GET":
+            await self.app(scope, receive, send)
+            return
+        cache_value = _cache_control_for(scope["path"], scope.get("query_string", b""))
+        if cache_value is None:
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cache(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = cache_value
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache)
+
+
+class _SSEFriendlyGZipResponder(GZipResponder):
+    """GZip responder that forwards ``text/event-stream`` bodies verbatim.
+
+    Starlette's stock responder compresses streaming bodies chunk-by-chunk,
+    which would buffer every SSE flush. This bypasses compression entirely once
+    the response declares an event-stream content type.
+    """
+
+    def __init__(self, app: ASGIApp, minimum_size: int, compresslevel: int = 9) -> None:
+        """Track whether the in-flight response opted out of compression.
+
+        Args:
+            app: The downstream ASGI application.
+            minimum_size: Smallest body (bytes) still worth compressing.
+            compresslevel: zlib level forwarded to the gzip stream.
+        """
+        super().__init__(app, minimum_size, compresslevel=compresslevel)
+        self._passthrough = False
+
+    async def send_with_gzip(self, message: Message) -> None:
+        """Forward SSE responses raw; defer everything else to the gzip path.
+
+        Args:
+            message: The outgoing ASGI response message.
+        """
+        if message["type"] == "http.response.start":
+            content_type = Headers(raw=message["headers"]).get("content-type", "")
+            self._passthrough = content_type.startswith("text/event-stream")
+        if self._passthrough:
+            await self.send(message)
+            return
+        await super().send_with_gzip(message)
+
+
+class SSEFriendlyGZipMiddleware(GZipMiddleware):
+    """``GZipMiddleware`` variant that never buffers ``text/event-stream``.
+
+    Compresses the large, highly repetitive trajectory/log JSON the read
+    endpoints return while leaving the dashboard / per-job / agent SSE streams
+    flushing incrementally and uncompressed.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Gzip compressible HTTP responses; pass SSE and non-HTTP through.
+
+        Args:
+            scope: The ASGI connection scope.
+            receive: The ASGI receive channel.
+            send: The ASGI send channel.
+        """
+        if scope["type"] == "http" and "gzip" in Headers(scope=scope).get("Accept-Encoding", ""):
+            responder = _SSEFriendlyGZipResponder(self.app, self.minimum_size, compresslevel=self.compresslevel)
+            await responder(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
 def create_app(
     registry: ServiceRegistry | None = None,
     *,
@@ -605,10 +729,10 @@ def create_app(
         engine = getattr(job_store, "engine", None)
         with advisory_lock(engine, STARTUP_WORK_LOCK_KEY) as is_startup_leader:
             if is_startup_leader:
-                # The explore-map vector is embedded on a daemon thread when
-                # a job succeeds; a crashed thread (LLM creds, API blip)
-                # leaves the row missing forever and the map silently drops
-                # the job. A startup backfill drains the gap; the orphan
+                # The explore search vector is embedded on a daemon thread
+                # when a job succeeds; a crashed thread (LLM creds, API blip)
+                # leaves the row missing forever and the job silently drops
+                # out of search. A startup backfill drains the gap; the orphan
                 # purge cleans up rows whose job was deleted before the
                 # cascade into job_embeddings completed.
                 try:
@@ -959,36 +1083,10 @@ def create_app(
             vector_search_enabled=getattr(job_store, "vector_search_enabled", None),
         )
 
-    @app.middleware("http")
-    async def add_cache_headers(
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        """Attach ``Cache-Control`` headers to selected GET endpoints.
-
-        Args:
-            request: The incoming HTTP request.
-            call_next: The downstream handler to invoke.
-
-        Returns:
-            The downstream :class:`Response` with cache headers applied where
-            applicable.
-        """
-        response = await call_next(request)
-        path = request.url.path
-        if request.method == "GET":
-            if path == "/models":
-                # Model catalog is static per process lifetime
-                response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
-            elif path == "/health":
-                response.headers["Cache-Control"] = "no-cache, max-age=0"
-            elif path == "/queue":
-                # Queue status is semi-dynamic — cache briefly
-                response.headers["Cache-Control"] = "private, max-age=5"
-            elif path == "/optimizations" and "status" not in str(request.url.query):
-                # Job list without status filter — cache briefly
-                response.headers["Cache-Control"] = "private, max-age=2, stale-while-revalidate=10"
-        return response
+    app.add_middleware(CacheControlMiddleware)
+    # Outermost so it compresses the fully-assembled response body. Skips
+    # text/event-stream to keep SSE streams flushing incrementally.
+    app.add_middleware(SSEFriendlyGZipMiddleware, minimum_size=1024)
 
     @app.get(
         "/queue",

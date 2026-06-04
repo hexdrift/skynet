@@ -6,6 +6,7 @@ Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
 Internal (dashboard plumbing, hidden from public docs):
 - ``GET /optimizations/counts`` — sidebar badge totals.
 - ``GET /optimizations/sidebar`` — left-rail listing for the dashboard.
+- ``GET /optimizations/shared-with-me`` — runs others shared with the caller.
 - ``POST /optimizations/compare`` — multi-job comparison view.
 """
 
@@ -35,7 +36,7 @@ from ...auth import AuthenticatedUser, get_authenticated_user, is_admin
 from ...converters import parse_overview, parse_timestamp, status_to_job_status
 from ...errors import DomainError
 from ...response_limits import AGENT_DEFAULT_LIST, AGENT_MAX_LIST, clamp_limit
-from .._helpers import build_summary, job_owner
+from .._helpers import build_summary, grant_roles_for, job_owner
 from ..constants import VALID_OPTIMIZATION_TYPES, VALID_STATUSES
 from .schemas import (
     CompareJobSnapshot,
@@ -110,12 +111,22 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
             ge=0,
             description="Number of optimizations to skip before returning; combine with limit for stable pagination",
         ),
+        include_shared: bool = Query(
+            default=False,
+            description=(
+                "Also include runs shared with the caller via a member grant "
+                "(Drive-style sharing). Non-admins only; admins already see all."
+            ),
+        ),
     ) -> PaginatedJobsResponse:
         """Return a page of optimizations ordered by ``created_at`` descending.
 
         Filters combine with AND. Non-admins are silently scoped to their own
         username regardless of any ``username`` query they pass; admins can
-        omit it for a network-wide view or pin to a specific user.
+        omit it for a network-wide view or pin to a specific user. When
+        ``include_shared`` is set, a non-admin's page is the union of their
+        owned runs and runs shared to them, and each shared row carries the
+        caller's grant ``role`` (owned rows leave ``role`` null).
         ``limit`` is clamped to keep agent responses context-safe; UI callers
         that genuinely need larger pages hit the dedicated
         ``/optimizations/sidebar`` route.
@@ -127,6 +138,7 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
             optimization_type: Optional ``"run"`` / ``"grid_search"`` filter.
             limit: Page size (clamped to ``AGENT_MAX_LIST``).
             offset: Number of optimizations to skip.
+            include_shared: Union in runs shared with the caller (non-admin).
 
         Returns:
             A ``PaginatedJobsResponse`` carrying summaries and pagination
@@ -150,17 +162,39 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
                 value=optimization_type,
                 allowed=sorted(VALID_OPTIMIZATION_TYPES),
             )
-        scoped_username = _scope_username(current_user, username)
         resolved_limit = clamp_limit(limit)
-        total = job_store.count_jobs(status=status, username=scoped_username, optimization_type=optimization_type)
-        rows = job_store.list_jobs(
-            status=status,
-            username=scoped_username,
-            optimization_type=optimization_type,
-            limit=resolved_limit,
-            offset=offset,
+        use_shared = (
+            include_shared
+            and not is_admin(current_user)
+            and bool(current_user.username)
+            and hasattr(job_store, "list_jobs_visible_to")
         )
+        if use_shared:
+            caller = current_user.username
+            total = job_store.count_jobs_visible_to(caller, status=status, optimization_type=optimization_type)
+            rows = job_store.list_jobs_visible_to(
+                caller,
+                status=status,
+                optimization_type=optimization_type,
+                limit=resolved_limit,
+                offset=offset,
+            )
+        else:
+            scoped_username = _scope_username(current_user, username)
+            total = job_store.count_jobs(status=status, username=scoped_username, optimization_type=optimization_type)
+            rows = job_store.list_jobs(
+                status=status,
+                username=scoped_username,
+                optimization_type=optimization_type,
+                limit=resolved_limit,
+                offset=offset,
+            )
         items = [build_summary(job_data) for job_data in rows]
+        if use_shared:
+            caller_norm = current_user.username.strip().lower()
+            roles = grant_roles_for(job_store, [s.optimization_id for s in items], caller_norm)
+            for s in items:
+                s.role = roles.get(s.optimization_id)
         return PaginatedJobsResponse(items=items, total=total, limit=resolved_limit, offset=offset)
 
     @router.get(
@@ -172,19 +206,46 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
     def get_optimization_counts(
         current_user: AuthenticatedUserDep,
         username: str | None = Query(default=None, description="Restrict counts to a single user"),
+        include_shared: bool = Query(
+            default=False,
+            description="Fold runs shared with the caller into the tally and report them under `shared` (non-admin).",
+        ),
     ) -> OptimizationCountsResponse:
         """Return backend row counts grouped by status for dashboard stat cards.
 
         Non-admins are silently scoped to their own username; admins can omit
-        ``username`` for a network-wide tally or pin to a specific user.
+        ``username`` for a network-wide tally or pin to a specific user. When
+        ``include_shared`` is set, a non-admin's tally is the union of owned
+        and shared-with-them runs, and ``shared`` reports how many of the
+        visible runs came from a grant (powering the "shared" stat card).
 
         Args:
             current_user: Authenticated caller resolved from the bearer token.
             username: Optional submitter filter (admin-only).
+            include_shared: Union in runs shared with the caller (non-admin).
 
         Returns:
-            An ``OptimizationCountsResponse`` keyed by status.
+            An ``OptimizationCountsResponse`` keyed by status, with ``shared``
+            set when ``include_shared`` is requested.
         """
+        use_shared = (
+            include_shared
+            and not is_admin(current_user)
+            and bool(current_user.username)
+            and hasattr(job_store, "count_jobs_visible_to")
+        )
+        if use_shared:
+            caller = current_user.username
+            return OptimizationCountsResponse(
+                total=job_store.count_jobs_visible_to(caller),
+                pending=job_store.count_jobs_visible_to(caller, status="pending"),
+                validating=job_store.count_jobs_visible_to(caller, status="validating"),
+                running=job_store.count_jobs_visible_to(caller, status="running"),
+                success=job_store.count_jobs_visible_to(caller, status="success"),
+                failed=job_store.count_jobs_visible_to(caller, status="failed"),
+                cancelled=job_store.count_jobs_visible_to(caller, status="cancelled"),
+                shared=job_store.count_jobs_shared_with(caller),
+            )
         scoped_username = _scope_username(current_user, username)
         total = job_store.count_jobs(username=scoped_username)
         return OptimizationCountsResponse(
@@ -247,6 +308,63 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
                     pinned=bool(overview.get("pinned", False)),
                     optimization_type=overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE),
                     total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
+                )
+            )
+        return SidebarJobsResponse(items=items, total=total)
+
+    @router.get(
+        "/optimizations/shared-with-me",
+        response_model=SidebarJobsResponse,
+        summary="Compact list of optimizations shared with the caller",
+    )
+    def list_jobs_shared_with_me(
+        current_user: AuthenticatedUserDep,
+        limit: int = Query(
+            default=50,
+            ge=1,
+            le=200,
+            description="Page size; capped at 200 because the sidebar only renders a finite slice",
+        ),
+        offset: int = Query(default=0, ge=0, description="Number of optimizations to skip before the returned slice"),
+    ) -> SidebarJobsResponse:
+        """Return runs another user invited the caller to (Drive-style sharing).
+
+        Mirrors ``/optimizations/sidebar`` but lists optimizations the caller
+        holds a member grant on (not their own). Each item carries the caller's
+        ``role`` (``viewer``/``editor``/``owner``) so the UI can badge and gate
+        actions. Stores without a grant-bearing engine return an empty list.
+
+        Args:
+            current_user: Authenticated caller resolved from the bearer token.
+            limit: Page size (clamped to 200).
+            offset: Number of optimizations to skip.
+
+        Returns:
+            A ``SidebarJobsResponse`` of shared items with per-item ``role``.
+        """
+        username = current_user.username.strip().lower()
+        if not hasattr(job_store, "list_jobs_shared_with"):
+            return SidebarJobsResponse(items=[], total=0)
+        total = job_store.count_jobs_shared_with(username)
+        rows = job_store.list_jobs_shared_with(username, limit=limit, offset=offset)
+        roles = grant_roles_for(job_store, [row["optimization_id"] for row in rows], username)
+        items = []
+        for row in rows:
+            overview = parse_overview(row)
+            items.append(
+                SidebarJobItem(
+                    optimization_id=row["optimization_id"],
+                    status=row.get("status", "pending"),
+                    name=overview.get(PAYLOAD_OVERVIEW_NAME),
+                    module_name=overview.get(PAYLOAD_OVERVIEW_MODULE_NAME),
+                    optimizer_name=overview.get(PAYLOAD_OVERVIEW_OPTIMIZER_NAME),
+                    model_name=overview.get(PAYLOAD_OVERVIEW_MODEL_NAME),
+                    username=overview.get(PAYLOAD_OVERVIEW_USERNAME),
+                    created_at=parse_timestamp(row.get("created_at")),
+                    pinned=bool(overview.get("pinned", False)),
+                    optimization_type=overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE),
+                    total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
+                    role=roles.get(row["optimization_id"]),
                 )
             )
         return SidebarJobsResponse(items=items, total=total)
