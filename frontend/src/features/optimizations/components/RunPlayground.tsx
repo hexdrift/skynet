@@ -58,8 +58,8 @@ export function RunPlayground({
   return (
     <>
       <FadeIn>
-        <div className="flex items-center justify-between pb-3 border-b border-border/60">
-          <p className="text-sm text-muted-foreground">{description}</p>
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-border/60">
+          <p className="min-w-0 text-sm text-muted-foreground">{description}</p>
           {runHistory.length > 0 && (
             <TooltipButton tooltip={clearTooltip}>
               <Button

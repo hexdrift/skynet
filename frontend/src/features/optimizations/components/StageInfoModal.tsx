@@ -28,7 +28,7 @@ export function StageInfoModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-md" dir="rtl">
+      <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md" dir="rtl">
         {stage &&
           (() => {
             const info = STAGE_INFO[stage];

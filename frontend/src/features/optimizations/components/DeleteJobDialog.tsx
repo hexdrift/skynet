@@ -47,7 +47,7 @@ export function DeleteJobDialog({
         </Button>
       </TooltipButton>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md sm:max-w-md">
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogTitleRow
             title={
               <>

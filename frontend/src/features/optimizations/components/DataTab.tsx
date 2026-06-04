@@ -274,6 +274,11 @@ export function DataTab({
 
   return (
     <div className="space-y-4 mt-4">
+      <FadeIn>
+        <p className="text-sm text-muted-foreground">
+          {msg("optimizations.datatab.description")}
+        </p>
+      </FadeIn>
       {/* Test evaluation bar — shows cached results */}
       {split === "test" && (
         <FadeIn delay={0.2}>
@@ -370,7 +375,7 @@ export function DataTab({
         ) : (
           <Card data-tutorial="data-table">
             <CardContent className="p-0">
-              <div className="max-h-[520px] overflow-auto">
+              <div className="table-scroll max-h-[520px] overflow-y-auto">
                 <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { Gauge, Hourglass, MessageSquare, Timer, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
@@ -13,8 +13,6 @@ import { formatDuration, formatImprovement, formatPercent } from "@/shared/lib";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
 import type { ScorePoint } from "../lib/extract-scores";
-import { GridOverview } from "./GridOverview";
-import { GridLiveChart } from "./GridLiveChart";
 import { InfoCard } from "./ui-primitives";
 import { PipelineStages, computeStageTimestamps } from "./PipelineStages";
 import { TrajectoryPanel } from "@/features/trajectory";
@@ -23,6 +21,18 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 const ScoreChart = dynamic(() => import("@/shared/ui/score-chart").then((m) => m.ScoreChart), {
   ssr: false,
   loading: () => <div className="h-full" />,
+});
+
+// Lazy-loaded so the recharts/d3 vendor chunk stays out of the first-load JS on
+// /optimizations/[id] (the default eager tab). Both only render for grid runs.
+const GridLiveChart = dynamic(() => import("./GridLiveChart").then((m) => m.GridLiveChart), {
+  ssr: false,
+  loading: () => <div className="h-[300px]" />,
+});
+
+const GridOverview = dynamic(() => import("./GridOverview").then((m) => m.GridOverview), {
+  ssr: false,
+  loading: () => <div className="h-[300px]" />,
 });
 
 /**
@@ -44,7 +54,7 @@ function LiveStat({ icon, label, value }: { icon: ReactNode; label: string; valu
   );
 }
 
-export function OverviewTab({
+function OverviewTabImpl({
   job,
   isActive,
   scorePoints,
@@ -365,7 +375,7 @@ export function OverviewTab({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[220px]">
+              <div className="h-[220px] min-w-0">
                 <ScoreChart data={scorePoints} />
               </div>
             </CardContent>
@@ -385,3 +395,8 @@ export function OverviewTab({
     </>
   );
 }
+
+// Memoized so unrelated parent state ticks (live elapsed badge, SSE in-place
+// patches) don't re-render the whole overview — props are now stable identities
+// (memoized job/scorePoints, useCallback'd handlers).
+export const OverviewTab = memo(OverviewTabImpl);

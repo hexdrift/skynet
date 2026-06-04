@@ -240,8 +240,12 @@ export function LMActivityTab({ lmActivity }: { lmActivity: LMActivity | null | 
   // ornamental defaults fight that intent.
   return (
     <FadeIn>
+      <p className="text-sm text-muted-foreground mb-4">
+        {msg("optimizations.lmactivity.description")}
+      </p>
       <section
         aria-labelledby="lm-activity-title"
+        data-tutorial="lm-activity"
         className="rounded-2xl border border-border bg-card text-card-foreground shadow-[var(--shadow-sm)]"
       >
         <header className="flex items-center gap-2 px-6 pt-5 pb-3">

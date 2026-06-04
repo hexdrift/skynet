@@ -89,7 +89,7 @@ export function LangPicker<T extends string>({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.96 }}
             transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute bottom-full mb-1.5 start-0 z-20 min-w-[120px] rounded-lg border border-[#E5DDD4] bg-[#FAF6F0] shadow-lg overflow-hidden py-1"
+            className="absolute bottom-full mb-1.5 start-0 z-20 min-w-[120px] max-w-[min(220px,92vw)] rounded-lg border border-[#E5DDD4] bg-[#FAF6F0] shadow-lg overflow-hidden py-1"
           >
             {keys.map((k) => (
               <li key={k}>
