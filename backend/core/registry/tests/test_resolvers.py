@@ -11,6 +11,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+import dspy
 import pytest
 
 from core.registry.resolvers import (
@@ -40,8 +41,10 @@ from core.registry.tests.mocks import (
         ("PREDICT", "predict"),  # case-insensitive
         ("cot", "cot"),
         ("CoT", "cot"),
+        ("react", "react"),
+        ("ReAct", "react"),
     ],
-    ids=["predict_lower", "predict_upper", "cot_lower", "cot_mixed"],
+    ids=["predict_lower", "predict_upper", "cot_lower", "cot_mixed", "react_lower", "react_mixed"],
 )
 def test_match_module_alias_known_names(name: str, expected_key: str) -> None:
     """Match module alias known names."""
@@ -264,3 +267,24 @@ def test_resolve_module_factory_unaliased_dspy_path_outside_auto_signature_set()
         _, auto_sig = resolve_module_factory(arbitrary_path)
 
     assert auto_sig is False
+
+
+def test_match_module_alias_react_is_registered() -> None:
+    """The ``react`` alias is registered, auto-signatured, and prefers ReActV2."""
+    alias = _match_module_alias("react")
+
+    assert alias is MODULE_ALIASES["react"]
+    assert alias.auto_signature is True
+    assert alias.paths[0] == "dspy.ReActV2"
+
+
+def test_resolve_module_factory_react_resolves_to_reactv2() -> None:
+    """``react`` resolves against real DSPy to ``dspy.ReActV2`` with auto_signature on.
+
+    Unlike the mocked alias cases, this hits the real import so the alias's
+    first path (``dspy.ReActV2``) is verified to exist in the installed DSPy.
+    """
+    factory, auto_sig = resolve_module_factory("react")
+
+    assert auto_sig is True
+    assert factory.func is dspy.ReActV2

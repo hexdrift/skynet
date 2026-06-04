@@ -100,6 +100,26 @@ class JobStore(Protocol):
         """
         ...
 
+    def get_job_status_fields(self, optimization_id: str) -> JobRecord:
+        """Retrieve only the live-polling fields for a job.
+
+        A narrow projection (``status`` / ``message`` / ``latest_metrics``) for
+        high-frequency pollers such as the per-job SSE loop, which must not
+        re-read the potentially multi-MB ``payload`` JSONB that
+        :meth:`get_job` returns.
+
+        Args:
+            optimization_id: ID of the job to read.
+
+        Returns:
+            A partial ``JobRecord`` carrying ``status``, ``message`` and
+            ``latest_metrics``.
+
+        Raises:
+            KeyError: When no job is filed under ``optimization_id``.
+        """
+        ...
+
     def job_exists(self, optimization_id: str) -> bool:
         """Return ``True`` when ``optimization_id`` is present in the store.
 
@@ -163,14 +183,16 @@ class JobStore(Protocol):
         """
         ...
 
-    def get_progress_events(self, optimization_id: str) -> list[ProgressEventRecord]:
-        """Retrieve all progress events for a job in chronological order.
+    def get_progress_events(self, optimization_id: str, *, since: int = 0) -> list[ProgressEventRecord]:
+        """Retrieve progress events for a job in chronological order.
 
         Args:
             optimization_id: ID of the job to inspect.
+            since: Number of leading events to skip, for tail (delta) fetches;
+                ``0`` returns the full history.
 
         Returns:
-            Events ordered oldest-first.
+            Events ordered oldest-first, starting at offset ``since``.
         """
         ...
 

@@ -1,10 +1,22 @@
-"""Job lifecycle notification public surface.
+"""Notification public surface.
 
-Re-exports the two top-level helpers used by the worker and API layers when
-a job is submitted or finishes; the underlying transport (Slack / Teams /
-Rocket.Chat / etc.) is encapsulated in ``core.notifications.comms``.
+Re-exports the helpers used by the worker and API layers for job lifecycle and
+sharing events; the underlying transport (Outlook via ``win32com``) is
+encapsulated in ``core.notifications.comms``.
 """
 
-from .notifier import notify_job_completed, notify_job_started
+from .notifier import (
+    notify_job_completed,
+    notify_job_started,
+    notify_ownership_transfer,
+    notify_role_change,
+    notify_share_invite,
+)
 
-__all__ = ["notify_job_completed", "notify_job_started"]
+__all__ = [
+    "notify_job_completed",
+    "notify_job_started",
+    "notify_ownership_transfer",
+    "notify_role_change",
+    "notify_share_invite",
+]

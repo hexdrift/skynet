@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .artifacts import ProgramArtifact
 from .common import ColumnMapping, OptimizationStatus, OptimizationType, SplitFractions
@@ -80,14 +80,58 @@ class _JobResponseBase(BaseModel):
     # ``stable_seed(optimization_id)`` fallback the split endpoints use.
     compare_fingerprint: str | None = None
 
+    @field_validator("column_mapping", mode="before")
+    @classmethod
+    def _coerce_legacy_column_mapping(cls, value: Any) -> Any:
+        """Tolerate legacy list-shaped column mappings on persisted rows.
+
+        Older optimizations persisted ``column_mapping.inputs``/``outputs`` as
+        bare lists of column names instead of ``{field: column}`` dicts. The
+        response model declares them as dicts, so a single legacy row would
+        fail validation and take down the whole listing (one bad row → the
+        entire ``list_jobs`` response 500s). Coerce each list to an identity
+        ``{name: name}`` mapping so the row still renders; leave well-formed
+        dicts and ``None`` untouched.
+
+        Args:
+            value: The raw ``column_mapping`` value pulled from the persisted row.
+
+        Returns:
+            The value with any list-shaped ``inputs``/``outputs`` normalised to
+            identity dicts; returned unchanged otherwise.
+        """
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        for side in ("inputs", "outputs"):
+            mapping = normalized.get(side)
+            if isinstance(mapping, list):
+                normalized[side] = {str(name): str(name) for name in mapping}
+        return normalized
+
 
 class OptimizationStatusResponse(_JobResponseBase):
     """Full optimization detail returned by GET /optimizations/{optimization_id}."""
 
     progress_events: list[ProgressEvent] = Field(default_factory=list)
     logs: list[JobLogEntry] = Field(default_factory=list)
+    # Start index of the returned progress_events / logs slices within the full
+    # server-side stream. 0 means the slice is the complete stream (the default,
+    # and the only value pre-cursor clients ever see); a positive value marks a
+    # delta tail the client must splice onto the rows it already holds. See the
+    # since_progress / since_log query params on GET /optimizations/{id}.
+    progress_offset: int = 0
+    logs_offset: int = 0
     result: RunResponse | None = None
     grid_result: GridSearchResponse | None = None
+    effective_role: str | None = Field(
+        default=None,
+        description=(
+            "The caller's share role on this run ('viewer'/'editor'/'owner') "
+            "when reached via a member grant; null for the owner's own view "
+            "(the owner is implicitly 'owner')."
+        ),
+    )
 
 
 class OptimizationSummaryResponse(_JobResponseBase):
@@ -122,6 +166,11 @@ class OptimizationSummaryResponse(_JobResponseBase):
     # when no embedding row exists yet (queued/failed/not-yet-embedded).
     summary_text: str | None = None
 
+    # Caller's share role (viewer/editor/owner) when this run was reached
+    # via a member grant rather than ownership; null for runs the caller
+    # owns. Attached by the listing route, not by build_summary.
+    role: str | None = None
+
 
 class PaginatedJobsResponse(BaseModel):
     """Paginated wrapper for optimization listings."""
@@ -142,6 +191,9 @@ class OptimizationCountsResponse(BaseModel):
     success: int = 0
     failed: int = 0
     cancelled: int = 0
+    # Runs shared with the caller via a member grant (not owned). Powers the
+    # control panel's "shared" stat card; 0 for admins and solo users.
+    shared: int = 0
 
 
 class JobCancelResponse(BaseModel):

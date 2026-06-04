@@ -123,8 +123,9 @@ def run_service_in_subprocess(
     This is the ``target`` function passed to ``mp.Process``.  It emits four event
     types onto ``event_queue``:
 
-    - ``EVENT_LOG`` — every record from the ``dspy`` logger at INFO or above,
-      forwarded via ``SubprocessLogHandler``.
+    - ``EVENT_LOG`` — every record from the ``dspy`` logger and the
+      ``core.service_gateway.optimization`` logger at INFO or above, forwarded
+      via ``SubprocessLogHandler``.
     - ``EVENT_PROGRESS`` — one event per ``progress_callback`` invocation from the
       optimizer, carrying ``event`` (phase name) and ``metrics`` (dict).
     - ``EVENT_RESULT`` — emitted once on success, containing the serialised
@@ -143,15 +144,22 @@ def run_service_in_subprocess(
         start_method: The active multiprocessing start method (e.g. ``"fork"``).
     """
     service = _FORK_SERVICE if start_method == "fork" and _FORK_SERVICE is not None else DspyService(ServiceRegistry())
-    dspy_logger = logging.getLogger("dspy")
-    saved_level = dspy_logger.level
     log_handler = SubprocessLogHandler(event_queue)
     log_handler.setLevel(logging.INFO)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
 
-    if dspy_logger.level == 0 or dspy_logger.level > logging.INFO:
-        dspy_logger.setLevel(logging.INFO)
-    dspy_logger.addHandler(log_handler)
+    # Forward DSPy's own records AND our optimization-harness records (rollout
+    # heartbeats, phase logs) so both surface in job_logs at INFO+. The app
+    # logger sits outside the ``dspy`` tree, so it needs its own hookup.
+    forwarded_loggers = (
+        logging.getLogger("dspy"),
+        logging.getLogger("core.service_gateway.optimization"),
+    )
+    saved_levels = [lg.level for lg in forwarded_loggers]
+    for lg in forwarded_loggers:
+        if lg.level == 0 or lg.level > logging.INFO:
+            lg.setLevel(logging.INFO)
+        lg.addHandler(log_handler)
 
     try:
         payload_dict = dict(payload_dict)
@@ -193,5 +201,6 @@ def run_service_in_subprocess(
             },
         )
     finally:
-        dspy_logger.removeHandler(log_handler)
-        dspy_logger.setLevel(saved_level)
+        for lg, saved_level in zip(forwarded_loggers, saved_levels, strict=True):
+            lg.removeHandler(log_handler)
+            lg.setLevel(saved_level)

@@ -38,6 +38,13 @@ MODULE_ALIASES: Mapping[str, ModuleAlias] = MappingProxyType(
             ),
             auto_signature=True,
         ),
+        "react": ModuleAlias(
+            (
+                "dspy.ReActV2",
+                "dspy.ReAct",
+            ),
+            auto_signature=True,
+        ),
     }
 )
 

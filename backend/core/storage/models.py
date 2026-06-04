@@ -9,7 +9,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -42,6 +53,35 @@ class ApiTokenModel(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class SearchQueryLogModel(Base):
+    """Anonymous log of public-corpus search queries, powering trending searches.
+
+    One row is written per public ``POST /dashboard/search`` that carries a
+    non-empty query, first page only — later pages are pagination of the same
+    search, not new intent. Owner-scoped ("mine") searches are never logged;
+    only the cross-user public corpus is. No user identity, IP, session, or
+    filter state is stored — just the normalized query text and a timestamp —
+    so a top-N trending aggregate can be computed without profiling anyone.
+    """
+
+    __tablename__ = "search_query_log"
+
+    # BigInteger on Postgres (BIGSERIAL); INTEGER on SQLite so its rowid
+    # autoincrement kicks in for the create_all-based test stores.
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    query_text: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+    )
+
+
 class OptimizationShareLinkModel(Base):
     """Per-optimization sharing config keyed by a public link token.
 
@@ -49,11 +89,15 @@ class OptimizationShareLinkModel(Base):
     public ``/share/<token>`` URL. It is stored in plaintext because it IS the
     public identifier (like a ChatGPT share id), not a credential hash. The
     active (``revoked_at IS NULL``) row per optimization holds the sharing
-    config; ``general_access`` selects the anonymous-link policy:
-    ``'restricted'`` (owner + invited members only) or ``'anyone'`` (anyone
-    with the link gets a view-only, inference-free snapshot). Revoking sets
-    ``revoked_at`` so the public route returns 404 thereafter. Rows are removed
-    when the optimization is deleted.
+    config. ``general_access`` selects the link policy: ``'restricted'`` (owner
+    + invited members only) or ``'anyone'`` (anyone holding the link has
+    access). ``general_role`` is the tier an ``'anyone'`` link grants a
+    *signed-in* visitor — ``'viewer'`` or ``'editor'`` (never ``'owner'``;
+    ownership is not transferred by link). An anonymous (logged-out) visitor
+    never elevates past the read-only ``view`` tier regardless of
+    ``general_role``, so a bare URL can never run inference on the owner's key.
+    Revoking sets ``revoked_at`` so the public route returns 404 thereafter.
+    Rows are removed when the optimization is deleted.
     """
 
     __tablename__ = "optimization_share_links"
@@ -67,6 +111,9 @@ class OptimizationShareLinkModel(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     general_access: Mapped[str] = mapped_column(
         String(16), nullable=False, default="restricted", server_default="restricted"
+    )
+    general_role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="viewer", server_default="viewer"
     )
 
 
@@ -90,6 +137,10 @@ class OptimizationShareGrantModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
+
+    # The composite PK leads with optimization_id, so "list everything shared
+    # with this user" (filtering on grantee_username alone) could not use it.
+    __table_args__ = (Index("ix_optimization_share_grants_grantee", "grantee_username"),)
 
 
 class JobModel(Base):
@@ -174,6 +225,11 @@ class LogEntryModel(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     pair_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Backs the per-job ordered reads (get_logs) and the oldest-first cap
+    # eviction in append_log, which otherwise scan on the single-column
+    # optimization_id index and sort timestamps in memory.
+    __table_args__ = (Index("ix_job_logs_optimization_timestamp", "optimization_id", "timestamp"),)
+
 
 class UserQuotaOverrideModel(Base):
     """SQLAlchemy model for live per-user quota overrides."""
@@ -245,8 +301,6 @@ class JobEmbeddingModel(Base):
     optimizer_kwargs: Mapped[dict[str, Any] | None] = mapped_column(JSON_STORE, nullable=True)
     module_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     task_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    projection_x: Mapped[float | None] = mapped_column(Float, nullable=True)
-    projection_y: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class AgentConversationModel(Base):

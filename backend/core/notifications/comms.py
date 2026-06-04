@@ -1,63 +1,80 @@
-"""Internal communications service client.
+"""Outlook mail transport for Skynet notifications.
 
-Sends notifications to an operator-supplied webhook for the organization's
-internal messaging platform.
+On the on-prem Windows deployment Skynet runs on a domain-joined host with the
+Outlook desktop client signed in, so notifications go out through Outlook via
+COM automation (``win32com``): no SMTP host or credentials to configure, mail
+is sent as the signed-in profile, and recipients resolve against the Exchange
+Global Address List (GAL).
 
-To integrate:
-    1. Set COMMS_WEBHOOK_URL in backend/.env
-    2. Optionally set COMMS_CHANNEL for the target channel/room
-    3. Adjust the JSON payload if your webhook format requires different keys
+``win32com`` ships in ``pywin32`` and is Windows-only. On dev/CI hosts
+(macOS/Linux) the import fails, ``win32`` is ``None``, and every send becomes a
+logged no-op so the rest of the app is unaffected.
 """
 
-import logging
-import os
+from __future__ import annotations
 
-import requests  # type: ignore[import-untyped]
+import logging
+
+try:
+    import win32com.client as win32  # type: ignore[import-untyped]
+except ImportError:  # Windows-only (pywin32); absent on dev/CI hosts.
+    win32 = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
-WEBHOOK_URL = os.getenv("COMMS_WEBHOOK_URL")
-CHANNEL = os.getenv("COMMS_CHANNEL", "#skynet-notifications")
-ENABLED = bool(WEBHOOK_URL)
+_OL_MAIL_ITEM = 0  # Outlook.OlItemType.olMailItem
 
 
-def send_message(text: str, channel: str | None = None) -> bool:
-    """Send a message to the internal comms webhook.
+def resolve_email(username: str) -> str | None:
+    """Resolve a Skynet username to a mail address for Outlook delivery.
 
-    Never raises: any transport/HTTP error is logged at WARNING and
-    surfaced via the boolean return. When the webhook URL is not
-    configured (``COMMS_WEBHOOK_URL`` unset) this is a no-op that
-    returns ``False``.
+    Returns ``None`` for now: usernames carry no email address until the
+    on-prem SSO / Active Directory directory is wired up, so notifications are
+    recorded and logged but not delivered. When SSO lands, resolve the address
+    here — or return the AD ``username``/UPN and let Outlook resolve it against
+    the GAL inside :func:`send_mail`.
 
     Args:
-        text: Message body to deliver.
-        channel: Optional override for the target channel; defaults to
-            ``COMMS_CHANNEL`` (``#skynet-notifications``).
+        username: Skynet account name (a share grantee or a job owner).
 
     Returns:
-        ``True`` when the webhook accepted the payload, ``False`` when
-        delivery was skipped or any error occurred.
+        The recipient's mail address, or ``None`` when it cannot be resolved
+        yet — in which case delivery is skipped.
     """
-    if not ENABLED or not WEBHOOK_URL:
-        logger.debug("Comms not configured (COMMS_WEBHOOK_URL not set), skipping: %s", text[:80])
+    return None
+
+
+def send_mail(to: str, subject: str, html_body: str) -> bool:
+    """Send an HTML email through the local Outlook desktop client.
+
+    Never raises: when Outlook/``win32com`` is unavailable (non-Windows dev
+    hosts) or the COM call fails, the error is logged and ``False`` is returned
+    so a notification can never break the request or job that triggered it.
+
+    Args:
+        to: Recipient mail address, or an AD name resolvable against the GAL.
+        subject: Mail subject line.
+        html_body: RTL HTML message body.
+
+    Returns:
+        ``True`` when Outlook accepted and sent the message, ``False`` when
+        delivery was skipped (no Outlook) or failed.
+    """
+    if win32 is None:
+        logger.info("Outlook unavailable (win32com not importable); skipping mail to %s", to)
         return False
-
-    target = channel or CHANNEL
     try:
-        payload = {
-            "text": text,
-            "channel": target,
-        }
-
-        resp = requests.post(
-            WEBHOOK_URL,
-            json=payload,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        logger.info("Comms message sent to %s", target)
+        outlook = win32.Dispatch("Outlook.Application")
+        mail = outlook.CreateItem(_OL_MAIL_ITEM)
+        recipient = mail.Recipients.Add(to)
+        if not recipient.Resolve():
+            logger.warning("Outlook could not resolve recipient %r against the GAL; skipping mail", to)
+            return False
+        mail.Subject = subject
+        mail.HTMLBody = html_body
+        mail.Send()
+        logger.info("Outlook mail sent to %s", to)
         return True
-
-    except requests.RequestException as exc:
-        logger.warning("Failed to send comms message: %s", exc)
+    except Exception as exc:  # COM boundary: a send must never break the caller.
+        logger.warning("Failed to send Outlook mail to %s: %s", to, exc)
         return False

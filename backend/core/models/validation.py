@@ -21,6 +21,9 @@ class ValidateCodeRequest(BaseModel):
     column_mapping: ColumnMapping
     sample_row: dict[str, Any] = Field(default_factory=dict)
     optimizer_name: str | None = None
+    # When "react", the metric scores a trajectory via (example, rollout) — the
+    # GEPA 5-arg gate and the (example, prediction) sample probe do not apply.
+    module_name: str | None = None
 
 
 class ValidateCodeResponse(BaseModel):

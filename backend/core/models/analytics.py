@@ -123,6 +123,16 @@ class DashboardAnalyticsResponse(BaseModel):
     # Model usage — list of {name, value} sorted desc, trimmed to top 8.
     model_usage: list[DashboardAnalyticsNameValue] = Field(default_factory=list)
 
+    # Owner usage — runs per owning username, sorted desc, trimmed to top 8.
+    # Powers the control panel's "by owner" breakdown; clicking a bar scopes
+    # the other charts to that owner via the `owner` filter param.
+    owner_usage: list[DashboardAnalyticsNameValue] = Field(default_factory=list)
+
+    # Access usage — runs per caller access tier (mine/owner/editor/viewer).
+    # Powers the "by access" breakdown; clicking a bar scopes the other charts
+    # to that tier via the `access` filter param. Empty when no caller context.
+    access_usage: list[DashboardAnalyticsNameValue] = Field(default_factory=list)
+
     success_count: int = 0
     failed_count: int = 0
     running_count: int = 0

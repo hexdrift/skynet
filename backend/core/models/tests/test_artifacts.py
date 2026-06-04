@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.models.artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact
+from core.models.artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact, ReactOverlay
 
 
 def test_optimized_demo_defaults_empty_dicts() -> None:
@@ -112,3 +112,34 @@ def test_program_artifact_with_pickle() -> None:
     art = ProgramArtifact(program_pickle_base64="abc123==")
 
     assert art.program_pickle_base64 == "abc123=="
+
+
+def test_program_artifact_react_overlay_defaults_none() -> None:
+    """A ProgramArtifact leaves ``react_overlay`` unset for non-react artifacts."""
+    art = ProgramArtifact(path="/opt/artifacts/scalar")
+
+    assert art.react_overlay is None
+
+
+def test_program_artifact_react_overlay_round_trip() -> None:
+    """A react overlay survives a ``model_dump`` / ``model_validate`` round-trip."""
+    overlay = ReactOverlay(
+        tool_descriptions={"search": "optimized search"},
+        tool_arg_descriptions={"search": {"query": "the search query"}},
+        tool_schema_hashes={"search": "deadbeef"},
+        max_iters=6,
+        tool_source={"kind": "live_mcp", "mcp_url": "http://localhost:9000/mcp"},
+    )
+    art = ProgramArtifact(path="/opt/artifacts/react", react_overlay=overlay)
+
+    restored = ProgramArtifact.model_validate(art.model_dump())
+
+    assert restored.react_overlay is not None
+    assert restored.react_overlay.tool_descriptions == {"search": "optimized search"}
+    assert restored.react_overlay.tool_arg_descriptions == {"search": {"query": "the search query"}}
+    assert restored.react_overlay.tool_schema_hashes == {"search": "deadbeef"}
+    assert restored.react_overlay.max_iters == 6
+    assert restored.react_overlay.tool_source == {
+        "kind": "live_mcp",
+        "mcp_url": "http://localhost:9000/mcp",
+    }

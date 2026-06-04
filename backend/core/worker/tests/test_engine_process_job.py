@@ -7,6 +7,7 @@ are spawned.  FakeJobStore from conftest is used as the in-memory store.
 from __future__ import annotations
 
 import inspect
+import itertools
 import json
 from collections.abc import Iterator
 from typing import cast
@@ -21,7 +22,15 @@ from .. import engine as engine_module
 from ..constants import EVENT_RESULT
 from ..engine import BackgroundWorker, reset_worker_for_tests
 from .conftest import FakeJobStore
-from .mocks import REAL_GRID_PAYLOAD, REAL_RUN_PAYLOAD, make_mp_context
+from .mocks import (
+    REAL_GRID_PAYLOAD,
+    REAL_RUN_PAYLOAD,
+    fake_mp_process,
+    fake_mp_queue,
+    make_mp_context,
+    make_progress_event,
+    make_result_event,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -396,3 +405,102 @@ def test_process_job_keyboard_interrupt_sets_status_failed_and_reraises(
             worker._process_job("opt-12", 0)
 
     assert store._jobs["opt-12"]["status"] == "failed"
+
+
+def _stall_ctx() -> tuple[MagicMock, MagicMock]:
+    """Build an mp context whose child stays alive and emits no events.
+
+    Returns:
+        ``(ctx, proc)`` where ``proc.is_alive()`` always returns ``True`` and
+        the queue is empty — the shape that should trip the stall watchdog.
+    """
+    proc = fake_mp_process(exitcode=0, is_alive=True)
+    mq = fake_mp_queue()
+    ctx = MagicMock()
+    ctx.Queue.return_value = mq
+    ctx.Process.return_value = proc
+    ctx.get_start_method.return_value = "spawn"
+    return ctx, proc
+
+
+def test_process_job_watchdog_fails_run_that_emits_no_events(
+    worker: BackgroundWorker,
+    store: FakeJobStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live child that emits nothing past the stall window is failed and terminated."""
+    store.seed_job("opt-stall", payload=REAL_RUN_PAYLOAD)
+    worker.enqueue_job("opt-stall")
+
+    ctx, proc = _stall_ctx()
+    worker._mp_ctx = ctx
+    worker._mp_start_method = "spawn"
+    monkeypatch.setattr(engine_module.settings, "job_stall_timeout_seconds", 1.0)
+
+    # A monotonic clock that jumps far past the 1s window on every read forces
+    # the watchdog to trip on the first event-less iteration, deterministically.
+    with (
+        patch("core.worker.engine.notify_job_completed"),
+        patch.object(worker, "_get_service") as mock_svc,
+        patch.object(engine_module.time, "monotonic", side_effect=itertools.count(0.0, 100_000.0)),
+    ):
+        mock_svc.return_value.validate_payload = MagicMock()
+        worker._process_job("opt-stall", 0)  # must not raise — handled internally
+
+    assert store._jobs["opt-stall"]["status"] == "failed"
+    assert "stall" in store._jobs["opt-stall"]["message"].lower()
+    assert proc.terminate.called
+
+
+def test_process_job_watchdog_disabled_when_timeout_zero(
+    worker: BackgroundWorker,
+    store: FakeJobStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A zero stall timeout disables the watchdog: an event-less child is not stall-failed."""
+    store.seed_job("opt-nowatch", payload=REAL_RUN_PAYLOAD)
+    worker.enqueue_job("opt-nowatch")
+
+    # Child stays alive for two iterations then exits cleanly with a result, so
+    # the run completes normally — the watchdog must never look at the clock.
+    proc = fake_mp_process(exitcode=0, is_alive=[True, True, False, False])
+    mq = fake_mp_queue(make_result_event())
+    ctx = MagicMock()
+    ctx.Queue.return_value = mq
+    ctx.Process.return_value = proc
+    ctx.get_start_method.return_value = "spawn"
+    worker._mp_ctx = ctx
+    worker._mp_start_method = "spawn"
+    monkeypatch.setattr(engine_module.settings, "job_stall_timeout_seconds", 0.0)
+
+    with patch("core.worker.engine.notify_job_completed"), patch.object(worker, "_get_service") as mock_svc:
+        mock_svc.return_value.validate_payload = MagicMock()
+        worker._process_job("opt-nowatch", 0)
+
+    assert store._jobs["opt-nowatch"]["status"] == "success"
+    assert not proc.terminate.called
+
+
+def test_process_job_watchdog_does_not_fire_while_events_flow(
+    worker: BackgroundWorker,
+    store: FakeJobStore,
+) -> None:
+    """Draining events each iteration keeps the stall timer reset so the run completes."""
+    store.seed_job("opt-live", payload=REAL_RUN_PAYLOAD)
+    worker.enqueue_job("opt-live")
+
+    proc = fake_mp_process(exitcode=0, is_alive=[True, True, False, False])
+    mq = fake_mp_queue(make_progress_event(), make_result_event())
+    ctx = MagicMock()
+    ctx.Queue.return_value = mq
+    ctx.Process.return_value = proc
+    ctx.get_start_method.return_value = "spawn"
+    worker._mp_ctx = ctx
+    worker._mp_start_method = "spawn"
+
+    with patch("core.worker.engine.notify_job_completed"), patch.object(worker, "_get_service") as mock_svc:
+        mock_svc.return_value.validate_payload = MagicMock()
+        worker._process_job("opt-live", 0)
+
+    assert store._jobs["opt-live"]["status"] == "success"
+    assert not proc.terminate.called

@@ -10,6 +10,7 @@ genealogy tree, so the tests live in the unit suite.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import pickle
 import tempfile
@@ -33,6 +34,7 @@ from core.service_gateway.optimization.trajectory import (
     RejectedEvent,
     _current_proposal_iteration,
     _load_state,
+    _normalize_prediction,
     capture_proposal_prompts,
     emit_valset_event,
     extract_candidates_from_state,
@@ -402,6 +404,18 @@ class TestSerializeValsetRows:
         """Runs without a validation split yield ``[]``, not ``None``."""
         assert serialize_valset_rows([]) == []
 
+    def test_tool_schema_hashes_is_excluded_from_display(self) -> None:
+        """``tool_schema_hashes`` is internal drift-detection provenance, not a
+        human-facing expected output, so it's dropped from the rendered rows while
+        the genuine label fields still render."""
+        ex = dspy.Example(
+            question="q",
+            answer="a",
+            tool_schema_hashes={"submit": "deadbeef"},
+        ).with_inputs("question")
+        rows = serialize_valset_rows([ex])
+        assert rows[0]["outputs"] == {"answer": "a"}
+
 
 class TestEmitValsetEvent:
     """The fire-and-forget emitter must respect the SSE contract."""
@@ -530,8 +544,9 @@ class TestMinibatchRecorder:
         recorder(ex, dspy.Prediction(answer="x"))
         assert len(events[0][1]["feedback"]) == MINIBATCH_FEEDBACK_CHAR_CAP
 
-    def test_prediction_repr_is_truncated_to_cap(self) -> None:
-        """Long predictions are length-capped before being placed on the wire."""
+    def test_prediction_is_structured_field_map_with_per_field_cap(self) -> None:
+        """A Prediction reaches the wire as a field→value map (so the drawer renders
+        it structurally), with each leaf string capped rather than the whole repr."""
         events: list[tuple[str, dict]] = []
         ex = dspy.Example(q="a").with_inputs("q")
         recorder = MinibatchRecorder(
@@ -540,8 +555,11 @@ class TestMinibatchRecorder:
             lambda event, metrics: events.append((event, metrics)),
         )
         recorder(ex, dspy.Prediction(answer="y" * (MINIBATCH_PREDICTION_CHAR_CAP + 200)))
-        assert len(events[0][1]["prediction"]) == MINIBATCH_PREDICTION_CHAR_CAP + 1
-        assert events[0][1]["prediction"].endswith("…")
+        prediction = events[0][1]["prediction"]
+        assert isinstance(prediction, dict)
+        assert set(prediction) == {"answer"}
+        assert len(prediction["answer"]) == MINIBATCH_PREDICTION_CHAR_CAP + 1
+        assert prediction["answer"].endswith("…")
 
     def test_callback_exception_does_not_break_metric_call(self) -> None:
         """A raising progress callback never aborts the optimizer's metric call."""
@@ -626,10 +644,10 @@ class TestMinibatchRecorder:
 
 
 class TestMaybeWrapMinibatchRecorder:
-    """The gating helper applies only when GEPA + callback are both present."""
+    """Wraps whenever a callback is present; candidate-output events stay GEPA-only."""
 
     def test_returns_recorder_for_gepa_with_callback(self) -> None:
-        """GEPA + callback yields a MinibatchRecorder wrapping the metric."""
+        """GEPA + callback yields a recorder that also emits candidate-output events."""
         wrapped = maybe_wrap_minibatch_recorder(
             lambda *_, **__: 0.0,
             [dspy.Example(q="a").with_inputs("q")],
@@ -637,6 +655,7 @@ class TestMaybeWrapMinibatchRecorder:
             lambda *_: None,
         )
         assert isinstance(wrapped, MinibatchRecorder)
+        assert wrapped._emit_candidate_events is True
 
     def test_returns_raw_metric_when_callback_missing(self) -> None:
         """Without a progress callback there's nowhere to send events, so skip wrapping."""
@@ -649,16 +668,21 @@ class TestMaybeWrapMinibatchRecorder:
         )
         assert wrapped is metric
 
-    def test_returns_raw_metric_for_non_gepa_optimizer(self) -> None:
-        """Other optimizers don't produce minibatch feedback — pass-through."""
-        metric = lambda *_, **__: 0.0
+    def test_wraps_non_gepa_for_heartbeat_with_candidate_events_off(self) -> None:
+        """Non-GEPA + callback still wraps (for the per-example heartbeat), but the
+        candidate-index attribution is GEPA-specific so candidate-output events stay off."""
+        example = dspy.Example(q="a").with_inputs("q")
+        events: list[tuple[str, dict]] = []
         wrapped = maybe_wrap_minibatch_recorder(
-            metric,
-            [dspy.Example(q="a").with_inputs("q")],
+            lambda *_, **__: 0.0,
+            [example],
             "bootstrap_fewshot",
-            lambda *_: None,
+            lambda event, metrics: events.append((event, metrics)),
         )
-        assert wrapped is metric
+        assert isinstance(wrapped, MinibatchRecorder)
+        assert wrapped._emit_candidate_events is False
+        wrapped(example, dspy.Prediction(answer="a"))
+        assert not any(e == PROGRESS_VALSET_OUTPUTS for e, _ in events)
 
 
 class TestCaptureProposalPrompts:
@@ -746,3 +770,39 @@ class TestCaptureProposalPrompts:
 
         assert seen["value"] == 11
         assert _current_proposal_iteration.get() is None
+
+
+class TestNormalizePrediction:
+    """``_normalize_prediction`` serializes candidate outputs for the drawer.
+
+    The drawer renders an object prediction the same way it renders the expected
+    answer (a field→value map); these pin that contract so the candidate stops
+    arriving as a Python repr the frontend can't parse once it's truncated.
+    """
+
+    def test_react_prediction_becomes_field_map_with_json_nested_field(self) -> None:
+        """A react Prediction flattens to ``{field: value}``: scalar fields stay
+        plain strings, nested ``history`` becomes a JSON string the drawer trees."""
+        pred = dspy.Prediction(
+            assistant_message="hello",
+            history=dspy.History(
+                messages=[{"role": "user", "content": "Hi"}],
+            ),
+        )
+        out = _normalize_prediction(pred)
+        assert isinstance(out, dict)
+        assert out["assistant_message"] == "hello"
+        parsed = json.loads(out["history"])
+        assert parsed["messages"][0]["content"] == "Hi"
+
+    def test_non_prediction_input_falls_back_to_capped_string(self) -> None:
+        """A non-Prediction, non-dict input degrades to a single capped string."""
+        assert _normalize_prediction("plain") == "plain"
+
+    def test_oversized_leaf_string_is_capped_per_field(self) -> None:
+        """Each leaf string is capped independently, keeping the field map valid."""
+        pred = dspy.Prediction(answer="z" * (MINIBATCH_PREDICTION_CHAR_CAP + 50))
+        out = _normalize_prediction(pred)
+        assert isinstance(out, dict)
+        assert len(out["answer"]) == MINIBATCH_PREDICTION_CHAR_CAP + 1
+        assert out["answer"].endswith("…")

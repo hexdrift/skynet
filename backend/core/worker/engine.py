@@ -47,6 +47,15 @@ class CancellationError(Exception):
     """Raised inside a job thread when the job is cancelled by the user."""
 
 
+class JobStalledError(RuntimeError):
+    """Raised when a job subprocess stops emitting events past the stall window.
+
+    Subclasses ``RuntimeError`` so the generic failure handler in
+    ``_process_job`` marks the job ``failed`` with this message, while tests
+    can still assert on the specific type.
+    """
+
+
 def _raise_if_cancelled(cancel_event: threading.Event | None, optimization_id: str) -> None:
     """Raise ``CancellationError`` when the caller's cancel flag is set; ``None`` is treated as not cancelled.
 
@@ -231,17 +240,30 @@ class BackgroundWorker:
         return optimization_id
 
     def _get_next_job(self) -> str | None:
-        """Return the next claimable job (in-memory hint first, then DB claim).
+        """Return the next claimable job, picking up through the atomic claim.
+
+        ``_pending_jobs`` is only a low-latency *hint* that work may exist
+        (populated by the in-process ``enqueue_job`` path and the startup
+        recovery backfill). It must never be the pickup itself: popping a hinted
+        id and returning it directly skips the DB claim, so a second worker
+        thread can re-claim the same still-``pending`` row via
+        :meth:`JobStore.claim_next_job` and spawn the job twice — the boot-race
+        double-spawn that hit any job left pending across a restart. When the
+        store supports atomic claims we drain the hint only to skip the idle
+        sleep and then pick up through ``claim_next_job`` (which owns the row
+        exclusively via ``FOR UPDATE SKIP LOCKED``). A claim-less legacy/test
+        store has no such path, so there we honour the hinted id directly —
+        single-pod, no race.
 
         Returns:
             The optimization ID to process next, or ``None`` when idle.
         """
         with self._queue_lock:
-            if self._pending_jobs:
-                optimization_id = self._pending_jobs.pop(0)
-                self._processing_jobs.add(optimization_id)
-                return optimization_id
-        # Fall back to the multi-pod safe claim path.
+            hinted = self._pending_jobs.pop(0) if self._pending_jobs else None
+        if hinted is not None and not hasattr(self._job_store, "claim_next_job"):
+            with self._queue_lock:
+                self._processing_jobs.add(hinted)
+            return hinted
         return self._claim_job_from_store()
 
     def _mark_job_done(self, optimization_id: str) -> None:
@@ -405,17 +427,36 @@ class BackgroundWorker:
                 assert run_process is not None
                 run_process.start()
 
+                # Stall watchdog: the lease heartbeat (_touch_activity) renews
+                # on every tick regardless of progress, so a child wedged on a
+                # timeout-less blocking call (e.g. a hung LLM socket read) would
+                # otherwise be kept "running" forever. Track the last time the
+                # child emitted any event and fail the run if it goes silent past
+                # the configured window. The per-request LM timeout normally trips
+                # first; this only catches genuine wedges that produce nothing.
+                stall_timeout = settings.job_stall_timeout_seconds
+                last_event_at = time.monotonic()
                 while run_process.is_alive():
                     _raise_if_cancelled(cancel_event, optimization_id)
                     self._touch_activity(worker_id)
                     run_process.join(timeout=self._cancel_poll_interval)
-                    drained_result, drained_error = self._drain_subprocess_events(optimization_id, event_queue)
+                    drained_result, drained_error, drained_count = self._drain_subprocess_events(
+                        optimization_id, event_queue
+                    )
                     if drained_result is not None:
                         result_dict = drained_result
                     if drained_error is not None:
                         subprocess_error = drained_error
+                    if drained_count > 0:
+                        last_event_at = time.monotonic()
+                    elif stall_timeout > 0 and time.monotonic() - last_event_at > stall_timeout:
+                        raise JobStalledError(
+                            f"Optimization stalled: no progress for {stall_timeout:.0f}s. "
+                            "The run was terminated; a model call or other operation likely "
+                            "hung without making progress."
+                        )
 
-                drained_result, drained_error = self._drain_subprocess_events(optimization_id, event_queue)
+                drained_result, drained_error, _ = self._drain_subprocess_events(optimization_id, event_queue)
                 if drained_result is not None:
                     result_dict = drained_result
                 if drained_error is not None:
@@ -646,7 +687,7 @@ class BackgroundWorker:
                     event.set()
 
     def _schedule_embedding_indexing(self, optimization_id: str) -> None:
-        """Fire-and-forget embed the finished job for the explore-map index.
+        """Fire-and-forget embed the finished job for the explore search index.
 
         Runs on a daemon thread so a slow LLM call or a missing pgvector
         extension can never block the worker's hot path. Failures are
@@ -702,7 +743,7 @@ class BackgroundWorker:
         self,
         optimization_id: str,
         event_queue: Any,
-    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, int]:
         """Drain all pending events from the subprocess queue, routing each by type.
 
         Handles four event types emitted by ``run_service_in_subprocess``:
@@ -716,11 +757,14 @@ class BackgroundWorker:
             event_queue: The shared multiprocessing queue to drain.
 
         Returns:
-            ``(result_dict, error_dict)`` — either may be ``None`` if the
-            corresponding event was not present.
+            ``(result_dict, error_dict, drained_count)`` — the first two may be
+            ``None`` if the corresponding event was not present; ``drained_count``
+            is the number of events consumed, used by the stall watchdog as the
+            liveness signal (any event proves the child is still doing work).
         """
         result_payload: dict[str, Any] | None = None
         error_payload: dict[str, Any] | None = None
+        drained_count = 0
         while True:
             try:
                 event = event_queue.get_nowait()
@@ -730,6 +774,7 @@ class BackgroundWorker:
                 logger.exception("Optimization %s: event queue read failed; stopping drain", optimization_id)
                 break
 
+            drained_count += 1
             event_type = event.get("type")
             if event_type == EVENT_PROGRESS:
                 try:
@@ -772,7 +817,7 @@ class BackgroundWorker:
                 }
                 error_payload = payload
 
-        return result_payload, error_payload
+        return result_payload, error_payload, drained_count
 
     def seconds_since_last_activity(self) -> float | None:
         """Return seconds since the most recent worker activity, or ``None`` if none recorded yet.
