@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { preload } from "react-dom";
 import Script from "next/script";
 import { AppShell } from "@/shared/layout/app-shell";
 import { TooltipProvider } from "@/shared/ui/primitives/tooltip";
@@ -82,6 +83,16 @@ const jsonLd = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Preload the above-the-fold variable subsets so the fallback→webfont swap
+  // window (and its RTL line-box shift) is bounded. react-dom's preload()
+  // dedupes to a single hoisted <link> per resource — a raw <link rel=preload> in
+  // <head> gets emitted twice (literal + React's resource hoist). URLs are the
+  // stable public/ copies the globals.css overrides point at; crossOrigin is
+  // required since fonts fetch in CORS mode. JetBrains Mono stays non-preloaded.
+  const fontPreload = { as: "font", type: "font/woff2", crossOrigin: "anonymous" } as const;
+  preload("/fonts/heebo-hebrew-wght-normal.woff2", fontPreload);
+  preload("/fonts/heebo-latin-wght-normal.woff2", fontPreload);
+  preload("/fonts/inter-latin-wght-normal.woff2", fontPreload);
   const runtimeEnv = getServerRuntimeEnv();
   // dns-prefetch only helps when the API is on a different origin than the
   // document; on same-origin deploys the browser already resolved the host.

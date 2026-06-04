@@ -241,6 +241,7 @@ export function listJobs(params?: {
   optimization_type?: string;
   limit?: number;
   offset?: number;
+  include_shared?: boolean;
 }) {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
@@ -248,6 +249,7 @@ export function listJobs(params?: {
   if (params?.optimization_type) q.set("optimization_type", params.optimization_type);
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.offset) q.set("offset", String(params.offset));
+  if (params?.include_shared) q.set("include_shared", "true");
   const qs = q.toString();
   return cachedGet<PaginatedJobsResponse>(`/optimizations${qs ? `?${qs}` : ""}`);
 }
@@ -260,6 +262,8 @@ export interface OptimizationCounts {
   success: number;
   failed: number;
   cancelled: number;
+  /** Runs shared with the caller (set only when include_shared is requested). */
+  shared?: number;
 }
 
 export interface UserQuotaOverride {
@@ -288,9 +292,10 @@ export interface UserQuotaOverridesResponse {
   audit_events: UserQuotaAuditEvent[];
 }
 
-export function getOptimizationCounts(username?: string) {
+export function getOptimizationCounts(username?: string, includeShared?: boolean) {
   const q = new URLSearchParams();
   if (username) q.set("username", username);
+  if (includeShared) q.set("include_shared", "true");
   const qs = q.toString();
   return cachedGet<OptimizationCounts>(`/optimizations/counts${qs ? `?${qs}` : ""}`);
 }
@@ -383,6 +388,8 @@ export interface DashboardAnalytics {
   optimizer_counts: Record<string, number>;
   job_type_counts: Record<string, number>;
   model_usage: Array<{ name: string; value: number }>;
+  owner_usage: Array<{ name: string; value: number }>;
+  access_usage: Array<{ name: string; value: number }>;
   success_count: number;
   failed_count: number;
   running_count: number;
@@ -414,6 +421,9 @@ export function getDashboardAnalytics(params?: {
   status?: string;
   optimization_id?: string;
   date?: string;
+  include_shared?: boolean;
+  owner?: string;
+  access?: string;
 }) {
   const q = new URLSearchParams();
   if (params?.username) q.set("username", params.username);
@@ -422,11 +432,31 @@ export function getDashboardAnalytics(params?: {
   if (params?.status) q.set("status", params.status);
   if (params?.optimization_id) q.set("optimization_id", params.optimization_id);
   if (params?.date) q.set("date", params.date);
+  if (params?.include_shared) q.set("include_shared", "true");
+  if (params?.owner) q.set("owner", params.owner);
+  if (params?.access) q.set("access", params.access);
   const qs = q.toString();
   return cachedGet<DashboardAnalytics>(`/analytics/dashboard${qs ? `?${qs}` : ""}`);
 }
 
-export function getJob(optimizationId: string) {
+export function getJob(
+  optimizationId: string,
+  cursor?: { sinceProgress: number; sinceLog: number },
+) {
+  // A delta fetch asks only for stream rows past what the caller already
+  // holds. The response is a tail slice (stateful w.r.t. the caller's buffer),
+  // so it bypasses the value cache — replaying a cached tail against a
+  // different local buffer would corrupt the splice. The full (no-cursor) path
+  // stays cached so the detail gate's probe warms the view's first load.
+  if (cursor) {
+    const q = new URLSearchParams({
+      since_progress: String(cursor.sinceProgress),
+      since_log: String(cursor.sinceLog),
+    });
+    return request<OptimizationStatusResponse>(
+      `/optimizations/${optimizationId}?${q.toString()}`,
+    );
+  }
   return cachedGet<OptimizationStatusResponse>(`/optimizations/${optimizationId}`, JOB_CACHE_MS);
 }
 
@@ -445,25 +475,48 @@ export function getTestResults(optimizationId: string) {
   }>(`/optimizations/${optimizationId}/test-results`);
 }
 
-/** Member tier role on a shared optimization (full-access tiers). */
+/**
+ * Effective/resolved tier on a shared optimization. `owner` is the creator's
+ * (and admins') resolved role; it is never a *grantable* member tier — see
+ * {@link MemberRole}. Reassigned only via {@link transferOwnership}.
+ */
 export type ShareRole = "viewer" | "editor" | "owner";
+
+/**
+ * Grantable member tier. Single-owner model: ownership belongs to the creator
+ * and moves only by transfer, so an invited member is always viewer or editor.
+ */
+export type MemberRole = Exclude<ShareRole, "owner">;
 
 /** General-access policy on the active share link. */
 export type GeneralAccess = "restricted" | "anyone";
 
-/** One invited member of an optimization (username + tier role). */
+/**
+ * Tier an "anyone with the link" link grants a *signed-in* visitor. Tops out at
+ * editor (ownership is never transferred by link, mirroring Google Drive).
+ * Access is login-gated, so the link never grants a logged-out visitor.
+ */
+export type LinkRole = Exclude<ShareRole, "owner">;
+
+/** One invited member of an optimization (username + grantable tier role). */
 export interface SharingMember {
   username: string;
-  role: ShareRole;
+  role: MemberRole;
 }
 
 /** Owner/editor-facing sharing config for one optimization. */
 export interface SharingState {
   general_access: GeneralAccess;
+  general_role: LinkRole;
   token: string | null;
   share_path: string | null;
   owner: string | null;
   members: SharingMember[];
+  /**
+   * Explore-corpus visibility — orthogonal to `general_access`. `true` hides the
+   * job from the public /explore search; `general_access` governs link access.
+   */
+  is_private: boolean;
 }
 
 /** Envelope for ``GET /users/search`` — matching distinct usernames. */
@@ -474,14 +527,15 @@ export interface UserSearchResponse {
 /**
  * Composite, access-gated read behind a ``/share/<token>`` page.
  *
- * `role` is the caller's effective access: `"view"` (anonymous, read-only,
- * owner hidden, no inference/clone) or `viewer`/`editor`/`owner` (real owner
- * shown, inference + clone enabled). `serve_info` is only populated for
- * viewer+; it is `null` for the anonymous `view` role.
+ * `role` is the caller's effective access (`viewer`/`editor`/`owner`); the read
+ * is login-gated, so the floor is `viewer` (real owner shown). Cloning is
+ * viewer+; serving/chat is editor+ (it spends the owner's key). `serve_info`
+ * (the field schema behind the inference panel) is only populated for editor+;
+ * it is `null` for viewers.
  */
 export interface SharedOptimizationData {
   optimization_id: string;
-  role: "view" | ShareRole;
+  role: ShareRole;
   owner: string | null;
   status: OptimizationStatusResponse;
   payload: Record<string, unknown>;
@@ -495,18 +549,37 @@ export function getSharing(optimizationId: string) {
   return request<SharingState>(`/optimizations/${optimizationId}/sharing`);
 }
 
-/** Set the general-access policy (restricted vs anyone-with-link); mints a link if needed. */
-export function putSharing(optimizationId: string, body: { general_access: GeneralAccess }) {
+/**
+ * Set the link policy: `general_access` (restricted vs anyone-with-link) and,
+ * optionally, `general_role` — the tier an anyone-link grants signed-in
+ * visitors (viewer/editor). Mints a link if needed.
+ */
+export function putSharing(
+  optimizationId: string,
+  body: { general_access: GeneralAccess; general_role?: LinkRole },
+) {
   return request<SharingState>(`/optimizations/${optimizationId}/sharing`, {
     method: "PUT",
     body: JSON.stringify(body),
   });
 }
 
+/**
+ * Flip an optimization's public-Explore visibility (owner-only). `isPrivate:
+ * true` hides it from the public corpus; `false` lists it. Independent of the
+ * share link's general access. Returns the refreshed sharing state.
+ */
+export function setOptimizationVisibility(optimizationId: string, isPrivate: boolean) {
+  return request<SharingState>(`/optimizations/${optimizationId}/visibility`, {
+    method: "PUT",
+    body: JSON.stringify({ is_private: isPrivate }),
+  });
+}
+
 /** Invite a user (add or replace a member grant). */
 export function addShareMember(
   optimizationId: string,
-  body: { username: string; role: ShareRole },
+  body: { username: string; role: MemberRole },
 ) {
   return request<SharingState>(`/optimizations/${optimizationId}/sharing/members`, {
     method: "POST",
@@ -518,7 +591,7 @@ export function addShareMember(
 export function updateShareMember(
   optimizationId: string,
   username: string,
-  body: { role: ShareRole },
+  body: { role: MemberRole },
 ) {
   return request<SharingState>(
     `/optimizations/${optimizationId}/sharing/members/${encodeURIComponent(username)}`,
@@ -534,6 +607,20 @@ export function removeShareMember(optimizationId: string, username: string) {
   );
 }
 
+/**
+ * Transfer ownership to an existing member (owner-only). Single-owner model:
+ * the new owner must already be a member, the previous owner is demoted to an
+ * editor, and the new owner's member grant is dropped. The serving key stays
+ * with the optimization, so this moves control, not billing. Returns the
+ * refreshed sharing state (`owner` is now the new owner).
+ */
+export function transferOwnership(optimizationId: string, username: string) {
+  return request<SharingState>(`/optimizations/${optimizationId}/sharing/transfer`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
 /** Autocomplete distinct known usernames by prefix (any authed caller). */
 export function searchUsers(q: string) {
   return request<UserSearchResponse>(`/users/search?q=${encodeURIComponent(q)}`);
@@ -545,8 +632,37 @@ export function getSharedOptimization(token: string) {
 }
 
 /**
+ * Scrubbed read-only composite for a PUBLIC (Explore-corpus) optimization, by id.
+ * Returns the same shape as a shared read, so the detail view can render it
+ * in read-only mode. 404s when the optimization is unknown or private — backs the
+ * Explore "public" tab so a listed run is also openable.
+ */
+export function getPublicOptimization(optimizationId: string) {
+  return request<SharedOptimizationData>(
+    `/optimizations/${encodeURIComponent(optimizationId)}/public`,
+  );
+}
+
+/** Resolved target of a redeemed share link: the optimization and the caller's role. */
+export interface ClaimShareResult {
+  optimization_id: string;
+  role: ShareRole;
+}
+
+/**
+ * Redeem a share link (Google-Drive semantics): an anyone-with-link URL durably
+ * grants the signed-in caller the link's tier, so the run then lives in their
+ * account and the normal `/optimizations/{id}` routes resolve them to that role.
+ * Returns where to send them. Requires the bearer (the app is login-gated).
+ */
+export function claimSharedOptimization(token: string) {
+  return request<ClaimShareResult>(`/share/${encodeURIComponent(token)}/claim`, { method: "POST" });
+}
+
+/**
  * Run one inference through the owner's stored model on a shared optimization.
- * Requires an effective role of viewer or higher (403 for anonymous `view`).
+ * Requires an effective role of editor or higher (it spends the owner's key);
+ * viewers and the anonymous `view` role get 403.
  */
 export function serveSharedOptimization(token: string, inputs: Record<string, string>) {
   return request<ServeResponse>(`/share/${encodeURIComponent(token)}/serve`, {
@@ -558,6 +674,17 @@ export function serveSharedOptimization(token: string, inputs: Record<string, st
 export async function cancelJob(optimizationId: string) {
   const res = await request<{ optimization_id: string; status: string }>(
     `/optimizations/${optimizationId}/cancel`,
+    { method: "POST" },
+  );
+  invalidateCache("/optimizations");
+  return res;
+}
+
+// Re-runs a failed/cancelled optimization. The response's optimization_id is the
+// NEW run, so callers navigate to it after success.
+export async function retryJob(optimizationId: string) {
+  const res = await request<OptimizationSubmissionResponse>(
+    `/optimizations/${optimizationId}/retry`,
     { method: "POST" },
   );
   invalidateCache("/optimizations");
@@ -659,6 +786,7 @@ export function validateCode(payload: {
   column_mapping: ColumnMapping;
   sample_row: Record<string, unknown>;
   optimizer_name?: string;
+  module_name?: string;
 }) {
   return request<ValidateCodeResponse>("/validate-code", {
     method: "POST",
@@ -840,6 +968,8 @@ export interface SidebarJobItem {
   total_pairs?: number | null;
   completed_pairs?: number | null;
   failed_pairs?: number | null;
+  /** Caller's share role on a "shared with me" item; absent on own optimizations. */
+  role?: ShareRole | null;
 }
 
 export function listJobsSidebar(params?: { username?: string; limit?: number; offset?: number }) {
@@ -850,6 +980,18 @@ export function listJobsSidebar(params?: { username?: string; limit?: number; of
   const qs = q.toString();
   return cachedGet<{ items: SidebarJobItem[]; total: number }>(
     `/optimizations/sidebar${qs ? `?${qs}` : ""}`,
+    SIDEBAR_CACHE_MS,
+  );
+}
+
+/** List optimizations another user shared with the caller (Drive-style). */
+export function listJobsSharedWithMe(params?: { limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return cachedGet<{ items: SidebarJobItem[]; total: number }>(
+    `/optimizations/shared-with-me${qs ? `?${qs}` : ""}`,
     SIDEBAR_CACHE_MS,
   );
 }
@@ -994,7 +1136,9 @@ export interface CodeAgentChatTurn {
 
 export interface CodeAgentRequest {
   dataset_columns: string[];
-  column_roles: Record<string, "input" | "output" | "ignore">;
+  // Plain string roles: react adds replay roles (steps, allowed_tools, …)
+  // beyond the signature I/O set; the code agent only consumes input/output.
+  column_roles: Record<string, string>;
   column_kinds?: Record<string, "text" | "image">;
   sample_rows: Array<Record<string, unknown>>;
   user_message?: string;
@@ -1143,12 +1287,9 @@ export interface PublicDashboardPoint {
   module_name: string | null;
   optimizer_name: string | null;
   created_at: string | null;
-  x: number;
-  y: number;
   siblings: string[];
   task_fingerprint: string | null;
   compare_fingerprint: string | null;
-  has_coordinates?: boolean;
 }
 
 export interface PublicDashboardResponse {
@@ -1210,4 +1351,42 @@ export function searchPublicDashboard(
     body: JSON.stringify(filters),
     signal: init?.signal,
   });
+}
+
+export interface PopularQuery {
+  query: string;
+  count: number;
+}
+
+export interface PopularQueriesResponse {
+  queries: PopularQuery[];
+}
+
+/** Trending public-corpus search queries, ranked by frequency over a recent window. */
+export function getPopularQueries(): Promise<PopularQueriesResponse> {
+  return cachedGet("/dashboard/search/popular", 60000);
+}
+
+/**
+ * Record an explicitly-committed public search query for trending. Fire-and-
+ * forget: only call on an explicit commit (Enter / opening a result), never on
+ * debounced typing, and never for the "mine" corpus.
+ *
+ * Uses ``keepalive`` so the request still completes when the result-open click
+ * navigates the page away mid-flight. The 204 response is ignored and all
+ * errors are swallowed — a failed log never affects the user.
+ */
+export function logSearchQuery(query: string): void {
+  try {
+    void fetch(`${API}/dashboard/search/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+      keepalive: true,
+    }).catch(() => {
+      // Best-effort telemetry; ignore network failures.
+    });
+  } catch {
+    // Ignore synchronous fetch construction errors.
+  }
 }

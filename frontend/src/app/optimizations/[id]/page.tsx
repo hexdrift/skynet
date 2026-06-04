@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { OptimizationDetailView } from "@/features/optimizations";
+import { OptimizationDetailGate } from "@/features/optimizations";
 
 export default function JobDetailPage() {
   return (
     <Suspense fallback={null}>
-      <OptimizationDetailView />
+      <OptimizationDetailGate />
     </Suspense>
   );
 }

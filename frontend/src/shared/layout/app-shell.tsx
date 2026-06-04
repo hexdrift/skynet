@@ -9,6 +9,7 @@ import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { useTutorialContext, ConceptsGuide } from "@/features/tutorial";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { msg } from "@/shared/lib/messages";
 import { JobsStreamProvider } from "@/shared/hooks/use-jobs-stream";
 import { ParticleHero } from "@/shared/ui/particle-hero";
@@ -28,8 +29,9 @@ const DESKTOP_BP = "(min-width: 768px)";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Public read-only share pages render bare — no sidebar, agent panel, or any
-  // authed chrome, since the viewer may be anonymous.
+  // Shared-optimization pages render bare — no sidebar, agent panel, or other
+  // app chrome — to keep the focus on the shared item. The recipient is still
+  // authenticated (the route is login-gated like the rest of the app).
   if (pathname.startsWith("/share/")) {
     return (
       <main className="min-h-screen" dir="rtl">
@@ -169,18 +171,19 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-1.5">
           {session?.user && (
             <>
-              <span className="hidden sm:inline text-xs text-muted-foreground">
+              <span className="hidden sm:inline text-xs font-semibold text-foreground">
                 {session.user.name ?? session.user.email}
               </span>
-              <button
-                type="button"
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="rounded-lg p-2 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer hidden sm:block"
-                aria-label={msg("app.shell.logout")}
-                title={msg("app.shell.logout")}
-              >
-                <LogOut className="size-4" />
-              </button>
+              <TooltipButton tooltip={msg("app.shell.logout")} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="rounded-lg p-2 hover:bg-accent/80 active:scale-95 transition-all duration-200 cursor-pointer hidden sm:block"
+                  aria-label={msg("app.shell.logout")}
+                >
+                  <LogOut className="size-4" />
+                </button>
+              </TooltipButton>
             </>
           )}
           <button
@@ -224,7 +227,7 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      <ConceptsGuide open={conceptsOpen} onClose={() => setConceptsOpen(false)} />
+      {conceptsOpen && <ConceptsGuide open onClose={() => setConceptsOpen(false)} />}
     </div>
   );
 

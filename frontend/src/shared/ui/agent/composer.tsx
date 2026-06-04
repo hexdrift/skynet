@@ -5,6 +5,7 @@ import { Square } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
 
 import { Button } from "@/shared/ui/primitives/button";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { cn } from "@/shared/lib/utils";
 
 import { autoResizeTextarea } from "./auto-resize";
@@ -72,16 +73,17 @@ export function Composer({
           )}
         />
         {streaming && onStop ? (
-          <Button
-            type="button"
-            size="icon"
-            onClick={onStop}
-            className="shrink-0 rounded-full !size-[42px]"
-            aria-label={stopAriaLabel}
-            title={stopAriaLabel}
-          >
-            <Square className="size-3 fill-current" />
-          </Button>
+          <TooltipButton tooltip={stopAriaLabel} side="top">
+            <Button
+              type="button"
+              size="icon"
+              onClick={onStop}
+              className="shrink-0 rounded-full !size-[42px]"
+              aria-label={stopAriaLabel}
+            >
+              <Square className="size-3 fill-current" />
+            </Button>
+          </TooltipButton>
         ) : (
           <Button
             type="submit"
