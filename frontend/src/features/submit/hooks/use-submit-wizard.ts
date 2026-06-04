@@ -13,6 +13,7 @@ import {
   getOptimizationPayload,
   getJob,
   getSharedOptimization,
+  getPublicOptimization,
   stageDatasetForAgent,
   getStagedDataset,
 } from "@/shared/lib/api";
@@ -24,6 +25,9 @@ import type {
   DatasetProfile,
   SplitPlan,
   RunRequest,
+  Reward,
+  ToolSource,
+  ReplayMapping,
 } from "@/shared/types/api";
 import { parseDatasetFile, type ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/shared/ui/code-editor";
@@ -32,9 +36,17 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { useWizardStateOptional } from "@/features/agent-panel";
 import { readPref, useUserPrefs } from "@/features/settings";
 
-import { STEPS, emptyModelConfig, defaultSplit } from "../constants";
+import {
+  STEPS,
+  emptyModelConfig,
+  defaultSplit,
+  defaultReactConfig,
+  REACT_REPLAY_ROLES,
+  REQUIRED_REPLAY_ROLES,
+} from "../constants";
+import type { ReactConfig, ColumnRole } from "../constants";
 import { buildSignatureTemplate } from "../lib/build-signature";
-import { buildMetricTemplate } from "../lib/build-metric";
+import { buildMetricTemplate, buildReactMetricTemplate } from "../lib/build-metric";
 import { buildOptimizerKwargs } from "../lib/build-kwargs";
 import { useCodeAgent } from "@/shared/hooks/use-code-agent";
 import {
@@ -43,6 +55,13 @@ import {
   useModelCatalog,
   useRecentModelConfigs,
 } from "./use-submit-wizard-data";
+
+const COLUMN_ROLES = new Set<string>(["input", "output", "ignore", ...REACT_REPLAY_ROLES]);
+
+/** Type guard for a valid dataset column role (signature I/O or react replay). */
+function isColumnRole(value: unknown): value is ColumnRole {
+  return typeof value === "string" && COLUMN_ROLES.has(value);
+}
 
 export function useSubmitWizard() {
   const router = useRouter();
@@ -65,6 +84,16 @@ export function useSubmitWizard() {
   const [moduleName, setModuleName] = useState("predict");
   const [optimizerName, setOptimizerName] = useState("gepa");
 
+  // React (ReAct-agent) run configuration. Only sent when moduleName is
+  // "react"; the reward preset replaces the scalar metric, so a react run
+  // omits metric_code entirely (see handleSubmit).
+  const [reactConfig, setReactConfig] = useState<ReactConfig>(defaultReactConfig);
+  const updateReactConfig = useCallback(
+    (patch: Partial<ReactConfig>) => setReactConfig((prev) => ({ ...prev, ...patch })),
+    [],
+  );
+  const isReact = moduleName.toLowerCase() === "react";
+
   const [signatureCode, setSignatureCode] = useState(() => buildSignatureTemplate({}));
   const [metricCode, setMetricCode] = useState(() => buildMetricTemplate({}));
 
@@ -72,7 +101,7 @@ export function useSubmitWizard() {
   const [datasetFileName, setDatasetFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [columnRoles, setColumnRoles] = useState<Record<string, "input" | "output" | "ignore">>({});
+  const [columnRoles, setColumnRoles] = useState<Record<string, ColumnRole>>({});
   // Manual override for input column modality. The dataset profiler auto-fills
   // entries for every input column (kind = "text" | "image"); the user can
   // flip a column manually via the DatasetStep toggle.
@@ -239,6 +268,18 @@ export function useSubmitWizard() {
         setOptimizerName(sharedState.optimizer_name);
       } else if (key === "module_name" && typeof sharedState.module_name === "string") {
         setModuleName(sharedState.module_name);
+      } else if (key === "react_config" && sharedState.react_config) {
+        const rc = sharedState.react_config as Record<string, unknown>;
+        setReactConfig((prev) => {
+          const next = { ...prev };
+          if (rc.toolSourceKind === "live_mcp" || rc.toolSourceKind === "dataset_snapshot") {
+            next.toolSourceKind = rc.toolSourceKind;
+          }
+          for (const field of ["mcpUrl", "toolFilter"] as const) {
+            if (typeof rc[field] === "string") next[field] = rc[field] as string;
+          }
+          return next;
+        });
       } else if (key === "signature_code" && typeof sharedState.signature_code === "string") {
         setSignatureCode(sharedState.signature_code);
         setSignatureManuallyEdited(true);
@@ -251,9 +292,7 @@ export function useSubmitWizard() {
         setColumnRoles((prev) => {
           const next = { ...prev };
           for (const [col, role] of Object.entries(sharedState.column_roles ?? {})) {
-            if (role === "input" || role === "output" || role === "ignore") {
-              next[col] = role;
-            }
+            if (isColumnRole(role)) next[col] = role;
           }
           return next;
         });
@@ -582,6 +621,18 @@ export function useSubmitWizard() {
     );
   }, [reflectionModels, wizardCtx]);
 
+  // Outgoing: react config (minus the secret mcp_auth_header) so the agent and
+  // clone path can read/drive it. JSON-compared because a fresh object is built
+  // each render; the secret never enters shared state.
+  useEffect(() => {
+    if (!wizardCtx) return;
+    const { mcpAuthHeader: _omit, ...shareable } = reactConfig;
+    const shared = wizardCtx.state.react_config;
+    if (JSON.stringify(shared ?? null) !== JSON.stringify(shareable)) {
+      wizardCtx.setField("react_config", shareable as Record<string, unknown>, "user");
+    }
+  }, [reactConfig, wizardCtx]);
+
   // Outgoing: optimizer_kwargs — rebuild from the quartet and compare entries.
   useEffect(() => {
     if (!wizardCtx) return;
@@ -633,9 +684,7 @@ export function useSubmitWizard() {
       lastStagedDatasetRef.current = parsed;
       setParsedDataset(parsed);
       const explicitFilename =
-        typeof d.dataset_filename === "string" && d.dataset_filename
-          ? d.dataset_filename
-          : null;
+        typeof d.dataset_filename === "string" && d.dataset_filename ? d.dataset_filename : null;
       const jobBasedFilename =
         typeof ws.job_name === "string" && ws.job_name ? `${ws.job_name}.json` : null;
       setDatasetFileName(explicitFilename ?? jobBasedFilename ?? "sample.json");
@@ -654,18 +703,14 @@ export function useSubmitWizard() {
       setMetricManuallyEdited(true);
       if (ws.column_kinds && typeof ws.column_kinds === "object") {
         const stagedKinds: Record<string, "text" | "image"> = {};
-        for (const [col, kind] of Object.entries(
-          ws.column_kinds as Record<string, unknown>,
-        )) {
+        for (const [col, kind] of Object.entries(ws.column_kinds as Record<string, unknown>)) {
           stagedKinds[col] = kind === "image" ? "image" : "text";
         }
         setColumnKinds(stagedKinds);
       }
       if (ws.column_roles && typeof ws.column_roles === "object") {
         const stagedRoles: Record<string, "input" | "output" | "ignore"> = {};
-        for (const [col, role] of Object.entries(
-          ws.column_roles as Record<string, unknown>,
-        )) {
+        for (const [col, role] of Object.entries(ws.column_roles as Record<string, unknown>)) {
           if (role === "input" || role === "output" || role === "ignore") {
             stagedRoles[col] = role;
           }
@@ -726,10 +771,16 @@ export function useSubmitWizard() {
   // edits from being clobbered when they toggle between columns afterwards.
   useEffect(() => {
     if (metricManuallyEdited) return;
+    // React scores a trajectory via metric(example, rollout), independent of
+    // output columns — seed the react template instead of the I/O comparison.
+    if (isReact) {
+      setMetricCode(buildReactMetricTemplate());
+      return;
+    }
     const hasOutputs = Object.values(columnRoles).some((r) => r === "output");
     if (!hasOutputs) return;
     setMetricCode(buildMetricTemplate(columnRoles));
-  }, [columnRoles, metricManuallyEdited]);
+  }, [columnRoles, metricManuallyEdited, isReact]);
 
   useEffect(() => {
     const cloneId = searchParams.get("clone");
@@ -738,6 +789,9 @@ export function useSubmitWizard() {
     const pairParam = searchParams.get("pair");
     const clonePairIndex = pairParam == null ? null : Number(pairParam);
     const shareToken = searchParams.get("shareToken");
+    // Forking a public Explore run: there's no share token, so hydrate from the
+    // by-id scrubbed public composite instead of the authed owner endpoints.
+    const publicClone = searchParams.get("public") === "1";
     setCloneLoading(true);
 
     // Maps a cloned optimization payload into wizard state. Shared between the
@@ -748,139 +802,187 @@ export function useSubmitWizard() {
       payload: Record<string, unknown>,
       jobData: Awaited<ReturnType<typeof getJob>> | null,
     ) => {
-        const clonePair =
-          Number.isInteger(clonePairIndex) && jobData?.grid_result
-            ? (jobData.grid_result.pair_results.find((p) => p.pair_index === clonePairIndex) ??
-              null)
-            : null;
-        setOptimizationType(clonePair ? "run" : optimization_type === "grid_search" ? "grid_search" : "run");
+      const clonePair =
+        Number.isInteger(clonePairIndex) && jobData?.grid_result
+          ? (jobData.grid_result.pair_results.find((p) => p.pair_index === clonePairIndex) ?? null)
+          : null;
+      setOptimizationType(
+        clonePair ? "run" : optimization_type === "grid_search" ? "grid_search" : "run",
+      );
 
-        const displayName = jobData?.name || payload.name;
-        if (displayName) setJobName(String(displayName));
-        if (payload.description) setJobDescription(String(payload.description));
-        if (payload.module_name) setModuleName(String(payload.module_name));
-        if (payload.optimizer_name) setOptimizerName(String(payload.optimizer_name));
-        if (payload.signature_code) {
-          setSignatureCode(String(payload.signature_code));
-          setSignatureManuallyEdited(true);
-        }
-        if (payload.metric_code) {
-          setMetricCode(String(payload.metric_code));
-          setMetricManuallyEdited(true);
-        }
+      const displayName = jobData?.name || payload.name;
+      if (displayName) setJobName(String(displayName));
+      if (payload.description) setJobDescription(String(payload.description));
+      if (payload.module_name) setModuleName(String(payload.module_name));
+      if (payload.optimizer_name) setOptimizerName(String(payload.optimizer_name));
+      if (payload.signature_code) {
+        setSignatureCode(String(payload.signature_code));
+        setSignatureManuallyEdited(true);
+      }
+      if (payload.metric_code) {
+        setMetricCode(String(payload.metric_code));
+        setMetricManuallyEdited(true);
+      }
 
-        if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
-          const rows = payload.dataset as Array<Record<string, unknown>>;
-          const columns = Object.keys(rows[0] ?? {});
-          setParsedDataset({ columns, rows, rowCount: rows.length });
-          setDatasetFileName(
-            String(
-              (payload as Record<string, unknown>).dataset_filename || displayName || cloneId || "",
-            ),
+      if (Array.isArray(payload.dataset) && payload.dataset.length > 0) {
+        const rows = payload.dataset as Array<Record<string, unknown>>;
+        const rowKeys = Object.keys(rows[0] ?? {});
+        // Restore the submitted column order from the persisted array (the
+        // rows' own key order is scrambled by JSONB). Fall back to row keys,
+        // and append any columns the saved order didn't cover.
+        const savedOrder = Array.isArray(payload.column_order)
+          ? (payload.column_order as string[]).filter((c) => rowKeys.includes(c))
+          : [];
+        const columns =
+          savedOrder.length > 0
+            ? [...savedOrder, ...rowKeys.filter((c) => !savedOrder.includes(c))]
+            : rowKeys;
+        setParsedDataset({ columns, rows, rowCount: rows.length });
+        setDatasetFileName(
+          String(
+            (payload as Record<string, unknown>).dataset_filename || displayName || cloneId || "",
+          ),
+        );
+      }
+
+      const cm = payload.column_mapping as
+        | { inputs?: Record<string, string>; outputs?: Record<string, string> }
+        | undefined;
+      if (cm) {
+        const roles: Record<string, "input" | "output" | "ignore"> = {};
+        if (cm.inputs)
+          Object.keys(cm.inputs).forEach((k) => {
+            roles[k] = "input";
+          });
+        if (cm.outputs)
+          Object.keys(cm.outputs).forEach((k) => {
+            roles[k] = "output";
+          });
+        setColumnRoles(roles);
+      }
+
+      const sf = payload.split_fractions as
+        | { train?: number; val?: number; test?: number }
+        | undefined;
+      if (sf) {
+        setSplit({ train: sf.train ?? 0.7, val: sf.val ?? 0.15, test: sf.test ?? 0.15 });
+        // Cloned splits are intentional — pin the wizard to manual so the
+        // auto-profile effect doesn't clobber them when the dataset reloads.
+        splitModeRef.current = "manual";
+        setSplitModeState("manual");
+      }
+
+      if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
+      if (payload.seed != null) setSeed(Number(payload.seed));
+      if (payload.is_private != null) setIsPrivate(Boolean(payload.is_private));
+
+      if (clonePair) {
+        const findPairModel = (
+          models: ModelConfig[] | undefined,
+          name: string,
+          reasoningEffort?: string | null,
+        ) => {
+          const match = models?.find(
+            (model) =>
+              model.name === name &&
+              (!reasoningEffort || model.extra?.reasoning_effort === reasoningEffort),
           );
-        }
-
-        const cm = payload.column_mapping as
-          | { inputs?: Record<string, string>; outputs?: Record<string, string> }
-          | undefined;
-        if (cm) {
-          const roles: Record<string, "input" | "output" | "ignore"> = {};
-          if (cm.inputs)
-            Object.keys(cm.inputs).forEach((k) => {
-              roles[k] = "input";
-            });
-          if (cm.outputs)
-            Object.keys(cm.outputs).forEach((k) => {
-              roles[k] = "output";
-            });
-          setColumnRoles(roles);
-        }
-
-        const sf = payload.split_fractions as
-          | { train?: number; val?: number; test?: number }
-          | undefined;
-        if (sf) {
-          setSplit({ train: sf.train ?? 0.7, val: sf.val ?? 0.15, test: sf.test ?? 0.15 });
-          // Cloned splits are intentional — pin the wizard to manual so the
-          // auto-profile effect doesn't clobber them when the dataset reloads.
-          splitModeRef.current = "manual";
-          setSplitModeState("manual");
-        }
-
-        if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
-        if (payload.seed != null) setSeed(Number(payload.seed));
-        if (payload.is_private != null) setIsPrivate(Boolean(payload.is_private));
-
-        if (clonePair) {
-          const findPairModel = (
-            models: ModelConfig[] | undefined,
-            name: string,
-            reasoningEffort?: string | null,
-          ) => {
-            const match = models?.find(
-              (model) =>
-                model.name === name &&
-                (!reasoningEffort || model.extra?.reasoning_effort === reasoningEffort),
-            );
-            if (match) return { ...emptyModelConfig(), ...match };
-            return {
-              ...emptyModelConfig(),
-              name,
-              extra: reasoningEffort ? { reasoning_effort: reasoningEffort } : undefined,
-            };
+          if (match) return { ...emptyModelConfig(), ...match };
+          return {
+            ...emptyModelConfig(),
+            name,
+            extra: reasoningEffort ? { reasoning_effort: reasoningEffort } : undefined,
           };
-          setModelConfig(
-            findPairModel(
-              payload.generation_models as ModelConfig[] | undefined,
-              clonePair.generation_model,
-              clonePair.generation_reasoning_effort,
-            ),
-          );
-          setSecondModelConfig(
-            findPairModel(
-              payload.reflection_models as ModelConfig[] | undefined,
-              clonePair.reflection_model,
-              clonePair.reflection_reasoning_effort,
-            ),
-          );
-          setUseAllGenerationModels(false);
-          setUseAllReflectionModels(false);
-        } else {
-          const mc = payload.model_config as ModelConfig | undefined;
-          if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
+        };
+        setModelConfig(
+          findPairModel(
+            payload.generation_models as ModelConfig[] | undefined,
+            clonePair.generation_model,
+            clonePair.generation_reasoning_effort,
+          ),
+        );
+        setSecondModelConfig(
+          findPairModel(
+            payload.reflection_models as ModelConfig[] | undefined,
+            clonePair.reflection_model,
+            clonePair.reflection_reasoning_effort,
+          ),
+        );
+        setUseAllGenerationModels(false);
+        setUseAllReflectionModels(false);
+      } else {
+        const mc = payload.model_config as ModelConfig | undefined;
+        if (mc) setModelConfig({ ...emptyModelConfig(), ...mc });
 
-          const smc = (payload.reflection_model_config ?? payload.task_model_config) as
-            | ModelConfig
-            | undefined;
-          if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
+        const smc = (payload.reflection_model_config ?? payload.task_model_config) as
+          | ModelConfig
+          | undefined;
+        if (smc?.name) setSecondModelConfig({ ...emptyModelConfig(), ...smc });
 
-          const gm = payload.generation_models as ModelConfig[] | undefined;
-          if (gm?.length) setGenerationModels(gm.map((m) => ({ ...emptyModelConfig(), ...m })));
+        const gm = payload.generation_models as ModelConfig[] | undefined;
+        if (gm?.length) setGenerationModels(gm.map((m) => ({ ...emptyModelConfig(), ...m })));
 
-          const rm = payload.reflection_models as ModelConfig[] | undefined;
-          if (rm?.length) setReflectionModels(rm.map((m) => ({ ...emptyModelConfig(), ...m })));
+        const rm = payload.reflection_models as ModelConfig[] | undefined;
+        if (rm?.length) setReflectionModels(rm.map((m) => ({ ...emptyModelConfig(), ...m })));
 
-          if (payload.use_all_available_generation_models) setUseAllGenerationModels(true);
-          if (payload.use_all_available_reflection_models) setUseAllReflectionModels(true);
-        }
+        if (payload.use_all_available_generation_models) setUseAllGenerationModels(true);
+        if (payload.use_all_available_reflection_models) setUseAllReflectionModels(true);
+      }
 
-        const optKw = payload.optimizer_kwargs as Record<string, unknown> | undefined;
-        if (optKw) {
-          if (optKw.auto) setAutoLevel(String(optKw.auto));
-          if (optKw.reflection_minibatch_size != null)
-            setReflectionMinibatchSize(String(optKw.reflection_minibatch_size));
-          if (optKw.max_full_evals != null) setMaxFullEvals(String(optKw.max_full_evals));
-          if (optKw.use_merge != null) setUseMerge(Boolean(optKw.use_merge));
-        }
+      const optKw = payload.optimizer_kwargs as Record<string, unknown> | undefined;
+      if (optKw) {
+        if (optKw.auto) setAutoLevel(String(optKw.auto));
+        if (optKw.reflection_minibatch_size != null)
+          setReflectionMinibatchSize(String(optKw.reflection_minibatch_size));
+        if (optKw.max_full_evals != null) setMaxFullEvals(String(optKw.max_full_evals));
+        if (optKw.use_merge != null) setUseMerge(Boolean(optKw.use_merge));
+      }
 
-        toast.success(msg("submit.clone.success"));
+      // React run config — hydrate tool source from the wire model. Scoring is
+      // owned by metric_code (hydrated above), so there is no reward to restore.
+      // mcp_auth_header is scrubbed from cloned/shared payloads, never present.
+      const ts = payload.tool_source as Record<string, unknown> | undefined;
+      if (ts) {
+        setReactConfig((prev) => {
+          const next = { ...prev };
+          if (ts.kind) next.toolSourceKind = String(ts.kind) as ReactConfig["toolSourceKind"];
+          if (ts.mcp_url != null) next.mcpUrl = String(ts.mcp_url);
+          if (Array.isArray(ts.tool_filter)) next.toolFilter = ts.tool_filter.join(", ");
+          return next;
+        });
+      }
+      // Replay mapping hydrates onto the dataset column roles (chat_history is
+      // left as a signature input — it is derived by name at submit).
+      const rm = payload.replay_mapping as Record<string, unknown> | undefined;
+      if (rm) {
+        setColumnRoles((prev) => {
+          const next = { ...prev };
+          const assign = (role: ColumnRole, col: unknown) => {
+            if (typeof col === "string" && col) next[col] = role;
+          };
+          assign("steps", rm.steps);
+          assign("allowed_tools", rm.allowed_tools);
+          assign("tool_schema_hashes", rm.tool_schema_hashes);
+          assign("state_before", rm.state_before);
+          assign("state_after", rm.state_after);
+          return next;
+        });
+      }
+
+      toast.success(msg("submit.clone.success"));
     };
 
-    // Share clone: hydrate from the public, token-gated composite. The payload
-    // is scrubbed (no api_key/base_url/username) and carries no dataset rows, so
-    // reconstruct them from the full train/val/test split sorted by index.
-    const source = shareToken
-      ? getSharedOptimization(shareToken).then((shared) => {
+    // Share / public clone: hydrate from the scrubbed composite — token-gated for
+    // a share link, or by id for a public Explore run. Both return the same
+    // shape; the payload is scrubbed (no api_key/base_url/username) and carries no
+    // dataset rows, so reconstruct them from the full train/val/test split.
+    const scrubbedComposite = shareToken
+      ? getSharedOptimization(shareToken)
+      : publicClone
+        ? getPublicOptimization(cloneId)
+        : null;
+    const source = scrubbedComposite
+      ? scrubbedComposite.then((shared) => {
           const splits = shared.dataset?.splits;
           const rows = splits
             ? [...splits.train, ...splits.val, ...splits.test]
@@ -910,6 +1012,13 @@ export function useSubmitWizard() {
       })
       .finally(() => setCloneLoading(false));
   }, []);
+
+  // React is a single-run replay feature — it has no grid-search variant. When
+  // react is active, force the job back to a single run so BasicsStep can hide
+  // the grid option without leaving a stale grid_search selection behind.
+  useEffect(() => {
+    if (isReact && jobType === "grid_search") setOptimizationType("run");
+  }, [isReact, jobType]);
 
   const goNext = () => {
     if (step < STEPS.length - 1) {
@@ -987,6 +1096,13 @@ export function useSubmitWizard() {
           if (showToast) toast.error(msg("submit.validation.output_column_required"));
           return false;
         }
+        if (isReact) {
+          const assigned = new Set(Object.values(columnRoles));
+          if (REQUIRED_REPLAY_ROLES.some((role) => !assigned.has(role))) {
+            if (showToast) toast.error(msg("submit.validation.react_replay_roles_required"));
+            return false;
+          }
+        }
         return true;
       }
       case 2:
@@ -1000,11 +1116,11 @@ export function useSubmitWizard() {
           if (showToast) toast.error(msg("submit.validation.signature_required"));
           return false;
         }
-        if (!metricCode.trim()) {
-          if (showToast) toast.error(msg("submit.validation.metric_required"));
+        if (!signatureValidation || signatureValidation.errors.length > 0) {
           return false;
         }
-        if (!signatureValidation || signatureValidation.errors.length > 0) {
+        if (!metricCode.trim()) {
+          if (showToast) toast.error(msg("submit.validation.metric_required"));
           return false;
         }
         if (!metricValidation || metricValidation.errors.length > 0) {
@@ -1097,7 +1213,7 @@ export function useSubmitWizard() {
     }
     const mapping = currentColumnMapping();
     const sampleRow = parsedDataset.rows[0] as Record<string, unknown>;
-    const cacheKey = JSON.stringify([kind, code, mapping, sampleRow, optimizerName]);
+    const cacheKey = JSON.stringify([kind, code, mapping, sampleRow, optimizerName, moduleName]);
     const cached = validationCacheRef.current.get(cacheKey);
     if (cached) return cached;
     const pending = validateCode({
@@ -1106,6 +1222,7 @@ export function useSubmitWizard() {
       column_mapping: mapping,
       sample_row: sampleRow,
       optimizer_name: optimizerName,
+      module_name: moduleName,
     });
     validationCacheRef.current.set(cacheKey, pending);
     pending.catch(() => validationCacheRef.current.delete(cacheKey));
@@ -1166,8 +1283,7 @@ export function useSubmitWizard() {
     }
     const effectiveFractions =
       splitModeRef.current === "auto" && splitPlan ? splitPlan.fractions : split;
-    const sum =
-      effectiveFractions.train + effectiveFractions.val + effectiveFractions.test;
+    const sum = effectiveFractions.train + effectiveFractions.val + effectiveFractions.test;
     if (Math.abs(sum - 1) > 0.001) {
       toast.error(msg("submit.validation.split_must_sum_to_one"));
       return false;
@@ -1196,7 +1312,7 @@ export function useSubmitWizard() {
         const passed = await handleValidateDataset();
         if (!passed) return;
       }
-      if (step === 3 && signatureCode.trim() && metricCode.trim() && parsedDataset) {
+      if (step === 3 && signatureCode.trim() && parsedDataset && (isReact || metricCode.trim())) {
         const passed = await handleValidateCode();
         if (!passed) return;
       }
@@ -1285,9 +1401,14 @@ export function useSubmitWizard() {
       goTo(3);
       return;
     }
-    if (!metricCode.trim()) {
+    if (!isReact && !metricCode.trim()) {
       toast.error(msg("submit.validation.metric_required"));
       goTo(3);
+      return;
+    }
+    if (isReact && reactConfig.toolSourceKind === "live_mcp" && !reactConfig.mcpUrl.trim()) {
+      toast.error(msg("submit.validation.mcp_url_required"));
+      goTo(2);
       return;
     }
 
@@ -1323,11 +1444,65 @@ export function useSubmitWizard() {
         dataset: parsedDataset.rows as Array<Record<string, unknown>>,
         dataset_filename: datasetFileName || undefined,
         column_mapping: columnMapping,
+        // Preserve the on-screen column order (file order) so a clone restores
+        // it — JSONB would otherwise scramble the dataset's object-key order.
+        column_order: parsedDataset.columns,
         split_fractions: split,
         shuffle,
         is_private: isPrivate,
         ...(seed != null && { seed }),
         ...(Object.keys(optKw).length > 0 && { optimizer_kwargs: optKw }),
+      };
+
+      // Reshape the flat UI react config into the backend Reward / ToolSource /
+      // ReplayMapping wire models. mcp_auth_header is forwarded once on the wire
+      // but never persisted (backend) or mirrored into shared agent state.
+      const buildReactFields = (): {
+        reward: Reward;
+        tool_source: ToolSource;
+        replay_mapping: ReplayMapping;
+      } => {
+        const filter = reactConfig.toolFilter
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const tool_source: ToolSource = {
+          kind: reactConfig.toolSourceKind,
+          ...(reactConfig.toolSourceKind === "live_mcp" && reactConfig.mcpUrl.trim()
+            ? { mcp_url: reactConfig.mcpUrl.trim() }
+            : {}),
+          ...(reactConfig.mcpAuthHeader.trim()
+            ? { mcp_auth_header: reactConfig.mcpAuthHeader.trim() }
+            : {}),
+          ...(filter.length > 0 ? { tool_filter: filter } : {}),
+        };
+        // Replay mapping is derived from the per-column roles set in the
+        // dataset step: the column tagged "steps" is replay_mapping.steps, etc.
+        const colForRole = (role: ColumnRole) =>
+          Object.keys(columnRoles).find((c) => columnRoles[c] === role) ?? "";
+        // chat_history is a signature input, so it can't also carry a replay
+        // role in the single-toggle model — derive it from the canonical column
+        // name when present (the generalist trajectory convention).
+        const chatHistoryCol = Object.keys(columnRoles).find(
+          (c) => c === "chat_history" && columnRoles[c] !== "ignore",
+        );
+        const replay_mapping: ReplayMapping = {
+          steps: colForRole("steps"),
+          allowed_tools: colForRole("allowed_tools"),
+          tool_schema_hashes: colForRole("tool_schema_hashes"),
+          ...(colForRole("state_before") ? { state_before: colForRole("state_before") } : {}),
+          ...(colForRole("state_after") ? { state_after: colForRole("state_after") } : {}),
+          ...(chatHistoryCol ? { chat_history: chatHistoryCol } : {}),
+        };
+        return {
+          // Scoring is owned by metric_code; the only reward knob that can't
+          // live in the metric is match_mode (it governs the replay rollout the
+          // metric scores), fixed to the lenient substrate so the metric sees
+          // every step and decides argument-exactness itself.
+          reward: { match_mode: "tool_name" },
+          tool_source,
+          replay_mapping,
+        };
       };
 
       // Inject global API key + base URL into any model config that doesn't override
@@ -1355,6 +1530,7 @@ export function useSubmitWizard() {
           ...base,
           model_config: applyGlobals(modelConfig),
           ...(secondApplied ? { reflection_model_config: secondApplied } : {}),
+          ...(isReact ? buildReactFields() : {}),
         };
         result = await submitRun(runPayload);
       } else {
@@ -1478,6 +1654,9 @@ export function useSubmitWizard() {
     setJobDescription,
     moduleName,
     setModuleName,
+    isReact,
+    reactConfig,
+    updateReactConfig,
     optimizerName,
     setOptimizerName,
     signatureCode,

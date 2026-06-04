@@ -157,10 +157,6 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
     setDrawerOpen(true);
   }, []);
 
-  const handleDrawerParentJump = useCallback((id: string) => {
-    setSelected({ kind: "candidate", id });
-  }, []);
-
   if (candidates.length === 0) return null;
 
   return (
@@ -174,8 +170,8 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
           aria-hidden="true"
         />
         <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-base flex items-center gap-2">
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-base flex min-w-0 items-center gap-2">
               <GitBranch className="size-4 text-[#7C6350]" aria-hidden="true" />
               <HelpTip text={msg("trajectory.explainer.trajectory")}>
                 <span className="font-bold tracking-tight">{msg("trajectory.panel.title")}</span>
@@ -186,7 +182,7 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
             <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-1.5 rounded-full border border-border/40 bg-background/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/40 bg-background/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
             >
               <span className="relative inline-flex size-2" aria-hidden="true">
                 <motion.span
@@ -200,7 +196,7 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
               <span>{TERMS.candidatePlural}</span>
             </motion.div>
           ) : (
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <span className="tabular-nums">{candidates.length}</span> {TERMS.candidatePlural}
             </span>
           )}
@@ -226,8 +222,6 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
             selection={drawerSelection}
             open={drawerOpen}
             onOpenChange={setDrawerOpen}
-            onSelectCandidate={handleDrawerParentJump}
-            candidates={candidates}
             valsetRows={valsetRows}
             minibatch={minibatch}
             valsetOutputs={valsetOutputs}

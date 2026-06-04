@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Boxes, X } from "lucide-react";
+import { Boxes, ChevronDown, X } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
 import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Button } from "@/shared/ui/primitives/button";
@@ -51,15 +51,29 @@ export function ModelConfigModal({
   onSelectAllAvailable,
 }: ModelConfigModalProps) {
   const [draft, setDraft] = React.useState<ModelConfig>(config);
+  // Custom-connection section is collapsed for the common (built-in provider)
+  // case; it auto-expands when the opened config already carries an endpoint
+  // or key, so a populated field is never hidden behind a closed disclosure.
+  const [connectionOpen, setConnectionOpen] = React.useState(false);
 
   // Sync draft when config changes externally (e.g. opening with different model)
   React.useEffect(() => {
-    if (open) setDraft(config);
+    if (open) {
+      setDraft(config);
+      setConnectionOpen(!!(config.base_url || config.extra?.api_key));
+    }
   }, [open, config]);
 
   const canThink = modelSupportsThinking(draft.name, catalogModels);
   const thinkingEnabled = !!draft.extra?.reasoning_effort;
   const reasoningEffort = (draft.extra?.reasoning_effort as string) ?? "medium";
+
+  // Plaintext http to a remote host sends the API key unencrypted; localhost
+  // loopback (Ollama, LM Studio, llama.cpp) is the common local-model case and
+  // doesn't warrant the warning.
+  const insecureRemoteEndpoint =
+    /^http:\/\//i.test(draft.base_url ?? "") &&
+    !/^http:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(?::|\/|$)/i.test(draft.base_url ?? "");
 
   const setThinking = (on: boolean) => {
     setDraft((p) => ({
@@ -158,7 +172,13 @@ export function ModelConfigModal({
                     >
                       <button
                         type="button"
-                        onClick={() => setDraft({ ...rc })}
+                        onClick={() => {
+                          setDraft({ ...rc });
+                          // Reveal the connection fields when the restored config
+                          // carries a custom endpoint, so the base URL isn't
+                          // hidden behind the collapsed disclosure.
+                          setConnectionOpen(!!(rc.base_url || rc.extra?.api_key));
+                        }}
                         className="flex items-center gap-1.5 cursor-pointer outline-none"
                       >
                         <span className="truncate max-w-[120px]">{rc.name.split("/").pop()}</span>
@@ -188,8 +208,86 @@ export function ModelConfigModal({
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => setConnectionOpen((o) => !o)}
+            aria-expanded={connectionOpen}
+            className="flex w-full cursor-pointer items-center justify-between gap-1.5 text-[0.625rem] uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <HelpTip text={tip("model_config.connection_section")} className="cursor-pointer">
+              {msg("auto.features.submit.components.modelconfigmodal.section.connection")}
+            </HelpTip>
+            <ChevronDown
+              className={cn(
+                "size-3 shrink-0 transition-transform duration-150",
+                connectionOpen && "rotate-180",
+              )}
+            />
+          </button>
+
+          {connectionOpen && (
+            <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-1">
+              <div className="space-y-2">
+                <Label htmlFor="modelConfigBaseUrl">
+                  <HelpTip text={tip("model_config.base_url")}>
+                    {msg("auto.features.submit.components.steps.modelstep.8")}
+                  </HelpTip>
+                </Label>
+                <Input
+                  id="modelConfigBaseUrl"
+                  dir="ltr"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  placeholder="https://my-host:1234/v1"
+                  value={draft.base_url ?? ""}
+                  onChange={(e) => {
+                    const next = e.target.value.trim();
+                    setDraft((p) => ({ ...p, base_url: next ? next : undefined }));
+                  }}
+                />
+                {insecureRemoteEndpoint && (
+                  <p className="text-[0.625rem] text-amber-700 dark:text-amber-400">
+                    {msg("auto.features.submit.components.steps.modelstep.12")}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="modelConfigApiKey">
+                  <HelpTip text={tip("model_config.api_key")}>
+                    {msg("auto.features.submit.components.steps.modelstep.10")}
+                  </HelpTip>
+                </Label>
+                <Input
+                  id="modelConfigApiKey"
+                  dir="ltr"
+                  type="password"
+                  placeholder="sk-..."
+                  autoComplete="new-password"
+                  value={(draft.extra?.api_key as string | undefined) ?? ""}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setDraft((p) => {
+                      const rest = { ...p.extra };
+                      if (next) rest.api_key = next;
+                      else delete rest.api_key;
+                      return { ...p, extra: Object.keys(rest).length ? rest : undefined };
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
           <div className="space-y-2">
-            <Label>{msg("auto.features.submit.components.modelconfigmodal.4")}</Label>
+            <Label>
+              <HelpTip text={tip("model_config.model")}>
+                {msg("auto.features.submit.components.modelconfigmodal.4")}
+              </HelpTip>
+            </Label>
             <ModelPicker
               value={draft.name}
               onChange={(next) => {
@@ -202,37 +300,17 @@ export function ModelConfigModal({
                   });
                 }
               }}
+              discoverUrl={draft.base_url?.trim() || undefined}
+              discoverApiKey={(draft.extra?.api_key as string | undefined) || undefined}
               placeholder={msg("auto.features.submit.components.modelconfigmodal.literal.3")}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="modelConfigApiKey">
-              {msg("auto.features.submit.components.steps.modelstep.10")}
-            </Label>
-            <Input
-              id="modelConfigApiKey"
-              dir="ltr"
-              type="password"
-              placeholder="sk-..."
-              autoComplete="new-password"
-              value={(draft.extra?.api_key as string | undefined) ?? ""}
-              onChange={(e) => {
-                const next = e.target.value;
-                setDraft((p) => {
-                  const rest = { ...p.extra };
-                  if (next) rest.api_key = next;
-                  else delete rest.api_key;
-                  return { ...p, extra: Object.keys(rest).length ? rest : undefined };
-                });
-              }}
-            />
-            <p className="text-[0.625rem] text-muted-foreground">
-              {msg("auto.features.submit.components.steps.modelstep.11")}
-            </p>
-          </div>
-
           <Separator />
+
+          <Label className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">
+            {msg("auto.features.submit.components.modelconfigmodal.section.parameters")}
+          </Label>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

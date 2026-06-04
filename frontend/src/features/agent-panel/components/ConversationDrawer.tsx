@@ -27,6 +27,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
+import { ConversationDrawerSkeleton } from "./ConversationDrawerSkeleton";
 
 import type { ConversationSummary } from "../lib/conversation-api";
 
@@ -142,9 +143,7 @@ export function ConversationDrawer(props: ConversationDrawerProps) {
 
         <div className="flex-1 overflow-y-auto px-2 pb-4">
           {loading && conversations.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[0.75rem] text-muted-foreground">
-              {msg("auto.features.agent.panel.components.conversationdrawer.loading")}
-            </p>
+            <ConversationDrawerSkeleton />
           ) : conversations.length === 0 ? (
             <p className="px-3 py-6 text-center text-[0.75rem] text-muted-foreground">
               {query.trim()

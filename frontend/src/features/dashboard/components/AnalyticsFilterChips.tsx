@@ -6,25 +6,78 @@ import type { UseAnalyticsFiltersReturn } from "../hooks/use-analytics-filters";
 
 export function AnalyticsFilterChips({
   filters,
+  sessionUser,
 }: {
   filters: Pick<
     UseAnalyticsFiltersReturn,
-    "model" | "status" | "jobId" | "date" | "setModel" | "setStatus" | "setJobId" | "setDate"
+    | "model"
+    | "status"
+    | "jobId"
+    | "date"
+    | "owner"
+    | "access"
+    | "setModel"
+    | "setStatus"
+    | "setJobId"
+    | "setDate"
+    | "setOwner"
+    | "setAccess"
   >;
+  sessionUser: string;
 }) {
-  const { model, status, jobId, date, setModel, setStatus, setJobId, setDate } = filters;
-  const hasFilters = jobId || date || model !== "all" || status !== "all";
+  const {
+    model,
+    status,
+    jobId,
+    date,
+    owner,
+    access,
+    setModel,
+    setStatus,
+    setJobId,
+    setDate,
+    setOwner,
+    setAccess,
+  } = filters;
+  const hasFilters = jobId || date || owner || access || model !== "all" || status !== "all";
   if (!hasFilters) return null;
 
   const clearAllFilters = () => {
     setJobId(null);
     setDate(null);
+    setOwner(null);
+    setAccess(null);
     setModel("all");
     setStatus("all");
   };
 
+  const ownerIsMe = Boolean(owner) && owner!.toLowerCase() === sessionUser.toLowerCase();
+  const accessLabels: Record<string, string> = {
+    mine: msg("dashboard.role.mine"),
+    owner: msg("dashboard.role_short.owner"),
+    editor: msg("dashboard.role_short.editor"),
+    viewer: msg("dashboard.role_short.viewer"),
+  };
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      {access && (
+        <FilterChip
+          label={accessLabels[access] ?? access}
+          ariaLabel={msg("dashboard.analytics.access_filter_clear")}
+          onClear={() => setAccess(null)}
+        />
+      )}
+      {owner && (
+        <FilterChip
+          dir={ownerIsMe ? "rtl" : "ltr"}
+          label={ownerIsMe ? msg("dashboard.owner.me") : owner}
+          title={owner}
+          truncate={!ownerIsMe}
+          ariaLabel={msg("dashboard.analytics.owner_filter_clear")}
+          onClear={() => setOwner(null)}
+        />
+      )}
       {jobId && (
         <FilterChip
           dir="ltr"

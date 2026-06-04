@@ -62,7 +62,7 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
                   side="bottom"
                   sideOffset={8}
                   dir="rtl"
-                  className="max-w-[320px] rounded-xl border border-[#C8B9A8]/60 bg-[#FAF8F5] px-4 py-3 text-right text-[#3D2E22] shadow-[0_8px_24px_-8px_rgba(61,46,34,0.2)] [&>span]:hidden"
+                  className="max-w-[min(320px,92vw)] rounded-xl border border-[#C8B9A8]/60 bg-[#FAF8F5] px-4 py-3 text-end text-[#3D2E22] shadow-[0_8px_24px_-8px_rgba(61,46,34,0.2)] [&>span]:hidden"
                 >
                   {hasRationale && (
                     <>

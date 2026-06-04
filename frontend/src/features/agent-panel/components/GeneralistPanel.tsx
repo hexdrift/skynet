@@ -123,23 +123,21 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     [setOpen],
   );
 
-  // Auto-minimize when the viewport becomes too narrow to comfortably show
-  // panel + sidebar + main content. Only flip on the wider→narrower edge so
-  // we don't fight a user who explicitly opens at narrow sizes.
-  const prevNarrowRef = React.useRef<boolean | null>(null);
+  // Auto-minimize whenever the viewport is too narrow to comfortably show
+  // panel + sidebar + main content. Checked on mount and on every change of
+  // the narrow media query (not just the wider→narrower crossing edge) so a
+  // panel that was already open — restored from localStorage, opened
+  // programmatically, or carried across a resize — collapses at <=1023px
+  // regardless of how it got there.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia(NARROW_VIEWPORT_QUERY);
-    prevNarrowRef.current = mql.matches;
-    const handleChange = (e: MediaQueryListEvent) => {
-      const wasNarrow = prevNarrowRef.current;
-      prevNarrowRef.current = e.matches;
-      if (e.matches && wasNarrow === false && open) {
-        setOpen(false);
-      }
+    const enforce = () => {
+      if (mql.matches && open) setOpen(false);
     };
-    mql.addEventListener("change", handleChange);
-    return () => mql.removeEventListener("change", handleChange);
+    enforce();
+    mql.addEventListener("change", enforce);
+    return () => mql.removeEventListener("change", enforce);
   }, [open, setOpen]);
 
   const wizardCtx = useWizardStateOptional();
@@ -561,7 +559,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             animate={{ x: 0, opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { x: -24, opacity: 0 }}
             transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-            style={{ width }}
+            style={{ width: `min(${width}px, 92vw)` }}
             className={cn(
               "fixed start-0 inset-y-0 z-40 flex h-dvh shrink-0",
               "bg-background/95 backdrop-blur-xl border-e border-border/60",

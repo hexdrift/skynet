@@ -3,14 +3,9 @@ import { Button } from "@/shared/ui/primitives/button";
 import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
 import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { TERMS } from "@/shared/lib/terms";
-import type { DeleteTarget } from "../hooks/use-bulk-delete";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 type DeleteDialogsProps = {
-  deleteTarget: DeleteTarget;
-  setDeleteTarget: (t: DeleteTarget) => void;
-  deleting: boolean;
-  confirmDelete: () => void;
   bulkDeleteOpen: boolean;
   setBulkDeleteOpen: (open: boolean) => void;
   bulkDeleting: boolean;
@@ -19,10 +14,6 @@ type DeleteDialogsProps = {
 };
 
 export function DeleteDialogs({
-  deleteTarget,
-  setDeleteTarget,
-  deleting,
-  confirmDelete,
   bulkDeleteOpen,
   setBulkDeleteOpen,
   bulkDeleting,
@@ -30,13 +21,12 @@ export function DeleteDialogs({
   selectedCount,
 }: DeleteDialogsProps) {
   return (
-    <>
-      <Dialog
-        open={bulkDeleteOpen}
-        onOpenChange={(open) => {
-          if (!open) setBulkDeleteOpen(false);
-        }}
-      >
+    <Dialog
+      open={bulkDeleteOpen}
+      onOpenChange={(open) => {
+        if (!open) setBulkDeleteOpen(false);
+      }}
+    >
         <DialogContent className="max-w-md sm:max-w-md">
           <DialogTitleRow
             title={
@@ -88,56 +78,5 @@ export function DeleteDialogs({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Dialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-      >
-        <DialogContent className="max-w-md sm:max-w-md">
-          <DialogTitleRow
-            title={
-              <>
-                {msg("auto.features.dashboard.components.deletedialogs.6")}
-                {TERMS.optimization}
-              </>
-            }
-            description={
-              <>
-                {msg("auto.features.dashboard.components.deletedialogs.7")}
-                {TERMS.optimization}{" "}
-                <span className="font-mono font-medium text-foreground break-all">
-                  {deleteTarget?.id}
-                </span>
-                ?
-              </>
-            }
-          />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteTarget(null)}
-              disabled={deleting}
-              className="w-full justify-center"
-            >
-              {msg("auto.features.dashboard.components.deletedialogs.8")}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deleting}
-              className="w-full justify-center"
-            >
-              {deleting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                msg("auto.features.dashboard.components.deletedialogs.literal.2")
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }

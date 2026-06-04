@@ -21,13 +21,13 @@ import { msg } from "@/shared/lib/messages";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 import { SplitRecommendationCard } from "../SplitRecommendationCard";
+import { ReactConfigSection } from "./ReactConfigSection";
 
 export function ParamsStep({ w }: { w: SubmitWizardContext }) {
   const { prefs } = useUserPrefs();
   const advancedMode = prefs.advancedMode;
   const {
-    moduleName,
-    setModuleName,
+    isReact,
     split,
     updateSplit,
     splitSum,
@@ -58,42 +58,9 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {advancedMode && (
+        {isReact && (
           <>
-            <div className="space-y-2" data-tutorial="module-selector">
-              <Label>
-                <HelpTip text={tip("module.choice")}>
-                  {msg("auto.features.submit.components.steps.paramsstep.3")}
-                </HelpTip>
-              </Label>
-              <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
-                <div
-                  className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
-                  style={{ insetInlineStart: moduleName === "predict" ? 4 : "calc(50% + 2px)" }}
-                />
-                {(
-                  [
-                    ["predict", "Predict"],
-                    ["cot", "CoT"],
-                  ] as const
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setModuleName(val)}
-                    className={cn(
-                      "relative z-10 flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 text-center cursor-pointer",
-                      moduleName === val
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+            <ReactConfigSection w={w} />
             <Separator />
           </>
         )}
@@ -249,7 +216,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
           </div>
 
           {advancedMode && (
-            <div className="grid grid-cols-2 gap-3" data-tutorial="gepa-params">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-tutorial="gepa-params">
               <div className="space-y-1.5">
                 <Label className="text-xs">
                   <HelpTip text={tip("submit.reflection_minibatch")}>

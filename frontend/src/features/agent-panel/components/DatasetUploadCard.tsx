@@ -487,7 +487,7 @@ function ColumnRoleRow({
             onClick={() => onChangeRole(val)}
             disabled={disabled}
             className={cn(
-              "relative z-10 rounded-md px-3 py-1 text-[0.6875rem] font-medium text-center transition-colors duration-100 cursor-pointer",
+              "relative z-10 rounded-md px-2.5 py-1 text-[0.6875rem] font-medium text-center transition-colors duration-100 cursor-pointer",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40",
               role === val ? "text-stone-600" : "text-muted-foreground hover:text-foreground",
               disabled && "cursor-not-allowed opacity-60",

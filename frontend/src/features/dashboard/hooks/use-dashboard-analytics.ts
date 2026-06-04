@@ -9,6 +9,8 @@ type UseDashboardAnalyticsArgs = {
   status: string;
   jobId: string | null;
   date: string | null;
+  owner: string | null;
+  access: string | null;
 };
 
 export type UseDashboardAnalyticsReturn = {
@@ -26,12 +28,16 @@ export function useDashboardAnalytics({
   status,
   jobId,
   date,
+  owner,
+  access,
 }: UseDashboardAnalyticsArgs): UseDashboardAnalyticsReturn {
   const [analyticsData, setAnalyticsData] = useState<DashboardAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const fetchDashboardAnalytics = useCallback(async () => {
     const username = isAdmin ? undefined : sessionUser || undefined;
+    // Non-admins aggregate over their own + shared runs; admins see all.
+    const includeShared = !isAdmin;
     setAnalyticsLoading(true);
     try {
       const result = await getDashboardAnalytics({
@@ -40,6 +46,9 @@ export function useDashboardAnalytics({
         status: status !== "all" ? status : undefined,
         optimization_id: jobId ?? undefined,
         date: date ?? undefined,
+        include_shared: includeShared,
+        owner: owner ?? undefined,
+        access: access ?? undefined,
       });
       setAnalyticsData(result);
     } catch {
@@ -47,7 +56,7 @@ export function useDashboardAnalytics({
     } finally {
       setAnalyticsLoading(false);
     }
-  }, [isAdmin, sessionUser, model, status, jobId, date]);
+  }, [isAdmin, sessionUser, model, status, jobId, date, owner, access]);
 
   useEffect(() => {
     if (activeTab !== "analytics") return;

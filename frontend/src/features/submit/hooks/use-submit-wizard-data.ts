@@ -11,8 +11,7 @@ import type {
 } from "@/shared/types/api";
 import type { ParsedDataset } from "@/shared/lib/parse-dataset";
 import { MAX_RECENT, RECENT_KEY } from "../constants";
-
-type ColumnRole = "input" | "output" | "ignore";
+import type { ColumnRole } from "../constants";
 
 export function buildColumnMapping(columnRoles: Record<string, ColumnRole>): ColumnMapping {
   const inputs: Record<string, string> = {};

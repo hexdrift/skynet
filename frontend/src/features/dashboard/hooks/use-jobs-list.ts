@@ -32,9 +32,17 @@ export function useJobsList({ sessionUser, isAdmin }: UseJobsListArgs): UseJobsL
   const fetchJobs = useCallback(async () => {
     try {
       const username = isAdmin ? undefined : sessionUser || undefined;
+      // Always request the shared-with-me union. A true backend admin ignores
+      // it (they already see everything network-wide); a non-admin gets their
+      // owned runs unioned with runs shared to them. Gating this on the
+      // *frontend* admin flag was a latent bug: the backend's admin check is a
+      // separate allowlist, so when the two disagree (e.g. prod env drift) the
+      // frontend suppressed the flag while the backend scoped the caller to
+      // owner-only — silently hiding every shared run.
+      const includeShared = true;
       const [result, countsResult] = await Promise.all([
-        listJobs({ username, limit: FETCH_PAGE_SIZE, offset: pageOffset }),
-        getOptimizationCounts(username).catch(() => null),
+        listJobs({ username, limit: FETCH_PAGE_SIZE, offset: pageOffset, include_shared: includeShared }),
+        getOptimizationCounts(username, includeShared).catch(() => null),
       ]);
       setData(result);
       if (countsResult) setCounts(countsResult);

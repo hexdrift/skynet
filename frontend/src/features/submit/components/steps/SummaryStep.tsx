@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
+import { moduleLabel } from "@/shared/lib/formatters";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip } from "@/shared/ui/model-chip";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -87,6 +88,8 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
     jobName,
     jobType,
     moduleName,
+    isReact,
+    reactConfig,
     datasetFileName,
     parsedDataset,
     columnRoles,
@@ -178,7 +181,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                       {msg("auto.features.submit.components.steps.summarystep.5")}
                     </span>
                     <span className="text-sm font-medium font-mono" dir="ltr">
-                      {moduleName === "predict" ? "Predict" : "CoT"}
+                      {moduleLabel(moduleName)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
@@ -379,6 +382,29 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
 
               {summaryTab === 3 && (
                 <div className="space-y-0">
+                  {isReact && (
+                    <>
+                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Boxes className="size-3.5" />
+                          {msg("submit.react.tool_source_label")}
+                        </span>
+                        <span
+                          className="text-sm font-medium font-mono truncate max-w-[60%]"
+                          dir="ltr"
+                          title={
+                            reactConfig.toolSourceKind === "live_mcp"
+                              ? reactConfig.mcpUrl
+                              : undefined
+                          }
+                        >
+                          {reactConfig.toolSourceKind === "live_mcp"
+                            ? reactConfig.mcpUrl || "live_mcp"
+                            : "dataset_snapshot"}
+                        </span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex items-center justify-between py-2.5 border-b border-border/40">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Search className="size-3.5" />
