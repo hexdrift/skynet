@@ -11,12 +11,36 @@ from __future__ import annotations
 import itertools
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from .replay import SUBMIT_TOOL_NAME, iter_hit_events
 from .types import EvaluationExample, ReplayEvent, ReplayRollout
 
 UPDATE_WIZARD_STATE_TOOL = "update_wizard_state"
+
+
+@dataclass(frozen=True)
+class RewardSpec:
+    """Declarative scalarizer config for one reward preset.
+
+    Bundles the weighted-mean weights with the hard-cap policy so
+    ``scalar_with_hard_caps`` is domain-agnostic — the generalist and the
+    general default are two ``RewardSpec`` instances over the same machinery.
+
+    Args:
+        weights: ``{dimension: weight}``; the weights should sum to 1.0 so
+            an all-1.0 vector scalarizes to 1.0.
+        critical_set: Dimensions that trip the hard cap when any falls below
+            ``critical_floor``.
+        critical_floor: Threshold a critical dimension must clear to avoid the cap.
+        hard_cap: Ceiling applied to the weighted mean once the cap trips.
+    """
+
+    weights: dict[str, float]
+    critical_set: frozenset[str]
+    critical_floor: float
+    hard_cap: float
 
 
 _CRITICAL: frozenset[str] = frozenset(
@@ -52,6 +76,14 @@ _WEIGHTS: dict[str, float] = {
 # Hard-cap kicks in when ANY of these dimensions falls below this threshold.
 _CRITICAL_FLOOR = 0.5
 _HARD_CAP = 0.4
+
+GENERALIST_REWARD_SPEC = RewardSpec(
+    weights=_WEIGHTS,
+    critical_set=_CRITICAL,
+    critical_floor=_CRITICAL_FLOOR,
+    hard_cap=_HARD_CAP,
+)
+"""The validated generalist preset — the default for back-compat call sites."""
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -298,29 +330,164 @@ def vector_reward(
     }
 
 
-def scalar_with_hard_caps(vec: Mapping[str, float]) -> float:
-    """Weighted mean, hard-capped at ``_HARD_CAP`` when any critical dim < 0.5.
+def _trajectory_coverage(
+    example: EvaluationExample, rollout: ReplayRollout
+) -> float:
+    """Fraction of recorded steps the candidate matched before diverging.
 
-    Defends against reward hacking by refusal: a candidate that scores
-    1.0 on easy dims by doing nothing still gets capped because
-    ``no_call_on_actionable_turn`` or ``gate_progress`` collapses below
-    ``_CRITICAL_FLOOR``.
+    Each ``hit`` event advances the replay pointer by exactly one recorded
+    step, so the hit count equals the matched-step pointer. Turns with no
+    recorded steps score 1.0 — there is no trajectory to cover.
+    """
+    total = len(example.replay_steps)
+    if total == 0:
+        return 1.0
+    hits = sum(1 for _ in iter_hit_events(rollout))
+    return _safe_div(float(hits), float(total))
+
+
+def general_vector_reward(
+    example: EvaluationExample, rollout: ReplayRollout
+) -> dict[str, float]:
+    """Compute the domain-agnostic 8-dimension reward vector (spec §6.1).
+
+    Reuses the same replay-derived helpers as ``vector_reward`` but drops
+    every wizard/generalist-specific dimension, so it scores an arbitrary
+    ReAct rollout purely from the recorded trajectory with no domain
+    semantics. Order is preserved for objective_scores reproducibility.
+    """
+    return {
+        "tool_selection": _replay_hit_success_rate(rollout),
+        "argument_fidelity": _replay_hit_success_rate(rollout),
+        "trajectory_coverage": _trajectory_coverage(example, rollout),
+        "in_scope_tools": _no_phantom_refusal(rollout, example.allowed_tools),
+        "clean_termination": max(_submit_clean(rollout), _no_forced_submit(rollout)),
+        "no_schema_drift": _schema_parse_success(rollout),
+        "observation_threading": _next_action_uses_result_fields(rollout),
+        "engaged_when_expected": _no_idle_when_tools_available(rollout, example),
+    }
+
+
+GENERAL_REWARD_SPEC = RewardSpec(
+    weights={
+        "tool_selection": 0.20,
+        "argument_fidelity": 0.15,
+        "trajectory_coverage": 0.20,
+        "in_scope_tools": 0.15,
+        "clean_termination": 0.15,
+        "no_schema_drift": 0.05,
+        "observation_threading": 0.05,
+        "engaged_when_expected": 0.05,
+    },
+    critical_set=frozenset(
+        {"trajectory_coverage", "in_scope_tools", "clean_termination"}
+    ),
+    critical_floor=0.5,
+    hard_cap=0.4,
+)
+"""Domain-agnostic default preset over the 8 §6.1 dimensions (weights sum to 1.0)."""
+
+
+def replay_match_vector_reward(
+    example: EvaluationExample, rollout: ReplayRollout
+) -> dict[str, float]:
+    """Compute the named-dimension replay-match reward for ``tool_name`` mode.
+
+    Built for ``match_mode="tool_name"`` rollouts, where a ``hit`` event means
+    the candidate called the right tool in the recorded order even when its
+    free-text arguments differ. Every dimension carries an actionable name so
+    GEPA's reflective proposer can target the exact failure mode instead of
+    reading an opaque ``custom=0.5``. All dimensions are in ``[0, 1]``.
 
     Args:
-        vec: Mapping returned by ``vector_reward``.
+        example: The training example supplying the recorded ``replay_steps``.
+        rollout: The candidate's hybrid-mock rollout.
+
+    Returns:
+        ``{dimension: score}`` over the five replay-match dimensions.
+    """
+    steps = len(example.replay_steps)
+    hit_events = list(iter_hit_events(rollout))
+    hits = len(hit_events)
+    args_exact = sum(
+        1
+        for event in hit_events
+        if event.matched_step is not None
+        and event.candidate_argument_hash == event.matched_step.argument_hash
+    )
+    if steps == 0:
+        tool_selection = 1.0
+        argument_fidelity = 1.0
+        engaged_when_expected = 1.0 if not rollout.events else 0.5
+    else:
+        tool_selection = _safe_div(float(hits), float(steps))
+        argument_fidelity = _safe_div(float(args_exact), float(hits))
+        engaged_when_expected = 1.0 if rollout.events else 0.0
+    in_scope_tools = (
+        0.0
+        if any(event.outcome == "tool_not_allowed" for event in rollout.events)
+        else 1.0
+    )
+    no_schema_drift = (
+        0.0
+        if any(event.outcome == "schema_drift" for event in rollout.events)
+        else 1.0
+    )
+    return {
+        "tool_selection": tool_selection,
+        "argument_fidelity": argument_fidelity,
+        "in_scope_tools": in_scope_tools,
+        "engaged_when_expected": engaged_when_expected,
+        "no_schema_drift": no_schema_drift,
+    }
+
+
+# No hard cap (critical_set empty, hard_cap=1.0) so the scalar is a clean,
+# fully climbable weighted mean — GEPA's frontier sees a smooth gradient
+# instead of a cliff that masks incremental tool-selection improvements.
+REPLAY_MATCH_REWARD_SPEC = RewardSpec(
+    weights={
+        "tool_selection": 0.45,
+        "argument_fidelity": 0.20,
+        "in_scope_tools": 0.15,
+        "engaged_when_expected": 0.10,
+        "no_schema_drift": 0.10,
+    },
+    critical_set=frozenset(),
+    critical_floor=0.0,
+    hard_cap=1.0,
+)
+"""Named-dimension replay-match preset for ``tool_name`` mode (weights sum to 1.0)."""
+
+
+def scalar_with_hard_caps(
+    vec: Mapping[str, float], spec: RewardSpec = GENERALIST_REWARD_SPEC
+) -> float:
+    """Weighted mean, hard-capped when any critical dim falls below the floor.
+
+    Defends against reward hacking by refusal: a candidate that scores
+    1.0 on easy dims by doing nothing still gets capped because a critical
+    dim (e.g. ``gate_progress`` for the generalist, ``trajectory_coverage``
+    for the general default) collapses below ``spec.critical_floor``.
+
+    Args:
+        vec: Mapping returned by a ``*_vector_reward``.
+        spec: Reward preset supplying weights and the hard-cap policy.
+            Defaults to the generalist spec so existing call sites are
+            unchanged.
 
     Returns:
         Scalar in ``[0, 1]`` suitable for GEPA's frontier comparison.
     """
-    raw = sum(_WEIGHTS[k] * float(vec.get(k, 0.0)) for k in _WEIGHTS)
+    raw = sum(spec.weights[k] * float(vec.get(k, 0.0)) for k in spec.weights)
     raw = max(0.0, min(1.0, raw))
     triggered = any(
-        float(vec.get(name, 0.0)) < _CRITICAL_FLOOR
-        for name in _CRITICAL
+        float(vec.get(name, 0.0)) < spec.critical_floor
+        for name in spec.critical_set
         if name in vec
     )
     if triggered:
-        return min(_HARD_CAP, raw)
+        return min(spec.hard_cap, raw)
     return raw
 
 
@@ -340,7 +507,10 @@ def feedback_from_low_dims(
     sorted_dims = sorted(vec.items(), key=lambda kv: float(kv[1]))
     bottom = [name for name, score in sorted_dims if score < 0.99][:max_dims]
     if not bottom:
-        return "All reward dimensions ≥ 0.99."
+        return (
+            "Reproduced the full recorded tool sequence (coverage + args). "
+            "Preserve this tool-selection behavior."
+        )
     lines = [
         f"Turn {example.turn_id}: lowest dims = " + ", ".join(
             f"{name}={float(vec[name]):.2f}" for name in bottom
@@ -412,7 +582,13 @@ def _known_ids(example: EvaluationExample) -> frozenset[str]:
 
 # Public re-exports — used by ``gepa_adapter.evaluate``.
 __all__ = [
+    "GENERALIST_REWARD_SPEC",
+    "GENERAL_REWARD_SPEC",
+    "REPLAY_MATCH_REWARD_SPEC",
+    "RewardSpec",
     "feedback_from_low_dims",
+    "general_vector_reward",
+    "replay_match_vector_reward",
     "scalar_with_hard_caps",
     "vector_reward",
 ]

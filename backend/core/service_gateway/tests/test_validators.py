@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 
 from core.exceptions import ServiceError
-from core.models import ColumnMapping
+from core.models import ColumnMapping, ReplayMapping
 from core.service_gateway.optimization.validators import (
     require_mapping_columns_in_dataset,
     require_mapping_matches_signature,
+    require_replay_mapping_valid,
 )
 
 
@@ -71,3 +72,69 @@ def test_require_mapping_columns_in_dataset_lists_available() -> None:
     with pytest.raises(ServiceError) as exc:
         require_mapping_columns_in_dataset(m, [{"q": "hi", "a": "hello"}])
     assert "Available columns: ['a', 'q']" in str(exc.value)
+
+
+def _replay(**overrides) -> ReplayMapping:
+    """Build a ``ReplayMapping`` with all required roles plus optional overrides."""
+    base: dict = {
+        "steps": "steps",
+        "allowed_tools": "tools",
+        "tool_schema_hashes": "hashes",
+        "state_before": "before",
+        "state_after": "after",
+    }
+    base.update(overrides)
+    return ReplayMapping(**base)
+
+
+def test_require_replay_mapping_valid_ok() -> None:
+    """A replay mapping whose required roles all exist in the dataset passes."""
+    rm = _replay()
+    require_replay_mapping_valid(
+        rm, [{"steps": "[]", "tools": "[]", "hashes": "{}", "before": "{}", "after": "{}", "extra": 1}]
+    )
+
+
+def test_require_replay_mapping_valid_missing_required_role() -> None:
+    """A required role naming a column missing from every row raises."""
+    rm = _replay(allowed_tools="absent_col")
+    with pytest.raises(ServiceError, match="replay_mapping references columns not found"):
+        require_replay_mapping_valid(rm, [{"steps": "[]", "hashes": "{}", "before": "{}", "after": "{}"}])
+
+
+def test_require_replay_mapping_valid_reports_role_and_column() -> None:
+    """The error names the offending role and the column it pointed at."""
+    rm = _replay(steps="nope")
+    with pytest.raises(ServiceError) as exc:
+        require_replay_mapping_valid(rm, [{"tools": "[]", "hashes": "{}", "before": "{}", "after": "{}"}])
+    assert "steps='nope'" in str(exc.value)
+
+
+def test_require_replay_mapping_valid_state_role_checked() -> None:
+    """A required state-snapshot role naming a missing column raises."""
+    rm = _replay(state_before="ghost_col")
+    with pytest.raises(ServiceError, match="state_before='ghost_col'"):
+        require_replay_mapping_valid(rm, [{"steps": "[]", "tools": "[]", "hashes": "{}", "after": "{}"}])
+
+
+def test_require_replay_mapping_valid_optional_chat_history_unset_ignored() -> None:
+    """The still-optional chat_history role is ignored when unset."""
+    rm = _replay()
+    require_replay_mapping_valid(
+        rm, [{"steps": "[]", "tools": "[]", "hashes": "{}", "before": "{}", "after": "{}"}]
+    )
+
+
+def test_require_replay_mapping_valid_skips_when_no_dataset() -> None:
+    """Validation is skipped entirely when the dataset is staged (None/empty)."""
+    rm = _replay(steps="anything")
+    require_replay_mapping_valid(rm, None)
+    require_replay_mapping_valid(rm, [])
+
+
+def test_require_replay_mapping_valid_merges_row_keys() -> None:
+    """Different rows can contribute different columns to the available set."""
+    rm = _replay()
+    require_replay_mapping_valid(
+        rm, [{"steps": "[]"}, {"tools": "[]"}, {"hashes": "{}"}, {"before": "{}"}, {"after": "{}"}]
+    )

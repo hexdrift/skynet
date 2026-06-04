@@ -19,6 +19,7 @@ import pytest
 from core.service_gateway.optimization.training_ground import gepa_adapter, optimize
 from core.service_gateway.optimization.training_ground.gepa_adapter import (
     GENERALIST_MODULE_KEY,
+    TOOL_MODULE_KEY,
     TrainingGroundDspyAdapter,
     observation_texts_from_messages,
     seed_candidate_from_program,
@@ -28,6 +29,8 @@ from core.service_gateway.optimization.training_ground.grounding import (
     as_unit_interval,
 )
 from core.service_gateway.optimization.training_ground.metrics import (
+    GENERAL_REWARD_SPEC,
+    general_vector_reward,
     scalar_with_hard_caps,
     vector_reward,
 )
@@ -321,3 +324,64 @@ def test_completions_model_passthrough_when_no_prefix() -> None:
     """A non-fireworks model id is returned unchanged."""
     args = SimpleNamespace(fireworks_model=None, model="openrouter/minimax/minimax-m2.7")
     assert optimize._grounding_completions_model(args) == "openrouter/minimax/minimax-m2.7"
+
+
+def test_seed_candidate_uses_neutral_react_key() -> None:
+    """The seed candidate is keyed by the neutral ``tool_module:react`` blob."""
+    adapter = _adapter(_FixedTemplate("x"), _CharScorer())
+    candidate = seed_candidate_from_program(adapter._seed_program)
+    assert set(candidate) == {TOOL_MODULE_KEY}
+    assert TOOL_MODULE_KEY != GENERALIST_MODULE_KEY
+
+
+def test_legacy_generalist_keyed_candidate_still_parses() -> None:
+    """A candidate seeded under the old ``:generalist`` key loads back-compat.
+
+    Re-keying the seed blob onto the legacy key must surface the same tool
+    descriptions through the parser, so old checkpoints still evaluate.
+    """
+    adapter = _adapter(_FixedTemplate("x"), _CharScorer())
+    neutral = seed_candidate_from_program(adapter._seed_program)
+    legacy = {GENERALIST_MODULE_KEY: neutral[TOOL_MODULE_KEY]}
+    assert gepa_adapter._candidate_blob_key(legacy) == GENERALIST_MODULE_KEY
+    assert (
+        gepa_adapter._candidate_tool_descriptions(legacy)
+        == gepa_adapter._candidate_tool_descriptions(neutral)
+        == {"alpha": "d"}
+    )
+
+
+def test_parametrized_vector_fn_scores_general_preset(monkeypatch) -> None:
+    """A general-preset adapter scores via ``vector_fn`` + ``reward_spec``.
+
+    The task term must equal ``scalar_with_hard_caps`` over the 8-dim general
+    vector (not the 12-dim generalist vector), proving the reward is fully
+    parametrized rather than hard-wired to the generalist preset.
+    """
+    tool = dspy.Tool(func=lambda x: x, name="alpha", desc="d", args={"x": {"type": "integer"}})
+    seed = dspy.ReActV2(_Sig, tools=[tool], max_iters=2)
+    adapter = TrainingGroundDspyAdapter(
+        seed_program=seed,
+        student_lm=SimpleNamespace(history=[]),
+        reflection_lm=None,
+        include_task_reward=True,
+        grounding_weight=0.0,
+        reward_spec=GENERAL_REWARD_SPEC,
+        vector_fn=general_vector_reward,
+    )
+    monkeypatch.setattr(
+        gepa_adapter,
+        "_run_candidate",
+        lambda **_: dspy.Prediction(assistant_message="x"),
+    )
+    example = _example(allowed=frozenset({"alpha"}), steps=(_step("alpha"),))
+    candidate = seed_candidate_from_program(adapter._seed_program)
+    batch = adapter.evaluate([example], candidate, capture_traces=True)
+    empty_rollout = TraceConditionedMCPMock(example).rollout_so_far()
+    expected = scalar_with_hard_caps(
+        general_vector_reward(example, empty_rollout), GENERAL_REWARD_SPEC
+    )
+    assert batch.scores[0] == pytest.approx(expected)
+    objectives = batch.objective_scores[0]
+    assert set(objectives) == set(GENERAL_REWARD_SPEC.weights)
+    assert "submit_clean" not in objectives  # generalist-only dims are absent

@@ -4,15 +4,29 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import dspy
 import pytest
 
 from core.constants import PROGRESS_GRID_PAIR_FAILED, PROGRESS_SPLITS_READY
 from core.exceptions import ServiceError
-from core.models import ColumnMapping, ModelConfig, RunRequest, RunResponse, SplitFractions
+from core.models import (
+    ColumnMapping,
+    ModelConfig,
+    ReplayMapping,
+    Reward,
+    RunRequest,
+    RunResponse,
+    SplitFractions,
+    ToolSource,
+)
+from core.models.artifacts import ProgramArtifact, ReactOverlay
 from core.models.results import GridSearchResponse, LMActivity
 from core.models.submissions import GridSearchRequest
 from core.registry import ServiceRegistry
-from core.service_gateway.optimization.core import DspyService
+from core.service_gateway.optimization.core import DspyService, _resolve_max_metric_calls
+from core.service_gateway.optimization.training_ground.optimize import _AUTO_BUDGETS
+from core.service_gateway.optimization.training_ground import run_react
+from core.service_gateway.optimization.training_ground.types import PairedBootstrapResult
 from core.service_gateway.tests.mocks import (
     fake_compiled_program,
     fake_language_model,
@@ -457,3 +471,182 @@ def test_run_grid_search_pair_results_carry_lm_activity() -> None:
     for pair in result.pair_results:
         assert pair.error is None
         assert isinstance(pair.lm_activity, LMActivity)
+
+
+_REACT_DATASET = [
+    {"q": "hi", "a": "yo", "steps": "[]", "tools": "[]", "hashes": "{}", "before": "{}", "after": "{}"},
+    {"q": "ok", "a": "sure", "steps": "[]", "tools": "[]", "hashes": "{}", "before": "{}", "after": "{}"},
+]
+
+_REACT_REPLAY_MAPPING = ReplayMapping(
+    steps="steps",
+    allowed_tools="tools",
+    tool_schema_hashes="hashes",
+    state_before="before",
+    state_after="after",
+)
+
+_REACT_TOOL_SOURCE = ToolSource(kind="live_mcp", mcp_url="http://localhost:9000/mcp")
+
+# React metrics score the recorded trajectory over the (example, rollout) pair.
+_REACT_METRIC = "def metric(example, rollout):\n    return 1.0\n"
+
+
+def _react_run_request(**overrides) -> RunRequest:
+    """Build a react ``RunRequest`` backed by an authored ``(example, rollout)`` metric."""
+    base: dict = {
+        "username": "tester",
+        "module_name": "react",
+        "signature_code": _VALID_SIG,
+        "metric_code": _REACT_METRIC,
+        "optimizer_name": "gepa",
+        "dataset": _REACT_DATASET,
+        "column_mapping": _MAPPING,
+        "split_fractions": SplitFractions(train=1.0, val=0.0, test=0.0),
+        "model_config": _MODEL_CFG,
+        "tool_source": _REACT_TOOL_SOURCE,
+        "replay_mapping": _REACT_REPLAY_MAPPING,
+        "reward": Reward(match_mode="tool_name"),
+    }
+    base.update(overrides)
+    return RunRequest(**base)
+
+
+def test_run_react_branch_resolves_tools_and_returns_overlay() -> None:
+    """``run`` dispatches react payloads through ``_run_react`` and persists the overlay.
+
+    Patches ``resolve_react_tools``/``run_react_optimization`` with canned
+    returns so the branch wiring is exercised without a live MCP or GEPA: the
+    test asserts the react path resolved tools, surfaced the canned
+    baseline/optimized scalars on the ``RunResponse``, and attached a
+    ``ReactOverlay`` to the persisted ``ProgramArtifact``.
+    """
+    service = _service()
+    payload = _react_run_request()
+
+    noop_tool = dspy.Tool(lambda **_kw: None, name="noop", desc="noop tool", args={"x": {"type": "string"}})
+    resolved_tools = [noop_tool]
+    resolved_hashes = {"noop": "deadbeef"}
+
+    resolve_mock = MagicMock(return_value=(resolved_tools, resolved_hashes))
+
+    def _fake_optimize(*, signature_cls, tools, schema_hashes, max_iters=run_react.DEFAULT_MAX_ITERS, **_kwargs) -> dict:
+        seed = dspy.ReActV2(signature_cls, tools=tools, max_iters=max_iters)
+        return {
+            "program_state": seed.dump_state(),
+            "baseline_objective_scores": {"task": 0.4},
+            "optimized_objective_scores": {"task": 0.7},
+            "baseline_scalar": 0.4,
+            "optimized_scalar": 0.7,
+            "paired_bootstrap": PairedBootstrapResult(
+                resamples=10, mean_delta=0.3, ci95_lower=0.1, ci95_upper=0.5
+            ),
+            "promotion": {"promotable": False, "reasons": ["held-out scale: 1 < 200 required by §11"]},
+            "tool_overlay": {
+                "tool_descriptions": {"noop": "optimized noop"},
+                "tool_arg_descriptions": {"noop": {"x": "the x arg"}},
+                "tool_schema_hashes": schema_hashes,
+                "max_iters": max_iters,
+            },
+        }
+
+    optimize_mock = MagicMock(side_effect=_fake_optimize)
+    persisted = ProgramArtifact(path="/tmp/react-artifact")
+
+    with (
+        patch("core.service_gateway.optimization.core.build_language_model", return_value=fake_language_model()),
+        patch("core.service_gateway.optimization.core.persist_program", return_value=persisted),
+        patch.object(run_react, "resolve_react_tools", resolve_mock),
+        patch.object(run_react, "run_react_optimization", optimize_mock),
+    ):
+        result = service.run(payload)
+
+    assert resolve_mock.called
+    assert optimize_mock.called
+    assert isinstance(result, RunResponse)
+    assert result.module_name == "react"
+    assert result.baseline_test_metric == 0.4
+    assert result.optimized_test_metric == 0.7
+    assert result.metric_improvement == pytest.approx(0.3)
+    assert result.objective_scores == {"task": 0.7}
+    assert result.paired_bootstrap is not None
+    assert result.paired_bootstrap.mean_delta == pytest.approx(0.3)
+    assert result.promotion is not None
+    assert result.promotion.promotable is False
+    assert result.promotion.reasons == ["held-out scale: 1 < 200 required by §11"]
+    assert result.program_artifact is persisted
+    overlay = result.program_artifact.react_overlay
+    assert isinstance(overlay, ReactOverlay)
+    assert overlay.tool_descriptions == {"noop": "optimized noop"}
+    assert overlay.tool_arg_descriptions == {"noop": {"x": "the x arg"}}
+    assert overlay.tool_schema_hashes == resolved_hashes
+    assert overlay.max_iters == 8
+
+
+def test_resolve_max_metric_calls_honors_auto_preset() -> None:
+    """An ``auto`` preset (without explicit ``max_metric_calls``) maps through ``_AUTO_BUDGETS``.
+
+    Regression: the react submit path used to read ``max_metric_calls`` alone
+    and hardcode the medium (2000) budget, so an ``auto="light"`` run silently
+    got 4x its intended budget.
+    """
+    assert _resolve_max_metric_calls({"auto": "light"}) == _AUTO_BUDGETS["light"] == 500
+    assert _resolve_max_metric_calls({"auto": "medium"}) == _AUTO_BUDGETS["medium"]
+    assert _resolve_max_metric_calls({"auto": "heavy"}) == _AUTO_BUDGETS["heavy"]
+
+
+def test_resolve_max_metric_calls_explicit_wins_over_auto() -> None:
+    """An explicit ``max_metric_calls`` overrides any ``auto`` preset."""
+    assert _resolve_max_metric_calls({"max_metric_calls": 123, "auto": "light"}) == 123
+
+
+def test_resolve_max_metric_calls_defaults_to_medium_when_unset() -> None:
+    """With neither key supplied the budget falls back to the medium preset."""
+    assert _resolve_max_metric_calls({}) == _AUTO_BUDGETS["medium"]
+
+
+def test_run_react_branch_passes_auto_budget_to_optimizer() -> None:
+    """``run`` resolves the react budget from ``auto`` and forwards it to GEPA.
+
+    Regression for the call site that ignored the ``auto`` preset: an
+    ``auto="light"`` react payload must reach ``run_react_optimization`` with
+    ``max_metric_calls=500``, not the hardcoded medium 2000.
+    """
+    service = _service()
+    payload = _react_run_request(optimizer_kwargs={"auto": "light"})
+
+    noop_tool = dspy.Tool(lambda **_kw: None, name="noop", desc="noop tool", args={"x": {"type": "string"}})
+    resolve_mock = MagicMock(return_value=([noop_tool], {"noop": "deadbeef"}))
+
+    captured: dict = {}
+
+    def _fake_optimize(*, signature_cls, tools, schema_hashes, max_iters=run_react.DEFAULT_MAX_ITERS, **kwargs) -> dict:
+        captured["max_metric_calls"] = kwargs.get("max_metric_calls")
+        seed = dspy.ReActV2(signature_cls, tools=tools, max_iters=max_iters)
+        return {
+            "program_state": seed.dump_state(),
+            "baseline_objective_scores": {"task": 0.4},
+            "optimized_objective_scores": {"task": 0.7},
+            "baseline_scalar": 0.4,
+            "optimized_scalar": 0.7,
+            "paired_bootstrap": PairedBootstrapResult(
+                resamples=10, mean_delta=0.3, ci95_lower=0.1, ci95_upper=0.5
+            ),
+            "promotion": {"promotable": False, "reasons": ["held-out scale: 1 < 200 required by §11"]},
+            "tool_overlay": {
+                "tool_descriptions": {"noop": "optimized noop"},
+                "tool_arg_descriptions": {"noop": {"x": "the x arg"}},
+                "tool_schema_hashes": schema_hashes,
+                "max_iters": max_iters,
+            },
+        }
+
+    with (
+        patch("core.service_gateway.optimization.core.build_language_model", return_value=fake_language_model()),
+        patch("core.service_gateway.optimization.core.persist_program", return_value=ProgramArtifact(path="/tmp/x")),
+        patch.object(run_react, "resolve_react_tools", resolve_mock),
+        patch.object(run_react, "run_react_optimization", MagicMock(side_effect=_fake_optimize)),
+    ):
+        service.run(payload)
+
+    assert captured["max_metric_calls"] == 500

@@ -318,6 +318,23 @@ def test_rows_to_examples_empty_dataset_returns_empty_list() -> None:
     assert examples == []
 
 
+def test_rows_to_examples_extra_columns_carried_but_not_in_inputs() -> None:
+    """An extra column is readable on the example yet absent from ``inputs()``."""
+    rows = [{"q": "What is 1+1?", "a": "2", "phase": "collecting"}]
+
+    examples = rows_to_examples(rows, _SIMPLE_MAPPING, extra_columns={"phase"})
+
+    assert examples[0].phase == "collecting"
+    assert "phase" not in examples[0].inputs()
+
+
+def test_rows_to_examples_extra_column_absent_from_row_is_skipped() -> None:
+    """An extra column missing from a row is skipped without error."""
+    examples = rows_to_examples(_SIMPLE_ROWS, _SIMPLE_MAPPING, extra_columns={"phase"})
+
+    assert not hasattr(examples[0], "phase")
+
+
 _SIG_CODE = """\
 import dspy
 class QA(dspy.Signature):

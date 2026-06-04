@@ -6,8 +6,94 @@ Builds ``dspy.LM`` instances from ``ModelConfig`` while filtering out
 
 import dspy
 
+from ..config import settings
 from ..exceptions import ServiceError
 from ..models import ModelConfig
+
+_DEFAULT_REASONING_MAX_TOKENS = 4000
+"""Floor on ``max_tokens`` for chat-style replies. Below this a reasoning model
+can truncate mid-``tool_calls`` and emit a malformed call that dspy's ToolCalls
+parser rejects with a ValidationError."""
+
+_OPENAI_REASONING_MAX_TOKENS = 16000
+"""Mandatory ``max_tokens`` floor for OpenAI reasoning models — dspy validates
+``max_tokens >= 16000`` (and ``temperature == 1.0``) at ``dspy.LM`` init."""
+
+
+def _is_openai_reasoning_model(model_name: str) -> bool:
+    """Detect OpenAI reasoning models (gpt-5.x, o1/o3/o4 series).
+
+    These require ``temperature=1.0`` and ``max_tokens >= 16000`` at ``dspy.LM``
+    init; they also emit thinking on the ``reasoning_content`` channel when
+    ``reasoning_effort`` is set. Fireworks/OpenRouter hosts of these models
+    don't share the same constraints, so we scope to the ``openai/`` prefix.
+
+    Args:
+        model_name: The fully-qualified model identifier.
+
+    Returns:
+        True when ``model_name`` is an OpenAI-hosted reasoning model.
+    """
+    lower = model_name.lower()
+    if not lower.startswith("openai/"):
+        return False
+    tail = lower.removeprefix("openai/")
+    return tail.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def apply_model_reasoning_config(config: ModelConfig) -> ModelConfig:
+    """Return a copy of ``config`` with model-specific reasoning defaults applied.
+
+    Mirrors the provider knobs the production generalist agent relies on so any
+    code path that builds a student/agent LM from a bare ``ModelConfig`` gets a
+    safe ``max_tokens`` floor and the right reasoning extras — without which a
+    minimax/reasoning model with no ``max_tokens`` truncates into malformed
+    ``tool_calls`` (a dspy ToolCalls ValidationError).
+
+    Defaults, by provider:
+
+    - **Native MiniMax** (``minimax/...``): ``extra_body={"reasoning_split": true}``
+      surfaces the interleaved ``<think>`` channel; ``max_tokens`` floored at 4000.
+    - **OpenAI reasoning models** (``openai/gpt-5.*``, ``openai/o1|o3|o4*``):
+      ``reasoning_effort="medium"``, ``temperature=1.0``, ``max_tokens`` floored
+      at 16000.
+    - **Everything else** (incl. Fireworks/OpenRouter MiniMax): ``max_tokens``
+      floored at 4000, no reasoning knob.
+
+    Caller-supplied values win: a larger ``max_tokens`` is never shrunk, an
+    explicit ``temperature`` is never overwritten, and ``config.extra`` overrides
+    the model-specific extras on conflict.
+
+    Args:
+        config: Provider-agnostic model configuration to normalize.
+
+    Returns:
+        A new ``ModelConfig`` with the reasoning defaults merged in.
+    """
+    lower = config.name.lower()
+    model_extra: dict[str, object] = {}
+    floor = _DEFAULT_REASONING_MAX_TOKENS
+    temperature = config.temperature
+
+    is_native_minimax = lower.startswith("minimax/") or (
+        "minimax" in lower and "fireworks" not in lower and "openrouter" not in lower
+    )
+    if is_native_minimax:
+        model_extra["extra_body"] = {"reasoning_split": True}
+    elif _is_openai_reasoning_model(config.name):
+        model_extra["reasoning_effort"] = "medium"
+        floor = _OPENAI_REASONING_MAX_TOKENS
+        if temperature is None:
+            temperature = 1.0
+
+    max_tokens = floor if config.max_tokens is None else max(config.max_tokens, floor)
+    return config.model_copy(
+        update={
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "extra": {**model_extra, **config.extra},
+        }
+    )
 
 
 def build_language_model(config: ModelConfig, *, disable_cache: bool = False) -> dspy.LM:
@@ -31,7 +117,25 @@ def build_language_model(config: ModelConfig, *, disable_cache: bool = False) ->
     """
 
     model_name = config.name.strip("/")
-    lm_kwargs: dict[str, object] = {"model": model_name}
+    # Default per-request timeout guards against a provider that accepts the
+    # connection but never sends a response — without it the SSL socket read
+    # blocks forever and wedges the whole optimization run. Set before the
+    # config.extra merge below so an explicit per-model timeout still wins.
+    # dspy defaults to ``num_retries=3``; with our per-call timeout that lets a
+    # hung provider burn up to ``(retries + 1) * timeout`` seconds of silence,
+    # which meets or exceeds ``job_stall_timeout_seconds`` and trips the run's
+    # stall watchdog *before* the call itself errors — turning a recoverable
+    # per-call timeout into an opaque whole-run failure (observed: a GEPA
+    # reflection call wedged ~1800s and the watchdog killed a 9-hour run). Cap
+    # retries so the worst-case attempt sequence finishes under the watchdog
+    # with one timeout of margin, keeping the watchdog's documented invariant
+    # ("a hung call times out first") true even with retries.
+    safe_attempts = max(1, int(settings.job_stall_timeout_seconds // settings.lm_request_timeout_seconds) - 1)
+    lm_kwargs: dict[str, object] = {
+        "model": model_name,
+        "timeout": settings.lm_request_timeout_seconds,
+        "num_retries": safe_attempts - 1,
+    }
     if config.temperature is not None:
         lm_kwargs["temperature"] = config.temperature
     if config.base_url:

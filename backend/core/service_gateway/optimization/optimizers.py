@@ -250,6 +250,17 @@ def evaluate_on_test(
             if hasattr(ex_score, "score"):
                 ex_score = ex_score.score
             ex_score = float(ex_score) if isinstance(ex_score, (int, float, bool)) else 0.0
+            # Per-row heartbeat: these baseline/optimized eval passes sit outside
+            # capture_tqdm, so dspy.Evaluate's bar never forwards — without this a
+            # large test split shows only a single aggregate with no live progress.
+            logger.info(
+                "%s test eval %d/%d score=%.3f pass=%s",
+                program.__class__.__name__,
+                i + 1,
+                len(raw_results),
+                ex_score,
+                ex_score > 0,
+            )
             outputs = {}
             for k in example.labels():
                 outputs[k] = getattr(prediction, k, None) if prediction else None
@@ -416,7 +427,17 @@ def instantiate_optimizer(
                 f"Optimizer '{optimizer_name}' requires reflection_model_config "
                 "or a preconfigured 'reflection_lm' in optimizer_kwargs."
             )
-    logger.debug("Creating optimizer %s with kwargs keys=%s", optimizer_name, list(kwargs.keys()))
+    # INFO (not DEBUG): the subprocess log forwarder floors at INFO, so this —
+    # the single most useful instantiation breadcrumb — was previously invisible
+    # in job_logs. Reports which injections were applied, not just key names.
+    logger.info(
+        "Creating optimizer %s (metric=%s reflection_lm=%s auto=%s log_dir=%s)",
+        optimizer_name,
+        OPTIMIZER_METRIC_KEY in kwargs,
+        OPTIMIZER_REFLECTION_LM_KEY in kwargs,
+        kwargs.get("auto"),
+        OPTIMIZER_LOG_DIR_KEY in kwargs,
+    )
     return factory(**kwargs)
 
 

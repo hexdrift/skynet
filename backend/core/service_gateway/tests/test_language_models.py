@@ -7,9 +7,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.config import settings
 from core.exceptions import ServiceError
 from core.models import ModelConfig
-from core.service_gateway.language_models import build_language_model
+from core.service_gateway.language_models import (
+    apply_model_reasoning_config,
+    build_language_model,
+)
 
 
 def _cfg(**kwargs: Any) -> ModelConfig:
@@ -104,8 +108,39 @@ def test_build_language_model_passes_top_p_when_set() -> None:
     assert call_kwargs["top_p"] == 0.9
 
 
+def test_build_language_model_applies_default_request_timeout() -> None:
+    """A default ``timeout`` from settings guards against hung provider reads."""
+    with patch("dspy.LM") as mock_cls:
+        build_language_model(_cfg())
+
+    call_kwargs = mock_cls.call_args[1]
+    assert call_kwargs["timeout"] == settings.lm_request_timeout_seconds
+
+
+def test_build_language_model_caps_num_retries_under_stall_watchdog() -> None:
+    """Retries are capped so the worst-case attempt sequence finishes before the
+    stall watchdog — otherwise dspy's default num_retries=3 lets a hung call burn
+    the whole watchdog budget and fail the run instead of timing out first."""
+    with patch("dspy.LM") as mock_cls:
+        build_language_model(_cfg())
+
+    call_kwargs = mock_cls.call_args[1]
+    num_retries = call_kwargs["num_retries"]
+    worst_case = (num_retries + 1) * settings.lm_request_timeout_seconds
+    assert worst_case < settings.job_stall_timeout_seconds
+
+
+def test_build_language_model_extra_overrides_num_retries() -> None:
+    """A per-model ``num_retries`` in ``extra`` wins over the watchdog-derived cap."""
+    with patch("dspy.LM") as mock_cls:
+        build_language_model(_cfg(extra={"num_retries": 5}))
+
+    call_kwargs = mock_cls.call_args[1]
+    assert call_kwargs["num_retries"] == 5
+
+
 def test_build_language_model_merges_extra_kwargs() -> None:
-    """Entries in the ``extra`` mapping are merged into the call kwargs."""
+    """Entries in the ``extra`` mapping are merged into the call kwargs, overriding the default timeout."""
     with patch("dspy.LM") as mock_cls:
         build_language_model(_cfg(extra={"api_key": "sk-test", "timeout": 30}))
 
@@ -150,3 +185,58 @@ def test_build_language_model_service_error_message_contains_model_name() -> Non
     """The wrapped ``ServiceError`` message includes the offending model name."""
     with patch("dspy.LM", side_effect=ValueError("nope")), pytest.raises(ServiceError, match="my-model-name"):
         build_language_model(_cfg(name="my-model-name"))
+
+
+def test_apply_reasoning_config_native_minimax_sets_extra_and_floor() -> None:
+    """A native ``minimax/`` model gets the reasoning-split extra and a 4000 floor."""
+    out = apply_model_reasoning_config(ModelConfig(name="minimax/abc"))
+
+    assert out.max_tokens == 4000
+    assert out.extra["extra_body"] == {"reasoning_split": True}
+
+
+def test_apply_reasoning_config_fireworks_minimax_floors_without_extra() -> None:
+    """The shipped Fireworks minimax default gets max_tokens>=4000 and no extra."""
+    out = apply_model_reasoning_config(
+        ModelConfig(name=settings.generalist_agent_model)
+    )
+
+    assert "minimax" in settings.generalist_agent_model.lower()
+    assert out.max_tokens == 4000
+    assert out.extra == {}
+
+
+def test_apply_reasoning_config_openai_reasoning_sets_temperature_and_floor() -> None:
+    """An OpenAI reasoning model gets temperature=1.0 and max_tokens>=16000."""
+    out = apply_model_reasoning_config(ModelConfig(name="openai/gpt-5"))
+
+    assert out.temperature == 1.0
+    assert out.max_tokens == 16000
+    assert out.extra["reasoning_effort"] == "medium"
+
+
+def test_apply_reasoning_config_does_not_shrink_caller_max_tokens() -> None:
+    """A caller-supplied larger ``max_tokens`` is preserved, never clamped to the floor."""
+    out = apply_model_reasoning_config(
+        ModelConfig(name="minimax/abc", max_tokens=8000)
+    )
+
+    assert out.max_tokens == 8000
+
+
+def test_apply_reasoning_config_caller_extra_wins_on_conflict() -> None:
+    """``config.extra`` overrides the model-specific extras on key conflict."""
+    out = apply_model_reasoning_config(
+        ModelConfig(name="minimax/abc", extra={"extra_body": {"custom": 1}})
+    )
+
+    assert out.extra["extra_body"] == {"custom": 1}
+
+
+def test_apply_reasoning_config_non_reasoning_model_is_floored_plain() -> None:
+    """A plain model gets the 4000 floor, no temperature, and an empty extra."""
+    out = apply_model_reasoning_config(ModelConfig(name="openai/gpt-4o-mini"))
+
+    assert out.max_tokens == 4000
+    assert out.temperature is None
+    assert out.extra == {}

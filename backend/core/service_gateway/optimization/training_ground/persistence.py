@@ -15,6 +15,7 @@ import random
 import statistics
 import tempfile
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -240,23 +241,29 @@ def split_stratified(
     *,
     holdout_frac: float = 0.20,
     seed: int = 0,
+    stratifier: Callable[[EvaluationExample], str] | None = None,
 ) -> tuple[list[EvaluationExample], list[EvaluationExample]]:
-    """Stratify by wizard phase, then split each bucket by ``holdout_frac``.
+    """Stratify by ``stratifier``, then split each bucket by ``holdout_frac``.
 
     Args:
         examples: All loaded examples.
-        holdout_frac: Fraction reserved for valset (per phase).
+        holdout_frac: Fraction reserved for valset (per bucket).
         seed: RNG seed for reproducibility.
+        stratifier: Maps an example to its bucket label. When ``None`` all
+            examples land in a single bucket (domain-agnostic default); the
+            generalist callers pass ``phase_of`` to recover wizard-phase
+            stratification.
 
     Returns:
         ``(trainset, holdout)`` — order within each side is randomized.
     """
     if not examples:
         return [], []
+    bucket_of = stratifier if stratifier is not None else lambda _example: ""
     rng = random.Random(seed)
     buckets: dict[str, list[EvaluationExample]] = defaultdict(list)
     for example in examples:
-        buckets[phase_of(example)].append(example)
+        buckets[bucket_of(example)].append(example)
     train: list[EvaluationExample] = []
     holdout: list[EvaluationExample] = []
     for bucket in buckets.values():

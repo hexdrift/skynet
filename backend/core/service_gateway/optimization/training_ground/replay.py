@@ -12,7 +12,8 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-from collections.abc import Iterable, Mapping, Sequence
+import logging
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 import dspy
@@ -24,6 +25,8 @@ from .types import (
     ReplayRollout,
     ReplayStep,
 )
+
+logger = logging.getLogger(__name__)
 
 SUBMIT_TOOL_NAME = "submit"
 """ReActV2's reserved terminal tool. The mock never exposes it — ReActV2 owns
@@ -151,15 +154,36 @@ class TraceConditionedMCPMock:
 
     Args:
         example: The training example whose recorded steps drive the mock.
+        name_canonicalizer: Optional ``proposed_name -> canonical_name`` map
+            applied to every candidate-called tool name before matching,
+            allowed-tools checks, and event recording. Defaults to identity so
+            recorded steps + reward dims (keyed on canonical names) are
+            unaffected when no rename is proposed.
+        match_mode: ``"exact"`` (default) terminates the rollout on the first
+            ``(tool_name, argument_hash)`` mismatch. ``"tool_name"`` advances
+            on a tool-name match alone — arg fidelity becomes a separate scored
+            signal (the hit event carries ``matched_step``) rather than a hard
+            divergence — so a rollout whose free-text args are unreproducible
+            still earns credit for matching the recorded tool sequence.
     """
 
-    def __init__(self, example: EvaluationExample) -> None:
+    def __init__(
+        self,
+        example: EvaluationExample,
+        *,
+        name_canonicalizer: Callable[[str], str] | None = None,
+        match_mode: str = "exact",
+    ) -> None:
         """Initialize replay state from the example's recorded steps.
 
         Args:
             example: The training example whose recorded steps drive the mock.
+            name_canonicalizer: Optional ``proposed -> canonical`` mapper; the
+                identity function when omitted.
+            match_mode: ``"exact"`` or ``"tool_name"`` step-matching policy.
         """
         self._example = example
+        self._match_mode = match_mode
         self._pointer = 0
         self._events: list[ReplayEvent] = []
         self._terminated_reason: ReplayOutcome | None = None
@@ -167,6 +191,7 @@ class TraceConditionedMCPMock:
         self._submit_payload: dict[str, Any] | None = None
         self._forced_submit = False
         self._allowed_tools: frozenset[str] = example.allowed_tools
+        self._canonicalize: Callable[[str], str] = name_canonicalizer or (lambda n: n)
 
     def rollout_so_far(self) -> ReplayRollout:
         """Snapshot the rollout state — safe to call after the candidate finishes.
@@ -189,6 +214,7 @@ class TraceConditionedMCPMock:
         *,
         candidate_tool_descriptions: Mapping[str, str] | None = None,
         live_tools: Mapping[str, dspy.Tool] | None = None,
+        proposed_names: Mapping[str, str] | None = None,
     ) -> list[dspy.Tool]:
         """Build the list of fake ``dspy.Tool`` objects for one candidate program.
 
@@ -207,21 +233,30 @@ class TraceConditionedMCPMock:
 
         Args:
             candidate_tool_descriptions: GEPA-tuned descriptions, keyed by
-                tool name. Missing keys get the placeholder.
+                canonical tool name. Missing keys get the placeholder.
             live_tools: ``{tool_name: live_dspy_tool}`` for the phased
                 MCP roster. Missing entries fall back to ``**kwargs``.
+            proposed_names: ``{canonical: proposed}`` display-name overrides;
+                collisions are dropped (see :func:`resolve_proposed_names`) so
+                each rendered tool name is unique. Defaults to identity.
 
         Returns:
-            One ``dspy.Tool`` per name in ``allowed_tools``.
+            One ``dspy.Tool`` per name in ``allowed_tools`` — rendered under its
+            collision-safe display name when ``proposed_names`` supplies one.
         """
         descriptions = dict(candidate_tool_descriptions or {})
         live_map: Mapping[str, dspy.Tool] = live_tools or {}
+        resolved_names = resolve_proposed_names(proposed_names, self._allowed_tools)
         tools: list[dspy.Tool] = []
         for name in sorted(self._allowed_tools):
             desc = descriptions.get(name) or f"Replay-mock proxy for MCP tool {name}."
             tools.append(
                 _build_proxy_tool(
-                    self, name=name, desc=desc, live_tool=live_map.get(name)
+                    self,
+                    name=name,
+                    desc=desc,
+                    proposed_name=resolved_names.get(name, name),
+                    live_tool=live_map.get(name),
                 )
             )
         return tools
@@ -285,6 +320,11 @@ class TraceConditionedMCPMock:
             raise ReplayTerminated(
                 f"rollout already terminated via {self._terminated_reason!r}"
             )
+        # Canonicalize the agent-facing (possibly GEPA-renamed) name back to its
+        # original identity BEFORE any allowed-tools/recorded-step matching or
+        # event recording, so every downstream reward dim and coverage check
+        # stays keyed on canonical names regardless of the proposed display name.
+        tool_name = self._canonicalize(tool_name)
         candidate_hash = canonical_argument_hash(arguments)
         if tool_name not in self._allowed_tools:
             self._record_termination(
@@ -311,7 +351,15 @@ class TraceConditionedMCPMock:
                 ),
             )
         expected = self._example.replay_steps[self._pointer]
-        if expected.tool_name != tool_name or expected.argument_hash != candidate_hash:
+        name_ok = expected.tool_name == tool_name
+        args_ok = expected.argument_hash == candidate_hash
+        # In "tool_name" mode a name match advances the pointer even when the
+        # args diverge — the hit event carries ``matched_step`` so the reward
+        # can score arg fidelity separately (free-text args are never byte-exact).
+        diverged = (not name_ok) if self._match_mode == "tool_name" else (
+            not name_ok or not args_ok
+        )
+        if diverged:
             self._record_termination(
                 outcome="no_data",
                 tool=tool_name,
@@ -332,7 +380,10 @@ class TraceConditionedMCPMock:
                 candidate_arguments=dict(arguments),
                 candidate_argument_hash=candidate_hash,
                 matched_step=expected,
-                evidence="hit",
+                evidence=(
+                    f"step {self._pointer}: matched {tool_name!r} "
+                    f"({'args exact' if args_ok else 'right tool, args differ'})"
+                ),
             )
         )
         self._pointer += 1
@@ -367,11 +418,63 @@ class TraceConditionedMCPMock:
 
 
 
+def resolve_proposed_names(
+    proposed: Mapping[str, str] | None,
+    allowed_tools: Iterable[str],
+) -> dict[str, str]:
+    """Resolve the canonical->proposed display-name map, dropping collisions.
+
+    GEPA proposes a display name per canonical tool. Two canonicals proposing
+    the same display name would make the agent-facing roster ambiguous and the
+    canonicalizer non-invertible, so any name claimed by more than one canonical
+    is rejected and those tools keep their canonical name. The result is
+    restricted to ``allowed_tools`` (the canonical roster for this turn) and is
+    always identity when ``proposed`` is ``None`` or proposes no real rename.
+
+    Args:
+        proposed: ``{canonical: proposed}`` from :func:`_candidate_tool_names`,
+            or ``None`` for identity.
+        allowed_tools: Canonical tool names exposed this turn.
+
+    Returns:
+        ``{canonical: resolved_name}`` covering every canonical in
+        ``allowed_tools`` — the proposed name when it is unique and non-blank,
+        else the canonical name.
+    """
+    allowed = sorted(set(allowed_tools))
+    proposed = proposed or {}
+    desired: dict[str, str] = {}
+    for canonical in allowed:
+        candidate = proposed.get(canonical)
+        if isinstance(candidate, str) and candidate.strip():
+            desired[canonical] = candidate.strip()
+        else:
+            desired[canonical] = canonical
+    claimants: dict[str, list[str]] = {}
+    for canonical, name in desired.items():
+        claimants.setdefault(name, []).append(canonical)
+    resolved: dict[str, str] = {}
+    for canonical in allowed:
+        name = desired[canonical]
+        owners = claimants[name]
+        if name != canonical and len(owners) > 1:
+            logger.warning(
+                "Proposed tool name %r claimed by %s; keeping canonical names.",
+                name,
+                sorted(owners),
+            )
+            resolved[canonical] = canonical
+        else:
+            resolved[canonical] = name
+    return resolved
+
+
 def _build_proxy_tool(
     mock: TraceConditionedMCPMock,
     *,
     name: str,
     desc: str,
+    proposed_name: str | None = None,
     live_tool: dspy.Tool | None = None,
 ) -> dspy.Tool:
     """Construct a ``dspy.Tool`` that delegates to the mock.
@@ -382,15 +485,22 @@ def _build_proxy_tool(
     the real per-arg schema (description, type) to the LM, which is what
     lets the candidate's arg-description overrides actually reach the
     model. Without a live tool, we fall back to the ``**kwargs`` schema.
+
+    When ``proposed_name`` differs from the canonical ``name`` the agent sees
+    the proposed display name (``dspy.ReActV2`` re-keys its tool map by
+    ``tool.name`` and renders it into the prompt), and the proxy forwards that
+    proposed name into ``_on_candidate_call`` so the mock's canonicalizer maps
+    it back to ``name`` before any matching/allowed/reward logic runs.
     """
+    display_name = proposed_name or name
 
     def _proxy(**kwargs: Any) -> Any:
-        """Forward the candidate's call to the mock for this tool name."""
-        return mock._on_candidate_call(name, dict(kwargs))
+        """Forward the candidate's call (under its display name) to the mock."""
+        return mock._on_candidate_call(display_name, dict(kwargs))
 
     _proxy.__doc__ = desc
-    _proxy.__name__ = name
-    tool = dspy.Tool(_proxy, name=name, desc=desc)
+    _proxy.__name__ = display_name
+    tool = dspy.Tool(_proxy, name=display_name, desc=desc)
     if live_tool is not None:
         live_args = getattr(live_tool, "args", None)
         if isinstance(live_args, dict):
@@ -425,6 +535,7 @@ __all__ = [
     "canonical_argument_hash",
     "is_replay_terminated",
     "iter_hit_events",
+    "resolve_proposed_names",
 ]
 
 
