@@ -122,7 +122,7 @@ export function TrajectoryDetailChart({
   }));
 
   return (
-    <div dir="ltr" className="h-[340px] w-full">
+    <div dir="ltr" className="h-[340px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 10, left: 5, bottom: 18 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -250,8 +250,8 @@ export function TrajectoryCompareChart({ rows }: { rows: ModelRow[] }) {
   const ticks = Array.from({ length: tickCount + 1 }, (_, i) => minY + (yRange * i) / tickCount);
 
   return (
-    <div dir="ltr" className="space-y-2">
-      <div className="relative">
+    <div dir="ltr" className="min-w-0 space-y-2">
+      <div className="relative min-w-0">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${w} ${h}`}

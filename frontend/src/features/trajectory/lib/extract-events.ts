@@ -3,6 +3,7 @@ import type {
   CandidateMetrics,
   MinibatchEntry,
   PerExampleScore,
+  PredictionValue,
   RejectedMetrics,
   ValsetOutputsEvent,
   ValsetPrediction,
@@ -167,6 +168,22 @@ export function extractValset(events: ProgressEvent[]): ValsetRow[] {
   return [];
 }
 
+// A prediction arrives as a flat field→value map (the backend serializes a dspy
+// Prediction this way, nested fields as JSON strings) or a plain string (legacy
+// runs). Map values are coerced to strings so each renders via the structured
+// FieldValue cell. Anything else (null, array, number) degrades to "".
+function coercePrediction(value: unknown): PredictionValue {
+  if (typeof value === "string") return value;
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const out: Record<string, string> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = typeof item === "string" ? item : JSON.stringify(item);
+    }
+    return out;
+  }
+  return "";
+}
+
 function coerceMinibatch(
   metrics: Record<string, unknown>,
   sequence: number,
@@ -183,7 +200,7 @@ function coerceMinibatch(
     example_id,
     score,
     feedback,
-    prediction: typeof prediction === "string" ? prediction : "",
+    prediction: coercePrediction(prediction),
     sequence,
     iteration: typeof iteration === "number" ? iteration : null,
   };
@@ -212,9 +229,12 @@ function coerceValsetOutputs(metrics: Record<string, unknown>): ValsetOutputsEve
     if (!row || typeof row !== "object") continue;
     const r = row as Record<string, unknown>;
     if (typeof r.example_id !== "string") continue;
-    if (typeof r.prediction !== "string") continue;
     const score = typeof r.score === "number" ? r.score : 0;
-    predictions.push({ example_id: r.example_id, prediction: r.prediction, score });
+    predictions.push({
+      example_id: r.example_id,
+      prediction: coercePrediction(r.prediction),
+      score,
+    });
   }
   return { candidate_index, predictions };
 }
@@ -224,14 +244,14 @@ function coerceValsetOutputs(metrics: Record<string, unknown>): ValsetOutputsEve
 // If the same candidate fires twice (shouldn't, but defensive), later events win.
 export function extractValsetOutputs(
   events: ProgressEvent[],
-): Map<string, Map<string, string>> {
-  const out = new Map<string, Map<string, string>>();
+): Map<string, Map<string, PredictionValue>> {
+  const out = new Map<string, Map<string, PredictionValue>>();
   for (const event of events) {
     if (event.event !== VALSET_OUTPUTS_EVENT) continue;
     const parsed = coerceValsetOutputs(event.metrics ?? {});
     if (parsed === null) continue;
     const key = String(parsed.candidate_index);
-    const inner = new Map<string, string>();
+    const inner = new Map<string, PredictionValue>();
     for (const p of parsed.predictions) {
       inner.set(p.example_id, p.prediction);
     }

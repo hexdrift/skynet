@@ -331,14 +331,14 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {MODE_OPTIONS.map((opt) => (
             <button
               key={opt.mode}
               type="button"
               onClick={() => setMode(opt.mode)}
               className={cn(
-                "flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all cursor-pointer",
+                "flex min-w-0 flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all cursor-pointer",
                 "hover:border-primary/40 hover:bg-primary/5",
                 mode === opt.mode ? "border-primary bg-primary/10 shadow-sm" : "border-border/50",
               )}

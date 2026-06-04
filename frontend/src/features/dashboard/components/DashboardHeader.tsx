@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { Users } from "lucide-react";
 import { AnimatedNumber } from "@/shared/ui/motion";
 import type { DashboardStats } from "../lib/get-dashboard-stats";
 import { msg } from "@/shared/lib/messages";
@@ -11,6 +13,7 @@ type StatCardProps = {
   value: number;
   accent?: "default" | "warning" | "success" | "danger";
   pulse?: boolean;
+  icon?: ReactNode;
 };
 
 const ACCENT_TEXT: Record<NonNullable<StatCardProps["accent"]>, string> = {
@@ -27,14 +30,16 @@ const ACCENT_DOT: Record<NonNullable<StatCardProps["accent"]>, string> = {
   danger: "bg-red-500",
 };
 
-function StatCard({ label, value, accent = "default", pulse = false }: StatCardProps) {
+function StatCard({ label, value, accent = "default", pulse = false, icon }: StatCardProps) {
   return (
-    <div className="group/stat relative flex flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7">
+    <div className="group/stat relative flex min-w-0 flex-[1_1_13rem] flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7 xl:flex-[1_1_9rem]">
       <div className="flex items-center gap-2">
-        <span
-          className={`size-1.5 rounded-full ${ACCENT_DOT[accent]} ${pulse ? "animate-pulse" : ""}`}
-          aria-hidden
-        />
+        {icon ?? (
+          <span
+            className={`size-1.5 rounded-full ${ACCENT_DOT[accent]} ${pulse ? "animate-pulse" : ""}`}
+            aria-hidden
+          />
+        )}
         <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
           {label}
         </p>
@@ -53,10 +58,7 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
     <>
       {stats && (
         <div
-          className="grid gap-3 sm:gap-4"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))",
-          }}
+          className="flex flex-wrap gap-3 sm:gap-4"
           data-tutorial="dashboard-kpis"
         >
           <StatCard
@@ -79,6 +81,13 @@ export function DashboardHeader({ stats }: DashboardHeaderProps) {
             value={stats.failed}
             accent={stats.failed > 0 ? "danger" : "default"}
           />
+          {stats.shared > 0 && (
+            <StatCard
+              label={msg("dashboard.stat.shared")}
+              value={stats.shared}
+              icon={<Users className="size-3.5 text-muted-foreground/60" aria-hidden />}
+            />
+          )}
         </div>
       )}
     </>

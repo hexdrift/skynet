@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   Compass,
   CopyPlus,
+  RotateCcw,
 } from "lucide-react";
 import { SidebarMoreSkeleton } from "./SidebarMoreSkeleton";
 import { cn } from "@/shared/lib/utils";
@@ -33,9 +34,11 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import {
   listJobsSidebar,
+  listJobsSharedWithMe,
   deleteJob,
   renameOptimization,
   togglePinOptimization,
+  retryJob,
 } from "@/shared/lib/api";
 import type { SidebarJobItem } from "@/shared/lib/api";
 import { isActiveStatus } from "@/shared/constants/job-status";
@@ -80,6 +83,14 @@ export function Sidebar() {
   const sessionUser = session?.user?.name ?? "";
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
 
+  const [tab, setTab] = React.useState<"mine" | "shared">("mine");
+  // ``tab`` is the *requested* tab; ``renderedTab`` trails it and only flips
+  // once that tab's rows have actually loaded. Keeping the two separate lets us
+  // hold the previous list on screen during the in-flight fetch and crossfade
+  // straight to the new one — no blank frame, so no flicker on toggle.
+  const [renderedTab, setRenderedTab] = React.useState<"mine" | "shared">("mine");
+  const tabRef = React.useRef<"mine" | "shared">("mine");
+  const switchingRef = React.useRef(false);
   const [jobs, setJobs] = React.useState<SidebarJobItem[]>([]);
   const [activeCount, setActiveCount] = React.useState(0);
   const [loadedAll, setLoadedAll] = React.useState(false);
@@ -150,19 +161,27 @@ export function Sidebar() {
   const fetchData = React.useCallback(async () => {
     try {
       const limit = Math.min(200, Math.max(PAGE_SIZE, loadedItemsRef.current));
-      const res = await listJobsSidebar({
-        username: isAdmin ? undefined : sessionUser || undefined,
-        limit,
-        offset: 0,
-      });
+      const res =
+        tab === "shared"
+          ? await listJobsSharedWithMe({ limit, offset: 0 })
+          : await listJobsSidebar({
+              username: isAdmin ? undefined : sessionUser || undefined,
+              limit,
+              offset: 0,
+            });
+      // Drop the response if the user has since toggled away — applying it
+      // would clobber the newer tab's list with stale rows.
+      if (tabRef.current !== tab) return;
       setJobs(res.items);
       setActiveCount(res.items.filter((j) => isActiveStatus(j.status)).length);
       setLoadedAll(res.items.length >= res.total);
       loadedItemsRef.current = res.items.length;
+      switchingRef.current = false;
+      setRenderedTab(tab);
     } catch (err) {
       console.warn("sidebar fetch failed:", err);
     }
-  }, [sessionUser, isAdmin]);
+  }, [sessionUser, isAdmin, tab]);
 
   React.useEffect(() => {
     // Dep change (login / admin toggle) — reset depth so the next fetch
@@ -196,15 +215,20 @@ export function Sidebar() {
   useJobsStream({ active: activeCount > 0, onTick: () => void fetchData() });
 
   const loadMore = React.useCallback(async () => {
-    if (loadingMoreRef.current || loadedAll) return;
+    // ``switchingRef`` blocks pagination while a tab change is in flight — the
+    // stale ``jobs.length`` offset would otherwise fetch the wrong page.
+    if (loadingMoreRef.current || loadedAll || switchingRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const res = await listJobsSidebar({
-        username: isAdmin ? undefined : sessionUser || undefined,
-        limit: PAGE_SIZE,
-        offset: jobs.length,
-      });
+      const res =
+        tab === "shared"
+          ? await listJobsSharedWithMe({ limit: PAGE_SIZE, offset: jobs.length })
+          : await listJobsSidebar({
+              username: isAdmin ? undefined : sessionUser || undefined,
+              limit: PAGE_SIZE,
+              offset: jobs.length,
+            });
       setJobs((prev) => {
         // Dedupe by optimization_id in case a new job was inserted above
         // the offset between the previous fetch and this one.
@@ -221,7 +245,7 @@ export function Sidebar() {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [loadedAll, isAdmin, sessionUser, jobs.length]);
+  }, [loadedAll, isAdmin, sessionUser, jobs.length, tab]);
 
   // Infinite-scroll sentinel. The sidebar scrolls in its own container
   // (``listRef``), so the observer's root must point at that element — not
@@ -270,6 +294,19 @@ export function Sidebar() {
     }
   };
 
+  const handleTabChange = React.useCallback(
+    (next: "mine" | "shared") => {
+      if (next === tab) return;
+      // Keep the current rows on screen; the new tab's list crossfades in once
+      // its fetch resolves (see ``renderedTab``). ``switchingRef`` parks
+      // pagination until then.
+      switchingRef.current = true;
+      tabRef.current = next;
+      setTab(next);
+    },
+    [tab],
+  );
+
   const groupedJobs = React.useMemo(() => groupJobsByRecency(jobs), [jobs]);
 
   const deleteJobInfo = React.useMemo(() => {
@@ -286,7 +323,7 @@ export function Sidebar() {
   return (
     <aside
       className="relative flex h-full shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar/80 backdrop-blur-xl overflow-hidden"
-      style={{ width }}
+      style={{ width: `min(${width}px, 40vw, 92vw)` }}
       dir="rtl"
       data-tutorial="sidebar-full"
     >
@@ -306,7 +343,7 @@ export function Sidebar() {
         >
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-            const showBadge = href === "/" && activeCount > 0;
+            const showBadge = href === "/" && renderedTab === "mine" && activeCount > 0;
             return (
               <Link
                 key={href}
@@ -348,30 +385,75 @@ export function Sidebar() {
 
         <div aria-hidden="true" className="mx-3 h-px bg-sidebar-border/40" />
 
+        <div
+          role="tablist"
+          aria-label={msg("sidebar.tab.aria")}
+          className="relative mx-3 mt-2.5 mb-0.5 flex rounded-lg bg-muted p-1 gap-1"
+        >
+          <div
+            aria-hidden="true"
+            className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
+            style={{ insetInlineStart: tab === "mine" ? 4 : "calc(50% + 2px)" }}
+          />
+          {(["mine", "shared"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => handleTabChange(key)}
+              className={cn(
+                "relative z-10 flex-1 cursor-pointer rounded-md px-2 py-1.5 text-center text-[0.6875rem] font-medium transition-colors duration-200",
+                tab === key ? "text-foreground" : "text-foreground/60 hover:text-foreground",
+              )}
+            >
+              {msg(key === "mine" ? "sidebar.tab.mine" : "sidebar.tab.shared")}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           <div ref={listRef} className="flex-1 overflow-y-auto px-3 pt-2 pb-2 no-scrollbar">
-            {groupedJobs.map((group) => (
-              <div key={group.label} className="mb-2">
-                <p className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
-                  <span>{group.label}</span>
-                  <span className="tabular-nums text-muted-foreground/40 font-normal">
-                    {group.jobs.length}
-                  </span>
-                </p>
-                {group.jobs.map((job) => (
-                  <JobRow
-                    key={job.optimization_id}
-                    job={job}
-                    isActive={pathname === `/optimizations/${job.optimization_id}`}
-                    activePair={
-                      pathname === `/optimizations/${job.optimization_id}` ? activePairIndex : null
-                    }
-                    onDelete={handleDelete}
-                    onRefresh={fetchData}
-                  />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={renderedTab}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.14, ease: "easeOut" }}
+              >
+                {groupedJobs.map((group) => (
+                  <div key={group.label} className="mb-2">
+                    <p className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
+                      <span>{group.label}</span>
+                      <span className="tabular-nums text-muted-foreground/40 font-normal">
+                        {group.jobs.length}
+                      </span>
+                    </p>
+                    {group.jobs.map((job) => (
+                      <JobRow
+                        key={job.optimization_id}
+                        job={job}
+                        isShared={renderedTab === "shared"}
+                        isActive={pathname === `/optimizations/${job.optimization_id}`}
+                        activePair={
+                          pathname === `/optimizations/${job.optimization_id}`
+                            ? activePairIndex
+                            : null
+                        }
+                        onDelete={handleDelete}
+                        onRefresh={fetchData}
+                      />
+                    ))}
+                  </div>
                 ))}
-              </div>
-            ))}
+                {renderedTab === "shared" && loadedAll && groupedJobs.length === 0 && (
+                  <p className="px-3 py-6 text-center text-[0.6875rem] leading-relaxed text-muted-foreground/60">
+                    {msg("sidebar.shared.empty")}
+                  </p>
+                )}
+              </motion.div>
+            </AnimatePresence>
             {loadingMore && (
               <div className="px-1 pt-1 pb-2" aria-hidden="true">
                 <SidebarMoreSkeleton />
@@ -439,12 +521,14 @@ export function Sidebar() {
 
 function JobRow({
   job,
+  isShared,
   isActive,
   activePair,
   onDelete,
   onRefresh,
 }: {
   job: SidebarJobItem;
+  isShared: boolean;
   isActive: boolean;
   activePair: number | null;
   onDelete: (e: React.MouseEvent, id: string) => void;
@@ -468,6 +552,12 @@ function JobRow({
     job.name ||
     [job.module_name, job.optimizer_name].filter(Boolean).join(" · ") ||
     job.optimization_id.slice(0, 8);
+
+  // Shared rows carry the caller's grant role; gate row actions by what that
+  // role permits server-side. Rename/rerun/pin are editor+; share/delete are
+  // owner-only (and a shared-with-me row is never one the caller owns). On the
+  // "mine" tab the caller is always owner/admin, so everything is allowed.
+  const canEdit = !isShared || job.role === "editor" || job.role === "owner";
 
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -511,6 +601,21 @@ function JobRow({
   const handleClone = () => {
     setMenuOpen(false);
     router.push(`/submit?clone=${job.optimization_id}`);
+  };
+
+  const handleRetry = async () => {
+    setMenuOpen(false);
+    try {
+      const res = await retryJob(job.optimization_id);
+      toast.success(msg("sidebar.rerun.success"));
+      window.dispatchEvent(new Event("optimizations-changed"));
+      onRefresh();
+      router.push(`/optimizations/${res.optimization_id}`);
+    } catch (err) {
+      // Surface the real backend reason (quota 429, wrong-status 409, …) like
+      // the detail-view retry does, falling back to the generic message.
+      toast.error(err instanceof Error ? err.message : msg("sidebar.rerun.failed"));
+    }
   };
 
   // Enter triggers handleRename, then setRenaming(false) blurs the input,
@@ -735,29 +840,33 @@ function JobRow({
             className="fixed z-[9999] min-w-[140px] rounded-2xl border border-border/40 bg-card shadow-[0_4px_24px_rgba(28,22,18,0.1)] py-1.5"
             style={{ top: menuPos.top, left: menuPos.left, right: "auto" }}
           >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleShare}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
-            >
-              <Share2 className="size-3.5 text-muted-foreground" />
-              {msg("auto.features.sidebar.components.sidebar.7")}
-            </button>
+            {!isShared && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleShare}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+              >
+                <Share2 className="size-3.5 text-muted-foreground" />
+                {msg("auto.features.sidebar.components.sidebar.7")}
+              </button>
+            )}
 
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                setRenameValue(job.name ?? displayName);
-                setRenaming(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
-            >
-              <Pencil className="size-3.5 text-muted-foreground" />
-              {msg("auto.features.sidebar.components.sidebar.8")}
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setRenameValue(job.name ?? displayName);
+                  setRenaming(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+              >
+                <Pencil className="size-3.5 text-muted-foreground" />
+                {msg("auto.features.sidebar.components.sidebar.8")}
+              </button>
+            )}
 
             <button
               type="button"
@@ -769,34 +878,55 @@ function JobRow({
               {msg("auto.features.sidebar.components.sidebar.9")}
             </button>
 
-            <div className="h-px bg-border/20 mx-2 my-1" />
+            {canEdit && (job.status === "failed" || job.status === "cancelled") && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleRetry}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+              >
+                <RotateCcw className="size-3.5 text-muted-foreground" />
+                {msg("sidebar.rerun")}
+              </button>
+            )}
 
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handlePin}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
-            >
-              <Pin
-                className={cn("size-3.5", job.pinned ? "text-foreground" : "text-muted-foreground")}
-              />
-              {job.pinned
-                ? msg("auto.features.sidebar.components.sidebar.literal.13")
-                : msg("auto.features.sidebar.components.sidebar.literal.14")}
-            </button>
+            {canEdit && (
+              <>
+                <div className="h-px bg-border/20 mx-2 my-1" />
 
-            <button
-              type="button"
-              role="menuitem"
-              onClick={(e) => {
-                setMenuOpen(false);
-                onDelete(e, job.optimization_id);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-red-500 hover:bg-red-500/5 cursor-pointer transition-colors"
-            >
-              <Trash2 className="size-3.5" />
-              {msg("auto.features.sidebar.components.sidebar.10")}
-            </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handlePin}
+                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+                >
+                  <Pin
+                    className={cn(
+                      "size-3.5",
+                      job.pinned ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  />
+                  {job.pinned
+                    ? msg("auto.features.sidebar.components.sidebar.literal.13")
+                    : msg("auto.features.sidebar.components.sidebar.literal.14")}
+                </button>
+              </>
+            )}
+
+            {!isShared && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  setMenuOpen(false);
+                  onDelete(e, job.optimization_id);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-red-500 hover:bg-red-500/5 cursor-pointer transition-colors"
+              >
+                <Trash2 className="size-3.5" />
+                {msg("auto.features.sidebar.components.sidebar.10")}
+              </button>
+            )}
           </motion.div>,
           document.body,
         )}

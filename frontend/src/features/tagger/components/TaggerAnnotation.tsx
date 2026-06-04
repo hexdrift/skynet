@@ -267,7 +267,7 @@ export function TaggerAnnotation({
                     variant="outline"
                     onClick={() => onToggleCategory(id, cat.id)}
                     className={cn(
-                      "flex-1 min-h-0 rounded-xl gap-2 focus-visible:ring-0 focus-visible:border-transparent",
+                      "flex-1 min-h-0 min-w-0 rounded-xl gap-2 whitespace-normal focus-visible:ring-0 focus-visible:border-transparent",
                       (config.categories?.length ?? 0) >= 7 ? "text-sm" : "text-base",
                       "font-medium",
                       selected && "bg-primary/10 border-primary/40 text-primary",
@@ -282,7 +282,7 @@ export function TaggerAnnotation({
                         {i + 1}
                       </Badge>
                     )}
-                    {cat.label}
+                    <span className="min-w-0 break-words">{cat.label}</span>
                   </Button>
                 );
               })}

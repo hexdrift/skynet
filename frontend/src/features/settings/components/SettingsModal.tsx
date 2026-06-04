@@ -294,7 +294,7 @@ function UsernameCombobox({
                     className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-start text-xs hover:bg-accent/50"
                     dir="ltr"
                   >
-                    <span className="font-mono">{entry.username}</span>
+                    <span className="font-semibold text-foreground">{entry.username}</span>
                     {entry.source === "directory" && (
                       <span className="text-[0.6875rem] text-muted-foreground">
                         {msg("settings.admin.quotas.source_directory")}
@@ -603,7 +603,7 @@ function AdminTab() {
           </div>
 
           <div className="flex-1 overflow-auto">
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <Table style={{ minWidth: "560px" }}>
               <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur-sm">
                 <TableRow>
@@ -716,7 +716,7 @@ function AdminTab() {
                       className="border-border/40 hover:bg-accent/30"
                     >
                       <TableCell
-                        className="max-w-[200px] truncate text-center font-mono text-xs text-foreground"
+                        className="max-w-[200px] truncate text-center font-semibold text-xs text-foreground"
                         dir="ltr"
                         title={item.username}
                       >

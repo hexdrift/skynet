@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { toast } from "react-toastify";
-import { ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Crown,
+  Eye,
+  ExternalLink,
+  Pencil,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
@@ -18,7 +27,7 @@ import { PingDot } from "@/shared/ui/ping-dot";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import type { useColumnResize } from "@/shared/ui/excel-filter";
 import { ColumnHeader, ResetColumnsButton, type SortDir } from "@/shared/ui/excel-filter";
-import { formatDate, formatId, formatRelativeTime } from "@/shared/lib";
+import { formatDate, formatId, formatRelativeTime, moduleLabel } from "@/shared/lib";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 import { LiveElapsed } from "./LiveElapsed";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
@@ -27,23 +36,65 @@ import { TERMS } from "@/shared/lib/terms";
 import { FETCH_PAGE_SIZE } from "../constants";
 import { formatScore, typeBadge } from "../lib/status-badges";
 import { StatusBadge } from "@/shared/ui/status-badge";
-import type { DeleteTarget } from "../hooks/use-bulk-delete";
 
-// Compact default widths so every column + actions fit a typical card scroller
-// (~956px) without horizontal scrolling. Users can still resize individually.
+// Default widths sized so all columns fit on screen at once (no horizontal
+// scroll) while each header still shows its full Hebrew label. This works in
+// tandem with the compact density overrides on the <Table> below (smaller
+// header font, tighter padding, smaller sort/filter icons) — without those
+// the labels would clip at these widths. Users can still resize individually.
 const DEFAULT_COL_WIDTHS: Record<string, number> = {
-  optimization_id: 90,
-  name: 130,
-  optimization_type: 75,
-  status: 95,
-  module_name: 95,
-  dataset_rows: 65,
-  created_at: 90,
-  elapsed_seconds: 75,
-  optimized_test_metric: 105,
+  optimization_id: 86,
+  name: 104,
+  username: 94,
+  role: 92,
+  optimization_type: 80,
+  status: 94,
+  module_name: 94,
+  dataset_rows: 72,
+  created_at: 94,
+  elapsed_seconds: 66,
+  optimized_test_metric: 94,
 };
 
 type ColResize = ReturnType<typeof useColumnResize>;
+
+type ShareRole = "viewer" | "editor" | "owner";
+
+// Icon + tooltip for the caller's tier on a run. Icons denote state only (per
+// the design system); the tooltip names the tier in plain Hebrew and doubles
+// as the accessible label. A null role means the caller's own run — the union
+// only ever yields owned or granted rows — so it earns the ownership crown
+// rather than a blank dash.
+function RoleBadge({ role }: { role?: ShareRole | null }) {
+  const tier = role ?? "owned";
+  const Icon =
+    tier === "viewer"
+      ? Eye
+      : tier === "editor"
+        ? Pencil
+        : tier === "owner"
+          ? ShieldCheck
+          : Crown;
+  const tip =
+    tier === "viewer"
+      ? msg("dashboard.role.viewer")
+      : tier === "editor"
+        ? msg("dashboard.role.editor")
+        : tier === "owner"
+          ? msg("dashboard.role.owner")
+          : msg("dashboard.role.owned");
+  return (
+    <TooltipButton tooltip={tip} dir="rtl">
+      <span
+        tabIndex={0}
+        aria-label={tip}
+        className="inline-flex rounded text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <Icon className="size-3.5" />
+      </span>
+    </TooltipButton>
+  );
+}
 
 type JobsTabProps = {
   data: PaginatedJobsResponse | null;
@@ -61,7 +112,8 @@ type JobsTabProps = {
   openFilter: string | null;
   setOpenFilter: (col: string | null) => void;
   filterOptions: Record<string, Array<{ value: string; label: string }>>;
-  isAdmin: boolean;
+  showSharedColumns: boolean;
+  sessionUser: string;
   selectedIds: Set<string>;
   toggleRowSelected: (id: string) => void;
   selectablePageIds: string[];
@@ -71,7 +123,6 @@ type JobsTabProps = {
   pageOffset: number;
   setPageOffset: React.Dispatch<React.SetStateAction<number>>;
   onOpenJob: (id: string) => void;
-  onRequestDelete: (target: { id: string; status: string }) => void;
 };
 
 export function JobsTab({
@@ -90,7 +141,8 @@ export function JobsTab({
   openFilter,
   setOpenFilter,
   filterOptions,
-  isAdmin,
+  showSharedColumns,
+  sessionUser,
   selectedIds,
   toggleRowSelected,
   selectablePageIds,
@@ -100,7 +152,6 @@ export function JobsTab({
   pageOffset,
   setPageOffset,
   onOpenJob,
-  onRequestDelete,
 }: JobsTabProps) {
   return (
     <Card className="border-border/60">
@@ -151,7 +202,10 @@ export function JobsTab({
             className="overflow-x-auto rounded-2xl border border-border/40 bg-card/60"
             data-tutorial="dashboard-table"
           >
-            <Table style={{ minWidth: "640px" }}>
+            <Table
+              style={{ minWidth: "640px" }}
+              className="table-stack [&_thead_th]:ps-1 [&_thead_th]:pe-2 [&_thead_th]:py-2 [&_thead_th]:text-[0.6875rem] [&_thead_th_button]:px-1 [&_thead_svg]:size-2.5 [&_tbody_td]:px-1.5"
+            >
               <TableHeader className="bg-muted/20 [&_tr]:border-b-border/40">
                 <TableRow>
                   <TableHead className="w-10 px-3">
@@ -198,6 +252,40 @@ export function JobsTab({
                     width={colResize.widths["name"] ?? DEFAULT_COL_WIDTHS.name}
                     onResize={colResize.setColumnWidth}
                   />
+                  {showSharedColumns && (
+                    <>
+                      <ColumnHeader
+                        label={msg("dashboard.col.owner")}
+                        sortKey="username"
+                        currentSort={sortKey}
+                        sortDir={sortDir}
+                        onSort={toggleSort}
+                        filterCol="username"
+                        filterOptions={filterOptions.username}
+                        filters={filters}
+                        onFilter={setColumnFilter}
+                        openFilter={openFilter}
+                        setOpenFilter={setOpenFilter}
+                        width={colResize.widths["username"] ?? DEFAULT_COL_WIDTHS.username}
+                        onResize={colResize.setColumnWidth}
+                      />
+                      <ColumnHeader
+                        label={msg("dashboard.col.role")}
+                        sortKey="role"
+                        currentSort={sortKey}
+                        sortDir={sortDir}
+                        onSort={toggleSort}
+                        filterCol="role"
+                        filterOptions={filterOptions.role}
+                        filters={filters}
+                        onFilter={setColumnFilter}
+                        openFilter={openFilter}
+                        setOpenFilter={setOpenFilter}
+                        width={colResize.widths["role"] ?? DEFAULT_COL_WIDTHS.role}
+                        onResize={colResize.setColumnWidth}
+                      />
+                    </>
+                  )}
                   <ColumnHeader
                     label={msg("auto.features.dashboard.components.jobstab.literal.2")}
                     sortKey="optimization_type"
@@ -279,7 +367,7 @@ export function JobsTab({
                     width={colResize.widths["optimized_test_metric"] ?? DEFAULT_COL_WIDTHS.optimized_test_metric}
                     onResize={colResize.setColumnWidth}
                   />
-                  <TableHead className="w-16" />
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody className="transition-opacity duration-200">
@@ -326,6 +414,7 @@ export function JobsTab({
                       <TableCell
                         className="px-2 max-w-[100px]"
                         title={job.optimization_id}
+                        data-label={msg("auto.features.dashboard.components.jobstab.template.1")}
                       >
                         {/* ``min-w-0`` lets the flex item shrink so the
                             cell's overflow-hidden + text-ellipsis can
@@ -343,6 +432,7 @@ export function JobsTab({
                         className="px-2 max-w-[140px] text-sm truncate overflow-hidden"
                         title={job.name ?? ""}
                         dir="auto"
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.9")}
                       >
                         {job.name ? (
                           <span className="text-foreground">{job.name}</span>
@@ -350,31 +440,67 @@ export function JobsTab({
                           <span className="text-muted-foreground/60">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="px-2 truncate overflow-hidden">
+                      {showSharedColumns && (
+                        <>
+                          <TableCell
+                            className="px-2 max-w-[120px] text-sm truncate overflow-hidden"
+                            title={job.username ?? ""}
+                            data-label={msg("dashboard.col.owner")}
+                          >
+                            {job.username ? (
+                              job.username.toLowerCase() === sessionUser.toLowerCase() ? (
+                                <span className="font-semibold text-foreground">{msg("dashboard.owner.me")}</span>
+                              ) : (
+                                <span className="font-semibold text-foreground" dir="ltr">
+                                  {job.username}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground/40">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-2" data-label={msg("dashboard.col.role")}>
+                            <RoleBadge role={job.role} />
+                          </TableCell>
+                        </>
+                      )}
+                      <TableCell
+                        className="px-2 truncate overflow-hidden"
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.2")}
+                      >
                         {typeBadge(job.optimization_type)}
                       </TableCell>
-                      <TableCell className="px-2 truncate overflow-hidden">
+                      <TableCell
+                        className="px-2 truncate overflow-hidden"
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.3")}
+                      >
                         <StatusBadge status={job.status} compact />
                       </TableCell>
                       <TableCell
                         className="px-2 max-w-[120px] text-sm truncate overflow-hidden"
                         title={job.module_name ?? ""}
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.4")}
                       >
-                        {job.module_name ?? "-"}
+                        {moduleLabel(job.module_name)}
                       </TableCell>
                       <TableCell
                         className="px-2 text-sm tabular-nums truncate overflow-hidden"
                         title={String(job.dataset_rows ?? "")}
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.5")}
                       >
                         {job.dataset_rows ?? "-"}
                       </TableCell>
                       <TableCell
                         className="px-2 text-xs text-muted-foreground truncate overflow-hidden whitespace-nowrap"
                         title={formatDate(job.created_at)}
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.6")}
                       >
                         {formatRelativeTime(job.created_at)}
                       </TableCell>
-                      <TableCell className="px-2 text-xs tabular-nums truncate overflow-hidden whitespace-nowrap">
+                      <TableCell
+                        className="px-2 text-xs tabular-nums truncate overflow-hidden whitespace-nowrap"
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.7")}
+                      >
                         <LiveElapsed
                           startedAt={job.started_at}
                           createdAt={job.created_at}
@@ -382,7 +508,12 @@ export function JobsTab({
                           isActive={ACTIVE_STATUSES.has(job.status)}
                         />
                       </TableCell>
-                      <TableCell className="px-2 truncate overflow-hidden">{formatScore(job)}</TableCell>
+                      <TableCell
+                        className="px-2 truncate overflow-hidden"
+                        data-label={msg("auto.features.dashboard.components.jobstab.literal.8")}
+                      >
+                        {formatScore(job)}
+                      </TableCell>
                       <TableCell className="px-2">
                         <div className="flex items-center gap-0.5">
                           <TooltipButton
@@ -400,29 +531,6 @@ export function JobsTab({
                               <ExternalLink className="size-3.5" />
                             </button>
                           </TooltipButton>
-                          {isAdmin && (
-                            <TooltipButton
-                              tooltip={msg("auto.features.dashboard.components.jobstab.10")}
-                            >
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onRequestDelete({
-                                    id: job.optimization_id,
-                                    status: job.status,
-                                  });
-                                }}
-                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all cursor-pointer"
-                                aria-label={formatMsg(
-                                  "auto.features.dashboard.components.jobstab.template.4",
-                                  { p1: TERMS.optimization },
-                                )}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </TooltipButton>
-                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -465,5 +573,3 @@ export function JobsTab({
     </Card>
   );
 }
-
-export type { DeleteTarget };

@@ -7,7 +7,7 @@
  * to valid Python identifiers.
  */
 export function buildSignatureTemplate(
-  roles: Record<string, "input" | "output" | "ignore">,
+  roles: Record<string, "input" | "output" | "ignore" | string>,
   kinds: Record<string, "text" | "image"> = {},
 ): string {
   const inputs = Object.entries(roles)

@@ -103,6 +103,8 @@ export function DashboardView() {
     status: analyticsFilters.status,
     jobId: analyticsFilters.jobId,
     date: analyticsFilters.date,
+    owner: analyticsFilters.owner,
+    access: analyticsFilters.access,
   });
 
   // Demo overlay state — tutorial injects fake data here so background
@@ -163,9 +165,6 @@ export function DashboardView() {
   );
 
   const {
-    deleteTarget,
-    setDeleteTarget,
-    deleting,
     selectedIds,
     setSelectedIds,
     toggleRowSelected,
@@ -173,7 +172,6 @@ export function DashboardView() {
     bulkDeleteOpen,
     setBulkDeleteOpen,
     bulkDeleting,
-    confirmDelete,
     confirmBulkDelete,
   } = useBulkDelete({ data, setData, setPageOffset, fetchJobs, visibleData: effectiveData });
 
@@ -192,6 +190,21 @@ export function DashboardView() {
     return selectedItems.map((j) => j.optimization_id);
   }, [effectiveData, selectedIds]);
   const canCompare = compareEligibleIds.length >= 2;
+
+  // Admins delete anything; everyone else may bulk-delete only runs they own
+  // outright (role null/absent) or co-own (role "owner"). Shared viewer/editor
+  // grants can't delete. Mirrors the detail page's canDeleteRun (effective_role
+  // == null) and the backend's owner-role check in /optimizations/bulk-delete,
+  // which skips non-owned ids — gating here avoids a misleading "deleted" toast
+  // when the server actually skipped them.
+  const canBulkDelete = useMemo(() => {
+    if (isAdmin) return true;
+    if (!effectiveData || selectedIds.size === 0) return false;
+    const selected = effectiveData.items.filter((j) => selectedIds.has(j.optimization_id));
+    if (selected.length !== selectedIds.size) return false;
+    return selected.every((j) => j.role == null || j.role === "owner");
+  }, [isAdmin, effectiveData, selectedIds]);
+
   const onCompare = useCallback(() => {
     if (compareEligibleIds.length < 2) return;
     if (compareEligibleIds.length > COMPARE_MAX) {
@@ -250,15 +263,33 @@ export function DashboardView() {
         .sort();
       return vals.map((v) => ({ value: v, label: labelFn ? labelFn(v) : v }));
     };
+    // Role / access filter: owned runs carry no grant role, so they surface
+    // under the empty-string bucket labeled "שלי". Multi-select then covers
+    // both shared-vs-mine and viewer/editor-vs-owner framings.
+    const roleLabels: Record<string, string> = {
+      "": msg("dashboard.role.mine"),
+      owner: msg("dashboard.role_short.owner"),
+      editor: msg("dashboard.role_short.editor"),
+      viewer: msg("dashboard.role_short.viewer"),
+    };
+    const presentRoles = new Set(items.map((j) => String(getJobField(j, "role") ?? "")));
+    const role = ["", "owner", "editor", "viewer"]
+      .filter((v) => presentRoles.has(v))
+      .map((v) => ({ value: v, label: roleLabels[v] ?? v }));
+
     return {
       optimization_id: unique("optimization_id"),
       name: unique("name"),
+      username: unique("username", (v) =>
+        v.toLowerCase() === sessionUser.toLowerCase() ? msg("dashboard.owner.me") : v,
+      ),
+      role,
       status: unique("status", getStatusLabel),
       optimization_type: unique("optimization_type", getJobTypeLabel),
       module_name: unique("module_name"),
       optimizer_name: unique("optimizer_name"),
     };
-  }, [effectiveData]);
+  }, [effectiveData, sessionUser]);
 
   const chartData = useMemo(() => transformChartData(effectiveAnalytics), [effectiveAnalytics]);
 
@@ -273,6 +304,11 @@ export function DashboardView() {
       }),
     [effectiveData, filteredItems, counts, effectiveAnalytics, activeTab],
   );
+
+  // Owner/Role columns and the shared stat card only appear once the caller
+  // actually collaborates — a solo user's control panel stays unchanged.
+  const hasShared =
+    (counts?.shared ?? 0) > 0 || (effectiveData?.items.some((j) => Boolean(j.role)) ?? false);
 
   if (initialLoad && !effectiveData) {
     return <DashboardSkeleton />;
@@ -322,7 +358,8 @@ export function DashboardView() {
                   openFilter={openFilter}
                   setOpenFilter={setOpenFilter}
                   filterOptions={filterOptions}
-                  isAdmin={isAdmin}
+                  showSharedColumns={hasShared}
+                  sessionUser={sessionUser}
                   selectedIds={selectedIds}
                   toggleRowSelected={toggleRowSelected}
                   selectablePageIds={selectablePageIds}
@@ -332,7 +369,6 @@ export function DashboardView() {
                   pageOffset={pageOffset}
                   setPageOffset={setPageOffset}
                   onOpenJob={(id) => router.push(`/optimizations/${id}`)}
-                  onRequestDelete={setDeleteTarget}
                 />
               </TabsContent>
 
@@ -342,6 +378,7 @@ export function DashboardView() {
                   analyticsData={effectiveAnalytics}
                   chartData={chartData}
                   filters={analyticsFilters}
+                  sessionUser={sessionUser}
                 />
               </TabsContent>
 
@@ -350,7 +387,7 @@ export function DashboardView() {
         </FadeIn>
 
         <BulkActionBar
-          isAdmin={isAdmin}
+          canDelete={canBulkDelete}
           selectedCount={selectedIds.size}
           compareEligibleCount={compareEligibleIds.length}
           canCompare={canCompare}
@@ -359,10 +396,6 @@ export function DashboardView() {
           onRequestBulkDelete={() => setBulkDeleteOpen(true)}
         />
         <DeleteDialogs
-          deleteTarget={deleteTarget}
-          setDeleteTarget={setDeleteTarget}
-          deleting={deleting}
-          confirmDelete={confirmDelete}
           bulkDeleteOpen={bulkDeleteOpen}
           setBulkDeleteOpen={setBulkDeleteOpen}
           bulkDeleting={bulkDeleting}

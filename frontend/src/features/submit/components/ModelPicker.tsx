@@ -140,16 +140,22 @@ export function ModelPicker({
     if (discovered.length === 0) return filtered;
     const existingValues = new Set(filtered.map((m) => m.value));
     const discoveredEntries: EnrichedModel[] = discovered
-      .filter((id) => !existingValues.has(id))
-      .map((id) => ({
-        value: id,
-        label: id,
-        provider: "discovered",
-        supports_thinking: false,
-        supports_vision: false,
-        available: true,
-        fromDiscovery: true,
-      }));
+      .map((id) => {
+        // A bare id from an OpenAI-compatible endpoint (Ollama, vLLM, LM Studio,
+        // llama.cpp) needs the openai/ prefix so LiteLLM routes it to the custom
+        // base_url; ids that already carry it pass through unchanged.
+        const value = id.startsWith("openai/") ? id : `openai/${id}`;
+        return {
+          value,
+          label: id,
+          provider: "discovered",
+          supports_thinking: false,
+          supports_vision: false,
+          available: true,
+          fromDiscovery: true,
+        };
+      })
+      .filter((m) => !existingValues.has(m.value));
     return [...discoveredEntries, ...filtered];
   }, [catalog, discovered, providerFilter]);
 
@@ -180,9 +186,7 @@ export function ModelPicker({
     (groupKey: string): string => {
       const [slug = "", dataCenter = ""] = groupKey.split("\u0000");
       if (slug === "discovered")
-        return formatMsg("auto.features.submit.components.modelpicker.template.1", {
-          p1: discoverUrl ?? "",
-        });
+        return msg("auto.features.submit.components.modelpicker.template.1");
       const base = catalog?.providers.find((p) => p.slug === slug)?.label ?? slug;
       if (!dataCenter) return base;
       return formatMsg("auto.features.submit.components.modelpicker.template.2", {
@@ -190,7 +194,7 @@ export function ModelPicker({
         p2: dataCenter,
       });
     },
-    [catalog, discoverUrl],
+    [catalog],
   );
 
   const selectedModel = allModels.find((m) => m.value === value);

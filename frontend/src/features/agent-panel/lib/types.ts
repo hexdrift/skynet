@@ -29,6 +29,9 @@ export interface WizardState {
   job_type?: "run" | "grid_search";
   optimizer_name?: string;
   module_name?: string;
+  // React (ReAct-agent) run config (reward preset, tool source, replay
+  // mapping). Excludes the secret mcp_auth_header, which is never shared.
+  react_config?: Record<string, unknown>;
   dataset_columns?: string[];
   column_roles?: Record<string, string>;
   model_config?: Record<string, unknown>;

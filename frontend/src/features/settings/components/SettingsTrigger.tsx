@@ -3,6 +3,7 @@
 import { Settings } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { useSettingsModal } from "../hooks/use-settings-modal";
 
 interface SettingsTriggerProps {
@@ -14,15 +15,16 @@ export function SettingsTrigger({ collapsed = false }: SettingsTriggerProps) {
 
   if (collapsed) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground cursor-pointer transition-colors"
-        title={msg("settings.title")}
-        aria-label={msg("settings.open")}
-      >
-        <Settings className="size-4" />
-      </button>
+      <TooltipButton tooltip={msg("settings.title")} side="right">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground cursor-pointer transition-colors"
+          aria-label={msg("settings.open")}
+        >
+          <Settings className="size-4" />
+        </button>
+      </TooltipButton>
     );
   }
 

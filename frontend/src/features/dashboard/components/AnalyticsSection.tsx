@@ -36,8 +36,9 @@ export function AnalyticsSection({
         }}
       >
         <CardTitle className="text-base font-semibold flex items-center justify-between">
-          <span>{title}</span>
+          <span className="min-w-0">{title}</span>
           <motion.div
+            className="shrink-0"
             animate={{ rotate: isOpen ? 0 : 180 }}
             transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
           >
