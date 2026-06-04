@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -160,6 +160,71 @@ def test_get_next_job_fifo_ordering(worker: BackgroundWorker) -> None:
         worker.enqueue_job(f"opt-{i}")
     dequeued = [worker._get_next_job() for _ in range(5)]
     assert dequeued == [f"opt-{i}" for i in range(5)]
+
+
+class _ClaimCapableStore(FakeJobStore):
+    """``FakeJobStore`` variant exposing the atomic ``claim_next_job`` path."""
+
+    def __init__(self) -> None:
+        """Start with no claimable job and a zeroed claim counter."""
+        super().__init__()
+        self.claim_calls = 0
+        self.claimed_id: str | None = None
+
+    def claim_next_job(self, worker_id: str, lease_seconds: float) -> dict[str, Any] | None:
+        """Hand back the configured claimed job once, recording the call.
+
+        Args:
+            worker_id: Claiming worker identity (unused by the stub).
+            lease_seconds: Requested lease window (unused by the stub).
+
+        Returns:
+            A one-shot ``{"optimization_id": ...}`` record, or ``None`` when no
+            job is configured (simulating a row already claimed by a peer).
+        """
+        self.claim_calls += 1
+        if self.claimed_id is None:
+            return None
+        record = {"optimization_id": self.claimed_id}
+        self.claimed_id = None
+        return record
+
+
+def test_get_next_job_hint_routes_through_atomic_claim() -> None:
+    """A hinted job is picked up via the atomic claim, never returned raw.
+
+    Regression for the boot-race double-spawn: when the store supports
+    ``claim_next_job`` the in-memory hint must only wake the loop, with the
+    actual pickup going through the exclusive DB claim so a second worker thread
+    cannot re-grab the same still-pending row.
+    """
+    store = _ClaimCapableStore()
+    store.claimed_id = "opt-1"
+    worker = BackgroundWorker(job_store=cast(JobStore, store), num_workers=2, poll_interval=1.0)
+    worker.enqueue_job("opt-1")
+
+    result = worker._get_next_job()
+
+    assert result == "opt-1"
+    assert store.claim_calls == 1
+    assert "opt-1" not in worker._pending_jobs
+
+
+def test_get_next_job_hint_drops_when_row_already_claimed() -> None:
+    """A hinted job already claimed elsewhere yields ``None`` — no double pickup.
+
+    If the atomic claim finds nothing pending (the row was taken by a peer), the
+    drained hint must not cause the job to be processed locally as well.
+    """
+    store = _ClaimCapableStore()
+    worker = BackgroundWorker(job_store=cast(JobStore, store), num_workers=2, poll_interval=1.0)
+    worker.enqueue_job("opt-1")
+
+    result = worker._get_next_job()
+
+    assert result is None
+    assert store.claim_calls == 1
+    assert "opt-1" not in worker._pending_jobs
 
 
 def test_mark_job_done_removes_from_processing(worker: BackgroundWorker) -> None:

@@ -25,10 +25,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # TODO: On-prem / air-gap — set this to whatever LiteLLM identifier your
 # internal gateway exposes (e.g. "openai/<model>") and point
 # CODE_AGENT_BASE_URL / GENERALIST_AGENT_BASE_URL at the gateway via env.
-# The shipped default is Fireworks-hosted MiniMax M2p7 — pinned to
-# Fireworks (not OpenRouter) so tool-calling fidelity is consistent.
-# Requires FIREWORKS_AI_API_KEY in the env.
-DEFAULT_AGENT_MODEL_ID = "fireworks_ai/accounts/fireworks/models/minimax-m2p7"
+# The shipped default is OpenRouter-hosted MiniMax M3.
+# Requires OPENROUTER_API_KEY in the env.
+DEFAULT_AGENT_MODEL_ID = "openrouter/minimax/minimax-m3"
 
 
 class Settings(BaseSettings):
@@ -124,10 +123,39 @@ class Settings(BaseSettings):
     cancel_poll_interval: float = Field(
         default=1.0, ge=0.1, le=10.0, description="Seconds between cancel signal checks"
     )
+    lm_request_timeout_seconds: float = Field(
+        default=600.0,
+        ge=1.0,
+        le=3600.0,
+        description=(
+            "Per-request timeout (seconds) applied to every dspy.LM call so a stalled "
+            "provider response can't wedge a run forever on a socket read. Overridable "
+            "per-model via ModelConfig.extra['timeout']."
+        ),
+        alias="LM_REQUEST_TIMEOUT",
+    )
+    job_stall_timeout_seconds: float = Field(
+        default=1800.0,
+        ge=0.0,
+        description=(
+            "Watchdog: fail a running optimization whose subprocess emits no "
+            "progress/log/result event for this many seconds. Backstops a wedged child "
+            "that the lease heartbeat would otherwise keep alive indefinitely. Keep it "
+            "comfortably above the *retried* LM-call ceiling — build_language_model caps "
+            "num_retries so (retries + 1) * lm_request_timeout_seconds stays under this "
+            "with margin, so a hung call times out first; 0 disables the watchdog."
+        ),
+        alias="JOB_STALL_TIMEOUT",
+    )
     job_run_start_method: Literal["fork", "spawn", "forkserver"] = Field(
         default="fork", description="Multiprocessing start method for job execution"
     )
-    db_pool_size: int = Field(default=10, ge=1, le=200, description="SQLAlchemy pool size", alias="DB_POOL_SIZE")
+    # Ceiling (pool_size + max_overflow = 20 + 20 = 40) is aligned with
+    # Starlette's anyio threadpool width (40) so a burst of concurrent sync DB
+    # handlers can't exhaust the pool and stall on pool_timeout. Tune via
+    # DB_POOL_SIZE to keep total connections (× pod count) under the Postgres
+    # max_connections budget.
+    db_pool_size: int = Field(default=20, ge=1, le=200, description="SQLAlchemy pool size", alias="DB_POOL_SIZE")
     db_pool_max_overflow: int = Field(
         default=20,
         ge=0,
@@ -223,7 +251,7 @@ class Settings(BaseSettings):
         default=DEFAULT_AGENT_MODEL_ID,
         description=(
             "LiteLLM model id used by the submit-wizard code agent. "
-            "Defaults to DEFAULT_AGENT_MODEL_ID (Fireworks-hosted MiniMax M2p7); "
+            "Defaults to DEFAULT_AGENT_MODEL_ID (OpenRouter-hosted MiniMax M3); "
             "override via CODE_AGENT_MODEL for on-prem deployments."
         ),
     )
@@ -243,8 +271,8 @@ class Settings(BaseSettings):
         default=DEFAULT_AGENT_MODEL_ID,
         description=(
             "LiteLLM model id used by the generalist agent (Cmd/Ctrl+J "
-            "panel). Defaults to DEFAULT_AGENT_MODEL_ID (Fireworks-hosted "
-            "MiniMax M2p7); the shipped default emits <think> reasoning that "
+            "panel). Defaults to DEFAULT_AGENT_MODEL_ID (OpenRouter-hosted "
+            "MiniMax M3); the shipped default emits <think> reasoning that "
             "streams visibly to the chat UI."
         ),
     )
@@ -306,8 +334,8 @@ class Settings(BaseSettings):
     embeddings_enabled: bool = Field(
         default=True,
         description=(
-            "Master switch for the explore-map embedding pipeline. "
-            "Off = no rows are written to job_embeddings and the map renders empty."
+            "Master switch for the explore search embedding pipeline. "
+            "Off = no rows are written to job_embeddings and explore falls back to lexical search."
         ),
     )
 

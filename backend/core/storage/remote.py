@@ -13,10 +13,10 @@ from typing import Any, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from sqlalchemy import Engine, create_engine, func, or_, text
+from sqlalchemy import Engine, case, create_engine, func, or_, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, defer, sessionmaker
 
 from ..config import settings
 from ..constants import STRUCTURAL_PROGRESS_EVENTS, TQDM_KEY_PREFIX
@@ -28,6 +28,7 @@ from .models import (
     JobEmbeddingModel,
     JobModel,
     LogEntryModel,
+    OptimizationShareGrantModel,
     ProgressEventModel,
     UserQuotaAuditModel,
     UserQuotaOverrideModel,
@@ -52,10 +53,21 @@ def _build_connect_args(db_url: str) -> dict[str, Any]:
         Keyword arguments passed through SQLAlchemy to the DBAPI connect call.
     """
     connect_args: dict[str, Any] = {"options": "-c timezone=UTC"}
+    driver = make_url(db_url).drivername
+    # libpq-based drivers honour TCP keepalive params so a connection silently
+    # dropped by a load balancer / NAT idle timeout is detected and recycled
+    # instead of surfacing as a stall on the next checkout from the pool.
+    if driver in {"postgresql", "postgresql+psycopg2", "postgresql+psycopg", "postgresql+psycopg3"}:
+        connect_args.update(
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5,
+        )
+
     if not settings.db_pgbouncer_transaction_mode:
         return connect_args
 
-    driver = make_url(db_url).drivername
     if driver in {"postgresql+psycopg", "postgresql+psycopg3"}:
         connect_args["prepare_threshold"] = None
     elif driver == "postgresql+asyncpg":
@@ -233,11 +245,16 @@ class RemoteDBJobStore:
         """
         return self._session_factory()
 
-    def _job_to_dict(self, job: JobModel) -> JobRecord:
+    def _job_to_dict(self, job: JobModel, *, include_payload: bool = True) -> JobRecord:
         """Convert a JobModel ORM instance to its TypedDict representation.
 
         Args:
             job: SQLAlchemy ORM row to serialize.
+            include_payload: When ``False``, the (potentially multi-MB) ``payload``
+                JSONB is reported as ``None`` instead of being read off the row.
+                List/SSE paths pass ``False`` so the column is never materialized;
+                callers that defer it on the query (see :meth:`_rows_with_counts`)
+                avoid the DB read entirely.
 
         Returns:
             A ``JobRecord`` with ISO-formatted timestamps and JSON columns
@@ -256,7 +273,7 @@ class RemoteDBJobStore:
                 "latest_metrics": job.latest_metrics or {},
                 "result": job.result,
                 "payload_overview": job.payload_overview or {},
-                "payload": job.payload,
+                "payload": job.payload if include_payload else None,
                 "username": job.username,
                 "optimization_type": job.optimization_type,
                 "attempts": job.attempts,
@@ -442,6 +459,39 @@ class RemoteDBJobStore:
             if not job:
                 raise KeyError(f"Job '{optimization_id}' not found")
             return self._job_to_dict(job)
+        finally:
+            session.close()
+
+    def get_job_status_fields(self, optimization_id: str) -> JobRecord:
+        """Retrieve only the live-polling fields for a job.
+
+        Selects ``status`` / ``message`` / ``latest_metrics`` directly so the
+        per-job SSE loop can poll every few seconds without re-reading the
+        ``payload`` JSONB that :meth:`get_job` materializes.
+
+        Args:
+            optimization_id: ID of the job to read.
+
+        Returns:
+            A partial ``JobRecord`` with ``status``, ``message`` and
+            ``latest_metrics``.
+
+        Raises:
+            KeyError: When the job does not exist.
+        """
+        session = self._get_session()
+        try:
+            row = (
+                session.query(JobModel.status, JobModel.message, JobModel.latest_metrics)
+                .filter(JobModel.optimization_id == optimization_id)
+                .first()
+            )
+            if row is None:
+                raise KeyError(f"Job '{optimization_id}' not found")
+            return cast(
+                JobRecord,
+                {"status": row[0], "message": row[1], "latest_metrics": row[2] or {}},
+            )
         finally:
             session.close()
 
@@ -1168,50 +1218,48 @@ class RemoteDBJobStore:
             if excess <= 0:
                 return
 
-            old_ids = [
-                row[0]
-                for row in session.query(ProgressEventModel.id)
+            # One ordered DELETE replaces the prior count→select→top-up→delete
+            # round trips. Structural events sort last (flag 1) so they are
+            # evicted only when non-structural rows alone cannot cover the
+            # excess — identical preference to the old two-phase selection.
+            structural_last = case(
+                (ProgressEventModel.event.in_(STRUCTURAL_PROGRESS_EVENTS), 1),
+                else_=0,
+            )
+            old_ids = (
+                session.query(ProgressEventModel.id)
                 .filter(ProgressEventModel.optimization_id == optimization_id)
-                .filter(ProgressEventModel.event.notin_(STRUCTURAL_PROGRESS_EVENTS))
-                .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
+                .order_by(structural_last.asc(), ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
                 .limit(excess)
-                .all()
-            ]
-            if len(old_ids) < excess:
-                old_ids.extend(
-                    row[0]
-                    for row in session.query(ProgressEventModel.id)
-                    .filter(ProgressEventModel.optimization_id == optimization_id)
-                    .filter(ProgressEventModel.id.notin_(old_ids))
-                    .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
-                    .limit(excess - len(old_ids))
-                    .all()
-                )
-            if old_ids:
-                session.query(ProgressEventModel).filter(ProgressEventModel.id.in_(old_ids)).delete(
-                    synchronize_session=False
-                )
-                session.commit()
+            )
+            session.query(ProgressEventModel).filter(
+                ProgressEventModel.id.in_(old_ids.scalar_subquery())
+            ).delete(synchronize_session=False)
+            session.commit()
         finally:
             session.close()
 
-    def get_progress_events(self, optimization_id: str) -> list[ProgressEventRecord]:
-        """Retrieve all progress events for a job in chronological order.
+    def get_progress_events(self, optimization_id: str, *, since: int = 0) -> list[ProgressEventRecord]:
+        """Retrieve progress events for a job in chronological order.
 
         Args:
             optimization_id: ID of the job to inspect.
+            since: Number of leading events to skip, for tail (delta) fetches;
+                ``0`` returns the full history.
 
         Returns:
-            Events ordered oldest-first.
+            Events ordered oldest-first, starting at offset ``since``.
         """
         session = self._get_session()
         try:
-            events = (
+            query = (
                 session.query(ProgressEventModel)
                 .filter(ProgressEventModel.optimization_id == optimization_id)
                 .order_by(ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
-                .all()
             )
+            if since > 0:
+                query = query.offset(since)
+            events = query.all()
             return [
                 cast(
                     ProgressEventRecord,
@@ -1271,8 +1319,16 @@ class RemoteDBJobStore:
         ts = timestamp or datetime.now(UTC)
         session = self._get_session()
         try:
-            job = session.query(JobModel).filter(JobModel.optimization_id == optimization_id).with_for_update().first()
-            if job is None:
+            # An existence probe, not a critical section: appends are independent
+            # inserts, so the per-job row lock only serialized writers and starved
+            # the connection pool under concurrent log bursts. The cap eviction
+            # below tolerates a transient over-count without correctness loss.
+            exists = (
+                session.query(JobModel.optimization_id)
+                .filter(JobModel.optimization_id == optimization_id)
+                .first()
+            )
+            if exists is None:
                 logger.warning("Discarding log entry for missing job %s", optimization_id)
                 return
 
@@ -1394,7 +1450,7 @@ class RemoteDBJobStore:
         """
         session = self._get_session()
         try:
-            q = session.query(JobModel).order_by(JobModel.created_at.desc())
+            q = session.query(JobModel).options(defer(JobModel.payload)).order_by(JobModel.created_at.desc())
             if status:
                 q = q.filter(JobModel.status == status)
             if username:
@@ -1402,54 +1458,212 @@ class RemoteDBJobStore:
             if optimization_type:
                 q = q.filter(JobModel.optimization_type == optimization_type)
             jobs = q.offset(offset).limit(limit).all()
-            optimization_ids = [j.optimization_id for j in jobs]
+            return self._rows_with_counts(session, jobs)
+        finally:
+            session.close()
 
-            progress_counts: dict[str, int] = (
-                {
-                    row[0]: row[1]
-                    for row in session.query(ProgressEventModel.optimization_id, func.count())
-                    .filter(ProgressEventModel.optimization_id.in_(optimization_ids))
-                    .group_by(ProgressEventModel.optimization_id)
-                    .all()
-                }
-                if optimization_ids
-                else {}
-            )
-            log_counts: dict[str, int] = (
-                {
-                    row[0]: row[1]
-                    for row in session.query(LogEntryModel.optimization_id, func.count())
-                    .filter(LogEntryModel.optimization_id.in_(optimization_ids))
-                    .group_by(LogEntryModel.optimization_id)
-                    .all()
-                }
-                if optimization_ids
-                else {}
-            )
+    def _rows_with_counts(self, session, jobs: list[JobModel]) -> list[JobRecord]:
+        """Fold progress/log counts and summary text into job rows.
 
-            summary_texts: dict[str, str | None] = (
-                {
-                    row[0]: row[1]
-                    for row in session.query(
-                        JobEmbeddingModel.optimization_id,
-                        JobEmbeddingModel.summary_text,
-                    )
-                    .filter(JobEmbeddingModel.optimization_id.in_(optimization_ids))
-                    .all()
-                }
-                if optimization_ids
-                else {}
-            )
+        Two aggregate queries (plus the embedding lookup) keyed on the page's
+        ``optimization_ids`` so each row carries ``progress_count`` /
+        ``log_count`` / ``summary_text`` without an N-per-row round trip. Shared
+        by :meth:`list_jobs` and :meth:`list_jobs_shared_with`.
 
-            result: list[JobRecord] = []
-            for j in jobs:
-                d = self._job_to_dict(j)
-                oid = str(j.optimization_id)
-                d["progress_count"] = progress_counts.get(oid, 0)
-                d["log_count"] = log_counts.get(oid, 0)
-                d["summary_text"] = summary_texts.get(oid)
-                result.append(d)
-            return result
+        Args:
+            session: The open session the ``jobs`` were loaded on.
+            jobs: The page of ``JobModel`` rows to enrich.
+
+        Returns:
+            The rows as ``JobRecord`` dicts with the folded counts.
+        """
+        optimization_ids = [j.optimization_id for j in jobs]
+        progress_counts: dict[str, int] = (
+            {
+                row[0]: row[1]
+                for row in session.query(ProgressEventModel.optimization_id, func.count())
+                .filter(ProgressEventModel.optimization_id.in_(optimization_ids))
+                .group_by(ProgressEventModel.optimization_id)
+                .all()
+            }
+            if optimization_ids
+            else {}
+        )
+        log_counts: dict[str, int] = (
+            {
+                row[0]: row[1]
+                for row in session.query(LogEntryModel.optimization_id, func.count())
+                .filter(LogEntryModel.optimization_id.in_(optimization_ids))
+                .group_by(LogEntryModel.optimization_id)
+                .all()
+            }
+            if optimization_ids
+            else {}
+        )
+        summary_texts: dict[str, str | None] = (
+            {
+                row[0]: row[1]
+                for row in session.query(
+                    JobEmbeddingModel.optimization_id,
+                    JobEmbeddingModel.summary_text,
+                )
+                .filter(JobEmbeddingModel.optimization_id.in_(optimization_ids))
+                .all()
+            }
+            if optimization_ids
+            else {}
+        )
+        result: list[JobRecord] = []
+        for j in jobs:
+            d = self._job_to_dict(j, include_payload=False)
+            oid = str(j.optimization_id)
+            d["progress_count"] = progress_counts.get(oid, 0)
+            d["log_count"] = log_counts.get(oid, 0)
+            d["summary_text"] = summary_texts.get(oid)
+            result.append(d)
+        return result
+
+    def list_jobs_shared_with(
+        self, username: str, *, limit: int = 50, offset: int = 0
+    ) -> list[JobRecord]:
+        """List jobs shared with ``username`` via a member grant, newest first.
+
+        Joins ``optimization_share_grants`` on ``grantee_username`` so a member
+        sees runs they were invited to but do not own. The same count-folding as
+        :meth:`list_jobs` is applied; the grant role is not attached here (the
+        caller resolves roles for the page via
+        :func:`core.api.sharing_access.list_grants_for_user`).
+
+        Args:
+            username: Grantee username (compared case-insensitively).
+            limit: Maximum number of rows to return.
+            offset: Number of rows to skip from the start.
+
+        Returns:
+            Matching ``JobRecord`` rows in newest-first order.
+        """
+        normalized = username.strip().lower()
+        session = self._get_session()
+        try:
+            jobs = (
+                session.query(JobModel)
+                .options(defer(JobModel.payload))
+                .join(
+                    OptimizationShareGrantModel,
+                    OptimizationShareGrantModel.optimization_id == JobModel.optimization_id,
+                )
+                .filter(OptimizationShareGrantModel.grantee_username == normalized)
+                .order_by(JobModel.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return self._rows_with_counts(session, jobs)
+        finally:
+            session.close()
+
+    def count_jobs_shared_with(self, username: str) -> int:
+        """Count jobs shared with ``username`` via a member grant.
+
+        Args:
+            username: Grantee username (compared case-insensitively).
+
+        Returns:
+            Number of optimizations the user holds a grant on.
+        """
+        normalized = username.strip().lower()
+        session = self._get_session()
+        try:
+            return (
+                session.query(func.count(OptimizationShareGrantModel.optimization_id))
+                .join(
+                    JobModel,
+                    OptimizationShareGrantModel.optimization_id == JobModel.optimization_id,
+                )
+                .filter(OptimizationShareGrantModel.grantee_username == normalized)
+                .scalar()
+                or 0
+            )
+        finally:
+            session.close()
+
+    def list_jobs_visible_to(
+        self,
+        username: str,
+        *,
+        status: str | None = None,
+        optimization_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[JobRecord]:
+        """List jobs the caller owns or was granted access to, newest first.
+
+        Unions the caller's own jobs with jobs shared to them via a member
+        grant (Drive-style sharing), de-duplicated, ordered newest-first and
+        paginated as a single set. Powers the unified control panel, where a
+        collaborator sees their own runs and runs shared with them together.
+
+        Args:
+            username: The caller. Owned rows match exactly (mirroring
+                :meth:`list_jobs`); grant rows match case-insensitively
+                because grants store a lowercased grantee.
+            status: Restrict to jobs with this status when set.
+            optimization_type: Restrict to a particular run type when set.
+            limit: Maximum number of rows to return.
+            offset: Number of rows to skip from the start.
+
+        Returns:
+            Matching ``JobRecord`` rows in newest-first order with
+            ``progress_count`` / ``log_count`` / ``summary_text`` folded in.
+        """
+        normalized = username.strip().lower()
+        session = self._get_session()
+        try:
+            grant_ids = session.query(OptimizationShareGrantModel.optimization_id).filter(
+                OptimizationShareGrantModel.grantee_username == normalized
+            )
+            q = session.query(JobModel).options(defer(JobModel.payload)).filter(
+                or_(JobModel.username == username, JobModel.optimization_id.in_(grant_ids))
+            )
+            if status:
+                q = q.filter(JobModel.status == status)
+            if optimization_type:
+                q = q.filter(JobModel.optimization_type == optimization_type)
+            jobs = q.order_by(JobModel.created_at.desc()).offset(offset).limit(limit).all()
+            return self._rows_with_counts(session, jobs)
+        finally:
+            session.close()
+
+    def count_jobs_visible_to(
+        self, username: str, *, status: str | None = None, optimization_type: str | None = None
+    ) -> int:
+        """Count jobs the caller owns or was granted access to.
+
+        The union counterpart of :meth:`list_jobs_visible_to`; matching rules
+        are identical.
+
+        Args:
+            username: The caller (owned exact, grants case-insensitive).
+            status: Restrict count to this status when set.
+            optimization_type: Restrict count to this run type when set.
+
+        Returns:
+            Number of optimizations visible to the caller under the filters.
+        """
+        normalized = username.strip().lower()
+        session = self._get_session()
+        try:
+            grant_ids = session.query(OptimizationShareGrantModel.optimization_id).filter(
+                OptimizationShareGrantModel.grantee_username == normalized
+            )
+            q = session.query(func.count(JobModel.optimization_id)).filter(
+                or_(JobModel.username == username, JobModel.optimization_id.in_(grant_ids))
+            )
+            if status:
+                q = q.filter(JobModel.status == status)
+            if optimization_type:
+                q = q.filter(JobModel.optimization_type == optimization_type)
+            return q.scalar() or 0
         finally:
             session.close()
 

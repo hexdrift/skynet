@@ -29,6 +29,23 @@ class OptimizedPredictor(BaseModel):
     )
 
 
+# Tool-level overlay carried by a react ``POST /run`` artifact: the optimized
+# per-tool descriptions and arg descriptions, the schema-hash snapshot the seed
+# program was built against, the ReActV2 loop budget, and the originating tool
+# source. Phase B persists this alongside the program state so a served react
+# bundle can reconstruct its tool surface.
+class ReactOverlay(BaseModel):
+    tool_descriptions: dict[str, str] = Field(default_factory=dict)
+    tool_arg_descriptions: dict[str, dict[str, str]] = Field(default_factory=dict)
+    tool_schema_hashes: dict[str, str] = Field(default_factory=dict)
+    max_iters: int
+    tool_source: dict[str, Any] | None = None
+    # GEPA-proposed agent-facing display names, ``{canonical: proposed}``. Serve
+    # renames the re-sourced canonical tools to these AFTER drift-check + desc/arg
+    # overlays. None (the default) preserves pre-rename behavior exactly.
+    tool_names: dict[str, str] | None = Field(default=None)
+
+
 class ProgramArtifact(BaseModel):
     """Serializable payload that carries the optimized DSPy program files."""
 
@@ -59,4 +76,12 @@ class ProgramArtifact(BaseModel):
     optimized_prompt: OptimizedPredictor | None = Field(
         default=None,
         description="Extracted prompt and demos from the compiled program predictor.",
+    )
+    react_overlay: ReactOverlay | None = Field(
+        default=None,
+        description=(
+            "Tool-level overlay for a react run: optimized tool/arg descriptions, "
+            "the schema-hash snapshot, and the ReActV2 loop budget. Unset for "
+            "non-react artifacts."
+        ),
     )

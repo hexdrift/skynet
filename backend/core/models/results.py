@@ -28,6 +28,26 @@ class LMActivity(BaseModel):
     reflection: dict[str, LMStageStats] = Field(default_factory=dict)
 
 
+# Paired-bootstrap acceptance statistics for a ReAct run. Mirrors
+# training_ground/types.py PairedBootstrapResult by value — a fresh model
+# is defined here (not imported) so the OpenAPI contract owns its own shape.
+# Pydantic class docstrings are part of that contract, so the annotation
+# lives in a comment, not the class body.
+class PairedBootstrap(BaseModel):
+    resamples: int
+    mean_delta: float
+    ci95_lower: float
+    ci95_upper: float
+
+
+# Advisory §11 promotion verdict for a ReAct run. Mirrors the CLI's
+# _PromotionVerdict by value; carried on the wire as a contract-owned model
+# (see the PairedBootstrap comment for why the docstring lives here).
+class Promotion(BaseModel):
+    promotable: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
 class RunResponse(BaseModel):
     """Result of a single optimization run."""
 
@@ -38,6 +58,9 @@ class RunResponse(BaseModel):
     baseline_test_metric: float | None = None
     optimized_test_metric: float | None = None
     metric_improvement: float | None = None
+    objective_scores: dict[str, float] | None = None
+    paired_bootstrap: PairedBootstrap | None = None
+    promotion: Promotion | None = None
     optimization_metadata: dict[str, Any] = Field(default_factory=dict)
     details: dict[str, Any] = Field(default_factory=dict)
     program_artifact_path: str | None = None
