@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { searchPublicDashboard, type SearchResult } from "@/shared/lib/api";
+import { searchPublicDashboard, type SearchResult, type SearchSort } from "@/shared/lib/api";
 
-export type ExploreView = "list" | "map";
 export type ExploreCorpus = "mine" | "public";
 export type SearchType = "semantic" | "lexical";
 
@@ -22,16 +21,19 @@ export interface SearchQueryState {
   /** ISO date (YYYY-MM-DD), inclusive. */
   dateFrom: string | null;
   dateTo: string | null;
-  /** Which view is shown: ranked list or scatter map. */
-  view: ExploreView;
   /** Which corpus to search: the user's own jobs or other users' public jobs. */
   corpus: ExploreCorpus;
+  /**
+   * Result ordering. Resolved to a concrete value (never "auto"): with a
+   * query the default is "relevance"; with an empty query it falls back to
+   * "recent" since there is nothing to rank by.
+   */
+  sort: SearchSort;
 }
 
 export interface SearchResponseState {
   results: SearchResult[];
   total: number;
-  matchedIds: Set<string>;
   loading: boolean;
   error: string | null;
   /** True when the user has typed anything or applied any filter. */
@@ -41,15 +43,21 @@ export interface SearchResponseState {
 }
 
 const VALID_SIZES = new Set([10, 30, 50]);
-const VALID_VIEWS = new Set<ExploreView>(["list", "map"]);
 const VALID_CORPORA = new Set<ExploreCorpus>(["mine", "public"]);
+const VALID_SORTS = new Set<SearchSort>(["relevance", "recent", "gain"]);
 
 const DEFAULT_SIZE = 30;
 const DEFAULT_PAGE = 1;
-const DEFAULT_VIEW: ExploreView = "list";
 const DEFAULT_CORPUS: ExploreCorpus = "public";
 
-const DEBOUNCE_MS = 150;
+/**
+ * The sort the UI defaults to for a given query. "relevance" only makes
+ * sense when there's a query to rank against — the backend rejects an empty
+ * query under relevance — so an empty query falls back to "recent".
+ */
+function autoSort(text: string): SearchSort {
+  return text.trim() ? "relevance" : "recent";
+}
 
 function parseCsv(value: string | null): string[] {
   if (!value) return [];
@@ -62,10 +70,15 @@ function parseCsv(value: string | null): string[] {
 function readState(params: URLSearchParams): SearchQueryState {
   const sizeRaw = Number.parseInt(params.get("size") ?? "", 10);
   const pageRaw = Number.parseInt(params.get("page") ?? "", 10);
-  const viewRaw = params.get("view") as ExploreView | null;
   const corpusRaw = params.get("corpus") as ExploreCorpus | null;
+  const text = params.get("q") ?? "";
+  const sortRaw = params.get("sort") as SearchSort | null;
+  let sort = sortRaw && VALID_SORTS.has(sortRaw) ? sortRaw : autoSort(text);
+  // A stale ``sort=relevance`` left over from a since-cleared query would be
+  // rejected by the backend; coerce it back to recency.
+  if (!text.trim() && sort === "relevance") sort = "recent";
   return {
-    text: params.get("q") ?? "",
+    text,
     size: VALID_SIZES.has(sizeRaw) ? sizeRaw : DEFAULT_SIZE,
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : DEFAULT_PAGE,
     models: parseCsv(params.get("models")),
@@ -73,9 +86,9 @@ function readState(params: URLSearchParams): SearchQueryState {
     types: parseCsv(params.get("types")),
     dateFrom: params.get("from"),
     dateTo: params.get("to"),
-    view: viewRaw && VALID_VIEWS.has(viewRaw) ? viewRaw : DEFAULT_VIEW,
     corpus:
       corpusRaw && VALID_CORPORA.has(corpusRaw) ? corpusRaw : DEFAULT_CORPUS,
+    sort,
   };
 }
 
@@ -93,7 +106,7 @@ export interface SearchActions {
   setText: (value: string) => void;
   setPage: (page: number) => void;
   setSize: (size: number) => void;
-  setView: (view: ExploreView) => void;
+  setSort: (sort: SearchSort) => void;
   setCorpus: (corpus: ExploreCorpus) => void;
   toggleModel: (model: string) => void;
   toggleOptimizer: (optimizer: string) => void;
@@ -131,7 +144,6 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
   const [response, setResponse] = React.useState<SearchResponseState>({
     results: [],
     total: 0,
-    matchedIds: new Set(),
     loading: false,
     error: null,
     isActive: false,
@@ -182,19 +194,18 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
           else p.set("size", String(size));
         }, { resetPage: true }),
 
-      setView: (view: ExploreView) =>
+      setSort: (sort: SearchSort) =>
         updateUrl((p) => {
-          if (view === DEFAULT_VIEW) p.delete("view");
-          else p.set("view", view);
-        }),
+          // Only persist a non-default choice so the URL stays clean and the
+          // auto relevance↔recent flip keeps working when the query changes.
+          if (sort === autoSort(p.get("q") ?? "")) p.delete("sort");
+          else p.set("sort", sort);
+        }, { resetPage: true }),
 
       setCorpus: (corpus: ExploreCorpus) =>
         updateUrl((p) => {
           if (corpus === DEFAULT_CORPUS) p.delete("corpus");
           else p.set("corpus", corpus);
-          // Mine doesn't have map projections — snap back to list view so a
-          // returning user doesn't land on an empty map.
-          if (corpus === "mine") p.delete("view");
         }, { resetPage: true }),
 
       toggleModel: (model: string) => {
@@ -272,7 +283,7 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
           optimization_types: query.types.length ? query.types : undefined,
           date_from: query.dateFrom ?? undefined,
           date_to: query.dateTo ?? undefined,
-          sort: "relevance",
+          sort: query.sort,
           page: query.page,
           size: query.size,
           owner_username: ownerUsername,
@@ -283,7 +294,6 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
       setResponse({
         results: data.results,
         total: data.total,
-        matchedIds: new Set(data.matched_ids),
         loading: false,
         error: null,
         isActive: active,
@@ -295,7 +305,6 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
       setResponse({
         results: [],
         total: 0,
-        matchedIds: new Set(),
         loading: false,
         error: null,
         isActive: active,
@@ -324,9 +333,11 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
       }
     };
 
-    const handle = window.setTimeout(run, DEBOUNCE_MS);
+    // Typing is already debounced upstream in SearchBar, and every other
+    // trigger (filters, corpus, sort, page) is a discrete click — so fire the
+    // request immediately and rely on AbortController to drop the stale one.
+    void run();
     return () => {
-      window.clearTimeout(handle);
       controller.abort();
     };
   }, [query, sessionUser]);

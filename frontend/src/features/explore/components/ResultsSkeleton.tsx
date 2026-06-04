@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Skeleton } from "@/shared/ui/skeleton";
 
 interface ResultsSkeletonProps {
   /** Number of placeholder rows to render. */
@@ -14,27 +15,33 @@ interface ResultsSkeletonProps {
  */
 export function ResultsSkeleton({ rows = 4 }: ResultsSkeletonProps) {
   return (
-    <ul
-      dir="rtl"
-      aria-hidden="true"
-      className="divide-y divide-border/55 animate-pulse"
-    >
+    <ul dir="rtl" aria-hidden="true" className="divide-y divide-border/55">
       {Array.from({ length: rows }).map((_, i) => (
-        <li key={i} className="flex flex-col gap-2 px-1 py-5">
-          <div className="flex items-start justify-between gap-4">
-            <div
-              className="h-4 rounded bg-foreground/10"
-              style={{ width: `${50 + ((i * 13) % 30)}%` }}
-            />
-            <div className="h-4 w-16 shrink-0 rounded bg-foreground/[0.06]" />
+        <li key={i} className="flex flex-col gap-2 rounded-lg px-3 py-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <div className="min-w-0 flex-1" style={{ maxWidth: `${50 + ((i * 13) % 30)}%` }}>
+              <Skeleton height={16} borderRadius={4} />
+            </div>
+            <div className="w-16 shrink-0">
+              <Skeleton height={14} borderRadius={9999} />
+            </div>
           </div>
-          <div className="h-3 max-w-[68%] rounded bg-foreground/[0.07]" />
-          <div className="h-3 max-w-[40%] rounded bg-foreground/[0.05]" />
-          <div className="mt-1 flex items-center gap-3">
-            <div className="h-2.5 w-20 rounded bg-foreground/[0.06]" />
-            <div className="h-2.5 w-24 rounded bg-foreground/[0.06]" />
-            <div className="h-2.5 w-16 rounded bg-foreground/[0.06]" />
-            <div className="ms-auto h-2.5 w-14 rounded bg-foreground/[0.05]" />
+          <div className="max-w-[72ch]">
+            <Skeleton height={13} count={2} borderRadius={4} />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="w-20">
+              <Skeleton height={12} borderRadius={9999} />
+            </div>
+            <div className="w-24">
+              <Skeleton height={12} borderRadius={4} />
+            </div>
+            <div className="w-16">
+              <Skeleton height={12} borderRadius={4} />
+            </div>
+            <div className="ms-auto w-14">
+              <Skeleton height={12} borderRadius={4} />
+            </div>
           </div>
         </li>
       ))}

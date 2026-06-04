@@ -4,15 +4,15 @@ import * as React from "react";
 import { motion } from "framer-motion";
 import {
   Globe,
-  List,
-  Map,
+  Loader2,
   SlidersHorizontal,
   User,
   X,
 } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
-import type { ExploreCorpus, ExploreView } from "../hooks/use-semantic-search";
+import type { ExploreCorpus } from "../hooks/use-semantic-search";
+import { SearchSuggestions } from "./SearchSuggestions";
 
 const PILL_TRANSITION = { type: "tween", duration: 0.18, ease: [0.22, 1, 0.36, 1] } as const;
 
@@ -21,28 +21,42 @@ interface SearchBarProps {
   text: string;
   /** Fires on debounced typing pause, explicit Enter, or clear. */
   onSubmit: (next: string) => void;
-  view: ExploreView;
-  onViewChange: (next: ExploreView) => void;
   corpus: ExploreCorpus;
   onCorpusChange: (next: ExploreCorpus) => void;
   /** Hides Mine when no logged-in user — server-rendered fallback. */
   mineEnabled: boolean;
   filtersCount: number;
   onOpenFilters: () => void;
+  /** True while a search request is in flight — drives the inline spinner. */
+  loading: boolean;
+  /**
+   * Result keyboard-nav handler (↑/↓/Enter/Escape). Called first on keydown;
+   * returns true when it consumed the event so the input skips its defaults.
+   */
+  onResultKeyDown: (event: React.KeyboardEvent) => boolean;
+  /** Index of the keyboard-highlighted result, or -1 — drives aria + panel. */
+  activeResultIndex: number;
+  /** Recently-used queries shown when the field is focused and empty. */
+  recentQueries: string[];
+  onClearRecent: () => void;
+  /** Trending public queries (ranked server-side) shown alongside recent queries. */
+  suggestions: string[];
 }
 
-// Wait this long after the user stops typing before firing onSubmit. Sized
-// for the embedding API (Jina v4): long enough that a quick burst of
-// keystrokes collapses to one request, short enough that the result lands
-// while the user's attention is still on the field.
-const TYPING_DEBOUNCE_MS = 400;
+// Wait this long after the user stops typing before committing the query.
+// This is the *only* debounce on the path (the fetch fires immediately off
+// the committed value), so it's tuned to the 250–300ms sweet spot for
+// server-backed search: a burst of keystrokes collapses to one request, yet
+// results land while the user's attention is still on the field. Enter
+// bypasses the wait entirely.
+const TYPING_DEBOUNCE_MS = 250;
 
 /**
  * The page's center of gravity. A segmented corpus toggle sits on top so the
  * user can pick where to search (their own jobs vs other users' public ones),
- * and the rounded input surface below carries the free-text query, view
- * toggle, and filters affordance. Keyboard: pressing "/" anywhere focuses
- * the input; Enter fires the search immediately.
+ * and the rounded input surface below carries the free-text query and
+ * filters affordance. Keyboard: pressing "/" anywhere focuses the input;
+ * Enter fires the search immediately.
  *
  * Typing into the input auto-submits after a short pause so the embedding
  * API isn't hammered with one request per keystroke — Enter exists as an
@@ -51,21 +65,37 @@ const TYPING_DEBOUNCE_MS = 400;
 export function SearchBar({
   text,
   onSubmit,
-  view,
-  onViewChange,
   corpus,
   onCorpusChange,
   mineEnabled,
   filtersCount,
   onOpenFilters,
+  loading,
+  onResultKeyDown,
+  activeResultIndex,
+  recentQueries,
+  onClearRecent,
+  suggestions,
 }: SearchBarProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = React.useState(text);
+  const [focused, setFocused] = React.useState(false);
   React.useEffect(() => {
     setDraft(text);
   }, [text]);
   const inputDir = detectInputDir(draft);
   const isActive = text.trim().length > 0 || filtersCount > 0;
+
+  // The suggestions dropdown only competes for attention on a blank field;
+  // once the user starts arrowing through results (activeResultIndex >= 0) it
+  // yields so the two affordances never overlap.
+  const activeResultId =
+    activeResultIndex >= 0 ? `explore-result-${activeResultIndex}` : undefined;
+  const suggestOpen =
+    focused &&
+    draft.trim().length === 0 &&
+    activeResultIndex < 0 &&
+    (recentQueries.length > 0 || suggestions.length > 0);
 
   // Debounce typing into committed submissions. Compare against the
   // already-committed ``text`` so a draft that already matches the URL
@@ -88,6 +118,16 @@ export function SearchBar({
     inputRef.current?.focus();
   }, [onSubmit]);
 
+  const selectSuggestion = React.useCallback(
+    (value: string) => {
+      setDraft(value);
+      onSubmit(value);
+      // Blur to dismiss the panel; the committed value stays in the field.
+      inputRef.current?.blur();
+    },
+    [onSubmit],
+  );
+
   // "/" focuses the input from anywhere on the page (Google's shortcut).
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -102,10 +142,6 @@ export function SearchBar({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // When the corpus is "mine", the scatter map has no projected coordinates,
-  // so hiding the view toggle keeps the user out of a guaranteed-empty state.
-  const showViewToggle = corpus === "public";
 
   return (
     <div dir="rtl" data-tutorial="explore-search" className="mx-auto flex w-full max-w-3xl flex-col gap-2.5">
@@ -130,17 +166,34 @@ export function SearchBar({
           spellCheck={false}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
+            if (onResultKeyDown(e)) return;
             if (e.key === "Enter") {
               e.preventDefault();
               submitDraft();
+            } else if (e.key === "Escape") {
+              if (draft) clearAll();
+              else inputRef.current?.blur();
             }
           }}
           placeholder={msg("explore.search.placeholder")}
           aria-label={msg("explore.search.aria")}
+          aria-busy={loading}
+          aria-controls="explore-results"
+          aria-activedescendant={activeResultId}
           style={{ textAlign: inputDir === "rtl" ? "right" : "left" }}
           className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[15px] tracking-tight text-foreground placeholder:text-foreground/40 focus:outline-none"
         />
+        {loading && (
+          <span
+            className="inline-flex size-8 shrink-0 items-center justify-center"
+            aria-hidden="true"
+          >
+            <Loader2 className="size-4 animate-spin text-foreground/40" />
+          </span>
+        )}
         {draft.length > 0 && (
           <button
             type="button"
@@ -167,11 +220,13 @@ export function SearchBar({
             </span>
           )}
         </button>
-        {showViewToggle && (
-          <>
-            <span aria-hidden="true" className="mx-1 h-6 w-px bg-border/80" />
-            <ViewToggle value={view} onChange={onViewChange} />
-          </>
+        {suggestOpen && (
+          <SearchSuggestions
+            recent={recentQueries}
+            suggestions={suggestions}
+            onSelect={selectSuggestion}
+            onClearRecent={onClearRecent}
+          />
         )}
       </div>
       <div className="mx-1 flex items-center justify-end gap-3 text-[12px] text-foreground/55">
@@ -293,72 +348,5 @@ function CorpusToggle({
         );
       })}
     </div>
-  );
-}
-
-function ViewToggle({
-  value,
-  onChange,
-}: {
-  value: ExploreView;
-  onChange: (next: ExploreView) => void;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={msg("explore.view.aria")}
-      className="relative inline-flex shrink-0 items-center rounded-lg bg-muted/55 p-0.5"
-    >
-      <ViewToggleButton
-        active={value === "list"}
-        onClick={() => onChange("list")}
-        label={msg("explore.view.list")}
-      >
-        <List className="size-4" aria-hidden="true" />
-      </ViewToggleButton>
-      <ViewToggleButton
-        active={value === "map"}
-        onClick={() => onChange("map")}
-        label={msg("explore.view.map")}
-      >
-        <Map className="size-4" aria-hidden="true" />
-      </ViewToggleButton>
-    </div>
-  );
-}
-
-function ViewToggleButton({
-  active,
-  onClick,
-  label,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <TooltipButton tooltip={label} side="bottom">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={active}
-        aria-label={label}
-        className={`relative inline-flex size-8 items-center justify-center rounded-md transition-colors duration-150 ease-out cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
-          active ? "text-foreground" : "text-foreground/55 hover:text-foreground"
-        }`}
-      >
-        {active && (
-          <motion.span
-            layoutId="explore-view-pill"
-            className="absolute inset-0 rounded-md bg-background shadow-sm"
-            transition={PILL_TRANSITION}
-            aria-hidden="true"
-          />
-        )}
-        <span className="relative z-10 inline-flex">{children}</span>
-      </button>
-    </TooltipButton>
   );
 }

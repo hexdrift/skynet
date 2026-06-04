@@ -1,5 +1,5 @@
 /**
- * Pure formatters and projection helpers for the explore slice.
+ * Pure formatters for the explore slice.
  *
  * Score values from the public dashboard are already on a 0–100 scale —
  * see `backend/service_gateway/embedding_pipeline._extract_scores`. Any
@@ -13,17 +13,6 @@ export type GainBadge = {
   text: string;
   kind: "positive" | "negative" | "neutral";
 };
-
-export type View = {
-  k: number;
-  tx: number;
-  ty: number;
-};
-
-export function formatScore(value: number | null | undefined): string | null {
-  if (value == null || !Number.isFinite(value)) return null;
-  return value.toFixed(1);
-}
 
 export function formatMetric(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -93,19 +82,4 @@ export function formatRelativeDate(iso: string | null | undefined): string {
     month: "long",
     ...(sameYear ? {} : { year: "numeric" }),
   });
-}
-
-export function clampView(v: View, size: { w: number; h: number }): View {
-  const maxPan = Math.max(size.w, size.h) * Math.max(0.35, v.k - 1);
-  return {
-    k: v.k,
-    tx: Math.max(-maxPan, Math.min(maxPan, v.tx)),
-    ty: Math.max(-maxPan, Math.min(maxPan, v.ty)),
-  };
-}
-
-export function clampNorm(v: number): number {
-  if (v < -1) return -1;
-  if (v > 1) return 1;
-  return v;
 }

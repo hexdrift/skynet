@@ -3,39 +3,16 @@
 import { TERMS } from "@/shared/lib/terms";
 
 export const exploreMessages = {
-  "explore.filter.all": "הכל",
   "explore.filter.run": TERMS.optimizationTypeRun,
   "explore.filter.grid": TERMS.optimizationTypeGrid,
-  "explore.filter.aria": "סינון סוג ריצה",
-  "explore.filter.no_match": "אין ריצות מסוג זה.",
-  "explore.filter.clear": "הצגת הכל",
-  "explore.empty.title": "המפה עדיין ריקה. ריצות יופיעו כאן אחרי שהמערכת תעבד אותן.",
+  "explore.empty.title": "עדיין אין ריצות. ריצות יופיעו כאן אחרי שהמערכת תעבד אותן.",
   "explore.empty.cta": "צרו ריצה ראשונה",
-  "explore.detail.task": `ה${TERMS.task}`,
-  "explore.detail.model": TERMS.winningModel,
-  "explore.detail.optimizer": TERMS.optimizer,
-  "explore.detail.score": TERMS.score,
-  "explore.detail.close": "סגירה",
-  "explore.detail.module": "מודול",
-  "explore.detail.open_action": "פתיחה",
-  "explore.tooltip.open_hint": "לחצו לפרטים",
-  "explore.map.reset": "איפוס תצוגה",
-  "explore.map.zoom_in": "התקרבות",
-  "explore.map.zoom_out": "התרחקות",
-  "explore.canvas.aria_label": "מפת פיזור של {count} ריצות. השתמשו בעכבר או באצבע להזזה ולקירוב; לחיצה על נקודה פותחת את פרטי הריצה.",
-  "explore.picker.subtitle": "גרסאות של אותה משימה",
-  "explore.picker.back": "חזרה לרשימה",
-  "explore.canvas.variations_hint": "{n} גרסאות — לחצו לבחירה",
 
   // Semantic search
   "explore.search.placeholder": "חפשו אופטימיזציות לפי משימה, מודל או אופטימייזר",
   "explore.search.aria": "חיפוש חופשי בארכיון האופטימיזציות הציבורי",
   "explore.search.clear": "ניקוי החיפוש",
   "explore.search.kbd_hint": "/",
-
-  "explore.view.list": "רשימה",
-  "explore.view.map": "מפה",
-  "explore.view.aria": "מצב תצוגה",
 
   "explore.corpus.aria": "מקור הריצות",
   "explore.corpus.mine": "שלי",
@@ -48,7 +25,22 @@ export const exploreMessages = {
   "explore.results.empty.title": "אין תוצאות עבור “{query}”",
   "explore.results.empty.hint": "נסו ניסוח אחר או נקו את המסננים.",
   "explore.results.empty.clear_filters": "ניקוי המסננים",
+  "explore.results.empty.show_recent": "הצגת הריצות האחרונות",
   "explore.results.error": "טעינת התוצאות נכשלה. נסו שוב.",
+  "explore.results.count.one": "תוצאה אחת",
+  "explore.results.count.many": "{n} תוצאות",
+
+  "explore.sort.aria": "מיון התוצאות",
+  "explore.sort.relevance": "התאמה",
+  "explore.sort.recent": "אחרונות",
+  "explore.sort.gain": "שיפור",
+  "explore.sort.relevance.tip": "מיון לפי קרבת התוצאות לכוונת החיפוש — המתאימות ביותר מופיעות ראשונות",
+  "explore.sort.recent.tip": `מיון לפי זמן — ${TERMS.optimizationTypeRunPlural} החדשות ביותר מופיעות ראשונות`,
+  "explore.sort.gain.tip": `מיון לפי ${TERMS.scoreImprovement} — הפער בין ${TERMS.optimizedScore} ל${TERMS.baselineScore}, מהגבוה לנמוך`,
+
+  "explore.suggest.recent": "חיפושים אחרונים",
+  "explore.suggest.clear": "ניקוי",
+  "explore.suggest.popular": "חיפושים פופולריים",
 
   "explore.row.no_summary": "ללא תיאור משימה",
   "explore.row.open_aria": "פתיחת {name}",
