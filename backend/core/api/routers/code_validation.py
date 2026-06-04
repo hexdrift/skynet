@@ -174,6 +174,7 @@ def create_code_validation_router() -> APIRouter:
 
         metric_ok = False
         metric_errors_before = len(errors)
+        is_react = (payload.module_name or "").lower() == "react"
         if payload.metric_code:
             try:
                 metric_info = validate_metric_code(payload.metric_code)
@@ -184,7 +185,16 @@ def create_code_validation_router() -> APIRouter:
             except Exception as exc:
                 errors.append(_bounded_error(f"Metric error: {exc}"))
 
-            if metric_ok and payload.optimizer_name == "gepa":
+            if metric_ok and is_react:
+                # A react metric scores the recorded trajectory over
+                # (example, rollout) — the GEPA 5-arg gate and the
+                # (example, prediction) sample probe below do not apply.
+                if len(metric_info.param_names) < 2:
+                    errors.append(
+                        f"A ReAct metric must accept (example, rollout). "
+                        f"Found {len(metric_info.param_names)}: ({', '.join(metric_info.param_names)})."
+                    )
+            elif metric_ok and payload.optimizer_name == "gepa":
                 param_names = metric_info.param_names
                 if len(param_names) < 5:
                     errors.append(
@@ -194,7 +204,7 @@ def create_code_validation_router() -> APIRouter:
                     )
 
             metric_has_errors = len(errors) > metric_errors_before
-            if metric_ok and payload.sample_row and not metric_has_errors:
+            if metric_ok and payload.sample_row and not metric_has_errors and not is_react:
                 mapping = payload.column_mapping
                 ex_data: dict = {}
                 for sig_field, col_name in mapping.inputs.items():

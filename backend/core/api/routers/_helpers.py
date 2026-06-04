@@ -17,6 +17,9 @@ from collections.abc import AsyncIterable, AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
+import dspy
+from sqlalchemy.orm import Session
+
 from ...config import settings
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
@@ -32,7 +35,6 @@ from ...constants import (
     PAYLOAD_OVERVIEW_SIGNATURE_CODE,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
     PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
-    PAYLOAD_OVERVIEW_USERNAME,
 )
 from ...models import (
     GridSearchResponse,
@@ -40,20 +42,38 @@ from ...models import (
     OptimizationSummaryResponse,
     PairResult,
     ProgramArtifact,
+    ReactOverlay,
     RunResponse,
 )
 from ...registry import ResolverError, resolve_module_factory
 from ...service_gateway.optimization.data import load_signature_from_code
+from ...service_gateway.optimization.tool_overlay import (
+    ToolSchemaDriftError,
+    _apply_bundle_tool_overrides,
+    _apply_tool_name_overrides,
+    _assert_tool_set_matches,
+)
+from ...service_gateway.optimization.training_ground.run_react import (
+    resolve_react_tools,
+)
 from ..auth import AuthenticatedUser, is_admin
 from ..converters import (
     compute_elapsed,
     extract_estimated_remaining,
+    job_owner,
     overview_to_base_fields,
     parse_overview,
     parse_timestamp,
     status_to_job_status,
 )
 from ..errors import DomainError
+from ..sharing_access import (
+    MEMBER_ROLES,
+    ShareRole,
+    get_grant,
+    list_grants_for_user,
+    role_rank,
+)
 from .constants import TERMINAL_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -248,26 +268,71 @@ def compute_compare_fingerprint(optimization_id: str, overview: dict[str, Any]) 
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
-def job_owner(job_data: dict[str, Any]) -> str | None:
-    """Return the lowercased owner username for a job row, or ``None`` if absent.
+def _grant_role(job_store, optimization_id: str, username: str) -> ShareRole | None:
+    """Resolve a member grant's role for ``username`` on an optimization.
+
+    Opens a short-lived session on the job store's SQLAlchemy engine to read
+    the ``optimization_share_grants`` row. Job stores without an ``engine``
+    (the in-memory/local store used in tests and offline mode) carry no grant
+    table, so this returns ``None`` and access falls back to owner/admin only.
 
     Args:
-        job_data: Raw job row from the job store.
+        job_store: Job-store whose ``engine`` backs the grant table.
+        optimization_id: Optimization the grant would apply to.
+        username: Caller's username (compared case-insensitively by the query).
 
     Returns:
-        The job owner's lowercased username, or ``None`` when neither the
-        payload nor the overview carry one.
+        The grant's :class:`ShareRole`, or ``None`` when there is no grant or
+        the store exposes no grant-bearing engine.
     """
-    payload = job_data.get("payload")
-    if isinstance(payload, dict):
-        raw = payload.get("username")
-        if isinstance(raw, str) and raw.strip():
-            return raw.strip().lower()
-    overview = parse_overview(job_data)
-    raw = overview.get(PAYLOAD_OVERVIEW_USERNAME)
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip().lower()
+    engine = getattr(job_store, "engine", None)
+    if engine is None:
+        return None
+    with Session(engine) as session:
+        grant = get_grant(session, optimization_id, username)
+    if grant is not None and grant.role in MEMBER_ROLES:
+        return ShareRole(grant.role)
     return None
+
+
+def load_job_with_role(
+    job_store,
+    optimization_id: str,
+    user: AuthenticatedUser,
+) -> tuple[dict[str, Any], ShareRole]:
+    """Load a job row and resolve the caller's effective role on it.
+
+    Access is granted to the owner, any admin, or an invited member (Google-
+    Drive-style grants — see :mod:`core.api.sharing_access`). A caller with no
+    ownership and no grant gets 404 (not 403): not leaking existence keeps
+    unauthorized observers from confirming an ID exists.
+
+    Args:
+        job_store: Job-store the row is read from.
+        optimization_id: Optimization id to load.
+        user: Authenticated caller.
+
+    Returns:
+        ``(job_row, effective_role)`` where ``effective_role`` is
+        :attr:`ShareRole.owner` for the creator/admin or the member grant's tier.
+
+    Raises:
+        DomainError: 404 when the id is unknown or the caller has no access.
+    """
+    try:
+        job_data = job_store.get_job(optimization_id)
+    except KeyError:
+        raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
+    if is_admin(user):
+        return job_data, ShareRole.owner
+    owner = job_owner(job_data)
+    username = user.username.strip().lower()
+    if owner is not None and owner == username:
+        return job_data, ShareRole.owner
+    role = _grant_role(job_store, optimization_id, username)
+    if role is not None:
+        return job_data, role
+    raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id)
 
 
 def load_job_for_user(
@@ -275,11 +340,11 @@ def load_job_for_user(
     optimization_id: str,
     user: AuthenticatedUser,
 ) -> dict[str, Any]:
-    """Load a job row, enforcing ownership for non-admin callers.
+    """Load a job row, enforcing access (owner, admin, or invited member).
 
-    Returns 404 (not 403) when a non-admin requests a job they do not own —
-    not leaking existence keeps unauthorized observers from confirming an
-    ID exists.
+    The viewer-floor gate: any caller with access (owner / admin / a grant of
+    any tier) gets the row; everyone else 404s. Routes that mutate require a
+    higher tier — see :func:`require_role_at_least`.
 
     Args:
         job_store: Job-store the row is read from.
@@ -290,19 +355,119 @@ def load_job_for_user(
         The raw job-row mapping.
 
     Raises:
-        DomainError: 404 when the id is unknown or the caller is a
-            non-admin requesting somebody else's job.
+        DomainError: 404 when the id is unknown or the caller has no access.
     """
-    try:
-        job_data = job_store.get_job(optimization_id)
-    except KeyError:
-        raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
-    if is_admin(user):
-        return job_data
-    owner = job_owner(job_data)
-    if owner is None or owner != user.username:
-        raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id)
+    job_data, _role = load_job_with_role(job_store, optimization_id, user)
     return job_data
+
+
+def require_role_at_least(
+    job_store,
+    optimization_id: str,
+    user: AuthenticatedUser,
+    minimum: ShareRole,
+) -> tuple[dict[str, Any], ShareRole]:
+    """Load a job row, requiring the caller's effective role to meet ``minimum``.
+
+    A caller with access but below the required tier (e.g. a viewer hitting a
+    delete route) gets 403 — they already know the run exists, so hiding it as
+    404 would be misleading. A caller with no access at all still 404s (via
+    :func:`load_job_with_role`).
+
+    Args:
+        job_store: Job-store the row is read from.
+        optimization_id: Optimization id to load.
+        user: Authenticated caller.
+        minimum: The lowest :class:`ShareRole` permitted to proceed.
+
+    Returns:
+        ``(job_row, effective_role)`` for a caller meeting the tier.
+
+    Raises:
+        DomainError: 404 when unknown/inaccessible; 403 when the caller has
+            access but a role below ``minimum``.
+    """
+    job_data, role = load_job_with_role(job_store, optimization_id, user)
+    if role_rank(role) < role_rank(minimum):
+        raise DomainError(
+            "optimization.insufficient_role",
+            status=403,
+            optimization_id=optimization_id,
+            required=str(minimum),
+            role=str(role),
+        )
+    return job_data, role
+
+
+def grant_roles_for(
+    job_store, optimization_ids: list[str], username: str
+) -> dict[str, str]:
+    """Batch-resolve the caller's grant roles across many optimizations.
+
+    One query for the whole id set (see :func:`list_grants_for_user`); stores
+    without a grant-bearing ``engine`` return ``{}``.
+
+    Args:
+        job_store: Job-store whose ``engine`` backs the grant table.
+        optimization_ids: Ids to scope the lookup to.
+        username: Caller's username.
+
+    Returns:
+        ``{optimization_id: role}`` for the caller's intersecting grants.
+    """
+    engine = getattr(job_store, "engine", None)
+    if engine is None:
+        return {}
+    with Session(engine) as session:
+        return list_grants_for_user(session, optimization_ids, username)
+
+
+def filter_ids_at_least(
+    job_store,
+    optimization_ids: list[str],
+    user: AuthenticatedUser,
+    minimum: ShareRole,
+) -> tuple[list[str], list[str]]:
+    """Split ids into ``(allowed, denied)`` by whether the caller meets ``minimum``.
+
+    The bulk-action counterpart of :func:`require_role_at_least`: admins keep
+    every id; otherwise an id is allowed when the caller is its owner or holds a
+    grant whose tier is at least ``minimum``. Unknown ids and below-tier ids land
+    in ``denied`` so the caller can mark them skipped.
+
+    Args:
+        job_store: Job-store used to read each row's owner.
+        optimization_ids: Already-deduplicated list of ids.
+        user: Authenticated caller.
+        minimum: The lowest :class:`ShareRole` permitted per id.
+
+    Returns:
+        ``(allowed, denied)``.
+    """
+    if is_admin(user):
+        return list(optimization_ids), []
+    username = user.username.strip().lower()
+    min_rank = role_rank(minimum)
+    granted = grant_roles_for(job_store, optimization_ids, username)
+    allowed: list[str] = []
+    denied: list[str] = []
+    for oid in optimization_ids:
+        try:
+            job_data = job_store.get_job(oid)
+        except KeyError:
+            denied.append(oid)
+            continue
+        owner = job_owner(job_data)
+        if owner is not None and owner == username:
+            role: ShareRole | None = ShareRole.owner
+        else:
+            grant_role = granted.get(oid)
+            role = ShareRole(grant_role) if grant_role in MEMBER_ROLES else None
+        if role is not None and role_rank(role) >= min_rank:
+            allowed.append(oid)
+        else:
+            denied.append(oid)
+    return allowed, denied
 
 
 def enforce_user_quota(job_store, username: str) -> None:
@@ -458,6 +623,9 @@ def _materialize_program(artifact: ProgramArtifact, overview: dict) -> Any:
             ``signature_code`` is missing from the overview for a JSON
             artifact, or when module reconstruction fails.
     """
+    if artifact.react_overlay is not None:
+        return _materialize_react_program(artifact, overview)
+
     if artifact.program_state_json is not None:
         signature_code = overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE)
         if not signature_code:
@@ -485,6 +653,75 @@ def _materialize_program(artifact: ProgramArtifact, overview: dict) -> Any:
         return program
 
     return _legacy_pickle_load(artifact.program_pickle_base64)
+
+
+def _materialize_react_program(artifact: ProgramArtifact, overview: dict) -> Any:
+    """Rebuild a served ``ReActV2`` program from a persisted react artifact.
+
+    Unlike the scalar JSON path, a react program owns a tool roster that the
+    state dump deliberately drops (``save_program=False``). We re-source that
+    roster from ``react_overlay.tool_source`` — the same resolver the run path
+    uses — drift-check it against the schema-hash snapshot taken at training
+    time, re-apply the optimized per-tool wording, then build ``ReActV2`` and
+    load the stored state.
+
+    Args:
+        artifact: The artifact carrying ``program_state_json`` and a
+            ``react_overlay`` (signature reconstruction reads ``overview``).
+        overview: Parsed payload-overview dict; supplies ``signature_code``.
+
+    Returns:
+        A live ``dspy.ReActV2`` program ready for inference.
+
+    Raises:
+        DomainError: 409 when ``signature_code`` is missing, when module/tool
+            reconstruction fails, or when the live tool schema has drifted
+            from the snapshot recorded at training time.
+    """
+    react_overlay = artifact.react_overlay
+    signature_code = overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE)
+    if not signature_code:
+        raise DomainError("optimization.no_signature_code_for_reload", status=409)
+
+    try:
+        signature_cls = load_signature_from_code(signature_code)
+        # live_mcp re-sources with auth None: the MCP auth header is a secret
+        # and is intentionally never persisted on the overlay (see
+        # _persist_react_program), so serve falls back to the settings-default
+        # URL with no header rather than replaying a stored credential.
+        tools, _live_hashes = resolve_react_tools(
+            react_overlay.tool_source, signature_cls, settings
+        )
+    except (ResolverError, ValueError) as exc:
+        raise DomainError(
+            "optimization.module_reconstruction_failed", status=409, error=str(exc)
+        ) from exc
+
+    try:
+        # Strict: a served run must materialise against the exact tool surface
+        # it was optimised against — any added/removed tool, not just a hash
+        # mismatch, is drift. Mirrors the chat driver so both react-serve
+        # surfaces gate identically.
+        _assert_tool_set_matches(react_overlay.tool_schema_hashes, tools, strict=True)
+    except ToolSchemaDriftError as exc:
+        raise DomainError(
+            "optimization.tool_schema_drift", status=409, error=str(exc)
+        ) from exc
+
+    _apply_bundle_tool_overrides(
+        tools,
+        tool_descriptions=react_overlay.tool_descriptions,
+        tool_arg_descriptions=react_overlay.tool_arg_descriptions,
+    )
+    # Rename to the proposed display names last (canonical drift-check + overlays
+    # above key on the original names). None preserves pre-rename behavior.
+    _apply_tool_name_overrides(tools, react_overlay.tool_names)
+
+    program = dspy.ReActV2(
+        signature_cls, tools=tools, max_iters=react_overlay.max_iters
+    )
+    program.load_state(artifact.program_state_json)
+    return program
 
 
 def _legacy_pickle_load(program_pickle_base64: str | None) -> Any:
@@ -518,6 +755,25 @@ def _legacy_pickle_load(program_pickle_base64: str | None) -> Any:
     return pickle.loads(program_bytes)
 
 
+def _stable_hash(payload: Any) -> str:
+    """Return a process-stable short SHA256 over a JSON-able payload.
+
+    Used to fold a react program's tool-roster identity into its cache key.
+    Built-in ``hash`` is salted per process via ``PYTHONHASHSEED``, so two
+    workers would derive different keys for the same roster; canonical JSON +
+    SHA256 keeps the key byte-stable across processes.
+
+    Args:
+        payload: Any JSON-serializable value (here, the schema-hash map).
+
+    Returns:
+        A 16-hex-char prefix of the SHA256 digest — enough entropy to
+        distinguish rosters without bloating the cache key.
+    """
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def load_program(
     job_store,
     optimization_id: str,
@@ -526,13 +782,15 @@ def load_program(
     """Load and cache an optimized program from a completed job.
 
     For grid-search jobs, loads the best pair's program automatically and
-    synthesizes a ``RunResponse`` from the grid result envelope. Non-admin
-    callers requesting somebody else's job 404 — see :func:`load_job_for_user`.
+    synthesizes a ``RunResponse`` from the grid result envelope. Serving spends
+    the owner's API key, so this requires editor-tier access (owner / admin /
+    editor-or-owner grant): a viewer-tier member gets 403, a caller with no
+    access 404s — see :func:`require_role_at_least`.
 
     Args:
         job_store: The job store to read the job row from.
         optimization_id: The optimization to load.
-        user: Authenticated caller; non-admins are restricted to their own jobs.
+        user: Authenticated caller; must hold editor-tier access to serve.
 
     Returns:
         A ``(program, RunResponse, overview)`` tuple where ``program`` is the
@@ -540,11 +798,11 @@ def load_program(
         and ``overview`` is the parsed payload-overview dict.
 
     Raises:
-        DomainError: 404 when the job is unknown or inaccessible; 409 when
-            the job is not in a success state, has no result, or lacks a
-            serialized program artifact.
+        DomainError: 404 when the job is unknown or inaccessible; 403 when the
+            caller's role is below editor; 409 when the job is not in a success
+            state, has no result, or lacks a serialized program artifact.
     """
-    job_data = load_job_for_user(job_store, optimization_id, user)
+    job_data, _role = require_role_at_least(job_store, optimization_id, user, ShareRole.editor)
 
     overview = parse_overview(job_data)
     optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
@@ -585,10 +843,87 @@ def load_program(
         if not _artifact_has_payload(artifact):
             raise DomainError("optimization.no_program_artifact_scoped", status=409)
 
-    if optimization_id not in _program_cache:
-        _program_cache[optimization_id] = _materialize_program(artifact, overview)
+    # Fold the tool-roster identity into the key for react programs so a
+    # re-sourced or drifted roster never serves a stale cached program. The
+    # non-react key stays the bare optimization_id.
+    cache_key = optimization_id
+    if artifact.react_overlay is not None:
+        cache_key = f"{optimization_id}:{_stable_hash(artifact.react_overlay.tool_schema_hashes)}"
 
-    return _program_cache[optimization_id], result, overview
+    if cache_key not in _program_cache:
+        _program_cache[cache_key] = _materialize_program(artifact, overview)
+
+    return _program_cache[cache_key], result, overview
+
+
+def load_react_chat_inputs(
+    job_store,
+    optimization_id: str,
+    user: AuthenticatedUser,
+) -> tuple[type, str, ReactOverlay, dict]:
+    """Load a react run's signature + state + overlay for the live chat driver.
+
+    Mirrors :func:`load_program`'s access/status guards but deliberately does
+    **not** materialize or cache a program. The chat driver builds a fresh
+    ``ReActV2`` per turn bound to a live MCP session that closes when the turn
+    ends; a shared, cached program with a dead-session roster would be both
+    wrong (tools can't execute) and unsafe (concurrent turns would race on its
+    mutable ``tools`` map). Also enforces that the run is a react run served
+    from a live-MCP tool source — the only shape that supports live tool calls.
+
+    Args:
+        job_store: The job store to read the row from.
+        optimization_id: The optimization to chat against.
+        user: Authenticated caller; chat is editor-tier (it spends the owner's
+            key), so the caller must hold editor-tier access.
+
+    Returns:
+        ``(signature_cls, program_state_json, react_overlay, overview)`` — the
+        pieces :func:`~...service_gateway.agents.react_serve.run_react_chat`
+        needs to assemble a fresh program.
+
+    Raises:
+        DomainError: 404 when unknown/inaccessible; 403 when the caller's role
+            is below editor; 409 when not in a success state, has no result, is
+            not a react run, was not served from a live-MCP source, or is
+            missing its signature code.
+    """
+    job_data, _role = require_role_at_least(job_store, optimization_id, user, ShareRole.editor)
+    overview = parse_overview(job_data)
+    optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
+
+    status = status_to_job_status(job_data.get("status", "pending"))
+    if status != OptimizationStatus.success:
+        raise DomainError(
+            "optimization.not_success_status_for_serve",
+            status=409,
+            params={"status": status.value},
+        )
+
+    result_data = job_data.get("result")
+    if not result_data or not isinstance(result_data, dict):
+        raise DomainError("optimization.no_result", status=409)
+    # React runs are always run-type (grid search is hidden for react in the
+    # wizard), so a grid envelope here means this isn't a chattable react run.
+    if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+        raise DomainError("serve.chat_not_react", status=409)
+
+    result = RunResponse.model_validate(result_data)
+    artifact = result.program_artifact
+    if not _artifact_has_payload(artifact) or artifact.react_overlay is None:
+        raise DomainError("serve.chat_not_react", status=409)
+
+    react_overlay = artifact.react_overlay
+    tool_source = react_overlay.tool_source or {}
+    if not isinstance(tool_source, dict) or tool_source.get("kind") != "live_mcp":
+        raise DomainError("serve.chat_requires_live_mcp", status=409)
+
+    signature_code = overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE)
+    if not signature_code:
+        raise DomainError("optimization.no_signature_code_for_reload", status=409)
+    signature_cls = load_signature_from_code(signature_code)
+
+    return signature_cls, artifact.program_state_json, react_overlay, overview
 
 
 def load_pair_program(
@@ -599,14 +934,15 @@ def load_pair_program(
 ) -> tuple[Any, PairResult, dict]:
     """Load and cache the compiled program for a specific grid-search pair.
 
-    Non-admin callers requesting somebody else's job 404 — see
-    :func:`load_job_for_user`.
+    Serving spends the owner's key, so this requires editor-tier access (owner /
+    admin / editor-or-owner grant): a viewer-tier member gets 403, a caller with
+    no access 404s — see :func:`require_role_at_least`.
 
     Args:
         job_store: The job store to read the job row from.
         optimization_id: The grid-search optimization to load.
         pair_index: The index of the pair within the grid sweep.
-        user: Authenticated caller; non-admins are restricted to their own jobs.
+        user: Authenticated caller; must hold editor-tier access to serve.
 
     Returns:
         A ``(program, PairResult, overview)`` tuple where ``program`` is the
@@ -614,12 +950,12 @@ def load_pair_program(
         pair's outcome, and ``overview`` is the parsed payload-overview dict.
 
     Raises:
-        DomainError: 404 when the job or pair index is unknown or the
-            caller cannot access the job; 409 when the job is not a
-            successful grid search, the pair failed, or the program
-            artifact is missing.
+        DomainError: 404 when the job or pair index is unknown or the caller
+            cannot access the job; 403 when the caller's role is below editor;
+            409 when the job is not a successful grid search, the pair failed,
+            or the program artifact is missing.
     """
-    job_data = load_job_for_user(job_store, optimization_id, user)
+    job_data, _role = require_role_at_least(job_store, optimization_id, user, ShareRole.editor)
 
     overview = parse_overview(job_data)
     optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)

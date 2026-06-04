@@ -33,7 +33,8 @@ from ..response_limits import (
     clamp_limit,
     truncate_text,
 )
-from ._helpers import load_job_for_user, strip_api_key
+from ..sharing_access import ShareRole
+from ._helpers import load_job_for_user, require_role_at_least, strip_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -231,10 +232,12 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
             ``{"optimization_id": id, "name": new_name}``.
 
         Raises:
-            DomainError: 404 when the optimization is unknown or
-                inaccessible to the caller.
+            DomainError: 404 when the optimization is unknown or inaccessible;
+                403 when the caller's share role is below ``editor``.
         """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
         overview = parse_overview(job_data)
         overview[PAYLOAD_OVERVIEW_NAME] = req.name.strip()
         job_store.set_payload_overview(optimization_id, overview)
@@ -257,10 +260,12 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
             ``{"optimization_id": id, "pinned": bool}``.
 
         Raises:
-            DomainError: 404 when the optimization is unknown or
-                inaccessible to the caller.
+            DomainError: 404 when the optimization is unknown or inaccessible;
+                403 when the caller's share role is below ``editor``.
         """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
         overview = parse_overview(job_data)
         current = overview.get("pinned", False)
         overview["pinned"] = not current

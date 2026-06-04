@@ -40,7 +40,7 @@ from ...models import (
 )
 from ...models.common import OptimizationStatus
 from ..converters import parse_overview
-from ._helpers import build_summary
+from ._helpers import build_summary, grant_roles_for
 
 logger = logging.getLogger(__name__)
 
@@ -457,12 +457,24 @@ def create_analytics_router(*, job_store) -> APIRouter:
         username: str | None = Query(default=None, description="Only include optimizations owned by this user"),
         optimization_id: str | None = Query(default=None, description="Limit the aggregation to a single optimization"),
         date: str | None = Query(default=None, description="YYYY-MM-DD day filter on created_at"),
+        include_shared: bool = Query(
+            default=False,
+            description="Fold runs shared with `username` into the aggregation (Drive-style sharing).",
+        ),
+        owner: str | None = Query(default=None, description="Restrict the aggregation to runs owned by this username"),
+        access: str | None = Query(
+            default=None,
+            description="Restrict to a caller access tier: 'mine', 'owner', 'editor', or 'viewer'.",
+        ),
     ) -> DashboardAnalyticsResponse:
         """Return a pre-shaped payload for the whole analytics dashboard.
 
         Caps at :data:`_ANALYTICS_JOB_HARD_CAP` jobs per request and surfaces
         ``truncated=True`` when the cap is hit. Improvements are raw floats;
-        the frontend normalizes ratios.
+        the frontend normalizes ratios. When ``include_shared`` is set the job
+        set is the union of ``username``'s owned and shared-with-them runs;
+        ``owner`` then narrows the aggregation to a single owner within that
+        set (powering the "by owner" breakdown's click-through).
 
         Args:
             optimizer: Exact-match optimizer name filter.
@@ -471,16 +483,27 @@ def create_analytics_router(*, job_store) -> APIRouter:
             username: Only include optimizations owned by this user.
             optimization_id: Limit the aggregation to a single optimization.
             date: ``YYYY-MM-DD`` day filter on ``created_at``.
+            include_shared: Union in runs shared with ``username``.
+            owner: Restrict the aggregation to runs owned by this username.
+            access: Restrict to a caller access tier (mine/owner/editor/viewer).
 
         Returns:
             A populated :class:`DashboardAnalyticsResponse` envelope.
         """
-        all_jobs_raw = job_store.list_jobs(
-            status=status,
-            username=username,
-            limit=_ANALYTICS_JOB_HARD_CAP,
-            offset=0,
-        )
+        if include_shared and username and hasattr(job_store, "list_jobs_visible_to"):
+            all_jobs_raw = job_store.list_jobs_visible_to(
+                username,
+                status=status,
+                limit=_ANALYTICS_JOB_HARD_CAP,
+                offset=0,
+            )
+        else:
+            all_jobs_raw = job_store.list_jobs(
+                status=status,
+                username=username,
+                limit=_ANALYTICS_JOB_HARD_CAP,
+                offset=0,
+            )
         truncated = len(all_jobs_raw) >= _ANALYTICS_JOB_HARD_CAP
 
         # Build summaries up front so every downstream filter and
@@ -509,6 +532,8 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 continue
             if model and summary.model_name != model:
                 continue
+            if owner and (summary.username or "") != owner:
+                continue
             if optimization_id and summary.optimization_id != optimization_id:
                 continue
             if date:
@@ -519,6 +544,22 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 if created_day != date:
                     continue
             summaries.append(summary)
+
+        # Resolve each run's access tier for the caller so the dashboard can
+        # break down and filter by "mine vs shared vs grant tier". Owned runs
+        # are "mine"; the rest carry their grant role. Needs a caller identity
+        # (``username``); admin/all-user views have no per-caller tier.
+        access_by_id: dict[str, str] = {}
+        if username:
+            caller_norm = username.strip().lower()
+            grant_roles = grant_roles_for(job_store, [s.optimization_id for s in summaries], caller_norm)
+            for s in summaries:
+                owner_name = (s.username or "").strip().lower()
+                access_by_id[s.optimization_id] = (
+                    "mine" if owner_name == caller_norm else grant_roles.get(s.optimization_id, "")
+                )
+            if access:
+                summaries = [s for s in summaries if access_by_id.get(s.optimization_id) == access]
 
         filtered_total = len(summaries)
 
@@ -562,6 +603,23 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 model_counter[m] += 1
         model_usage = [
             DashboardAnalyticsNameValue(name=name, value=count) for name, count in model_counter.most_common(8)
+        ]
+
+        owner_counter: Counter = Counter()
+        for s in summaries:
+            if s.username:
+                owner_counter[s.username] += 1
+        owner_usage = [
+            DashboardAnalyticsNameValue(name=name, value=count) for name, count in owner_counter.most_common(8)
+        ]
+
+        access_counter: Counter = Counter()
+        for s in summaries:
+            tier = access_by_id.get(s.optimization_id)
+            if tier:
+                access_counter[tier] += 1
+        access_usage = [
+            DashboardAnalyticsNameValue(name=name, value=count) for name, count in access_counter.most_common()
         ]
 
         improvements = [(s, s.metric_improvement) for s in success_items if s.metric_improvement is not None]
@@ -644,6 +702,8 @@ def create_analytics_router(*, job_store) -> APIRouter:
             optimizer_counts=optimizer_counts,
             job_type_counts=job_type_counts,
             model_usage=model_usage,
+            owner_usage=owner_usage,
+            access_usage=access_usage,
             success_count=success_count,
             failed_count=failed_count,
             running_count=running_count,

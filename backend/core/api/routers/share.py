@@ -7,19 +7,23 @@ Owner/editor-gated management endpoints plus the access-gated public surface:
 * ``POST   /optimizations/{id}/sharing/members`` — add/replace a member grant.
 * ``PATCH  /optimizations/{id}/sharing/members/{username}`` — change a role.
 * ``DELETE /optimizations/{id}/sharing/members/{username}`` — remove a grant.
+* ``POST   /optimizations/{id}/sharing/transfer`` — reassign ownership to an
+  existing member (the previous owner is demoted to an editor).
 * ``GET    /users/search`` — username autocomplete for the invite picker.
 * ``GET    /share/{token}`` — **access-gated** composite read of one
-  optimization (anonymous view-only under an ``anyone`` link, full data for
-  invited members), no auth required.
+  optimization (viewer+ for an invited member or an ``anyone`` link); requires
+  a signed-in caller.
 * ``POST   /share/{token}/serve`` — one inference through the owner's stored
-  model (requires an effective role of viewer or higher).
+  model (requires an effective role of editor or higher — it spends the
+  owner's API key, so viewers are forbidden).
 
-Two sharing modes coexist per :mod:`core.api.sharing_access`: ``general_access``
-on the active link selects the anonymous policy (``restricted`` vs ``anyone``)
-and member grants invite specific users at a tier role. Effective access is
-resolved by :func:`resolve_share_access`. Secrets (API keys, base URLs) never
-cross the public boundary; for the anonymous ``view`` role the real owner is
-hidden and inference is forbidden.
+Two sharing modes coexist per :mod:`core.api.sharing_access`: the active link's
+``general_access`` (``restricted`` vs ``anyone``) and ``general_role`` (the
+``viewer``/``editor`` tier an ``anyone`` link grants a signed-in visitor)
+combine with per-user member grants; effective access is the highest the rules
+allow, resolved by :func:`resolve_share_access`. Access is login-gated, so the
+floor is ``viewer`` (real owner shown). Secrets (API keys, base URLs) never
+cross the public boundary.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import dspy
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -39,9 +43,11 @@ from sqlalchemy.orm import Session
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
+    PAYLOAD_OVERVIEW_IS_PRIVATE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
+    PAYLOAD_OVERVIEW_USERNAME,
 )
 from ...models import (
     ColumnMapping,
@@ -56,6 +62,13 @@ from ...models import (
     ServeResponse,
     SplitFractions,
 )
+from ...notifications import (
+    notify_ownership_transfer,
+    notify_role_change,
+    notify_share_invite,
+)
+from ...service_gateway.dashboard import invalidate_public_dashboard_cache
+from ...service_gateway.embedding_pipeline import set_embedding_privacy
 from ...service_gateway.language_models import build_language_model
 from ...storage.models import (
     AgentConversationModel,
@@ -77,6 +90,8 @@ from ..errors import DomainError
 from ..sharing_access import (
     GENERAL_ACCESS_ANYONE,
     GENERAL_ACCESS_RESTRICTED,
+    LINK_GRANT_MARKER,
+    LINK_ROLES,
     MEMBER_ROLES,
     ShareRole,
     get_active_link,
@@ -84,6 +99,7 @@ from ..sharing_access import (
     get_link_by_token,
     list_grants,
     resolve_share_access,
+    role_rank,
 )
 from ._helpers import (
     _artifact_has_payload,
@@ -99,41 +115,20 @@ logger = logging.getLogger(__name__)
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
-
-def get_optional_user(
-    request: Request, authorization: str | None = Header(default=None)
-) -> AuthenticatedUser | None:
-    """Resolve the caller when a valid credential is present, else ``None``.
-
-    The public share routes accept anonymous visitors, so an absent or invalid
-    bearer credential must not 401 — it yields ``None`` and the access resolver
-    falls through to the ``anyone`` policy. Exposed at module scope (not as a
-    route-local closure) so it participates in FastAPI's dependency-override
-    mechanism for tests.
-
-    Args:
-        request: Incoming request (used to reach the store for PAT lookup).
-        authorization: HTTP Authorization header, if any.
-
-    Returns:
-        The authenticated user, or ``None`` for an anonymous visitor.
-    """
-    if not authorization:
-        return None
-    try:
-        return get_authenticated_user(request, authorization)
-    except DomainError:
-        return None
-
-
-OptionalUserDep = Annotated[AuthenticatedUser | None, Depends(get_optional_user)]
-
-# Roles that may read/manage the sharing config or run inference on a share.
-_MANAGE_ROLES: frozenset[ShareRole] = frozenset({ShareRole.editor, ShareRole.owner})
-_INFER_ROLES: frozenset[ShareRole] = frozenset({ShareRole.viewer, ShareRole.editor, ShareRole.owner})
+# Serving / chat runs inference through the OWNER's stored API key (real spend),
+# so it is reserved to the editor tier and above. Viewers can read and clone but
+# never spend the owner's key.
+_INFER_ROLES: frozenset[ShareRole] = frozenset({ShareRole.editor, ShareRole.owner})
 _GENERAL_ACCESS_VALUES = (GENERAL_ACCESS_RESTRICTED, GENERAL_ACCESS_ANYONE)
+_LINK_ROLE_VALUES = tuple(sorted(LINK_ROLES))
 # Cap for the username-autocomplete result set (contract: at most 10).
 _USER_SEARCH_LIMIT = 10
+# Synthetic test/load accounts authenticate as email-shaped usernames under the
+# reserved ``.local`` TLD (e.g. ``analytics-1-1@s.local``, ``x@sampler.local``).
+# ``.local`` is non-routable (RFC 6762) and never a real identity, so we exclude
+# such usernames from the people picker — otherwise an integration/E2E harness
+# run against a shared backend leaks its fixtures into everyone's invite search.
+_SYNTHETIC_USERNAME_PATTERN = "%@%.local%"
 # Model-config sub-keys that must never cross the public boundary.
 _SECRET_MODEL_FIELDS = ("model_config", "reflection_model_config", "task_model_config")
 
@@ -149,16 +144,28 @@ class SharingState(BaseModel):
     """Owner/editor-facing sharing config for one optimization."""
 
     general_access: str
+    general_role: str = "viewer"
     token: str | None = None
     share_path: str | None = None
     owner: str | None = None
     members: list[SharingMember] = Field(default_factory=list)
+    # Explore-corpus visibility — orthogonal to the link's general_access:
+    # is_private hides the job from the public /explore search, general_access
+    # governs who can reach /share/<token>.
+    is_private: bool = False
 
 
 class PutSharingRequest(BaseModel):
     """Request body for ``PUT /optimizations/{id}/sharing``."""
 
     general_access: str
+    general_role: str | None = None
+
+
+class SetVisibilityRequest(BaseModel):
+    """Request body for ``PUT /optimizations/{id}/visibility`` — the explore-corpus flag."""
+
+    is_private: bool
 
 
 class AddMemberRequest(BaseModel):
@@ -174,10 +181,23 @@ class UpdateMemberRequest(BaseModel):
     role: str
 
 
+class TransferOwnershipRequest(BaseModel):
+    """Request body for ``POST /optimizations/{id}/sharing/transfer``."""
+
+    username: str
+
+
 class UserSearchResponse(BaseModel):
     """Envelope for ``GET /users/search`` — matching distinct usernames."""
 
     usernames: list[str]
+
+
+class ClaimShareResponse(BaseModel):
+    """Envelope for ``POST /share/{token}/claim`` — where to send the redeemer."""
+
+    optimization_id: str
+    role: str
 
 
 def _strip_model_secrets(cfg: Any) -> Any:
@@ -346,7 +366,7 @@ def _test_results(job_data: dict[str, Any], optimization_id: str) -> dict[str, l
 
 
 def _build_status_response(
-    job_store, optimization_id: str, job_data: dict[str, Any], *, owner_visible: bool
+    job_store, optimization_id: str, job_data: dict[str, Any]
 ) -> OptimizationStatusResponse:
     """Assemble the read-only status response for a shared optimization.
 
@@ -358,8 +378,6 @@ def _build_status_response(
         job_store: Job-store the logs/progress are read from.
         optimization_id: Optimization id being rendered.
         job_data: Raw job row.
-        owner_visible: When ``False`` (anonymous ``view``), the ``username``
-            field is anonymised; when ``True`` (member) the real owner is shown.
 
     Returns:
         A populated :class:`OptimizationStatusResponse`.
@@ -400,8 +418,16 @@ def _build_status_response(
     progress_events = job_store.get_progress_events(optimization_id)
 
     base_fields = overview_to_base_fields(overview)
-    if not owner_visible:
-        base_fields["username"] = None
+    # Strip connection secrets from every model config surfaced on this scrubbed
+    # composite. ``api_key`` is already dropped when the overview is persisted,
+    # but ``base_url`` is not — and this response feeds the public ``/share`` and
+    # ``/optimizations/{id}/public`` reads, so an internal endpoint URL must not
+    # leak to a non-owner viewer.
+    base_fields["model_settings"] = _strip_model_secrets(base_fields.get("model_settings"))
+    for _models_key in ("generation_models", "reflection_models"):
+        _models = base_fields.get(_models_key)
+        if isinstance(_models, list):
+            base_fields[_models_key] = [_strip_model_secrets(m) for m in _models]
 
     return OptimizationStatusResponse(
         optimization_id=optimization_id,
@@ -515,10 +541,11 @@ def create_share_router(*, job_store) -> APIRouter:
     def _require_manage(session: Session, optimization_id: str, user: AuthenticatedUser) -> str | None:
         """Ensure ``user`` may manage sharing for ``optimization_id``.
 
-        The optimization must exist (404 otherwise, never 403 — existence is not
-        leaked to strangers). The job owner and admins manage; a member with an
-        editor/owner grant also manages. A non-owner, non-admin, non-editor
-        caller cannot even confirm the optimization exists, so they 404 too.
+        Management is **owner-only**: only the job owner (its creator) or an
+        admin may invite people, change roles, transfer ownership, and set
+        general access. Editors and viewers — like strangers — 404 here
+        (existence is never leaked, so non-managers can't even confirm the
+        optimization exists).
 
         Args:
             session: Open DB session.
@@ -530,8 +557,8 @@ def create_share_router(*, job_store) -> APIRouter:
             carries no owner.
 
         Raises:
-            DomainError: 404 when the optimization is unknown or the caller has
-                no management access at all (owner existence is not leaked).
+            DomainError: 404 when the optimization is unknown or the caller is
+                not the owner/admin (owner existence is not leaked).
         """
         try:
             job_data = job_store.get_job(optimization_id)
@@ -539,9 +566,6 @@ def create_share_router(*, job_store) -> APIRouter:
             raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
         owner = job_owner(job_data)
         if (owner is not None and owner == user.username) or is_admin(user):
-            return owner
-        grant = get_grant(session, optimization_id, user.username)
-        if grant is not None and ShareRole(grant.role) in _MANAGE_ROLES:
             return owner
         raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id)
 
@@ -558,17 +582,28 @@ def create_share_router(*, job_store) -> APIRouter:
         """
         link = get_active_link(session, optimization_id)
         general_access = link.general_access if link is not None else GENERAL_ACCESS_RESTRICTED
+        general_role = link.general_role if link is not None else str(ShareRole.viewer)
         token = link.token if link is not None else None
+        # Only named invites appear in the people list; link-derived memberships
+        # (created_by == LINK_GRANT_MARKER) are covered by the general-access link
+        # row, exactly like Google Drive keeps "anyone with the link" users out of
+        # the explicit people-with-access list.
         members = [
             SharingMember(username=g.grantee_username, role=g.role)
             for g in list_grants(session, optimization_id)
+            if g.created_by != LINK_GRANT_MARKER
         ]
+        # Existence already validated by _require_manage; read the overview for
+        # the current explore-corpus visibility flag.
+        overview = parse_overview(job_store.get_job(optimization_id))
         return SharingState(
             general_access=general_access,
+            general_role=general_role,
             token=token,
             share_path=f"/share/{token}" if token else None,
             owner=owner,
             members=members,
+            is_private=bool(overview.get(PAYLOAD_OVERVIEW_IS_PRIVATE, False)),
         )
 
     def _ensure_link(session: Session, optimization_id: str, created_by: str) -> OptimizationShareLinkModel:
@@ -590,9 +625,61 @@ def create_share_router(*, job_store) -> APIRouter:
                 created_by=created_by,
                 created_at=datetime.now(UTC),
                 general_access=GENERAL_ACCESS_RESTRICTED,
+                general_role=str(ShareRole.viewer),
             )
             session.add(link)
         return link
+
+    def _sync_link_memberships(session: Session, optimization_id: str, link: OptimizationShareLinkModel) -> None:
+        """Reconcile link-derived memberships with the link's current policy.
+
+        Drive-style live propagation: when the link is ``anyone`` every existing
+        link membership is re-pointed at the link's current tier (so an
+        editor→viewer flip downgrades them immediately); when the link is
+        ``restricted`` (the "turn the link off" action) every link membership is
+        deleted, which both revokes access and drops the run from those users'
+        tables. Named invites (``created_by != LINK_GRANT_MARKER``) are never
+        touched — they are authoritative. Caller commits.
+
+        Args:
+            session: Open DB session.
+            optimization_id: Optimization whose link memberships are reconciled.
+            link: The just-updated active link row.
+        """
+        markers = session.scalars(
+            select(OptimizationShareGrantModel).where(
+                OptimizationShareGrantModel.optimization_id == optimization_id,
+                OptimizationShareGrantModel.created_by == LINK_GRANT_MARKER,
+            )
+        )
+        if link.general_access == GENERAL_ACCESS_ANYONE and link.general_role in MEMBER_ROLES:
+            for grant in markers:
+                grant.role = link.general_role
+        else:
+            for grant in markers:
+                session.delete(grant)
+
+    def _reassign_job_owner(optimization_id: str, new_owner: str) -> None:
+        """Rewrite a job's stored owner to ``new_owner`` everywhere it lives.
+
+        The owner identity is denormalized three ways — ``payload['username']``
+        (what :func:`job_owner` reads first), ``payload_overview['username']``
+        (its fallback), and the indexed ``username`` column (what the
+        "my optimizations" list query filters on) — so all three are rewritten
+        together to keep ownership consistent across the read paths.
+
+        Args:
+            optimization_id: Optimization whose owner is reassigned.
+            new_owner: The new owner's lowercased username.
+        """
+        job_data = job_store.get_job(optimization_id)
+        overview = parse_overview(job_data)
+        overview[PAYLOAD_OVERVIEW_USERNAME] = new_owner
+        updates: dict[str, Any] = {"payload_overview": overview, "username": new_owner}
+        payload = job_data.get("payload")
+        if isinstance(payload, dict):
+            updates["payload"] = {**payload, "username": new_owner}
+        job_store.update_job(optimization_id, **updates)
 
     @router.get(
         "/optimizations/{optimization_id}/sharing",
@@ -622,14 +709,18 @@ def create_share_router(*, job_store) -> APIRouter:
         response_model=SharingState,
         summary="Set the general-access policy (restricted vs anyone-with-link)",
     )
-    def put_sharing(
-        optimization_id: str, req: PutSharingRequest, current_user: AuthenticatedUserDep
-    ) -> SharingState:
-        """Set the optimization's general-access policy, minting a link if needed.
+    def put_sharing(optimization_id: str, req: PutSharingRequest, current_user: AuthenticatedUserDep) -> SharingState:
+        """Set the link's general-access policy and tier, minting a link if needed.
+
+        ``general_role`` is the tier an ``anyone`` link grants a signed-in
+        visitor (``viewer``/``editor``); omit it to leave the current tier
+        unchanged. It is persisted regardless of ``general_access`` so toggling
+        back to ``anyone`` later keeps the chosen tier.
 
         Args:
             optimization_id: Optimization to update.
-            req: Body carrying the new ``general_access`` policy.
+            req: Body carrying the new ``general_access`` policy and optional
+                ``general_role`` tier.
             current_user: Authenticated owner/editor.
 
         Returns:
@@ -637,17 +728,64 @@ def create_share_router(*, job_store) -> APIRouter:
 
         Raises:
             DomainError: 404 when unknown/inaccessible; 403 when the caller may
-                not manage sharing; 400 when ``general_access`` is invalid.
+                not manage sharing; 400 when ``general_access`` or
+                ``general_role`` is invalid.
         """
         if req.general_access not in _GENERAL_ACCESS_VALUES:
+            raise DomainError("share.invalid_general_access", status=400, allowed=", ".join(_GENERAL_ACCESS_VALUES))
+        if req.general_role is not None and req.general_role not in LINK_ROLES:
             raise DomainError(
-                "share.invalid_general_access", status=400, allowed=", ".join(_GENERAL_ACCESS_VALUES)
+                "share.invalid_role",
+                status=400,
+                role=req.general_role,
+                allowed=", ".join(_LINK_ROLE_VALUES),
             )
         with Session(job_store.engine) as session:
             owner = _require_manage(session, optimization_id, current_user)
             link = _ensure_link(session, optimization_id, current_user.username)
             link.general_access = req.general_access
+            if req.general_role is not None:
+                link.general_role = req.general_role
+            _sync_link_memberships(session, optimization_id, link)
             session.commit()
+            return _sharing_state(session, optimization_id, owner)
+
+    @router.put(
+        "/optimizations/{optimization_id}/visibility",
+        response_model=SharingState,
+        summary="Set whether an optimization is private (hidden from the public Explore corpus)",
+    )
+    def put_visibility(
+        optimization_id: str, req: SetVisibilityRequest, current_user: AuthenticatedUserDep
+    ) -> SharingState:
+        """Flip an optimization's public-Explore visibility (owner-only).
+
+        Toggles the ``is_private`` flag the Explore public corpus filters on.
+        Writes it to ``payload_overview`` **and** the denormalized
+        ``job_embeddings.is_private`` column (what the corpus query actually
+        reads), then invalidates the cached public dashboard so the change shows
+        immediately. Independent of the share link's ``general_access`` — corpus
+        discoverability and link access are separate axes.
+
+        Args:
+            optimization_id: Optimization to update.
+            req: Body carrying the new ``is_private`` flag.
+            current_user: Authenticated owner/admin.
+
+        Returns:
+            The updated :class:`SharingState`.
+
+        Raises:
+            DomainError: 404 when unknown/inaccessible; 403 when the caller may
+                not manage sharing.
+        """
+        with Session(job_store.engine) as session:
+            owner = _require_manage(session, optimization_id, current_user)
+            overview = parse_overview(job_store.get_job(optimization_id))
+            overview[PAYLOAD_OVERVIEW_IS_PRIVATE] = req.is_private
+            job_store.set_payload_overview(optimization_id, overview)
+            set_embedding_privacy(job_store, optimization_id, req.is_private)
+            invalidate_public_dashboard_cache()
             return _sharing_state(session, optimization_id, owner)
 
     @router.post(
@@ -655,9 +793,7 @@ def create_share_router(*, job_store) -> APIRouter:
         response_model=SharingState,
         summary="Invite a user (add or replace a member grant)",
     )
-    def add_member(
-        optimization_id: str, req: AddMemberRequest, current_user: AuthenticatedUserDep
-    ) -> SharingState:
+    def add_member(optimization_id: str, req: AddMemberRequest, current_user: AuthenticatedUserDep) -> SharingState:
         """Add or replace a member grant on the optimization.
 
         Args:
@@ -669,14 +805,12 @@ def create_share_router(*, job_store) -> APIRouter:
             The updated :class:`SharingState`.
 
         Raises:
-            DomainError: 404 when unknown/inaccessible; 403 when the caller may
-                not manage sharing; 400 when the role is invalid or the caller
-                tries to grant themselves.
+            DomainError: 404 when unknown/inaccessible or the caller is not an
+                owner/admin; 400 when the role is invalid or the caller tries to
+                grant the owner themselves.
         """
         if req.role not in MEMBER_ROLES:
-            raise DomainError(
-                "share.invalid_role", status=400, role=req.role, allowed=", ".join(sorted(MEMBER_ROLES))
-            )
+            raise DomainError("share.invalid_role", status=400, role=req.role, allowed=", ".join(sorted(MEMBER_ROLES)))
         grantee = req.username.strip().lower()
         with Session(job_store.engine) as session:
             owner = _require_manage(session, optimization_id, current_user)
@@ -685,6 +819,10 @@ def create_share_router(*, job_store) -> APIRouter:
             existing = get_grant(session, optimization_id, grantee)
             if existing is not None:
                 existing.role = req.role
+                # Promote a link-derived membership to a named invite so it becomes
+                # authoritative — it must no longer track (or be revoked with) the
+                # link once the owner has invited the person by name.
+                existing.created_by = current_user.username
             else:
                 session.add(
                     OptimizationShareGrantModel(
@@ -696,7 +834,11 @@ def create_share_router(*, job_store) -> APIRouter:
                     )
                 )
             session.commit()
-            return _sharing_state(session, optimization_id, owner)
+            state = _sharing_state(session, optimization_id, owner)
+        # Notify outside the session so a slow Outlook send never holds the
+        # transaction open; only fires once the grant is durably committed.
+        notify_share_invite(optimization_id, grantee, current_user.username, req.role)
+        return state
 
     @router.patch(
         "/optimizations/{optimization_id}/sharing/members/{username}",
@@ -721,32 +863,32 @@ def create_share_router(*, job_store) -> APIRouter:
             The updated :class:`SharingState`.
 
         Raises:
-            DomainError: 404 when the optimization is unknown/inaccessible or
-                the member grant does not exist; 403 when the caller may not
-                manage sharing; 400 when the role is invalid.
+            DomainError: 404 when the optimization is unknown/inaccessible, the
+                caller is not an owner/admin, or the member grant does not exist;
+                400 when the role is invalid or the caller targets their own grant.
         """
         if req.role not in MEMBER_ROLES:
-            raise DomainError(
-                "share.invalid_role", status=400, role=req.role, allowed=", ".join(sorted(MEMBER_ROLES))
-            )
+            raise DomainError("share.invalid_role", status=400, role=req.role, allowed=", ".join(sorted(MEMBER_ROLES)))
         grantee = username.strip().lower()
         with Session(job_store.engine) as session:
             owner = _require_manage(session, optimization_id, current_user)
+            if grantee == current_user.username.strip().lower():
+                raise DomainError("share.cannot_modify_self", status=400)
             grant = get_grant(session, optimization_id, grantee)
             if grant is None:
                 raise DomainError("share.member_not_found", status=404, username=grantee)
             grant.role = req.role
             session.commit()
-            return _sharing_state(session, optimization_id, owner)
+            state = _sharing_state(session, optimization_id, owner)
+        notify_role_change(optimization_id, grantee, current_user.username, req.role)
+        return state
 
     @router.delete(
         "/optimizations/{optimization_id}/sharing/members/{username}",
         response_model=SharingState,
         summary="Remove a member's grant",
     )
-    def remove_member(
-        optimization_id: str, username: str, current_user: AuthenticatedUserDep
-    ) -> SharingState:
+    def remove_member(optimization_id: str, username: str, current_user: AuthenticatedUserDep) -> SharingState:
         """Remove a member's grant from the optimization.
 
         Args:
@@ -758,19 +900,86 @@ def create_share_router(*, job_store) -> APIRouter:
             The updated :class:`SharingState`.
 
         Raises:
-            DomainError: 404 when the optimization is unknown/inaccessible or
-                the member grant does not exist; 403 when the caller may not
-                manage sharing.
+            DomainError: 404 when the optimization is unknown/inaccessible, the
+                caller is not an owner/admin, or the member grant does not exist;
+                400 when the caller targets their own grant.
         """
         grantee = username.strip().lower()
         with Session(job_store.engine) as session:
             owner = _require_manage(session, optimization_id, current_user)
+            if grantee == current_user.username.strip().lower():
+                raise DomainError("share.cannot_modify_self", status=400)
             grant = get_grant(session, optimization_id, grantee)
             if grant is None:
                 raise DomainError("share.member_not_found", status=404, username=grantee)
             session.delete(grant)
             session.commit()
             return _sharing_state(session, optimization_id, owner)
+
+    @router.post(
+        "/optimizations/{optimization_id}/sharing/transfer",
+        response_model=SharingState,
+        summary="Transfer ownership to an existing member (old owner becomes an editor)",
+    )
+    def transfer_ownership(
+        optimization_id: str, req: TransferOwnershipRequest, current_user: AuthenticatedUserDep
+    ) -> SharingState:
+        """Hand a single optimization's ownership to an existing member.
+
+        Mirrors Google Drive's My-Drive transfer: an optimization has exactly
+        one owner, so ownership is reassigned outright — the previous owner is
+        demoted to an ``editor`` grant (keeping edit/run access), and the new
+        owner's member grant is dropped (the owner is never also a grantee). The
+        serving key is baked into the optimization's stored ``model_config``, so
+        it is unchanged: transfer moves control, not billing. The new owner must
+        already be a member (Drive: you can only transfer to someone you shared
+        with).
+
+        Args:
+            optimization_id: Optimization whose ownership moves.
+            req: Body carrying the new owner ``username`` (an existing member).
+            current_user: Authenticated current owner/admin.
+
+        Returns:
+            The updated :class:`SharingState` — ``owner`` is the new owner and
+            the previous owner now appears as an ``editor`` member.
+
+        Raises:
+            DomainError: 404 when unknown/inaccessible or the caller may not
+                manage sharing; 400 when transferring to the current owner;
+                404 (``share.member_not_found``) when the target is not a member.
+        """
+        new_owner = req.username.strip().lower()
+        with Session(job_store.engine) as session:
+            owner = _require_manage(session, optimization_id, current_user)
+            if owner is not None and new_owner == owner:
+                raise DomainError("share.cannot_grant_self", status=400)
+            grant = get_grant(session, optimization_id, new_owner)
+            if grant is None:
+                raise DomainError("share.member_not_found", status=404, username=new_owner)
+            # Flip the structural owner first so the transfer itself is durable
+            # even if the grant bookkeeping below fails (recoverable: the new
+            # owner now controls the share and can re-add the old one).
+            _reassign_job_owner(optimization_id, new_owner)
+            session.delete(grant)
+            if owner is not None:
+                demoted = get_grant(session, optimization_id, owner)
+                if demoted is not None:
+                    demoted.role = str(ShareRole.editor)
+                else:
+                    session.add(
+                        OptimizationShareGrantModel(
+                            optimization_id=optimization_id,
+                            grantee_username=owner,
+                            role=str(ShareRole.editor),
+                            created_by=current_user.username,
+                            created_at=datetime.now(UTC),
+                        )
+                    )
+            session.commit()
+            state = _sharing_state(session, optimization_id, new_owner)
+        notify_ownership_transfer(optimization_id, new_owner, current_user.username)
+        return state
 
     @router.get(
         "/users/search",
@@ -782,7 +991,9 @@ def create_share_router(*, job_store) -> APIRouter:
 
         Backs the invite autocomplete. Searches the union of known username
         sources (``jobs.username``, ``agent_conversations.username``,
-        ``api_tokens.username``); a blank query returns nothing.
+        ``api_tokens.username``); a blank query returns nothing. Synthetic
+        ``.local`` test/load accounts are excluded so harness fixtures never
+        surface in the people picker (see ``_SYNTHETIC_USERNAME_PATTERN``).
 
         Args:
             q: Case-insensitive username prefix.
@@ -803,7 +1014,11 @@ def create_share_router(*, job_store) -> APIRouter:
                 ApiTokenModel.username,
             ):
                 rows = session.scalars(
-                    select(column).where(column.isnot(None)).where(column.ilike(pattern)).distinct()
+                    select(column)
+                    .where(column.isnot(None))
+                    .where(column.ilike(pattern))
+                    .where(~column.ilike(_SYNTHETIC_USERNAME_PATTERN))
+                    .distinct()
                 )
                 for value in rows:
                     if value:
@@ -812,21 +1027,21 @@ def create_share_router(*, job_store) -> APIRouter:
 
     @router.get(
         "/share/{token}",
-        summary="Access-gated composite snapshot of a shared optimization (no auth required)",
+        summary="Access-gated composite snapshot of a shared optimization (viewer+)",
     )
-    def get_shared_optimization(token: str, viewer: OptionalUserDep) -> dict[str, Any]:
+    def get_shared_optimization(token: str, current_user: AuthenticatedUserDep) -> dict[str, Any]:
         """Return the access-gated composite view of a shared optimization.
 
-        Anonymous visitors under an ``anyone`` link resolve to the ``view``
-        role: the owner is hidden and ``serve_info`` is ``null``. Invited
-        members (viewer+) see the real owner and ``serve_info``. Secrets (API
-        keys, base URLs) are stripped from the payload in every case, and the
-        full train/val/test split plus per-example test results are returned
-        uncapped for the read-only detail view.
+        Requires a signed-in caller; the floor is ``viewer`` (real owner shown).
+        ``serve_info`` (the field schema behind the inference panel) is editor+
+        only, since serving spends the owner's key. Secrets (API keys, base
+        URLs) are stripped from the payload in every case, and the full
+        train/val/test split plus per-example test results are returned uncapped
+        for the read-only detail view.
 
         Args:
             token: The public share token from the URL.
-            viewer: Resolved caller (or ``None`` for an anonymous visitor).
+            current_user: Authenticated caller.
 
         Returns:
             ``{optimization_id, role, owner, status, payload, dataset,
@@ -837,7 +1052,7 @@ def create_share_router(*, job_store) -> APIRouter:
                 no access, or the underlying optimization no longer exists.
         """
         with Session(job_store.engine) as session:
-            role = resolve_share_access(session, token, viewer)
+            role = resolve_share_access(session, token, current_user)
             if role is None:
                 raise DomainError("share.not_found", status=404)
             link = get_link_by_token(session, token)
@@ -848,14 +1063,17 @@ def create_share_router(*, job_store) -> APIRouter:
         except KeyError:
             raise DomainError("share.not_found", status=404) from None
 
-        owner_visible = role != ShareRole.view
-        owner = job_owner(job_data) if owner_visible else None
+        owner = job_owner(job_data)
+        # Serving is editor+, so only an editor+ caller gets serve_info — the
+        # field schema that drives the inference panel. Viewers read the run
+        # but never see the serve surface (they can't spend the owner's key).
+        can_serve = role_rank(role) >= role_rank(ShareRole.editor)
 
-        status = _build_status_response(job_store, optimization_id, job_data, owner_visible=owner_visible)
+        status = _build_status_response(job_store, optimization_id, job_data)
         raw_payload = job_data.get("payload")
         payload = _scrub_payload(raw_payload) if isinstance(raw_payload, dict) else {}
         serve_info = None
-        if owner_visible and owner is not None:
+        if can_serve and owner is not None:
             info = _serve_info(job_store, optimization_id, owner)
             serve_info = info.model_dump(mode="json") if info is not None else None
 
@@ -870,23 +1088,153 @@ def create_share_router(*, job_store) -> APIRouter:
             "serve_info": serve_info,
         }
 
+    @router.get(
+        "/optimizations/{optimization_id}/public",
+        summary="Scrubbed read-only view of a public (Explore-corpus) optimization",
+    )
+    def get_public_optimization(optimization_id: str) -> dict[str, Any]:
+        """Return the scrubbed, read-only composite for a PUBLIC optimization.
+
+        Mirrors the access-gated ``GET /share/{token}`` composite but is keyed by
+        optimization id and gated on the Explore-corpus ``is_private`` flag rather
+        than a share token: a public optimization grants every caller the
+        ``viewer`` tier (read + clone) — the owner is shown for attribution,
+        secrets (API keys, base URLs) are stripped from the payload, and inference
+        is disabled (``serve_info`` is ``null``, so no caller can spend the
+        owner's key). A private optimization 404s, exactly as if it were unlisted.
+        This backs the Explore "public" tab so that a *listed* run is also
+        *openable* and *forkable* — public discoverability and view access stay in
+        sync.
+
+        Args:
+            optimization_id: The optimization to read.
+
+        Returns:
+            ``{optimization_id, role, owner, status, payload, dataset,
+            test_results, serve_info}`` — the same shape as the share composite.
+
+        Raises:
+            DomainError: 404 when the optimization is unknown or private.
+        """
+        try:
+            job_data = job_store.get_job(optimization_id)
+        except KeyError:
+            raise DomainError("share.not_found", status=404) from None
+        overview = parse_overview(job_data)
+        if bool(overview.get(PAYLOAD_OVERVIEW_IS_PRIVATE, False)):
+            raise DomainError("share.not_found", status=404)
+
+        status = _build_status_response(job_store, optimization_id, job_data)
+        raw_payload = job_data.get("payload")
+        payload = _scrub_payload(raw_payload) if isinstance(raw_payload, dict) else {}
+        return {
+            "optimization_id": optimization_id,
+            # ``viewer`` (not the anonymous ``view`` floor): a public run grants
+            # read + clone to every signed-in user — the point of the showcase is
+            # to fork others' work. Inference stays editor+ (``serve_info`` is
+            # null below), so a viewer still can't spend the owner's key.
+            "role": ShareRole.viewer.value,
+            "owner": job_owner(job_data),
+            "status": status.model_dump(mode="json"),
+            "payload": payload,
+            "dataset": _full_dataset(job_data, optimization_id),
+            "test_results": _test_results(job_data, optimization_id),
+            "serve_info": None,
+        }
+
+    @router.post(
+        "/share/{token}/claim",
+        response_model=ClaimShareResponse,
+        summary="Redeem a share link: record a link membership and return the target optimization",
+    )
+    def claim_shared_optimization(token: str, current_user: AuthenticatedUserDep) -> ClaimShareResponse:
+        """Redeem a share link, joining the caller to it, then point them at it.
+
+        Google-Drive link semantics: opening an ``anyone``-with-link URL records a
+        *link membership* for the signed-in caller at the link's current tier — so
+        the run lists in their account (``/optimizations/shared-with-me`` and the
+        unified table) and the normal ``/optimizations/{id}`` routes resolve them
+        to that tier. The membership is **not** frozen: it tracks the link, so a
+        later editor→viewer change downgrades them and restricting/revoking the
+        link removes their access entirely (see :func:`_sync_link_memberships`). A
+        ``restricted`` link grants nothing: the caller must already be the owner or
+        a named invitee, else 404. The owner/admin needs no membership, and a
+        caller who already holds a named invite keeps it untouched (invites are
+        authoritative and independent of the link). Authentication is required —
+        the whole app is login-gated, so there is no anonymous tier to redeem.
+
+        Args:
+            token: The public share token from the ``/share/<token>`` URL.
+            current_user: Authenticated caller redeeming the link.
+
+        Returns:
+            A :class:`ClaimShareResponse` with the target ``optimization_id`` and
+            the caller's effective ``role`` after redemption.
+
+        Raises:
+            DomainError: 404 when the token is unknown/revoked, the underlying
+                optimization is gone, or the caller has no access under the
+                link's policy.
+        """
+        with Session(job_store.engine) as session:
+            role = resolve_share_access(session, token, current_user)
+            if role is None:
+                raise DomainError("share.not_found", status=404)
+            link = get_link_by_token(session, token)
+            optimization_id = link.optimization_id
+            try:
+                job_store.get_job(optimization_id)
+            except KeyError:
+                raise DomainError("share.not_found", status=404) from None
+            # Record a link-derived membership so the run lists in the caller's
+            # table, carrying the link's *current* tier. This is not a frozen
+            # grant: it is re-synced here on every open and by put_sharing on any
+            # link change, and deleted when the link is restricted — so link
+            # access tracks the link (Drive semantics). The owner/admin
+            # (role==owner) needs no membership; a caller who already holds a
+            # named invite keeps it untouched (invites are authoritative).
+            if (
+                role != ShareRole.owner
+                and link.general_access == GENERAL_ACCESS_ANYONE
+                and link.general_role in MEMBER_ROLES
+            ):
+                username = current_user.username.strip().lower()
+                existing = get_grant(session, optimization_id, username)
+                if existing is None:
+                    session.add(
+                        OptimizationShareGrantModel(
+                            optimization_id=optimization_id,
+                            grantee_username=username,
+                            role=link.general_role,
+                            created_by=LINK_GRANT_MARKER,
+                            created_at=datetime.now(UTC),
+                        )
+                    )
+                    session.commit()
+                elif existing.created_by == LINK_GRANT_MARKER and existing.role != link.general_role:
+                    existing.role = link.general_role
+                    session.commit()
+        return ClaimShareResponse(optimization_id=optimization_id, role=str(role))
+
     @router.post(
         "/share/{token}/serve",
         response_model=ServeResponse,
         summary="Run one inference on a shared optimization (viewer+ only)",
     )
-    def serve_shared_optimization(token: str, req: ServeRequest, viewer: OptionalUserDep) -> ServeResponse:
+    def serve_shared_optimization(
+        token: str, req: ServeRequest, current_user: AuthenticatedUserDep
+    ) -> ServeResponse:
         """Run a single blocking inference using the OWNER's stored model config.
 
-        Requires an effective role of viewer or higher — anonymous ``view``
-        callers (and unknown tokens) get 403/404. The owner's model config
-        (including the owner's API key) is loaded server-side and never
+        Requires an effective role of editor or higher — it spends the owner's
+        API key, so viewers get 403 (unknown tokens get 404). The owner's model
+        config (including the owner's API key) is loaded server-side and never
         returned. Extra inputs beyond the program signature are ignored.
 
         Args:
             token: The public share token from the URL.
             req: Inference request carrying the inputs.
-            viewer: Resolved caller (or ``None`` for an anonymous visitor).
+            current_user: Authenticated caller.
 
         Returns:
             A :class:`ServeResponse` with the predicted outputs and resolved
@@ -894,11 +1242,11 @@ def create_share_router(*, job_store) -> APIRouter:
 
         Raises:
             DomainError: 404 when the token is unknown/revoked; 403 when the
-                caller's role is view/anonymous; 400 (bad inputs / no model);
+                caller's role is below editor; 400 (bad inputs / no model);
                 409 when the optimization is not in a serveable state.
         """
         with Session(job_store.engine) as session:
-            role = resolve_share_access(session, token, viewer)
+            role = resolve_share_access(session, token, current_user)
             if role is None:
                 raise DomainError("share.not_found", status=404)
             if role not in _INFER_ROLES:
@@ -929,9 +1277,7 @@ def create_share_router(*, job_store) -> APIRouter:
             raise DomainError("serve.no_declared_inputs", status=400)
         missing = [f for f in input_fields if f not in req.inputs]
         if missing:
-            raise DomainError(
-                "serve.missing_inputs", status=400, missing=missing, input_fields=input_fields
-            )
+            raise DomainError("serve.missing_inputs", status=400, missing=missing, input_fields=input_fields)
         filtered_inputs = {f: req.inputs[f] for f in input_fields}
 
         lm = build_language_model(model_config)

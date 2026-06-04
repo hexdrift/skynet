@@ -27,10 +27,11 @@ from ....models import (
     GridSearchResponse,
     JobDeleteResponse,
 )
-from ...auth import AuthenticatedUser, get_authenticated_user, is_admin
+from ...auth import AuthenticatedUser, get_authenticated_user
 from ...converters import parse_overview, status_to_job_status
 from ...errors import DomainError
-from .._helpers import _program_cache, job_owner, load_job_for_user
+from ...sharing_access import ShareRole
+from .._helpers import _program_cache, filter_ids_at_least, require_role_at_least
 from ..constants import TERMINAL_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -67,10 +68,13 @@ def register_deletion_routes(router: APIRouter, *, job_store) -> None:
             A ``JobDeleteResponse`` confirming the delete.
 
         Raises:
-            DomainError: 404 if unknown or inaccessible to the caller, 409
-                if still active.
+            DomainError: 404 if unknown or inaccessible, 403 if the caller is
+                not an ``owner`` (admins and the creator qualify), 409 if still
+                active.
         """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.owner
+        )
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in TERMINAL_STATUSES:
@@ -110,10 +114,12 @@ def register_deletion_routes(router: APIRouter, *, job_store) -> None:
 
         Raises:
             DomainError: 404 (unknown id / inaccessible / not a grid / no
-                result / missing pair), 409 (not yet terminal), 500
-                (corrupt result).
+                result / missing pair), 403 (caller is not an ``owner``), 409
+                (not yet terminal), 500 (corrupt result).
         """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.owner
+        )
 
         overview = parse_overview(job_data)
         if overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
@@ -177,10 +183,10 @@ def register_deletion_routes(router: APIRouter, *, job_store) -> None:
     def bulk_delete_jobs(body: BulkDeleteRequest, current_user: AuthenticatedUserDep) -> BulkDeleteResponse:
         """Delete a batch of terminal optimizations and report per-id outcomes.
 
-        Duplicate ids are deduplicated. Non-terminal, missing, or
-        non-owned (for non-admin callers) ids are returned under
-        ``skipped``; a bulk database failure reports every requested id as
-        skipped rather than raising 500.
+        Duplicate ids are deduplicated. Non-terminal, missing, or ids the
+        caller is not an ``owner`` of are returned under ``skipped``; a bulk
+        database failure reports every requested id as skipped rather than
+        raising 500.
 
         Args:
             body: The bulk-delete request body.
@@ -202,22 +208,13 @@ def register_deletion_routes(router: APIRouter, *, job_store) -> None:
         if not ordered_unique:
             return BulkDeleteResponse(deleted=deleted, skipped=skipped)
 
-        admin = is_admin(current_user)
-        if admin:
-            allowed = ordered_unique
-        else:
-            allowed = []
-            for optimization_id in ordered_unique:
-                try:
-                    job_data = job_store.get_job(optimization_id)
-                except KeyError:
-                    skipped.append(BulkDeleteSkipped(optimization_id=optimization_id, reason="not_found"))
-                    continue
-                owner = job_owner(job_data)
-                if owner is None or owner != current_user.username:
-                    skipped.append(BulkDeleteSkipped(optimization_id=optimization_id, reason="not_found"))
-                    continue
-                allowed.append(optimization_id)
+        allowed, denied = filter_ids_at_least(
+            job_store, ordered_unique, current_user, ShareRole.owner
+        )
+        skipped.extend(
+            BulkDeleteSkipped(optimization_id=optimization_id, reason="not_found")
+            for optimization_id in denied
+        )
 
         if not allowed:
             return BulkDeleteResponse(deleted=deleted, skipped=skipped)

@@ -260,6 +260,13 @@ def is_admin(user: AuthenticatedUser) -> bool:
     Returns:
         Whether the user is recognised as a backend admin.
     """
+    # The session JWT is HS256-signed by the trusted frontend, which already
+    # resolves admin status from AUTH_ADMINS/AUTH_ADMIN_GROUPS. Honour that
+    # claim so the admin UI (tab visibility) and the API can't drift apart and
+    # leave a frontend-admin staring at a 403. admin_usernames/admin_groups
+    # below remain a break-glass override independent of the frontend.
+    if user.role == "admin":
+        return True
     if user.username in settings.admin_usernames_set:
         return True
     return bool(settings.admin_groups_set and settings.admin_groups_set.intersection(user.groups))
