@@ -31,7 +31,7 @@ export function RuntimeDistributionChart({
   if (data.length === 0) return null;
 
   return (
-    <div className="h-[250px]">
+    <div className="h-[250px] min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ left: 10, right: 10, top: 10, bottom: 25 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted" />

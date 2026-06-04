@@ -24,7 +24,7 @@ export function OptimizerChart({ data, onBarClick }: OptimizerChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   return (
-    <div className="h-[280px]">
+    <div className="h-[280px] min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ left: 10, right: 20, top: 20, bottom: 30 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted" />

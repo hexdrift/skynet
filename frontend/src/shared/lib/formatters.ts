@@ -29,26 +29,39 @@ export function formatRelativeTime(iso: string): string {
   }
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
 /**
- * Format log timestamp for display
- * @example "2026-03-30T23:32:45.971393" → "30/03 23:32:45"
+ * Parse a backend timestamp into a Date in the viewer's local zone.
+ *
+ * The backend persists UTC. When the ISO string carries no timezone designator
+ * we append "Z" so it is read as UTC instead of local — otherwise the displayed
+ * wall-clock silently drifts by the viewer's offset (e.g. a UTC "23:29" rendered
+ * verbatim instead of the local "02:29").
  */
-export function formatLogTimestamp(ts: string): string {
-  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return ts;
-  const [, , mm, dd, hh, mi, ss] = m;
-  return `${dd}/${mm} ${hh}:${mi}:${ss}`;
+function parseBackendTimestamp(ts: string): Date {
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(ts);
+  return new Date(hasZone ? ts : `${ts}Z`);
 }
 
 /**
- * Group log timestamps by minute for filtering
- * @example "2026-03-30T23:32:45" → "30/03 23:32"
+ * Format log timestamp for display in the viewer's local time
+ * @example "2026-03-30T23:32:45.971393+00:00" → "31/03 02:32:45" (UTC+3 viewer)
+ */
+export function formatLogTimestamp(ts: string): string {
+  const d = parseBackendTimestamp(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+/**
+ * Group log timestamps by minute for filtering, in the viewer's local time
+ * @example "2026-03-30T23:32:45+00:00" → "31/03 02:32" (UTC+3 viewer)
  */
 export function logTimeBucket(ts: string): string {
-  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
-  if (!m) return ts;
-  const [, , mm, dd, hh, mi] = m;
-  return `${dd}/${mm} ${hh}:${mi}`;
+  const d = parseBackendTimestamp(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 /**
@@ -112,5 +125,20 @@ export function formatOutput(v: unknown): string {
 
 export function formatId(id: string): string {
   return id;
+}
+
+/**
+ * Friendly label for a DSPy module name. The backend may store either the
+ * short alias ("cot") or the resolved dotted path ("dspy.ChainOfThought"), so
+ * match on keywords rather than exact strings.
+ * @example "dspy.ChainOfThought" → "CoT", "react" → "ReAct"
+ */
+export function moduleLabel(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const v = raw.toLowerCase();
+  if (v.includes("react")) return "ReAct";
+  if (v.includes("chain") || v === "cot") return "CoT";
+  if (v.includes("predict")) return "Predict";
+  return raw;
 }
 

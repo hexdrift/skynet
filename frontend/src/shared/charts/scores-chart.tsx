@@ -50,7 +50,7 @@ export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartPr
 
   return (
     <>
-      <div className="h-[300px] relative group">
+      <div className="h-[300px] relative group min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}

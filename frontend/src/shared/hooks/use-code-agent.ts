@@ -108,7 +108,10 @@ export interface CodeAgentState {
 export interface UseCodeAgentArgs {
   codeAssistMode: "auto" | "manual";
   setCodeAssistMode: (m: "auto" | "manual") => void;
-  columnRoles: Record<string, "input" | "output" | "ignore">;
+  // Widened to plain string roles: react runs add replay roles (steps,
+  // allowed_tools, …) beyond the signature I/O set; this hook only reads the
+  // "input"/"output" roles, so the extra react roles pass through harmlessly.
+  columnRoles: Record<string, string>;
   columnKinds: Record<string, "text" | "image">;
   parsedDataset: ParsedDataset | null;
   moduleName: string;

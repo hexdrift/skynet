@@ -27,7 +27,7 @@ export function DatasetVsImprovementChart({
   if (data.length === 0) return null;
 
   return (
-    <div className="h-[250px]">
+    <div className="h-[250px] min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <ScatterChart margin={{ left: 10, right: 20, top: 10, bottom: 25 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

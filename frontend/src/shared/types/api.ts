@@ -33,6 +33,38 @@ export interface SplitFractions {
   test: number;
 }
 
+// React (ReAct-agent) optimization configuration. Mirrors the backend
+// `Reward`, `ToolSource`, and `ReplayMapping` models on `RunRequest`. Only
+// sent when `module_name === "react"`.
+export type RewardPreset = "general" | "generalist" | "replay_match";
+export type MatchMode = "exact" | "tool_name";
+
+export interface Reward {
+  // ReAct runs score via a code-authored metric_code, so they omit the preset
+  // and send only match_mode (the replay-matching strictness).
+  preset?: RewardPreset;
+  grounding_weight?: number;
+  match_mode?: MatchMode;
+}
+
+export interface ToolSource {
+  kind: "live_mcp" | "dataset_snapshot";
+  mcp_url?: string | null;
+  // Secret bearer/auth header for the MCP endpoint. Never persisted by the
+  // backend and never mirrored into shared agent state.
+  mcp_auth_header?: string | null;
+  tool_filter?: string[] | null;
+}
+
+export interface ReplayMapping {
+  steps: string;
+  allowed_tools: string;
+  tool_schema_hashes: string;
+  state_before?: string | null;
+  state_after?: string | null;
+  chat_history?: string | null;
+}
+
 export interface SplitCounts {
   train: number;
   val: number;
@@ -46,13 +78,18 @@ interface OptimizationRequestBase {
   module_name: string;
   module_kwargs?: Record<string, unknown>;
   signature_code: string;
-  metric_code: string;
+  // Optional: react runs backed by a built-in reward preset omit it.
+  metric_code?: string;
   optimizer_name: string;
   optimizer_kwargs?: Record<string, unknown>;
   compile_kwargs?: Record<string, unknown>;
   dataset: Array<Record<string, unknown>>;
   dataset_filename?: string | null;
   column_mapping: ColumnMapping;
+  // Dataset columns in the order the user arranged them at submit time. An
+  // array (not object keys) so it survives JSONB storage and a clone can
+  // restore the original column order.
+  column_order?: string[];
   split_fractions?: SplitFractions;
   shuffle?: boolean;
   seed?: number | null;
@@ -63,6 +100,10 @@ export interface RunRequest extends OptimizationRequestBase {
   model_config: ModelConfig;
   reflection_model_config?: ModelConfig;
   task_model_config?: ModelConfig;
+  // React-agent run fields — only populated when `module_name === "react"`.
+  reward?: Reward;
+  tool_source?: ToolSource;
+  replay_mapping?: ReplayMapping;
 }
 
 export interface GridSearchRequest extends OptimizationRequestBase {
@@ -129,6 +170,8 @@ export interface OptimizationSummaryResponse {
   task_fingerprint?: string | null;
   compare_fingerprint?: string | null;
   summary_text?: string | null;
+  /** Caller's share role when this run was reached via a member grant; null/absent for owned runs. */
+  role?: "viewer" | "editor" | "owner" | null;
 }
 
 export interface PaginatedJobsResponse {
@@ -167,11 +210,25 @@ export interface OptimizedPredictor {
   formatted_prompt: string;
 }
 
+// Optimized react-agent overlay: the actual artifact a react run produces —
+// GEPA-tuned per-tool descriptions, optional renamed display names, and the
+// loop budget. Mirrors backend ReactOverlay.
+export interface ReactOverlay {
+  tool_descriptions: Record<string, string>;
+  tool_arg_descriptions: Record<string, Record<string, string>>;
+  tool_schema_hashes: Record<string, string>;
+  max_iters: number;
+  tool_source?: Record<string, unknown> | null;
+  /** GEPA-proposed display names, { canonical: proposed }. */
+  tool_names?: Record<string, string> | null;
+}
+
 export interface ProgramArtifact {
   path?: string | null;
   program_pickle_base64?: string | null;
   metadata?: Record<string, unknown>;
   optimized_prompt?: OptimizedPredictor;
+  react_overlay?: ReactOverlay | null;
 }
 
 export interface EvalExampleResult {
@@ -248,8 +305,18 @@ export interface GridSearchResult {
 export interface OptimizationStatusResponse extends OptimizationSummaryResponse {
   progress_events: ProgressEvent[];
   logs: OptimizationLogEntry[];
+  /**
+   * Start index of the `progress_events` / `logs` slices within the full
+   * server-side stream. 0 (or absent) means the slice is the complete stream;
+   * a positive value marks a delta tail returned for a `since_progress` /
+   * `since_log` cursor, to be spliced onto rows already held client-side.
+   */
+  progress_offset?: number;
+  logs_offset?: number;
   result?: RunResult | null;
   grid_result?: GridSearchResult | null;
+  /** Caller's share role when reached via a member grant; null for the owner's own view. */
+  effective_role?: "viewer" | "editor" | "owner" | null;
 }
 
 export interface ValidateCodeResponse {

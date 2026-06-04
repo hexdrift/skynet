@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 
 import { cn } from "@/shared/lib/utils";
@@ -47,8 +47,13 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  // "popper" anchors the menu to the trigger (drops below/above it). The Radix
+  // default "item-aligned" scrolls the page to align the selected option over
+  // the trigger, which visibly jumps the surrounding layout when the trigger
+  // sits low on a scrollable page. Popper avoids that scroll entirely.
+  position = "popper",
   align = "center",
+  sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
   return (
@@ -64,6 +69,7 @@ function SelectContent({
         style={{ zIndex: 9999 }}
         position={position}
         align={align}
+        sideOffset={sideOffset}
         {...props}
       >
         <SelectScrollUpButton />
@@ -71,7 +77,7 @@ function SelectContent({
           className={cn(
             "p-1",
             position === "popper" &&
-              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
+              "w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
           )}
         >
           {children}
@@ -97,34 +103,23 @@ function SelectItem({
   children,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item>) {
-  const applyInteractiveStyle = (element: HTMLDivElement) => {
-    element.style.backgroundColor = "var(--accent)";
-    element.style.color = "var(--accent-foreground)";
-    element.style.boxShadow = "var(--shadow-sm)";
-  };
-
-  const clearInteractiveStyle = (element: HTMLDivElement) => {
-    if (element.getAttribute("data-state") === "checked") return;
-    element.style.backgroundColor = "";
-    element.style.color = "";
-    element.style.boxShadow = "";
-  };
-
+  // Highlight (pointer hover + keyboard) is driven entirely by Radix's
+  // data-highlighted state in CSS — no imperative style mutation — so pointer
+  // and keyboard navigation share one consistent, flicker-free appearance.
+  // The selected row gets a clear check indicator, not just a tint.
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex w-full cursor-pointer items-center gap-2 rounded-lg py-2 text-sm outline-hidden select-none transition-[background-color,color,transform,box-shadow] duration-75 hover:bg-accent/80 hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=checked]:bg-accent/70 data-[state=checked]:text-foreground data-[state=checked]:shadow-sm data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg py-2 ps-3 pe-2 text-sm outline-hidden select-none transition-colors duration-100 ease-[cubic-bezier(0.2,0.8,0.2,1)] data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=checked]:font-medium data-[state=checked]:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className,
       )}
-      style={{ paddingInlineStart: "0.75rem", paddingInlineEnd: "0.5rem" }}
-      onMouseEnter={(event) => applyInteractiveStyle(event.currentTarget)}
-      onMouseLeave={(event) => clearInteractiveStyle(event.currentTarget)}
-      onFocus={(event) => applyInteractiveStyle(event.currentTarget)}
-      onBlur={(event) => clearInteractiveStyle(event.currentTarget)}
       {...props}
     >
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemIndicator className="flex shrink-0 items-center text-primary">
+        <CheckIcon className="size-4 text-primary" />
+      </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   );
 }

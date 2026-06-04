@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 
 const beigeEditorTheme = EditorView.theme(
   {
@@ -522,33 +523,38 @@ export function CodeEditor({
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
                 {(result.errors.length > 0 || result.warnings.length > 0) && (
-                  <button
-                    type="button"
-                    onClick={handleCopyConsole}
-                    className="close-button"
-                    title={
+                  <TooltipButton
+                    tooltip={
                       consoleCopied
                         ? msg("shared.code_editor.console_copied")
                         : msg("shared.code_editor.copy_console")
                     }
-                    aria-label={msg("shared.code_editor.copy_console")}
+                    side="top"
                   >
-                    {consoleCopied ? (
-                      <Check style={{ color: "#3D2E22" }} />
-                    ) : (
-                      <Copy />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyConsole}
+                      className="close-button"
+                      aria-label={msg("shared.code_editor.copy_console")}
+                    >
+                      {consoleCopied ? (
+                        <Check style={{ color: "#3D2E22" }} />
+                      ) : (
+                        <Copy />
+                      )}
+                    </button>
+                  </TooltipButton>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setResult(null)}
-                  className="close-button"
-                  title={msg("shared.code_editor.console_clear")}
-                  aria-label={msg("shared.code_editor.console_clear")}
-                >
-                  <X />
-                </button>
+                <TooltipButton tooltip={msg("shared.code_editor.console_clear")} side="top">
+                  <button
+                    type="button"
+                    onClick={() => setResult(null)}
+                    className="close-button"
+                    aria-label={msg("shared.code_editor.console_clear")}
+                  >
+                    <X />
+                  </button>
+                </TooltipButton>
               </div>
             </div>
           )}

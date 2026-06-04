@@ -5,6 +5,7 @@ import { Settings, Copy, Trash2, Plus, Thermometer, Coins, Eye, Brain } from "lu
 import { cn } from "@/shared/lib/utils";
 import type { CatalogModel, ModelConfig } from "@/shared/types/api";
 import { msg } from "@/shared/lib/messages";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 
 interface ModelChipProps {
   config: ModelConfig;
@@ -138,30 +139,32 @@ export function ModelChip({
 
       <div className="flex shrink-0 items-center gap-1">
         {onClone && !isEmpty && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClone();
-            }}
-            className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground transition-all cursor-pointer"
-            title={msg("shared.model_chip.clone")}
-          >
-            <Copy className="size-3" />
-          </button>
+          <TooltipButton tooltip={msg("shared.model_chip.clone")} side="top">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClone();
+              }}
+              className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground transition-all cursor-pointer"
+            >
+              <Copy className="size-3" />
+            </button>
+          </TooltipButton>
         )}
         {onRemove && !isEmpty && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all cursor-pointer"
-            title={msg("shared.model_chip.remove")}
-          >
-            <Trash2 className="size-3" />
-          </button>
+          <TooltipButton tooltip={msg("shared.model_chip.remove")} side="top">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all cursor-pointer"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          </TooltipButton>
         )}
         <Settings className="size-3.5 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />
       </div>
