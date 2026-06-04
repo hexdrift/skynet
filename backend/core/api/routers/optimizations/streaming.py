@@ -17,8 +17,8 @@ from fastapi import APIRouter, Depends
 from starlette.responses import StreamingResponse
 
 from ...auth import AuthenticatedUser, get_authenticated_user, is_admin
-from ...errors import DomainError
-from .._helpers import job_owner, sse_from_events
+from ...sharing_access import ShareRole
+from .._helpers import require_role_at_least, sse_from_events
 from ._local import stream_dashboard_snapshots, stream_job_updates
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,10 @@ def register_job_stream(router: APIRouter, *, job_store) -> None:
         """Stream one optimization's live status updates as SSE.
 
         Emits a status + metrics snapshot every 2 seconds and terminates with
-        ``event: done`` once the optimization reaches a terminal state.
+        ``event: done`` once the optimization reaches a terminal state. Open to
+        anyone the run is shared with (viewer tier or above) — owner, admin, and
+        invited members alike — mirroring the access check on the rest of the
+        optimization surface.
 
         Args:
             optimization_id: Optimization id to follow.
@@ -95,20 +98,15 @@ def register_job_stream(router: APIRouter, *, job_store) -> None:
             A streaming ``StreamingResponse`` with ``text/event-stream`` body.
 
         Raises:
-            DomainError: 404 if the optimization id is unknown or the
-                non-admin caller doesn't own it.
+            DomainError: 404 when the optimization id is unknown or the caller
+                has no share access to it.
         """
         loop = asyncio.get_running_loop()
-        try:
-            raw = await loop.run_in_executor(None, job_store.get_job, optimization_id)
-        except KeyError:
-            raw = None
-        if raw is None:
-            raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id) from None
-        if not is_admin(current_user):
-            owner = job_owner(raw)
-            if owner is None or owner != current_user.username:
-                raise DomainError("optimization.not_found", status=404, optimization_id=optimization_id)
+        # Run the sync DB role check off the event loop (the job read did the
+        # same). viewer-minimum admits any grant tier; a non-member 404s.
+        await loop.run_in_executor(
+            None, require_role_at_least, job_store, optimization_id, current_user, ShareRole.viewer
+        )
 
         return StreamingResponse(
             sse_from_events(stream_job_updates(job_store, optimization_id)),

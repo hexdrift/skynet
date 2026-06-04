@@ -32,10 +32,16 @@ from ....models import (
 from ....models.common import OptimizationType
 from ....notifications import notify_job_started
 from ....worker.engine import get_worker
-from ...auth import AuthenticatedUser, is_admin
+from ...auth import AuthenticatedUser
 from ...converters import parse_overview
 from ...errors import DomainError
-from .._helpers import compute_task_fingerprint, job_owner, stable_seed, strip_api_key
+from ...sharing_access import ShareRole
+from .._helpers import (
+    compute_task_fingerprint,
+    filter_ids_at_least,
+    stable_seed,
+    strip_api_key,
+)
 from .schemas import BulkMetadataRequest, BulkMetadataResponse, BulkMetadataSkipped
 
 logger = logging.getLogger(__name__)
@@ -87,19 +93,18 @@ async def stream_dashboard_snapshots(
         summaries = []
         for row in active_rows:
             overview = parse_overview(row)
-            oid = row["optimization_id"]
-            log_count, progress_count = await asyncio.gather(
-                loop.run_in_executor(None, job_store.get_log_count, oid),
-                loop.run_in_executor(None, job_store.get_progress_count, oid),
-            )
             summaries.append(
                 {
-                    "optimization_id": oid,
+                    "optimization_id": row["optimization_id"],
                     "status": row.get("status", "pending"),
                     "name": overview.get(PAYLOAD_OVERVIEW_NAME),
                     "latest_metrics": row.get("latest_metrics", {}),
-                    "log_count": log_count,
-                    "progress_count": progress_count,
+                    # list_jobs already folds these in via two aggregate queries
+                    # (see RemoteDBJobStore._rows_with_counts), so the previous
+                    # per-row COUNT round trips (2 per active job, every tick)
+                    # were pure redundancy.
+                    "log_count": row.get("log_count", 0),
+                    "progress_count": row.get("progress_count", 0),
                 }
             )
 
@@ -130,8 +135,13 @@ async def stream_job_updates(job_store, optimization_id: str) -> AsyncIterator[d
     loop = asyncio.get_running_loop()
     terminal = {"success", "failed", "cancelled"}
     while True:
-        raw = await loop.run_in_executor(None, job_store.get_job, optimization_id)
-        if raw is None:
+        # Narrow projection: the loop polls every few seconds and only needs
+        # status/message/latest_metrics, never the multi-MB payload that
+        # get_job materializes. get_job_status_fields raises KeyError (not None)
+        # when the row is gone, so the not-found path is an except, not a guard.
+        try:
+            raw = await loop.run_in_executor(None, job_store.get_job_status_fields, optimization_id)
+        except KeyError:
             yield {"event": "error", "data": {"error": "Optimization not found"}}
             return
 
@@ -180,8 +190,10 @@ def clone_payload(
         ``RunRequest`` or ``GridSearchRequest`` ready to be enqueued.
 
     Raises:
-        DomainError: 500 when the stored payload no longer validates
-            against its request model (schema drift from when it was stored).
+        DomainError: 409 when the stored payload no longer validates against
+            its request model (schema drift from when it was stored). This is a
+            state condition on the saved resource, not a server fault — surface
+            it as a conflict the caller can act on, not an opaque 500.
     """
     copy = dict(source_payload)
     if new_name is not None:
@@ -194,7 +206,7 @@ def clone_payload(
     except ValidationError as exc:
         raise DomainError(
             "optimization.cannot_resubmit_payload",
-            status=500,
+            status=409,
             error=exc.errors()[0]["msg"],
         ) from exc
     new_id = str(uuid4())
@@ -297,19 +309,22 @@ def bulk_set_flag(
     *,
     flag: str,
     user: AuthenticatedUser,
+    minimum: ShareRole = ShareRole.editor,
 ) -> BulkMetadataResponse:
     """Shared bulk-metadata update used by ``/bulk-pin``.
 
-    Walks ``req.optimization_ids``, loading each row, setting ``overview[flag]``
-    to ``req.value``, and writing it back. Duplicate ids are collapsed;
-    unknown ids — and ids the non-admin caller doesn't own — are surfaced
-    in the ``skipped`` list with ``reason="not_found"`` rather than raising.
+    Walks ``req.optimization_ids``, setting ``overview[flag]`` to ``req.value``
+    on each row the caller may edit. Duplicate ids are collapsed; unknown ids —
+    and ids the caller's share role can't reach ``minimum`` on — are surfaced in
+    ``skipped`` with ``reason="not_found"`` rather than raising. Members can
+    pin/flag a shared run when their grant is at least ``minimum`` (editor).
 
     Args:
         job_store: Job-store the flag is written to.
         req: Bulk-metadata request body.
         flag: Overview key to toggle (e.g. ``"pinned"``).
-        user: Authenticated caller; non-admins are restricted to their own jobs.
+        user: Authenticated caller.
+        minimum: Lowest share role permitted to edit each row (pin is editor+).
 
     Returns:
         A ``BulkMetadataResponse`` listing successful and skipped ids.
@@ -317,21 +332,22 @@ def bulk_set_flag(
     updated: list[str] = []
     skipped: list[BulkMetadataSkipped] = []
     seen: set[str] = set()
-    admin = is_admin(user)
+    ordered: list[str] = []
     for oid in req.optimization_ids:
         if oid in seen:
             continue
         seen.add(oid)
+        ordered.append(oid)
+    allowed, denied = filter_ids_at_least(job_store, ordered, user, minimum)
+    skipped.extend(
+        BulkMetadataSkipped(optimization_id=oid, reason="not_found") for oid in denied
+    )
+    for oid in allowed:
         try:
             job_data = job_store.get_job(oid)
         except KeyError:
             skipped.append(BulkMetadataSkipped(optimization_id=oid, reason="not_found"))
             continue
-        if not admin:
-            owner = job_owner(job_data)
-            if owner is None or owner != user.username:
-                skipped.append(BulkMetadataSkipped(optimization_id=oid, reason="not_found"))
-                continue
         overview = parse_overview(job_data)
         overview[flag] = bool(req.value)
         job_store.set_payload_overview(oid, overview)

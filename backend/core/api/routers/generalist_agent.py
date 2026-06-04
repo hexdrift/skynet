@@ -17,6 +17,7 @@ All endpoints are hidden from the public Scalar reference (none are in
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -293,8 +294,11 @@ async def _wrap_with_persistence(
     )
     persisted = False
 
-    def _do_persist(content: str) -> None:
+    async def _do_persist(content: str) -> None:
         """Write the accumulated turn exactly once; never raise.
+
+        The synchronous psycopg2 write is offloaded to a worker thread so it
+        does not block the event loop while the SSE stream is still draining.
 
         Args:
             content: Final assistant message text for the row.
@@ -304,7 +308,8 @@ async def _wrap_with_persistence(
             return
         ordered_tools = [tool_calls[tid] for tid in tool_order if tid in tool_calls]
         try:
-            _persist_assistant_turn(
+            await asyncio.to_thread(
+                _persist_assistant_turn,
                 job_store,
                 conversation_id,
                 content,
@@ -368,7 +373,7 @@ async def _wrap_with_persistence(
                 )
                 raw_model = data.get("model")
                 model_used = raw_model if isinstance(raw_model, str) and raw_model else None
-                _do_persist(content)
+                await _do_persist(content)
             yield event
     finally:
         # The frontend tears down the SSE stream the moment ``submit_job_run_post``
@@ -379,7 +384,7 @@ async def _wrap_with_persistence(
             assistant_buf
             or any(c["status"] in ("done", "error") for c in tool_calls.values())
         ):
-            _do_persist("".join(assistant_buf))
+            await _do_persist("".join(assistant_buf))
 
 
 def _merge_wizard_patch(
@@ -449,31 +454,42 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         Returns:
             A :class:`StreamingResponse` of Server-Sent Events.
         """
-        conversation_id: str | None = None
-        title: str | None = None
-        username: str | None = None
-        if job_store is not None and authorization:
-            try:
-                user = get_authenticated_user(request, authorization=authorization)
-                username = user.username
-            except Exception:
-                username = None
+        def _setup_turn() -> tuple[str | None, str | None]:
+            """Resolve auth and persist the user turn off the event loop.
 
-        if username is not None and job_store is not None:
+            Runs the blocking psycopg2 auth lookup, conversation upsert, and
+            user-message insert in a worker thread so the single event loop is
+            not stalled before the SSE stream starts. Auth failures degrade to
+            an anonymous (unpersisted) stream; a conversation ``DomainError``
+            (403/404) is allowed to propagate.
+
+            Returns:
+                ``(conversation_id, title)`` — both ``None`` when persistence
+                was skipped or failed non-fatally.
+            """
+            resolved_username: str | None = None
+            if job_store is not None and authorization:
+                try:
+                    resolved_username = get_authenticated_user(
+                        request, authorization=authorization
+                    ).username
+                except Exception:
+                    resolved_username = None
+            if resolved_username is None or job_store is None:
+                return None, None
             try:
-                conversation_id, title = _ensure_conversation(
-                    job_store,
-                    req.conversation_id,
-                    username,
-                    req.user_message,
+                cid, ttl = _ensure_conversation(
+                    job_store, req.conversation_id, resolved_username, req.user_message
                 )
-                _persist_user_turn(job_store, conversation_id, req.user_message)
+                _persist_user_turn(job_store, cid, req.user_message)
             except DomainError:
                 raise
             except Exception:
                 logger.exception("Failed to persist user turn")
-                conversation_id = None
-                title = None
+                return None, None
+            return cid, ttl
+
+        conversation_id, title = await asyncio.to_thread(_setup_turn)
 
         wizard_state: WizardState = {**req.wizard_state}  # type: ignore[typeddict-item]
         source = run_generalist_agent(

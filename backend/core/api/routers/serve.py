@@ -17,10 +17,11 @@ from typing import Annotated, Any
 
 import dspy
 from dspy.streaming import StreamListener, StreamResponse
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
+from ...config import settings
 from ...constants import (
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
@@ -28,11 +29,21 @@ from ...constants import (
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
 )
 from ...models import ModelConfig, ServeInfoResponse, ServeRequest, ServeResponse
+from ...service_gateway.agents.generalist import TrustMode, get_approval_registry
+from ...service_gateway.agents.react_serve import run_react_chat
 from ...service_gateway.language_models import build_language_model
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 from ..response_limits import AGENT_MAX_INSTRUCTIONS, AGENT_MAX_TEXT, truncate_text
-from ._helpers import load_job_for_user, load_pair_program, load_program, sse_from_events
+from ..sharing_access import ShareRole
+from ._helpers import (
+    load_job_for_user,
+    load_pair_program,
+    load_program,
+    load_react_chat_inputs,
+    require_role_at_least,
+    sse_from_events,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +66,41 @@ class RequestUserInferenceResponse(BaseModel):
     optimization_id: str
     awaiting_inputs: bool
     prompt: str
+
+
+class ServeChatTurn(BaseModel):
+    """One prior chat turn carried by the react-serve chat request."""
+
+    role: str = Field(default="user")
+    content: str = Field(default="", max_length=AGENT_MAX_TEXT)
+
+
+class ServeChatRequest(BaseModel):
+    """Request body for ``POST /serve/{id}/chat`` (live ReAct chat turn)."""
+
+    user_message: str = Field(..., max_length=AGENT_MAX_TEXT)
+    chat_history: list[ServeChatTurn] = Field(default_factory=list)
+    trust_mode: TrustMode = Field(
+        default="ask",
+        description="'ask'/'auto_safe' confirm every tool, 'yolo' confirms none.",
+    )
+    model_config_override: ModelConfig | None = Field(
+        default=None,
+        description="Optional model override. Uses the run's model if omitted.",
+    )
+
+
+class ServeChatConfirmRequest(BaseModel):
+    """Confirm payload for resolving a pending react-serve tool approval."""
+
+    call_id: str
+    approved: bool
+
+
+class ServeChatConfirmResponse(BaseModel):
+    """Ack for a react-serve approval confirm call."""
+
+    resolved: bool
 
 
 def _cap_serve_outputs(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -493,7 +539,12 @@ def create_serve_router(*, job_store) -> APIRouter:
             DomainError: 400, 404 (including inaccessible to caller), or
                 409 mirroring the non-streaming route.
         """
-        program, result, overview = load_program(job_store, optimization_id, current_user)
+        # Offload the synchronous DB read + program deserialization so it does
+        # not block the single event loop (and every other in-flight request /
+        # SSE stream) before the first byte is produced.
+        program, result, overview = await asyncio.to_thread(
+            load_program, job_store, optimization_id, current_user
+        )
         artifact = result.program_artifact
 
         if req.model_config_override:
@@ -687,7 +738,11 @@ def create_serve_router(*, job_store) -> APIRouter:
             DomainError: 400 (bad inputs), 404 (unknown / inaccessible),
                 409 (not finished or pair failed).
         """
-        program, pair, _overview = load_pair_program(job_store, optimization_id, pair_index, current_user)
+        # Offload the synchronous DB read + program deserialization so it does
+        # not block the single event loop before the first byte is produced.
+        program, pair, _overview = await asyncio.to_thread(
+            load_pair_program, job_store, optimization_id, pair_index, current_user
+        )
         artifact = pair.program_artifact
 
         model_config = req.model_config_override or ModelConfig(name=pair.generation_model)
@@ -728,5 +783,118 @@ def create_serve_router(*, job_store) -> APIRouter:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @router.post(
+        "/serve/{optimization_id}/chat",
+        summary="Stream a live ReAct chat turn against an optimized agent",
+    )
+    async def serve_chat_stream(
+        optimization_id: str,
+        req: ServeChatRequest,
+        current_user: AuthenticatedUserDep,
+        authorization: str | None = Header(default=None),
+    ) -> StreamingResponse:
+        """Stream one chat turn against a served, optimized ReActV2 agent as SSE.
+
+        The agent's tools execute live against the MCP server the run was
+        optimized against; each call is approval-gated by ``trust_mode`` (every
+        tool except in ``yolo``). Emits the generalist SSE envelope
+        (``reasoning_patch``, ``tool_start`` / ``tool_end``, ``pending_approval``
+        / ``approval_resolved``, ``message_patch``, ``done``, ``error``).
+
+        Args:
+            optimization_id: The react run to chat against.
+            req: Chat request with the user's message, prior turns, trust mode,
+                and an optional model override.
+            current_user: Authenticated caller; non-admins are restricted to
+                their own runs.
+            authorization: Caller's bearer token, forwarded into the agent's MCP
+                session so its tool calls authenticate as the same user.
+
+        Returns:
+            A streaming ``text/event-stream`` response.
+
+        Raises:
+            DomainError: 404 (unknown/inaccessible), 409 (not a success react
+                run, or not served from a live-MCP source), 400 (no model).
+        """
+        # Offload the synchronous DB read + program deserialization so it does
+        # not block the single event loop before the first byte is produced.
+        signature_cls, program_state_json, react_overlay, overview = await asyncio.to_thread(
+            load_react_chat_inputs, job_store, optimization_id, current_user
+        )
+
+        if req.model_config_override:
+            model_config = req.model_config_override
+        else:
+            model_settings = overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS, {})
+            model_name = overview.get(PAYLOAD_OVERVIEW_MODEL_NAME, "")
+            if model_settings:
+                model_config = ModelConfig.model_validate(model_settings)
+            elif model_name:
+                model_config = ModelConfig(name=model_name)
+            else:
+                raise DomainError("serve.no_model_config", status=400)
+
+        lm = build_language_model(model_config)
+        tool_source = react_overlay.tool_source or {}
+        mcp_url = tool_source.get("mcp_url") or settings.generalist_agent_mcp_url
+
+        source = run_react_chat(
+            signature_cls=signature_cls,
+            program_state_json=program_state_json,
+            react_overlay=react_overlay,
+            user_message=req.user_message,
+            trust_mode=req.trust_mode,
+            lm=lm,
+            model_name=model_config.normalized_identifier(),
+            mcp_url=mcp_url,
+            auth_header=authorization,
+        )
+        return StreamingResponse(
+            sse_from_events(source),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @router.post(
+        "/serve/{optimization_id}/chat/confirm",
+        response_model=ServeChatConfirmResponse,
+        summary="Resolve a pending react-serve chat tool approval",
+    )
+    def serve_chat_confirm(
+        optimization_id: str,
+        req: ServeChatConfirmRequest,
+        current_user: AuthenticatedUserDep,
+    ) -> ServeChatConfirmResponse:
+        """Resolve an outstanding tool approval from the react-serve chat.
+
+        Approval call-ids are process-unique, so this shares the same global
+        registry the generalist agent uses; ``optimization_id`` scopes the
+        route and enforces the caller holds editor-tier access (chat spends the
+        owner's key, so it is editor+ like the rest of the serve surface).
+
+        Args:
+            optimization_id: The react run the pending call belongs to.
+            req: Confirm payload with the ``call_id`` and approval boolean.
+            current_user: Authenticated caller; must hold editor-tier access.
+
+        Returns:
+            A :class:`ServeChatConfirmResponse` with ``resolved=True`` on success.
+
+        Raises:
+            DomainError: 404 when the run is unknown/inaccessible; 403 when the
+                caller's role is below editor; 404 when the call id is unknown
+                or already resolved.
+        """
+        require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
+        resolved = get_approval_registry().resolve(req.call_id, req.approved)
+        if not resolved:
+            raise DomainError("agent.approval.unknown_call_id", status=404)
+        return ServeChatConfirmResponse(resolved=True)
 
     return router

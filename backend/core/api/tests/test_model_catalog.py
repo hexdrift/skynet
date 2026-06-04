@@ -366,3 +366,117 @@ def test_on_prem_falls_back_to_embeddings_base_url(monkeypatch: pytest.MonkeyPat
     centers = _provider_data_centers("openai")
     on_prem = next(c for c in centers if c.label == "On-prem gateway")
     assert on_prem.base_url == "https://embed.internal/v1"
+
+
+def test_get_catalog_adds_probe_only_models_with_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Probe-reported models absent from LiteLLM's registry are added with metadata.
+
+    Simulates an OpenRouter ``/models`` probe that returns two MiniMax models
+    LiteLLM never listed: a vision/reasoning one and a text-only one. Both must
+    appear in the catalog, provider-prefixed, with vision/thinking flags and the
+    context window derived defensively from the raw probe item.
+    """
+    monkeypatch.setattr(litellm, "model_cost", {})
+    monkeypatch.setattr(litellm, "get_valid_models", list)
+
+    probe = {
+        ("openrouter", None): {
+            "minimax/minimax-m3": {
+                "id": "minimax/minimax-m3",
+                "architecture": {
+                    "input_modalities": ["text", "image", "video"],
+                    "output_modalities": ["text"],
+                },
+                "supported_parameters": ["reasoning", "temperature"],
+                "context_length": 200000,
+            },
+            "minimax/minimax-m2.7": {
+                "id": "minimax/minimax-m2.7",
+                "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
+                },
+                "supported_parameters": ["temperature"],
+                "context_length": 100000,
+            },
+        }
+    }
+    monkeypatch.setattr(mc, "_probe_all_providers", lambda: probe)
+
+    result = get_catalog()
+
+    by_value = {m.value: m for m in result.models}
+    assert "openrouter/minimax/minimax-m3" in by_value
+    assert "openrouter/minimax/minimax-m2.7" in by_value
+
+    m3 = by_value["openrouter/minimax/minimax-m3"]
+    assert m3.supports_vision is True
+    assert m3.supports_thinking is True
+    assert m3.available is True
+    assert m3.max_input_tokens == 200000
+    assert m3.provider == "openrouter"
+    assert m3.label == "minimax-m3"
+
+    m27 = by_value["openrouter/minimax/minimax-m2.7"]
+    assert m27.supports_vision is False
+    assert m27.supports_thinking is False
+
+    assert any(p.slug == "openrouter" for p in result.providers)
+
+
+def test_get_catalog_skips_non_text_probe_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A probe item whose output modalities lack ``"text"`` is skipped.
+
+    An embedding/image model (output_modalities without ``"text"``) must not
+    leak into the chat catalog, while an item with no modality info defaults
+    to being included.
+    """
+    monkeypatch.setattr(litellm, "model_cost", {})
+    monkeypatch.setattr(litellm, "get_valid_models", list)
+
+    probe = {
+        ("openrouter", None): {
+            "vendor/image-gen": {
+                "id": "vendor/image-gen",
+                "architecture": {"input_modalities": ["text"], "output_modalities": ["image"]},
+            },
+            "vendor/bare-chat": {"id": "vendor/bare-chat"},
+        }
+    }
+    monkeypatch.setattr(mc, "_probe_all_providers", lambda: probe)
+
+    result = get_catalog()
+
+    values = {m.value for m in result.models}
+    assert "openrouter/vendor/image-gen" not in values
+    assert "openrouter/vendor/bare-chat" in values
+
+
+def test_get_catalog_does_not_duplicate_registry_models_from_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model present in both the registry and the probe is emitted only once."""
+    fake_cost: dict = {
+        "openrouter/vendor/known": {
+            "mode": "chat",
+            "litellm_provider": "openrouter",
+            "supports_reasoning": False,
+            "max_input_tokens": 8192,
+            "input_cost_per_token": 0,
+            "output_cost_per_token": 0,
+        }
+    }
+    monkeypatch.setattr(litellm, "model_cost", fake_cost)
+    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["openrouter/vendor/known"])
+
+    probe = {
+        ("openrouter", None): {
+            "vendor/known": {"id": "vendor/known", "context_length": 999999},
+        }
+    }
+    monkeypatch.setattr(mc, "_probe_all_providers", lambda: probe)
+
+    result = get_catalog()
+
+    matches = [m for m in result.models if m.value == "openrouter/vendor/known"]
+    assert len(matches) == 1

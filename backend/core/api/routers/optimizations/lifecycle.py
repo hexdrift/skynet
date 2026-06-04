@@ -33,10 +33,16 @@ from ....models import (
     OptimizationStatus,
     OptimizationSubmissionResponse,
 )
-from ...auth import AuthenticatedUser, get_authenticated_user, is_admin
+from ...auth import AuthenticatedUser, get_authenticated_user
 from ...converters import parse_overview, status_to_job_status
 from ...errors import DomainError
-from .._helpers import enforce_user_quota, job_owner, load_job_for_user
+from ...sharing_access import ShareRole
+from .._helpers import (
+    enforce_user_quota,
+    filter_ids_at_least,
+    load_job_for_user,
+    require_role_at_least,
+)
 from ..constants import TERMINAL_STATUSES
 from ._local import bulk_set_flag, clone_payload, persist_and_enqueue
 from .schemas import (
@@ -49,43 +55,6 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
-
-
-def _filter_owned_ids(
-    job_store,
-    optimization_ids: list[str],
-    user: AuthenticatedUser,
-) -> tuple[list[str], list[str]]:
-    """Split a deduplicated id list into "owned-or-admin" and "non-owned".
-
-    Admins keep every id. Unknown ids are returned in the *non-owned* bucket
-    so the caller can mark them ``not_found``.
-
-    Args:
-        job_store: Job-store used to read each row's owner.
-        optimization_ids: Already-deduplicated list of ids.
-        user: Authenticated caller.
-
-    Returns:
-        ``(allowed, denied)`` — denied collects unknown ids and ids the
-        non-admin caller doesn't own.
-    """
-    if is_admin(user):
-        return list(optimization_ids), []
-    allowed: list[str] = []
-    denied: list[str] = []
-    for oid in optimization_ids:
-        try:
-            job_data = job_store.get_job(oid)
-        except KeyError:
-            denied.append(oid)
-            continue
-        owner = job_owner(job_data)
-        if owner is None or owner != user.username:
-            denied.append(oid)
-        else:
-            allowed.append(oid)
-    return allowed, denied
 
 
 def register_lifecycle_routes(
@@ -124,10 +93,12 @@ def register_lifecycle_routes(
             A ``JobCancelResponse`` confirming the cancellation.
 
         Raises:
-            DomainError: 404 if unknown or inaccessible to the caller, 409
-                if already terminal.
+            DomainError: 404 if unknown or inaccessible, 403 if the caller's
+                share role is below ``editor``, 409 if already terminal.
         """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status in TERMINAL_STATUSES:
@@ -182,7 +153,9 @@ def register_lifecycle_routes(
         if not ordered_unique:
             return BulkCancelResponse(cancelled=cancelled, skipped=skipped)
 
-        allowed, denied = _filter_owned_ids(job_store, ordered_unique, current_user)
+        allowed, denied = filter_ids_at_least(
+            job_store, ordered_unique, current_user, ShareRole.editor
+        )
         skipped.extend(
             BulkCancelSkipped(optimization_id=optimization_id, reason="not_found")
             for optimization_id in denied
@@ -265,7 +238,7 @@ def register_lifecycle_routes(
 
         Raises:
             DomainError: 404 (unknown / inaccessible source), 409 (no
-                payload / quota), 500 (corrupt payload).
+                payload / quota / saved payload no longer resubmittable).
         """
         job_data = load_job_for_user(job_store, optimization_id, current_user)
 
@@ -318,11 +291,13 @@ def register_lifecycle_routes(
             An ``OptimizationSubmissionResponse`` for the new run.
 
         Raises:
-            DomainError: 404 (unknown / inaccessible source), 409 (wrong
-                status / no payload — use clone instead), 500 (corrupt
-                payload).
+            DomainError: 404 (unknown / inaccessible source), 403 (caller's
+                share role below ``editor``), 409 (wrong status / no payload —
+                use clone instead / saved payload no longer resubmittable).
         """
-        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in {OptimizationStatus.failed, OptimizationStatus.cancelled}:
