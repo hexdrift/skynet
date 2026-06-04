@@ -1,4 +1,4 @@
-"""Per-job embedding pipeline backing the public explore-map scatter.
+"""Per-job embedding pipeline backing public explore search.
 
 Pipeline:
 
@@ -17,7 +17,7 @@ credentials, LLM hiccups, or a flaky pgvector connection all degrade to
 "skip this job" and the row is retried on the next startup scan.
 
 Only the ``summary`` aspect is embedded. The code / schema aspects from
-the original recommendations design were dropped: the explore map's only
+the original recommendations design were dropped: the explore page's only
 consumer is dashboard.py, which reads ``embedding_summary`` exclusively.
 """
 
@@ -107,7 +107,7 @@ def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
 
 
 def _extract_display_fields(job: dict[str, Any]) -> dict[str, str | None]:
-    """Pull the human-readable labels shown on the explore-map tooltip.
+    """Pull the human-readable labels shown in explore search results.
 
     Args:
         job: The job-store record with ``payload`` and ``payload_overview``
@@ -206,7 +206,7 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> bool:
                 "module_name": display["module_name"],
                 "optimizer_name": display["optimizer_name"],
                 # Persist signature_code so identity dedup on the explore
-                # map can collapse repeated submissions of the same task.
+                # page can collapse repeated submissions of the same task.
                 "signature_code": signature_code,
             }
             if existing:
@@ -234,6 +234,28 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> bool:
         optimized,
     )
     return True
+
+
+def set_embedding_privacy(job_store: Any, optimization_id: str, is_private: bool) -> None:
+    """Sync the denormalized ``is_private`` flag on a job's embedding row.
+
+    The public Explore corpus filters on the indexed ``job_embeddings.is_private``
+    column, so flipping a job's visibility after it was embedded must update that
+    row — not just ``payload_overview`` — or the change stays invisible to search
+    and the explore page until the row is re-embedded. A no-op when the job has no
+    embedding row yet (not-yet-embedded or non-success): the pipeline reads
+    ``is_private`` from the overview at embed time and picks up the new value then.
+
+    Args:
+        job_store: Job-store exposing the SQLAlchemy ``engine``.
+        optimization_id: Optimization whose embedding row should be updated.
+        is_private: New visibility flag (``True`` hides it from the public corpus).
+    """
+    with Session(job_store.engine) as session:
+        session.query(JobEmbeddingModel).filter(
+            JobEmbeddingModel.optimization_id == optimization_id
+        ).update({JobEmbeddingModel.is_private: is_private})
+        session.commit()
 
 
 def _fetch_missing_embedding_ids(job_store: Any) -> list[str]:

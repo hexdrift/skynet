@@ -118,6 +118,11 @@ class EvaluationExample:
         tool_schema_hashes: ``{tool_name: sha256(schema_json)}`` snapshot.
         replay_steps: Chronological recorded calls + results for the turn.
         chat_history: Prior ``{role, content}`` turns in the same conversation.
+        signature_inputs: Signature-driven rollout input dict. When set, the
+            adapter feeds it verbatim to ``program(**signature_inputs)`` instead
+            of the generalist three-key dict; when ``None`` (the default)
+            behavior is unchanged. Lets the /run path drive arbitrary
+            signatures while the generalist path stays identical.
     """
 
     turn_id: str
@@ -128,6 +133,26 @@ class EvaluationExample:
     tool_schema_hashes: dict[str, str]
     replay_steps: tuple[ReplayStep, ...]
     chat_history: tuple[dict[str, Any], ...]
+    signature_inputs: dict[str, Any] | None = None
+
+    @property
+    def state_before(self) -> dict[str, Any]:
+        """Domain-agnostic alias for ``wizard_state_before``.
+
+        Lets generic (non-wizard) reward code read turn-start state
+        without knowing it is a wizard snapshot. Read-only and
+        frozen-dataclass-safe — the stored field stays ``wizard_state_before``.
+        """
+        return self.wizard_state_before
+
+    @property
+    def state_after(self) -> dict[str, Any]:
+        """Domain-agnostic alias for ``wizard_state_after``.
+
+        Lets generic (non-wizard) reward code read turn-end state without
+        knowing it is a wizard snapshot. Read-only and frozen-dataclass-safe.
+        """
+        return self.wizard_state_after
 
 
 @dataclass
@@ -186,6 +211,10 @@ class Bundle(BaseModel):
     # compatibility with bundles produced before this field existed.
     tool_descriptions: dict[str, str] = Field(default_factory=dict)
     tool_arg_descriptions: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # GEPA-proposed agent-facing display names ``{canonical: proposed}``, applied
+    # after drift-check + desc/arg overlays in ``fresh_program_for_bundle``. None
+    # (default) preserves pre-rename behavior for bundles produced before this field.
+    tool_names: dict[str, str] | None = Field(default=None)
     scalar_score: float
     objective_scores: dict[str, float]
     window_days: int = Field(ge=1)

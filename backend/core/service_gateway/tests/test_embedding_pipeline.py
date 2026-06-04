@@ -1,4 +1,4 @@
-"""Tests for the explore-map embedding pipeline.
+"""Tests for the explore search embedding pipeline.
 
 These tests stub out the embedder, summariser, and Session so the pure
 Python logic (metadata extraction, upsert branches, backfill queueing)

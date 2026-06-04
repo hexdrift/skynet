@@ -74,6 +74,7 @@ def rows_to_examples(
     mapping: ColumnMapping,
     *,
     image_input_fields: set[str] | None = None,
+    extra_columns: set[str] | None = None,
 ) -> list[Any]:
     """Convert dataset rows into DSPy Example instances using the column mapping.
 
@@ -82,11 +83,20 @@ def rows_to_examples(
     built — pass the result of :func:`image_input_field_names` on the loaded
     signature class.
 
+    ``extra_columns`` lists raw source columns to carry onto the example as
+    plain attributes *after* construction — without ``with_inputs``/output
+    marking — so a reward function can read ``gold.<col>`` while the value
+    never feeds the program. Each named column present in a row is set on the
+    example; columns absent from a row are silently skipped (extras are
+    advisory, not required like mapped inputs/outputs).
+
     Args:
         dataset: Raw dataset rows.
         mapping: Column mapping describing inputs and outputs.
         image_input_fields: Optional set of signature field names whose
             values are coerced into ``dspy.Image`` instances.
+        extra_columns: Optional set of raw source-column names to attach to
+            each example as unmarked attributes for reward-side reads.
 
     Returns:
         A list of populated :class:`dspy.Example` instances.
@@ -96,6 +106,7 @@ def rows_to_examples(
     """
 
     image_fields = image_input_fields or set()
+    extras = extra_columns or set()
     examples: list[Any] = []
     for row_idx, row in enumerate(dataset):
         if not isinstance(row, dict):
@@ -121,6 +132,12 @@ def rows_to_examples(
                 example = example.with_outputs(*mapping.outputs.keys())
             elif hasattr(example, "with_targets"):
                 example = example.with_targets(*mapping.outputs.keys())
+        # Attach extras after input/output marking so they stay out of
+        # ``example.inputs()`` — reward code reads ``gold.<col>`` but the
+        # program never receives the value.
+        for column_name in extras:
+            if column_name in row:
+                setattr(example, column_name, row[column_name])
         examples.append(example)
 
     return examples

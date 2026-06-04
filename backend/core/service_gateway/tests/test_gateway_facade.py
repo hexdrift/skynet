@@ -6,7 +6,7 @@ import dspy
 import pytest
 
 from core.exceptions import ServiceError
-from core.models import ColumnMapping, ModelConfig, RunRequest, SplitFractions
+from core.models import ColumnMapping, ModelConfig, ReplayMapping, Reward, RunRequest, SplitFractions, ToolSource
 from core.registry import ServiceRegistry
 from core.service_gateway.optimization.core import DspyService
 
@@ -203,6 +203,102 @@ def test_validate_payload_gepa_accepts_five_arg_metric() -> None:
         optimizer_name="gepa",
         metric_code=five_arg_metric,
         reflection_model_config=_MODEL_CFG,
+    )
+
+    service.validate_payload(payload)
+
+
+_REACT_DATASET = [
+    {"q": "hi", "a": "yo", "steps": "[]", "tools": "[]", "hashes": "{}", "before": "{}", "after": "{}"}
+]
+
+_REPLAY_MAPPING = ReplayMapping(
+    steps="steps",
+    allowed_tools="tools",
+    tool_schema_hashes="hashes",
+    state_before="before",
+    state_after="after",
+)
+
+_TOOL_SOURCE = ToolSource(kind="live_mcp", mcp_url="http://localhost:9000/mcp")
+
+# React metrics score the recorded trajectory over the (example, rollout) pair.
+_REACT_METRIC = "def metric(example, rollout):\n    return 1.0\n"
+
+
+def _react_payload(**overrides) -> RunRequest:
+    """Build a react ``RunRequest`` backed by an authored ``(example, rollout)`` metric."""
+    base: dict = {
+        "username": "tester",
+        "module_name": "react",
+        "signature_code": _VALID_SIG,
+        "metric_code": _REACT_METRIC,
+        "optimizer_name": "gepa",
+        "dataset": _REACT_DATASET,
+        "column_mapping": _MAPPING,
+        "split_fractions": SplitFractions(train=1.0, val=0.0, test=0.0),
+        "model_config": _MODEL_CFG,
+        "reflection_model_config": _MODEL_CFG,
+        "tool_source": _TOOL_SOURCE,
+        "replay_mapping": _REPLAY_MAPPING,
+        "reward": Reward(match_mode="tool_name"),
+    }
+    base.update(overrides)
+    return RunRequest(**base)
+
+
+def test_validate_payload_react_passes() -> None:
+    """A react run with an authored metric and replay config validates."""
+    service = _service()
+    payload = _react_payload()
+
+    service.validate_payload(payload)
+
+
+def test_validate_payload_react_requires_tool_source() -> None:
+    """A react run missing ``tool_source`` raises ``ServiceError``."""
+    service = _service()
+    payload = _react_payload(tool_source=None)
+
+    with pytest.raises(ServiceError, match="require tool_source"):
+        service.validate_payload(payload)
+
+
+def test_validate_payload_react_requires_replay_mapping() -> None:
+    """A react run missing ``replay_mapping`` raises ``ServiceError``."""
+    service = _service()
+    payload = _react_payload(replay_mapping=None)
+
+    with pytest.raises(ServiceError, match="require replay_mapping"):
+        service.validate_payload(payload)
+
+
+def test_validate_payload_react_rejects_missing_replay_column() -> None:
+    """A replay role naming a column absent from the dataset raises."""
+    service = _service()
+    bad_mapping = ReplayMapping(
+        steps="steps",
+        allowed_tools="absent_col",
+        tool_schema_hashes="hashes",
+        state_before="before",
+        state_after="after",
+    )
+    payload = _react_payload(replay_mapping=bad_mapping)
+
+    with pytest.raises(ServiceError, match="replay_mapping references columns not found"):
+        service.validate_payload(payload)
+
+
+def test_validate_payload_react_with_metric_code_skips_arity_gate() -> None:
+    """A react run with a custom 2-arg metric loads without the 5-arg GEPA gate.
+
+    The replay harness invokes the metric directly, so the GEPA reflection
+    arity requirement does not apply to react runs even with a custom metric.
+    """
+    service = _service()
+    payload = _react_payload(
+        metric_code="def metric(example, prediction, trace=None): return 1.0",
+        reward=None,
     )
 
     service.validate_payload(payload)

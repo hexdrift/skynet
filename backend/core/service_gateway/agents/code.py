@@ -17,7 +17,7 @@ Two distinct modes share this module:
   call so the UI can render a tool-call card and swap the code atomically.
 
 The agent runs on whatever LiteLLM-compatible model is configured via
-``settings.code_agent_model`` (default: ``openai/gpt-4o-mini``). Users can
+``settings.code_agent_model`` (default: ``openrouter/minimax/minimax-m3``). Users can
 point it at an internal gateway via ``CODE_AGENT_BASE_URL``.
 """
 
@@ -155,6 +155,13 @@ class GenerateSignatureCode(dspy.Signature):
     * numeric with decimals → ``float``
     * "yes"/"no" or "true"/"false" → ``bool``
     * obvious multi-value (commas, newlines, pipes) → ``list[str]``
+    * cells that are JSON objects or arrays of objects — nested,
+      structured blobs like a ``{"role": ..., "content": ...}`` chat
+      turn list or a wizard/state snapshot — → ``str``, NOT
+      ``dict``/``list``. The runtime delivers these fields as
+      JSON-encoded strings, so a ``dict``/``list`` annotation triggers a
+      predict-time type mismatch on every call. Keep the field ``str``
+      and say "JSON-encoded ..." in its ``desc=``.
     * everything else → ``str``.
 
     Types constrain the parser and reduce failures — prefer them over
@@ -372,6 +379,103 @@ class GenerateMetricCode(dspy.Signature):
     )
 
 
+# A react run is identifiable by the replay roles its dataset columns carry;
+# these roles only ever appear on react submissions.
+_REACT_REPLAY_ROLES = frozenset(
+    {"steps", "allowed_tools", "tool_schema_hashes", "state_before", "state_after"}
+)
+
+
+def _roles_are_react(column_roles_json: str) -> bool:
+    """Return True when the column roles carry react replay roles.
+
+    Args:
+        column_roles_json: JSON object mapping column name → role.
+
+    Returns:
+        True when any column is tagged with a react replay role, else False.
+    """
+    try:
+        roles = json.loads(column_roles_json)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(roles, dict) and bool(_REACT_REPLAY_ROLES.intersection(roles.values()))
+
+
+class GenerateReactMetricCode(dspy.Signature):
+    """Write a metric that scores a ReAct agent's recorded tool-use trajectory.
+
+    A ReAct run replays each recorded turn: the candidate agent acts against a
+    replay harness, and the metric scores how well its rollout reproduced the
+    recorded trajectory. This is NOT the ``(gold, pred)`` prediction contract —
+    there is no single prediction to compare, there is a whole trajectory.
+
+    ## Required shape
+
+    Exact signature: ``def metric(example, rollout) -> float`` returning a
+    float in ``[0, 1]``. Never raise — guard every access with ``getattr`` and
+    return a low score on malformed input.
+
+    ## Reading the recorded turn (``example``)
+
+    * ``example.replay_steps`` — the recorded tool calls; each step has
+      ``.tool_name`` and ``.argument_hash``.
+    * ``example.allowed_tools`` — tool names allowed this turn (a frozenset).
+    * ``example.tool_schema_hashes`` — ``{tool_name: schema_hash}``.
+    * ``example.state_before`` / ``example.state_after`` — wizard-state dicts
+      before/after the turn; their delta is the gate-progress signal.
+    * ``example.chat_history``, ``example.signature_inputs``.
+
+    ## Reading the candidate rollout (``rollout``)
+
+    * ``rollout.events`` — per-step events; each has ``.outcome``,
+      ``.candidate_tool``, ``.candidate_argument_hash``, ``.matched_step``
+      (the recorded step it matched, or ``None``), and ``.evidence``.
+    * ``rollout.submit_called``, ``rollout.submit_payload``,
+      ``rollout.terminated_early``.
+
+    ## Scoring ideas (combine and weight as the task warrants)
+
+    * Tool-selection coverage — fraction of ``replay_steps`` the rollout hit
+      (events whose ``matched_step`` is not ``None``).
+    * Argument fidelity — for each hit, ``candidate_argument_hash`` vs the
+      matched step's ``argument_hash``.
+    * Gate progress — advancement implied by ``state_before`` → ``state_after``.
+    * In-scope tools — penalise events with ``outcome == "tool_not_allowed"``.
+    * Clean termination — reward ``submit_called`` without ``terminated_early``.
+
+    ## Hard rules
+
+    * Self-contained, importable at module scope.
+    * Allowed imports: ``dspy`` and common stdlib (``re``, ``json``, ``math``).
+    * Never raise. Return a float in ``[0, 1]``.
+    * No markdown fences, no prose outside the function body.
+    """
+
+    dataset_columns: list[str] = dspy.InputField(desc="Every column name in the dataset.")
+    column_roles: str = dspy.InputField(
+        desc=(
+            "JSON object mapping column name → role. React replay roles "
+            "('steps', 'allowed_tools', 'tool_schema_hashes', 'state_before', "
+            "'state_after') name the columns the rollout is scored against."
+        ),
+    )
+    column_kinds: str = dspy.InputField(
+        desc="JSON object mapping input-column name → 'text' | 'image'.",
+    )
+    sample_rows: str = dspy.InputField(
+        desc="JSON array of up to 5 representative rows — read them to shape the scoring.",
+    )
+
+    metric_code: str = dspy.OutputField(
+        desc=(
+            "Complete ``def metric(example, rollout):`` Python code returning a "
+            "float in [0, 1] that scores the rollout against the recorded "
+            "trajectory. Never raises. No markdown fences, no surrounding prose."
+        ),
+    )
+
+
 class GenerateSeedMessage(dspy.Signature):
     """Write a short Hebrew chat reply describing what was generated.
 
@@ -577,13 +681,78 @@ class CodeAssistant(dspy.Signature):
     )
 
 
+# Appended to CodeAssistant.instructions for react runs so the chat agent
+# can't drift toward the GEPA ``(gold, pred) -> dspy.Prediction`` contract
+# when explaining or rewriting the metric. The base instructions and Rule 2
+# (ground replies in the real code) still apply; this only overrides the
+# metric's shape.
+_REACT_CHAT_METRIC_ADDENDUM = """\
+## ReAct run — metric contract override
+
+This run optimizes a ReAct agent, so its metric does NOT use the
+``(gold, pred, trace=...) -> dspy.Prediction(score, feedback)`` contract
+described above — ignore that contract for THIS run's metric. The metric
+scores a recorded tool-use trajectory against the candidate agent's rollout:
+
+    def metric(example, rollout) -> float   # a float in [0, 1]
+
+When you edit OR explain the metric, ground it in this contract:
+
+* ``example`` is the recorded turn: ``example.replay_steps`` (each step has
+  ``.tool_name`` / ``.argument_hash``), ``example.allowed_tools`` (a
+  frozenset), ``example.tool_schema_hashes``, ``example.state_before`` /
+  ``example.state_after`` (wizard-state dicts whose delta is the gate-progress
+  signal), ``example.chat_history``, ``example.signature_inputs``.
+* ``rollout`` is the candidate run: ``rollout.events`` (each has
+  ``.outcome``, ``.candidate_tool``, ``.candidate_argument_hash``,
+  ``.matched_step`` — the recorded step it matched, or ``None`` — and
+  ``.evidence``), ``rollout.submit_called``, ``rollout.submit_payload``,
+  ``rollout.terminated_early``.
+* It returns a float in [0, 1] — never ``dspy.Prediction`` and never a bare
+  bool. It never raises: guard every access with ``getattr`` and score low on
+  malformed input.
+
+The Signature contract above is unchanged; this override applies ONLY to the
+metric function."""
+
+
+# Overrides the edit_metric tool description (ReActV2 surfaces the bound
+# method's docstring, which asserts the GEPA dspy.Prediction return) for react
+# runs. Mirrors the method docstring's behavioural rules; only the contract
+# sentence differs.
+_REACT_EDIT_METRIC_DESC = """\
+Replace the current metric function in the editor.
+
+Call ONLY when the user asks for a change to the metric and the artifact has
+NOT yet been edited this turn. For questions, explanations, or after any
+successful edit, call ``finish`` and answer in ``reply`` instead.
+
+The new code is validated before it's applied. If validation fails, the edit
+is rejected and the observation returns the error message so you can fix the
+code and try again in the next iteration.
+
+``reason`` must be HEBREW prose (≤10 words); product terms like
+Signature/Metric may stay in English. ``new_code`` is a ReAct trajectory
+metric — ``def metric(example, rollout) -> float`` returning a float in
+[0, 1], NOT ``dspy.Prediction(score, feedback)``. Pass the COMPLETE
+replacement function body.
+
+Args:
+    reason: Short Hebrew rationale for the edit.
+    new_code: Complete replacement metric function body.
+
+Returns:
+    An observation string the ReAct agent reads back: a confirmation on
+    success or a rejection message on validation/policy failure."""
+
+
 def _extract_reasoning_token(chunk: object) -> str | None:
     """Pull a thinking/reasoning token from a raw LiteLLM streaming chunk.
 
     Handles both conventions in the wild:
       - LiteLLM-normalized: ``delta.reasoning_content`` (string). Emitted by
         Fireworks, DeepSeek, OpenAI o-series, and most reasoning providers.
-      - MiniMax M2 native with ``reasoning_split=true``: ``delta.reasoning_details``
+      - Native MiniMax with ``reasoning_split=true``: ``delta.reasoning_details``
         (list of ``{"text": "..."}`` blocks).
 
     Args:
@@ -957,7 +1126,12 @@ async def _run_seed(
         repaired within the attempt budget.
     """
     sig_predict = dspy.Predict(GenerateSignatureCode)
-    met_predict = dspy.Predict(GenerateMetricCode)
+    # React runs score a trajectory via metric(example, rollout); other runs use
+    # the GEPA (gold, pred) contract. The column roles reveal which to author.
+    metric_signature = (
+        GenerateReactMetricCode if _roles_are_react(column_roles_json) else GenerateMetricCode
+    )
+    met_predict = dspy.Predict(metric_signature)
     sig_program = dspy.streamify(
         sig_predict,
         stream_listeners=[
@@ -1354,14 +1528,31 @@ async def _run_agent(
         emit=emit,
     )
 
+    # React runs score a trajectory via metric(example, rollout); the base
+    # CodeAssistant instructions and the edit_metric docstring both assert the
+    # GEPA (gold, pred) -> dspy.Prediction contract, so override both here when
+    # the column roles reveal a react run — otherwise a "rewrite the metric"
+    # chat turn could drift toward the wrong shape.
+    is_react = _roles_are_react(column_roles_json)
+    chat_signature = (
+        CodeAssistant.with_instructions(CodeAssistant.instructions + "\n\n" + _REACT_CHAT_METRIC_ADDENDUM)
+        if is_react
+        else CodeAssistant
+    )
+    edit_metric_tool = (
+        dspy.Tool(session.edit_metric, name="edit_metric", desc=_REACT_EDIT_METRIC_DESC)
+        if is_react
+        else session.edit_metric
+    )
+
     # Keep max_iters tight. A normal turn is: (1) think → (2) edit_* OR
     # submit. A validator-driven retry may need one more iteration if the
     # first edit fails validation: (1) edit fails → (2) edit succeeds →
     # submit carries reply. max_iters=3 covers the worst case without
     # room to run away.
     react = dspy.ReActV2(
-        CodeAssistant,
-        tools=[session.edit_signature, session.edit_metric],
+        chat_signature,
+        tools=[session.edit_signature, edit_metric_tool],
         max_iters=3,
     )
     # ReActV2 has a single inner predict (``react.react``). It emits both

@@ -512,6 +512,42 @@ async def test_non_submit_tool_does_not_inject_code() -> None:
     assert "metric_code" not in seen
 
 
+@pytest.mark.asyncio
+async def test_profile_injects_staged_dataset_id() -> None:
+    """Profiling a staged dataset gets the opaque id injected so the backend rehydrates."""
+    tool, seen = _make_recording_tool("profile_datasets_profile_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        staged_dataset_id="ds_123",
+        wizard_state=cast(WizardState, {}),
+    )
+    await tool.func._async_body(column_mapping={"inputs": {}, "outputs": {}})
+    assert seen["staged_dataset_id"] == "ds_123"
+
+
+@pytest.mark.asyncio
+async def test_profile_inline_dataset_not_overridden_by_staged_id() -> None:
+    """An inline dataset on the profile call suppresses staged-id injection."""
+    tool, seen = _make_recording_tool("profile_datasets_profile_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        staged_dataset_id="ds_123",
+        wizard_state=cast(WizardState, {}),
+    )
+    await tool.func._async_body(
+        dataset=[{"q": "x"}], column_mapping={"inputs": {}, "outputs": {}}
+    )
+    assert "staged_dataset_id" not in seen
+
+
 def test_registry_resolve_unknown_returns_false() -> None:
     """Resolving an unknown call id returns ``False``."""
     registry = ApprovalRegistry()

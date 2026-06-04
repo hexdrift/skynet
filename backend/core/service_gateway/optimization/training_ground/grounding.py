@@ -44,6 +44,13 @@ except ImportError:  # optimizer-only optional dependency
     AutoTokenizer = None
 
 FIREWORKS_COMPLETIONS_URL = "https://api.fireworks.ai/inference/v1/completions"
+# TODO: Bump to MiniMaxAI/MiniMax-M3 once it fully drops on HF. Blocked on two
+# upstream prerequisites: (1) the M3 tokenizer/chat-template repo publishing on
+# Hugging Face (only M2.7 and earlier exist today), and (2) M3 landing on the
+# Fireworks /completions echo-logprob endpoint (it's OpenRouter-only now). M2.7
+# stays here as the latest MiniMax-family template available on both surfaces;
+# the agents serve on M3, but this grounding reward is scored against a frozen
+# reference model and does not have to track the agent swap.
 DEFAULT_HF_REPO = "MiniMaxAI/MiniMax-M2.7"
 
 _USER_AGENT = (

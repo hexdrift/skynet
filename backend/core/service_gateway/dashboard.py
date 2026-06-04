@@ -1,23 +1,21 @@
 """Public dashboard aggregator for the anonymous /explore page (PER-11 Feature B).
 
-Pipeline:
+Builds the corpus point list that feeds the /explore list view's count,
+filters, and model/optimizer options.
 
 1. Fingerprint check — cheap ``COUNT(*) + MAX(created_at)`` query gates the
    expensive recompute. Same fingerprint = serve cached payload.
-2. Bulk fetch — every embedded job's lightweight metadata + the
-   ``embedding_summary`` vector itself. Heavy fields (``signature_code``,
-   ``optimizer_kwargs``, ``metric_name``, ``winning_rank``,
-   ``is_recommendable``) are not used by the explore UI and are dropped to
-   keep the payload under ~5 MB (gzipped) at 100k points.
-3. Projection — UMAP when ``umap-learn`` is installed (preserves local
-   structure that PCA flattens), PCA fallback otherwise.
-4. Cache — keyed by fingerprint, 5 min TTL. UMAP on 100k×768 takes seconds.
+2. Bulk fetch — every public success job's lightweight metadata. Heavy
+   fields (``signature_code``, ``optimizer_kwargs``, ``metric_name``,
+   ``winning_rank``, ``is_recommendable``) are not used by the explore UI
+   and are dropped to keep the payload under ~5 MB (gzipped) at 100k points.
+3. Cache — keyed by fingerprint, 5 min TTL.
 
-No personal information is exposed. ``user_id`` is never projected.
-``signature_code`` is dropped from the bulk response (it is not consumed
-by the explore page). Jobs flagged ``is_private`` are excluded from both
-the fingerprint and the bulk fetch, so they never appear on the map and
-do not invalidate the cache when added.
+No personal information is exposed. ``signature_code`` is dropped from the
+bulk response (it is not consumed by the explore page). Jobs flagged
+``is_private`` are excluded from both the fingerprint and the bulk fetch,
+so they never appear in the corpus payload and do not invalidate the cache
+when added.
 """
 
 from __future__ import annotations
@@ -26,10 +24,10 @@ import logging
 import threading
 import time
 from collections.abc import Mapping, Sequence
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import DateTime, bindparam, text
 from sqlalchemy.orm import Session
 
 from ..api.routers._helpers import compute_compare_fingerprint
@@ -40,28 +38,15 @@ from ..constants import (
     PAYLOAD_OVERVIEW_MODULE_NAME,
     PAYLOAD_OVERVIEW_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
-    PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
 )
 from .embedding_pipeline.embeddings import get_embedder
-
-# numpy underpins both projection paths — degrade gracefully when absent.
-try:
-    import numpy as np
-except ImportError:
-    np = None  # type: ignore[assignment]
-
-# umap-learn ships under the [recommendations] extra. Optional at runtime —
-# we fall back to PCA when it isn't installed.
-try:
-    import umap as _umap
-except ImportError:
-    _umap = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
 
 # Defensive ceiling. The /explore page is designed for up to 100k points;
-# beyond that, UMAP on the request thread becomes a real outage risk.
+# beyond that, building the payload on the request thread becomes a real
+# outage risk.
 MAX_POINTS = 100_000
 
 # Free-text fields are truncated for the bulk response. Full text is
@@ -74,108 +59,12 @@ _LOCK = threading.Lock()
 _CACHE: dict[str, Any] = {"fingerprint": None, "at": 0.0, "payload": None}
 
 
-def _fit_pca_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
-    """Project L2-normalised vectors to 2D via SVD.
-
-    Returns ``[]`` when numpy isn't available or the matrix has fewer
-    than two rows — the dashboard renders a welcoming empty state in
-    either case. A fixed sign convention (flip each component so the
-    largest-magnitude entry in its column is positive) keeps the
-    picture stable across reruns: SVD's component sign is otherwise
-    arbitrary and would mirror the scatter on every recompute.
-
-    Args:
-        vectors: Embedding rows, each already L2-normalised.
-
-    Returns:
-        ``(x, y)`` per input row, scaled so the largest magnitude is 1.0.
-    """
-    if len(vectors) < 2:
-        return [(0.0, 0.0)] * len(vectors)
-    if np is None:
-        logger.debug("numpy unavailable — projection returns 0,0 for every point")
-        return [(0.0, 0.0)] * len(vectors)
-
-    try:
-        matrix = np.asarray(vectors, dtype=float)
-        centered = matrix - matrix.mean(axis=0, keepdims=True)
-        _, _, vh = np.linalg.svd(centered, full_matrices=False)
-        components = vh[:2]
-        coords = centered @ components.T
-        for axis in range(coords.shape[1]):
-            column = coords[:, axis]
-            if column.size == 0:
-                continue
-            anchor_idx = int(np.argmax(np.abs(column)))
-            if column[anchor_idx] < 0:
-                coords[:, axis] = -column
-        scale = float(np.max(np.abs(coords))) or 1.0
-        normalised = coords / scale
-        return [(float(x), float(y)) for x, y in normalised]
-    except Exception as exc:
-        logger.warning("PCA projection failed: %s", exc)
-        return [(0.0, 0.0)] * len(vectors)
-
-
-def _fit_umap_2d(vectors: list[list[float]]) -> list[tuple[float, float]] | None:
-    """Project to 2D via UMAP, returning ``None`` on failure or missing dep.
-
-    UMAP preserves local structure that PCA flattens — runs that share a
-    prompt template stay co-located even when global variance is dominated
-    by an unrelated axis. The trade-off is compute time: ~10-30s on 100k
-    rows, hence the cache.
-
-    Args:
-        vectors: Embedding rows.
-
-    Returns:
-        ``(x, y)`` per input row scaled to [-1, 1], or ``None`` if UMAP
-        isn't installed, numpy is missing, the input is too small, or the
-        fit raised.
-    """
-    if _umap is None or np is None or len(vectors) < 4:
-        return None
-    try:
-        matrix = np.asarray(vectors, dtype=float)
-        n = matrix.shape[0]
-        n_neighbors = min(15, max(2, n - 1))
-        reducer = _umap.UMAP(
-            n_neighbors=n_neighbors,
-            min_dist=0.1,
-            n_components=2,
-            random_state=42,
-            init="random",
-        )
-        coords = reducer.fit_transform(matrix)
-        scale = float(np.max(np.abs(coords))) or 1.0
-        normalised = coords / scale
-        return [(float(x), float(y)) for x, y in normalised]
-    except Exception as exc:
-        logger.warning("UMAP projection failed: %s; falling back to PCA", exc)
-        return None
-
-
-def _project_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
-    """Project to 2D, preferring UMAP when available.
-
-    Args:
-        vectors: Embedding rows.
-
-    Returns:
-        ``(x, y)`` per input row, scaled so the largest magnitude is 1.0.
-    """
-    umap_coords = _fit_umap_2d(vectors)
-    if umap_coords is not None:
-        return umap_coords
-    return _fit_pca_2d(vectors)
-
-
 def _fetch_fingerprint(session: Session) -> str:
     """Cheap content fingerprint over the searchable corpus.
 
     Used as the cache key. Includes both embedded and unembedded public
     success jobs so backfill progress (or new submissions while embeddings
-    are off) reliably invalidates the cached scatter payload.
+    are off) reliably invalidates the cached corpus payload.
 
     Args:
         session: Active SQLAlchemy session.
@@ -221,113 +110,6 @@ def _fetch_fingerprint(session: Session) -> str:
     )
 
 
-def _fetch_projection_rows(session: Session) -> list[dict[str, Any]]:
-    """Pull every row needed to render the scatter, capped at :data:`MAX_POINTS`.
-
-    Embedding columns are streamed as SQL text (pgvector cast) and parsed
-    in Python because SQLAlchemy's pgvector binding returns them as numpy
-    arrays — we convert to ``list[float]`` up front so the downstream
-    code only sees one representation.
-
-    Every public success row is its own point: the map's grouping is the
-    frontend's ``task_fingerprint`` bucket, not ``compare_fingerprint``.
-    Identical-task jobs whose embeddings collide naturally overlap at the
-    same canvas coordinate — that overlap, plus the variation ring the
-    frontend draws when ``buildVariationGroups`` finds siblings sharing a
-    task, is how the UI signals "this dot fronts N runs of the same task".
-    Collapsing on the backend would silently hide siblings from the
-    variation count and the detail-panel picker.
-
-    Args:
-        session: An open SQLAlchemy session bound to the job-store engine.
-
-    Returns:
-        Row dicts containing point metadata plus a ``_vector`` list. Heavy
-        fields (signature_code, optimizer_kwargs, metric_name) are
-        intentionally omitted — they are not used by the explore UI and
-        bloat the bulk response.
-    """
-    rows = (
-        session.execute(
-            text(
-                "SELECT je.optimization_id, je.optimization_type, je.winning_model, "
-                "je.baseline_metric, je.optimized_metric, je.summary_text, "
-                f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
-                "je.module_name, je.optimizer_name, je.created_at, "
-                "je.embedding_summary::text AS embedding_summary_text, "
-                "j.payload_overview AS payload_overview "
-                "FROM job_embeddings je "
-                "INNER JOIN jobs j ON j.optimization_id = je.optimization_id "
-                "WHERE j.status = 'success' "
-                "AND je.embedding_summary IS NOT NULL AND je.is_private = FALSE "
-                "ORDER BY je.created_at DESC, je.optimization_id DESC "
-                f"LIMIT {MAX_POINTS}"
-            )
-        )
-        .mappings()
-        .all()
-    )
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        vector = _parse_pgvector_literal(row.get("embedding_summary_text"))
-        if vector is None:
-            continue
-        overview = row.get("payload_overview") or {}
-        if not isinstance(overview, dict):
-            overview = {}
-        optimization_id = row["optimization_id"]
-        compare_fp = compute_compare_fingerprint(optimization_id, overview)
-        task_fp = overview.get(PAYLOAD_OVERVIEW_TASK_FINGERPRINT)
-        if not isinstance(task_fp, str) or not task_fp:
-            task_fp = None
-        summary = row["summary_text"]
-        if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
-            summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
-        out.append(
-            {
-                "optimization_id": optimization_id,
-                "optimization_type": row["optimization_type"],
-                "winning_model": row["winning_model"],
-                "baseline_metric": _as_float(row["baseline_metric"]),
-                "optimized_metric": _as_float(row["optimized_metric"]),
-                "summary_text": summary,
-                "task_name": row["task_name"],
-                "module_name": row["module_name"],
-                "optimizer_name": row["optimizer_name"],
-                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "task_fingerprint": task_fp,
-                "compare_fingerprint": compare_fp,
-                "siblings": [],
-                "_vector": vector,
-            }
-        )
-    return out
-
-
-def _parse_pgvector_literal(value: Any) -> list[float] | None:
-    """Parse ``'[0.1,0.2,...]'`` back into a Python list of floats.
-
-    Args:
-        value: The pgvector literal as a string, list, or ``None``.
-
-    Returns:
-        Floats parsed from the literal, or ``None`` if unparseable.
-    """
-    if value is None:
-        return None
-    if isinstance(value, list):
-        return [float(x) for x in value]
-    if not isinstance(value, str):
-        return None
-    s = value.strip().lstrip("[").rstrip("]")
-    if not s:
-        return None
-    try:
-        return [float(x) for x in s.split(",")]
-    except ValueError:
-        return None
-
-
 def _as_float(value: Any) -> float | None:
     """Best-effort coerce ``value`` to ``float``; return ``None`` on ``None`` or parse failure.
 
@@ -345,23 +127,21 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def _fetch_unembedded_points(session: Session) -> list[dict[str, Any]]:
-    """Return public success-state jobs that lack an embedding row.
+def _fetch_corpus_points(session: Session) -> list[dict[str, Any]]:
+    """Return every public success-state job as a corpus point.
 
-    These points are surfaced so the explore corpus count and lexical
-    search results reflect the full archive — not just the rows that
-    happen to be embedded right now. They carry ``x=0, y=0`` because
-    there's no vector to project; the map renderer should treat them as
-    off-canvas (or render them in a separate region), since piling them
-    at the origin would otherwise visually overstate that cluster.
+    Drives the /explore list view's corpus count, filters, and
+    model/optimizer options. Both embedded and unembedded jobs are
+    included via a ``LEFT JOIN`` that prefers the embedding row's values
+    and falls back to ``payload_overview`` for jobs not yet embedded.
 
     Args:
         session: An open SQLAlchemy session bound to the job-store engine.
 
     Returns:
-        A list of point dicts in the same shape as
-        :func:`_fetch_projection_rows`, minus ``_vector`` /
-        ``compare_fingerprint`` / ``task_fingerprint``.
+        A list of point dicts carrying the metadata the /explore payload
+        exposes; heavy fields (signature_code, optimizer_kwargs,
+        metric_name) are omitted.
     """
     rows = (
         session.execute(
@@ -382,8 +162,8 @@ def _fetch_unembedded_points(session: Session) -> list[dict[str, Any]]:
                 "FROM jobs j "
                 "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
                 "WHERE j.status = 'success' "
-                "AND (je.optimization_id IS NULL OR je.embedding_summary IS NULL) "
-                "AND NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE) "
+                "AND NOT COALESCE(je.is_private, "
+                "(j.payload_overview->>'is_private')::boolean, FALSE) "
                 "ORDER BY j.created_at DESC, j.optimization_id DESC "
                 f"LIMIT {MAX_POINTS}"
             )
@@ -408,35 +188,20 @@ def _fetch_unembedded_points(session: Session) -> list[dict[str, Any]]:
                 "module_name": row["module_name"],
                 "optimizer_name": row["optimizer_name"],
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "x": 0.0,
-                "y": 0.0,
                 "siblings": [],
                 "task_fingerprint": None,
                 "compare_fingerprint": None,
-                "has_coordinates": False,
             }
         )
     return points
 
 
 def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
-    """Return the payload for ``GET /dashboard/public``.
+    """Return the public corpus point list for ``GET /dashboard/public``.
 
-    Cached by content fingerprint with a 5 min TTL. UMAP is expensive
-    (seconds at 100k rows); recomputing per request would spike CPU
-    under traffic.
-
-    The payload merges two sources so the /explore caption + lexical
-    search reflect the full corpus, not just the embedded slice:
-
-    * Embedded jobs come back with their UMAP/PCA coordinates and
-      ``has_coordinates=True``.
-    * Successful jobs missing an embedding row come back with placeholder
-      coordinates and ``has_coordinates=False`` — they are searchable but
-      should not be rendered on the scatter map.
-
-    When ``settings.embeddings_enabled`` is false the projection step is
-    skipped entirely and only the unembedded list is returned.
+    Cached by content fingerprint with a 5 min TTL so the corpus count,
+    filters, and model/optimizer options the /explore list view derives
+    aren't recomputed per request.
 
     Args:
         job_store: A store exposing a SQLAlchemy ``engine`` attribute.
@@ -457,21 +222,7 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
             ):
                 return cached["payload"]
 
-        if settings.embeddings_enabled:
-            rows = _fetch_projection_rows(session)
-            coords = _project_2d([r["_vector"] for r in rows])
-            embedded_points: list[dict[str, Any]] = []
-            for row, (x, y) in zip(rows, coords, strict=False):
-                row.pop("_vector", None)
-                row["x"] = x
-                row["y"] = y
-                row["has_coordinates"] = True
-                embedded_points.append(row)
-        else:
-            embedded_points = []
-
-        unembedded_points = _fetch_unembedded_points(session)
-        payload = {"points": embedded_points + unembedded_points}
+        payload = {"points": _fetch_corpus_points(session)}
         with _LOCK:
             _CACHE["fingerprint"] = fingerprint
             _CACHE["at"] = now
@@ -479,7 +230,7 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
         return payload
 
 
-def invalidate_projection_cache() -> None:
+def invalidate_public_dashboard_cache() -> None:
     """Force the next ``fetch_public_dashboard`` call to recompute."""
     with _LOCK:
         _CACHE["fingerprint"] = None
@@ -495,6 +246,104 @@ SEARCH_SORTS = (SEARCH_SORT_RELEVANCE, SEARCH_SORT_RECENT, SEARCH_SORT_GAIN)
 SEARCH_PAGE_SIZE_DEFAULT = 30
 SEARCH_PAGE_SIZE_MAX = 50
 SEARCH_MATCHED_IDS_CAP = 5_000
+
+POPULAR_QUERIES_LIMIT_DEFAULT = 8
+POPULAR_QUERIES_WINDOW_DAYS_DEFAULT = 30
+_SEARCH_QUERY_LOG_MIN_LEN = 2
+_SEARCH_QUERY_LOG_MAX_LEN = 200
+
+
+def _normalize_query_for_log(query: str) -> str | None:
+    """Normalize a query for trending storage, or None when it isn't worth logging.
+
+    Lowercases, collapses internal whitespace, and caps length so trivially
+    different spellings of the same search coalesce into one trending bucket.
+
+    Args:
+        query: The raw (already caller-trimmed) public query string.
+
+    Returns:
+        The normalized query, or ``None`` when it is shorter than
+        :data:`_SEARCH_QUERY_LOG_MIN_LEN` and thus too noisy to count.
+    """
+    normalized = " ".join(query.split()).lower()[:_SEARCH_QUERY_LOG_MAX_LEN]
+    if len(normalized) < _SEARCH_QUERY_LOG_MIN_LEN:
+        return None
+    return normalized
+
+
+def record_public_search_query(job_store: Any, query: str) -> None:
+    """Record one public search query for trending, best-effort.
+
+    Called only on an explicit commit (Enter or opening a result) via
+    ``POST /dashboard/search/log`` — never on every debounced keystroke — so
+    half-typed prefixes don't pollute the trending counts. Writes a single
+    anonymous row to ``search_query_log`` and never raises: logging is a side
+    effect and must not break the caller when the store has no engine (test
+    stubs) or the insert fails.
+
+    Args:
+        job_store: Job store exposing a SQLAlchemy ``engine`` attribute.
+        query: The public query to record (normalized internally).
+    """
+    normalized = _normalize_query_for_log(query)
+    if normalized is None:
+        return
+    try:
+        with Session(job_store.engine) as session:
+            session.execute(
+                text(
+                    "INSERT INTO search_query_log (query_text, created_at) "
+                    "VALUES (:q, :ts)"
+                ).bindparams(bindparam("ts", type_=DateTime(timezone=True))),
+                {"q": normalized, "ts": datetime.now(UTC)},
+            )
+            session.commit()
+    except Exception as exc:
+        logger.debug("search query logging skipped: %s", exc)
+
+
+def fetch_popular_queries(
+    job_store: Any,
+    *,
+    limit: int = POPULAR_QUERIES_LIMIT_DEFAULT,
+    window_days: int = POPULAR_QUERIES_WINDOW_DAYS_DEFAULT,
+) -> list[dict[str, Any]]:
+    """Return the most frequent public search queries over a recent window.
+
+    Aggregates ``search_query_log`` into a top-N ranking by occurrence count,
+    most popular first. Best-effort: returns an empty list when the store has
+    no engine or the aggregate fails, so a missing/empty log never breaks the
+    /explore zero-state (the UI falls back to corpus-frequency terms).
+
+    Args:
+        job_store: Job store exposing a SQLAlchemy ``engine`` attribute.
+        limit: Maximum number of queries to return (clamped to ``[1, 50]``).
+        window_days: Only count queries logged within this many days.
+
+    Returns:
+        A list of ``{"query": str, "count": int}`` dicts, ranked by count
+        descending then query text.
+    """
+    limit = max(1, min(50, limit))
+    cutoff = datetime.now(UTC) - timedelta(days=max(1, window_days))
+    try:
+        with Session(job_store.engine) as session:
+            rows = session.execute(
+                text(
+                    "SELECT query_text, COUNT(*) AS n "
+                    "FROM search_query_log "
+                    "WHERE created_at >= :cutoff "
+                    "GROUP BY query_text "
+                    "ORDER BY n DESC, query_text ASC "
+                    "LIMIT :limit"
+                ).bindparams(bindparam("cutoff", type_=DateTime(timezone=True))),
+                {"cutoff": cutoff, "limit": limit},
+            ).all()
+    except Exception as exc:
+        logger.debug("popular query fetch failed: %s", exc)
+        return []
+    return [{"query": row[0], "count": int(row[1])} for row in rows]
 
 
 def _dedup_ranked_rows(
@@ -782,7 +631,7 @@ def _search_semantic(
     with Session(engine) as session:
         # Pull every match in rank order, then dedup by compare_fingerprint in
         # Python — same logic as the projection so the result count matches
-        # what the map shows.
+        # what the explore page shows.
         ranked_rows = (
             session.execute(
                 text(
@@ -1014,7 +863,7 @@ def _search_lexical(
     with Session(engine) as session:
         # Pull every match in rank order, then dedup by compare_fingerprint in
         # Python — same logic as the projection so the result count matches
-        # what the map shows.
+        # what the explore page shows.
         ranked_rows = (
             session.execute(
                 text(

@@ -244,6 +244,29 @@ def test_assert_tool_set_matches_raises_on_intersection_drift() -> None:
         _assert_tool_set_matches(bundle_hashes, live)
 
 
+def test_assert_tool_set_matches_strict_passes_on_exact_match() -> None:
+    """Strict mode tolerates an exactly-matching surface."""
+    hashes = {"alpha": hash_tool_schema(_tool("alpha"))}
+    _assert_tool_set_matches(hashes, [_tool("alpha")], strict=True)
+
+
+def test_assert_tool_set_matches_strict_raises_on_removed_tool() -> None:
+    """Strict mode rejects a recorded tool absent from the live surface."""
+    hashes = {
+        "alpha": hash_tool_schema(_tool("alpha")),
+        "removed": hash_tool_schema(_tool("removed")),
+    }
+    with pytest.raises(ToolSchemaDriftError):
+        _assert_tool_set_matches(hashes, [_tool("alpha")], strict=True)
+
+
+def test_assert_tool_set_matches_strict_raises_on_added_tool() -> None:
+    """Strict mode rejects a live tool the snapshot never recorded."""
+    hashes = {"alpha": hash_tool_schema(_tool("alpha"))}
+    with pytest.raises(ToolSchemaDriftError):
+        _assert_tool_set_matches(hashes, [_tool("alpha"), _tool("newcomer")], strict=True)
+
+
 # ---------- optimize._filter_trainable_examples drops drift & missing ----------
 
 
@@ -318,6 +341,7 @@ def test_promotion_blocks_when_phase_under_floor() -> None:
         baseline_objectives=[],
         candidate_objectives=[],
         holdout_examples=ready + intake,
+        stratifier=optimize.persistence.phase_of,
     )
     assert verdict.promotable is False
     assert any("intake" in r for r in verdict.reasons)
@@ -354,7 +378,38 @@ def test_promotion_passes_when_all_thresholds_met() -> None:
         baseline_objectives=[],
         candidate_objectives=[],
         holdout_examples=ready,
+        stratifier=optimize.persistence.phase_of,
     )
+    assert verdict.promotable is True
+    assert verdict.reasons == ()
+
+
+def test_promotion_default_stratifier_is_single_bucket() -> None:
+    """With no stratifier, the per-bucket floor sees one bucket spanning the holdout.
+
+    The advisory (service) caller passes ``stratifier=None``: a 205-example
+    holdout that would trip the per-*phase* floor (5 intake < 30) still clears
+    the single-bucket floor, so the only gating left is the total-scale floor.
+    """
+    mixed = [
+        _phase_example(
+            {
+                "dataset_ready": True,
+                "signature_code": "x",
+                "metric_code": "y",
+                "model_configured": True,
+            }
+        )
+        for _ in range(200)
+    ] + [_phase_example({}) for _ in range(5)]
+
+    verdict = optimize._resolve_promotion(
+        bootstrap=_ok_bootstrap(),
+        baseline_objectives=[],
+        candidate_objectives=[],
+        holdout_examples=mixed,
+    )
+
     assert verdict.promotable is True
     assert verdict.reasons == ()
 
