@@ -30,7 +30,7 @@ export function Pagination({
     <div dir="rtl" className="flex flex-wrap items-center justify-center gap-4 pt-2">
       <nav
         aria-label={msg("explore.page.indicator")}
-        className="flex items-center gap-1"
+        className="flex flex-wrap items-center justify-center gap-1"
       >
         <PageNavButton
           disabled={page <= 1}
