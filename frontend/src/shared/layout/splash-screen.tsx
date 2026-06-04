@@ -8,8 +8,8 @@ export function SplashScreen() {
 
   useEffect(() => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const fadeDelay = reduceMotion ? 0 : 1000;
-    const doneDelay = reduceMotion ? 0 : 1300;
+    const fadeDelay = reduceMotion ? 0 : 450;
+    const doneDelay = reduceMotion ? 0 : 750;
     const fadeTimer = setTimeout(() => setPhase("fading"), fadeDelay);
     const removeTimer = setTimeout(() => setPhase("done"), doneDelay);
 

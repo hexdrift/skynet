@@ -27,7 +27,7 @@ export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
   if (data.length === 0) return null;
 
   return (
-    <div className="h-[160px]">
+    <div className="h-[160px] min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ left: 10, right: 5, top: 10, bottom: 20 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted" />

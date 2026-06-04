@@ -1,12 +1,21 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 
 import { cn } from "@/shared/lib/utils";
 
-import { MessageMarkdown } from "./message-markdown";
 import { ThinkingSection } from "./thinking-section";
 import type { AgentMessage, AgentThinking, AgentToolCall } from "./types";
+
+// react-markdown + remark-gfm (the micromark/mdast/hast tree, ~40-60 KB gzip)
+// only matter once the agent chat actually renders a message, but the panel is
+// mounted on every authenticated route. Lazy-load it so the parser stays out of
+// the global first-load chunk; the Suspense fallback shows the raw text meanwhile.
+const MessageMarkdown = dynamic(
+  () => import("./message-markdown").then((m) => m.MessageMarkdown),
+  { ssr: false },
+);
 
 interface AgentBubbleProps {
   msg: AgentMessage;
@@ -70,7 +79,11 @@ export function AgentBubble({
             hasThinking && "border-t border-[#3D2E22]/[0.08]",
           )}
         >
-          <MessageMarkdown content={msg.content} onRunCode={onRunCode} />
+          <React.Suspense
+            fallback={<span className="whitespace-pre-wrap">{msg.content}</span>}
+          >
+            <MessageMarkdown content={msg.content} onRunCode={onRunCode} />
+          </React.Suspense>
         </div>
       )}
       {hasTools && renderToolCall && (

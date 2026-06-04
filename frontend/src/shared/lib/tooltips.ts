@@ -44,10 +44,26 @@ export const TOOLTIPS = {
   "data.seed": `מספר התחלתי קבוע ששומר על אותה חלוקה ואותו ערבוב בכל הרצה חוזרת`,
 
   "prompt.optimized": `הפרומפט שה${TERMS.optimizer} בנה: הנחיות משופרות ודוגמאות שנבחרו מתוך ה${TERMS.dataset}`,
-  "prompt.demonstrations": `דוגמאות קלט-פלט שמוצגות ל${TERMS.model} כדי להראות לו את הפורמט והתשובה הרצויים`,
+  "prompt.demonstrations": `דוגמאות קלט-פלט (few-shot demonstrations) שמוצגות ל${TERMS.model} כדי להראות לו את הפורמט והתשובה הרצויים`,
 
-  "module.choice": "איך להריץ את הפרומפט: Predict מבקש תשובה ישירה; CoT מוסיף שלב reasoning לפני התשובה",
+  "module.choice":
+    "מודול DSPy הוא רכיב בתוכנית שמפעילה מודל שפה: הוא עוטף כל signature בטכניקת prompting ומגדיר את מבנה הקריאה למודל כדי להפיק את הפלט שמוגדר ב-signature. בתוך המסגרת הזו האופטימייזר מכוון את הפרמטרים הניתנים ללמידה של המודול, כמו הוראות ודוגמאות בפרומפט",
+  "module.predict": "Predict — המודול הבסיסי: ממפה את הקלט לפלט בקריאה אחת למודל, ללא שלבי ביניים",
+  "module.cot":
+    "Chain of Thought — מוסיף שדה reasoning שמוביל את המודל לחשוב שלב-אחר-שלב לפני התשובה הסופית; לרוב משפר דיוק במשימות מורכבות",
+  "module.react":
+    "ReAct — סוכן שמשלב חשיבה עם קריאה לכלים (tools) בלולאה, עד שהוא מפיק את הפלט שב-signature",
   "optimizer.choice": `השיטה שמנסה לשפר את הפרומפט ולמצוא גרסה עם ${TERMS.score} גבוה יותר`,
+
+  "react.reward":
+    "כיצד מתוגמל הסוכן: replay_match מתגמל שחזור של רצף הכלים שהוקלט; generalist משתמש בתגמול רב-ממדי; general הוא תגמול כללי",
+  "react.match_mode":
+    "exact דורש התאמה מדויקת של שם הכלי והארגומנטים; tool_name מתקדם בהתאמת שם הכלי בלבד",
+  "react.grounding": "כמה משקל לתת לאיתות העיגון (grounding signal) של הכלים בתוך התגמול",
+  "react.tool_source": "מהיכן נטענת רשימת הכלים: שרת MCP חי, או תצלום כלים מתוך הדאטאסט",
+  "react.mcp_url": "כתובת שרת ה-MCP שממנו נטענים הכלים של הסוכן",
+  "react.auth": "כותרת אימות (Authorization header) לשרת ה-MCP. לא נשמרת בשרת ולא נחשפת לסוכן הצ'אט",
+  "react.tool_filter": "הגבלת רשימת הכלים לשמות שצוינו בלבד, מופרדים בפסיקים",
 
   "config.section.summary": `ה${TERMS.module}, ה${TERMS.optimizer}, והפרמטרים שנבחרו ל${TERMS.optimizationTypeRun} זו`,
   "config.section.models": `מודלי השפה שהוגדרו — ${TERMS.generationModelShort} לייצור תשובות, רפלקציה לניתוח שגיאות`,
@@ -74,10 +90,14 @@ export const TOOLTIPS = {
     "כמה רחב החיפוש של GEPA: קל רץ מהר עם פחות ניסיונות; מעמיק בודק יותר אפשרויות ולוקח יותר זמן",
   "submit.reflection_minibatch": `כמה דוגמאות ה${TERMS.model} בודק בכל סבב רפלקציה כדי למצוא דפוסי שגיאה`,
   "submit.eval_rounds": "כמה פעמים להריץ הערכה מלאה כדי לבדוק מועמדים לפרומפט",
-  "submit.merge": "כשפעיל, GEPA יכול לשלב רעיונות מכמה מועמדים טובים לפרומפט אחד",
+  "submit.merge": "כשפעיל, GEPA יכול לבצע merge ולשלב רעיונות מכמה מועמדים טובים לפרומפט אחד",
 
+  "model_config.connection_section": `הרצת ה${TERMS.model} על שרת משלכם: נקודת קצה תואמת-OpenAI (Ollama, vLLM, LM Studio או שער ארגוני) ומפתח גישה. השאירו סגור כדי להשתמש בספקים המובנים`,
+  "model_config.model": `ה${TERMS.model} שיריץ את ה${TERMS.optimization}. בחרו מ${TERMS.modelCatalog}, או מודל מותאם אישית שהתגלה מכתובת ה-Base URL`,
+  "model_config.base_url": `כתובת לשרת תואם-OpenAI משלכם — Ollama, vLLM, LM Studio או שער ארגוני. השאירו ריק כדי להשתמש בשרת ברירת המחדל של ה${TERMS.provider}`,
+  "model_config.api_key": `מפתח גישה לשרת ה${TERMS.model}. אופציונלי — אם ריק, נלקח ממשתנה סביבה. לא נשמר אצלנו ונמחק מהטופס אחרי השליחה`,
   "model_config.temperature": `מידת היצירתיות של ה${TERMS.model} — ערך נמוך נותן תשובות עקביות, גבוה מגוון יותר`,
-  "model_config.top_p": `מגביל את מגוון המילים שה${TERMS.model} שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון`,
+  "model_config.top_p": `top_p (nucleus sampling): מגביל את מגוון המילים שה${TERMS.model} שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון`,
   "model_config.max_tokens": `אורך ה${TERMS.prediction} המקסימלי — טוקן הוא בערך מילה אחת`,
 
   "code.signature_metric": `קוד המקור של ה${TERMS.signature} ו${TERMS.metric} שהוגדרו ל${TERMS.optimization} זו`,

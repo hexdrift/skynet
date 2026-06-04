@@ -1,6 +1,42 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Above-the-fold subsets pinned to stable public/ URLs so layout.tsx can
+   <link rel=preload> them — @fontsource emits content-hashed filenames we
+   can't name at author time, which would make a preload miss and go unused.
+   These are declared after the @fontsource imports (layout.tsx imports those
+   first, this file last), so for the Hebrew + primary-Latin ranges the cascade
+   uses these faces and the browser fetches the preloaded /fonts/ copy; the
+   long-tail subsets (latin-ext/math/symbols) still resolve from @fontsource.
+   Family names + unicode-range mirror @fontsource exactly — no glyph-resolution
+   change, only the byte source moves for the preloaded subsets. */
+@font-face {
+  font-family: "Heebo Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/heebo-hebrew-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: "Heebo Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/heebo-latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/inter-latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* shadcn tailwind utilities */
 @theme inline {
   @keyframes accordion-down {
@@ -263,6 +299,9 @@
 html {
   direction: rtl;
   text-size-adjust: 100%;
+  /* The documentElement is the app scroller; keep its gutter during Radix scroll locks. */
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 html,
@@ -522,9 +561,26 @@ table.guide-table tbody tr td:hover {
 /* Smooth page transitions */
 main {
   animation: fadeIn var(--duration-base) ease-out;
-  /* Reserve scrollbar width on platforms with classic scrollbars (Windows).
-     On macOS overlay scrollbars this is a no-op. */
+  /* Keep the same protection for routes that constrain <main> into the scroller. */
   scrollbar-gutter: stable;
+}
+
+/* Radix popovers (Select, Dialog, DropdownMenu) lock scroll via
+   react-remove-scroll, which tags <body data-scroll-locked> and adds
+   margin/padding to compensate for the document scrollbar it hides. The root
+   scroller already reserves that gutter, so the compensation would double-count
+   it and shift the page sideways when a dropdown opens. Cancel it so opening a
+   Select never moves the layout.
+   react-remove-scroll appends its <style> to the end of <head>, so its
+   `body[data-scroll-locked]` rule shares our specificity and would win on source
+   order alone — `!important` can't beat a later `!important`. The leading `html`
+   raises specificity so this override wins regardless of injection order. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  --removed-body-scroll-bar-size: 0px;
 }
 
 @keyframes fadeIn {
@@ -736,9 +792,8 @@ h1 {
   letter-spacing: -0.02em;
 }
 
-/* Smooth hover lift on all cards */
+/* Hover emphasis on all cards */
 [data-slot="card"]:hover {
-  transform: translateY(-2px);
   box-shadow:
     0 4px 12px rgba(28, 22, 18, 0.06),
     0 12px 32px rgba(28, 22, 18, 0.04);
@@ -1144,14 +1199,90 @@ table {
 }
 
 @media (max-width: 960px) {
-  main table {
+  main table:not(.table-stack) {
     min-width: 700px; /* Force horizontal scroll below this width */
   }
 }
 
 @media (max-width: 800px) {
-  main table {
+  main table:not(.table-stack) {
     min-width: 600px;
+  }
+}
+
+/* ════════════════════════════════════════════
+   RESPONSIVE TABLE UTILITIES
+   Foundation utilities feature agents rely on to keep tables from
+   overflowing the page edge. Pick per table:
+   - .table-stack  → row-oriented data reflows into stacked cards <=900px
+   - .table-scroll → wrapper giving a contained horizontal scroll
+   ════════════════════════════════════════════ */
+
+/* Contained horizontal scroll for alignment-critical tables (compare
+   matrices, numeric prediction grids). Keeps columns aligned and confines
+   the scroll to this wrapper instead of the page. */
+.table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--radius);
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table {
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Stacked-card reflow for row-oriented data tables. Below 900px the thead
+   is hidden and each row becomes a card whose cells show their column label
+   (sourced from each td's ``data-label``). Above 900px it is a normal table
+   with no overrides. */
+@media (max-width: 900px) {
+  table.table-stack {
+    min-width: 0 !important;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  table.table-stack thead {
+    display: none;
+  }
+  table.table-stack tbody,
+  table.table-stack tr,
+  table.table-stack td {
+    display: block;
+    width: 100%;
+  }
+  table.table-stack tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.625rem;
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+  table.table-stack td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-inline: 0;
+    padding-block: 0.25rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: start;
+    border: 0;
+  }
+  table.table-stack td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--muted-foreground, currentColor);
+    flex-shrink: 0;
+  }
+  /* Cells with no data-label (e.g. an actions cell) don't reserve label space. */
+  table.table-stack td:not([data-label])::before {
+    content: none;
   }
 }
 

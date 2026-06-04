@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 
 interface IndexPagerProps {
   currentIndex: number;
@@ -37,29 +38,31 @@ export function IndexPager({
         className,
       )}
     >
-      <button
-        type="button"
-        onClick={() => onChange(currentIndex - 1)}
-        disabled={atFirst}
-        className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-        title={prevLabel}
-        aria-label={prevLabel}
-      >
-        <ChevronLeft className="size-4" />
-      </button>
+      <TooltipButton tooltip={prevLabel} side="top">
+        <button
+          type="button"
+          onClick={() => onChange(currentIndex - 1)}
+          disabled={atFirst}
+          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          aria-label={prevLabel}
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      </TooltipButton>
       <span className="font-mono tabular-nums px-1.5 min-w-[2.25rem] text-center text-foreground/80 select-none">
         {currentIndex + 1}/{total}
       </span>
-      <button
-        type="button"
-        onClick={() => onChange(currentIndex + 1)}
-        disabled={atLast}
-        className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-        title={nextLabel}
-        aria-label={nextLabel}
-      >
-        <ChevronRight className="size-4" />
-      </button>
+      <TooltipButton tooltip={nextLabel} side="top">
+        <button
+          type="button"
+          onClick={() => onChange(currentIndex + 1)}
+          disabled={atLast}
+          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          aria-label={nextLabel}
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </TooltipButton>
     </div>
   );
 }

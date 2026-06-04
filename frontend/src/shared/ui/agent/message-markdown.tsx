@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 
 interface RunCodeContextValue {
   onRunCode?: (code: string, language: string) => void;
@@ -51,26 +52,28 @@ function CodeBlock({ language, rawCode, children }: CodeBlockProps) {
         </span>
         <div className="flex items-center gap-0.5">
           {onRunCode && (
+            <TooltipButton tooltip={msg("shared.agent.run_code")} side="top">
+              <button
+                type="button"
+                onClick={() => onRunCode(rawCode, language)}
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
+                aria-label={msg("shared.agent.run_code")}
+              >
+                <Play className="size-3" />
+                <span>{msg("shared.agent.run_code")}</span>
+              </button>
+            </TooltipButton>
+          )}
+          <TooltipButton tooltip={msg("shared.agent.copy_code")} side="top">
             <button
               type="button"
-              onClick={() => onRunCode(rawCode, language)}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
-              title={msg("shared.agent.run_code")}
-              aria-label={msg("shared.agent.run_code")}
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1 rounded-md p-1 text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
+              aria-label={msg("shared.agent.copy_code")}
             >
-              <Play className="size-3" />
-              <span>{msg("shared.agent.run_code")}</span>
+              {copied ? <Check className="size-3" /> : <Clipboard className="size-3" />}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex items-center gap-1 rounded-md p-1 text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
-            title={msg("shared.agent.copy_code")}
-            aria-label={msg("shared.agent.copy_code")}
-          >
-            {copied ? <Check className="size-3" /> : <Clipboard className="size-3" />}
-          </button>
+          </TooltipButton>
         </div>
       </div>
       <pre className="overflow-x-auto p-3">{children}</pre>
