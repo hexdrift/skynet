@@ -9,7 +9,7 @@ without constructing a full ``DspyService``.
 from typing import Any
 
 from ...exceptions import ServiceError
-from ...models import ColumnMapping
+from ...models import ColumnMapping, ReplayMapping
 
 
 def require_mapping_matches_signature(
@@ -64,5 +64,54 @@ def require_mapping_columns_in_dataset(
     if missing:
         raise ServiceError(
             f"column_mapping references columns not found in dataset: {sorted(missing)}. "
+            f"Available columns: {sorted(dataset_columns)}"
+        )
+
+
+def require_replay_mapping_valid(
+    replay_mapping: ReplayMapping,
+    dataset: list[dict[str, Any]] | None,
+) -> None:
+    """Raise ServiceError if a replay role names a column absent from the dataset.
+
+    React replay rollouts read recorded tool-call steps, the allowed-tool
+    roster, and per-tool schema hashes off dataset columns named by
+    ``replay_mapping``. Every required role (``steps``, ``allowed_tools``,
+    ``tool_schema_hashes``) must reference a column that exists in the
+    dataset. Optional roles (state/chat-history) are checked too when set.
+    Validation is skipped entirely when no inline dataset is supplied (the
+    rows live in a staged copy resolved later).
+
+    Args:
+        replay_mapping: The submitted replay mapping whose role values name
+            dataset column names.
+        dataset: The inline dataset rows, or ``None`` when the rows are
+            staged and not yet resolved.
+
+    Raises:
+        ServiceError: When a replay role references a column that is not
+            present in any row of ``dataset``.
+    """
+    if not dataset:
+        return
+    dataset_columns: set[str] = set()
+    for row in dataset:
+        dataset_columns.update(row.keys())
+    required = {
+        "steps": replay_mapping.steps,
+        "allowed_tools": replay_mapping.allowed_tools,
+        "tool_schema_hashes": replay_mapping.tool_schema_hashes,
+    }
+    optional = {
+        "state_before": replay_mapping.state_before,
+        "state_after": replay_mapping.state_after,
+        "chat_history": replay_mapping.chat_history,
+    }
+    roles = {**required, **{role: col for role, col in optional.items() if col is not None}}
+    missing = {role: col for role, col in roles.items() if col not in dataset_columns}
+    if missing:
+        offending = sorted(f"{role}={col!r}" for role, col in missing.items())
+        raise ServiceError(
+            f"replay_mapping references columns not found in dataset: {offending}. "
             f"Available columns: {sorted(dataset_columns)}"
         )

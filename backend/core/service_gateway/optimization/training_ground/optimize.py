@@ -25,6 +25,7 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
@@ -49,6 +50,7 @@ from .gepa_adapter import (
     TrainingGroundDspyAdapter,
     _candidate_tool_arg_descriptions,
     _candidate_tool_descriptions,
+    _candidate_tool_names,
     seed_candidate_from_program,
 )
 from .grounding import ChatTemplate, FireworksEchoScorer, MiniMaxChatTemplate, PromptScorer
@@ -494,6 +496,7 @@ def _load_seed_program_and_hashes(
     mcp_url: str,
     mcp_auth_header: str | None,
     max_iters: int = 8,
+    signature_cls: type = GeneralistSig,
 ) -> tuple[dspy.ReActV2, dict[str, str], list[dspy.Tool]]:
     """Construct the seed ReActV2 + capture the live tool-schema hashes.
 
@@ -501,6 +504,9 @@ def _load_seed_program_and_hashes(
         mcp_url: Endpoint of the MCP server hosting the agent's tools.
         mcp_auth_header: Verbatim ``Authorization`` header for the session.
         max_iters: ReActV2 loop budget. Mirrors the production setting.
+        signature_cls: Signature the seed ReActV2 is built around. Defaults to
+            ``GeneralistSig`` so the CLI path is identical; the /run path passes
+            a resolved signature to drive arbitrary modules.
 
     Returns:
         ``(seed_program, tool_schema_hashes, dspy_tools)``. ``dspy_tools`` is
@@ -511,7 +517,7 @@ def _load_seed_program_and_hashes(
         raise SystemExit(
             f"MCP at {mcp_url!r} exposed zero tools — refusing to optimize an empty surface."
         )
-    program = dspy.ReActV2(GeneralistSig, tools=dspy_tools, max_iters=max_iters)
+    program = dspy.ReActV2(signature_cls, tools=dspy_tools, max_iters=max_iters)
     schema_hashes = {tool.name: hash_tool_schema(tool) for tool in dspy_tools}
     return program, schema_hashes, dspy_tools
 
@@ -653,6 +659,7 @@ def _resolve_promotion(
     baseline_objectives: list[dict[str, float]],
     candidate_objectives: list[dict[str, float]],
     holdout_examples: list[EvaluationExample],
+    stratifier: Callable[[EvaluationExample], str] | None = None,
 ) -> _PromotionVerdict:
     """Apply the §11 promotion gate and explain the result.
 
@@ -662,26 +669,31 @@ def _resolve_promotion(
         candidate_objectives: Per-example dim dicts for the optimized candidate.
         holdout_examples: The held-out evaluation examples — used to
             compute both the total and per-phase trajectory floors.
+        stratifier: Maps each example to a per-bucket label for the per-bucket
+            holdout floor. The CLI passes ``persistence.phase_of`` to recover
+            the wizard-phase floor; ``None`` collapses to a single bucket so
+            the advisory (non-CLI) caller floors on total scale only.
 
     Returns:
         A ``_PromotionVerdict`` whose ``reasons`` field is empty on PASS and
         a non-empty list of failure strings on BLOCK.
     """
+    bucket_of = stratifier if stratifier is not None else (lambda _e: "")
     reasons: list[str] = []
     held_out = len(holdout_examples)
     if held_out < _PROMOTION_TOTAL_HOLDOUT_FLOOR:
         reasons.append(
             f"held-out scale: {held_out} < {_PROMOTION_TOTAL_HOLDOUT_FLOOR} required by §11"
         )
-    phase_counts: dict[str, int] = {}
+    bucket_counts: dict[str, int] = {}
     for example in holdout_examples:
-        phase = persistence.phase_of(example)
-        phase_counts[phase] = phase_counts.get(phase, 0) + 1
-    for phase in sorted(phase_counts):
-        count = phase_counts[phase]
+        bucket = bucket_of(example)
+        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+    for bucket in sorted(bucket_counts):
+        count = bucket_counts[bucket]
         if count < _PROMOTION_PER_PHASE_FLOOR:
             reasons.append(
-                f"phase {phase!r} held-out scale: {count} < "
+                f"phase {bucket!r} held-out scale: {count} < "
                 f"{_PROMOTION_PER_PHASE_FLOOR} required by §11"
             )
     if bootstrap.ci95_lower <= _PROMOTION_CI_LOWER:
@@ -745,6 +757,7 @@ def _bundle_from_result(
     program_state: dict[str, Any],
     tool_descriptions: dict[str, str],
     tool_arg_descriptions: dict[str, dict[str, str]],
+    tool_names: dict[str, str] | None = None,
 ) -> Bundle:
     """Assemble a ``Bundle`` from GEPA result + post-eval statistics."""
     version_tag = datetime.now(UTC).strftime(_DEFAULT_VERSION_TAG_FMT)
@@ -764,6 +777,7 @@ def _bundle_from_result(
         program_state=program_state,
         tool_descriptions=tool_descriptions,
         tool_arg_descriptions=tool_arg_descriptions,
+        tool_names=tool_names,
         scalar_score=candidate_mean,
         objective_scores=candidate_objective_mean,
         window_days=window_days,
@@ -912,6 +926,7 @@ def main(argv: list[str] | None = None) -> int:
         examples_filtered,
         holdout_frac=args.holdout_frac,
         seed=args.seed,
+        stratifier=persistence.phase_of,
     )
     logger.info(
         "Loaded %d examples (window=%s); split into train=%d holdout=%d",
@@ -990,6 +1005,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline_objectives=baseline_objectives,
         candidate_objectives=candidate_objectives_full,
         holdout_examples=holdout,
+        stratifier=persistence.phase_of,
     )
 
     program_state = _program_state_from(
@@ -1010,6 +1026,7 @@ def main(argv: list[str] | None = None) -> int:
         program_state=program_state,
         tool_descriptions=_candidate_tool_descriptions(best_candidate),
         tool_arg_descriptions=_candidate_tool_arg_descriptions(best_candidate),
+        tool_names=_candidate_tool_names(best_candidate),
     )
 
     _report_verdict(bundle=bundle, verdict=verdict)

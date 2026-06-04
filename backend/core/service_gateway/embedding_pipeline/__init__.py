@@ -1,4 +1,4 @@
-"""Embedding pipelines feeding the explore-map and the agent-history search.
+"""Embedding pipelines feeding explore search and the agent-history search.
 
 :mod:`core` runs the per-job embedding (``embed_finished_job``) and the
 startup heal (``backfill_missing_embeddings``). :mod:`conversations` is the
@@ -16,7 +16,12 @@ from .conversations import (
     purge_orphan_conversation_embeddings,
     queue_conversation_embed,
 )
-from .core import backfill_missing_embeddings, embed_finished_job, purge_orphan_embeddings
+from .core import (
+    backfill_missing_embeddings,
+    embed_finished_job,
+    purge_orphan_embeddings,
+    set_embedding_privacy,
+)
 
 __all__ = [
     "backfill_missing_conversation_embeddings",
@@ -26,4 +31,5 @@ __all__ = [
     "purge_orphan_conversation_embeddings",
     "purge_orphan_embeddings",
     "queue_conversation_embed",
+    "set_embedding_privacy",
 ]

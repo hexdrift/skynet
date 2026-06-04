@@ -140,6 +140,33 @@ def test_split_stratified_keeps_singleton_bucket_in_train() -> None:
     assert holdout == []
 
 
+def test_split_stratified_default_single_bucket_pools_all_phases() -> None:
+    """Without a stratifier every example shares one bucket, so a lone
+    off-phase example is eligible for holdout instead of pinned to train."""
+    examples = [
+        _example({"dataset_ready": True}, turn_id=f"ds-{i}") for i in range(9)
+    ] + [_example({}, turn_id="lone-intake")]
+    train, holdout = persistence.split_stratified(examples, holdout_frac=0.2, seed=0)
+    assert len(holdout) == 2
+    assert len(train) == 8
+    ids = {e.turn_id for e in train} | {e.turn_id for e in holdout}
+    assert ids == {f"ds-{i}" for i in range(9)} | {"lone-intake"}
+
+
+def test_split_stratified_with_phase_of_pins_singleton_phase_to_train() -> None:
+    """Passing ``phase_of`` recovers per-phase buckets: the lone intake
+    example forms a singleton bucket and stays entirely in train."""
+    examples = [
+        _example({"dataset_ready": True}, turn_id=f"ds-{i}") for i in range(9)
+    ] + [_example({}, turn_id="lone-intake")]
+    train, holdout = persistence.split_stratified(
+        examples, holdout_frac=0.2, seed=0, stratifier=persistence.phase_of
+    )
+    assert "lone-intake" in {e.turn_id for e in train}
+    assert "lone-intake" not in {e.turn_id for e in holdout}
+    assert len(holdout) == 2
+
+
 def test_paired_bootstrap_constant_delta_collapses_ci() -> None:
     """Identical per-trajectory deltas make every resample mean equal — CI collapses."""
     res = persistence.paired_bootstrap_ci(

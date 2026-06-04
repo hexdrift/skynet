@@ -2,8 +2,8 @@
 
 Given a finished job, we want ~2-3 sentences describing *what the task is*
 in natural language: input → output, objective, metric shape. This text is
-embedded into ``embedding_summary``, which drives the explore-map's 2D
-projection. Keeping a natural-language summary (rather than raw code) lets
+embedded into ``embedding_summary``, which drives explore semantic search.
+Keeping a natural-language summary (rather than raw code) lets
 semantically-similar tasks cluster together even when their Python source
 looks unrelated.
 

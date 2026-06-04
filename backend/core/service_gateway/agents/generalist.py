@@ -45,31 +45,13 @@ from ...config import settings
 from ...exceptions import ServiceError
 from ...i18n import t
 from ...models import ModelConfig
-from ..language_models import build_language_model
+from ..language_models import (
+    apply_model_reasoning_config,
+    build_language_model,
+)
 from ..optimization.training_ground.registry import hash_tool_schema
 from .code import ReasoningStreamListener, _format_agent_error, _SubmitArgExtractor
 from .constants import REASONING_FIELD
-
-
-def _is_openai_reasoning_model(model_name: str) -> bool:
-    """Detect OpenAI reasoning models (gpt-5.x, o1/o3/o4 series).
-
-    These require ``temperature=1.0`` and ``max_tokens >= 16000`` at ``dspy.LM``
-    init; they also emit thinking on the ``reasoning_content`` channel when
-    ``reasoning_effort`` is set. Fireworks/OpenRouter hosts of these models
-    don't share the same constraints, so we scope to the ``openai/`` prefix.
-
-    Args:
-        model_name: The fully-qualified model identifier.
-
-    Returns:
-        True when ``model_name`` is an OpenAI-hosted reasoning model.
-    """
-    lower = model_name.lower()
-    if not lower.startswith("openai/"):
-        return False
-    tail = lower.removeprefix("openai/")
-    return tail.startswith(("gpt-5", "o1", "o3", "o4"))
 
 
 def _build_generalist_lm() -> dspy.LM:
@@ -79,9 +61,10 @@ def _build_generalist_lm() -> dspy.LM:
 
     - **Native MiniMax** (``minimax/...``): ``extra_body={"reasoning_split": true}``
       surfaces the interleaved ``<think>`` channel as ``reasoning_details``.
-    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``, the shipped default)
-      **and OpenRouter MiniMax**: reasoning streams inline in the
-      assistant content as ``<think>…</think>`` blocks; no provider-side knob.
+    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``) **and OpenRouter
+      MiniMax** (``openrouter/minimax/...``, the shipped default): reasoning
+      streams inline in the assistant content as ``<think>…</think>`` blocks;
+      no provider-side knob.
     - **OpenAI reasoning models** (``openai/gpt-5.*``, ``openai/o1|o3|o4*``):
       pass ``reasoning_effort="medium"`` so the model emits reasoning content
       that LiteLLM normalizes to ``delta.reasoning_content``. DSPy validates
@@ -93,28 +76,11 @@ def _build_generalist_lm() -> dspy.LM:
     Returns:
         A configured :class:`dspy.LM` instance for the generalist agent.
     """
-    model_name = settings.generalist_agent_model
-    lower = model_name.lower()
-    extra: dict = {}
-    temperature: float | None = None
-    max_tokens = 4000
-
-    is_native_minimax = lower.startswith("minimax/") or (
-        "minimax" in lower and "fireworks" not in lower and "openrouter" not in lower
-    )
-    if is_native_minimax:
-        extra["extra_body"] = {"reasoning_split": True}
-    elif _is_openai_reasoning_model(model_name):
-        extra["reasoning_effort"] = "medium"
-        temperature = 1.0
-        max_tokens = 16000
-
-    config = ModelConfig(
-        name=model_name,
-        base_url=settings.generalist_agent_base_url or None,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        extra=extra,
+    config = apply_model_reasoning_config(
+        ModelConfig(
+            name=settings.generalist_agent_model,
+            base_url=settings.generalist_agent_base_url or None,
+        )
     )
     return build_language_model(config, disable_cache=True)
 
@@ -299,6 +265,7 @@ class _ApprovalGatedTool:
         staged_dataset_id: str | None = None,
         wizard_state: WizardState | None = None,
         authoring_flag: _TurnAuthoringFlag | None = None,
+        needs_approval: Callable[[str, TrustMode], bool] | None = None,
     ) -> None:
         """Capture the underlying tool and the side-channel plumbing.
 
@@ -330,6 +297,10 @@ class _ApprovalGatedTool:
                 deny a ``submit_job_run_post`` that follows it in the same turn
                 (the authored code is written back asynchronously, so it is not
                 yet in this turn's snapshot).
+            needs_approval: Policy deciding whether a call must pause for
+                confirmation. Defaults to the wizard-tool classifier
+                :func:`_needs_approval`; the react-serve driver injects a
+                gate-everything-but-yolo policy for arbitrary MCP rosters.
         """
         self._original = original
         self._tool_name = tool_name
@@ -340,6 +311,7 @@ class _ApprovalGatedTool:
         self._staged_dataset_id = staged_dataset_id
         self._wizard_state = wizard_state or {}
         self._authoring_flag = authoring_flag or _TurnAuthoringFlag()
+        self._needs_approval = needs_approval or _needs_approval
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Sync entrypoint — DSPy 3.3 ``Tool.__call__`` invokes this from a worker thread.
@@ -406,6 +378,18 @@ class _ApprovalGatedTool:
                 snapshot_code = self._wizard_state.get(code_field)
                 if snapshot_code:
                     kwargs[code_field] = snapshot_code
+        # Profiling a staged dataset needs the same rehydration submit relies
+        # on: the rows live behind an opaque id, never inline in the model's
+        # args, so without this the agent passes an empty dataset, the profile
+        # comes back empty, and it loops until max_iters. Hand the backend the
+        # staged id (read-only — profiling never evicts the staged rows).
+        if (
+            self._tool_name == "profile_datasets_profile_post"
+            and self._staged_dataset_id
+            and not kwargs.get("staged_dataset_id")
+            and not kwargs.get("dataset")
+        ):
+            kwargs["staged_dataset_id"] = self._staged_dataset_id
         self._emit(
             {
                 "event": "tool_start",
@@ -452,7 +436,7 @@ class _ApprovalGatedTool:
                         }
                     )
                     return order_error
-            if _needs_approval(self._tool_name, self._trust_mode):
+            if self._needs_approval(self._tool_name, self._trust_mode):
                 fut = self._registry.register(call_id)
                 self._emit(
                     {
@@ -535,6 +519,7 @@ def _wrap_tool_with_approval(
     staged_dataset_id: str | None = None,
     wizard_state: WizardState | None = None,
     authoring_flag: _TurnAuthoringFlag | None = None,
+    needs_approval: Callable[[str, TrustMode], bool] | None = None,
 ) -> dspy.Tool:
     """Replace ``tool.func`` with an approval-aware wrapper.
 
@@ -554,6 +539,8 @@ def _wrap_tool_with_approval(
         authoring_flag: Turn-scoped flag shared across all wrappers in the
             turn, used to block a submit that follows
             ``request_code_authoring`` in the same turn.
+        needs_approval: Optional gating policy override; defaults to the
+            wizard-tool classifier when omitted.
 
     Returns:
         The same ``tool`` instance with its ``func`` replaced.
@@ -568,6 +555,7 @@ def _wrap_tool_with_approval(
         staged_dataset_id=staged_dataset_id,
         wizard_state=wizard_state,
         authoring_flag=authoring_flag,
+        needs_approval=needs_approval,
     )
     return tool
 
@@ -757,9 +745,7 @@ def _code_ready(state: WizardState) -> bool:
     metric = state.get("metric_code") or ""
     if not signature or not metric:
         return False
-    if _is_placeholder_signature(signature) or _is_placeholder_metric(metric):
-        return False
-    return True
+    return not (_is_placeholder_signature(signature) or _is_placeholder_metric(metric))
 
 
 def _model_ready(state: WizardState) -> bool:

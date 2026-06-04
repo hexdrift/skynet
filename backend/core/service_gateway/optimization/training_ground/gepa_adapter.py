@@ -27,15 +27,40 @@ from .grounding import (
     as_unit_interval,
     grounding_reward,
 )
-from .metrics import feedback_from_low_dims, scalar_with_hard_caps, vector_reward
-from .replay import SUBMIT_TOOL_NAME, ReplayTerminated, TraceConditionedMCPMock
+from .metrics import (
+    GENERALIST_REWARD_SPEC,
+    RewardSpec,
+    feedback_from_low_dims,
+    scalar_with_hard_caps,
+    vector_reward,
+)
+from .replay import (
+    SUBMIT_TOOL_NAME,
+    ReplayTerminated,
+    TraceConditionedMCPMock,
+    resolve_proposed_names,
+)
 from .types import EvaluationExample, ReplayRollout
 
 logger = logging.getLogger(__name__)
 
 
-GENERALIST_MODULE_KEY = f"{TOOL_MODULE_PREFIX}:generalist"
-"""Single composite key holding every mutable text for the generalist program."""
+VectorRewardFn = Callable[[EvaluationExample, ReplayRollout], dict[str, float]]
+"""Signature of a per-example reward-vector function (generalist or general)."""
+
+
+TOOL_MODULE_KEY = f"{TOOL_MODULE_PREFIX}:react"
+"""Neutral composite key holding every mutable text for the candidate program.
+
+Domain-agnostic replacement for the legacy ``:generalist`` key. Candidate
+parsing accepts either key (see :data:`_LEGACY_MODULE_KEY`) so candidates
+seeded before the rename still load."""
+
+_LEGACY_MODULE_KEY = f"{TOOL_MODULE_PREFIX}:generalist"
+"""Pre-rename composite key — still parsed for back-compat with old candidates."""
+
+GENERALIST_MODULE_KEY = _LEGACY_MODULE_KEY
+"""Deprecated alias for :data:`_LEGACY_MODULE_KEY`, kept for existing importers."""
 
 REACT_PREDICTOR_NAME = "react"
 """Inner-predictor name on ReActV2 — used by the seed candidate and reflective
@@ -49,7 +74,7 @@ so it is logged + frontier-visible but never trips the §11 regression gate."""
 def seed_candidate_from_program(program: dspy.Module) -> dict[str, str]:
     """Build the GEPA seed candidate from a ReActV2 program.
 
-    GEPA mutates one composite ``tool_module:generalist`` blob so the
+    GEPA mutates one composite ``tool_module:react`` blob so the
     instruction proposer optimizes the inner predictor's instructions and
     the tool descriptions jointly. Mirrors ``DspyAdapter.build_program``
     expectations (see ``gepa/adapters/dspy_adapter/dspy_adapter.py:180``).
@@ -59,8 +84,11 @@ def seed_candidate_from_program(program: dspy.Module) -> dict[str, str]:
             and tool descriptions wired in.
 
     Returns:
-        ``{"tool_module:generalist": "<json blob>"}`` where the blob is
-        ``{"react": <instructions>, "tools": {<tool>: {"desc": ..., "args": ...}}}``.
+        ``{"tool_module:react": "<json blob>"}`` where the blob is
+        ``{"react": <instructions>, "tools": {<canonical>: {"name": ...,
+        "desc": ..., "args": ...}}}``. The blob is keyed by canonical name and
+        seeds ``name`` equal to the canonical name so GEPA can mutate a clearer
+        display name the agent sees while matching/reward stay canonical.
     """
     instructions = _extract_react_instructions(program)
     tools_payload: dict[str, dict[str, Any]] = {}
@@ -68,11 +96,12 @@ def seed_candidate_from_program(program: dspy.Module) -> dict[str, str]:
         if name == SUBMIT_TOOL_NAME:
             continue
         tools_payload[name] = {
+            "name": name,
             "desc": tool.desc or "",
             "args": _serialize_tool_args(tool.args),
         }
     config = {REACT_PREDICTOR_NAME: instructions, "tools": tools_payload}
-    return {GENERALIST_MODULE_KEY: json.dumps(config, ensure_ascii=False, sort_keys=True)}
+    return {TOOL_MODULE_KEY: json.dumps(config, ensure_ascii=False, sort_keys=True)}
 
 
 class TrainingGroundDspyAdapter(DspyAdapter):
@@ -113,6 +142,18 @@ class TrainingGroundDspyAdapter(DspyAdapter):
             ``grounding_weight > 0``.
         feedback_dim_count: Bottom-N task dimensions surfaced per example in
             the reflective dataset. Kept small so reflection prompts stay tight.
+        reward_spec: Scalarizer config (weights + hard-cap policy) for the task
+            term. Defaults to :data:`GENERALIST_REWARD_SPEC` so existing call
+            sites keep the generalist behavior; pair with ``vector_fn`` to score
+            a different dimension set.
+        vector_fn: Per-example reward-vector function. Defaults to
+            :func:`vector_reward` (the 12-dimension generalist vector); must
+            produce the dimensions named in ``reward_spec.weights``.
+        match_mode: Replay step-matching policy forwarded to every
+            :class:`TraceConditionedMCPMock`. ``"exact"`` (default) keeps the
+            byte-exact ``(tool_name, argument_hash)`` contract; ``"tool_name"``
+            advances on a tool-name match so unreproducible free-text args don't
+            kill the rollout after the first call.
 
     Raises:
         ValueError: when the configured reward has no active term, or grounding
@@ -130,6 +171,9 @@ class TrainingGroundDspyAdapter(DspyAdapter):
         template: ChatTemplate | None = None,
         scorer: PromptScorer | None = None,
         feedback_dim_count: int = 3,
+        reward_spec: RewardSpec = GENERALIST_REWARD_SPEC,
+        vector_fn: VectorRewardFn = vector_reward,
+        match_mode: str = "exact",
     ) -> None:
         """Configure the reward terms and stash the rollout collaborators.
 
@@ -168,6 +212,9 @@ class TrainingGroundDspyAdapter(DspyAdapter):
         self._grounding_weight = grounding_weight
         self._template = template
         self._scorer = scorer
+        self._reward_spec = reward_spec
+        self._vector_fn = vector_fn
+        self._match_mode = match_mode
 
     def evaluate(  # type: ignore[override]
         self,
@@ -189,9 +236,25 @@ class TrainingGroundDspyAdapter(DspyAdapter):
         objective_scores: list[dict[str, float]] = []
         tool_descriptions = _candidate_tool_descriptions(candidate)
         tool_arg_descriptions = _candidate_tool_arg_descriptions(candidate)
+        proposed_names = _candidate_tool_names(candidate)
         instructions = _candidate_instructions(candidate)
-        for example in batch:
-            mock = TraceConditionedMCPMock(example)
+        total = len(batch)
+        logger.info("react evaluate: scoring %d example(s)", total)
+        for idx, example in enumerate(batch):
+            # Resolve per-example because collision filtering is scoped to this
+            # turn's allowed_tools; the canonical_by_proposed inversion is then
+            # exactly the canonicalizer the mock applies to every called name.
+            resolved_names = resolve_proposed_names(
+                proposed_names, example.allowed_tools
+            )
+            canonical_by_proposed = {
+                proposed: canonical for canonical, proposed in resolved_names.items()
+            }
+            mock = TraceConditionedMCPMock(
+                example,
+                name_canonicalizer=lambda n, m=canonical_by_proposed: m.get(n, n),
+                match_mode=self._match_mode,
+            )
             messages: list[dict[str, Any]] = []
             tools: Any = None
             instantiation_failed = False
@@ -201,6 +264,7 @@ class TrainingGroundDspyAdapter(DspyAdapter):
                     instructions=instructions,
                     tool_descriptions=tool_descriptions,
                     tool_arg_descriptions=tool_arg_descriptions,
+                    proposed_names=resolved_names,
                 )
             except Exception:  # pragma: no cover - defensive
                 logger.exception(
@@ -217,6 +281,12 @@ class TrainingGroundDspyAdapter(DspyAdapter):
             )
             if instantiation_failed:
                 scalar = self.failure_score
+            # Per-rollout heartbeat: the type-mismatch warning used to be the
+            # only per-rollout signal in job_logs; this keeps rollout execution
+            # observable now that the warning is silenced.
+            logger.info(
+                "react rollout %d/%d turn=%s score=%.3f", idx + 1, total, example.turn_id, scalar
+            )
             outputs.append(pred)
             scores.append(scalar)
             objective_scores.append(objectives)
@@ -270,9 +340,9 @@ class TrainingGroundDspyAdapter(DspyAdapter):
         objectives: dict[str, float] = {}
         scalar = 0.0
         if self._include_task_reward:
-            vec = vector_reward(example, rollout)
+            vec = self._vector_fn(example, rollout)
             objectives.update(vec)
-            scalar += scalar_with_hard_caps(vec)
+            scalar += scalar_with_hard_caps(vec, self._reward_spec)
         mean_log_likelihood: float | None = None
         observation_count = 0
         if self._grounding_weight > 0:
@@ -363,15 +433,30 @@ class TrainingGroundDspyAdapter(DspyAdapter):
         return "\n\n".join(parts)
 
 
-def _parse_generalist_blob(candidate: dict[str, str]) -> dict[str, Any]:
-    """Parse the composite ``tool_module:generalist`` JSON blob, swallowing errors.
+def _candidate_blob_key(candidate: dict[str, str]) -> str:
+    """Return the composite-blob key present on ``candidate``.
+
+    Prefers the neutral ``tool_module:react`` key but falls back to the legacy
+    ``tool_module:generalist`` key so candidates seeded before the rename still
+    parse. Defaults to the neutral key when neither is present (an empty blob).
+    """
+    if TOOL_MODULE_KEY in candidate:
+        return TOOL_MODULE_KEY
+    if _LEGACY_MODULE_KEY in candidate:
+        return _LEGACY_MODULE_KEY
+    return TOOL_MODULE_KEY
+
+
+def _parse_candidate_blob(candidate: dict[str, str]) -> dict[str, Any]:
+    """Parse the composite ``tool_module:*`` JSON blob, swallowing errors.
 
     The reflective proposer can occasionally return a malformed blob — when
     that happens we want the candidate to fall back to the seed's text
     silently and have the rollout failure-score, not raise out of
     ``evaluate`` before the per-example try block catches it.
     """
-    raw = candidate.get(GENERALIST_MODULE_KEY)
+    key = _candidate_blob_key(candidate)
+    raw = candidate.get(key)
     if not isinstance(raw, str) or not raw:
         return {}
     try:
@@ -379,7 +464,7 @@ def _parse_generalist_blob(candidate: dict[str, str]) -> dict[str, Any]:
     except json.JSONDecodeError:
         logger.warning(
             "Candidate %s blob is not valid JSON — falling back to seed overrides",
-            GENERALIST_MODULE_KEY,
+            key,
         )
         return {}
     return parsed if isinstance(parsed, dict) else {}
@@ -388,11 +473,11 @@ def _parse_generalist_blob(candidate: dict[str, str]) -> dict[str, Any]:
 def _candidate_instructions(candidate: dict[str, str]) -> dict[str, str]:
     """Pull predictor instructions out of the candidate dict.
 
-    The candidate is expected to contain a single ``tool_module:generalist``
-    JSON blob whose top-level string keys are predictor instructions.
-    Non-prefix keys are accepted as overrides.
+    The candidate is expected to contain a single ``tool_module:react``
+    JSON blob (or the legacy ``:generalist`` key) whose top-level string keys
+    are predictor instructions. Non-prefix keys are accepted as overrides.
     """
-    parsed = _parse_generalist_blob(candidate)
+    parsed = _parse_candidate_blob(candidate)
     instructions: dict[str, str] = {
         key: value for key, value in parsed.items() if isinstance(value, str)
     }
@@ -405,7 +490,7 @@ def _candidate_instructions(candidate: dict[str, str]) -> dict[str, str]:
 
 def _candidate_tool_descriptions(candidate: dict[str, str]) -> dict[str, str]:
     """Pull tool descriptions (no arg-level edits) out of the candidate."""
-    parsed = _parse_generalist_blob(candidate)
+    parsed = _parse_candidate_blob(candidate)
     tools = parsed.get("tools") or {}
     descriptions: dict[str, str] = {}
     if not isinstance(tools, dict):
@@ -419,11 +504,40 @@ def _candidate_tool_descriptions(candidate: dict[str, str]) -> dict[str, str]:
     return descriptions
 
 
+def _candidate_tool_names(candidate: dict[str, str]) -> dict[str, str]:
+    """Extract the GEPA-proposed display name per canonical tool.
+
+    Each ``tools[<canonical>]`` payload may carry a ``name`` GEPA mutated to a
+    clearer label the agent sees. Entries whose proposed name is missing/blank
+    fall back to the canonical key, so the result is always identity when no
+    rename was proposed (the seed sets ``name == canonical``).
+
+    Returns:
+        ``{canonical_name: proposed_name}`` — never empty unless the blob has no
+        tools; identity for any tool whose proposed name is absent or blank.
+    """
+    parsed = _parse_candidate_blob(candidate)
+    tools = parsed.get("tools") or {}
+    names: dict[str, str] = {}
+    if not isinstance(tools, dict):
+        return names
+    for canonical, payload in tools.items():
+        if not isinstance(payload, dict):
+            names[canonical] = canonical
+            continue
+        proposed = payload.get("name")
+        if isinstance(proposed, str) and proposed.strip():
+            names[canonical] = proposed.strip()
+        else:
+            names[canonical] = canonical
+    return names
+
+
 def _candidate_tool_arg_descriptions(
     candidate: dict[str, str],
 ) -> dict[str, dict[str, str]]:
     """Extract arg-level description overrides keyed by tool then arg."""
-    parsed = _parse_generalist_blob(candidate)
+    parsed = _parse_candidate_blob(candidate)
     tools = parsed.get("tools") or {}
     out: dict[str, dict[str, str]] = {}
     if not isinstance(tools, dict):
@@ -531,7 +645,11 @@ def _grounding_feedback(
 
 
 def _instantiate_program_shell(
-    seed_program: dspy.Module, *, mock: TraceConditionedMCPMock, max_iters: int
+    seed_program: dspy.Module,
+    *,
+    mock: TraceConditionedMCPMock,
+    max_iters: int,
+    proposed_names: dict[str, str] | None = None,
 ) -> dspy.ReActV2:
     """Construct a fresh ``ReActV2`` whose tool layer routes through the mock.
 
@@ -542,7 +660,9 @@ def _instantiate_program_shell(
     actually visible to the LM during the rollout.
 
     Tool descriptions are placeholders here — the caller overlays them
-    with the candidate's payload before calling the program.
+    with the candidate's payload before calling the program. ``proposed_names``
+    (canonical->proposed) renames the agent-facing roster; the mock
+    canonicalizes the names back so matching/reward stay canonical.
     """
     signature = getattr(seed_program, "signature", None)
     if signature is None:
@@ -550,7 +670,7 @@ def _instantiate_program_shell(
     live_tools = _collect_tools(seed_program)
     return dspy.ReActV2(
         signature,
-        tools=mock.tool_layer(live_tools=live_tools),
+        tools=mock.tool_layer(live_tools=live_tools, proposed_names=proposed_names),
         max_iters=max_iters,
     )
 
@@ -561,20 +681,29 @@ def _apply_candidate_to_program(
     instructions: dict[str, str],
     tool_descriptions: dict[str, str],
     tool_arg_descriptions: dict[str, dict[str, str]] | None = None,
+    proposed_names: dict[str, str] | None = None,
 ) -> None:
-    """Overlay candidate text onto a fresh program in place."""
+    """Overlay candidate text onto a fresh program in place.
+
+    The candidate's ``desc`` / ``args`` overrides are keyed by canonical tool
+    name, but ``program.tools`` is keyed by the agent-facing (possibly renamed)
+    display name. ``proposed_names`` (canonical->proposed) bridges the two so a
+    renamed tool still receives its description/arg overlays; absent it the
+    canonical name is used directly (identity).
+    """
+    display_of = proposed_names or {}
     for name, predictor in program.named_predictors():
         if name in instructions:
             predictor.signature = predictor.signature.with_instructions(
                 instructions[name]
             )
     for tool_name, desc in tool_descriptions.items():
-        tool = program.tools.get(tool_name)
+        tool = program.tools.get(display_of.get(tool_name, tool_name))
         if tool is not None:
             tool.desc = desc
     if tool_arg_descriptions:
         for tool_name, arg_map in tool_arg_descriptions.items():
-            tool = program.tools.get(tool_name)
+            tool = program.tools.get(display_of.get(tool_name, tool_name))
             if tool is None:
                 continue
             for arg_name, description in arg_map.items():
@@ -626,18 +755,30 @@ def _run_candidate(
     catch it here as a defensive belt for direct callers that bypass the
     ReAct loop (the dry-run estimator does).
     """
-    inputs = {
-        "user_message": example.user_message,
-        "wizard_state": json.dumps(example.wizard_state_before, ensure_ascii=False),
-        "chat_history": json.dumps(list(example.chat_history), ensure_ascii=False),
-    }
+    if example.signature_inputs is not None:
+        inputs = dict(example.signature_inputs)
+    else:
+        inputs = {
+            "user_message": example.user_message,
+            "wizard_state": json.dumps(example.wizard_state_before, ensure_ascii=False),
+            "chat_history": json.dumps(list(example.chat_history), ensure_ascii=False),
+        }
     try:
-        with dspy.context(lm=lm):
+        # wizard_state/chat_history reach the program as JSON strings (the
+        # branch above and run_react._coerce_signature_inputs both stringify
+        # them) to mirror the live agent's wire format, even when the authored
+        # signature types those fields as dict/list. DSPy's warn_on_type_mismatch
+        # would then log a benign warning per predict; the substitution is
+        # deliberate and harness-controlled here, so the warning carries no signal.
+        with dspy.context(lm=lm, warn_on_type_mismatch=False):
             return program(**inputs)
     except ReplayTerminated:
         return None
     except Exception as exc:
-        logger.debug("Candidate rollout raised %s for turn %s", exc, example.turn_id)
+        # WARNING (not DEBUG): the subprocess log forwarder floors at INFO, so a
+        # DEBUG line never reaches job_logs — a crashed rollout would silently
+        # failure-score and be indistinguishable from a genuine low reward.
+        logger.warning("Candidate rollout raised %s for turn %s", exc, example.turn_id)
         return None
 
 
@@ -716,16 +857,28 @@ def _run_candidate_and_capture(
 
 
 def _reflective_inputs(example: EvaluationExample) -> dict[str, Any]:
-    """Build the ``Inputs`` block GEPA's reflective proposer sees per example."""
-    return {
-        "user_message": example.user_message,
-        "wizard_state_before": example.wizard_state_before,
-        "allowed_tools": sorted(example.allowed_tools),
-        "recorded_tool_calls": [
-            {"tool": step.tool_name, "arguments": step.arguments}
-            for step in example.replay_steps
-        ],
-    }
+    """Build the ``Inputs`` block GEPA's reflective proposer sees per example.
+
+    When ``example.signature_inputs`` is set (the /run path) the block is
+    based on the signature inputs so the proposer sees the same fields the
+    candidate was fed, still augmented with the replay context
+    (``allowed_tools`` + ``recorded_tool_calls``). When ``None`` the
+    generalist three-key block is returned unchanged.
+    """
+    base = (
+        dict(example.signature_inputs)
+        if example.signature_inputs is not None
+        else {
+            "user_message": example.user_message,
+            "wizard_state_before": example.wizard_state_before,
+        }
+    )
+    base["allowed_tools"] = sorted(example.allowed_tools)
+    base["recorded_tool_calls"] = [
+        {"tool": step.tool_name, "arguments": step.arguments}
+        for step in example.replay_steps
+    ]
+    return base
 
 
 def _summarize_rollout(rollout: ReplayRollout) -> dict[str, Any]:
@@ -772,16 +925,21 @@ def _instantiate_candidate(
     instructions: dict[str, str],
     tool_descriptions: dict[str, str],
     tool_arg_descriptions: dict[str, dict[str, str]] | None,
+    proposed_names: dict[str, str] | None = None,
 ) -> dspy.ReActV2:
     """Build a fresh candidate program for one example."""
     program = _instantiate_program_shell(
-        self._seed_program, mock=mock, max_iters=self._max_iters
+        self._seed_program,
+        mock=mock,
+        max_iters=self._max_iters,
+        proposed_names=proposed_names,
     )
     _apply_candidate_to_program(
         program,
         instructions=instructions,
         tool_descriptions=tool_descriptions,
         tool_arg_descriptions=tool_arg_descriptions,
+        proposed_names=proposed_names,
     )
     return program
 
@@ -792,10 +950,15 @@ TrainingGroundDspyAdapter._instantiate_candidate = _instantiate_candidate  # typ
 __all__ = [
     "GENERALIST_MODULE_KEY",
     "REACT_PREDICTOR_NAME",
+    "TOOL_MODULE_KEY",
     "TrainingGroundDspyAdapter",
     "observation_texts_from_messages",
     "seed_candidate_from_program",
 ]
+
+# ``_candidate_tool_names`` is imported by run_react/optimize (the bundle +
+# overlay persist paths) alongside the other ``_candidate_*`` parsers, which are
+# likewise underscore-prefixed and intentionally absent from ``__all__``.
 
 
 # Reference imports kept so a downstream typing pass can resolve the symbols

@@ -1,4 +1,4 @@
-"""OpenAI-compatible embedding API adapter for the explore-map projection.
+"""OpenAI-compatible embedding API adapter for explore search.
 
 The pipeline stores fixed-dimension pgvector embeddings, but the embedding
 model itself is not bundled with the backend. Operators provide an internal
