@@ -35,17 +35,29 @@ module:
   he: מודול
   note: Keep the borrowed DSPy term.
 
+signature:
+  en: Signature
+  he: חתימה (Signature)
+  note: DSPy input/output contract. Corrected from the earlier "פרומפט התחלתי"
+    ("initial prompt"), which was inaccurate — a Signature is a field spec, not a
+    prompt. Native חתימה plus an English "(Signature)" gloss.
+  do_not_use:
+    - פרומפט התחלתי
+
 metric:
   en: metric
-  he: פונקציית מדידה
-  note: Owner-approved native exception. Do not use מטריקה in product copy.
+  he: פונקציית מדידה (Metric)
+  note: Native phrase plus an English "(Metric)" gloss on the canonical label, per
+    the owner decision to surface DSPy's English term. Do not use מטריקה.
   do_not_use:
     - מטריקה
 
 baseline:
   en: baseline
   he: בסיס
-  note: Use תוצאות בסיס for the full pre-optimization result phrase.
+  note: Bare term stays בסיס; the score labels carry an English gloss —
+    "ציון בסיס (baseline)" / "ציון סופי (optimized score)". Use תוצאות בסיס for the
+    full pre-optimization result phrase.
 
 generationModel:
   en: generation model
