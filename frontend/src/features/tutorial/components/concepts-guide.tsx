@@ -175,7 +175,7 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
           <GuideSidebar activeId={activeId} onJump={jumpTo} />
           <div
             ref={scrollRef}
-            className="overflow-y-auto px-5 sm:px-8 py-6 scroll-smooth"
+            className="min-w-0 overflow-y-auto px-5 sm:px-8 py-6 scroll-smooth"
           >
             <SectionBackground />
             <SectionGepa />
@@ -1200,6 +1200,7 @@ function SectionWorkflow() {
                   {msg("auto.features.tutorial.components.concepts.guide.literal.287")}
                 </InlineCode>
                 {msg("auto.features.tutorial.components.concepts.guide.literal.177")}
+                {msg("auto.features.tutorial.components.concepts.guide.literal.346")}
               </>
             ),
           },
@@ -1373,6 +1374,12 @@ function SectionWorkflow() {
           {msg("auto.features.tutorial.components.concepts.guide.literal.219")}
         </li>
       </ul>
+
+      <SubHeading>
+        {msg("auto.features.tutorial.components.concepts.guide.literal.347")}
+      </SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.348")}</p>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.349")}</p>
     </GuideSection>
   );
 }
@@ -1575,6 +1582,10 @@ function SectionGlossary() {
     [
       msg("auto.features.tutorial.components.concepts.guide.literal.343"),
       msg("auto.features.tutorial.components.concepts.guide.literal.269"),
+    ],
+    [
+      msg("auto.features.tutorial.components.concepts.guide.literal.344"),
+      msg("auto.features.tutorial.components.concepts.guide.literal.345"),
     ],
     [
       msg("auto.features.tutorial.components.concepts.guide.literal.326"),

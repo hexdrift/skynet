@@ -558,6 +558,16 @@ function buildDone(start: Date): OptimizationStatusResponse {
       runtime_seconds: elapsed,
       num_lm_calls: 156,
       split_counts: { train: 120, val: 40, test: 40 },
+      lm_activity: {
+        generation: {
+          baseline: { calls: 40, avg_response_time_ms: 1850 },
+          training: { calls: 80, avg_response_time_ms: 2110 },
+          evaluation: { calls: 36, avg_response_time_ms: 1690 },
+        },
+        reflection: {
+          training: { calls: 12, avg_response_time_ms: 5240 },
+        },
+      },
     },
   };
 }
@@ -893,6 +903,8 @@ export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = {
     { name: "claude-haiku-4", value: 1 },
     { name: "gemini-2.0-pro", value: 1 },
   ],
+  owner_usage: [],
+  access_usage: [],
   success_count: 7,
   failed_count: 1,
   running_count: 1,
@@ -1100,6 +1112,11 @@ function gridPair(
     avgMs: number;
   },
 ): PairResult {
+  const reflCalls = Math.round(opts.numLmCalls * 0.15);
+  const genCalls = opts.numLmCalls - reflCalls;
+  const genBaseline = Math.round(genCalls * 0.3);
+  const genTraining = Math.round(genCalls * 0.45);
+  const genEval = genCalls - genBaseline - genTraining;
   return {
     pair_index: idx,
     generation_model: opts.genModel,
@@ -1110,6 +1127,16 @@ function gridPair(
     runtime_seconds: opts.runtime,
     num_lm_calls: opts.numLmCalls,
     avg_response_time_ms: opts.avgMs,
+    lm_activity: {
+      generation: {
+        baseline: { calls: genBaseline, avg_response_time_ms: opts.avgMs },
+        training: { calls: genTraining, avg_response_time_ms: Math.round(opts.avgMs * 1.15) },
+        evaluation: { calls: genEval, avg_response_time_ms: Math.round(opts.avgMs * 0.9) },
+      },
+      reflection: {
+        training: { calls: reflCalls, avg_response_time_ms: Math.round(opts.avgMs * 4) },
+      },
+    },
     program_artifact: {
       optimized_prompt: {
         predictor_name: "ArticleSummarizer",
@@ -1468,33 +1495,11 @@ function buildExploreDemoPoints(): PublicDashboardPoint[] {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 0x1_0000_0000;
   };
-  const gauss = () => {
-    const u1 = Math.max(1e-9, rand());
-    const u2 = rand();
-    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  };
-
-  const cellW = 1.7 / EXPLORE_CLUSTER_COLS;
-  const cellH = 1.7 / EXPLORE_CLUSTER_ROWS;
-  const centers: Array<{ cx: number; cy: number }> = [];
-  for (let r = 0; r < EXPLORE_CLUSTER_ROWS; r++) {
-    for (let c = 0; c < EXPLORE_CLUSTER_COLS; c++) {
-      centers.push({
-        cx: -0.85 + cellW / 2 + c * cellW,
-        cy: 0.85 - cellH / 2 - r * cellH,
-      });
-    }
-  }
 
   const now = Date.now();
   const points: PublicDashboardPoint[] = [];
   for (let i = 0; i < EXPLORE_DEMO_TOTAL; i++) {
     const c32 = i % EXPLORE_CLUSTER_TOTAL;
-    const center = centers[c32]!;
-    const noise = 0.075;
-    const x = Math.max(-0.98, Math.min(0.98, center.cx + gauss() * noise));
-    const y = Math.max(-0.98, Math.min(0.98, center.cy + gauss() * noise));
-
     const baseline = 0.38 + rand() * 0.32;
     const lift = 0.04 + rand() * 0.22;
     const optimized = Math.min(0.97, baseline + lift);
@@ -1519,8 +1524,6 @@ function buildExploreDemoPoints(): PublicDashboardPoint[] {
       module_name: "Predict",
       optimizer_name: EXPLORE_OPTIMIZERS[optimizerIdx] ?? null,
       created_at: new Date(now - daysAgo * 86400_000).toISOString(),
-      x,
-      y,
       siblings: [],
       task_fingerprint: null,
       compare_fingerprint: null,
