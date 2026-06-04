@@ -58,8 +58,8 @@ export function ServeChat({
   };
 
   return (
-    <div className="flex flex-col max-h-[560px] pt-2">
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto pb-4 space-y-6">
+    <div className="flex flex-col min-w-0 max-h-[560px] pt-2">
+      <div ref={chatScrollRef} className="min-w-0 flex-1 overflow-y-auto pb-4 space-y-6">
         {runHistory.length === 0 && !streamingRun && (
           <EmptyState
             icon={MessageSquare}

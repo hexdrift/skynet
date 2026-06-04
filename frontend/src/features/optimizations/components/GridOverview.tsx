@@ -221,7 +221,7 @@ function GridOverviewImpl({
 
   return (
     <div className="space-y-4" data-tutorial="grid-search">
-      <StaggerContainer className="grid grid-cols-2 gap-3">
+      <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <StaggerItem>
           <TiltCard
             className="rounded-xl border border-border/50 bg-card/80 p-4 text-center"
@@ -305,7 +305,7 @@ function GridOverviewImpl({
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="h-[280px]" dir="ltr">
+                <div className="h-[280px] min-w-0" dir="ltr">
                   <ResponsiveContainer width="100%" height="100%">
                     <ScatterChart margin={{ top: 10, right: 30, bottom: 35, left: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -431,7 +431,7 @@ function GridOverviewImpl({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="h-[220px]" dir="ltr">
+                    <div className="h-[220px] min-w-0" dir="ltr">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={pairScoresFiltered}
@@ -568,7 +568,7 @@ function GridOverviewImpl({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="h-[220px]" dir="ltr">
+                    <div className="h-[220px] min-w-0" dir="ltr">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={combinedScoresFiltered}
@@ -707,7 +707,7 @@ function GridOverviewImpl({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="h-[220px]" dir="ltr">
+                    <div className="h-[220px] min-w-0" dir="ltr">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={pairRespTimeFiltered}
@@ -929,7 +929,7 @@ function GridOverviewImpl({
       </div>
 
       <Dialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <DialogContent className="max-w-md sm:max-w-md">
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogTitleRow
             title={msg("auto.features.optimizations.components.gridoverview.19")}
             description={

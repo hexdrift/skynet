@@ -16,6 +16,9 @@ import {
   Database,
   Settings,
   Activity,
+  Eye,
+  Pencil,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -28,6 +31,7 @@ import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
   getJob,
   cancelJob,
+  retryJob,
   getOptimizationPayload,
   getServeInfo,
   getPairServeInfo,
@@ -68,6 +72,7 @@ import { PairSelectionStrip } from "./PairSelectionStrip";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
 import { LMActivityTab } from "./LMActivityTab";
+import { ReactServeChat } from "./ReactServeChat";
 import { RunPlayground } from "./RunPlayground";
 import { linkifyMessage } from "@/shared/lib/linkify";
 import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
@@ -90,6 +95,96 @@ function formatElapsed(seconds: number): string {
   return `${h}:${m}:${s}`;
 }
 
+// Fold a (possibly delta) detail response into the held job. Every non-stream
+// field on `next` is the full current value; only progress_events / logs may be
+// tails — a 0 offset (or no prior buffer) replaces, a positive offset splices
+// the tail onto rows already held. Slicing at the server-echoed offset
+// reconstructs the complete array even if the request cursor lagged a tick,
+// which keeps grid reconstruction (driven off the full progress_events) sound.
+function mergeJobDelta(
+  prev: OptimizationStatusResponse | null,
+  next: OptimizationStatusResponse,
+): OptimizationStatusResponse {
+  const po = next.progress_offset ?? 0;
+  const lo = next.logs_offset ?? 0;
+  const progress_events =
+    po > 0 && prev?.progress_events
+      ? [...prev.progress_events.slice(0, po), ...next.progress_events]
+      : next.progress_events;
+  const logs =
+    lo > 0 && prev?.logs ? [...prev.logs.slice(0, lo), ...next.logs] : next.logs;
+  return { ...next, progress_events, logs };
+}
+
+// Owns the 1Hz `now` tick + elapsed-time derivation in a leaf so that, while a
+// job is active, the per-second re-render is confined to this clock badge rather
+// than the 1200-line detail root (which would otherwise re-render the whole
+// active-tab subtree — chart/grid/trajectory — every second). Mirrors the
+// dashboard's LiveElapsed.tsx isolation.
+function LiveElapsedBadge({
+  isActive,
+  startedAt,
+  createdAt,
+  completedAt,
+  elapsedSeconds,
+}: {
+  isActive: boolean;
+  startedAt: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+  elapsedSeconds: number | null;
+}) {
+  // `now` ticks once per second only while the job is active, driving the
+  // elapsed-time derivation in `liveElapsed`. Decoupling the tick from the
+  // timestamp deps keeps the interval alive across polling refreshes that
+  // replace identical timestamp strings.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isActive) return;
+    setNow(Date.now());
+    const handle = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(handle);
+  }, [isActive]);
+  // Anchor on the server-computed elapsed_seconds so the live counter is
+  // immune to client/server clock skew — wall-clock derivation alone can go
+  // negative and stall the badge at 00:00:00.
+  const [elapsedAnchor, setElapsedAnchor] = useState<{ ms: number; sec: number } | null>(null);
+  useEffect(() => {
+    if (elapsedSeconds != null && Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0) {
+      setElapsedAnchor({ ms: Date.now(), sec: elapsedSeconds });
+    }
+  }, [elapsedSeconds]);
+  const liveElapsed = useMemo(() => {
+    if (!isActive) {
+      if (elapsedSeconds != null && elapsedSeconds > 0) {
+        return formatElapsed(Math.floor(elapsedSeconds));
+      }
+      const start = parseTimestampMs(startedAt ?? createdAt);
+      const end = parseTimestampMs(completedAt);
+      if (start !== null && end !== null) {
+        return formatElapsed(Math.max(0, Math.floor((end - start) / 1000)));
+      }
+      return "00:00:00";
+    }
+    // Take the larger of wallclock (now - started_at) and the server anchor so
+    // a stale upstream `elapsed_seconds` (e.g. cached 0) doesn't reset the
+    // header counter back to zero on every page reload.
+    const start = parseTimestampMs(startedAt ?? createdAt);
+    const wall = start !== null ? Math.max(0, (now - start) / 1000) : 0;
+    const anchored = elapsedAnchor
+      ? elapsedAnchor.sec + Math.max(0, (now - elapsedAnchor.ms) / 1000)
+      : 0;
+    return formatElapsed(Math.floor(Math.max(wall, anchored)));
+  }, [now, isActive, startedAt, createdAt, completedAt, elapsedSeconds, elapsedAnchor]);
+
+  return (
+    <span className="flex items-center gap-1.5 tabular-nums" dir="ltr">
+      <Clock className="size-3.5" />
+      {liveElapsed}
+    </span>
+  );
+}
+
 export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimizationData } = {}) {
   const params = useParams<{ id?: string; token?: string }>();
   const isShare = !!shareData;
@@ -98,8 +193,10 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   // shared serve + clone-with-token paths need it. shareData itself omits it.
   const shareToken = params.token ?? null;
   const shareRole = shareData?.role ?? null;
-  // viewer/editor/owner get inference + clone; the anonymous "view" role does not.
-  const shareCanInteract = isShare && shareRole != null && shareRole !== "view";
+  // Cloning is viewer+ (it makes the caller's own copy, no spend). Serving/chat
+  // spends the owner's key, so it's editor+ only (see shareCanServe).
+  const shareCanInteract = isShare && shareRole != null;
+  const shareCanServe = isShare && (shareRole === "editor" || shareRole === "owner");
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") ?? "overview";
@@ -124,6 +221,9 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   const [payload, setPayload] = useState<OptimizationPayloadResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Re-run mints a brand-new run per call, so guard against a double-click
+  // firing two retries (and creating two duplicate runs).
+  const [retrying, setRetrying] = useState(false);
 
   // Bump to replay the demo optimization simulation. The deep-dive tour
   // triggers this when reaching the trajectory step so users watch the tree
@@ -191,13 +291,16 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
     searchParams.get("pair") != null ? parseInt(searchParams.get("pair")!, 10) : null;
 
   /* Cancelled/failed grid jobs have no persisted grid_result — rebuild from
-     progress_events so overview + per-pair views still render. */
-  const effectiveJob: OptimizationStatusResponse | null = (() => {
+     progress_events so overview + per-pair views still render. Memoized on
+     [job] so the reconstruction + fresh object reference rebuild only on a real
+     refetch, not on every render — a stable ref is what lets the memoized
+     OverviewTab/GridOverview skip re-rendering between unrelated state changes. */
+  const effectiveJob: OptimizationStatusResponse | null = useMemo(() => {
     if (!job) return null;
     if (job.grid_result || job.optimization_type !== "grid_search") return job;
     const rebuilt = reconstructGridResult(job);
     return rebuilt ? { ...job, grid_result: rebuilt } : job;
-  })();
+  }, [job]);
 
   const activePair =
     activePairIndex === null || !effectiveJob?.grid_result
@@ -206,24 +309,52 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
         null);
   const isPairContext = activePair != null;
 
-  const pairScorePoints = (() => {
-    if (activePairIndex === null || !job?.logs) return [];
-    const pairLogs = job.logs.filter((l) => l.pair_index === activePairIndex);
+  // Hoisted so the memos below depend on a plain local — the React Compiler lint
+  // can't equate an inferred `job.logs` path with a `job?.logs` dependency
+  // literal, which would skip optimizing the whole component.
+  const jobLogs = job?.logs;
+
+  const pairScorePoints = useMemo(() => {
+    if (activePairIndex === null || !jobLogs) return [];
+    const pairLogs = jobLogs.filter((l) => l.pair_index === activePairIndex);
     return extractScoresFromLogs(pairLogs);
-  })();
+  }, [jobLogs, activePairIndex]);
 
-  const pairFilteredLogs =
-    activePairIndex === null || !job?.logs
-      ? (job?.logs ?? [])
-      : job.logs.filter(
-          (l) =>
-            l.pair_index === activePairIndex || l.pair_index === null || l.pair_index === undefined,
-        );
+  const pairFilteredLogs = useMemo(
+    () =>
+      activePairIndex === null || !jobLogs
+        ? (jobLogs ?? [])
+        : jobLogs.filter(
+            (l) =>
+              l.pair_index === activePairIndex ||
+              l.pair_index === null ||
+              l.pair_index === undefined,
+          ),
+    [jobLogs, activePairIndex],
+  );
 
+  const jobRef = useRef(job);
+  // Serialize refetches: delta tails must be applied in arrival order, so an
+  // overlapping fetch (an SSE tick racing the 5s poll) is skipped rather than
+  // risk interleaving. The continuous SSE + poll re-trigger within a tick, so
+  // dropping a concurrent call costs nothing.
+  const fetchingRef = useRef(false);
   const fetchJob = useCallback(async () => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     try {
-      const data = await getJob(id);
-      setJob(data);
+      // Send what we already hold so the server can return just the newer tail
+      // of progress_events / logs instead of the whole (growing) history. First
+      // load has no prior buffer → full fetch.
+      const prev = jobRef.current;
+      const cursor = prev
+        ? {
+            sinceProgress: prev.progress_events?.length ?? 0,
+            sinceLog: prev.logs?.length ?? 0,
+          }
+        : undefined;
+      const data = await getJob(id, cursor);
+      setJob((cur) => mergeJobDelta(cur, data));
       setError(null);
     } catch (err) {
       // Distinguish auth/network failures from a genuine 404 — the previous
@@ -232,6 +363,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
       setError(formatMsg("auto.app.optimizations.id.page.template.1", { p1: TERMS.optimization }));
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }, [id]);
 
@@ -243,7 +375,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
       .catch(() => {});
   }, [id, isAnyDemoMode, authReady]);
 
-  const jobRef = useRef(job);
   useEffect(() => {
     jobRef.current = job;
   }, [job]);
@@ -265,12 +396,19 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
         const logCount = sseData.log_count ?? 0;
         const progressCount = sseData.progress_count ?? 0;
         const prev = lastCountsRef.current;
-        if (
-          logCount > prev.logs ||
-          progressCount > prev.progress ||
-          sseData.status !== jobRef.current?.status
-        ) {
-          lastCountsRef.current = { logs: logCount, progress: progressCount };
+        const progressed = progressCount > prev.progress;
+        const statusChanged = sseData.status !== jobRef.current?.status;
+        lastCountsRef.current = { logs: logCount, progress: progressCount };
+        // During an active run DSPy/GEPA emit log lines continuously, so a gate
+        // that re-fetches on every `log_count` bump re-downloads the full
+        // (growing) progress_events+logs payload ~every tick — and since the
+        // backend ETag is keyed on those counts, the 304 fast-path can never
+        // fire. Re-fetch only when progress advances (drives the trajectory /
+        // grid / score views, emitted throughout the run via capture_tqdm) or
+        // the status changes; for logs-only bumps, patch the lightweight live
+        // fields in place. The Logs tab catches up on the next progress tick and
+        // a terminal status always triggers a final full fetch.
+        if (progressed || statusChanged) {
           void fetchJob();
         } else {
           setJob((p) =>
@@ -326,6 +464,21 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
       void fetchJob();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("optimization.cancel.failed"));
+    }
+  };
+
+  const handleRetry = async () => {
+    if (skipNetwork || retrying) return;
+    setRetrying(true);
+    try {
+      const res = await retryJob(id);
+      toast.success(msg("optimization.rerun.success"));
+      window.dispatchEvent(new Event("optimizations-changed"));
+      // Navigating unmounts this view, so leave ``retrying`` set on success.
+      router.push(`/optimizations/${res.optimization_id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("optimization.rerun.failed"));
+      setRetrying(false);
     }
   };
 
@@ -536,7 +689,10 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   const signatureCode = (payload?.payload?.signature_code as string) ?? null;
   const metricCode = (payload?.payload?.metric_code as string) ?? null;
 
-  const scorePoints = job?.logs?.length ? extractScoresFromLogs(job.logs) : [];
+  const scorePoints = useMemo(
+    () => (jobLogs?.length ? extractScoresFromLogs(jobLogs) : []),
+    [jobLogs],
+  );
 
   // Optimized prompt picks the pair's artifact in pair view, otherwise falls
   // back to the run's artifact, otherwise to the grid's best pair (for the
@@ -546,6 +702,12 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
     : (job?.result?.program_artifact?.optimized_prompt ??
        job?.grid_result?.best_pair?.program_artifact?.optimized_prompt ??
        null);
+
+  // The real optimized artifact for a react run lives in react_overlay (tuned
+  // tool descriptions / display names), not the reasoning-predictor prompt.
+  const reactOverlay = isPairContext
+    ? (activePair.program_artifact?.react_overlay ?? null)
+    : (job?.result?.program_artifact?.react_overlay ?? null);
 
   // Demos passed to the serve playground — pair-scoped in pair view.
   const playgroundDemos = isPairContext
@@ -564,48 +726,28 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   const createdAt = job?.created_at ?? null;
   const completedAt = job?.completed_at ?? null;
   const elapsedSeconds = job?.elapsed_seconds ?? null;
-  // `now` ticks once per second only while the job is active, driving the
-  // elapsed-time derivation in `liveElapsed`. Decoupling the tick from the
-  // timestamp deps keeps the interval alive across polling refreshes that
-  // replace identical timestamp strings.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!isActive) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [isActive]);
-  // Anchor on the server-computed elapsed_seconds so the live counter is
-  // immune to client/server clock skew — wall-clock derivation alone can go
-  // negative and stall the badge at 00:00:00.
-  const [elapsedAnchor, setElapsedAnchor] = useState<{ ms: number; sec: number } | null>(null);
-  useEffect(() => {
-    if (elapsedSeconds != null && Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0) {
-      setElapsedAnchor({ ms: Date.now(), sec: elapsedSeconds });
-    }
-  }, [elapsedSeconds]);
-  const liveElapsed = useMemo(() => {
-    if (!isActive) {
-      if (elapsedSeconds != null && elapsedSeconds > 0) {
-        return formatElapsed(Math.floor(elapsedSeconds));
+
+  // Stable identities so the memoized OverviewTab/GridOverview don't re-render
+  // on every parent state tick (live elapsed, SSE patches) just because these
+  // handlers were freshly allocated.
+  const handlePairSelect = useCallback(
+    (pi: number) => router.push(`/optimizations/${id}?pair=${pi}`),
+    [id, router],
+  );
+  const handlePairDeleted = useCallback(
+    (pi: number) => {
+      try {
+        window.localStorage.removeItem(`grid-serve:pair:${id}`);
+      } catch {
+        /* localStorage unavailable — nothing to clean up */
       }
-      const start = parseTimestampMs(startedAt ?? createdAt);
-      const end = parseTimestampMs(completedAt);
-      if (start !== null && end !== null) {
-        return formatElapsed(Math.max(0, Math.floor((end - start) / 1000)));
+      if (activePairIndex === pi) {
+        router.replace(`/optimizations/${id}`);
       }
-      return "00:00:00";
-    }
-    // Take the larger of wallclock (now - started_at) and the server anchor so
-    // a stale upstream `elapsed_seconds` (e.g. cached 0) doesn't reset the
-    // header counter back to zero on every page reload.
-    const start = parseTimestampMs(startedAt ?? createdAt);
-    const wall = start !== null ? Math.max(0, (now - start) / 1000) : 0;
-    const anchored = elapsedAnchor
-      ? elapsedAnchor.sec + Math.max(0, (now - elapsedAnchor.ms) / 1000)
-      : 0;
-    return formatElapsed(Math.floor(Math.max(wall, anchored)));
-  }, [now, isActive, startedAt, createdAt, completedAt, elapsedSeconds, elapsedAnchor]);
+      void fetchJob();
+    },
+    [id, activePairIndex, router, fetchJob],
+  );
 
   if (loading || !authReady) {
     return <OptimizationDetailSkeleton />;
@@ -624,6 +766,33 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   }
 
   const isTerminal = TERMINAL_STATUSES.has(job.status);
+  // Effective role on the normal (non-share) route. null = the caller's own run
+  // or an owner-tier grant (full control); "editor"/"viewer" = a member reached
+  // it via sharing. Mutations gate on this so a viewer can't cancel/delete/manage.
+  const effectiveRole = job.effective_role ?? null;
+  const canEditRun = effectiveRole == null || effectiveRole === "editor";
+  const canDeleteRun = effectiveRole == null;
+  // Sharing is owner-only: members (even editors) can't invite, change roles,
+  // or set general access. null = the owner's own run / admin / co-owner.
+  // Never on the public /share/<token> route: there the job is seeded from
+  // shareData and carries no effective_role, so it would read as owner-level
+  // and leak the management controls to viewers (even anonymous visitors).
+  const canManageShare = !isShare && effectiveRole == null;
+  // Share banner: surface the caller's granted tier whenever they're NOT the
+  // owner — both the public /share link and an explicit member grant. "viewer"
+  // maps to the viewer tier, "editor" to the editor tier. null / "owner" is the
+  // owner's own view (or admin/co-owner) and gets no banner.
+  const callerRole = isShare ? shareRole : effectiveRole;
+  const sharedTier =
+    callerRole === "editor"
+      ? "editor"
+      : callerRole === "viewer"
+        ? "viewer"
+        : null;
+  const sharedByOwner = isShare ? shareData?.owner : job.username;
+  // Split "מאת {name}" so the emphasis (semibold/foreground) lands only on the
+  // owner name; the "by" prefix stays muted meta text.
+  const [sharedByPrefix, sharedBySuffix] = msg("optimization.readonly_by").split("{name}");
   // Pair-aware terminal: a pair is considered "available for data export" once
   // it has either a program artifact or an error recorded. This mirrors the
   // standalone job's "isTerminal" gate so the data/export surfaces appear
@@ -633,11 +802,11 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
     : false;
 
   // Tab gating uniform across run and pair contexts.
-  // Share view: only viewer+ may run inference, and only through the single
-  // non-streaming /share serve endpoint, so it needs a seeded serveInfo
-  // (the backend nulls serve_info for the anonymous view role).
+  // Share view: only editor+ may run inference (it spends the owner's key),
+  // and only through the single non-streaming /share serve endpoint, so it
+  // needs a seeded serveInfo (the backend nulls serve_info below editor).
   const showPlaygroundTab = isShare
-    ? shareCanInteract && job.status === "success" && !!serveInfo
+    ? shareCanServe && job.status === "success" && !!serveInfo
     : job.status === "success" &&
       (job.optimization_type === "grid_search" || !!serveInfo);
   const showDataTab = isShare
@@ -669,6 +838,44 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
 
   return (
     <div className="space-y-6 pb-12">
+      {sharedTier && (
+        <div
+          role="status"
+          className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-gradient-to-br from-muted/60 to-muted/25 px-4 py-2.5 shadow-sm"
+        >
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/5 text-primary/80">
+            {sharedTier === "editor" ? (
+              <Pencil className="size-4" aria-hidden="true" />
+            ) : (
+              <Eye className="size-4" aria-hidden="true" />
+            )}
+          </span>
+          <span className="whitespace-nowrap text-sm font-medium text-foreground/90">
+            {msg(
+              sharedTier === "editor"
+                ? "optimization.access_banner.editor"
+                : "optimization.access_banner.viewer",
+            )}
+          </span>
+          {sharedByOwner && (
+            <span className="ms-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <span dir="auto" className="min-w-0 truncate">
+                {sharedByPrefix}
+                <span dir="auto" className="font-semibold text-foreground">
+                  {sharedByOwner}
+                </span>
+                {sharedBySuffix}
+              </span>
+              <span
+                aria-hidden="true"
+                className="grid size-4 shrink-0 place-items-center rounded-full bg-primary/10 text-[0.5625rem] font-semibold uppercase text-primary"
+              >
+                {sharedByOwner.trim().charAt(0)}
+              </span>
+            </span>
+          )}
+        </div>
+      )}
       <FadeIn delay={0.1}>
         <div
           className=" rounded-xl border border-border/40 bg-gradient-to-br from-card to-card/80 p-5"
@@ -717,10 +924,13 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                     ? msg("auto.app.optimizations.id.page.literal.2")
                     : msg("auto.app.optimizations.id.page.literal.3")}
                 </Badge>
-                <span className="flex items-center gap-1.5 tabular-nums" dir="ltr">
-                  <Clock className="size-3.5" />
-                  {liveElapsed}
-                </span>
+                <LiveElapsedBadge
+                  isActive={isActive}
+                  startedAt={startedAt}
+                  createdAt={createdAt}
+                  completedAt={completedAt}
+                  elapsedSeconds={elapsedSeconds}
+                />
                 {isActive && job.estimated_remaining && (
                   <span className="flex items-center gap-1.5">
                     <Timer className="size-3.5" />
@@ -732,7 +942,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
             </div>
             {!isShare && (
             <div className="flex items-center gap-2">
-              <ShareDialog optimizationId={job.optimization_id} />
+              {canManageShare && <ShareDialog optimizationId={job.optimization_id} />}
               <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
                 <Button
                   variant="ghost"
@@ -744,7 +954,21 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   <CopyPlus className="size-4" />
                 </Button>
               </TooltipButton>
-              {isActive && (
+              {canEditRun && (job.status === "failed" || job.status === "cancelled") && (
+                <TooltipButton tooltip={msg("optimization.rerun_tooltip")}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={handleRetry}
+                    disabled={retrying}
+                    aria-label={msg("optimization.rerun")}
+                  >
+                    <RotateCcw className={`size-4${retrying ? " animate-spin" : ""}`} />
+                  </Button>
+                </TooltipButton>
+              )}
+              {canEditRun && isActive && (
                 <TooltipButton tooltip={msg("auto.app.optimizations.id.page.5")}>
                   <Button
                     variant="ghost"
@@ -757,7 +981,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   </Button>
                 </TooltipButton>
               )}
-              {isTerminal && (
+              {canDeleteRun && isTerminal && (
                 <DeleteJobDialog
                   optimizationId={job.optimization_id}
                   onDeleted={() => router.push("/")}
@@ -774,9 +998,9 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                     className="size-8"
                     onClick={() =>
                       router.push(
-                        `/submit?clone=${job.optimization_id}&shareToken=${encodeURIComponent(
-                          shareToken ?? "",
-                        )}`,
+                        shareToken
+                          ? `/submit?clone=${job.optimization_id}&shareToken=${encodeURIComponent(shareToken)}`
+                          : `/submit?clone=${job.optimization_id}&public=1`,
                       )
                     }
                     aria-label={msg("share.clone")}
@@ -933,7 +1157,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
 
       {(() => {
         const tabCls =
-          "relative px-2.5 sm:px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
+          "relative shrink-0 flex-none px-2.5 sm:px-4 py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
         // Pair view pings the trajectory/logs tabs only while the pair itself
         // is still running, matching the standalone run's behaviour exactly.
         const pingActive = isPairContext
@@ -1000,18 +1224,8 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 activePairIndex={activePairIndex}
                 activePair={activePair}
                 onStageClick={setStageModal}
-                onPairSelect={(pi) => router.push(`/optimizations/${id}?pair=${pi}`)}
-                onPairDeleted={(pi) => {
-                  try {
-                    window.localStorage.removeItem(`grid-serve:pair:${id}`);
-                  } catch {
-                    /* localStorage unavailable — nothing to clean up */
-                  }
-                  if (activePairIndex === pi) {
-                    router.replace(`/optimizations/${id}`);
-                  }
-                  void fetchJob();
-                }}
+                onPairSelect={handlePairSelect}
+                onPairDeleted={handlePairDeleted}
                 trajectoryPreviewLayout={
                   isDemoMode && !isPairContext ? DEMO_TRAJECTORY_PREVIEW_LAYOUT : undefined
                 }
@@ -1022,6 +1236,10 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
               <TabsContent value="playground" className="space-y-4 mt-4">
                 {!isShare && job.optimization_type === "grid_search" && !isPairContext ? (
                   <GridServeTab job={job} />
+                ) : !isShare &&
+                  !isPairContext &&
+                  (job.module_name ?? "").toLowerCase() === "react" ? (
+                  <ReactServeChat optimizationId={job.optimization_id} />
                 ) : serveInfo ? (
                   <RunPlayground
                     serveInfo={serveInfo}
@@ -1060,6 +1278,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 signatureCode={signatureCode ?? ""}
                 metricCode={metricCode ?? ""}
                 optimizedPrompt={optimizedPrompt}
+                reactOverlay={reactOverlay}
               />
             </TabsContent>
 
@@ -1067,7 +1286,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
               <TabsContent value="logs">
                 <LogsTab
                   logs={isPairContext ? pairFilteredLogs : (job.logs ?? [])}
-                  live={isActive}
                 />
               </TabsContent>
             )}

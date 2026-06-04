@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Code, Sparkles } from "lucide-react";
+import { Code, Sparkles, Wrench } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { Skeleton } from "@/shared/ui/skeleton";
-import type { OptimizedPredictor } from "@/shared/types/api";
+import type { OptimizedPredictor, ReactOverlay } from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
 import { CopyButton } from "./ui-primitives";
 import { msg } from "@/shared/lib/messages";
@@ -22,10 +22,12 @@ export function CodeTab({
   signatureCode,
   metricCode,
   optimizedPrompt,
+  reactOverlay,
 }: {
   signatureCode: string;
   metricCode: string;
   optimizedPrompt: OptimizedPredictor | null;
+  reactOverlay?: ReactOverlay | null;
 }) {
   const [activeCodeTab, setActiveCodeTab] = useState<string>("signature");
   return (
@@ -151,6 +153,52 @@ export function CodeTab({
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {reactOverlay && Object.keys(reactOverlay.tool_descriptions).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wrench className="size-4" />
+              {msg("optimizations.react.optimized_tools")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {Object.entries(reactOverlay.tool_descriptions).map(([name, desc]) => {
+              const renamed = reactOverlay.tool_names?.[name];
+              const argDescs = reactOverlay.tool_arg_descriptions?.[name];
+              return (
+                <div key={name} className="rounded-lg bg-muted/40 p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="font-mono text-xs text-foreground" dir="ltr">
+                      {renamed || name}
+                    </span>
+                    {renamed && renamed !== name && (
+                      <span className="text-[0.625rem] text-muted-foreground" dir="ltr">
+                        ({name})
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground" dir="auto">
+                    {desc}
+                  </p>
+                  {argDescs && Object.keys(argDescs).length > 0 && (
+                    <div className="mt-1.5 space-y-0.5 border-t border-border/40 pt-1.5">
+                      {Object.entries(argDescs).map(([arg, argDesc]) => (
+                        <div key={arg} className="text-[0.6875rem] text-muted-foreground" dir="auto">
+                          <span className="font-mono text-foreground/70" dir="ltr">
+                            {arg}
+                          </span>
+                          {argDesc ? ` — ${argDesc}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

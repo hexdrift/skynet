@@ -163,7 +163,7 @@ export function PairSelectionStrip({
       </FadeIn>
 
       <Dialog open={deleteOpen} onOpenChange={(open) => !open && setDeleteOpen(false)}>
-        <DialogContent className="max-w-md sm:max-w-md">
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogTitleRow
             title={msg("auto.features.optimizations.components.gridoverview.19")}
             description={

@@ -2,17 +2,26 @@
 
 import type { ReactNode } from "react";
 import {
+  Boxes,
+  Brain,
   Coins,
   Component,
   Cpu,
   Database,
   Dices,
+  Gauge,
+  GitMerge,
   Layers,
+  Repeat,
+  Ruler,
   Settings,
   Settings2,
   Shuffle,
+  Sparkles,
+  Tags,
   Target,
   Thermometer,
+  Wrench,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { FadeIn } from "@/shared/ui/motion";
@@ -25,6 +34,7 @@ import type {
 } from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { moduleLabel } from "@/shared/lib/formatters";
 import { TERMS } from "@/shared/lib/terms";
 import { InfoCard, ReasoningPill } from "./ui-primitives";
 
@@ -64,6 +74,21 @@ function labelWithTip(key: string): ReactNode {
   return tipText ? <HelpTip text={tipText}>{label}</HelpTip> : label;
 }
 
+const PARAM_ICONS: Record<string, ReactNode> = {
+  auto: <Gauge className="size-3.5" />,
+  max_bootstrapped_demos: <Sparkles className="size-3.5" />,
+  max_labeled_demos: <Tags className="size-3.5" />,
+  minibatch: <Boxes className="size-3.5" />,
+  minibatch_size: <Ruler className="size-3.5" />,
+  reflection_minibatch_size: <Brain className="size-3.5" />,
+  max_full_evals: <Repeat className="size-3.5" />,
+  use_merge: <GitMerge className="size-3.5" />,
+};
+
+function paramIcon(key: string): ReactNode {
+  return PARAM_ICONS[key] ?? <Settings2 className="size-3.5" />;
+}
+
 function formatParamValue(_k: string, v: unknown): string {
   if (typeof v === "boolean")
     return v
@@ -72,8 +97,16 @@ function formatParamValue(_k: string, v: unknown): string {
   return String(v);
 }
 
+// Tooltip copy keyed by the two named model-role labels. Grid cards use
+// indexed short labels (no match here) since their columns are already tipped.
+const MODEL_CARD_TIPS: Record<string, string> = {
+  [msg("model.generation.label")]: tip("model.generation"),
+  [TERMS.reflectionModel]: tip("model.reflection"),
+};
+
 /** Inline model-config card — matches the ModelChip style. */
 function ModelCard({ label, cfg }: { label: string; cfg: Record<string, unknown> }) {
+  const labelTip = MODEL_CARD_TIPS[label];
   const name = String(cfg.name || "—");
   const shortName = name.includes("/") ? name.split("/").pop()! : name;
   const temp = cfg.temperature as number | undefined;
@@ -84,7 +117,7 @@ function ModelCard({ label, cfg }: { label: string; cfg: Record<string, unknown>
     <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/80 px-3 py-2">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
+          {labelTip ? <HelpTip text={labelTip}>{label}</HelpTip> : label}
         </span>
         <span className="truncate text-sm text-foreground font-mono font-medium" dir="ltr">
           {shortName}
@@ -155,6 +188,25 @@ export function ConfigTab({
   const reflCfg = (p.reflection_model_config ?? null) as Record<string, unknown> | null;
   const taskCfg = (p.task_model_config ?? null) as Record<string, unknown> | null;
 
+  // React runs carry a tool-source config the generic rows don't cover.
+  // Scoring lives in metric_code (shown in the code view), so there is no
+  // reward preset to surface here.
+  const toolSource = (p.tool_source ?? null) as Record<string, unknown> | null;
+  const reactRows: Array<{ label: ReactNode; value: string; icon: ReactNode }> =
+    (job.module_name ?? "").toLowerCase() === "react" && toolSource?.kind
+      ? [
+          {
+            label: (
+              <HelpTip text={tip("react.tool_source")}>
+                {msg("submit.react.tool_source_label")}
+              </HelpTip>
+            ),
+            value: String(toolSource.mcp_url || toolSource.kind),
+            icon: <Wrench className="size-3.5" />,
+          },
+        ]
+      : [];
+
   const items: Array<{ label: ReactNode; value: string; icon: ReactNode }> = [
     {
       label: (
@@ -162,7 +214,7 @@ export function ConfigTab({
           {msg("auto.features.optimizations.components.configtab.1")}
         </HelpTip>
       ),
-      value: job.module_name ?? "—",
+      value: moduleLabel(job.module_name),
       icon: <Component className="size-3.5" />,
     },
     {
@@ -170,12 +222,13 @@ export function ConfigTab({
       value: job.optimizer_name ?? "—",
       icon: <Target className="size-3.5" />,
     },
+    ...reactRows,
     ...Object.entries(optKw)
       .filter(([k]) => k !== "metric")
       .map(([k, v]) => ({
         label: labelWithTip(k),
         value: formatParamValue(k, v),
-        icon: <Settings2 className="size-3.5" />,
+        icon: paramIcon(k),
       })),
     ...Object.entries(compKw).map(([k, v]) => ({
       label: labelWithTip(k),
