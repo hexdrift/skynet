@@ -21,11 +21,9 @@ import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
 export function LogsTab({
   logs,
   pairNames,
-  live,
 }: {
   logs: OptimizationLogEntry[];
   pairNames?: Record<number, string>;
-  live?: boolean;
 }) {
   const showPairCol = !!pairNames && Object.keys(pairNames).length > 0;
   const logFilters = useColumnFilters();
@@ -57,9 +55,24 @@ export function LogsTab({
       return true;
     });
     result = [...result].sort((a, b) => {
-      const av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
-      const bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
-      const cmp = av.localeCompare(bv, "he", { numeric: true });
+      let cmp: number;
+      if (sortKey === "pair_index") {
+        // Numeric column — a direct subtraction beats spinning up the Intl
+        // collator on every comparison across a long log table.
+        cmp = (a.pair_index ?? -Infinity) - (b.pair_index ?? -Infinity);
+      } else if (sortKey === "timestamp") {
+        // ISO-8601 timestamps order correctly under plain string comparison,
+        // so skip the collator on this hot path too.
+        const av = String(a.timestamp ?? "");
+        const bv = String(b.timestamp ?? "");
+        cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      } else {
+        // Textual columns (level/logger/message) may hold Hebrew — locale-aware
+        // collation is reserved for these.
+        const av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
+        const bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
+        cmp = av.localeCompare(bv, "he", { numeric: true });
+      }
       return sortDir === "asc" ? cmp : -cmp;
     });
     return result;
@@ -107,22 +120,20 @@ export function LogsTab({
           className="flex items-center justify-between gap-3 mb-4"
           data-tutorial="live-logs"
         >
-          <p className="text-sm text-muted-foreground">
-            {live
-              ? ""
-              : formatMsg("auto.features.optimizations.components.logstab.template.2", {
-                  p1: TERMS.optimization,
-                })}
-          </p>
+          <div className="flex items-center gap-3">
+            <ResetColumnsButton resize={logResize} />
+            <p className="text-sm text-muted-foreground">
+              {formatMsg("auto.features.optimizations.components.logstab.template.2", {
+                p1: TERMS.optimization,
+              })}
+            </p>
+          </div>
           <span className="text-xs text-muted-foreground shrink-0">
             {filtered.length}
             {msg("auto.features.optimizations.components.logstab.1")}
           </span>
         </div>
       </FadeIn>
-      <div className="flex items-center justify-end gap-3 mb-5">
-        <ResetColumnsButton resize={logResize} />
-      </div>
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">
           {msg("auto.features.optimizations.components.logstab.2")}

@@ -21,6 +21,19 @@ export function detectStage(job: OptimizationStatusResponse): PipelineStage {
   if (eventNames.includes("optimizer_progress")) return "optimizing";
   if (eventNames.includes("baseline_evaluated")) return "optimizing";
   if (eventNames.includes("grid_pair_started")) return "baseline";
+  // Reflective optimizers (GEPA) never emit the bootstrap-style
+  // "optimizer_progress"/"baseline_evaluated" markers during their loop — they
+  // stream candidate-level events instead, and their "baseline_evaluated" is the
+  // held-out TEST eval emitted only at the very end. Once the seed is scored on
+  // the valset (valset_outputs) or any candidate is recorded, the run is past
+  // baseline measurement and iterating. Checked after the grid markers so per-pair
+  // grid jobs still report their own stage.
+  if (
+    eventNames.includes("valset_outputs") ||
+    eventNames.includes("candidate") ||
+    eventNames.includes("candidate_rejected")
+  )
+    return "optimizing";
   if (eventNames.includes("dataset_splits_ready")) return "baseline";
 
   // Fallback: use latest_metrics hints (e.g. tqdm from optimizer)

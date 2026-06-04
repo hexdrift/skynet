@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Globe, Loader2, Lock, Share2, User, UserPlus, X } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Copy, Globe, Loader2, Lock, User, UserPlus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Input } from "@/shared/ui/primitives/input";
 import {
   Select,
@@ -26,14 +29,30 @@ import {
   putSharing,
   removeShareMember,
   searchUsers,
+  setOptimizationVisibility,
+  transferOwnership,
   updateShareMember,
   type GeneralAccess,
+  type LinkRole,
+  type MemberRole,
   type ShareRole,
   type SharingState,
 } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 
-const ROLE_OPTIONS: ShareRole[] = ["viewer", "editor", "owner"];
+const ROLE_OPTIONS: MemberRole[] = ["viewer", "editor"];
+
+// Sentinel value for the per-member role dropdown's "transfer ownership" item
+// (not a real role — selecting it opens the transfer confirmation instead).
+const TRANSFER_VALUE = "__transfer__";
+
+// Split the confirm copy around the {name} token so the target username can
+// render emphasized (matching the delete dialog) instead of as plain inline
+// text. The username goes in a <bdi> below so its directionality stays
+// isolated inside the Hebrew sentence — the same protection formatTemplate's
+// FSI/PDI wrapping would have provided.
+const [TRANSFER_BODY_BEFORE, TRANSFER_BODY_AFTER] =
+  msg("share.transfer.confirm_body").split("{name}");
 
 /** Localised label for a member tier role. */
 function roleLabel(role: ShareRole): string {
@@ -46,7 +65,7 @@ function roleLabel(role: ShareRole): string {
 function roleDesc(role: ShareRole): string {
   if (role === "editor") return msg("share.role.editor_desc");
   if (role === "owner") return msg("share.role.owner_desc");
-  return msg("share.role.viewer_desc");
+  return "";
 }
 
 /**
@@ -57,14 +76,27 @@ function roleDesc(role: ShareRole): string {
  * plus a copy-link row. Different purpose, same components.
  */
 export function ShareDialog({ optimizationId }: { optimizationId: string }) {
+  const { data: session } = useSession();
+  const me = (session?.user?.name ?? "").trim().toLowerCase();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<SharingState | null>(null);
   const [savingAccess, setSavingAccess] = useState(false);
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const [transferTarget, setTransferTarget] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+
+  // Only the current owner may hand ownership off (admins manage via other
+  // tools); a member never sees the option. ``state.owner`` is the structural
+  // owner, ``me`` the signed-in caller.
+  const isOwner = !!state?.owner && state.owner.toLowerCase() === me;
 
   const shareUrl =
     state?.token && typeof window !== "undefined"
       ? `${window.location.origin}/share/${state.token}`
       : null;
+
+  // Owner (if present) plus every invited member — drives the header count.
+  const accessCount = state ? (state.owner ? 1 : 0) + state.members.length : 0;
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -79,6 +111,7 @@ export function ShareDialog({ optimizationId }: { optimizationId: string }) {
     setSavingAccess(true);
     try {
       setState(await putSharing(optimizationId, { general_access: value }));
+      toast.success(msg("share.access_updated"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("share.save_failed"));
     } finally {
@@ -86,12 +119,58 @@ export function ShareDialog({ optimizationId }: { optimizationId: string }) {
     }
   };
 
-  const handleRoleChange = async (username: string, role: ShareRole) => {
+  // Explore-corpus visibility — distinct from the link's general_access below.
+  const handleVisibilityChange = async (isPrivate: boolean) => {
+    setSavingVisibility(true);
+    try {
+      setState(await setOptimizationVisibility(optimizationId, isPrivate));
+      toast.success(isPrivate ? msg("share.visibility.now_private") : msg("share.visibility.now_public"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("share.save_failed"));
+    } finally {
+      setSavingVisibility(false);
+    }
+  };
+
+  // The tier an "anyone with the link" link grants signed-in visitors. Anonymous
+  // visitors stay read-only regardless, so this never elevates a bare URL.
+  const handleLinkRoleChange = async (role: LinkRole) => {
+    setSavingAccess(true);
+    try {
+      setState(await putSharing(optimizationId, { general_access: "anyone", general_role: role }));
+      toast.success(msg("share.access_updated"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("share.save_failed"));
+    } finally {
+      setSavingAccess(false);
+    }
+  };
+
+  const handleRoleChange = async (username: string, role: MemberRole) => {
     try {
       setState(await updateShareMember(optimizationId, username, { role }));
       toast.success(msg("share.member_updated"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("share.save_failed"));
+    }
+  };
+
+  // Transfer hands the structural owner off to an existing member; the caller
+  // is demoted to editor server-side, so once it lands they can no longer manage
+  // — close the dialog and drop cached state so a re-open refetches.
+  const handleTransfer = async () => {
+    if (!transferTarget) return;
+    setTransferring(true);
+    try {
+      await transferOwnership(optimizationId, transferTarget);
+      toast.success(msg("share.transfer.success", { name: transferTarget }));
+      setTransferTarget(null);
+      setOpen(false);
+      setState(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("share.save_failed"));
+    } finally {
+      setTransferring(false);
     }
   };
 
@@ -104,7 +183,7 @@ export function ShareDialog({ optimizationId }: { optimizationId: string }) {
     }
   };
 
-  const handleInvite = async (username: string, role: ShareRole) => {
+  const handleInvite = async (username: string, role: MemberRole) => {
     setState(await addShareMember(optimizationId, { username, role }));
     toast.success(msg("share.member_added"));
   };
@@ -127,141 +206,296 @@ export function ShareDialog({ optimizationId }: { optimizationId: string }) {
           onClick={() => handleOpenChange(true)}
           aria-label={msg("share.button")}
         >
-          <Share2 className="size-4" />
+          <Users className="size-4" />
         </Button>
       </TooltipButton>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          className="max-w-lg sm:max-w-lg p-0 overflow-hidden"
+          className="w-[min(32rem,92vw)] max-w-[min(32rem,92vw)] sm:max-w-lg p-0 overflow-hidden"
           aria-describedby={undefined}
         >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/40">
-            <DialogTitle>{msg("share.dialog_title")}</DialogTitle>
-          </DialogHeader>
+          {/* Flex column so the people list is the only scroller — invite stays
+              pinned at the top and access/link controls pinned at the bottom no
+              matter how many members are granted. */}
+          <div className="flex max-h-[85vh] flex-col">
+            <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b border-border/40">
+              <DialogTitle>{msg("share.dialog_title")}</DialogTitle>
+            </DialogHeader>
 
-          {state === null ? (
-            <div className="flex items-center justify-center gap-2 px-6 py-10 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              {msg("share.loading")}
-            </div>
-          ) : (
-            <div className="px-6 pb-6 pt-2 space-y-4 max-h-[60vh] overflow-y-auto">
-              <InvitePeople ownerName={state.owner} onInvite={handleInvite} />
+            {state === null ? (
+              <div className="flex items-center justify-center gap-2 px-6 py-10 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                {msg("share.loading")}
+              </div>
+            ) : (
+              <>
+                <div className="shrink-0 border-b border-border/40 px-6 py-4">
+                  <InvitePeople ownerName={state.owner} onInvite={handleInvite} />
+                </div>
 
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">
-                  {msg("share.people_with_access")}
-                </p>
-                {state.owner && (
-                  <SettingsRow
-                    icon={User}
-                    label={
-                      <span dir="ltr" className="font-mono">
-                        {state.owner}
-                      </span>
-                    }
-                    description={msg("share.you")}
-                  >
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {msg("share.owner_label")}
+                <div className="shrink-0 px-6 pt-3 pb-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {msg("share.people_with_access")}
+                    <span className="ms-1.5 text-xs font-normal tabular-nums text-muted-foreground">
+                      {accessCount}
                     </span>
-                  </SettingsRow>
-                )}
+                  </p>
+                </div>
 
-                {state.members.map((member) => (
-                  <SettingsRow
-                    key={member.username}
-                    icon={User}
-                    label={
-                      <span dir="ltr" className="font-mono">
-                        {member.username}
+                <div className="min-h-0 flex-1 overflow-y-auto px-6">
+                  {state.owner && (
+                    <SettingsRow
+                      icon={User}
+                      label={
+                        <span
+                          dir="ltr"
+                          title={state.owner}
+                          className="inline-block max-w-[200px] truncate align-bottom font-mono"
+                        >
+                          {state.owner}
+                        </span>
+                      }
+                      description={state.owner.toLowerCase() === me ? msg("share.you") : undefined}
+                    >
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {msg("share.owner_label")}
                       </span>
+                    </SettingsRow>
+                  )}
+
+                  {state.members.map((member) =>
+                    member.username === me ? (
+                      // The viewer's own row is read-only — you can't change or
+                      // remove your own access (that's the owner's call).
+                      <SettingsRow
+                        key={member.username}
+                        icon={User}
+                        label={
+                          <span
+                            dir="ltr"
+                            title={member.username}
+                            className="inline-block max-w-[200px] truncate align-bottom font-semibold text-foreground"
+                          >
+                            {member.username}
+                          </span>
+                        }
+                        description={msg("share.you")}
+                      >
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {roleLabel(member.role)}
+                        </span>
+                      </SettingsRow>
+                    ) : (
+                      <SettingsRow
+                        key={member.username}
+                        icon={User}
+                        label={
+                          <span
+                            dir="ltr"
+                            title={member.username}
+                            className="inline-block max-w-[200px] truncate align-bottom font-semibold text-foreground"
+                          >
+                            {member.username}
+                          </span>
+                        }
+                      >
+                        <Select
+                          value={member.role}
+                          onValueChange={(next) => {
+                            if (next === TRANSFER_VALUE) {
+                              setTransferTarget(member.username);
+                            } else {
+                              void handleRoleChange(member.username, next as MemberRole);
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            className="min-w-[120px]"
+                            aria-label={msg("share.role.change_aria")}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLE_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {roleLabel(option)}
+                              </SelectItem>
+                            ))}
+                            {isOwner && (
+                              <SelectItem value={TRANSFER_VALUE}>
+                                {msg("share.transfer.action")}
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <TooltipButton tooltip={msg("share.remove_member_aria")}>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemove(member.username)}
+                            aria-label={msg("share.remove_member_aria")}
+                          >
+                            <X className="size-3.5" />
+                          </Button>
+                        </TooltipButton>
+                      </SettingsRow>
+                    ),
+                  )}
+                </div>
+
+                <div className="shrink-0 space-y-3 border-t border-border/40 px-6 py-4">
+                  {/* Explore-corpus visibility — a separate axis from the
+                      link's general access: this controls public discovery in
+                      /explore, not who can open the share link. */}
+                  <SettingsRow
+                    icon={state.is_private ? Lock : Globe}
+                    label={msg("share.visibility.label")}
+                    description={
+                      state.is_private
+                        ? msg("share.visibility.private_desc")
+                        : msg("share.visibility.public_desc")
                     }
                   >
                     <Select
-                      value={member.role}
-                      onValueChange={(next) => handleRoleChange(member.username, next as ShareRole)}
+                      value={state.is_private ? "private" : "public"}
+                      onValueChange={(next) => handleVisibilityChange(next === "private")}
+                      disabled={savingVisibility}
                     >
-                      <SelectTrigger
-                        size="sm"
-                        className="min-w-[120px]"
-                        aria-label={msg("share.role.change_aria")}
-                      >
+                      <SelectTrigger size="sm" className="min-w-[120px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ROLE_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {roleLabel(option)}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="public">{msg("share.visibility.public")}</SelectItem>
+                        <SelectItem value="private">{msg("share.visibility.private")}</SelectItem>
                       </SelectContent>
                     </Select>
-                    <TooltipButton tooltip={msg("share.remove_member_aria")}>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => handleRemove(member.username)}
-                        aria-label={msg("share.remove_member_aria")}
-                      >
-                        <X className="size-3.5" />
-                      </Button>
-                    </TooltipButton>
                   </SettingsRow>
-                ))}
-              </div>
 
-              <SettingsRow
-                icon={state.general_access === "anyone" ? Globe : Lock}
-                label={msg("share.general_access")}
-                description={
-                  state.general_access === "anyone"
-                    ? msg("share.general_access.anyone_desc")
-                    : msg("share.general_access.restricted_desc")
-                }
-              >
-                <Select
-                  value={state.general_access}
-                  onValueChange={(next) => handleAccessChange(next as GeneralAccess)}
-                  disabled={savingAccess}
-                >
-                  <SelectTrigger size="sm" className="min-w-[150px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="restricted">
-                      {msg("share.general_access.restricted")}
-                    </SelectItem>
-                    <SelectItem value="anyone">{msg("share.general_access.anyone")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingsRow>
+                  <SettingsRow
+                    icon={state.general_access === "anyone" ? Globe : Lock}
+                    label={msg("share.general_access")}
+                    description={
+                      state.general_access === "restricted"
+                        ? msg("share.general_access.restricted_desc")
+                        : undefined
+                    }
+                  >
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Select
+                        value={state.general_access}
+                        onValueChange={(next) => handleAccessChange(next as GeneralAccess)}
+                        disabled={savingAccess}
+                      >
+                        <SelectTrigger size="sm" className="min-w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="restricted">
+                            {msg("share.general_access.restricted")}
+                          </SelectItem>
+                          <SelectItem value="anyone">
+                            {msg("share.general_access.anyone")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {state.general_access === "anyone" && (
+                        // Drive-style: pick the tier the link grants (caps at editor).
+                        <Select
+                          value={state.general_role}
+                          onValueChange={(next) => handleLinkRoleChange(next as LinkRole)}
+                          disabled={savingAccess}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            className="min-w-[104px]"
+                            aria-label={msg("share.role.change_aria")}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="viewer">{roleLabel("viewer")}</SelectItem>
+                            <SelectItem value="editor">{roleLabel("editor")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </SettingsRow>
 
-              {shareUrl && (
-                <div
-                  dir="ltr"
-                  className="flex items-center justify-between gap-2 rounded-md border border-border/50 px-3 py-2"
-                >
-                  <code className="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-muted-foreground">
-                    {shareUrl}
-                  </code>
-                  <TooltipButton tooltip={msg("share.copy_link")}>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      className="shrink-0"
-                      onClick={handleCopy}
-                      aria-label={msg("share.copy_link")}
+                  {shareUrl && state.general_access === "anyone" && (
+                    // Only an "anyone with the link" link grants access by URL;
+                    // in Restricted mode the link is useless to non-members, so
+                    // showing it is misleading.
+                    <div
+                      dir="ltr"
+                      className="flex items-center gap-1 rounded-md border border-input bg-background ps-3 pe-1 transition-[color,box-shadow,border-color] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
                     >
-                      <Copy className="size-3.5" />
-                    </Button>
-                  </TooltipButton>
+                      <code className="min-w-0 flex-1 truncate py-2 font-mono text-[0.6875rem] text-muted-foreground">
+                        {shareUrl}
+                      </code>
+                      <div aria-hidden className="h-5 w-px shrink-0 bg-border/70" />
+                      <TooltipButton tooltip={msg("share.copy_link")}>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={handleCopy}
+                          aria-label={msg("share.copy_link")}
+                          className="size-7 shrink-0 text-muted-foreground hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:ring-0"
+                        >
+                          <Copy className="size-3.5" />
+                        </Button>
+                      </TooltipButton>
+                    </div>
+                  )}
                 </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={transferTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setTransferTarget(null);
+        }}
+      >
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("share.transfer.confirm_title")}
+            description={
+              <>
+                {TRANSFER_BODY_BEFORE}
+                <bdi className="font-mono font-medium text-foreground">
+                  {transferTarget}
+                </bdi>
+                {TRANSFER_BODY_AFTER}
+              </>
+            }
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTransferTarget(null)}
+              disabled={transferring}
+              className="w-full justify-center"
+            >
+              {msg("share.transfer.cancel")}
+            </Button>
+            <Button
+              onClick={handleTransfer}
+              disabled={transferring}
+              className="w-full justify-center shadow-xs"
+            >
+              {transferring ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("share.transfer.confirm_cta")
               )}
-            </div>
-          )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -274,12 +508,12 @@ function InvitePeople({
   onInvite,
 }: {
   ownerName: string | null;
-  onInvite: (username: string, role: ShareRole) => Promise<void>;
+  onInvite: (username: string, role: MemberRole) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
-  const [role, setRole] = useState<ShareRole>("viewer");
+  const [role, setRole] = useState<MemberRole>("viewer");
   const [inviting, setInviting] = useState(false);
   const [open, setOpen] = useState(false);
   const lastQuery = useRef("");
@@ -333,8 +567,12 @@ function InvitePeople({
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-foreground">{msg("share.invite_label")}</p>
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="relative">
+        {/* Input, role picker, and add button share one border so they read
+            as a single field (Drive-style). The bar owns the focus ring via
+            focus-within; each inner control drops its own border/shadow/ring
+            so they don't stack chrome inside the bar. */}
+        <div className="flex items-center gap-1 rounded-md border border-input bg-background ps-3 pe-1 transition-[color,box-shadow,border-color] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
           <Input
             value={query}
             onChange={(e) => {
@@ -355,70 +593,78 @@ function InvitePeople({
             aria-label={msg("share.invite_label")}
             disabled={inviting}
             dir="ltr"
-            className="h-8 text-xs"
+            className="h-8 flex-1 rounded-none border-0 bg-transparent px-0 text-xs shadow-none backdrop-blur-none focus-visible:border-transparent focus-visible:ring-0"
           />
-          {open && query.trim().length > 0 && (
-            <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background shadow-md">
-              {searching ? (
-                <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  {msg("share.searching")}
-                </div>
-              ) : results.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-muted-foreground">
-                  {msg("share.no_results")}
-                </div>
+          <div aria-hidden className="h-5 w-px shrink-0 bg-border/70" />
+          <Select value={role} onValueChange={(next) => setRole(next as MemberRole)}>
+            <SelectTrigger
+              size="sm"
+              className="h-7 gap-1 rounded-md border-0 bg-transparent px-2 text-xs shadow-none hover:border-transparent hover:bg-accent/55 hover:shadow-none focus-visible:border-transparent focus-visible:bg-accent/55 focus-visible:ring-0 data-[state=open]:border-transparent data-[state=open]:bg-accent/60 data-[state=open]:shadow-none"
+              aria-label={msg("share.role.change_aria")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLE_OPTIONS.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {roleLabel(option)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <TooltipButton tooltip={msg("share.invite")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => void submit(query)}
+              disabled={inviting || query.trim().length === 0}
+              aria-label={msg("share.invite")}
+              className="size-7 shrink-0 text-muted-foreground hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:ring-0"
+            >
+              {inviting ? (
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <ul role="listbox">
-                  {results.map((name) => (
-                    <li key={name}>
-                      <button
-                        type="button"
-                        dir="ltr"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          void submit(name);
-                        }}
-                        className="flex w-full items-center px-3 py-1.5 text-start text-xs font-mono hover:bg-accent/50"
-                      >
-                        {name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <UserPlus className="size-4" />
               )}
-            </div>
-          )}
+            </Button>
+          </TooltipButton>
         </div>
-        <Select value={role} onValueChange={(next) => setRole(next as ShareRole)}>
-          <SelectTrigger size="sm" className="min-w-[120px]" aria-label={msg("share.role.change_aria")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ROLE_OPTIONS.map((option) => (
-              <SelectItem key={option} value={option}>
-                {roleLabel(option)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <TooltipButton tooltip={msg("share.invite")}>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => void submit(query)}
-            disabled={inviting || query.trim().length === 0}
-            aria-label={msg("share.invite")}
-          >
-            {inviting ? (
-              <Loader2 className="size-4 animate-spin" />
+        {open && query.trim().length > 0 && (
+          <div className="absolute inset-x-0 top-full z-30 mt-2 max-h-48 overflow-y-auto rounded-md border border-border/70 bg-popover shadow-lg">
+            {searching ? (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                {msg("share.searching")}
+              </div>
+            ) : results.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                {msg("share.no_results")}
+              </div>
             ) : (
-              <UserPlus className="size-4" />
+              <ul role="listbox" className="py-1">
+                {results.map((name) => (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      dir="ltr"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        void submit(name);
+                      }}
+                      className="flex w-full items-center px-3 py-1.5 text-start font-mono text-xs hover:bg-accent/60"
+                    >
+                      {name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-          </Button>
-        </TooltipButton>
+          </div>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground/80">{roleDesc(role)}</p>
+      {roleDesc(role) ? (
+        <p className="text-xs text-muted-foreground/80">{roleDesc(role)}</p>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
@@ -108,7 +108,17 @@ function LiveTip({
 
 export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const pairs = buildPairs(job);
+  // Recompute only when new progress events land, not on every parent tick —
+  // this chart lives under the live-updating OverviewTab.
+  const pairs = useMemo(() => buildPairs(job), [job.progress_events]);
+  const totalPairs = useMemo(() => {
+    const events = job.progress_events ?? [];
+    for (let i = events.length - 1; i >= 0; i--) {
+      const t = events[i]?.metrics?.total_pairs;
+      if (typeof t === "number") return t;
+    }
+    return null;
+  }, [job.progress_events]);
   if (pairs.length === 0) return null;
   const toggle = (key: string) => {
     setHidden((prev) => {
@@ -118,14 +128,6 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
       return next;
     });
   };
-  const totalPairs = (() => {
-    const events = job.progress_events ?? [];
-    for (let i = events.length - 1; i >= 0; i--) {
-      const t = events[i]?.metrics?.total_pairs;
-      if (typeof t === "number") return t;
-    }
-    return null;
-  })();
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -142,7 +144,7 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[220px]" dir="ltr">
+        <div className="h-[220px] min-w-0" dir="ltr">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={pairs}
@@ -183,7 +185,7 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
                   fill="var(--color-chart-4)"
                   radius={[0, 3, 3, 0]}
                   barSize={12}
-                  animationDuration={400}
+                  isAnimationActive={false}
                 />
               )}
               {!hidden.has(
@@ -195,7 +197,7 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
                   fill="var(--color-chart-2)"
                   radius={[0, 3, 3, 0]}
                   barSize={12}
-                  animationDuration={400}
+                  isAnimationActive={false}
                 />
               )}
             </BarChart>
