@@ -339,9 +339,9 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-analytics",
     title: msg("auto.features.tutorial.lib.steps.literal.9"),
-    description: formatMsg("auto.features.tutorial.lib.steps.template.4", {
+    description: formatMsg("auto.features.tutorial.lib.steps.template.47", {
       p1: TERMS.scorePlural,
-      p2: TERMS.optimizerPlural,
+      p2: TERMS.optimization,
       p3: TERMS.optimization,
     }),
     target: "[data-tutorial='dashboard-stats']",
@@ -402,9 +402,10 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-compare-scores",
     title: formatMsg("auto.features.tutorial.lib.steps.template.8", { p1: TERMS.scorePlural }),
-    description: formatMsg("auto.features.tutorial.lib.steps.template.9", {
-      p1: TERMS.baselineScore,
-      p2: TERMS.finalScore,
+    description: formatMsg("auto.features.tutorial.lib.steps.template.46", {
+      p1: TERMS.finalScore,
+      p2: TERMS.baselineScore,
+      p3: TERMS.finalScore,
     }),
     target: "[data-tutorial='compare-scores']",
     placement: "top",
@@ -541,7 +542,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-module",
     title: TERMS.module,
-    description: formatMsg("auto.features.tutorial.lib.steps.template.19", {
+    description: formatMsg("auto.features.tutorial.lib.steps.template.45", {
       p1: TERMS.model,
       p2: TERMS.model,
     }),
@@ -549,7 +550,7 @@ const tutorialSteps: TutorialStep[] = [
     placement: "auto",
     beforeShow: async () => {
       await ensureSubmit();
-      setWizardStep(2);
+      setWizardStep(0);
     },
     track: "deep-dive",
     readingTimeSec: 9,
@@ -658,7 +659,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-model-probe",
     title: msg("auto.features.tutorial.lib.steps.literal.36"),
-    description: msg("auto.features.tutorial.lib.steps.literal.37"),
+    description: msg("auto.features.tutorial.lib.steps.literal.51"),
     target: "[data-tutorial='model-probe']",
     placement: "top",
     beforeShow: async () => {
@@ -751,7 +752,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-trajectory",
     title: msg("auto.features.tutorial.lib.steps.literal.46"),
-    description: msg("auto.features.tutorial.lib.steps.literal.47"),
+    description: msg("auto.features.tutorial.lib.steps.literal.48"),
     target: "[data-tutorial='trajectory-panel']",
     placement: "top",
     beforeShow: async () => {
@@ -851,6 +852,20 @@ const tutorialSteps: TutorialStep[] = [
     },
     track: "deep-dive",
     readingTimeSec: 6,
+  },
+  {
+    id: "dd-lm-activity",
+    title: msg("auto.features.tutorial.lib.steps.literal.52"),
+    description: msg("auto.features.tutorial.lib.steps.literal.53"),
+    target: "[data-tutorial='lm-activity']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      setDetailTab("lm-activity");
+      await waitForElement("[data-tutorial='lm-activity']");
+    },
+    track: "deep-dive",
+    readingTimeSec: 11,
   },
   {
     id: "dd-config",
@@ -956,7 +971,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-explore",
     title: msg("auto.features.tutorial.lib.steps.literal.38"),
-    description: msg("auto.features.tutorial.lib.steps.literal.39"),
+    description: msg("auto.features.tutorial.lib.steps.literal.49"),
     target: "[data-tutorial='explore-search']",
     placement: "bottom",
     beforeShow: async () => {
@@ -985,7 +1000,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "dd-agent-panel",
     title: msg("auto.features.tutorial.lib.steps.literal.44"),
-    description: msg("auto.features.tutorial.lib.steps.literal.45"),
+    description: msg("auto.features.tutorial.lib.steps.literal.50"),
     target: "[data-tutorial='agent-panel']",
     placement: "right",
     beforeShow: async () => {
@@ -1035,6 +1050,7 @@ const ADVANCED_ONLY_STEP_IDS = new Set([
   "dd-trajectory",
   "dd-playground",
   "dd-logs",
+  "dd-lm-activity",
   "dd-config",
   "dd-grid-overview",
   "dd-grid-pair",
