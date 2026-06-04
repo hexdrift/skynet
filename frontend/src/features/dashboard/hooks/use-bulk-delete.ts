@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { cancelJob, deleteJob, bulkDeleteJobs } from "@/shared/lib/api";
+import { cancelJob, bulkDeleteJobs } from "@/shared/lib/api";
 import { ACTIVE_STATUSES } from "@/shared/constants/job-status";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
-import type { JobStatus, PaginatedJobsResponse } from "@/shared/types/api";
+import type { PaginatedJobsResponse } from "@/shared/types/api";
 
 type UseBulkDeleteArgs = {
   data: PaginatedJobsResponse | null;
@@ -19,12 +19,7 @@ type UseBulkDeleteArgs = {
   visibleData?: PaginatedJobsResponse | null;
 };
 
-export type DeleteTarget = { id: string; status: string } | null;
-
 export type UseBulkDeleteReturn = {
-  deleteTarget: DeleteTarget;
-  setDeleteTarget: React.Dispatch<React.SetStateAction<DeleteTarget>>;
-  deleting: boolean;
   selectedIds: Set<string>;
   setSelectedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   toggleRowSelected: (id: string) => void;
@@ -32,7 +27,6 @@ export type UseBulkDeleteReturn = {
   bulkDeleteOpen: boolean;
   setBulkDeleteOpen: React.Dispatch<React.SetStateAction<boolean>>;
   bulkDeleting: boolean;
-  confirmDelete: () => Promise<void>;
   confirmBulkDelete: () => Promise<void>;
 };
 
@@ -43,8 +37,6 @@ export function useBulkDelete({
   fetchJobs,
   visibleData,
 }: UseBulkDeleteArgs): UseBulkDeleteReturn {
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
-  const [deleting, setDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -74,37 +66,6 @@ export function useBulkDelete({
     }
     if (changed) setSelectedIds(next);
   }, [pruneSource, selectedIds]);
-
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    const targetId = deleteTarget.id;
-    const targetStatus = deleteTarget.status;
-    setDeleting(true);
-
-    setData((prev) =>
-      prev
-        ? {
-            ...prev,
-            items: prev.items.filter((j) => j.optimization_id !== targetId),
-            total: prev.total - 1,
-          }
-        : prev,
-    );
-    setDeleteTarget(null);
-
-    try {
-      if (ACTIVE_STATUSES.has(targetStatus as JobStatus)) {
-        await cancelJob(targetId);
-      }
-      await deleteJob(targetId);
-      window.dispatchEvent(new Event("optimizations-changed"));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("dashboard.delete_failed"));
-      void fetchJobs();
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   const confirmBulkDelete = async () => {
     if (bulkDeleting) return;
@@ -197,9 +158,6 @@ export function useBulkDelete({
   };
 
   return {
-    deleteTarget,
-    setDeleteTarget,
-    deleting,
     selectedIds,
     setSelectedIds,
     toggleRowSelected,
@@ -207,7 +165,6 @@ export function useBulkDelete({
     bulkDeleteOpen,
     setBulkDeleteOpen,
     bulkDeleting,
-    confirmDelete,
     confirmBulkDelete,
   };
 }

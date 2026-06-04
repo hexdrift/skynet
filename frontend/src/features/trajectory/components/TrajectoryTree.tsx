@@ -9,10 +9,10 @@ import {
   Plus,
   RotateCcw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { TRAJECTORY_LAYOUT, type LayoutResult } from "../lib/layout";
-import { displayCandidateId, type TrajectoryNode } from "../lib/types";
+import { displayCandidateId, type RejectedNode, type TrajectoryNode } from "../lib/types";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import {
@@ -48,9 +48,9 @@ const ZOOM_BUTTON_OUT = 0.8;
 const DRAG_THRESHOLD_PX = 4;
 const FIT_PADDING_PX = 32;
 const CONTAINER_HEIGHT_PX = 560;
-// Match ScatterCanvas: 44px grid step, oklch grid/axis colors, 48px padding
-// from edges before the axes start. Kept local rather than imported to avoid
-// cross-feature coupling for two tiny constants.
+// 44px grid step, oklch grid/axis colors, 48px padding from edges before the
+// axes start. Kept local rather than shared to avoid cross-feature coupling
+// for two tiny constants.
 const GRID_STEP = 44;
 const GRID_LINE_COLOR = "oklch(0.91 0.006 50)";
 const GRID_AXIS_COLOR = "oklch(0.94 0.005 50)";
@@ -463,222 +463,20 @@ export function TrajectoryTree({
           </>
         ) : null}
         <g transform={transform}>
-          <g>
-            {edges.map((edge, i) => {
-              const from = idIndex.get(edge.from);
-              const to = idIndex.get(edge.to);
-              if (from === undefined || to === undefined) return null;
-              return (
-                <motion.line
-                  key={`${edge.from}-${edge.to}-${i}`}
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                  stroke={edge.isMerge ? EDGE_STROKE_MERGE : EDGE_STROKE}
-                  strokeWidth={edge.isMerge ? 1.2 : 1.6}
-                  strokeLinecap="round"
-                  strokeDasharray={edge.isMerge ? "4 4" : undefined}
-                  initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
-                  animate={reduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
-                  transition={
-                    reduceMotion ? undefined : { duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }
-                  }
-                />
-              );
-            })}
-          </g>
-
-          <g>
-            {ghosts.map((ghost) => {
-              const parent = idIndex.get(ghost.parent_id);
-              if (parent === undefined) return null;
-              return (
-                <line
-                  key={`ghost-edge-${ghost.rejection_id}`}
-                  x1={parent.x}
-                  y1={parent.y}
-                  x2={ghost.x}
-                  y2={ghost.y}
-                  stroke={EDGE_STROKE_GHOST}
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                />
-              );
-            })}
-            {ghosts.map((ghost) => (
-              <motion.circle
-                key={`ghost-${ghost.rejection_id}`}
-                cx={ghost.x}
-                cy={ghost.y}
-                r={TRAJECTORY_LAYOUT.ghostRadius}
-                fill={GHOST_FILL}
-                stroke={GHOST_STROKE}
-                strokeWidth={0.9}
-                initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
-                animate={reduceMotion ? undefined : { scale: 1, opacity: 1 }}
-                transition={
-                  reduceMotion ? undefined : { duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }
-                }
-                style={{ cursor: "pointer" }}
-                onClick={(e) => handleGhostClick(ghost.rejection_id, e)}
-              />
-            ))}
-          </g>
-
-          <g>
-            {nodes.map((node) => {
-              const isSelected = node.candidate_id === selectedId;
-              const isHovered = node.candidate_id === hoveredId;
-              const isNewest = node.candidate_id === newestId;
-              const coreStroke = isSelected
-                ? NODE_CORE_STROKE_SELECTED
-                : isHovered
-                  ? NODE_CORE_STROKE_HOVER
-                  : NODE_CORE_STROKE;
-              const hasDonut = node.per_example.length > 0;
-              const innerRadius = hasDonut
-                ? TRAJECTORY_LAYOUT.nodeRadius - DONUT_RING_THICKNESS
-                : TRAJECTORY_LAYOUT.nodeRadius;
-              return (
-                <motion.g
-                  key={node.candidate_id}
-                  role="treeitem"
-                  aria-label={formatMsg("trajectory.a11y.node_label", {
-                    id: displayCandidateId(node.candidate_id),
-                    gen: node.generation,
-                    score: node.score.toFixed(2),
-                  })}
-                  aria-selected={isSelected}
-                  tabIndex={isSelected ? 0 : -1}
-                  onMouseEnter={() => setHoveredId(node.candidate_id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  onClick={(e) => handleNodeClick(node.candidate_id, e)}
-                  initial={
-                    reduceMotion
-                      ? false
-                      : isNewest
-                        ? { scale: 0, opacity: 0 }
-                        : { scale: 0.7, opacity: 0 }
-                  }
-                  animate={reduceMotion ? undefined : { scale: 1, opacity: 1 }}
-                  transition={
-                    reduceMotion ? undefined : { duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }
-                  }
-                  style={{ cursor: "pointer" }}
-                >
-                  {isNewest && !reduceMotion ? (
-                    <motion.circle
-                      cx={node.x}
-                      cy={node.y}
-                      r={TRAJECTORY_LAYOUT.nodeRadius}
-                      fill="none"
-                      stroke={WINNER_INDICATOR}
-                      strokeWidth="1.6"
-                      initial={{ r: TRAJECTORY_LAYOUT.nodeRadius, opacity: 0.6 }}
-                      animate={{ r: TRAJECTORY_LAYOUT.nodeRadius * 2.2, opacity: 0 }}
-                      transition={{ duration: 1.2, ease: "easeOut", repeat: 2 }}
-                    />
-                  ) : null}
-                  {isSelected ? (
-                    <circle
-                      cx={node.x}
-                      cy={node.y}
-                      r={TRAJECTORY_LAYOUT.nodeRadius + 5}
-                      fill="none"
-                      stroke={NODE_CORE_STROKE_SELECTED}
-                      strokeWidth={1.5}
-                      strokeOpacity={0.7}
-                    />
-                  ) : null}
-                  {node.isWinner ? (
-                    <>
-                      <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={TRAJECTORY_LAYOUT.nodeRadius + 11}
-                        fill="none"
-                        stroke={WINNER_HALO}
-                        strokeWidth={3}
-                      />
-                      {reduceMotion ? null : (
-                        <motion.circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={TRAJECTORY_LAYOUT.nodeRadius + 4}
-                          fill="none"
-                          stroke={WINNER_INDICATOR}
-                          strokeWidth={1.4}
-                          initial={{
-                            opacity: 0.5,
-                            r: TRAJECTORY_LAYOUT.nodeRadius + 4,
-                          }}
-                          animate={{
-                            opacity: [0.5, 0.12, 0.5],
-                            r: [
-                              TRAJECTORY_LAYOUT.nodeRadius + 4,
-                              TRAJECTORY_LAYOUT.nodeRadius + 10,
-                              TRAJECTORY_LAYOUT.nodeRadius + 4,
-                            ],
-                          }}
-                          transition={{
-                            duration: 3.2,
-                            ease: "easeInOut",
-                            repeat: Infinity,
-                          }}
-                        />
-                      )}
-                      <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={TRAJECTORY_LAYOUT.nodeRadius + 4}
-                        fill="none"
-                        stroke={WINNER_INDICATOR}
-                        strokeWidth={2.6}
-                      />
-                    </>
-                  ) : null}
-                  {hasDonut ? renderDonut(node, view.k >= DONUT_DETAIL_THRESHOLD) : null}
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={innerRadius}
-                    fill={node.isWinner ? WINNER_FILL : NODE_CORE_FILL}
-                    stroke={coreStroke}
-                    strokeWidth={isSelected ? 1.4 : 0.8}
-                  />
-                  <text
-                    x={node.x}
-                    y={node.y + 5}
-                    textAnchor="middle"
-                    fontFamily="var(--font-mono, monospace)"
-                    fontSize="14"
-                    fontWeight={700}
-                    fill="#1c1612"
-                    pointerEvents="none"
-                  >
-                    {displayCandidateId(node.candidate_id)}
-                  </text>
-                  {node.isWinner ? (
-                    <WinnerBadge x={node.x} y={node.y + TRAJECTORY_LAYOUT.nodeRadius + 4} />
-                  ) : null}
-                  <text
-                    x={node.x}
-                    y={node.y + TRAJECTORY_LAYOUT.nodeRadius + (node.isWinner ? 32 : 14)}
-                    textAnchor="middle"
-                    fontFamily="var(--font-mono, monospace)"
-                    fontSize="10.5"
-                    fontWeight={600}
-                    fill="rgba(28, 22, 18, 0.72)"
-                    pointerEvents="none"
-                    style={{ fontVariantNumeric: "tabular-nums" }}
-                  >
-                    {node.score.toFixed(2)}
-                  </text>
-                </motion.g>
-              );
-            })}
-          </g>
+          <TreeContent
+            nodes={nodes}
+            ghosts={ghosts}
+            edges={edges}
+            idIndex={idIndex}
+            selectedId={selectedId}
+            hoveredId={hoveredId}
+            newestId={newestId}
+            detailed={view.k >= DONUT_DETAIL_THRESHOLD}
+            reduceMotion={!!reduceMotion}
+            onNodeClick={handleNodeClick}
+            onGhostClick={handleGhostClick}
+            onHover={setHoveredId}
+          />
         </g>
       </svg>
 
@@ -803,6 +601,258 @@ export function TrajectoryTree({
   }
   return treeBody;
 }
+
+interface TreeContentProps {
+  nodes: TrajectoryNode[];
+  ghosts: RejectedNode[];
+  edges: LayoutResult["edges"];
+  idIndex: Map<string, TrajectoryNode>;
+  selectedId: string | null;
+  hoveredId: string | null;
+  newestId: string | null;
+  detailed: boolean;
+  reduceMotion: boolean;
+  onNodeClick: (id: string, e: React.MouseEvent) => void;
+  onGhostClick: (rejectionId: string, e: React.MouseEvent) => void;
+  onHover: (id: string | null) => void;
+}
+
+// The edge/ghost/node geometry is expressed in layout coordinates and never
+// depends on the live pan/zoom transform (that lives on the parent <g>). Pulling
+// it into a memoized child means a pan or zoom — which fires setView on every
+// pointermove/wheel tick — re-renders only the lightweight outer <g>, not the
+// hundreds of SVG primitives below it. `detailed` (the donut-collapse boolean)
+// is the one zoom-derived input, passed as a bool so crossing the threshold is
+// the only zoom event that reconciles the tree.
+const TreeContent = memo(function TreeContent({
+  nodes,
+  ghosts,
+  edges,
+  idIndex,
+  selectedId,
+  hoveredId,
+  newestId,
+  detailed,
+  reduceMotion,
+  onNodeClick,
+  onGhostClick,
+  onHover,
+}: TreeContentProps) {
+  return (
+    <>
+      <g>
+        {edges.map((edge, i) => {
+          const from = idIndex.get(edge.from);
+          const to = idIndex.get(edge.to);
+          if (from === undefined || to === undefined) return null;
+          return (
+            <motion.line
+              key={`${edge.from}-${edge.to}-${i}`}
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+              stroke={edge.isMerge ? EDGE_STROKE_MERGE : EDGE_STROKE}
+              strokeWidth={edge.isMerge ? 1.2 : 1.6}
+              strokeLinecap="round"
+              strokeDasharray={edge.isMerge ? "4 4" : undefined}
+              initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+              animate={reduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
+              transition={reduceMotion ? undefined : { duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+            />
+          );
+        })}
+      </g>
+
+      <g>
+        {ghosts.map((ghost) => {
+          const parent = idIndex.get(ghost.parent_id);
+          if (parent === undefined) return null;
+          return (
+            <line
+              key={`ghost-edge-${ghost.rejection_id}`}
+              x1={parent.x}
+              y1={parent.y}
+              x2={ghost.x}
+              y2={ghost.y}
+              stroke={EDGE_STROKE_GHOST}
+              strokeWidth={1}
+              strokeDasharray="3 3"
+            />
+          );
+        })}
+        {ghosts.map((ghost) => (
+          <motion.circle
+            key={`ghost-${ghost.rejection_id}`}
+            cx={ghost.x}
+            cy={ghost.y}
+            r={TRAJECTORY_LAYOUT.ghostRadius}
+            fill={GHOST_FILL}
+            stroke={GHOST_STROKE}
+            strokeWidth={0.9}
+            initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+            animate={reduceMotion ? undefined : { scale: 1, opacity: 1 }}
+            transition={reduceMotion ? undefined : { duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+            style={{ cursor: "pointer" }}
+            onClick={(e) => onGhostClick(ghost.rejection_id, e)}
+          />
+        ))}
+      </g>
+
+      <g>
+        {nodes.map((node) => {
+          const isSelected = node.candidate_id === selectedId;
+          const isHovered = node.candidate_id === hoveredId;
+          const isNewest = node.candidate_id === newestId;
+          const coreStroke = isSelected
+            ? NODE_CORE_STROKE_SELECTED
+            : isHovered
+              ? NODE_CORE_STROKE_HOVER
+              : NODE_CORE_STROKE;
+          const hasDonut = node.per_example.length > 0;
+          const innerRadius = hasDonut
+            ? TRAJECTORY_LAYOUT.nodeRadius - DONUT_RING_THICKNESS
+            : TRAJECTORY_LAYOUT.nodeRadius;
+          return (
+            <motion.g
+              key={node.candidate_id}
+              role="treeitem"
+              aria-label={formatMsg("trajectory.a11y.node_label", {
+                id: displayCandidateId(node.candidate_id),
+                gen: node.generation,
+                score: node.score.toFixed(2),
+              })}
+              aria-selected={isSelected}
+              tabIndex={isSelected ? 0 : -1}
+              onMouseEnter={() => onHover(node.candidate_id)}
+              onMouseLeave={() => onHover(null)}
+              onClick={(e) => onNodeClick(node.candidate_id, e)}
+              initial={
+                reduceMotion
+                  ? false
+                  : isNewest
+                    ? { scale: 0, opacity: 0 }
+                    : { scale: 0.7, opacity: 0 }
+              }
+              animate={reduceMotion ? undefined : { scale: 1, opacity: 1 }}
+              transition={reduceMotion ? undefined : { duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+              style={{ cursor: "pointer" }}
+            >
+              {isNewest && !reduceMotion ? (
+                <motion.circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={TRAJECTORY_LAYOUT.nodeRadius}
+                  fill="none"
+                  stroke={WINNER_INDICATOR}
+                  strokeWidth="1.6"
+                  initial={{ r: TRAJECTORY_LAYOUT.nodeRadius, opacity: 0.6 }}
+                  animate={{ r: TRAJECTORY_LAYOUT.nodeRadius * 2.2, opacity: 0 }}
+                  transition={{ duration: 1.2, ease: "easeOut", repeat: 2 }}
+                />
+              ) : null}
+              {isSelected ? (
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={TRAJECTORY_LAYOUT.nodeRadius + 5}
+                  fill="none"
+                  stroke={NODE_CORE_STROKE_SELECTED}
+                  strokeWidth={1.5}
+                  strokeOpacity={0.7}
+                />
+              ) : null}
+              {node.isWinner ? (
+                <>
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={TRAJECTORY_LAYOUT.nodeRadius + 11}
+                    fill="none"
+                    stroke={WINNER_HALO}
+                    strokeWidth={3}
+                  />
+                  {reduceMotion ? null : (
+                    <motion.circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={TRAJECTORY_LAYOUT.nodeRadius + 4}
+                      fill="none"
+                      stroke={WINNER_INDICATOR}
+                      strokeWidth={1.4}
+                      initial={{
+                        opacity: 0.5,
+                        r: TRAJECTORY_LAYOUT.nodeRadius + 4,
+                      }}
+                      animate={{
+                        opacity: [0.5, 0.12, 0.5],
+                        r: [
+                          TRAJECTORY_LAYOUT.nodeRadius + 4,
+                          TRAJECTORY_LAYOUT.nodeRadius + 10,
+                          TRAJECTORY_LAYOUT.nodeRadius + 4,
+                        ],
+                      }}
+                      transition={{
+                        duration: 3.2,
+                        ease: "easeInOut",
+                        repeat: Infinity,
+                      }}
+                    />
+                  )}
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={TRAJECTORY_LAYOUT.nodeRadius + 4}
+                    fill="none"
+                    stroke={WINNER_INDICATOR}
+                    strokeWidth={2.6}
+                  />
+                </>
+              ) : null}
+              {hasDonut ? renderDonut(node, detailed) : null}
+              <circle
+                cx={node.x}
+                cy={node.y}
+                r={innerRadius}
+                fill={node.isWinner ? WINNER_FILL : NODE_CORE_FILL}
+                stroke={coreStroke}
+                strokeWidth={isSelected ? 1.4 : 0.8}
+              />
+              <text
+                x={node.x}
+                y={node.y + 5}
+                textAnchor="middle"
+                fontFamily="var(--font-mono, monospace)"
+                fontSize="14"
+                fontWeight={700}
+                fill="#1c1612"
+                pointerEvents="none"
+              >
+                {displayCandidateId(node.candidate_id)}
+              </text>
+              {node.isWinner ? (
+                <WinnerBadge x={node.x} y={node.y + TRAJECTORY_LAYOUT.nodeRadius + 4} />
+              ) : null}
+              <text
+                x={node.x}
+                y={node.y + TRAJECTORY_LAYOUT.nodeRadius + (node.isWinner ? 32 : 14)}
+                textAnchor="middle"
+                fontFamily="var(--font-mono, monospace)"
+                fontSize="10.5"
+                fontWeight={600}
+                fill="rgba(28, 22, 18, 0.72)"
+                pointerEvents="none"
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {node.score.toFixed(2)}
+              </text>
+            </motion.g>
+          );
+        })}
+      </g>
+    </>
+  );
+});
 
 function WinnerBadge({ x, y }: { x: number; y: number }) {
   const label = msg("trajectory.node.winning_label");

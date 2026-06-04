@@ -6,7 +6,7 @@ import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 type BulkActionBarProps = {
-  isAdmin: boolean;
+  canDelete: boolean;
   selectedCount: number;
   compareEligibleCount: number;
   canCompare: boolean;
@@ -16,7 +16,7 @@ type BulkActionBarProps = {
 };
 
 export function BulkActionBar({
-  isAdmin,
+  canDelete,
   selectedCount,
   compareEligibleCount,
   canCompare,
@@ -42,8 +42,8 @@ export function BulkActionBar({
           dir="rtl"
           data-tutorial="bulk-action-bar"
         >
-          <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/95 backdrop-blur-xl px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
-            <span className="px-1 text-sm text-foreground">
+          <div className="flex max-w-[92vw] flex-wrap items-center justify-center gap-1 rounded-full border border-border/60 bg-background/95 backdrop-blur-xl px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+            <span className="min-w-0 px-1 text-sm text-foreground">
               {selectedCount === 1 ? (
                 <>
                   {msg("auto.features.dashboard.components.bulkactionbar.1")}
@@ -104,7 +104,7 @@ export function BulkActionBar({
                 <ArrowLeftRight className="size-4" />
               </button>
             </TooltipButton>
-            {isAdmin && (
+            {canDelete && (
               <TooltipButton
                 tooltip={msg("auto.features.dashboard.components.bulkactionbar.5")}
                 side="top"

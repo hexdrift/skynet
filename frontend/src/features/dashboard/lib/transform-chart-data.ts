@@ -28,6 +28,8 @@ export type ChartData = {
   };
   avgByOptimizer: Array<{ name: string; avgImprovement: number; count: number }>;
   modelUsage: Array<{ name: string; count: number }>;
+  ownerUsage: Array<{ name: string; count: number }>;
+  accessUsage: Array<{ name: string; count: number }>;
   topJobs: DashboardAnalyticsJob[];
   jobTypeData: Array<{ name: string; value: number }>;
   runtimeDistribution: Array<{ name: string; runtimeMinutes: number }>;
@@ -48,6 +50,8 @@ const EMPTY_CHART_DATA: ChartData = {
   kpis: null,
   avgByOptimizer: [],
   modelUsage: [],
+  ownerUsage: [],
+  accessUsage: [],
   topJobs: [],
   jobTypeData: [],
   runtimeDistribution: [],
@@ -119,6 +123,16 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
     count: m.value,
   }));
 
+  const ownerUsage = (analyticsData.owner_usage ?? []).map((o) => ({
+    name: o.name,
+    count: o.value,
+  }));
+
+  const accessUsage = (analyticsData.access_usage ?? []).map((a) => ({
+    name: a.name,
+    count: a.value,
+  }));
+
   const topJobs = analyticsData.top_jobs_by_improvement;
 
   const jobTypeData = Object.entries(analyticsData.job_type_counts).map(([key, value]) => ({
@@ -171,6 +185,8 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
     kpis,
     avgByOptimizer,
     modelUsage,
+    ownerUsage,
+    accessUsage,
     topJobs,
     jobTypeData,
     runtimeDistribution,

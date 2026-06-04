@@ -12,6 +12,27 @@ import { Label } from "@/shared/ui/primitives/label";
 import { Loader2 } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
 
+/**
+ * Resolve where to send the user after login. next-auth's middleware appends a
+ * ``callbackUrl`` query param when it bounces an unauthenticated request (e.g. a
+ * ``/share/<token>`` link) to /login; honor it so the recipient lands back on
+ * the page they came for. Only same-origin internal paths are accepted, so a
+ * crafted ``callbackUrl`` can't turn login into an open redirect. Falls back to
+ * the dashboard.
+ */
+function postLoginTarget(): string {
+  if (typeof window === "undefined") return "/";
+  const cb = new URLSearchParams(window.location.search).get("callbackUrl");
+  if (!cb) return "/";
+  try {
+    const url = new URL(cb, window.location.origin);
+    if (url.origin === window.location.origin) return url.pathname + url.search + url.hash;
+  } catch {
+    // Malformed callbackUrl — ignore and use the default.
+  }
+  return "/";
+}
+
 export function LoginView() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -27,7 +48,7 @@ export function LoginView() {
       .then((providers) => {
         if (providers?.adfs) {
           setMode("sso");
-          void signIn("adfs", { callbackUrl: "/" });
+          void signIn("adfs", { callbackUrl: postLoginTarget() });
         } else {
           setMode("dev");
         }
@@ -53,8 +74,9 @@ export function LoginView() {
       return;
     }
     // Soft-nav so we don't hard-reload and double-fetch the dashboard the way
-    // `window.location.href = "/"` did.
-    router.push("/");
+    // `window.location.href = "/"` did. Honor the post-login target so a
+    // recipient bounced here from a /share/<token> link lands back on it.
+    router.push(postLoginTarget());
     router.refresh();
   };
 

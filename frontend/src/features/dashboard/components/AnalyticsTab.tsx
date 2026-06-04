@@ -3,7 +3,6 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { toast } from "react-toastify";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
 import { AnimatedNumber, StaggerContainer, StaggerItem } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { formatElapsed } from "@/shared/lib";
@@ -14,6 +13,7 @@ import { TERMS } from "@/shared/lib/terms";
 import { AnalyticsEmpty } from "./AnalyticsEmpty";
 import { AnalyticsFilterChips } from "./AnalyticsFilterChips";
 import { AnalyticsSection } from "./AnalyticsSection";
+import { AnalyticsTabSkeleton } from "./AnalyticsTabSkeleton";
 import type { ChartData } from "../lib/transform-chart-data";
 import type { UseAnalyticsFiltersReturn } from "../hooks/use-analytics-filters";
 
@@ -43,12 +43,17 @@ const TimelineChart = dynamic(() => import("@/shared/charts").then((m) => m.Time
   ssr: false,
   loading: () => <div className="h-[160px]" />,
 });
+const SharingBreakdown = dynamic(() => import("./UsageCharts"), {
+  ssr: false,
+  loading: () => <div className="h-[260px]" />,
+});
 
 type AnalyticsTabProps = {
   analyticsLoading: boolean;
   analyticsData: DashboardAnalytics | null;
   chartData: ChartData;
   filters: UseAnalyticsFiltersReturn;
+  sessionUser: string;
 };
 
 type KpiAccent = "default" | "success" | "warning" | "danger";
@@ -79,7 +84,7 @@ function KpiCard({
   valueDir?: "ltr" | "rtl";
 }) {
   return (
-    <div className="flex h-full flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7">
+    <div className="flex h-full min-w-0 flex-[1_1_13rem] flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7 xl:flex-[1_1_9rem]">
       <div className="flex items-center gap-2">
         <span className={`size-1.5 rounded-full ${KPI_DOT[accent]}`} aria-hidden />
         <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
@@ -121,22 +126,38 @@ function copyToClipboard(text: string) {
     .catch(() => {});
 }
 
+// Rank-shaded ramp for the model-usage bars: the most-used model is darkest
+// (--chart-1) and lighter steps follow, so the list reads as a ranking rather
+// than a flat repeat of the other breakdowns. Clamps past the 5th rank.
+const MODEL_RAMP = [
+  "var(--color-chart-1)",
+  "var(--color-chart-2)",
+  "var(--color-chart-3)",
+  "var(--color-chart-4)",
+  "var(--color-chart-5)",
+];
+
 function AnalyticsTabImpl({
   analyticsLoading,
   analyticsData,
   chartData,
   filters,
+  sessionUser,
 }: AnalyticsTabProps) {
   const {
     model,
     status,
     jobId,
     date,
+    owner,
+    access,
     leaderboardLimit,
     setModel,
     setStatus,
     setJobId,
     setDate,
+    setOwner,
+    setAccess,
   } = filters;
 
   const statusBars = useMemo(() => {
@@ -163,19 +184,17 @@ function AnalyticsTabImpl({
     }));
   }, [chartData.modelUsage]);
 
+  const showOwners = chartData.ownerUsage.length > 1 || Boolean(owner);
+  const showAccess = chartData.accessUsage.length > 1 || Boolean(access);
+
   if (analyticsLoading && analyticsData === null) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-24">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          {msg("auto.features.dashboard.components.analyticstab.2")}
-        </p>
-      </div>
-    );
+    return <AnalyticsTabSkeleton />;
   }
 
   if ((analyticsData?.filtered_total ?? 0) === 0) {
-    const hasFilters = Boolean(jobId || date || model !== "all" || status !== "all");
+    const hasFilters = Boolean(
+      jobId || date || owner || access || model !== "all" || status !== "all",
+    );
     if (hasFilters) {
       return (
         <AnalyticsEmpty
@@ -183,6 +202,8 @@ function AnalyticsTabImpl({
           onClearFilters={() => {
             setModel("all");
             setStatus("all");
+            setOwner(null);
+            setAccess(null);
           }}
         />
       );
@@ -192,11 +213,11 @@ function AnalyticsTabImpl({
 
   return (
     <div data-tutorial="analytics-content" className="space-y-6">
-      <AnalyticsFilterChips filters={filters} />
+      <AnalyticsFilterChips filters={filters} sessionUser={sessionUser} />
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${jobId ?? "all"}-${date ?? "all"}-${model}-${status}`}
+          key={`${jobId ?? "all"}-${date ?? "all"}-${model}-${status}-${owner ?? "all"}-${access ?? "all"}`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
@@ -207,8 +228,7 @@ function AnalyticsTabImpl({
               <StaggerItem>
                 <div
                   data-tutorial="dashboard-stats"
-                  className="grid gap-3 sm:gap-4"
-                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+                  className="flex flex-wrap gap-3 sm:gap-4"
                 >
                   <KpiCard
                     label={msg("auto.features.dashboard.components.analyticstab.4")}
@@ -271,7 +291,7 @@ function AnalyticsTabImpl({
                 className="border-border/60"
               >
                 <div className="grid gap-5 lg:grid-cols-7">
-                  <div className="lg:col-span-4">
+                  <div className="min-w-0 lg:col-span-4">
                     <div className="mb-3">
                       <h4 className="text-sm font-semibold">
                         {msg("auto.features.dashboard.components.analyticstab.21")}
@@ -285,7 +305,7 @@ function AnalyticsTabImpl({
                     />
                   </div>
 
-                  <div className="lg:col-span-3 space-y-6">
+                  <div className="min-w-0 lg:col-span-3 space-y-6">
                     <div className="space-y-3">
                       <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase tracking-widest">
                         {msg("auto.features.dashboard.components.analyticstab.22")}
@@ -369,7 +389,7 @@ function AnalyticsTabImpl({
                 >
                   <div className="grid gap-5 md:grid-cols-2">
                     {chartData.runtimeDistribution.length > 0 && (
-                      <div>
+                      <div className="min-w-0">
                         <div className="mb-3">
                           <h4 className="text-sm font-semibold">
                             <HelpTip text={tip("analytics.runtime_minutes")}>
@@ -385,7 +405,7 @@ function AnalyticsTabImpl({
                       </div>
                     )}
                     {chartData.efficiencyData.length > 0 && (
-                      <div>
+                      <div className="min-w-0">
                         <div className="mb-3">
                           <h4 className="text-sm font-semibold">
                             <HelpTip text={tip("analytics.improvement_per_minute")}>
@@ -451,7 +471,7 @@ function AnalyticsTabImpl({
                   className="border-border/60"
                 >
                   <div className="space-y-3">
-                    {modelUsageBars.map((m) => (
+                    {modelUsageBars.map((m, i) => (
                       <div
                         key={m.name}
                         role="button"
@@ -460,23 +480,47 @@ function AnalyticsTabImpl({
                         onClick={() => setModel(m.name)}
                         onKeyDown={(e) => activateOnKey(e, () => setModel(m.name))}
                       >
-                        <div className="flex items-center justify-between text-sm" dir="ltr">
-                          <span className="font-mono truncate max-w-[200px]" title={m.name}>
+                        <div className="flex items-center gap-2 text-sm" dir="ltr">
+                          <span className="w-4 shrink-0 text-end tabular-nums text-[0.6875rem] text-muted-foreground/70">
+                            {i + 1}
+                          </span>
+                          <span className="font-mono truncate" title={m.name}>
                             {m.name}
                           </span>
-                          <span className="tabular-nums font-medium">{m.count}</span>
+                          <span className="ms-auto tabular-nums font-medium">{m.count}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden" dir="ltr">
+                        <div className="h-2 rounded-full bg-muted overflow-hidden ms-6" dir="ltr">
                           <div
-                            className="h-full rounded-full bg-primary/60 transition-all"
+                            className="h-full rounded-full transition-all"
                             style={{
                               width: `${m.pct}%`,
+                              backgroundColor: MODEL_RAMP[Math.min(i, MODEL_RAMP.length - 1)],
                             }}
                           />
                         </div>
                       </div>
                     ))}
                   </div>
+                </AnalyticsSection>
+              </StaggerItem>
+            )}
+
+            {(showOwners || showAccess) && (
+              <StaggerItem>
+                <AnalyticsSection
+                  title={msg("dashboard.analytics.sharing_breakdown")}
+                  defaultOpen={true}
+                  className="border-border/60"
+                >
+                  <SharingBreakdown
+                    owners={chartData.ownerUsage}
+                    access={chartData.accessUsage}
+                    showOwners={showOwners}
+                    showAccess={showAccess}
+                    sessionUser={sessionUser}
+                    onOwnerSelect={setOwner}
+                    onAccessSelect={setAccess}
+                  />
                 </AnalyticsSection>
               </StaggerItem>
             )}

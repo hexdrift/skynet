@@ -1,21 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 
-import { TOOL_META, type ApprovalSeverity } from "../lib/tool-meta";
+import { TOOL_META } from "../lib/tool-meta";
+import { Carousel } from "./Carousel";
+import { ToolHeader } from "./ToolHeader";
 
 interface ToolEntry {
   key: string;
-  title: string;
   description: string;
-  icon: LucideIcon;
-  severity: ApprovalSeverity;
 }
 
 // Curated subset of TOOL_META. Bulk variants are folded into their singular
@@ -99,215 +96,57 @@ const TOUR_DESCRIPTIONS: Record<string, string> = {
   request_user_inference: msg("auto.features.agent.panel.components.toolscarousel.literal.17"),
 };
 
-const SEVERITY: Record<ApprovalSeverity, { color: string; label: string | null }> = {
-  destructive: {
-    color: "#9B2C1F",
-    label: msg("auto.features.agent.panel.components.toolscarousel.literal.11"),
-  },
-  warning: {
-    color: "#A85A1A",
-    label: msg("auto.features.agent.panel.components.toolscarousel.literal.16"),
-  },
-  info: {
-    color: "#3D2E22",
-    label: msg("auto.features.agent.panel.components.toolscarousel.literal.12"),
-  },
-};
+interface ToolsCarouselProps {
+  /**
+   * Tool keys to show. Omit for the curated product tour (the hardcoded
+   * {@link FEATURED_TOOLS}); pass a real roster (e.g. a turn's ``allowed_tools``)
+   * to drive the same carousel from live data. Keys missing from
+   * {@link TOOL_META} fall back to a prettified title, a neutral icon, and
+   * ``info`` severity, so any tool name renders.
+   */
+  tools?: readonly string[];
+  /** Overrides the header label (the tour's first-person default doesn't fit every context). */
+  title?: string;
+  /** Merged onto the root — pass ``w-full`` to fill an embedding container. */
+  className?: string;
+}
 
-export function ToolsCarousel() {
-  const tools = React.useMemo<ToolEntry[]>(() => {
-    const out: ToolEntry[] = [];
-    for (const key of FEATURED_TOOLS) {
-      const m = TOOL_META[key];
-      if (!m) continue;
-      out.push({
+export function ToolsCarousel({
+  tools: toolKeys = FEATURED_TOOLS,
+  title,
+  className,
+}: ToolsCarouselProps = {}) {
+  const tools = React.useMemo<ToolEntry[]>(
+    () =>
+      toolKeys.map((key) => ({
         key,
-        ...m,
-        description: TOUR_DESCRIPTIONS[key] ?? m.description,
-      });
-    }
-    return out;
-  }, []);
-
-  const [idx, setIdx] = React.useState(0);
-  const [dir, setDir] = React.useState<1 | -1>(-1);
-  const reduceMotion = useReducedMotion();
-
-  const go = React.useCallback(
-    (next: number) => {
-      const clamped = Math.max(0, Math.min(tools.length - 1, next));
-      setDir(clamped > idx ? -1 : 1);
-      setIdx(clamped);
-    },
-    [idx, tools.length],
+        description: TOUR_DESCRIPTIONS[key] ?? TOOL_META[key]?.description ?? "",
+      })),
+    [toolKeys],
   );
-
-  const onKey = React.useCallback(
-    (e: React.KeyboardEvent) => {
-      // In RTL context, ArrowLeft = forward (next), ArrowRight = backward (prev).
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        go(idx + 1);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        go(idx - 1);
-      }
-    },
-    [go, idx],
-  );
-
-  const active = tools[idx];
-  if (!active) return null;
 
   return (
-    <div
-      className={cn(
-        "w-[min(300px,calc(100vw-2rem))] p-3 select-none rounded-xl",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1",
-      )}
-      dir="rtl"
-      role="region"
-      aria-label={msg("auto.features.agent.panel.components.toolscarousel.literal.13")}
-      tabIndex={0}
-      onKeyDown={onKey}
-    >
-      <div className="mb-2.5 flex items-baseline justify-between gap-2">
-        <span className="text-[0.8125rem] font-medium text-foreground">
-          {msg("auto.features.agent.panel.components.toolscarousel.1")}
-        </span>
-        <span className="font-mono tabular-nums text-[0.625rem] text-muted-foreground/70">
-          {idx + 1} / {tools.length}
-        </span>
-      </div>
-
-      <div className="relative h-[132px] overflow-hidden rounded-xl">
-        <AnimatePresence custom={dir} mode="popLayout" initial={false}>
-          <motion.div
-            key={active.key}
-            custom={dir}
-            variants={{
-              enter: (d: 1 | -1) => ({
-                x: reduceMotion ? 0 : d * 28,
-                opacity: 0,
-              }),
-              center: { x: 0, opacity: 1 },
-              exit: (d: 1 | -1) => ({
-                x: reduceMotion ? 0 : d * -28,
-                opacity: 0,
-              }),
-            }}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-            className="absolute inset-0"
-          >
-            <ToolCard tool={active} />
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      <div className="mt-2.5 flex items-center justify-center gap-1">
-        {tools.map((t, i) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => go(i)}
-            aria-label={formatMsg(
-              "auto.features.agent.panel.components.toolscarousel.template.11",
-              { p1: i + 1, p2: tools.length },
-            )}
-            aria-current={i === idx ? "true" : undefined}
-            className={cn(
-              "h-1.5 rounded-full transition-all duration-200 cursor-pointer",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1",
-              i === idx ? "w-4 bg-[#3D2E22]/70" : "w-1.5 bg-[#3D2E22]/20 hover:bg-[#3D2E22]/40",
-            )}
-          />
-        ))}
-      </div>
-
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        {/* Prev: visually on the RIGHT in RTL (rightmost = flex start). */}
-        <NavButton direction="prev" disabled={idx === 0} onClick={() => go(idx - 1)} />
-        <NavButton
-          direction="next"
-          disabled={idx >= tools.length - 1}
-          onClick={() => go(idx + 1)}
-        />
-      </div>
-    </div>
+    <Carousel
+      items={tools}
+      itemKey={(t) => t.key}
+      renderItem={(t) => <ToolCard tool={t} />}
+      title={title ?? msg("auto.features.agent.panel.components.toolscarousel.1")}
+      ariaLabel={msg("auto.features.agent.panel.components.toolscarousel.literal.13")}
+      bodyClassName="h-[132px]"
+      className={cn("w-[min(300px,calc(100vw-2rem))] p-3", className)}
+    />
   );
 }
 
 function ToolCard({ tool }: { tool: ToolEntry }) {
-  const Icon = tool.icon;
-  const sev = SEVERITY[tool.severity];
   return (
     <div className="h-full w-full p-3.5">
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <span
-          className="inline-flex size-9 items-center justify-center rounded-full shrink-0"
-          style={{
-            backgroundColor: `${sev.color}14`,
-            color: sev.color,
-          }}
-        >
-          <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[0.8125rem] font-medium leading-tight truncate">{tool.title}</div>
-          {sev.label && (
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <span
-                className="inline-block size-1 rounded-full shrink-0"
-                style={{ backgroundColor: sev.color, opacity: 0.55 }}
-                aria-hidden="true"
-              />
-              <span className="text-[0.625rem] text-muted-foreground/75">{sev.label}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      <p className="text-[0.75rem] leading-relaxed text-foreground/75 line-clamp-3">
-        {tool.description}
-      </p>
+      <ToolHeader toolKey={tool.key} className="mb-2.5" />
+      {tool.description ? (
+        <p className="text-[0.75rem] leading-relaxed text-foreground/75 line-clamp-3">
+          {tool.description}
+        </p>
+      ) : null}
     </div>
-  );
-}
-
-function NavButton({
-  direction,
-  disabled,
-  onClick,
-}: {
-  direction: "prev" | "next";
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  // In RTL reading flow: "prev" = step backwards = rightward chevron;
-  // "next" = step forwards = leftward chevron.
-  const Icon = direction === "prev" ? ChevronRight : ChevronLeft;
-  const label =
-    direction === "prev"
-      ? msg("auto.features.agent.panel.components.toolscarousel.literal.14")
-      : msg("auto.features.agent.panel.components.toolscarousel.literal.15");
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      className={cn(
-        "inline-flex size-7 items-center justify-center rounded-full",
-        "border border-border/50 bg-background/85",
-        "transition-all duration-150 cursor-pointer",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1",
-        "hover:bg-accent/60 hover:border-border active:scale-[0.96]",
-        "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-background/85",
-      )}
-    >
-      <Icon className="size-3.5 text-foreground/70" aria-hidden="true" />
-    </button>
   );
 }

@@ -29,17 +29,7 @@ import {
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { ChartTooltip } from "@/shared/charts/chart-utils";
+import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { FadeIn } from "@/shared/ui/motion";
 import {
@@ -55,6 +45,7 @@ import type {
   OptimizedPredictor,
 } from "@/shared/types/api";
 import { CompareSkeleton } from "./CompareSkeleton";
+import { PerExampleTableSkeleton } from "./PerExampleTableSkeleton";
 import { ReasoningPill } from "@/features/optimizations";
 import { canCompareKeys, compareCompatibilityKey } from "../lib/compatibility";
 import { COMPARE_MAX } from "@/features/dashboard";
@@ -254,16 +245,11 @@ function VerdictBlock({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number 
         </div>
 
         {stats.length > 0 && (
-          <div
-            className="grid gap-3"
-            style={{
-              gridTemplateColumns: `repeat(auto-fit, minmax(${stats.length > 2 ? 160 : 200}px, 1fr))`,
-            }}
-          >
+          <div className="flex flex-wrap gap-3">
             {stats.map((stat) => (
               <div
                 key={stat.key}
-                className={`rounded-xl border px-4 py-3 ${
+                className={`min-w-0 flex-[1_1_10rem] rounded-xl border px-4 py-3 ${
                   stat.tone === "primary"
                     ? "border-primary/25 bg-primary/[0.04]"
                     : "border-border/50 bg-card"
@@ -445,160 +431,10 @@ function RunsHeaderRow({
   );
 }
 
-type ChartRow = {
-  metric: string;
-  [runKey: string]: string | number | null;
-};
-
-function PerformanceChart({ runs }: { runs: RunInfo[] }) {
-  const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
-  const toggleRun = useCallback(
-    (id: string) => {
-      setHiddenRuns((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        // Prevent hiding every single run — always keep at least one visible.
-        if (next.size >= prev.size + 1 && next.size === runs.length) {
-          return prev;
-        }
-        return next;
-      });
-    },
-    [runs.length],
-  );
-  const chartData = useMemo(() => {
-    const latencies = runs
-      .map((r) => r.avgResponseMs)
-      .filter((v): v is number => v != null && v > 0);
-    const minLatency = latencies.length ? Math.min(...latencies) : null;
-    const hasSpeed = minLatency != null;
-
-    const quality = (r: RunInfo) => {
-      const v = r.optimized;
-      if (v == null) return null;
-      return v > 1 ? v / 100 : v;
-    };
-    const speed = (r: RunInfo) => {
-      if (!hasSpeed || r.avgResponseMs == null || r.avgResponseMs <= 0) return null;
-      return minLatency! / r.avgResponseMs;
-    };
-
-    const toPct = (v: number | null) => (v == null ? null : Math.round(v * 1000) / 10);
-
-    const qualityRow: ChartRow = { metric: msg("auto.app.compare.page.literal.9") };
-    const speedRow: ChartRow = { metric: msg("auto.app.compare.page.literal.10") };
-    runs.forEach((r, i) => {
-      const key = runToken(i);
-      qualityRow[key] = toPct(quality(r));
-      speedRow[key] = toPct(speed(r));
-    });
-
-    const rows: ChartRow[] = [qualityRow];
-    if (hasSpeed) {
-      rows.push(speedRow);
-    }
-    return { rows, hasSpeed };
-  }, [runs]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <BarChart3 className="size-4" />
-          <HelpTip text={msg("auto.app.compare.page.literal.12")}>
-            {msg("auto.app.compare.page.6")}
-          </HelpTip>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[280px]" dir="ltr">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData.rows}
-              margin={{ top: 16, right: 16, bottom: 8, left: 0 }}
-              barCategoryGap="20%"
-              barGap={4}
-            >
-              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="metric"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 12 }}
-                className="fill-muted-foreground"
-                reversed
-              />
-              <YAxis
-                domain={[0, 100]}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11 }}
-                className="fill-muted-foreground"
-                ticks={[0, 25, 50, 75, 100]}
-                tickFormatter={(v) => `${v}%`}
-                orientation="right"
-                width={40}
-              />
-              <RechartsTooltip
-                content={<ChartTooltip />}
-                cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-              />
-              {runs.map((run, i) => {
-                if (hiddenRuns.has(run.job.optimization_id)) return null;
-                return (
-                  <Bar
-                    key={run.job.optimization_id}
-                    dataKey={runToken(i)}
-                    name={`${runToken(i)} · ${run.label}`}
-                    radius={[4, 4, 0, 0]}
-                    animationDuration={400}
-                  >
-                    {chartData.rows.map((_, idx) => (
-                      <Cell key={idx} fill={colorFor(i)} />
-                    ))}
-                  </Bar>
-                );
-              })}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="flex flex-wrap justify-center gap-4 mt-3" dir="rtl">
-          {runs.map((run, i) => {
-            const isHidden = hiddenRuns.has(run.job.optimization_id);
-            const color = colorFor(i);
-            return (
-              <button
-                key={run.job.optimization_id}
-                type="button"
-                onClick={() => toggleRun(run.job.optimization_id)}
-                aria-pressed={!isHidden}
-                className={`flex items-center gap-1.5 text-xs cursor-pointer transition-opacity ${
-                  isHidden ? "opacity-45 hover:opacity-75" : "hover:opacity-80"
-                }`}
-              >
-                <span
-                  className="size-2.5 rounded-full shrink-0 transition-all"
-                  style={
-                    isHidden
-                      ? { backgroundColor: "transparent", boxShadow: `inset 0 0 0 1.5px ${color}` }
-                      : { backgroundColor: color }
-                  }
-                />
-                <RunChip index={i} label={run.label} />
-              </button>
-            );
-          })}
-        </div>
-        {!chartData.hasSpeed && (
-          <p className="text-[0.6875rem] text-muted-foreground text-center mt-2">
-            {msg("auto.app.compare.page.7")}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+const PerformanceChart = dynamic(
+  () => import("./PerformanceChart").then((m) => m.PerformanceChart),
+  { ssr: false, loading: () => <div className="h-[280px]" /> },
+);
 
 function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number | null }) {
   const compact = runs.length >= COMPARE_COMPACT_THRESHOLD;
@@ -647,8 +483,8 @@ function ScoresTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
     <Card className="overflow-hidden">
       <CardContent className="p-0">
         {compact && <CompactRunsLegend runs={runs} />}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[500px] text-sm border-separate border-spacing-0">
+        <div className="table-scroll">
+          <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <RunsHeaderRow
                 runs={runs}
@@ -739,8 +575,8 @@ function ConfigTable({ runs, winnerIdx }: { runs: RunInfo[]; winnerIdx: number |
     <Card className="overflow-hidden">
       <CardContent className="p-0">
         {compact && <CompactRunsLegend runs={runs} />}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[500px] text-sm border-separate border-spacing-0">
+        <div className="table-scroll">
+          <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <RunsHeaderRow
                 runs={runs}
@@ -1174,13 +1010,7 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
   }, []);
 
   if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-6">
-          <p className="text-xs text-muted-foreground">{msg("auto.app.compare.page.14")}</p>
-        </CardContent>
-      </Card>
-    );
+    return <PerExampleTableSkeleton runCount={runs.length} compact={compact} />;
   }
 
   if (!byRun || indices.length === 0) {
@@ -1248,7 +1078,7 @@ function PerExampleSection({ runs }: { runs: RunInfo[] }) {
             <p className="text-sm text-muted-foreground">{msg("auto.app.compare.page.16")}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm border-separate border-spacing-0">
               <thead>
                 <tr>

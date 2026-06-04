@@ -168,10 +168,7 @@ export function ModelDetailPanel({
 
       <TabsContent value="overview" className="space-y-4 mt-4">
         <FadeIn>
-          <div
-            className="grid gap-2.5"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(120px, 100%), 1fr))" }}
-          >
+          <div className="flex flex-wrap gap-2.5">
             <ProbeInfoCard
               icon={<TrendingUp className="size-3.5" />}
               label={signalLabel}
@@ -566,7 +563,7 @@ function ProbeInfoCard({
   value: React.ReactNode;
 }) {
   return (
-    <div className="group rounded-lg border border-[#E3DCD0] bg-[#FBF9F4] px-3.5 py-3 transition-[border-color,box-shadow] duration-200 hover:border-[#C8A882]/55 hover:shadow-[0_2px_8px_-2px_rgba(124,99,80,0.1)]">
+    <div className="group min-w-0 flex-[1_1_7.5rem] rounded-lg border border-[#E3DCD0] bg-[#FBF9F4] px-3.5 py-3 transition-[border-color,box-shadow] duration-200 hover:border-[#C8A882]/55 hover:shadow-[0_2px_8px_-2px_rgba(124,99,80,0.1)]">
       <div className="flex items-center gap-1.5 mb-1.5">
         <span
           className="shrink-0 inline-flex items-center justify-center size-3.5 text-[#A89680] transition-colors duration-200 group-hover:text-[#7C6350]"

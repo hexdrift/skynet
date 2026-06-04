@@ -46,11 +46,17 @@ export interface ValsetRow {
   outputs: Record<string, string>;
 }
 
+// A candidate prediction is either a flat field→value map (current runs, where
+// nested fields like the agent's history arrive as JSON strings — the same
+// shape as ValsetRow.outputs, so each value renders structurally) or a plain
+// string (legacy runs / non-Prediction metric returns).
+export type PredictionValue = string | Record<string, string>;
+
 export interface MinibatchEntry {
   example_id: string;
   score: number;
   feedback: string;
-  prediction: string;
+  prediction: PredictionValue;
   sequence: number;
   // GEPA iteration the reflective propose() was on when this feedback fired.
   // null when the event predates iteration plumbing or fires outside a
@@ -60,7 +66,7 @@ export interface MinibatchEntry {
 
 export interface ValsetPrediction {
   example_id: string;
-  prediction: string;
+  prediction: PredictionValue;
   score: number;
 }
 

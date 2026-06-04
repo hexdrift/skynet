@@ -23,6 +23,21 @@ export const submitMessages = {
   "submit.validation.dataset_before_code": `נא להעלות ${TERMS.dataset} לפני אימות הקוד`,
   "submit.submit_failed": `שגיאה בשליחת ה${TERMS.optimization}`,
   "submit.code_validation_failed": "שגיאה באימות הקוד",
+  "submit.validation.mcp_url_required": "נא להזין כתובת MCP עבור מקור הכלים",
+  "submit.validation.react_replay_roles_required":
+    "עבור ReAct יש לסמן עמודות לתפקידי ההקלטה: צעדי כלים מוקלטים, כלים מותרים, סכמות כלים, מצב הטופס לפני ומצב הטופס אחרי",
+
+  "submit.react.section_title": "תצורת סוכן ReAct",
+  "submit.react.tool_source_label": "מקור כלים",
+  "submit.react.mcp_url_label": "כתובת MCP",
+  "submit.react.auth_label": "כותרת אימות (אופציונלי)",
+  "submit.react.tool_filter_label": "סינון כלים (אופציונלי)",
+  "submit.react.tool_filter_placeholder": "search_web, read_file, run_query",
+  "submit.react.role_steps": "צעדי כלים מוקלטים",
+  "submit.react.role_allowed_tools": "כלים מותרים",
+  "submit.react.role_tool_schema_hashes": "סכמות כלים",
+  "submit.react.role_state_before": "מצב הטופס לפני",
+  "submit.react.role_state_after": "מצב הטופס אחרי",
   "submit.dataset.file_error": "שגיאה בטעינת הקובץ",
   "submit.clone.success": "הגדרות שוכפלו בהצלחה",
   "submit.clone.failed": "שגיאה בטעינת הגדרות לשכפול",
@@ -51,7 +66,10 @@ export const submitMessages = {
   "submit.code.agent.tool.metric.title": `עריכת ${TERMS.metric}`,
   "auto.features.submit.components.modelconfigmodal.1": "כל המודלים הזמינים",
   "auto.features.submit.components.modelconfigmodal.2": "הגדרות אחרונות",
-  "auto.features.submit.components.modelconfigmodal.recent.remove": "הסרת {model} מההגדרות האחרונות",
+  "auto.features.submit.components.modelconfigmodal.recent.remove":
+    "הסרת {model} מההגדרות האחרונות",
+  "auto.features.submit.components.modelconfigmodal.section.connection": "חיבור מותאם אישית (אופציונלי)",
+  "auto.features.submit.components.modelconfigmodal.section.parameters": "פרמטרים",
   "auto.features.submit.components.modelconfigmodal.4": "מודל",
   "auto.features.submit.components.modelconfigmodal.5": "טמפרטורה",
   "auto.features.submit.components.modelconfigmodal.6": "Top P",
@@ -121,7 +139,8 @@ export const submitMessages = {
   "auto.features.submit.components.steps.codestep.6": "הושלם",
   "auto.features.submit.components.steps.codestep.7": "אוטומטי",
   "auto.features.submit.components.steps.codestep.8": "ידני",
-  "auto.features.submit.components.steps.datasetstep.1": "העלו קובץ נתונים והגדירו את מיפוי העמודות",
+  "auto.features.submit.components.steps.datasetstep.1":
+    "העלו קובץ נתונים והגדירו את מיפוי העמודות",
   "auto.features.submit.components.steps.datasetstep.2": " שורות · ",
   "auto.features.submit.components.steps.datasetstep.3": " עמודות",
   "auto.features.submit.components.steps.datasetstep.4": "מיפוי עמודות",
@@ -134,9 +153,7 @@ export const submitMessages = {
   "auto.features.submit.components.steps.modelstep.6": "מודלי שפה",
   "auto.features.submit.components.steps.modelstep.7": "בחרו את המודלים שיריצו את ה",
   "auto.features.submit.components.steps.modelstep.8": "Base URL",
-  "auto.features.submit.components.steps.modelstep.9": "ניתן להשאיר ריק — יוגדר אוטומטית לפי הספק",
   "auto.features.submit.components.steps.modelstep.10": "API key",
-  "auto.features.submit.components.steps.modelstep.11": "אופציונלי — אם תשאיר ריק, ה־API key יילקח ממשתנה סביבה. הוא לא נשמר אצלנו ונמחק מהטופס אחרי השליחה.",
   "auto.features.submit.components.steps.modelstep.12":
     "חיבור לא מוצפן — API key יישלח ללא הצפנה. השתמשו ב-HTTPS בסביבת ייצור.",
   "auto.features.submit.components.steps.modelstep.13": "מודלים",
@@ -231,12 +248,14 @@ export const submitMessages = {
   "auto.features.submit.components.steps.datasetstep.literal.3": "פלט",
   "auto.features.submit.components.steps.datasetstep.literal.4": "התעלם",
   "auto.features.submit.components.modelconfigmodal.literal.1": "הגדרות מודל",
-  "auto.features.submit.components.modelconfigmodal.literal.2": "אין מודלים זמינים — הוסיפו מפתח API",
+  "auto.features.submit.components.modelconfigmodal.literal.2":
+    "אין מודלים זמינים — הוסיפו מפתח API",
   "auto.features.submit.components.modelconfigmodal.literal.3": "בחרו מודל…",
   "auto.features.submit.components.modelconfigmodal.literal.4": "נמוכה",
   "auto.features.submit.components.modelconfigmodal.literal.5": "בינונית",
   "auto.features.submit.components.modelconfigmodal.literal.6": "גבוהה",
-  "auto.features.submit.components.steps.codestep.literal.1": "הגדירו קודם את תפקידי העמודות (קלט ופלט)",
+  "auto.features.submit.components.steps.codestep.literal.1":
+    "הגדירו קודם את תפקידי העמודות (קלט ופלט)",
   "auto.features.submit.components.steps.codestep.literal.2": "כתיבת הקוד ידנית",
   "auto.features.submit.components.steps.codeagentpanel.literal.1": "בקש שינוי בקוד…",
   "auto.features.submit.components.steps.codeagentpanel.literal.2":
@@ -268,7 +287,7 @@ export const submitMessages = {
   "auto.features.submit.components.steps.summarystep.literal.15": "לא",
   "auto.features.submit.components.modelconfigmodal.template.1":
     "ירוץ {p1} לכל {p2} בקטלוג · {p3} כרגע",
-  "auto.features.submit.components.modelpicker.template.1": "מהשרת ({p1})",
+  "auto.features.submit.components.modelpicker.template.1": "מודלים שהתגלו בשרת שלך",
   "auto.features.submit.components.modelpicker.template.2": "{p1} · {p2}",
   "auto.features.submit.components.modelprobedialog.template.1": "חסר קוד {p1}",
   "auto.features.submit.components.modelprobedialog.template.2":

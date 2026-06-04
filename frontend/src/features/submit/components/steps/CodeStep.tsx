@@ -82,7 +82,7 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
               />
             </div>
           )}
-          <div className="flex flex-col self-stretch">
+          <div className="flex min-w-0 flex-col self-stretch">
             <div className="shrink-0 border-b border-border/30 px-6 py-3">
               <h3 className="inline-flex text-lg font-semibold tracking-tight text-foreground">
                 <HelpTip
