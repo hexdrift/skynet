@@ -20,7 +20,7 @@ from .analytics import (
     OptimizerStatsItem,
     OptimizerStatsResponse,
 )
-from .artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact
+from .artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact, ReactOverlay
 from .common import (
     ColumnMapping,
     ModelConfig,
@@ -60,7 +60,14 @@ from .optimizations import (
 )
 from .results import GridSearchResponse, LMActivity, LMStageStats, PairResult, RunResponse
 from .serve import ServeInfoResponse, ServeRequest, ServeResponse
-from .submissions import GridSearchRequest, OptimizationSubmissionResponse, RunRequest
+from .submissions import (
+    GridSearchRequest,
+    OptimizationSubmissionResponse,
+    ReplayMapping,
+    Reward,
+    RunRequest,
+    ToolSource,
+)
 from .telemetry import JobLogEntry, ProgressEvent
 from .validation import ValidateCodeRequest, ValidateCodeResponse
 
@@ -112,6 +119,9 @@ __all__ = [
     "ProgramArtifactResponse",
     "ProgressEvent",
     "QueueStatusResponse",
+    "ReactOverlay",
+    "ReplayMapping",
+    "Reward",
     "RunRequest",
     "RunResponse",
     "ServeInfoResponse",
@@ -121,6 +131,7 @@ __all__ = [
     "SplitFractions",
     "SplitPlan",
     "TargetColumnProfile",
+    "ToolSource",
     "ValidateCodeRequest",
     "ValidateCodeResponse",
     "ValidateDatasetRequest",

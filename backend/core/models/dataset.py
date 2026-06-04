@@ -99,8 +99,15 @@ class SplitPlan(BaseModel):
 class ProfileDatasetRequest(BaseModel):
     """Inbound body for ``POST /datasets/profile``."""
 
-    dataset: list[dict[str, Any]]
+    dataset: list[dict[str, Any]] = Field(default_factory=list)
     column_mapping: ColumnMapping
+    staged_dataset_id: str | None = Field(
+        default=None,
+        description=(
+            "Opaque id from ``POST /datasets/stage-for-agent``. Pass instead of "
+            "an inline ``dataset`` to profile staged rows; the backend rehydrates them."
+        ),
+    )
     seed: int | None = Field(
         default=None,
         description="Optional RNG seed for reproducibility; a random one is chosen if omitted.",

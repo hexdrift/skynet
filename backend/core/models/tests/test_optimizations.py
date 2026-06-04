@@ -71,6 +71,35 @@ def test_optimization_status_response_persists_column_mapping() -> None:
     assert resp.column_mapping.inputs == {"q": "q"}
 
 
+def test_summary_response_coerces_legacy_list_column_mapping() -> None:
+    """A legacy list-shaped column_mapping coerces to identity dicts, not a failure.
+
+    Regression: older optimizations persisted ``inputs``/``outputs`` as bare
+    lists of column names, which failed dict validation and took down the
+    entire ``list_jobs`` listing — one malformed row 500'd the whole response.
+    """
+    payload = _required_base_fields()
+    payload["column_mapping"] = {"inputs": ["ticket_text"], "outputs": ["category"]}
+
+    resp = OptimizationSummaryResponse.model_validate(payload)
+
+    assert resp.column_mapping is not None
+    assert resp.column_mapping.inputs == {"ticket_text": "ticket_text"}
+    assert resp.column_mapping.outputs == {"category": "category"}
+
+
+def test_summary_response_keeps_dict_column_mapping_untouched() -> None:
+    """A well-formed dict column_mapping is passed through unchanged by the coercion."""
+    payload = _required_base_fields()
+    payload["column_mapping"] = {"inputs": {"question": "q"}, "outputs": {"answer": "a"}}
+
+    resp = OptimizationSummaryResponse.model_validate(payload)
+
+    assert resp.column_mapping is not None
+    assert resp.column_mapping.inputs == {"question": "q"}
+    assert resp.column_mapping.outputs == {"answer": "a"}
+
+
 def test_optimization_summary_response_metric_fields_default_none() -> None:
     """Verify OptimizationSummaryResponse defaults metric fields to None."""
     resp = OptimizationSummaryResponse.model_validate(_required_base_fields())

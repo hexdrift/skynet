@@ -3,11 +3,45 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .common import ColumnMapping, ModelConfig, OptimizationStatus, OptimizationType, SplitFractions
+
+
+# Where a react run sources its tool roster: a live MCP endpoint or a snapshot
+# carried alongside the dataset.
+class ToolSource(BaseModel):
+    kind: Literal["live_mcp", "dataset_snapshot"]
+    mcp_url: str | None = None
+    mcp_auth_header: str | None = None
+    tool_filter: list[str] | None = None
+
+
+# Maps dataset columns onto the replay roles a react rollout needs (recorded
+# tool-call steps, the allowed-tool roster, per-tool schema hashes, and the
+# wizard-state snapshots). ``state_before``/``state_after`` are required: the
+# gate-progress signal a metric scores against is the delta between them, so an
+# unmapped snapshot would silently collapse that signal. ``chat_history`` stays
+# optional context.
+class ReplayMapping(BaseModel):
+    steps: str
+    allowed_tools: str
+    tool_schema_hashes: str
+    state_before: str
+    state_after: str
+    chat_history: str | None = None
+
+
+# Reward configuration for a react run: a built-in preset plus the grounding
+# weight applied to tool-grounding signals. ``match_mode`` controls replay
+# step-matching: "exact" keeps the byte-exact (tool, args) contract; "tool_name"
+# advances on a tool-name match so unreproducible free-text args still score.
+class Reward(BaseModel):
+    preset: Literal["general", "generalist", "replay_match"] = "general"
+    grounding_weight: float = 0.05
+    match_mode: Literal["exact", "tool_name"] = "exact"
 
 
 class _OptimizationRequestBase(BaseModel):
@@ -34,7 +68,7 @@ class _OptimizationRequestBase(BaseModel):
     module_name: str
     module_kwargs: dict[str, Any] = Field(default_factory=dict)
     signature_code: str
-    metric_code: str
+    metric_code: str | None = None
     optimizer_name: str
     optimizer_kwargs: dict[str, Any] = Field(default_factory=dict)
     compile_kwargs: dict[str, Any] = Field(default_factory=dict)
@@ -53,13 +87,21 @@ class _OptimizationRequestBase(BaseModel):
         ),
     )
     column_mapping: ColumnMapping
+    column_order: list[str] | None = Field(
+        default=None,
+        description=(
+            "Dataset column names in the order the user arranged them at submit time. "
+            "Persisted as an array because JSONB does not preserve object key order — a "
+            "clone reads this back to restore the original column order in the UI."
+        ),
+    )
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
     seed: int | None = None
     dataset_filename: str | None = Field(default=None, description="Original dataset file name.")
     is_private: bool = Field(
         default=False,
-        description="When true, the optimization is excluded from the public explore map.",
+        description="When true, the optimization is excluded from the public explore page.",
     )
 
     @model_validator(mode="after")
@@ -88,6 +130,27 @@ class RunRequest(_OptimizationRequestBase):
     model_settings: ModelConfig = Field(alias="model_config")
     reflection_model_settings: ModelConfig | None = Field(default=None, alias="reflection_model_config")
     task_model_settings: ModelConfig | None = Field(default=None, alias="task_model_config")
+    tool_source: ToolSource | None = None
+    replay_mapping: ReplayMapping | None = None
+    reward: Reward | None = None
+
+    @model_validator(mode="after")
+    def _require_metric_code(self) -> RunRequest:
+        """Re-require ``metric_code`` for every run, including react.
+
+        ``metric_code`` is declared optional on the base only so the field can be
+        shared; every run must supply it. React runs author a metric over the
+        ``(example, rollout)`` pair instead of selecting a built-in reward preset.
+
+        Returns:
+            The validated request instance.
+
+        Raises:
+            ValueError: When ``metric_code`` is missing.
+        """
+        if self.metric_code is None:
+            raise ValueError("metric_code is required.")
+        return self
 
 
 class GridSearchRequest(_OptimizationRequestBase):
@@ -122,11 +185,13 @@ class GridSearchRequest(_OptimizationRequestBase):
             The validated request instance.
 
         Raises:
-            ValueError: When ``generation_models`` is empty and
-                ``use_all_available_generation_models`` is false, or when
-                ``reflection_models`` is empty and
+            ValueError: When ``metric_code`` is missing, when ``generation_models``
+                is empty and ``use_all_available_generation_models`` is false, or
+                when ``reflection_models`` is empty and
                 ``use_all_available_reflection_models`` is false.
         """
+        if self.metric_code is None:
+            raise ValueError("metric_code is required.")
         if not self.use_all_available_generation_models and not self.generation_models:
             raise ValueError("At least one generation model is required.")
         if not self.use_all_available_reflection_models and not self.reflection_models:

@@ -69,14 +69,15 @@ def test_drain_returns_none_result_and_none_error_for_empty_queue(
     worker: BackgroundWorker,
     store: FakeJobStore,
 ) -> None:
-    """An empty queue yields ``(None, None)``."""
+    """An empty queue yields ``(None, None, 0)``."""
     store.seed_job("opt-1")
     q = _make_fake_queue()
 
-    result, error = worker._drain_subprocess_events("opt-1", q)
+    result, error, drained = worker._drain_subprocess_events("opt-1", q)
 
     assert result is None
     assert error is None
+    assert drained == 0
 
 
 def test_drain_routes_progress_event_to_record_progress(
@@ -176,7 +177,7 @@ def test_drain_returns_result_payload_from_result_event(
     payload = {"baseline_test_metric": 0.5, "optimized_test_metric": 0.7}
     q = _make_fake_queue({"type": EVENT_RESULT, "result": payload})
 
-    result, error = worker._drain_subprocess_events("opt-1", q)
+    result, error, _ = worker._drain_subprocess_events("opt-1", q)
 
     assert result == payload
     assert error is None
@@ -190,7 +191,7 @@ def test_drain_ignores_result_event_when_result_is_not_dict(
     store.seed_job("opt-1")
     q = _make_fake_queue({"type": EVENT_RESULT, "result": "not-a-dict"})
 
-    result, _error = worker._drain_subprocess_events("opt-1", q)
+    result, _error, _ = worker._drain_subprocess_events("opt-1", q)
 
     assert result is None
 
@@ -203,7 +204,7 @@ def test_drain_returns_error_payload_from_error_event(
     store.seed_job("opt-1")
     q = _make_fake_queue({"type": EVENT_ERROR, "error": "boom", "traceback": "Traceback..."})
 
-    result, error = worker._drain_subprocess_events("opt-1", q)
+    result, error, _ = worker._drain_subprocess_events("opt-1", q)
 
     assert result is None
     assert error is not None
@@ -223,10 +224,11 @@ def test_drain_processes_all_events_in_a_mixed_sequence(
         {"type": EVENT_RESULT, "result": {"val": 99}},
     )
 
-    result, error = worker._drain_subprocess_events("opt-1", q)
+    result, error, drained = worker._drain_subprocess_events("opt-1", q)
 
     assert result == {"val": 99}
     assert error is None
+    assert drained == 3
     assert len(store.record_progress_calls) == 1
     assert len(store.append_log_calls) == 1
 
@@ -242,7 +244,7 @@ def test_drain_last_result_event_wins_when_multiple_present(
         {"type": EVENT_RESULT, "result": {"val": 2}},
     )
 
-    result, _ = worker._drain_subprocess_events("opt-1", q)
+    result, _, _ = worker._drain_subprocess_events("opt-1", q)
 
     assert result == {"val": 2}
 
@@ -255,7 +257,7 @@ def test_drain_silently_ignores_unknown_event_types(
     store.seed_job("opt-1")
     q = _make_fake_queue({"type": "totally_unknown", "data": "ignored"})
 
-    result, error = worker._drain_subprocess_events("opt-1", q)
+    result, error, _ = worker._drain_subprocess_events("opt-1", q)
 
     assert result is None
     assert error is None

@@ -89,6 +89,17 @@ class FakeJobStore:
             raise KeyError(optimization_id)
         return dict(self._jobs[optimization_id])
 
+    def get_job_status_fields(self, optimization_id: str) -> dict[str, Any]:
+        """Return only the SSE-polling projection (status / message / latest_metrics)."""
+        if optimization_id not in self._jobs:
+            raise KeyError(optimization_id)
+        job = self._jobs[optimization_id]
+        return {
+            "status": job.get("status"),
+            "message": job.get("message"),
+            "latest_metrics": job.get("latest_metrics") or {},
+        }
+
     def job_exists(self, optimization_id: str) -> bool:
         """Return ``True`` if the job has been seeded or created."""
         return optimization_id in self._jobs
@@ -129,9 +140,9 @@ class FakeJobStore:
             }
         )
 
-    def get_progress_events(self, optimization_id: str) -> list[dict[str, Any]]:
-        """Return a copy of the progress event list for the job."""
-        return list(self._progress.get(optimization_id, []))
+    def get_progress_events(self, optimization_id: str, *, since: int = 0) -> list[dict[str, Any]]:
+        """Return the progress event list for the job, skipping ``since`` leading rows."""
+        return list(self._progress.get(optimization_id, []))[since:]
 
     def get_progress_count(self, optimization_id: str) -> int:
         """Return the number of progress events stored for the job."""

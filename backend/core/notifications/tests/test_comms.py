@@ -1,232 +1,116 @@
-"""Tests for the ``core.notifications.comms`` webhook transport."""
+"""Tests for the ``core.notifications.comms`` Outlook transport."""
 
 from __future__ import annotations
 
 import pytest
-import requests  # type: ignore[import-untyped]
 
 import core.notifications.comms as comms_module
-from core.notifications.comms import send_message
+from core.notifications.comms import resolve_email, send_mail
 
-from .mocks import (
-    FakeFailingResponse,
-    FakeHTTPResponse,
-    capture_requests_post,
-    disable_channel,
-    enable_channel,
-)
+from .mocks import FakeWin32
 
 
-def test_send_message_returns_false_when_not_enabled(
+def test_resolve_email_returns_none_until_sso() -> None:
+    """Recipient resolution is a no-op seam until the SSO directory is wired."""
+    assert resolve_email("alice") is None
+
+
+def test_send_mail_returns_false_when_win32_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Disabled channel returns ``False`` without calling out to HTTP."""
-    disable_channel(monkeypatch, comms_module)
+    """No Outlook/win32com (non-Windows dev host) yields a logged ``False``."""
+    monkeypatch.setattr(comms_module, "win32", None)
 
-    result = send_message("hello")
-
-    assert result is False
+    assert send_mail("alice@corp.example.com", "subject", "<p>body</p>") is False
 
 
-def test_send_message_logs_truncated_debug_when_not_enabled(
+def test_send_mail_logs_skip_when_win32_unavailable(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Disabled channel debug log includes only the first 80 message chars."""
-    disable_channel(monkeypatch, comms_module)
-    message = "x" * 120
-
-    with caplog.at_level("DEBUG", logger="core.notifications.comms"):
-        result = send_message(message)
-
-    assert result is False
-    assert "x" * 80 in caplog.text
-    assert "x" * 120 not in caplog.text
-
-
-def test_send_message_does_not_call_requests_when_not_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Disabled channel never invokes ``requests.post``."""
-    disable_channel(monkeypatch, comms_module)
-    captured, fn = capture_requests_post()
-    monkeypatch.setattr("requests.post", fn)
-
-    send_message("hello")
-
-    assert captured == []
-
-
-def test_send_message_returns_true_on_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A successful webhook delivery yields ``True``."""
-    enable_channel(monkeypatch, comms_module)
-    monkeypatch.setattr("requests.post", lambda *a, **kw: FakeHTTPResponse())
-
-    result = send_message("hello")
-
-    assert result is True
-
-
-def test_send_message_logs_target_on_success(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Successful delivery logs the target channel."""
-    enable_channel(monkeypatch, comms_module)
-    monkeypatch.setattr("requests.post", lambda *a, **kw: FakeHTTPResponse())
+    """The no-Outlook path logs the skipped recipient at INFO."""
+    monkeypatch.setattr(comms_module, "win32", None)
 
     with caplog.at_level("INFO", logger="core.notifications.comms"):
-        result = send_message("hello", channel="#alerts")
+        send_mail("alice@corp.example.com", "subject", "<p>body</p>")
+
+    assert "skipping mail to alice@corp.example.com" in caplog.text
+
+
+def test_send_mail_returns_true_on_send(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A resolvable recipient is composed and sent, returning ``True``."""
+    fake = FakeWin32(resolved=True)
+    monkeypatch.setattr(comms_module, "win32", fake)
+
+    result = send_mail("alice@corp.example.com", "hello", "<p>hi</p>")
 
     assert result is True
-    assert "Comms message sent to #alerts" in caplog.text
+    assert fake.app.item.sent is True
 
 
-def test_send_message_posts_to_webhook_url(
+def test_send_mail_composes_subject_recipient_and_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The configured ``WEBHOOK_URL`` is the target of the POST."""
-    enable_channel(monkeypatch, comms_module)
-    captured, fn = capture_requests_post()
-    monkeypatch.setattr("requests.post", fn)
+    """Subject, HTML body, and recipient are set on the Outlook mail item."""
+    fake = FakeWin32(resolved=True)
+    monkeypatch.setattr(comms_module, "win32", fake)
 
-    send_message("hello")
+    send_mail("alice@corp.example.com", "hello", "<p>hi</p>")
 
-    assert captured[0][0] == "https://example.com/hook"
+    item = fake.app.item
+    assert item.Subject == "hello"
+    assert item.HTMLBody == "<p>hi</p>"
+    assert item.Recipients.added == ["alice@corp.example.com"]
+    assert fake.dispatched == ["Outlook.Application"]
 
 
-def test_send_message_payload_contains_text(
+def test_send_mail_returns_false_when_recipient_unresolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The JSON body contains the caller-provided ``text`` field."""
-    enable_channel(monkeypatch, comms_module)
-    captured, fn = capture_requests_post()
-    monkeypatch.setattr("requests.post", fn)
+    """An unresolved GAL recipient is skipped (no send) and yields ``False``."""
+    fake = FakeWin32(resolved=False)
+    monkeypatch.setattr(comms_module, "win32", fake)
 
-    send_message("my message text")
-
-    assert captured[0][1].get("json", {})["text"] == "my message text"
-
-
-def test_send_message_uses_default_channel_when_none_passed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``channel=None`` falls back to the module-level default channel."""
-    enable_channel(monkeypatch, comms_module)
-    monkeypatch.setattr(comms_module, "CHANNEL", "#my-channel")
-    captured, fn = capture_requests_post()
-    monkeypatch.setattr("requests.post", fn)
-
-    send_message("hello", channel=None)
-
-    assert captured[0][1].get("json", {})["channel"] == "#my-channel"
-
-
-def test_send_message_uses_explicit_channel_when_provided(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An explicit ``channel`` argument overrides the default."""
-    enable_channel(monkeypatch, comms_module)
-    monkeypatch.setattr(comms_module, "CHANNEL", "#default")
-    captured, fn = capture_requests_post()
-    monkeypatch.setattr("requests.post", fn)
-
-    send_message("hello", channel="#override")
-
-    assert captured[0][1].get("json", {})["channel"] == "#override"
-
-
-def test_send_message_uses_10s_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The webhook POST is issued with a 10-second timeout."""
-    enable_channel(monkeypatch, comms_module)
-    captured, fn = capture_requests_post()
-    monkeypatch.setattr("requests.post", fn)
-
-    send_message("hello")
-
-    assert captured[0][1]["timeout"] == 10
-
-
-def test_send_message_returns_false_on_http_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A 5xx response is swallowed and surfaces as ``False``."""
-    enable_channel(monkeypatch, comms_module)
-    monkeypatch.setattr("requests.post", lambda *a, **kw: FakeFailingResponse())
-
-    result = send_message("hello")
+    result = send_mail("ghost@corp.example.com", "hello", "<p>hi</p>")
 
     assert result is False
+    assert fake.app.item.sent is False
 
 
-def test_send_message_logs_warning_on_http_error(
+def test_send_mail_logs_warning_when_recipient_unresolved(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Failed delivery logs a warning with the transport error."""
-    enable_channel(monkeypatch, comms_module)
-    monkeypatch.setattr("requests.post", lambda *a, **kw: FakeFailingResponse())
+    """An unresolved recipient logs a warning naming the address."""
+    fake = FakeWin32(resolved=False)
+    monkeypatch.setattr(comms_module, "win32", fake)
 
     with caplog.at_level("WARNING", logger="core.notifications.comms"):
-        result = send_message("hello")
+        send_mail("ghost@corp.example.com", "hello", "<p>hi</p>")
 
-    assert result is False
-    assert "Failed to send comms message: 500 Server Error" in caplog.text
+    assert "could not resolve recipient" in caplog.text
 
 
-def test_send_message_returns_false_on_connection_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A connection error is swallowed and surfaces as ``False``."""
-    enable_channel(monkeypatch, comms_module)
+def test_send_mail_returns_false_on_com_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A COM failure during Dispatch is swallowed and surfaces as ``False``."""
+    fake = FakeWin32(dispatch_error=RuntimeError("COM boom"))
+    monkeypatch.setattr(comms_module, "win32", fake)
 
-    def fake_post(*args, **kwargs):
-        """Raise ``requests.ConnectionError`` to simulate a network failure."""
-        raise requests.ConnectionError("unreachable")
-
-    monkeypatch.setattr("requests.post", fake_post)
-
-    result = send_message("hello")
+    result = send_mail("alice@corp.example.com", "hello", "<p>hi</p>")
 
     assert result is False
 
 
-def test_send_message_propagates_unexpected_exceptions(
+def test_send_mail_logs_warning_on_com_error(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Unexpected programmer errors are not swallowed as transport failures."""
-    enable_channel(monkeypatch, comms_module)
+    """A COM failure logs a warning with the transport error."""
+    fake = FakeWin32(dispatch_error=RuntimeError("COM boom"))
+    monkeypatch.setattr(comms_module, "win32", fake)
 
-    def fake_post(*args, **kwargs):
-        """Raise ``RuntimeError`` to simulate an unexpected transport bug."""
-        raise RuntimeError("unexpected boom")
+    with caplog.at_level("WARNING", logger="core.notifications.comms"):
+        send_mail("alice@corp.example.com", "hello", "<p>hi</p>")
 
-    monkeypatch.setattr("requests.post", fake_post)
-
-    with pytest.raises(RuntimeError, match="unexpected boom"):
-        send_message("hello")
-
-
-def test_send_message_enabled_but_empty_webhook_url_does_not_raise(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Enabled channel with an empty webhook URL is treated as disabled."""
-    enable_channel(monkeypatch, comms_module, webhook="")
-    result = send_message("hello")
-
-    assert result is False
-
-
-def test_send_message_enabled_but_empty_webhook_url_returns_false(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Enabled channel with an empty webhook URL surfaces as ``False``."""
-    enable_channel(monkeypatch, comms_module, webhook="")
-
-    result = send_message("any text")
-
-    assert result is False
+    assert "Failed to send Outlook mail" in caplog.text
+    assert "COM boom" in caplog.text
