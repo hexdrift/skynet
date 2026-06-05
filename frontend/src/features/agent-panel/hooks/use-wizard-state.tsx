@@ -174,14 +174,6 @@ export function WizardStateProvider({ children }: { children: React.ReactNode })
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useWizardState(): WizardStateContextValue {
-  const ctx = React.useContext(Ctx);
-  if (!ctx) {
-    throw new Error("useWizardState must be used within WizardStateProvider");
-  }
-  return ctx;
-}
-
 /** Safe variant — returns null when outside a provider. */
 export function useWizardStateOptional(): WizardStateContextValue | null {
   return React.useContext(Ctx);

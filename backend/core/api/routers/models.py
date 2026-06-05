@@ -621,7 +621,6 @@ def _probe_single_model(
             optimizer_name=optimizer_name,
             optimizer_kwargs=opt_kwargs,
             metric=metric,
-            default_model=model_config,
             reflection_model=reflection_cfg,
         )
         compiled = compile_program(

@@ -123,22 +123,27 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     [setOpen],
   );
 
-  // Auto-minimize whenever the viewport is too narrow to comfortably show
-  // panel + sidebar + main content. Checked on mount and on every change of
-  // the narrow media query (not just the wider→narrower crossing edge) so a
-  // panel that was already open — restored from localStorage, opened
-  // programmatically, or carried across a resize — collapses at <=1023px
-  // regardless of how it got there.
+  // Track the narrow viewport so the panel can render as a full-screen
+  // overlay drawer (rather than a side-by-side aside) at <=1023px. We collapse
+  // only on the wide→narrow *crossing* while open, so a panel docked at the
+  // desktop layout doesn't linger as a stale full-screen sheet after a resize.
+  // Crucially we no longer force-close on every render at narrow width — that
+  // made the panel impossible to open at all on laptops/split-screen.
+  const [isNarrow, setIsNarrow] = React.useState(false);
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia(NARROW_VIEWPORT_QUERY);
-    const enforce = () => {
-      if (mql.matches && open) setOpen(false);
+    let wasNarrow = mql.matches;
+    setIsNarrow(mql.matches);
+    const onChange = () => {
+      const narrow = mql.matches;
+      setIsNarrow(narrow);
+      if (narrow && !wasNarrow) setOpen(false);
+      wasNarrow = narrow;
     };
-    enforce();
-    mql.addEventListener("change", enforce);
-    return () => mql.removeEventListener("change", enforce);
-  }, [open, setOpen]);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [setOpen]);
 
   const wizardCtx = useWizardStateOptional();
   const effectiveWizard: WizardState = (() => {
@@ -551,6 +556,18 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   return (
     <>
       <AnimatePresence>
+        {open && isNarrow && (
+          <motion.div
+            key="generalist-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={closePanel}
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          />
+        )}
         {open && (
           <motion.aside
             key="generalist-panel"
@@ -559,7 +576,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             animate={{ x: 0, opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { x: -24, opacity: 0 }}
             transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-            style={{ width: `min(${width}px, 92vw)` }}
+            style={{ width: isNarrow ? "100vw" : `min(${width}px, 92vw)` }}
             className={cn(
               "fixed start-0 inset-y-0 z-40 flex h-dvh shrink-0",
               "bg-background/95 backdrop-blur-xl border-e border-border/60",
@@ -752,6 +769,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
               className={cn(
                 "absolute top-0 end-0 h-full w-1 cursor-col-resize",
                 "hover:bg-[#C8A882]/40 active:bg-[#C8A882]/60 transition-colors",
+                "max-lg:hidden",
               )}
             />
           </motion.aside>

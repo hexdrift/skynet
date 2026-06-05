@@ -179,6 +179,10 @@ def register_deletion_routes(router: APIRouter, *, job_store) -> None:
         status_code=200,
         summary="Delete many optimizations in a single request",
         tags=["agent"],
+        # A POST that deletes: the verb understates the effect, so author the
+        # destructive hint here (the MCP mount honours it over the method
+        # default). See ``_annotations_for_route`` in ``core/api/mcp_mount.py``.
+        openapi_extra={"x-mcp-annotations": {"destructiveHint": True}},
     )
     def bulk_delete_jobs(body: BulkDeleteRequest, current_user: AuthenticatedUserDep) -> BulkDeleteResponse:
         """Delete a batch of terminal optimizations and report per-id outcomes.

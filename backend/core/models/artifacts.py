@@ -44,6 +44,11 @@ class ReactOverlay(BaseModel):
     # renames the re-sourced canonical tools to these AFTER drift-check + desc/arg
     # overlays. None (the default) preserves pre-rename behavior exactly.
     tool_names: dict[str, str] | None = Field(default=None)
+    # Per-tool approval severity (``info``/``warning``/``destructive``) derived
+    # from the source MCP's tool annotations, ``{tool_name: severity}``. Only
+    # tools whose server stated a hint appear; omitted tools carry no severity so
+    # the UI never fabricates one. Empty by default for pre-severity artifacts.
+    tool_severities: dict[str, str] = Field(default_factory=dict)
 
 
 class ProgramArtifact(BaseModel):

@@ -21,8 +21,6 @@ export const optimizationsMessages = {
   "optimizations.react.chat_stop_aria": "עצרו את השיחה",
   "optimizations.react.chat_retry": "נסו שוב",
   "optimizations.react.api_title": "API של השירות",
-  "optimizations.react.api_desc":
-    "שלחו בקשות API לסוכן ה-ReAct המותאם. נקודת הקצה מחזירה את תשובת הסוכן בזרם SSE.",
   "optimizations.datatab.description": `הנתונים ששימשו ב${TERMS.optimization} — מחולקים ל${TERMS.splitTrain}, ${TERMS.splitVal} ו${TERMS.splitTest}, עם התוצאות לכל דוגמה.`,
   "optimizations.lmactivity.description": `פעילות מודלי השפה לפי שלב — כמה קריאות היו וכמה זמן הן לקחו, ל${TERMS.generationModelShort} ולמודל הרפלקציה בנפרד.`,
 } as const;

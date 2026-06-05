@@ -64,6 +64,7 @@ export const TOOLTIPS = {
   "react.mcp_url": "כתובת שרת ה-MCP שממנו נטענים הכלים של הסוכן",
   "react.auth": "כותרת אימות (Authorization header) לשרת ה-MCP. לא נשמרת בשרת ולא נחשפת לסוכן הצ'אט",
   "react.tool_filter": "הגבלת רשימת הכלים לשמות שצוינו בלבד, מופרדים בפסיקים",
+  "react.optimized_tools": `הכלים שהסוכן (ReAct) מפעיל בלולאה, עם התיאורים והארגומנטים שה${TERMS.optimizer} חידד במהלך ה${TERMS.optimization}`,
 
   "config.section.summary": `ה${TERMS.module}, ה${TERMS.optimizer}, והפרמטרים שנבחרו ל${TERMS.optimizationTypeRun} זו`,
   "config.section.models": `מודלי השפה שהוגדרו — ${TERMS.generationModelShort} לייצור תשובות, רפלקציה לניתוח שגיאות`,
@@ -84,6 +85,8 @@ export const TOOLTIPS = {
   "serve.section_run": `כתובת API וקטעי קוד לשילוב ה${TERMS.program} המשופרת באפליקציה שלכם`,
   "serve.api_url_pair": "כתובת ה-API של הזוג הנבחר",
   "serve.api_url_run": `כתובת ה-API שאליה שולחים בקשות POST עם שדות הקלט כדי לקבל ${TERMS.prediction} מה${TERMS.program} המשופרת`,
+  "serve.api_url_react":
+    "כתובת ה-API שאליה שולחים בקשת POST עם הודעת המשתמש; תשובת סוכן ה-ReAct המותאם משודרת בחזרה בזרם SSE",
   "serve.integration_code": "דוגמאות קוד מוכנות להעתקה",
 
   "submit.depth":

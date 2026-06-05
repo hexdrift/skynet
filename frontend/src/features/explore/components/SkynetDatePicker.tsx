@@ -53,11 +53,6 @@ export function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export function formatDisplayDate(s: string | null | undefined): string | null {
-  const d = parseISODate(s);
-  return d ? DISPLAY_FMT.format(d) : null;
-}
-
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }

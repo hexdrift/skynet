@@ -65,12 +65,8 @@ ENGLISH_MESSAGES: dict[str, str] = {
     "health.workers_dead": "Worker threads are not running.",
     "health.workers_stuck": "Worker threads have been stuck for {seconds} seconds.",
     "notifier.label.error": "error",
-    "notifier.label.model": "model",
-    "notifier.label.module": "module",
-    "notifier.label.optimizer": "optimizer",
     "notifier.label.score": "score",
     "notifier.label.type": "type",
-    "notifier.label.user": "user",
     "notifier.link.details": "Optimization details",
     "notifier.link.follow": "Follow optimization",
     "notifier.link.results": "View results",
@@ -113,7 +109,6 @@ ENGLISH_MESSAGES: dict[str, str] = {
     "serve.no_model_config": "No model config found for the run. Provide model_config_override.",
     "share.cannot_grant_self": "You cannot invite yourself to an optimization you own.",
     "share.cannot_modify_self": "You cannot change or remove your own access.",
-    "share.forbidden": "You do not have permission to manage sharing for this optimization.",
     "share.inference_forbidden": "This share link is view-only; running inference requires being invited.",
     "share.invalid_general_access": "general_access must be one of: {allowed}.",
     "share.invalid_role": "Invalid share role '{role}'. Allowed roles: {allowed}.",
@@ -140,17 +135,6 @@ ENGLISH_MESSAGES: dict[str, str] = {
     "wizard.model_not_json_object": "{field} must be a JSON object.",
     "wizard.model_number_required": "{field}.{key} must be a number.",
     "wizard.optimizer_kwargs_not_object": "optimizer_kwargs must be an object.",
-    "wizard.signature_code_syntax_error": (
-        "signature_code is not valid Python: {error}. The class name must be a "
-        "single identifier without spaces (e.g. QASignature, not 'QA Signature')."
-    ),
-    "wizard.signature_code_no_class": (
-        "signature_code must define at least one class inheriting from dspy.Signature."
-    ),
-    "wizard.metric_code_syntax_error": "metric_code is not valid Python: {error}.",
-    "wizard.metric_code_no_callable": (
-        "metric_code must define a top-level function (def …)."
-    ),
     "wizard.code_via_authoring_only": (
         "{field} cannot be set through update_wizard_state. Signature and "
         "Metric code are authored only via request_code_authoring, which "

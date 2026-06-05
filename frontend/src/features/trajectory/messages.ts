@@ -1,52 +1,29 @@
 // Hebrew UI strings owned by the trajectory feature slice. Edit directly.
 // USER REVIEW MARKER: every string here is end-user-visible Hebrew copy.
 // Term references go through TERMS.* so the glossary stays the single
-// source of truth (e.g. seedCandidate, winningCandidate, paretoFront).
+// source of truth (e.g. winningCandidate).
 
 export const trajectoryMessages = {
   "trajectory.panel.title": "עץ המועמדים",
-  "trajectory.empty.pre_first_iteration": "המועמד הראשון יופיע כאן בקרוב",
-  "trajectory.empty.no_candidates": "לא נוצרו מועמדים בריצה זו",
 
   "trajectory.live.new_candidate": "התקבל מועמד חדש",
 
-  "trajectory.node.seed_label": "התחלה",
   "trajectory.node.winning_label": "מוביל",
-  "trajectory.node.generation_label": "דור {gen}",
 
-  "trajectory.detail.per_example_title": "ציונים לפי דוגמה",
   "trajectory.detail.pareto_title": "דוגמאות האימות",
   "trajectory.detail.pareto_title.explain": "כל ריבוע מייצג דוגמת אימות. ירוק = תשובה נכונה, אדום = תשובה שגויה. לחצו כדי לפתוח את הדוגמה.",
-  "trajectory.detail.pareto_hint": "ריחפו או לחצו על דוגמה כדי לפתוח אותה. לחיצה נוספת תשחרר את הקיבוע.",
   "trajectory.detail.pareto_example_label": "דוגמה {id}, ציון {score}",
   "trajectory.detail.pareto_passed": "{count} עברו מתוך {total}",
-  "trajectory.detail.diff_title": "השוואה להורה",
-  "trajectory.detail.diff_show": "הציגו השוואה",
-  "trajectory.detail.diff_hide": "הציגו את הפרומפט המלא",
   "trajectory.detail.diff_unchanged": "ללא שינוי לעומת ההורה",
-  "trajectory.detail.diff_no_parent": "אין הורה — לא ניתן להציג השוואה",
 
-  "trajectory.drawer.score_line": "{pct}% — {correct} מתוך {total} עברו",
-  "trajectory.drawer.section.scores": "ציונים",
-  "trajectory.drawer.section.scores.explain": "השוואה בין ציון ההורה לציון ההצעה על אותו mini-batch של דוגמאות.",
   "trajectory.drawer.section.minibatch": "משוב על ה-mini-batch",
   "trajectory.drawer.section.minibatch.explain": "mini-batch = תת-קבוצה קטנה של דוגמאות שעליה ההצעה נבחנה לפני שהוחלט אם לאמץ אותה.",
-  "trajectory.drawer.parent.link": "פתחו את ההורה {id}",
   "trajectory.drawer.toggle.aria": "תצוגת הפרומפט",
   "trajectory.drawer.toggle.prompt": "פרומפט",
   "trajectory.drawer.toggle.diff": "השוואה",
-  "trajectory.drawer.rejected.subsample": "mini-batch של {n} דוגמאות",
-  "trajectory.drawer.rejected.parent_score": "ציון ההורה",
-  "trajectory.drawer.rejected.parent_score.explain": "הציון שההורה השיג על אותו mini-batch של דוגמאות.",
-  "trajectory.drawer.rejected.proposal_score": "ציון ההצעה",
-  "trajectory.drawer.rejected.proposal_score.explain": "הציון שההצעה השיגה על אותו mini-batch. כדי שההצעה תאומץ עליה לעלות על ציון ההורה — ציון שווה או נמוך גורם לדחייה.",
   "trajectory.drawer.rejected.prompt_title": "הפרומפט שהוצע ונדחה",
   "trajectory.drawer.rejected.prompt_title.explain": "ההבדל בין פרומפט ההורה לבין הפרומפט שמודל הרפלקציה יצר ושנדחה. שורות בירוק נוספו, שורות באדום הוסרו.",
   "trajectory.drawer.rejected.prompt_unavailable": "טקסט ההצעה לא נשמר בריצה זו",
-  "trajectory.drawer.rejected.peers_title": "הצעות אחרות מאותו הורה שהתקבלו",
-  "trajectory.drawer.rejected.peers_title.explain": "מועמדים אחרים שמודל הרפלקציה יצר מאותו הורה והתקבלו לעץ — הם קיבלו ציון גבוה יותר מההורה ב-mini-batch שלהם.",
-  "trajectory.drawer.rejected.no_peers": "עדיין לא התקבלו הצעות מההורה הזה",
-  "trajectory.drawer.rejected.peer_score": "ציון {score}",
 
   "trajectory.pareto.cell_detail_pending": "תוכן הדוגמה עדיין לא נטען מהשרת",
   "trajectory.pareto.cell.inputs_label": "קלט",
@@ -59,7 +36,6 @@ export const trajectoryMessages = {
   "trajectory.pareto.cell.details_label": "פרטים נוספים",
   "trajectory.pareto.cell.allowed_tools_label": "כלים זמינים",
   "trajectory.minibatch.no_data": "אין משוב mini-batch זמין בשלב זה",
-  "trajectory.minibatch.entry_label": "דוגמה {id} · ציון {score}",
   "trajectory.minibatch.score_label": "ציון",
   "trajectory.minibatch.score_label.explain": "הציון שפונקציית המדידה החזירה על הדוגמה הזו בלבד. ערך גבוה יותר = תשובה טובה יותר לפי פונקציית המדידה. ערכי ביניים מציינים זיכוי חלקי.",
   "trajectory.minibatch.question_label": "השאלה",
@@ -71,37 +47,18 @@ export const trajectoryMessages = {
   "trajectory.minibatch.pass_label": "דוגמה שעברה אימות",
   "trajectory.minibatch.fail_label": "דוגמה שלא עברה אימות",
 
-  "trajectory.ghost.title": "הצעה שנדחתה",
-  "trajectory.ghost.title.explain": "הצעת פרומפט ש־GEPA יצר אך לא אימץ — הציון שלה היה נמוך מההורה על ה-mini-batch, ולכן לא נכנסה לעץ.",
-  "trajectory.ghost.iteration": "סבב {iteration}",
-  "trajectory.ghost.score_line": "ציון ההצעה {proposal} מול ההורה {parent}",
   "trajectory.ghost.legend": "הצעות שנדחו",
 
   "trajectory.node.header.accepted_title": "מועמד {id}",
   "trajectory.node.header.rejected_title": "הצעה שנדחתה",
-  "trajectory.node.header.iteration": "סבב {iteration}",
-  "trajectory.node.header.score_valset": "ציון האימות {score} ({n} דוגמאות)",
-  "trajectory.node.header.score_minibatch": "ציון ה-mini-batch {score} ({n} דוגמאות)",
-  "trajectory.node.header.parent_minibatch": "ההורה קיבל ציון של {score} באותו mini-batch",
   "trajectory.node.header.label.iteration": "סבב",
   "trajectory.node.header.label.score_valset": "ציון האימות",
   "trajectory.node.header.label.score_minibatch": "ציון ההצעה שנדחתה",
   "trajectory.node.header.label.parent_score": "ציון ההורה",
   "trajectory.node.header.sub.examples": "{n} דוגמאות",
 
-  "trajectory.node.section.children": "צאצאים שהתקבלו לעץ",
-  "trajectory.node.section.children.explain": "מועמדים שהתקבלו לעץ כצאצאים ישירים של המועמד הזה.",
-  "trajectory.node.section.no_children": "למועמד הזה עדיין אין צאצאים",
-  "trajectory.node.section.rejected_from_here": "הצעות שנוצרו מהמועמד הזה ונדחו",
-  "trajectory.node.section.rejected_from_here.explain": "הצעות שמודל הרפלקציה יצר כשהמועמד הזה שימש כהורה שלהן, אך ב-mini-batch הן לא קיבלו ציון גבוה משלו.",
-  "trajectory.node.section.no_rejected_from_here": "לא נוצרו הצעות מהמועמד הזה שנדחו",
-  "trajectory.node.section.adopted_from_parent": "הצעות שאומצו מאותו הורה",
-  "trajectory.node.section.adopted_from_parent.explain": "מועמדים אחרים שמודל הרפלקציה יצר מאותו הורה והתקבלו לעץ.",
-  "trajectory.node.section.no_adopted_from_parent": "עדיין לא אומצה אף הצעה מההורה הזה",
   "trajectory.node.section.prompt": "הפרומפט",
   "trajectory.node.section.prompt.explain": "הוראות הסוכן עבור המועמד הזה — הטקסט שמודל הרפלקציה משנה כדי לשפר את הביצועים.",
-  "trajectory.prompt.react.instructions": "הוראות הסוכן",
-  "trajectory.prompt.react.instructions.explain": "טקסט ההוראות המרכזי של הסוכן — זה מה שמודל הרפלקציה מנסח מחדש כדי לשפר את הביצועים.",
   "trajectory.prompt.react.tools": "תיאורי הכלים ({n})",
   "trajectory.prompt.react.tools.explain": "התיאור של כל כלי ושל הארגומנטים שלו, כפי שעודכנו באופטימיזציה. דפדפו בין הכלים כדי לראות את הפירוט המלא.",
   "trajectory.prompt.react.tools_carousel_aria": "דפדוף בין תיאורי הכלים",
@@ -116,17 +73,12 @@ export const trajectoryMessages = {
   "trajectory.chat.recorded_label.explain": "תיעוד שמור של חילופי ההודעות שהוצגו למועמד — לקריאה בלבד, לא שיחה פעילה.",
   "trajectory.chat.recorded_count": "{n} הודעות",
   "trajectory.node.section.score_detail.valset": "ציונים לכל דוגמת אימות",
-  "trajectory.node.kind.accepted": "התקבל",
-  "trajectory.node.kind.rejected": "נדחתה",
 
-  "trajectory.explainer.generation": "מספר הדורות מאז ההתחלה",
   "trajectory.explainer.trajectory": "רצף המועמדים שאומצו לאורך הריצה",
-  "trajectory.explainer.score": "הציון הממוצע בדוגמאות האימות",
 
   "trajectory.controls.zoom_in": "הגדילו",
   "trajectory.controls.zoom_out": "הקטינו",
   "trajectory.controls.zoom_reset": "אפסו תצוגה",
-  "trajectory.controls.fit": "התאמת תצוגה",
   "trajectory.controls.fullscreen_enter": "עברו לתצוגה מלאה",
   "trajectory.controls.fullscreen_exit": "צאו מתצוגה מלאה",
 
@@ -136,7 +88,4 @@ export const trajectoryMessages = {
 
   "trajectory.a11y.tree_label": "עץ המועמדים של האופטימיזציה",
   "trajectory.a11y.node_label": "מועמד {id}, דור {gen}, ציון {score}",
-  "trajectory.a11y.live_region": "התקבל מועמד חדש: {id}, ציון {score}",
 } as const;
-
-export type TrajectoryMessageKey = keyof typeof trajectoryMessages;

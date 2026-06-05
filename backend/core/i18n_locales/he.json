@@ -36,7 +36,6 @@
     "prediction": "תשובה",
     "model": "מודל",
     "provider": "ספק",
-    "winningModel": "מודל מנצח",
     "reflectionModel": "מודל רפלקציה",
     "generationModel": "מודל מג׳נרט",
     "generationModelShort": "מג׳נרט",
@@ -63,13 +62,6 @@
     "pairPlural": "זוגות",
     "candidate": "מועמד",
     "candidatePlural": "מועמדים",
-    "parent": "הורה",
-    "generation": "דור",
-    "trajectory": "מסלול",
-    "paretoFront": "חזית Pareto",
-    "reflection": "רפלקציה",
-    "prompt": "פרומפט",
-    "seedCandidate": "מועמד התחלתי",
     "winningCandidate": "מועמד מוביל",
     "cancellationReason": "בוטלה על ידי המשתמש"
   },
@@ -138,10 +130,6 @@
     "wizard.model_not_json_object": "{field} חייב להיות אובייקט JSON.",
     "wizard.model_name_non_empty_string": "{field}.name חייב להיות מחרוזת לא ריקה.",
     "wizard.model_name_missing_prefix": "ל{field}.name '{name}' חסרה תחילית של ספק. dspy.LM דורש מזהים מלאים כמו 'openai/gpt-4o-mini'. קראו ל-list_models_for_agent והעתיקו את השדה ``name`` כמו שהוא.",
-    "wizard.signature_code_syntax_error": "signature_code אינו Python תקין: {error}. ודאו ששם המחלקה הוא מזהה יחיד ללא רווחים (למשל QASignature ולא 'QA Signature').",
-    "wizard.signature_code_no_class": "signature_code חייב להגדיר מחלקה אחת לפחות שיורשת מ-dspy.Signature.",
-    "wizard.metric_code_syntax_error": "metric_code אינו Python תקין: {error}.",
-    "wizard.metric_code_no_callable": "metric_code חייב להגדיר פונקציה ברמת המודול (def …).",
     "wizard.code_via_authoring_only": "אי אפשר לעדכן את {field} דרך update_wizard_state. את קוד ה-Signature וה-Metric כותבים רק דרך request_code_authoring, שמאמת את התוצאה לפני שהיא נכנסת ל-wizard.",
     "wizard.model_base_url_not_string": "{field}.base_url חייב להיות מחרוזת.",
     "wizard.model_number_required": "{field}.{key} חייב להיות מספר.",
@@ -184,11 +172,7 @@
     "notifier.title.completed": "ה{term.optimization} שלך הושלמה בהצלחה",
     "notifier.title.cancelled": "ה{term.optimization} שלך בוטלה",
     "notifier.title.failed": "ה{term.optimization} שלך נכשלה",
-    "notifier.label.user": "{term.user}",
     "notifier.label.type": "{term.type}",
-    "notifier.label.module": "{term.module}",
-    "notifier.label.optimizer": "{term.optimizer}",
-    "notifier.label.model": "{term.model}",
     "notifier.label.score": "{term.score}",
     "notifier.label.error": "{term.error}",
     "notifier.link.follow": "עברו ל{term.optimization}",
@@ -209,10 +193,7 @@
   "backend": {
     "constants": {
       "cloneNamePrefix": "עותק של",
-      "retryNamePrefix": "הרצה חוזרת של",
-      "gridSearchLabel": "סריקה",
-      "gridSearchLabelDefinite": "הסריקה",
-      "runLabel": "ריצה"
+      "retryNamePrefix": "הרצה חוזרת של"
     },
     "sampleDatasets": {
       "sentiment-he": {

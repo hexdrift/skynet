@@ -127,11 +127,6 @@ prompt:
     - הנחיה
     - הוראה
 
-seedCandidate:
-  en: seed candidate
-  he: מועמד התחלתי
-  note: The original prompt that seeds the optimization (always id "0").
-
 winningCandidate:
   en: winning candidate
   he: מועמד מוביל

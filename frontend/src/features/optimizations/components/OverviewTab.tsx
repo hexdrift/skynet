@@ -351,6 +351,7 @@ function OverviewTabImpl({
           job={job}
           pairIndex={pairIndex}
           previewLayout={trajectoryPreviewLayout}
+          toolSeverities={runResult?.program_artifact?.react_overlay?.tool_severities}
         />
       )}
 

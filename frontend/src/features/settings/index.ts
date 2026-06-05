@@ -10,4 +10,4 @@ export {
   PREF_KEYS,
 } from "./lib/prefs";
 export type { AgentShortcut } from "./lib/prefs";
-export { formatShortcut, matchShortcut, recordShortcut } from "./lib/shortcuts";
+export { formatShortcut, recordShortcut } from "./lib/shortcuts";

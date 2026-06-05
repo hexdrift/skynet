@@ -12,7 +12,6 @@ from typing import Any, Final
 from unittest.mock import MagicMock, patch
 
 REAL_MODULE_NAME = "cot"
-REAL_OPTIMIZER_NAME = "gepa"
 
 _UNSET: Final[object] = object()
 
@@ -28,19 +27,6 @@ def fake_dspy_module() -> Callable[..., Any]:
         return object()
 
     return _module
-
-
-def fake_optimizer_class() -> Callable[..., Any]:
-    """Return a no-op optimizer-shaped factory for resolver tests.
-
-    Returns:
-        A callable that accepts arbitrary kwargs and returns a fresh object.
-    """
-    def _optimizer(**_kwargs: Any) -> object:
-        """Return a placeholder optimizer instance ignoring all kwargs."""
-        return object()
-
-    return _optimizer
 
 
 @contextmanager

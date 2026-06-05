@@ -77,6 +77,12 @@ export interface TutorialHooks {
   /** Open or close the generalist agent panel (left-anchored aside). */
   setGeneralistPanelOpen: (open: boolean) => void;
   /**
+   * Open or close the navigation sidebar drawer. Below 768px the sidebar is
+   * off-canvas, so steps that spotlight it must slide it in first; a no-op on
+   * desktop where the sidebar is permanently docked.
+   */
+  setSidebarOpen: (open: boolean) => void;
+  /**
    * Toggle the advancedMode user preference. The deep-dive tour uses this
    * to surface advanced-only features (like /explore) without the user
    * having to flip the setting first; the prefs page is the canonical
@@ -257,22 +263,6 @@ export function setPendingCompareDemo(jobs: OptimizationStatusResponse[]): void 
 
 export function consumePendingCompareDemo(): OptimizationStatusResponse[] | null {
   return compareDemoSlot.consume();
-}
-
-/**
- * One-shot payload for the optimization-detail page when the tutorial is
- * showcasing grid search. Unlike the single-run demo (which progresses
- * through phases via startDemoSimulation), the grid demo is pre-completed:
- * the detail page just renders the job directly.
- */
-const gridDemoSlot = makeOneShot<OptimizationStatusResponse>();
-
-export function setPendingGridDemo(job: OptimizationStatusResponse): void {
-  gridDemoSlot.set(job);
-}
-
-export function consumePendingGridDemo(): OptimizationStatusResponse | null {
-  return gridDemoSlot.consume();
 }
 
 /**

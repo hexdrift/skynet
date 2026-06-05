@@ -21,6 +21,7 @@ from .core import (
     embed_finished_job,
     purge_orphan_embeddings,
     set_embedding_privacy,
+    set_embedding_task_name,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "purge_orphan_embeddings",
     "queue_conversation_embed",
     "set_embedding_privacy",
+    "set_embedding_task_name",
 ]

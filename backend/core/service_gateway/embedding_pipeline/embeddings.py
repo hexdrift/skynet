@@ -139,10 +139,3 @@ def get_embedder() -> _EmbeddingApiClient:
             if _EMBEDDER_INSTANCE is None:
                 _EMBEDDER_INSTANCE = _EmbeddingApiClient()
     return _EMBEDDER_INSTANCE
-
-
-def reset_embedder_for_tests() -> None:
-    """Drop the cached singleton. Only used by the test suite."""
-    global _EMBEDDER_INSTANCE
-    with _EMBEDDER_LOCK:
-        _EMBEDDER_INSTANCE = None

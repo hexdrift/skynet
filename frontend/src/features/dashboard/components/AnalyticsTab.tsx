@@ -1,6 +1,5 @@
 import { memo, useMemo } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
-import { toast } from "react-toastify";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { AnimatedNumber, StaggerContainer, StaggerItem } from "@/shared/ui/motion";
@@ -108,22 +107,6 @@ function activateOnKey(e: KeyboardEvent, action: () => void) {
     e.preventDefault();
     action();
   }
-}
-
-function fmtPct(n: number | undefined | null): string {
-  if (n == null) return "—";
-  return `${(n > 1 ? n : n * 100).toFixed(1)}%`;
-}
-
-function toPctScale(n: number): number {
-  return Math.abs(n) > 1 ? n : n * 100;
-}
-
-function copyToClipboard(text: string) {
-  void navigator.clipboard
-    .writeText(text)
-    .then(() => toast.success(msg("clipboard.copied_short"), { autoClose: 1000 }))
-    .catch(() => {});
 }
 
 // Rank-shaded ramp for the model-usage bars: the most-used model is darkest

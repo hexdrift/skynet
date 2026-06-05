@@ -32,14 +32,6 @@ export function formatShortcut(s: AgentShortcut): string {
   return parts.join(" + ");
 }
 
-export function matchShortcut(e: KeyboardEvent, s: AgentShortcut): boolean {
-  if (e.ctrlKey !== s.ctrl) return false;
-  if (e.altKey !== s.alt) return false;
-  if (e.shiftKey !== s.shift) return false;
-  if (e.metaKey !== s.meta) return false;
-  return e.key.toLowerCase() === s.key.toLowerCase();
-}
-
 export function recordShortcut(e: KeyboardEvent): AgentShortcut | null {
   if (NON_RECORDABLE.has(e.key)) return null;
   if (!e.ctrlKey && !e.altKey && !e.metaKey) return null;

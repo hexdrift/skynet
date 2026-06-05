@@ -9,7 +9,15 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   displayCandidateId,
   type MinibatchEntry,
@@ -43,6 +51,23 @@ const PARETO_FAIL_BG = "rgba(168, 90, 59, 0.22)";
 
 const DIFF_VIEW_KEY = "skynet:trajectory:prompt-view";
 
+// Per-node map of tool name → optimized description, derived from the selected
+// candidate's own ReAct overlay (see deriveToolDescriptions). Lets the shared
+// tools carousel describe *this* run's tools — any optimized agent, not just the
+// platform's catalogued generalist tools — when rendering an ``allowed_tools``
+// roster. Empty by default, so without a provider the carousel falls back to the
+// static catalog unchanged.
+const ToolDescriptionsContext = createContext<Record<string, string>>({});
+
+// Run-level tool name → approval severity, captured from the source MCP's tool
+// annotations and persisted on the result's ``react_overlay.tool_severities``
+// (see the optimizer's severity capture). Unlike descriptions this is invariant
+// across candidates — severity is a property of the underlying tool, not the
+// optimization step — so the whole drawer shares one map, looked up by name in
+// ReactToolCard. Empty by default, so without a provider ToolHeader falls back
+// to its catalog severity unchanged and never fabricates one.
+const ToolSeveritiesContext = createContext<Record<string, string>>({});
+
 export type DrawerSelection =
   | { kind: "candidate"; node: TrajectoryNode; parent: TrajectoryNode | null }
   | { kind: "rejected"; ghost: RejectedNode; parent: TrajectoryNode | null }
@@ -58,6 +83,9 @@ export interface TrajectoryDrawerProps {
   // example_id → prediction text. Sparse until each candidate's full eval
   // sweep arrives over the wire.
   valsetOutputs: Map<string, Map<string, PredictionValue>>;
+  // Tool name → approval severity from the run's persisted react_overlay, so the
+  // drawer's tool cards show the same captured severity as the Code tab.
+  toolSeverities?: Record<string, string>;
 }
 
 interface NodeView {
@@ -118,6 +146,7 @@ export function TrajectoryDrawer({
   valsetRows,
   minibatch,
   valsetOutputs,
+  toolSeverities,
 }: TrajectoryDrawerProps) {
   if (selection === null) {
     return (
@@ -147,6 +176,7 @@ export function TrajectoryDrawer({
           valsetRows={valsetRows}
           minibatch={minibatch}
           valsetOutputs={valsetOutputs}
+          toolSeverities={toolSeverities}
         />
       </SheetContent>
     </Sheet>
@@ -158,11 +188,13 @@ function NodeBody({
   valsetRows,
   minibatch,
   valsetOutputs,
+  toolSeverities,
 }: {
   view: NodeView;
   valsetRows: ValsetRow[];
   minibatch: MinibatchEntry[];
   valsetOutputs: Map<string, Map<string, PredictionValue>>;
+  toolSeverities?: Record<string, string>;
 }) {
   const [pinnedExampleId, setPinnedExampleId] = useState<string | null>(null);
   const [promptViewMode, setPromptViewMode] = usePromptView();
@@ -172,6 +204,7 @@ function NodeBody({
   }, [view.rawId]);
 
   const promptEntries = useMemo(() => Object.entries(view.prompt), [view.prompt]);
+  const toolDescriptions = useMemo(() => deriveToolDescriptions(view.prompt), [view.prompt]);
   const valsetById = useMemo(() => {
     const m = new Map<string, ValsetRow>();
     for (const row of valsetRows) m.set(row.id, row);
@@ -198,7 +231,8 @@ function NodeBody({
   });
 
   return (
-    <>
+    <ToolSeveritiesContext.Provider value={toolSeverities ?? {}}>
+    <ToolDescriptionsContext.Provider value={toolDescriptions}>
       <SheetHeader className="border-b border-border/30">
         <SheetTitle className="flex items-center gap-2 text-base">
           {view.kind === "rejected" ? (
@@ -292,7 +326,8 @@ function NodeBody({
           <MinibatchPanel entries={minibatch} valsetRows={valsetRows} iteration={view.iteration} />
         </Section>
       </div>
-    </>
+    </ToolDescriptionsContext.Provider>
+    </ToolSeveritiesContext.Provider>
   );
 }
 
@@ -973,6 +1008,7 @@ function FieldRow({ fieldName, value }: { fieldName?: string; value: string }) {
   // own header carries the label, so it breaks out of the bordered field cell
   // rather than sitting boxed (and inset) inside it.
   const chat = useMemo(() => parseChatHistory(value), [value]);
+  const toolDescriptions = useContext(ToolDescriptionsContext);
   if (chat !== null) {
     return <RecordedChatTranscript messages={chat} />;
   }
@@ -1003,6 +1039,7 @@ function FieldRow({ fieldName, value }: { fieldName?: string; value: string }) {
         <div className="rounded border border-[#DDD4C8]/40 bg-background/80 px-1 py-1">
           <ToolsCarousel
             tools={tools}
+            descriptions={toolDescriptions}
             title={msg("trajectory.pareto.cell.allowed_tools_label")}
             className="w-full"
           />
@@ -1372,6 +1409,25 @@ function parseReactOverlay(value: string): ReactOverlay | null {
   return { instructions: obj.react, tools };
 }
 
+// Merge the tool descriptions from every ReAct overlay in a node's prompt into a
+// flat name → description map. This is the run's own optimized copy, so the
+// shared tools carousel can describe an ``allowed_tools`` roster for any agent we
+// optimize rather than only the platform's catalogued tools. First non-empty
+// description per name wins; non-react predictors contribute nothing.
+function deriveToolDescriptions(prompt: Record<string, string>): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const value of Object.values(prompt)) {
+    const overlay = parseReactOverlay(value);
+    if (overlay === null) continue;
+    for (const tool of overlay.tools) {
+      if (tool.desc.length > 0 && map[tool.name] === undefined) {
+        map[tool.name] = tool.desc;
+      }
+    }
+  }
+  return map;
+}
+
 // Flatten one tool's editable text — description + argument descriptions — into
 // the lines the per-tool diff compares. The tool name is the row label, so it's
 // not repeated here. Diffing this surfaces the changes GEPA actually makes and
@@ -1710,12 +1766,14 @@ function ReactToolCard({
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const severities = useContext(ToolSeveritiesContext);
   return (
     // No border of its own: the carousel frame is the card now, so this is just
     // the pinned header over its body (avoids a card-in-card).
     <div>
       <ToolHeader
         toolKey={name}
+        severity={severities[name]}
         trailing={badge}
         className="border-b border-border/30 px-2.5 py-2"
       />

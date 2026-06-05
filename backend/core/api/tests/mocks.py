@@ -8,9 +8,7 @@ the test is asserting against) stay inline in the test — only the generic
 Example:
     >>> from core.api.tests.mocks import (
     ...     fake_background_worker,
-    ...     real_run_response_dict,
     ...     real_grid_response_dict,
-    ...     real_program_artifact_dict,
     ...     make_artifact,
     ...     make_run_result,
     ...     make_grid_job,
@@ -22,12 +20,11 @@ Example:
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 from ...models import (
@@ -75,15 +72,6 @@ REAL_OPTIMIZATION_ID: str = load_fixture("jobs/success_single_gepa.detail.json")
 REAL_USERNAME: str = load_fixture("jobs/success_single_gepa.detail.json")["username"]
 
 
-def real_run_response_dict() -> dict:
-    """Return the ``result`` block from the recorded single-run fixture.
-
-    Returns:
-        A fresh dict that can be mutated by the caller.
-    """
-    return load_fixture("jobs/success_single_gepa.detail.json")["result"]
-
-
 def real_grid_response_dict() -> dict:
     """Return the ``grid_result`` block from the recorded grid-search fixture.
 
@@ -91,39 +79,6 @@ def real_grid_response_dict() -> dict:
         A fresh dict that can be mutated by the caller.
     """
     return load_fixture("jobs/success_grid.detail.json")["grid_result"]
-
-
-def real_program_artifact_dict() -> dict:
-    """Return the ``program_artifact`` block from the single-run fixture.
-
-    Returns:
-        A fresh dict containing the pickled program and optimized prompt.
-    """
-    return load_fixture("jobs/success_single_gepa.detail.json")["result"]["program_artifact"]
-
-
-def real_optimization_status_dict(kind: str) -> dict:
-    """Return a recorded optimization detail document.
-
-    Args:
-        kind: One of ``"success"``, ``"failed"``, ``"cancelled"``, or
-            ``"grid"`` selecting the fixture variant.
-
-    Returns:
-        The parsed fixture document.
-
-    Raises:
-        ValueError: If ``kind`` is not one of the supported values.
-    """
-    mapping = {
-        "success": "jobs/success_single_gepa.detail.json",
-        "failed": "jobs/failed_runtime.detail.json",
-        "cancelled": "jobs/cancelled_mid_run.detail.json",
-        "grid": "jobs/success_grid.detail.json",
-    }
-    if kind not in mapping:
-        raise ValueError(f"Unknown kind {kind!r}; choose from {list(mapping)}")
-    return load_fixture(mapping[kind])
 
 
 def make_artifact(
@@ -512,110 +467,6 @@ class FakeJobStore(_BaseFakeJobStore):
     """Concrete in-memory job store used by router unit tests."""
 
 
-def fake_job_store_with_success_single() -> _BaseFakeJobStore:
-    """Build a fake job store seeded with a single successful run fixture.
-
-    Returns:
-        A fake store containing one job, its logs, and its progress events.
-    """
-    store = _BaseFakeJobStore()
-    detail = load_fixture("jobs/success_single_gepa.detail.json")
-    store.seed_raw(
-        detail["optimization_id"],
-        job={
-            "optimization_id": detail["optimization_id"],
-            "status": detail["status"],
-            "created_at": detail["created_at"],
-            "started_at": detail["started_at"],
-            "completed_at": detail["completed_at"],
-            "payload_overview": {
-                "username": detail["username"],
-                "job_type": detail["optimization_type"],
-                "module_name": detail["module_name"],
-                "optimizer_name": detail["optimizer_name"],
-                "model_name": detail.get("model_name", ""),
-            },
-            "payload": {},
-            "result": detail["result"],
-            "latest_metrics": detail.get("latest_metrics", {}),
-            "message": detail.get("message"),
-        },
-        logs=detail.get("logs", []),
-        progress=detail.get("progress_events", []),
-    )
-    return store
-
-
-def fake_job_store_with_grid() -> _BaseFakeJobStore:
-    """Build a fake job store seeded with a successful grid-search fixture.
-
-    Returns:
-        A fake store containing the grid job, its logs, and its progress events.
-    """
-    store = _BaseFakeJobStore()
-    detail = load_fixture("jobs/success_grid.detail.json")
-    gr = detail["grid_result"]
-    store.seed_raw(
-        detail["optimization_id"],
-        job={
-            "optimization_id": detail["optimization_id"],
-            "status": detail["status"],
-            "created_at": detail["created_at"],
-            "started_at": detail["started_at"],
-            "completed_at": detail["completed_at"],
-            "payload_overview": {
-                "username": detail["username"],
-                "job_type": detail["optimization_type"],
-                "optimization_type": "grid_search",
-                "module_name": gr["module_name"],
-                "optimizer_name": gr["optimizer_name"],
-                "model_name": detail.get("model_name", ""),
-            },
-            "payload": {},
-            "result": gr,
-            "latest_metrics": detail.get("latest_metrics", {}),
-            "message": detail.get("message"),
-        },
-        logs=detail.get("logs", []),
-        progress=detail.get("progress_events", []),
-    )
-    return store
-
-
-def fake_job_store_with_failed() -> _BaseFakeJobStore:
-    """Build a fake job store seeded with a failed runtime fixture.
-
-    Returns:
-        A fake store containing the failed job, its logs, and its progress
-        events.
-    """
-    store = _BaseFakeJobStore()
-    detail = load_fixture("jobs/failed_runtime.detail.json")
-    store.seed_raw(
-        detail["optimization_id"],
-        job={
-            "optimization_id": detail["optimization_id"],
-            "status": detail["status"],
-            "created_at": detail["created_at"],
-            "started_at": detail["started_at"],
-            "completed_at": detail["completed_at"],
-            "payload_overview": {
-                "username": detail.get("username", ""),
-                "job_type": detail.get("optimization_type", "run"),
-                "module_name": detail.get("module_name", ""),
-                "optimizer_name": detail.get("optimizer_name", ""),
-            },
-            "payload": {},
-            "result": detail.get("result"),
-            "latest_metrics": detail.get("latest_metrics", {}),
-            "message": detail.get("message"),
-        },
-        logs=detail.get("logs", []),
-        progress=detail.get("progress_events", []),
-    )
-    return store
-
-
 def fake_background_worker() -> MagicMock:
     """Build a ``MagicMock`` mimicking a healthy idle background worker.
 
@@ -633,48 +484,3 @@ def fake_background_worker() -> MagicMock:
     w.pending_ids = []
     w.status.return_value = "idle"
     return w
-
-
-@contextmanager
-def override_job_store(app: Any, store: Any):
-    """Patch ``core.api.app.get_job_store`` to return ``store``.
-
-    Args:
-        app: The FastAPI app under test (unused, kept for symmetry).
-        store: The store implementation to inject.
-
-    Yields:
-        The ``store`` instance, for convenience inside ``with`` blocks.
-    """
-    with patch("core.api.app.get_job_store", return_value=store):
-        yield store
-
-
-@contextmanager
-def override_worker(app: Any, worker: Any):
-    """Patch ``core.api.app.get_worker`` to return ``worker``.
-
-    Args:
-        app: The FastAPI app under test (unused, kept for symmetry).
-        worker: The worker mock to inject.
-
-    Yields:
-        The ``worker`` instance, for convenience inside ``with`` blocks.
-    """
-    with patch("core.api.app.get_worker", return_value=worker):
-        yield worker
-
-
-@contextmanager
-def override_dspy_service(app: Any, service: Any = None):
-    """Patch ``core.api.app.DspyService`` to block real DSPy initialisation.
-
-    Args:
-        app: The FastAPI app under test (unused, kept for symmetry).
-        service: Optional service double; ``None`` simply blocks construction.
-
-    Yields:
-        The ``service`` argument, for convenience inside ``with`` blocks.
-    """
-    with patch("core.api.app.DspyService", return_value=service):
-        yield service

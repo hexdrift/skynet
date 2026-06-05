@@ -105,6 +105,14 @@ interface ToolsCarouselProps {
    * ``info`` severity, so any tool name renders.
    */
   tools?: readonly string[];
+  /**
+   * Per-tool descriptions for *this* run, keyed by tool name — typically the
+   * optimized descriptions from the candidate's own ReAct overlay. Used before
+   * the static catalog so any optimized agent's tools render with their real
+   * descriptions, not just the platform's catalogued ones. Missing keys fall
+   * back to {@link TOUR_DESCRIPTIONS}/{@link TOOL_META}.
+   */
+  descriptions?: Record<string, string>;
   /** Overrides the header label (the tour's first-person default doesn't fit every context). */
   title?: string;
   /** Merged onto the root — pass ``w-full`` to fill an embedding container. */
@@ -113,6 +121,7 @@ interface ToolsCarouselProps {
 
 export function ToolsCarousel({
   tools: toolKeys = FEATURED_TOOLS,
+  descriptions,
   title,
   className,
 }: ToolsCarouselProps = {}) {
@@ -120,9 +129,10 @@ export function ToolsCarousel({
     () =>
       toolKeys.map((key) => ({
         key,
-        description: TOUR_DESCRIPTIONS[key] ?? TOOL_META[key]?.description ?? "",
+        description:
+          descriptions?.[key] ?? TOUR_DESCRIPTIONS[key] ?? TOOL_META[key]?.description ?? "",
       })),
-    [toolKeys],
+    [toolKeys, descriptions],
   );
 
   return (

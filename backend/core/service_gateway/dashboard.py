@@ -23,14 +23,13 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import DateTime, bindparam, text
 from sqlalchemy.orm import Session
 
-from ..api.routers._helpers import compute_compare_fingerprint
 from ..config import settings
 from ..constants import (
     PAYLOAD_OVERVIEW_DESCRIPTION,
@@ -57,6 +56,21 @@ SUMMARY_TEXT_MAX = 200
 _CACHE_TTL_SECONDS = 300
 _LOCK = threading.Lock()
 _CACHE: dict[str, Any] = {"fingerprint": None, "at": 0.0, "payload": None}
+
+# "Shared with me" scope: restrict to optimizations the caller holds a member
+# grant on AND does not own. Mirrors RemoteJobStore.list_jobs_shared_with —
+# match on the lowercased grantee with no is_private gate, since the grant
+# authorizes access to private runs the caller was explicitly invited to. The
+# owner-exclusion makes "shared with me" mean runs *others* shared with the
+# caller, never their own, even if a self-grant ever slips into the table.
+# ``IS DISTINCT FROM`` is the NULL-safe inequality — it keeps rows whose owner
+# column is NULL rather than dropping them the way ``<>`` would.
+_SHARED_GRANT_SCOPE_SQL = (
+    "j.optimization_id IN ("
+    "SELECT optimization_id FROM optimization_share_grants "
+    "WHERE grantee_username = :shared_with_username) "
+    "AND j.username IS DISTINCT FROM :shared_with_username"
+)
 
 
 def _fetch_fingerprint(session: Session) -> str:
@@ -152,7 +166,7 @@ def _fetch_corpus_points(session: Session) -> list[dict[str, Any]]:
                 "AS winning_model, "
                 "je.baseline_metric, je.optimized_metric, "
                 "je.summary_text, "
-                f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
+                f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) AS task_name, "
                 f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
                 "AS module_name, "
                 f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
@@ -236,6 +250,80 @@ def invalidate_public_dashboard_cache() -> None:
         _CACHE["fingerprint"] = None
         _CACHE["at"] = 0.0
         _CACHE["payload"] = None
+
+
+def fetch_corpus_facets(
+    *,
+    job_store: Any,
+    owner_username: str | None = None,
+    shared_with_username: str | None = None,
+) -> dict[str, list[str]]:
+    """Return the distinct model / optimizer / module values in one corpus.
+
+    Backs ``GET /dashboard/facets`` so each /explore tab lists the filter
+    options drawn from its OWN scope — the mine tab surfaces a user's private
+    react runs, not just whatever appears in the public archive. The scope
+    predicate and the payload-first / embedded-first ``COALESCE`` derivation
+    mirror :func:`_fetch_corpus_points` and :func:`_search_semantic` exactly,
+    so every value returned here lines up with a run the same scope can
+    actually filter to.
+
+    Args:
+        job_store: A store exposing a SQLAlchemy ``engine`` attribute.
+        owner_username: When set, scope to that user's own jobs (including
+            private rows) instead of the public corpus.
+        shared_with_username: When set (and ``owner_username`` is not), scope to
+            jobs shared with that user via a member grant.
+
+    Returns:
+        ``{"models": [...], "optimizers": [...], "modules": [...]}`` — each a
+        case-sensitively sorted list of distinct non-empty values.
+    """
+    params: dict[str, Any] = {}
+    if owner_username is not None:
+        scope_sql = "j.username = :owner_username"
+        params["owner_username"] = owner_username
+    elif shared_with_username is not None:
+        scope_sql = _SHARED_GRANT_SCOPE_SQL
+        params["shared_with_username"] = shared_with_username
+    else:
+        scope_sql = (
+            "NOT COALESCE(je.is_private, "
+            "(j.payload_overview->>'is_private')::boolean, FALSE)"
+        )
+    with Session(job_store.engine) as session:
+        row = (
+            session.execute(
+                text(
+                    "SELECT "
+                    "ARRAY_AGG(DISTINCT model) FILTER (WHERE model <> '') AS models, "
+                    "ARRAY_AGG(DISTINCT optimizer) FILTER (WHERE optimizer <> '') "
+                    "AS optimizers, "
+                    "ARRAY_AGG(DISTINCT module) FILTER (WHERE module <> '') AS modules "
+                    "FROM ("
+                    "SELECT "
+                    "COALESCE(je.winning_model, "
+                    f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') AS model, "
+                    "COALESCE(je.optimizer_name, "
+                    f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') AS optimizer, "
+                    "COALESCE(je.module_name, "
+                    f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') AS module "
+                    "FROM jobs j "
+                    "LEFT JOIN job_embeddings je "
+                    "ON je.optimization_id = j.optimization_id "
+                    f"WHERE j.status = 'success' AND {scope_sql}"
+                    ") sub"
+                ),
+                params,
+            )
+            .mappings()
+            .first()
+        )
+    return {
+        "models": sorted(row["models"] or []) if row else [],
+        "optimizers": sorted(row["optimizers"] or []) if row else [],
+        "modules": sorted(row["modules"] or []) if row else [],
+    }
 
 
 SEARCH_SORT_RELEVANCE = "relevance"
@@ -346,43 +434,6 @@ def fetch_popular_queries(
     return [{"query": row[0], "count": int(row[1])} for row in rows]
 
 
-def _dedup_ranked_rows(
-    rows: Sequence[Mapping[str, Any]],
-) -> tuple[list[str], dict[str, float | None]]:
-    """Collapse ranked rows to leader ids by ``compare_fingerprint``.
-
-    The first occurrence of each ``compare_fingerprint`` is kept; the caller
-    is responsible for ordering rows so that the desired leader comes first.
-    Rows missing a ``compare_fingerprint`` (legacy / no ``task_fingerprint``)
-    fall back to their own ``optimization_id`` so they never collapse into a
-    bogus group.
-
-    Args:
-        rows: Mapping rows with ``optimization_id``, ``payload_overview``,
-            and ``relevance`` keys, in the caller's chosen sort order.
-
-    Returns:
-        ``(ordered_leader_ids, relevance_by_id)``. The relevance map only
-        contains entries for leaders.
-    """
-    seen: set[str] = set()
-    leaders: list[str] = []
-    relevance_by_id: dict[str, float | None] = {}
-    for row in rows:
-        opt_id = row["optimization_id"]
-        overview = row.get("payload_overview") or {}
-        if not isinstance(overview, dict):
-            overview = {}
-        compare_fp = compute_compare_fingerprint(opt_id, overview)
-        key = compare_fp or f"_no_fp:{opt_id}"
-        if key in seen:
-            continue
-        seen.add(key)
-        leaders.append(opt_id)
-        relevance_by_id[opt_id] = _as_float(row.get("relevance"))
-    return leaders, relevance_by_id
-
-
 def _vector_literal(vector: list[float]) -> str:
     """Format a Python float list as a pgvector text literal.
 
@@ -402,12 +453,15 @@ def search_optimizations(
     models: list[str] | None = None,
     optimizers: list[str] | None = None,
     optimization_types: list[str] | None = None,
+    tasks: list[str] | None = None,
+    modules: list[str] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     sort: str = SEARCH_SORT_RELEVANCE,
     page: int = 1,
     size: int = SEARCH_PAGE_SIZE_DEFAULT,
     owner_username: str | None = None,
+    shared_with_username: str | None = None,
 ) -> dict[str, Any]:
     """Search the optimization corpus, semantic when possible, lexical otherwise.
 
@@ -431,6 +485,10 @@ def search_optimizations(
             the payload-overview model name for unembedded jobs).
         optimizers: Optional optimizer whitelist.
         optimization_types: Optional ``optimization_type`` whitelist.
+        tasks: Optional ``task_name`` whitelist (matched against the same
+            payload-overview-first COALESCE the corpus options derive from).
+        modules: Optional ``module_name`` whitelist (matched against the same
+            embedded-first COALESCE the corpus options derive from).
         date_from: Inclusive lower bound on ``created_at`` (date precision).
         date_to: Inclusive upper bound on ``created_at`` (date precision).
         sort: One of :data:`SEARCH_SORTS`.
@@ -440,6 +498,10 @@ def search_optimizations(
             (including their private rows) instead of the public corpus. The
             caller is responsible for verifying the requested owner matches the
             authenticated session.
+        shared_with_username: When set (and ``owner_username`` is not), scope the
+            search to jobs shared with this user via a member grant — runs they
+            were invited to but do not own, including private ones the grant
+            authorizes. The caller verifies the requested user is the session.
 
     Returns:
         ``{"results": [...], "total": int, "matched_ids": [...], "search_type": str}``,
@@ -457,7 +519,11 @@ def search_optimizations(
     query_vector: list[float] | None = None
 
     if not use_lexical:
-        if _has_unembedded_success_jobs(job_store, owner_username=owner_username):
+        if _has_unembedded_success_jobs(
+            job_store,
+            owner_username=owner_username,
+            shared_with_username=shared_with_username,
+        ):
             use_lexical = True
         elif query_clean:
             query_vector = get_embedder().encode(query_clean, task="retrieval.query")
@@ -472,12 +538,15 @@ def search_optimizations(
             models=models,
             optimizers=optimizers,
             optimization_types=optimization_types,
+            tasks=tasks,
+            modules=modules,
             date_from=date_from,
             date_to=date_to,
             sort=sort,
             page=page,
             size=size,
             owner_username=owner_username,
+            shared_with_username=shared_with_username,
         )
 
     return _search_semantic(
@@ -486,17 +555,23 @@ def search_optimizations(
         models=models,
         optimizers=optimizers,
         optimization_types=optimization_types,
+        tasks=tasks,
+        modules=modules,
         date_from=date_from,
         date_to=date_to,
         sort=sort,
         page=page,
         size=size,
         owner_username=owner_username,
+        shared_with_username=shared_with_username,
     )
 
 
 def _has_unembedded_success_jobs(
-    job_store: Any, *, owner_username: str | None = None
+    job_store: Any,
+    *,
+    owner_username: str | None = None,
+    shared_with_username: str | None = None,
 ) -> bool:
     """Return True if any in-scope successful job lacks a summary embedding row.
 
@@ -510,20 +585,23 @@ def _has_unembedded_success_jobs(
         owner_username: When set, restrict the probe to that user's jobs so a
             mine-corpus query isn't downgraded to lexical because some other
             user has unembedded rows.
+        shared_with_username: When set (and ``owner_username`` is not), restrict
+            the probe to jobs shared with that user via a member grant.
 
     Returns:
         True when at least one in-scope success-state job has no embedding,
         False otherwise (including on transient query failure — we prefer
         the semantic path to a hard error).
     """
-    scope_sql = (
-        "j.username = :owner_username"
-        if owner_username is not None
-        else "NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
-    )
     params: dict[str, Any] = {}
     if owner_username is not None:
+        scope_sql = "j.username = :owner_username"
         params["owner_username"] = owner_username
+    elif shared_with_username is not None:
+        scope_sql = _SHARED_GRANT_SCOPE_SQL
+        params["shared_with_username"] = shared_with_username
+    else:
+        scope_sql = "NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
     try:
         with Session(job_store.engine) as session:
             row = session.execute(
@@ -550,12 +628,15 @@ def _search_semantic(
     models: list[str] | None,
     optimizers: list[str] | None,
     optimization_types: list[str] | None,
+    tasks: list[str] | None,
+    modules: list[str] | None,
     date_from: date | None,
     date_to: date | None,
     sort: str,
     page: int,
     size: int,
     owner_username: str | None = None,
+    shared_with_username: str | None = None,
 ) -> dict[str, Any]:
     """Rank the embedded corpus by pgvector cosine similarity (or recency / gain).
 
@@ -565,6 +646,8 @@ def _search_semantic(
         models: Optional ``winning_model`` whitelist.
         optimizers: Optional ``optimizer_name`` whitelist.
         optimization_types: Optional ``optimization_type`` whitelist.
+        tasks: Optional ``task_name`` whitelist.
+        modules: Optional ``module_name`` whitelist.
         date_from: Inclusive lower bound on ``created_at``.
         date_to: Inclusive upper bound on ``created_at``.
         sort: One of :data:`SEARCH_SORTS`.
@@ -572,6 +655,8 @@ def _search_semantic(
         size: Page size (already clamped).
         owner_username: When set, scope to that user (including private rows)
             instead of the public corpus.
+        shared_with_username: When set (and ``owner_username`` is not), scope to
+            jobs shared with that user via a member grant.
 
     Returns:
         ``{"results": [...], "total": int, "matched_ids": [...], "search_type": "semantic"}``.
@@ -593,6 +678,9 @@ def _search_semantic(
     if owner_username is not None:
         where_parts.append("j.username = :owner_username")
         params["owner_username"] = owner_username
+    elif shared_with_username is not None:
+        where_parts.append(_SHARED_GRANT_SCOPE_SQL)
+        params["shared_with_username"] = shared_with_username
     else:
         where_parts.append("je.is_private = FALSE")
     if models:
@@ -604,6 +692,21 @@ def _search_semantic(
     if optimization_types:
         where_parts.append("je.optimization_type = ANY(:optimization_types)")
         params["optimization_types"] = list(optimization_types)
+    # Match the same payload-first / embedded-first COALESCE the corpus options
+    # derive from (``_fetch_corpus_points``) so a filter value always lines up
+    # with the chip the user picked, even for jobs renamed after embedding.
+    if tasks:
+        where_parts.append(
+            f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) "
+            "= ANY(:tasks)"
+        )
+        params["tasks"] = list(tasks)
+    if modules:
+        where_parts.append(
+            f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+            "= ANY(:modules)"
+        )
+        params["modules"] = list(modules)
     if date_from is not None:
         where_parts.append("je.created_at >= :date_from")
         params["date_from"] = date_from
@@ -629,9 +732,8 @@ def _search_semantic(
 
     engine = job_store.engine
     with Session(engine) as session:
-        # Pull every match in rank order, then dedup by compare_fingerprint in
-        # Python — same logic as the projection so the result count matches
-        # what the explore page shows.
+        # Pull every match in rank order up to the id cap so total and
+        # matched_ids cover the full result set, then page in Python.
         ranked_rows = (
             session.execute(
                 text(
@@ -648,7 +750,10 @@ def _search_semantic(
             .all()
         )
 
-        leaders, relevance_by_id = _dedup_ranked_rows(ranked_rows)
+        leaders = [row["optimization_id"] for row in ranked_rows]
+        relevance_by_id = {
+            row["optimization_id"]: _as_float(row.get("relevance")) for row in ranked_rows
+        }
         total = len(leaders)
         offset = (page - 1) * size
         page_ids = leaders[offset : offset + size]
@@ -663,7 +768,7 @@ def _search_semantic(
                     text(
                         "SELECT je.optimization_id, je.optimization_type, je.winning_model, "
                         "je.baseline_metric, je.optimized_metric, je.summary_text, "
-                        f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
+                        f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) AS task_name, "
                         "je.module_name, je.optimizer_name, je.created_at "
                         f"{from_sql} "
                         "WHERE je.optimization_id = ANY(:page_ids)"
@@ -712,7 +817,7 @@ def _search_semantic(
 # that haven't been embedded yet.
 _LEXICAL_HAYSTACK_SQL = (
     "lower(coalesce("
-    "  coalesce(je.task_name, j.payload_overview->>'name', '') || ' ' || "
+    "  coalesce(j.payload_overview->>'name', je.task_name, '') || ' ' || "
     "  coalesce(je.summary_text, '') || ' ' || "
     "  coalesce(j.payload_overview->>'description', '') || ' ' || "
     "  coalesce(je.optimizer_name, j.payload_overview->>'optimizer_name', '') || ' ' || "
@@ -755,12 +860,15 @@ def _search_lexical(
     models: list[str] | None,
     optimizers: list[str] | None,
     optimization_types: list[str] | None,
+    tasks: list[str] | None,
+    modules: list[str] | None,
     date_from: date | None,
     date_to: date | None,
     sort: str,
     page: int,
     size: int,
     owner_username: str | None = None,
+    shared_with_username: str | None = None,
 ) -> dict[str, Any]:
     """Lexical ILIKE search across the corpus.
 
@@ -779,6 +887,8 @@ def _search_lexical(
         models: Optional model whitelist.
         optimizers: Optional optimizer whitelist.
         optimization_types: Optional ``optimization_type`` whitelist.
+        tasks: Optional ``task_name`` whitelist.
+        modules: Optional ``module_name`` whitelist.
         date_from: Inclusive lower bound on ``created_at``.
         date_to: Inclusive upper bound on ``created_at``.
         sort: One of :data:`SEARCH_SORTS` (relevance is treated as recent).
@@ -786,6 +896,8 @@ def _search_lexical(
         size: Page size (already clamped).
         owner_username: When set, scope to that user (including private rows)
             instead of the public corpus.
+        shared_with_username: When set (and ``owner_username`` is not), scope to
+            jobs shared with that user via a member grant.
 
     Returns:
         ``{"results": [...], "total": int, "matched_ids": [...], "search_type": "lexical"}``.
@@ -795,6 +907,9 @@ def _search_lexical(
     if owner_username is not None:
         where_parts.append("j.username = :owner_username")
         params["owner_username"] = owner_username
+    elif shared_with_username is not None:
+        where_parts.append(_SHARED_GRANT_SCOPE_SQL)
+        params["shared_with_username"] = shared_with_username
     else:
         # Private flag may live in the embedding row OR the payload overview
         # (for jobs that haven't been embedded yet). Treat either as private.
@@ -820,6 +935,20 @@ def _search_lexical(
             "COALESCE(je.optimization_type, j.optimization_type) = ANY(:optimization_types)"
         )
         params["optimization_types"] = list(optimization_types)
+    # Same COALESCE expressions as the corpus options (``_fetch_corpus_points``)
+    # so a picked chip's value always matches, including for unembedded jobs.
+    if tasks:
+        where_parts.append(
+            f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) "
+            "= ANY(:tasks)"
+        )
+        params["tasks"] = list(tasks)
+    if modules:
+        where_parts.append(
+            f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+            "= ANY(:modules)"
+        )
+        params["modules"] = list(modules)
     if date_from is not None:
         where_parts.append("j.created_at >= :date_from")
         params["date_from"] = date_from
@@ -861,9 +990,8 @@ def _search_lexical(
 
     engine = job_store.engine
     with Session(engine) as session:
-        # Pull every match in rank order, then dedup by compare_fingerprint in
-        # Python — same logic as the projection so the result count matches
-        # what the explore page shows.
+        # Pull every match in rank order up to the id cap so total and
+        # matched_ids cover the full result set, then page in Python.
         ranked_rows = (
             session.execute(
                 text(
@@ -881,7 +1009,7 @@ def _search_lexical(
             .all()
         )
 
-        leaders, _relevance_by_id = _dedup_ranked_rows(ranked_rows)
+        leaders = [row["optimization_id"] for row in ranked_rows]
         total = len(leaders)
         offset = (page - 1) * size
         page_ids = leaders[offset : offset + size]

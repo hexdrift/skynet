@@ -73,6 +73,7 @@ import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
 import { LMActivityTab } from "./LMActivityTab";
 import { ReactServeChat } from "./ReactServeChat";
+import { ReactServeApi } from "./ReactServeApi";
 import { RunPlayground } from "./RunPlayground";
 import { linkifyMessage } from "@/shared/lib/linkify";
 import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
@@ -1239,7 +1240,10 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 ) : !isShare &&
                   !isPairContext &&
                   (job.module_name ?? "").toLowerCase() === "react" ? (
-                  <ReactServeChat optimizationId={job.optimization_id} />
+                  <>
+                    <ReactServeChat optimizationId={job.optimization_id} />
+                    <ReactServeApi optimizationId={job.optimization_id} />
+                  </>
                 ) : serveInfo ? (
                   <RunPlayground
                     serveInfo={serveInfo}

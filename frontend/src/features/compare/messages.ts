@@ -7,6 +7,4 @@ export const compareMessages = {
   "compare.mismatch": `אפשר להשוות רק ריצות מאותו סט בדיקה ועם אותה ${TERMS.metric}`,
   "compare.cap_reached": `ניתן להשוות עד 4 ${TERMS.optimizationPlural} בבת אחת`,
   "compare.partial_load": "חלק מהריצות לא נטענו ולכן לא נכללו בהשוואה",
-  "compare.includes_siblings":
-    "{p1, plural, one {השוואה (תכלול גם ריצה אחת מאותה משימה)} two {השוואה (תכלול גם שתי ריצות מאותה משימה)} other {השוואה (תכלול גם # ריצות מאותה משימה)}}",
 } as const;

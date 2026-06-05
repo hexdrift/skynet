@@ -23,6 +23,8 @@ from ...constants import (
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
 )
 from ...models import JobLogEntry, OptimizationPayloadResponse
+from ...service_gateway.dashboard import invalidate_public_dashboard_cache
+from ...service_gateway.embedding_pipeline import set_embedding_task_name
 from ..auth import AuthenticatedUser, get_authenticated_user, is_admin
 from ..converters import parse_overview
 from ..errors import DomainError
@@ -239,9 +241,12 @@ def create_optimizations_meta_router(*, job_store) -> APIRouter:
             job_store, optimization_id, current_user, ShareRole.editor
         )
         overview = parse_overview(job_data)
-        overview[PAYLOAD_OVERVIEW_NAME] = req.name.strip()
+        new_name = req.name.strip()
+        overview[PAYLOAD_OVERVIEW_NAME] = new_name
         job_store.set_payload_overview(optimization_id, overview)
-        return {"optimization_id": optimization_id, "name": req.name.strip()}
+        set_embedding_task_name(job_store, optimization_id, new_name)
+        invalidate_public_dashboard_cache()
+        return {"optimization_id": optimization_id, "name": new_name}
 
     @router.patch(
         "/optimizations/{optimization_id}/pin",

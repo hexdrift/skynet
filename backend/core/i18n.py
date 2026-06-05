@@ -57,9 +57,6 @@ _TERM_KEYS: dict[str, str] = {
 _CONSTANT_KEYS: dict[str, str] = {
     "CLONE_NAME_PREFIX": "cloneNamePrefix",
     "RETRY_NAME_PREFIX": "retryNamePrefix",
-    "GRID_SEARCH_LABEL": "gridSearchLabel",
-    "GRID_SEARCH_LABEL_DEFINITE": "gridSearchLabelDefinite",
-    "RUN_LABEL": "runLabel",
 }
 
 
