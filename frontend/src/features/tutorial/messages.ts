@@ -4,7 +4,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.tutorial.menu.1": "מדריך Skynet",
   "auto.features.tutorial.components.tutorial.menu.2":
     "סיור קצר שמציג את החלקים המרכזיים במערכת: לוח הבקרה, טופס ההגשה ודף התוצאות.",
-  "auto.features.tutorial.components.tutorial.menu.3": "התחלת הסיור",
+  "auto.features.tutorial.components.tutorial.menu.3": "התחילו בסיור",
   "auto.features.tutorial.components.tutorial.popover.1": " מתוך ",
   "auto.features.tutorial.components.tutorial.popover.2": "הקודם",
   "auto.features.tutorial.lib.steps.literal.1": "השירות היה מעולה, ממליץ בחום!",
@@ -29,7 +29,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.literal.18":
     "קל רץ מהר עם מעט ניסיונות. בינוני מאזן בין מהירות לאיכות. מעמיק בודק יותר אפשרויות ולכן לוקח יותר זמן, אבל מגדיל את הסיכוי לשיפור משמעותי.",
   "auto.features.tutorial.lib.steps.literal.19": "פרמטרי GEPA",
-  "auto.features.tutorial.lib.steps.literal.20": "פרומפט התחלתי",
+  "auto.features.tutorial.lib.steps.literal.20": "חתימה (Signature)",
   "auto.features.tutorial.lib.steps.literal.21": "סקירה",
   "auto.features.tutorial.lib.steps.literal.22": "דף תוצאות",
   "auto.features.tutorial.lib.steps.literal.23": "שלבי התהליך",
@@ -55,7 +55,7 @@ export const tutorialMessages = {
     "חיפוש חופשי בכל הריצות במערכת — שלכם או של משתמשים אחרים. הקלידו תיאור באנגלית או בעברית, ו-Skynet ימצא ריצות עם משמעות דומה, ולא רק התאמות מילים. אפשר לסנן לפי מודלים, אופטימייזרים, סטטוס וטווח תאריכים, ולעיין ברשימת תוצאות מדורגת.",
   "auto.features.tutorial.lib.steps.literal.40": "API ואינטגרציה",
   "auto.features.tutorial.lib.steps.literal.41":
-    "מעבר לבדיקה בדפדפן, הפרומפט המשופר זמין מיד דרך REST API. העתיקו את כתובת נקודת הקצה או השתמשו בקטעי הקוד המוכנים (Python, JavaScript, cURL) כדי לשלב אותו בקוד שלכם.",
+    "בנוסף לממשק בדפדפן, הפרומפט המשופר זמין מיד דרך REST API. העתיקו את כתובת נקודת הקצה או השתמשו בקטעי הקוד המוכנים (Python, JavaScript, cURL) כדי לשלב אותו בקוד שלכם.",
   "auto.features.tutorial.lib.steps.literal.42": "סוכן AI",
   "auto.features.tutorial.lib.steps.literal.43":
     "הכפתור הצף בפינה פותח את סוכן ה-AI. הסוכן מכיר את המערכת ויכול לעזור למלא את טופס ההגשה, להסביר תוצאות ולענות על שאלות.",
@@ -72,10 +72,10 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.literal.50":
     "בחלון הצ'אט אפשר לדבר עם הסוכן ולבקש ממנו לבצע פעולות. מצב אמון קובע אם הסוכן יבקש אישור לפני כל פעולה או יבצע פעולות בטוחות בעצמו. הסוכן רואה את מצב טופס ההגשה ויכול לעזור במילוי שדות. שיחות קודמות נשמרות וניתן לפתוח אותן מחדש מכפתור ההיסטוריה, וכפתור הכלים מראה אילו פעולות הסוכן יכול לבצע.",
   "auto.features.tutorial.lib.steps.literal.51":
-    "לפני שמתחילים ריצה, אפשר לבחור כמה מודלים ולהריץ ביניהם מירוץ קצר על הדאטאסט שלכם. Skynet מודד זמינות, זמן תגובה ואיכות, ומדרג את המודלים כדי לעזור לבחור את המתאים ביותר עוד לפני ריצה ארוכה.",
+    "לפני שמתחילים ריצה, אפשר לבחור כמה מודלים ולהריץ ביניהם השוואה קצרה על הדאטאסט שלכם. Skynet מודד זמינות, זמן תגובה ואיכות, ומדרג את המודלים כדי לעזור לבחור את המתאים ביותר עוד לפני ריצה ארוכה.",
   "auto.features.tutorial.lib.steps.literal.52": "פעילות מודל",
   "auto.features.tutorial.lib.steps.literal.53":
-    "לשונית פעילות מודל מפרקת את עבודת מודלי השפה בריצה: לכל שלב — מדידת בסיס, אופטימיזציה ומדידה סופית — רואים כמה קריאות בוצעו וכמה זמן ארכה כל קריאה בממוצע, בנפרד למודל המג׳נרט ולמודל הרפלקציה. כך אפשר לראות לאן הלכו רוב הקריאות והזמן, ולזהות שלב או מודל שמאט את הריצה.",
+    "לשונית פעילות מודל מפרטת את עבודת מודלי השפה בריצה: לכל שלב — מדידת בסיס, אופטימיזציה ומדידה סופית — רואים כמה קריאות בוצעו וכמה זמן ארכה כל קריאה בממוצע, בנפרד למודל המג׳נרט ולמודל הרפלקציה. כך אפשר לראות לאן הלכו רוב הקריאות והזמן, ולזהות שלב או מודל שמאט את הריצה.",
   "auto.features.tutorial.lib.demo.data.literal.1": "סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.2": "מתחילים אופטימיזציה: סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.3": "מתחילים אופטימיזציה: סיווג אימיילים",
@@ -96,11 +96,11 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.demo.data.literal.17": "סיכום טקסטים",
   "auto.features.tutorial.lib.demo.data.literal.18": "GEPA עם מודול Predict (בלי שדה חשיבה)",
   "auto.features.tutorial.lib.demo.data.literal.19":
-    "מאמתים את קוד הפרומפט ההתחלתי ופונקציית המדידה…",
+    "מאמתים את קוד החתימה (Signature) ופונקציית המדידה…",
   "auto.features.tutorial.lib.demo.data.literal.20": "כל הבדיקות עברו בהצלחה",
   "auto.features.tutorial.lib.demo.data.literal.21": "האימות עבר בהצלחה ✓",
   "auto.features.tutorial.lib.demo.data.literal.22": "מחלקים 200 דוגמאות לאימון, אימות ובדיקה…",
-  "auto.features.tutorial.lib.demo.data.literal.23": "חלוקת מערך הנתונים: אימון=120, אימות=40, בדיקה=40",
+  "auto.features.tutorial.lib.demo.data.literal.23": "חלוקת הדאטאסט: אימון=120, אימות=40, בדיקה=40",
   "auto.features.tutorial.lib.demo.data.literal.24": "מודדים את תוכנית הבסיס על סט הבדיקה…",
   "auto.features.tutorial.lib.demo.data.literal.25": "ציון תוכנית הבסיס: 62.0",
   "auto.features.tutorial.lib.demo.data.literal.26": "נמצאה התוכנית הטובה ביותר עם ציון 0.84",
@@ -112,13 +112,13 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.demo.data.literal.32": "סיכום מאמרים",
   "auto.features.tutorial.lib.demo.data.literal.33": "מענה על שאלות מתוך מסמכים",
   "auto.features.tutorial.lib.demo.data.literal.34": "תיוג כוונת משתמש",
-  "auto.features.tutorial.components.tutorial.menu.literal.1": "סגירה",
+  "auto.features.tutorial.components.tutorial.menu.literal.1": "סגרו",
   "auto.features.tutorial.components.tutorial.popover.literal.1": "השהיה",
   "auto.features.tutorial.components.tutorial.popover.literal.2": "הפעלה אוטומטית",
   "auto.features.tutorial.components.tutorial.popover.literal.3": "השהיה",
   "auto.features.tutorial.components.tutorial.popover.literal.4": "הפעלה אוטומטית",
-  "auto.features.tutorial.components.tutorial.popover.literal.5": "סגירת המדריך",
-  "auto.features.tutorial.components.tutorial.popover.literal.6": "סיום",
+  "auto.features.tutorial.components.tutorial.popover.literal.5": "סגרו את המדריך",
+  "auto.features.tutorial.components.tutorial.popover.literal.6": "סיימו",
   "auto.features.tutorial.components.tutorial.popover.literal.7": "הבא",
   "auto.features.tutorial.lib.demo.data.template.1":
     "{p1} לסיווג אימיילים לקטגוריות: spam, important, promotional",
@@ -157,7 +157,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.17":
     "גררו קובץ CSV, JSON או Excel לאזור ההעלאה. כל שורה היא דוגמה אחת שהמערכת יכולה ללמוד ממנה. ככל שיש יותר {p1} איכותיות, ה{p2} תהיה טובה יותר.",
   "auto.features.tutorial.lib.steps.template.18":
-    "סמנו כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר את הפרומפט ההתחלתי באופן אוטומטי.",
+    "סמנו כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר אוטומטית את החתימה (Signature).",
   "auto.features.tutorial.lib.steps.template.19":
     "Predict שולח את הקלט ישירות ל{p1} ומקבל תשובה. Chain of Thought מוסיף שדה חשיבה לפני הפלט, כדי שה{p2} יפרט את דרך הפתרון לפני התוצאה.",
   "auto.features.tutorial.lib.steps.template.20":
@@ -165,7 +165,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.21":
     "גודל מדגם לרפלקציה: כמה {p1} ה{p2} מנתח בכל סבב כדי לזהות שגיאות. מספר סבבי הערכה מרבי: בדרך כלל נקבע לפי עומק האופטימיזציה, אבל אפשר להגדיר אותו ידנית. מיזוג מועמדים: שילוב רעיונות מכמה מועמדים טובים לפרומפט אחד.",
   "auto.features.tutorial.lib.steps.template.22":
-    "הפרומפט ההתחלתי מגדיר מה ה{p1} מקבל ומה הוא צריך להחזיר. הוא נוצר אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותו ולהוסיף תיאורים מדויקים לכל שדה כדי שהוא יהיה איכותי.",
+    "החתימה (Signature) מגדירה מה ה{p1} מקבל ומה הוא צריך להחזיר. היא נוצרת אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותה ולהוסיף תיאורים מדויקים לכל שדה כדי שתהיה איכותית.",
   "auto.features.tutorial.lib.steps.template.23":
     "פונקציה שמחזירה {p1} בין 0 ל-1 לכל תשובה. היא מגדירה מה נחשב ״תשובה טובה״, וה{p2} מנסה לשפר את ה{p3} הזה לאורך הריצה.",
   "auto.features.tutorial.lib.steps.template.24": "בחירת {p1}",
@@ -221,10 +221,10 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.8": "Skynet · מדריך מושגים",
   "auto.features.tutorial.components.concepts.guide.literal.9":
     "איך Skynet משפר פרומפטים בעזרת DSPy ו-GEPA",
-  "auto.features.tutorial.components.concepts.guide.literal.10": "סגירה",
+  "auto.features.tutorial.components.concepts.guide.literal.10": "סגרו",
   "auto.features.tutorial.components.concepts.guide.literal.11": "תוכן עניינים",
   "auto.features.tutorial.components.concepts.guide.literal.12": "הועתק",
-  "auto.features.tutorial.components.concepts.guide.literal.13": "העתקה",
+  "auto.features.tutorial.components.concepts.guide.literal.13": "העתיקו",
   "auto.features.tutorial.components.concepts.guide.literal.14": "פרמטר",
   "auto.features.tutorial.components.concepts.guide.literal.15": "תיאור",
   "auto.features.tutorial.components.concepts.guide.literal.16": "ממודל שפה ועד פרומפט שאפשר למדוד",
@@ -299,12 +299,12 @@ export const tutorialMessages = {
     "GEPA הוא אופטימיזר רפלקטיבי שמשפר רכיבי טקסט בתוכנית, בעיקר הוראות בפרומפט. הוא לא משנה את משקלי ה-LLM. במקום להסתפק בציון מספרי, הוא מסתכל גם על ",
   "auto.features.tutorial.components.concepts.guide.literal.66": "מסלולי הרצה",
   "auto.features.tutorial.components.concepts.guide.literal.67":
-    ": תיעוד של הקלט, שלבי הביצוע, התשובה, הציון וה-feedback לכל ניסיון. מודל הרפלקציה קורא את המסלולים האלה כמו מפתח שמבצע code review: הוא מחפש דפוסים של הצלחה וכישלון, ואז מציע הוראות חדשות שמכוונות לבעיות שנמצאו.",
+    ": תיעוד של הקלט, שלבי הביצוע, התשובה, הציון והמשוב לכל ניסיון. מודל הרפלקציה קורא את המסלולים האלה כמו מפתח שעושה סקירת קוד: הוא מחפש דפוסים של הצלחה וכישלון, ואז מציע הוראות חדשות שמכוונות לבעיות שנמצאו.",
   "auto.features.tutorial.components.concepts.guide.literal.70":
     "2.2 איך GEPA עובד: הלולאה המעשית",
   "auto.features.tutorial.components.concepts.guide.literal.71": "אתחול:",
   "auto.features.tutorial.components.concepts.guide.literal.72":
-    " מתחילים מהתוכנית שהגדרתם ומהפרומפט ההתחלתי שלה. GEPA מודד את נקודת הבסיס כדי לדעת אם מועמד חדש באמת השתפר.",
+    " מתחילים מהתוכנית שהגדרתם ומהחתימה (Signature) שלה. GEPA מודד את נקודת הבסיס כדי לדעת אם מועמד חדש באמת השתפר.",
   "auto.features.tutorial.components.concepts.guide.literal.73": "הערכה:",
   "auto.features.tutorial.components.concepts.guide.literal.74":
     " מריצים מועמדים על דוגמאות. דוגמאות האימון מספקות מסלולי הרצה ומשוב לרפלקציה; דוגמאות האימות משמשות למעקב אחרי ציוני המועמדים ולבחירה ביניהם.",
@@ -312,7 +312,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.76":
     " זה החלק שמבדיל את GEPA מחיפוש עיוור. מודל הרפלקציה (",
   "auto.features.tutorial.components.concepts.guide.literal.77":
-    ") מקבל מסלולי הרצה, ציונים ו-feedback, ומנסח הסבר על טעויות חוזרות, תנאים חסרים והוראות שכדאי לשנות.",
+    ") מקבל מסלולי הרצה, ציונים ומשוב, ומנסח הסבר על טעויות חוזרות, תנאים חסרים והוראות שכדאי לשנות.",
   "auto.features.tutorial.components.concepts.guide.literal.78": "שיפור:",
   "auto.features.tutorial.components.concepts.guide.literal.79":
     " GEPA יוצר מועמד חדש שמיישם את התובנות. בחלק מהריצות הוא גם משלב בין שני מועמדים חזקים בעזרת מיזוג (",
@@ -324,7 +324,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.84":
     " לפי ציונים פר-דוגמה על סט האימות. מועמד יכול להישאר חשוב גם אם אינו הטוב ביותר בממוצע, כל עוד הוא מצטיין בדוגמאות מסוימות ואינו נשלט לגמרי על ידי מועמד אחר.",
   "auto.features.tutorial.components.concepts.guide.literal.85":
-    "חשוב לדייק: התרשים הוא הסבר שימושי, לא כל פרטי המימוש. בפועל GEPA דוגם מועמדים מחזית Pareto, מריץ mini-batch לאיסוף משוב, מעריך מועמד חדש, מעדכן את מאגר המועמדים, ובסוף מחזיר את המועמד עם הציון המצטבר הטוב ביותר על סט האימות.",
+    "חשוב לדייק: התרשים הוא הסבר שימושי, לא כל פרטי המימוש. בפועל GEPA דוגם מועמדים מחזית Pareto, מריץ מיני-באצ׳ לאיסוף משוב, מעריך מועמד חדש, מעדכן את מאגר המועמדים, ובסוף מחזיר את המועמד עם הציון המצטבר הטוב ביותר על סט האימות.",
   "auto.features.tutorial.components.concepts.guide.literal.86": "2.3 למה הרפלקציה כל כך חשובה?",
   "auto.features.tutorial.components.concepts.guide.literal.87": "GEPA עם רפלקציה",
   "auto.features.tutorial.components.concepts.guide.literal.88": "בחירה לפי ציון בלבד",
@@ -343,7 +343,7 @@ export const tutorialMessages = {
     "פרומפט חדש שמשלב את התובנה ומגדיר סדר עבודה ברור יותר.",
   "auto.features.tutorial.components.concepts.guide.literal.98": "מה חסר בלי רפלקציה?",
   "auto.features.tutorial.components.concepts.guide.literal.99":
-    "הציון אומר מי הצליח יותר, אבל לא מסביר למה. בלי feedback ומסלולי הרצה, השינוי הבא הוא כמעט ניחוש.",
+    "הציון אומר מי הצליח יותר, אבל לא מסביר למה. בלי משוב ומסלולי הרצה, השינוי הבא הוא כמעט ניחוש.",
   "auto.features.tutorial.components.concepts.guide.literal.100": "שליטה בתקציב, איכות ועלות",
   "auto.features.tutorial.components.concepts.guide.literal.101":
     "3.1 תקציב ריצה",
@@ -356,7 +356,7 @@ export const tutorialMessages = {
     " להרצה ראשונה מהירה ולבדיקת ההגדרה; ",
   "auto.features.tutorial.components.concepts.guide.literal.106": "\"medium\"",
   "auto.features.tutorial.components.concepts.guide.literal.107":
-    " אחרי שהדאטאסט וה-feedback יציבים ורוצים איזון בין איכות לעלות; ",
+    " אחרי שהדאטאסט והמשוב יציבים ורוצים איזון בין איכות לעלות; ",
   "auto.features.tutorial.components.concepts.guide.literal.108": "\"heavy\"",
   "auto.features.tutorial.components.concepts.guide.literal.109":
     " כשיש סיבה עסקית לחיפוש רחב יותר ותקציב זמן וקריאות מתאים ",
@@ -373,7 +373,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.116":
     "3.3 הערכה, ציונים ותיעוד",
   "auto.features.tutorial.components.concepts.guide.literal.117":
-    "מספר Threads של הערכה שרצים במקביל. ערך גבוה יקצר את זמן הריצה הכולל, אבל גם יעמיס על ספק המודל ועלול לעורר שגיאות rate limit. לדוגמה ",
+    "מספר ה-threads של ההערכה שרצים במקביל. ערך גבוה יקצר את זמן הריצה הכולל, אבל גם יעמיס על ספק המודל ועלול לעורר שגיאות rate limit. לדוגמה ",
   "auto.features.tutorial.components.concepts.guide.literal.118":
     "הציון שנרשם כאשר הערכת דוגמה נכשלת בגלל חריגה, כשל פורמט או שגיאת הרצה. ברירת מחדל: ",
   "auto.features.tutorial.components.concepts.guide.literal.119": "הציון שמייצג תשובה מושלמת. ברירת מחדל: ",
@@ -384,16 +384,16 @@ export const tutorialMessages = {
     "3.4 מודל רפלקציה",
   "auto.features.tutorial.components.concepts.guide.literal.123": "חשוב לדעת",
   "auto.features.tutorial.components.concepts.guide.literal.124":
-    " GEPA ב-DSPy צריך מודל רפלקציה, אלא אם מספקים מנגנון מותאם להצעת הוראות. ב-Skynet בוחרים מודל רפלקציה, והוא זה שקורא מסלולי הרצה ו-feedback ומציע איך לשפר את הפרומפט. לרוב כדאי לבחור כאן מודל חזק יותר ממודל המשימה, גם אם מודל המשימה עצמו זול ומהיר יותר.",
+    " GEPA ב-DSPy צריך מודל רפלקציה, אלא אם מספקים מנגנון מותאם להצעת הוראות. ב-Skynet בוחרים מודל רפלקציה, והוא זה שקורא מסלולי הרצה ומשוב ומציע איך לשפר את הפרומפט. לרוב כדאי לבחור כאן מודל חזק יותר ממודל המשימה, גם אם מודל המשימה עצמו זול ומהיר יותר.",
   "auto.features.tutorial.components.concepts.guide.literal.125": "",
   "auto.features.tutorial.components.concepts.guide.literal.126": ".",
   "auto.features.tutorial.components.concepts.guide.literal.127":
     " מודל השפה שמבצע את הרפלקציה. בריצות GEPA ב-Skynet הוא נדרש, כי בלי מודל כזה אין מי שיקרא את הכשלים ויציע הוראות חדשות.",
   "auto.features.tutorial.components.concepts.guide.literal.128":
-    "פרומפט התחלתי · דאטאסט · פונקציית מדידה",
-  "auto.features.tutorial.components.concepts.guide.literal.129": "4.1 פרומפט התחלתי",
+    "חתימה (Signature) · דאטאסט · פונקציית מדידה",
+  "auto.features.tutorial.components.concepts.guide.literal.129": "4.1 חתימה (Signature)",
   "auto.features.tutorial.components.concepts.guide.literal.130":
-    "הפרומפט ההתחלתי הוא קוד Python שמגדיר ל-DSPy את צורת המשימה: אילו שדות נכנסים, אילו שדות יוצאים, ומה ההוראה הכללית. Skynet יכול לייצר בסיס ממיפוי העמודות, אבל כדאי לערוך אותו כך שיבהיר את המשימה, את גבולות הפלט ואת משמעות כל שדה.",
+    "החתימה (Signature) היא קוד Python שמגדיר ל-DSPy את צורת המשימה: אילו שדות נכנסים, אילו שדות יוצאים, ומה ההוראה הכללית. Skynet יכול לייצר בסיס ממיפוי העמודות, אבל כדאי לערוך אותה כך שתבהיר את המשימה, את גבולות הפלט ואת משמעות כל שדה.",
   "auto.features.tutorial.components.concepts.guide.literal.131": "שדות קלט:",
   "auto.features.tutorial.components.concepts.guide.literal.132": " מה המודל מקבל בכל דוגמה, למשל שאלה, אימייל, ביקורת או צילום.",
   "auto.features.tutorial.components.concepts.guide.literal.133": "שדות פלט:",
@@ -411,7 +411,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.142": "מטרה",
   "auto.features.tutorial.components.concepts.guide.literal.143": " (אימון)",
   "auto.features.tutorial.components.concepts.guide.literal.144":
-    "מספק דוגמאות למסלולי הרצה, feedback ורעיונות לשיפור מועמדים.",
+    "מספק דוגמאות למסלולי הרצה, משוב ורעיונות לשיפור מועמדים.",
   "auto.features.tutorial.components.concepts.guide.literal.145": " (אימות)",
   "auto.features.tutorial.components.concepts.guide.literal.146":
     "משמש למעקב אחרי ציוני מועמדים, לעדכון חזית Pareto ולבחירת התוכנית המנצחת.",
@@ -428,14 +428,14 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.154": "דוגמאות לניקוד:",
   "auto.features.tutorial.components.concepts.guide.literal.155": "תשובה זהה:",
   "auto.features.tutorial.components.concepts.guide.literal.156": " ציון ",
-  "auto.features.tutorial.components.concepts.guide.literal.157": ", עם feedback שמסביר שהפלט תואם לפלט הרצוי.",
+  "auto.features.tutorial.components.concepts.guide.literal.157": ", עם משוב שמסביר שהפלט תואם לפלט הרצוי.",
   "auto.features.tutorial.components.concepts.guide.literal.158": "תשובה חלקית:",
-  "auto.features.tutorial.components.concepts.guide.literal.159": ", עם feedback שמפרט מה נכון, מה חסר, ואיזה כלל היה עוזר.",
+  "auto.features.tutorial.components.concepts.guide.literal.159": ", עם משוב שמפרט מה נכון, מה חסר, ואיזה כלל היה עוזר.",
   "auto.features.tutorial.components.concepts.guide.literal.160": "תשובה שגויה:",
-  "auto.features.tutorial.components.concepts.guide.literal.161": ", עם feedback שמצביע על מקור הטעות בצורה שיכולה להפוך להוראה חדשה.",
+  "auto.features.tutorial.components.concepts.guide.literal.161": ", עם משוב שמצביע על מקור הטעות בצורה שיכולה להפוך להוראה חדשה.",
   "auto.features.tutorial.components.concepts.guide.literal.162": "ניקוי ובדיקת הדאטאסט",
-  "auto.features.tutorial.components.concepts.guide.literal.163": "כתיבת פרומפט התחלתי",
-  "auto.features.tutorial.components.concepts.guide.literal.164": "כתיבת פונקציית מדידה עם feedback",
+  "auto.features.tutorial.components.concepts.guide.literal.163": "כתיבת חתימה (Signature)",
+  "auto.features.tutorial.components.concepts.guide.literal.164": "כתיבת פונקציית מדידה עם משוב",
   "auto.features.tutorial.components.concepts.guide.literal.165": "הרכבת בקשת API",
   "auto.features.tutorial.components.concepts.guide.literal.166": "שליחה לשירות (POST /run)",
   "auto.features.tutorial.components.concepts.guide.literal.167":
@@ -473,7 +473,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.332": "פרומפט",
   "auto.features.tutorial.components.concepts.guide.literal.333": "אופטימיזר",
   "auto.features.tutorial.components.concepts.guide.literal.334": "רפלקציה",
-  "auto.features.tutorial.components.concepts.guide.literal.335": "פרומפט התחלתי",
+  "auto.features.tutorial.components.concepts.guide.literal.335": "חתימה (Signature)",
   "auto.features.tutorial.components.concepts.guide.literal.336": "פונקציית מדידה",
   "auto.features.tutorial.components.concepts.guide.literal.337": "דאטאסט",
   "auto.features.tutorial.components.concepts.guide.literal.338": "אימון / אימות / בדיקה",
@@ -502,11 +502,11 @@ export const tutorialMessages = {
     " לפני הפלט; למשימות פשוטות, קצרות ומהירות אפשר להשתמש ב-dspy.Predict).",
   "auto.features.tutorial.components.concepts.guide.literal.178": "שם האופטימיזר (",
   "auto.features.tutorial.components.concepts.guide.literal.179": "\"dspy.GEPA\"",
-  "auto.features.tutorial.components.concepts.guide.literal.180": "קוד Python שמגדיר את הפרומפט ההתחלתי, שדות הקלט, שדות הפלט והוראת המשימה.",
-  "auto.features.tutorial.components.concepts.guide.literal.181": "קוד Python של פונקציית המדידה. ב-GEPA ודאו שהיא מקבלת חמישה פרמטרים ומחזירה ציון, ורצוי גם feedback.",
+  "auto.features.tutorial.components.concepts.guide.literal.180": "קוד Python שמגדיר את החתימה (Signature), שדות הקלט, שדות הפלט והוראת המשימה.",
+  "auto.features.tutorial.components.concepts.guide.literal.181": "קוד Python של פונקציית המדידה. ב-GEPA ודאו שהיא מקבלת חמישה פרמטרים ומחזירה ציון, ורצוי גם משוב.",
   "auto.features.tutorial.components.concepts.guide.literal.182": "רשימת שורות הדאטאסט בפורמט JSON. כל שורה צריכה להתאים למיפוי השדות.",
   "auto.features.tutorial.components.concepts.guide.literal.183":
-    "מיפוי בין שמות השדות בפרומפט ההתחלתי לבין שמות העמודות בדאטאסט. למשל, אם השדה הוא ",
+    "מיפוי בין שמות השדות בחתימה (Signature) לבין שמות העמודות בדאטאסט. למשל, אם השדה הוא ",
   "auto.features.tutorial.components.concepts.guide.literal.184": " ובדאטאסט העמודה נקראת ",
   "auto.features.tutorial.components.concepts.guide.literal.185": "הגדרות מודל המשימה שמייצר את התשובות בזמן האופטימיזציה ובשימוש.",
   "auto.features.tutorial.components.concepts.guide.literal.186": "הגדרות מודל הרפלקציה (",
@@ -521,21 +521,21 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.193":
     "(אופציונלי) seed קבוע שמאפשר לשחזר את אותה חלוקה ואותו ערבוב בין ריצות.",
   "auto.features.tutorial.components.concepts.guide.literal.194":
-    "5.3 Endpoints מרכזיים",
+    "5.3 נקודות קצה מרכזיות",
   "auto.features.tutorial.components.concepts.guide.literal.195":
-    "אלה ה-endpoints המרכזיים לעבודה מול השירות. בדפדפן Skynet משתמש באותם שלבים, וה-API מאפשר לשלב אותם בקוד שלכם:",
+    "אלה נקודות הקצה המרכזיות לעבודה מול השירות. בדפדפן Skynet משתמש באותם שלבים, וה-API מאפשר לשלב אותם בקוד שלכם:",
   "auto.features.tutorial.components.concepts.guide.literal.196": "כתובת",
   "auto.features.tutorial.components.concepts.guide.literal.197":
-    "שליחת הרצת אופטימיזציה חדשה עם דאטאסט, פרומפט התחלתי, פונקציית מדידה, מודל משימה ומודל רפלקציה.",
+    "שליחת הרצת אופטימיזציה חדשה עם דאטאסט, חתימה (Signature), פונקציית מדידה, מודל משימה ומודל רפלקציה.",
   "auto.features.tutorial.components.concepts.guide.literal.198": "הרצת סריקה שמשווה כמה זוגות של מודל משימה ומודל רפלקציה על אותה משימה.",
   "auto.features.tutorial.components.concepts.guide.literal.199":
     "רשימת ההרצות, כולל סטטוס, סינון, עימוד ונתוני סיכום.",
   "auto.features.tutorial.components.concepts.guide.literal.200":
     "מצב מלא ופרטים של הרצה מסוימת: הגדרות, ציונים, שלבים ותוצרים.",
   "auto.features.tutorial.components.concepts.guide.literal.201":
-    "סיכום קומפקטי להצגה בדף הבקרה או ברשימות.",
+    "סיכום מקוצר להצגה בדף הבקרה או ברשימות.",
   "auto.features.tutorial.components.concepts.guide.literal.202": "לוגים של הריצה, כולל סינון לפי רמה ומקור.",
-  "auto.features.tutorial.components.concepts.guide.literal.203": "עדכוני התקדמות בזמן אמת דרך SSE, שימושי למסכי מעקב ולחוויית UI חיה.",
+  "auto.features.tutorial.components.concepts.guide.literal.203": "עדכוני התקדמות בזמן אמת דרך SSE, שימושיים למסכי מעקב ולממשק שמתעדכן בזמן אמת.",
   "auto.features.tutorial.components.concepts.guide.literal.204":
     "הורדת התוצר השמור של התוכנית המשופרת לצורך בדיקה, ארכוב או שימוש מחוץ לממשק.",
   "auto.features.tutorial.components.concepts.guide.literal.205": "תוצאות סריקת המודלים כאשר ההרצה היא Grid Search.",
@@ -562,7 +562,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.221": "6.1 הכנת דאטאסט",
   "auto.features.tutorial.components.concepts.guide.literal.222": "איכות מעל כמות:",
   "auto.features.tutorial.components.concepts.guide.literal.223":
-    " 50 דוגמאות עקביות ומדויקות עדיפות על 200 דוגמאות רועשות. GEPA לומד מהדוגמאות ומה-feedback שאתם נותנים לו.",
+    " 50 דוגמאות עקביות ומדויקות עדיפות על 200 דוגמאות רועשות. GEPA לומד מהדוגמאות ומהמשוב שאתם נותנים לו.",
   "auto.features.tutorial.components.concepts.guide.literal.224": "גיוון:",
   "auto.features.tutorial.components.concepts.guide.literal.225":
     " כללו מקרים נפוצים, מקרי קצה ודוגמאות שבהן קל לטעות: טקסט קצר מדי, קלט ארוך, קטגוריות דומות ופורמטים לא מושלמים.",
@@ -576,7 +576,7 @@ export const tutorialMessages = {
     "6.2 כתיבת פונקציית מדידה טובה ל-GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.231": "משוב מפורט:",
   "auto.features.tutorial.components.concepts.guide.literal.232":
-    " החזירו feedback שמסביר מה בדיוק נכון או לא נכון, לא רק שהתשובה שגויה.",
+    " החזירו משוב שמסביר מה בדיוק נכון או לא נכון, לא רק שהתשובה שגויה.",
   "auto.features.tutorial.components.concepts.guide.literal.233": "משוב שימושי:",
   "auto.features.tutorial.components.concepts.guide.literal.234":
     " כתבו מה כדאי לשנות בכיוון הפרומפט: פורמט חסר, תנאי שלא נבדק, בלבול בין קטגוריות או שדה שהמודל התעלם ממנו.",
@@ -593,7 +593,7 @@ export const tutorialMessages = {
     "בדקו שה-JSON תקין, שמיפוי העמודות מכסה את כל השדות, שפונקציית המדידה מקבלת חמישה פרמטרים, ושנבחר מודל רפלקציה.",
   "auto.features.tutorial.components.concepts.guide.literal.243": "תוצאות גרועות",
   "auto.features.tutorial.components.concepts.guide.literal.244":
-    "בדקו קודם את הדאטאסט ואת ה-feedback של פונקציית המדידה. תקציב גבוה יותר לא יתקן תיוגים סותרים או פונקציית מדידה שמתגמלת תשובות לא נכונות.",
+    "בדקו קודם את הדאטאסט ואת המשוב של פונקציית המדידה. תקציב גבוה יותר לא יתקן תיוגים סותרים או פונקציית מדידה שמתגמלת תשובות לא נכונות.",
   "auto.features.tutorial.components.concepts.guide.literal.245": "ריצה איטית מאוד",
   "auto.features.tutorial.components.concepts.guide.literal.246": "השתמשו ב-",
   "auto.features.tutorial.components.concepts.guide.literal.247":
@@ -603,7 +603,7 @@ export const tutorialMessages = {
     "בדקו את לוגיקת ההשוואה והוסיפו נרמול בסיסי: הסרת רווחים מיותרים, אחידות אותיות, טיפול ב-JSON תקין והשוואת קטגוריות לפי רשימה סגורה.",
   "auto.features.tutorial.components.concepts.guide.literal.250": "הרפלקציה לא משפרת",
   "auto.features.tutorial.components.concepts.guide.literal.251":
-    "בדקו שה-feedback מסביר טעויות בצורה שאפשר להפוך להוראות. אם כן, נסו מודל רפלקציה חזק יותר, דאטאסט אימון מגוון יותר או תקציב גבוה יותר.",
+    "בדקו שהמשוב מסביר טעויות בצורה שאפשר להפוך להוראות. אם כן, נסו מודל רפלקציה חזק יותר, דאטאסט אימון מגוון יותר או תקציב גבוה יותר.",
   "auto.features.tutorial.components.concepts.guide.literal.252": "עזר מהיר",
   "auto.features.tutorial.components.concepts.guide.literal.253": "מונח",
   "auto.features.tutorial.components.concepts.guide.literal.254": "הסבר",
@@ -614,13 +614,13 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.258":
     "אלגוריתם שמנסה לשפר תוכנית DSPy לפי דאטאסט, פונקציית מדידה ותקציב ריצה.",
   "auto.features.tutorial.components.concepts.guide.literal.259":
-    "אופטימיזר רפלקטיבי שמשפר הוראות בעזרת מסלולי הרצה, feedback, mini-batches ובחירת Pareto.",
+    "אופטימיזר רפלקטיבי שמשפר הוראות בעזרת מסלולי הרצה, משוב, מיני-באצ׳ים ובחירת Pareto.",
   "auto.features.tutorial.components.concepts.guide.literal.260":
     "שלב שבו מודל הרפלקציה מנתח הצלחות וכישלונות ומציע שינוי בפרומפט על בסיס ראיות מהריצה.",
   "auto.features.tutorial.components.concepts.guide.literal.261":
-    "קוד ההתחלה שמגדיר ל-DSPy את שדות הקלט, שדות הפלט והוראת המשימה.",
+    "קוד החתימה (Signature) שמגדיר ל-DSPy את שדות הקלט, שדות הפלט והוראת המשימה.",
   "auto.features.tutorial.components.concepts.guide.literal.262":
-    "פונקציה שבודקת תשובה ומחזירה ציון. ב-GEPA מומלץ להחזיר גם feedback טקסטואלי שמסביר את הציון.",
+    "פונקציה שבודקת תשובה ומחזירה ציון. ב-GEPA מומלץ להחזיר גם משוב טקסטואלי שמסביר את הציון.",
   "auto.features.tutorial.components.concepts.guide.literal.263":
     "אוסף דוגמאות של קלט ותשובה רצויה שמשמש ליצירת מועמדים, השוואה ובדיקה.",
   "auto.features.tutorial.components.concepts.guide.literal.264":
@@ -631,11 +631,11 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.267":
     "הרצה של מועמד על סט דוגמאות רחב מספיק כדי לחשב ציון השוואתי.",
   "auto.features.tutorial.components.concepts.guide.literal.268":
-    "תיעוד של הקלט, שלבי הביצוע, התשובה, הציון וה-feedback עבור ניסיון מסוים.",
+    "תיעוד של הקלט, שלבי הביצוע, התשובה, הציון והמשוב עבור ניסיון מסוים.",
   "auto.features.tutorial.components.concepts.guide.literal.269":
     "מודול DSPy שמוסיף שדה reasoning לפני הפלט, ולכן מתאים למשימות שדורשות בדיקת תנאים, הסבר או פתרון בכמה צעדים.",
   "auto.features.tutorial.components.concepts.guide.literal.270":
-    "מודל השפה שמנתח את מסלולי ההרצה וה-feedback ומציע שיפורים לפרומפט.",
+    "מודל השפה שמנתח את מסלולי ההרצה והמשוב ומציע שיפורים לפרומפט.",
   "auto.features.tutorial.components.concepts.guide.literal.271": "DSPy",
   "auto.features.tutorial.components.concepts.guide.literal.272": "GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.273": "/serve/{id}",
