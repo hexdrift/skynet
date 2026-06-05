@@ -31,18 +31,6 @@ export function formatGain(
   return { text: gain.toFixed(1), kind: "negative" };
 }
 
-/**
- * Format an ISO timestamp as a numeric date (e.g. "14.5.2026").
- * Returns "—" for missing/unparseable input so callers can render the result
- * directly without a null check.
- */
-export function formatExploreDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
-}
-
 // Constructing Intl.RelativeTimeFormat is expensive (locale data + ICU
 // pattern parse). Lift to module scope so every row reuses one instance.
 const RTF_HE = new Intl.RelativeTimeFormat("he", { numeric: "auto" });

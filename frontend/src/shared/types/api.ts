@@ -221,6 +221,12 @@ export interface ReactOverlay {
   tool_source?: Record<string, unknown> | null;
   /** GEPA-proposed display names, { canonical: proposed }. */
   tool_names?: Record<string, string> | null;
+  /**
+   * Per-tool approval severity ("info" | "warning" | "destructive") derived
+   * from the source MCP's tool annotations, { tool_name: severity }. Only tools
+   * whose server stated a hint appear; absent for pre-severity artifacts.
+   */
+  tool_severities?: Record<string, string>;
 }
 
 export interface ProgramArtifact {

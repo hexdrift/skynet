@@ -463,15 +463,73 @@ def _build_engine(db_url: str) -> Engine:
     )
 
 
+# ``dspy.Tool`` drops MCP ``annotations`` when wrapping a server tool, so we
+# stash the derived approval severity on the wrapped object under this attr and
+# read it back at overlay-build time. Kept off the schema hash (it is identity
+# metadata, not part of the call contract) so it never perturbs drift detection.
+_TOOL_SEVERITY_ATTR = "_skynet_severity"
+
+
+def _severity_from_annotations(annotations: Any) -> str | None:
+    """Map MCP tool annotations to an approval severity, or ``None`` if unstated.
+
+    Mirrors the frontend ``ApprovalSeverity`` tiers from the MCP annotation
+    hints: a read-only tool is ``info``, an explicitly destructive one is
+    ``destructive``, and a declared-but-mutating tool is ``warning``. When the
+    server states no relevant hint we return ``None`` so the surface never
+    fabricates a severity it was not told.
+
+    Args:
+        annotations: The MCP ``ToolAnnotations`` object (or ``None``).
+
+    Returns:
+        ``"info"``/``"warning"``/``"destructive"``, or ``None`` when no hint
+        applies.
+    """
+    if annotations is None:
+        return None
+    if getattr(annotations, "readOnlyHint", None) is True:
+        return "info"
+    if getattr(annotations, "destructiveHint", None) is True:
+        return "destructive"
+    if getattr(annotations, "readOnlyHint", None) is False:
+        return "warning"
+    return None
+
+
+def set_tool_severity(tool: dspy.Tool, severity: str | None) -> None:
+    """Stash a derived approval severity on a wrapped tool (no-op when ``None``).
+
+    Args:
+        tool: The ``dspy.Tool`` to annotate.
+        severity: The severity tier, or ``None`` to leave the tool unmarked.
+    """
+    if severity is not None:
+        setattr(tool, _TOOL_SEVERITY_ATTR, severity)
+
+
+def tool_severity(tool: dspy.Tool) -> str | None:
+    """Read a tool's stashed approval severity, or ``None`` when unmarked.
+
+    Args:
+        tool: The ``dspy.Tool`` to read.
+
+    Returns:
+        The severity tier set by :func:`set_tool_severity`, or ``None``.
+    """
+    return getattr(tool, _TOOL_SEVERITY_ATTR, None)
+
+
 async def _list_live_tools(
     mcp_url: str, auth_header: str | None
 ) -> list[dspy.Tool]:
     """Open one MCP session and return the live ``dspy.Tool`` roster.
 
     Each tool's session-bound callable is irrelevant for our purposes —
-    the optimize CLI never invokes them. Only ``.name``, ``.desc``, and
-    ``.args`` are read (for the seed candidate + the bundle's schema-hash
-    snapshot). Rollout-time tool calls are routed through
+    the optimize CLI never invokes them. Only ``.name``, ``.desc``,
+    ``.args`` and the approval-severity hint from ``.annotations`` are read
+    (for the seed candidate, the bundle's schema-hash snapshot, and the
+    overlay's per-tool severity). Rollout-time tool calls are routed through
     :class:`TraceConditionedMCPMock`.
 
     Args:
@@ -479,7 +537,8 @@ async def _list_live_tools(
         auth_header: Optional ``Authorization`` header to forward.
 
     Returns:
-        List of dspy.Tool objects, one per MCP-exposed tool.
+        List of dspy.Tool objects, one per MCP-exposed tool, each carrying its
+        derived approval severity (see :func:`set_tool_severity`).
     """
     headers = {"Authorization": auth_header} if auth_header else None
     async with (
@@ -488,7 +547,14 @@ async def _list_live_tools(
     ):
         await session.initialize()
         listing = await session.list_tools()
-        return [dspy.Tool.from_mcp_tool(session, tool) for tool in listing.tools]
+        tools: list[dspy.Tool] = []
+        for tool in listing.tools:
+            wrapped = dspy.Tool.from_mcp_tool(session, tool)
+            set_tool_severity(
+                wrapped, _severity_from_annotations(getattr(tool, "annotations", None))
+            )
+            tools.append(wrapped)
+        return tools
 
 
 def _load_seed_program_and_hashes(
@@ -591,7 +657,7 @@ def _evaluate_candidate_on_examples(
     adapter: TrainingGroundDspyAdapter,
     candidate: dict[str, str],
     examples: list[EvaluationExample],
-) -> tuple[list[float], list[dict[str, float]], dict[str, float]]:
+) -> tuple[list[float], list[dict[str, float]], dict[str, float], list[Any]]:
     """Score one candidate against ``examples`` via ``adapter.evaluate``.
 
     Used by both the seed (baseline) and the optimized candidate so both
@@ -600,7 +666,11 @@ def _evaluate_candidate_on_examples(
     makes the §11 paired bootstrap comparison apples-to-apples.
 
     Returns:
-        ``(per_example_scalars, per_example_objectives, mean_objective_scores)``.
+        ``(per_example_scalars, per_example_objectives, mean_objective_scores,
+        per_example_outputs)`` where ``per_example_outputs`` carries the rollout
+        ``Prediction`` (or ``None`` on a failed rollout) for each example, in
+        ``examples`` order — the service path reads these to surface the agent's
+        per-example answer in the data view.
     """
     batch = adapter.evaluate(examples, candidate, capture_traces=False)
     scalars = list(batch.scores)
@@ -615,7 +685,7 @@ def _evaluate_candidate_on_examples(
                 means[name] += float(value)
         n = max(1, len(batch.objective_scores))
         means = {name: total / n for name, total in means.items()}
-    return scalars, per_example, means
+    return scalars, per_example, means, list(batch.outputs)
 
 
 def _critical_regressions(
@@ -984,13 +1054,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     best_candidate = _best_candidate(result)
-    baseline_scalars, baseline_objectives, _ = _evaluate_candidate_on_examples(
+    baseline_scalars, baseline_objectives, _, _ = _evaluate_candidate_on_examples(
         adapter=adapter, candidate=seed_candidate, examples=holdout
     )
     (
         candidate_scalars,
         candidate_objectives_full,
         candidate_objective_mean,
+        _,
     ) = _evaluate_candidate_on_examples(
         adapter=adapter, candidate=best_candidate, examples=holdout
     )

@@ -20,8 +20,20 @@ import pytest
 
 from core.config import settings
 from core.models.submissions import ReplayMapping, ToolSource
+from core.service_gateway.optimization.timing import (
+    STAGE_BASELINE,
+    STAGE_EVALUATION,
+    STAGE_TRAINING,
+    GenLMTimingCallback,
+)
 from core.service_gateway.optimization.training_ground import run_react as run_react_mod
 from core.service_gateway.optimization.training_ground.registry import hash_tool_schema
+from core.service_gateway.optimization.core import _tool_to_snapshot_spec
+from core.service_gateway.optimization.training_ground.optimize import (
+    _severity_from_annotations,
+    set_tool_severity,
+    tool_severity,
+)
 from core.service_gateway.optimization.training_ground.run_react import (
     _JobLogGepaLogger,
     build_replay_examples,
@@ -177,6 +189,53 @@ def test_resolve_react_tools_dataset_snapshot_rebuilds_roster() -> None:
     assert hashes["search"] == hash_tool_schema(search_tool)
 
 
+def test_severity_from_annotations_maps_mcp_hints() -> None:
+    """MCP annotation hints map to the three approval tiers, else ``None``."""
+    read_only = SimpleNamespace(readOnlyHint=True, destructiveHint=None)
+    destructive = SimpleNamespace(readOnlyHint=False, destructiveHint=True)
+    mutating = SimpleNamespace(readOnlyHint=False, destructiveHint=False)
+    open_world = SimpleNamespace(readOnlyHint=None, destructiveHint=None)
+
+    assert _severity_from_annotations(read_only) == "info"
+    assert _severity_from_annotations(destructive) == "destructive"
+    assert _severity_from_annotations(mutating) == "warning"
+    assert _severity_from_annotations(open_world) is None
+    assert _severity_from_annotations(None) is None
+
+
+def test_tool_to_snapshot_spec_serializes_severity() -> None:
+    """A tool's stashed severity is serialized into its spec; omitted when unset."""
+
+    def _noop(**_kwargs: object) -> None:
+        """Placeholder body for a snapshot tool."""
+
+    _noop.__name__ = "wipe"
+    marked = dspy.Tool(_noop, name="wipe", desc="Delete it.", args=None)
+    set_tool_severity(marked, "destructive")
+    unmarked = dspy.Tool(_noop, name="peek", desc="Read it.", args=None)
+
+    assert _tool_to_snapshot_spec(marked)["severity"] == "destructive"
+    assert "severity" not in _tool_to_snapshot_spec(unmarked)
+
+
+def test_resolve_react_tools_dataset_snapshot_carries_severity() -> None:
+    """A snapshot spec's ``severity`` round-trips onto the rebuilt tool."""
+    snapshot = [
+        {"name": "wipe", "description": "Delete it.", "args": {}, "severity": "destructive"},
+        {"name": "peek", "description": "Read it.", "args": {}},
+    ]
+    dataset = [{"__tool_snapshot__": snapshot}]
+    tool_source = ToolSource(kind="dataset_snapshot")
+
+    tools, _ = resolve_react_tools(
+        tool_source, signature_cls=object, settings=settings, dataset=dataset
+    )
+
+    by_name = {tool.name: tool for tool in tools}
+    assert tool_severity(by_name["wipe"]) == "destructive"
+    assert tool_severity(by_name["peek"]) is None
+
+
 def test_resolve_react_tools_dataset_snapshot_honours_tool_filter() -> None:
     """``tool_filter`` keeps and reorders the snapshot roster."""
     snapshot = [
@@ -278,7 +337,7 @@ def test_run_react_optimization_passes_progress_bar_and_logger(
     monkeypatch.setattr(run_react_mod, "seed_candidate_from_program", lambda program: {"seed": True})
     monkeypatch.setattr(run_react_mod, "TrainingGroundDspyAdapter", lambda **k: MagicMock())
     monkeypatch.setattr(
-        run_react_mod, "_evaluate_candidate_on_examples", lambda **k: ([1.0], [{}], 1.0)
+        run_react_mod, "_evaluate_candidate_on_examples", lambda **k: ([1.0], [{}], 1.0, [None])
     )
     monkeypatch.setattr(run_react_mod, "react_valset_outputs", _noop_cm)
     monkeypatch.setattr(run_react_mod, "react_minibatch_feedback", _noop_cm)
@@ -305,3 +364,75 @@ def test_run_react_optimization_passes_progress_bar_and_logger(
     # The sink must sit under core.service_gateway.optimization so the worker's
     # JobLogHandler (attached to that parent) captures GEPA's iteration lines.
     assert wired_logger._sink.name.startswith("core.service_gateway.optimization")
+
+
+def test_run_react_optimization_buckets_lm_activity_per_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Student rollouts are attributed to the baseline/training/evaluation stages.
+
+    Guards the regression where react runs left the LM-activity panel empty:
+    ``run_react_optimization`` ran its three model-call regions without a
+    ``track_stage`` wrapper, so the per-stage buckets the panel reads stayed
+    empty and the tab rendered "no activity". A real
+    :class:`GenLMTimingCallback` is threaded in here and each stubbed region
+    simulates one matched student call; the callback must then report exactly
+    one call bucketed under each of the three stages.
+    """
+    student_lm = MagicMock()
+    gen_timing = GenLMTimingCallback(student_lm)
+    call_ids = iter(range(100))
+
+    def _simulate_student_call() -> None:
+        """Record one matched student-LM call against whichever stage is active."""
+        call_id = f"call-{next(call_ids)}"
+        gen_timing.on_lm_start(call_id, student_lm, {})
+        gen_timing.on_lm_end(call_id, {})
+
+    def _fake_eval(**_kwargs: object) -> tuple[list[float], list[dict], float, list[object]]:
+        """Stand in for ``_evaluate_candidate_on_examples`` with one simulated call."""
+        _simulate_student_call()
+        return [1.0], [{}], 1.0, [None]
+
+    def _fake_optimize(**_kwargs: object) -> MagicMock:
+        """Stand in for ``gepa.optimize`` with one simulated training call."""
+        _simulate_student_call()
+        return MagicMock()
+
+    monkeypatch.setattr(run_react_mod.dspy, "ReActV2", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(run_react_mod, "seed_candidate_from_program", lambda program: {"seed": True})
+    monkeypatch.setattr(run_react_mod, "TrainingGroundDspyAdapter", lambda **k: MagicMock())
+    monkeypatch.setattr(run_react_mod, "_evaluate_candidate_on_examples", _fake_eval)
+    monkeypatch.setattr(run_react_mod, "react_valset_outputs", _noop_cm)
+    monkeypatch.setattr(run_react_mod, "react_minibatch_feedback", _noop_cm)
+    monkeypatch.setattr(run_react_mod.gepa, "optimize", _fake_optimize)
+    monkeypatch.setattr(run_react_mod, "_best_candidate", lambda result: {"opt": True})
+    monkeypatch.setattr(run_react_mod, "_program_state_from", lambda **k: {})
+    monkeypatch.setattr(run_react_mod, "_bootstrap_or_empty", lambda **k: MagicMock())
+    monkeypatch.setattr(
+        run_react_mod,
+        "_resolve_promotion",
+        lambda **k: SimpleNamespace(promotable=True, reasons=[]),
+    )
+    monkeypatch.setattr(run_react_mod, "_candidate_tool_descriptions", lambda c: {})
+    monkeypatch.setattr(run_react_mod, "_candidate_tool_arg_descriptions", lambda c: {})
+    monkeypatch.setattr(run_react_mod, "_candidate_tool_names", lambda c: [])
+
+    run_react_optimization(
+        signature_cls=object,
+        tools=[],
+        schema_hashes={},
+        reward_spec=MagicMock(),
+        vector_fn=MagicMock(),
+        grounding_weight=0.0,
+        train=[],
+        val=[],
+        test=[],
+        student_lm=student_lm,
+        reflection_lm=MagicMock(),
+        timing_callbacks=(gen_timing,),
+    )
+
+    stages = gen_timing.stage_summary()
+    assert set(stages) == {STAGE_BASELINE, STAGE_TRAINING, STAGE_EVALUATION}
+    assert all(calls == 1 for calls, _avg in stages.values())

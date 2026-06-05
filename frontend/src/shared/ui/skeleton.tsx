@@ -28,20 +28,3 @@ export function AppSkeletonTheme({ children }: AppSkeletonThemeProps) {
     </SkeletonTheme>
   );
 }
-
-interface SkeletonGateProps {
-  loading: boolean;
-  skeleton: ReactNode;
-  children: ReactNode;
-}
-
-export function SkeletonGate({ loading, skeleton, children }: SkeletonGateProps) {
-  if (loading) {
-    return (
-      <div aria-busy="true" aria-live="polite" className="w-full">
-        {skeleton}
-      </div>
-    );
-  }
-  return <>{children}</>;
-}

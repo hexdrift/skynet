@@ -10,15 +10,9 @@ Usage
         fake_language_model_no_history,
         fake_compiled_program,
         fake_original_program,
-        fake_optimizer,
         fake_capture_tqdm,
         patch_core_dependencies,
         REAL_NUM_LM_CALLS,
-        REAL_BASELINE_METRIC,
-        REAL_OPTIMIZED_METRIC,
-        REAL_OPTIMIZER_NAME,
-        REAL_MODULE_NAME,
-        REAL_AVG_RESPONSE_TIME_MS,
     )
 """
 
@@ -32,11 +26,6 @@ from tests.fixtures import load_fixture
 _gepa = load_fixture("jobs/success_single_gepa.detail.json")
 
 REAL_NUM_LM_CALLS: int = _gepa["result"]["num_lm_calls"]  # 1257
-REAL_AVG_RESPONSE_TIME_MS: float = _gepa["result"]["avg_response_time_ms"]  # 58686.1
-REAL_BASELINE_METRIC: float = _gepa["result"]["baseline_test_metric"]  # 52.89
-REAL_OPTIMIZED_METRIC: float = _gepa["result"]["optimized_test_metric"]  # 75.9
-REAL_MODULE_NAME: str = _gepa["module_name"]  # "cot"
-REAL_OPTIMIZER_NAME: str = _gepa["optimizer_name"]  # "gepa"
 
 
 def fake_language_model(history_len: int | None = None) -> MagicMock:
@@ -75,11 +64,6 @@ def fake_compiled_program(name: str = "compiled") -> MagicMock:
 def fake_original_program(name: str = "original_program") -> MagicMock:
     """Return a ``MagicMock`` standing in for the pre-compile baseline program."""
     return MagicMock(name=name)
-
-
-def fake_optimizer() -> MagicMock:
-    """Return a bare ``MagicMock`` standing in for a DSPy optimizer."""
-    return MagicMock()
 
 
 def fake_capture_tqdm() -> MagicMock:

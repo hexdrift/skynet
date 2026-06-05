@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Code, Sparkles, Wrench } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { Carousel, ToolHeader } from "@/features/agent-panel";
 import type { OptimizedPredictor, ReactOverlay } from "@/shared/types/api";
 import { tip } from "@/shared/lib/tooltips";
 import { CopyButton } from "./ui-primitives";
@@ -162,46 +163,95 @@ export function CodeTab({
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Wrench className="size-4" />
-              {msg("optimizations.react.optimized_tools")}
+              <HelpTip text={tip("react.optimized_tools")}>
+                {msg("optimizations.react.optimized_tools")}
+              </HelpTip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2.5">
-            {Object.entries(reactOverlay.tool_descriptions).map(([name, desc]) => {
-              const renamed = reactOverlay.tool_names?.[name];
-              const argDescs = reactOverlay.tool_arg_descriptions?.[name];
-              return (
-                <div key={name} className="rounded-lg bg-muted/40 p-3">
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="font-mono text-xs text-foreground" dir="ltr">
-                      {renamed || name}
-                    </span>
-                    {renamed && renamed !== name && (
-                      <span className="text-[0.625rem] text-muted-foreground" dir="ltr">
-                        ({name})
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground" dir="auto">
-                    {desc}
-                  </p>
-                  {argDescs && Object.keys(argDescs).length > 0 && (
-                    <div className="mt-1.5 space-y-0.5 border-t border-border/40 pt-1.5">
-                      {Object.entries(argDescs).map(([arg, argDesc]) => (
-                        <div key={arg} className="text-[0.6875rem] text-muted-foreground" dir="auto">
-                          <span className="font-mono text-foreground/70" dir="ltr">
-                            {arg}
-                          </span>
-                          {argDesc ? ` — ${argDesc}` : ""}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <CardContent>
+            <ReactToolsCarousel overlay={reactOverlay} />
           </CardContent>
         </Card>
       )}
     </>
+  );
+}
+
+// Pages the ReAct overlay's tools one at a time through the shared carousel
+// chrome (counter, dots, RTL prev/next, keyboard) instead of a long vertical
+// list — the same paging the trajectory drawer uses for tool descriptions.
+function ReactToolsCarousel({ overlay }: { overlay: ReactOverlay }) {
+  const tools = useMemo(
+    () => Object.keys(overlay.tool_descriptions),
+    [overlay.tool_descriptions],
+  );
+  return (
+    <Carousel
+      items={tools}
+      itemKey={(name) => name}
+      renderItem={(name) => (
+        <ReactToolSlide
+          name={name}
+          desc={overlay.tool_descriptions[name] ?? ""}
+          renamed={overlay.tool_names?.[name]}
+          argDescs={overlay.tool_arg_descriptions?.[name]}
+          severity={overlay.tool_severities?.[name]}
+        />
+      )}
+      ariaLabel={msg("optimizations.react.optimized_tools")}
+      fluid
+      className="w-full"
+    />
+  );
+}
+
+// One tool's slide. Wears the shared ToolHeader chrome — severity-tinted icon,
+// friendly title, severity label — so it reads identically to the agent tour and
+// the trajectory drawer's allowed_tools carousel; any optimized agent's tools get
+// the same treatment (uncatalogued ones fall back to a wrench + prettified name).
+// Severity comes from the run's own tool metadata (overlay.tool_severities,
+// captured from the source MCP's annotations) and is never fabricated. The
+// optimized description and per-argument descriptions sit below it, plus the
+// GEPA-renamed name when the optimizer changed it.
+function ReactToolSlide({
+  name,
+  desc,
+  renamed,
+  argDescs,
+  severity,
+}: {
+  name: string;
+  desc: string;
+  renamed?: string;
+  argDescs?: Record<string, string>;
+  severity?: string;
+}) {
+  const optimizedName = renamed && renamed !== name ? renamed : null;
+  return (
+    <div className="p-3.5">
+      <ToolHeader toolKey={name} severity={severity} className="mb-2.5" />
+      {optimizedName ? (
+        <p className="-mt-1.5 mb-2 font-mono text-[0.625rem] text-muted-foreground/70" dir="ltr">
+          {`↳ ${optimizedName}`}
+        </p>
+      ) : null}
+      {desc ? (
+        <p className="text-[0.75rem] leading-relaxed text-foreground/75" dir="auto">
+          {desc}
+        </p>
+      ) : null}
+      {argDescs && Object.keys(argDescs).length > 0 && (
+        <div className="mt-2 space-y-0.5 border-t border-border/40 pt-2">
+          {Object.entries(argDescs).map(([arg, argDesc]) => (
+            <div key={arg} className="text-[0.6875rem] text-muted-foreground" dir="auto">
+              <span className="font-mono text-foreground/70" dir="ltr">
+                {arg}
+              </span>
+              {argDesc ? ` — ${argDesc}` : ""}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -37,9 +37,17 @@ export interface TrajectoryPanelProps {
   // Forwarded to TrajectoryTree — see its prop docs. The tutorial demo uses
   // it to open the tree at the eventual extent before any node streams in.
   previewLayout?: { width: number; height: number };
+  // Tool name → approval severity from the run's persisted react_overlay,
+  // forwarded to the drawer so its tool cards match the Code tab.
+  toolSeverities?: Record<string, string>;
 }
 
-export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPanelProps) {
+export function TrajectoryPanel({
+  job,
+  pairIndex,
+  previewLayout,
+  toolSeverities,
+}: TrajectoryPanelProps) {
   const live = isLive(job);
   const { candidates, rejected, valsetRows, minibatch, valsetOutputs } = useMemo(() => {
     const events = job.progress_events ?? [];
@@ -225,6 +233,7 @@ export function TrajectoryPanel({ job, pairIndex, previewLayout }: TrajectoryPan
             valsetRows={valsetRows}
             minibatch={minibatch}
             valsetOutputs={valsetOutputs}
+            toolSeverities={toolSeverities}
           />
           <div
             ref={liveRegionRef}

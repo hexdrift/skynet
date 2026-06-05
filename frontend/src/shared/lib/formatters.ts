@@ -100,18 +100,6 @@ export function formatImprovement(v: number | undefined | null): string {
   return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
 }
 
-export function jsonPreview(v: unknown): string {
-  if (v == null) return "—";
-  if (typeof v === "object") {
-    try {
-      return JSON.stringify(v, null, 2);
-    } catch {
-      return String(v);
-    }
-  }
-  return String(v);
-}
-
 export function formatOutput(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;

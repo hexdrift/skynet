@@ -227,6 +227,20 @@ function setGeneralistPanelOpen(open: boolean) {
   callTutorialHook("setGeneralistPanelOpen", open);
 }
 
+/**
+ * Slide the off-canvas sidebar drawer into view before a step spotlights it.
+ * Below 768px the sidebar is translated off-screen, so its target rect would
+ * sit off the viewport edge and the spotlight would highlight nothing. Open
+ * the drawer and let its 300ms transform settle before the overlay measures.
+ * On desktop the sidebar is permanently docked, so we skip the work entirely.
+ */
+async function revealSidebarDrawer() {
+  if (typeof window === "undefined") return;
+  if (!window.matchMedia("(max-width: 767.98px)").matches) return;
+  callTutorialHook("setSidebarOpen", true);
+  await new Promise((r) => setTimeout(r, 340));
+}
+
 /** Inject demo data into tagger setup when empty and advance to the requested step */
 function injectDemoTaggerData(targetStep: number) {
   if (!queryTutorialHook("hasTaggerData")) {
@@ -332,6 +346,10 @@ const tutorialSteps: TutorialStep[] = [
       await ensureDashboard();
       injectDemoDashboardData();
       setTab("jobs");
+      await revealSidebarDrawer();
+    },
+    afterHide: () => {
+      callTutorialHook("setSidebarOpen", false);
     },
     track: "deep-dive",
     readingTimeSec: 7,
@@ -1025,6 +1043,10 @@ const tutorialSteps: TutorialStep[] = [
     placement: "left",
     beforeShow: async () => {
       await ensureDashboard();
+      await revealSidebarDrawer();
+    },
+    afterHide: () => {
+      callTutorialHook("setSidebarOpen", false);
     },
     track: "deep-dive",
     readingTimeSec: 5,
@@ -1084,9 +1106,3 @@ export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | unde
   };
 }
 
-export const TUTORIAL_TRACKS: TutorialTrackDefinition[] = [getTrack("deep-dive")!];
-
-export function getStep(trackId: TutorialTrack, stepId: string): TutorialStep | undefined {
-  const track = getTrack(trackId);
-  return track?.steps.find((s) => s.id === stepId);
-}

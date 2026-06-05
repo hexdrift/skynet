@@ -17,7 +17,7 @@ from typing import Annotated, Any
 
 import dspy
 from dspy.streaming import StreamListener, StreamResponse
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 

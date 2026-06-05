@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Menu, LogOut, GraduationCap, Lightbulb } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
-import { useTutorialContext, ConceptsGuide } from "@/features/tutorial";
+import { useTutorialContext, ConceptsGuide, registerTutorialHook } from "@/features/tutorial";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { msg } from "@/shared/lib/messages";
@@ -67,6 +67,10 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
+  // Let the tutorial slide the sidebar drawer in/out so its spotlight steps
+  // have an on-screen target below 768px, where the sidebar is off-canvas.
+  React.useEffect(() => registerTutorialHook("setSidebarOpen", setSidebarOpen), []);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

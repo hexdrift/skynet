@@ -390,3 +390,30 @@ def test_drain_backfill_queue_continues_after_embed_failure() -> None:
     with patch.object(pipeline, "embed_finished_job", side_effect=_fake_embed):
         pipeline._drain_backfill_queue(store, ["a", "b", "c"])
     assert seen == ["a", "b", "c"]
+
+
+def test_set_embedding_task_name_updates_row() -> None:
+    """A rename propagates the new display name onto the embedding row."""
+    store = _FakeJobStore()
+    session = MagicMock(name="session")
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+
+    with patch.object(pipeline, "Session", return_value=session):
+        pipeline.set_embedding_task_name(store, "job-1", "Renamed task")
+
+    update = session.query.return_value.filter.return_value.update
+    update.assert_called_once()
+    assert list(update.call_args.args[0].values()) == ["Renamed task"]
+    session.commit.assert_called_once()
+
+
+def test_set_embedding_task_name_noop_without_engine() -> None:
+    """A store with no SQLAlchemy engine (offline mode) is left untouched."""
+    store = _FakeJobStore()
+    store.engine = None
+
+    with patch.object(pipeline, "Session") as session_factory:
+        pipeline.set_embedding_task_name(store, "job-1", "Renamed task")
+
+    session_factory.assert_not_called()

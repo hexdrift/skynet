@@ -4,11 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Clock, FilterX, Plus, SearchX, X } from "lucide-react";
+import { AlertTriangle, Clock, FilterX, Plus, SearchX } from "lucide-react";
 import { logSearchQuery, type PublicDashboardPoint } from "@/shared/lib/api";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import { registerTutorialHook } from "@/features/tutorial";
 import { usePublicDashboard } from "../hooks/use-public-dashboard";
+import { useCorpusFacets } from "../hooks/use-corpus-facets";
 import { useSemanticSearch } from "../hooks/use-semantic-search";
 import { useRecentQueries } from "../hooks/use-recent-queries";
 import { usePopularQueries } from "../hooks/use-popular-queries";
@@ -20,14 +21,13 @@ import { ResultsList } from "./ResultsList";
 import { ResultsToolbar } from "./ResultsToolbar";
 import { ResultsSkeleton } from "./ResultsSkeleton";
 import { Pagination } from "./Pagination";
-import { formatDisplayDate } from "./SkynetDatePicker";
 
 /**
  * Top-level /explore page rendering a single ranked-list view driven by one
  * shared search input and filter set, with corpus toggle and pagination.
  */
 export function ExploreView() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const sessionUser = session?.user?.name ?? "";
   const { points: realPoints, loading: corpusLoading, error: corpusError } = usePublicDashboard();
   const [demoPoints, setDemoPoints] = React.useState<PublicDashboardPoint[] | null>(null);
@@ -42,6 +42,7 @@ export function ExploreView() {
 
   const { query, response, actions, appliedFilterCount } = useSemanticSearch({
     sessionUser,
+    sessionReady: status !== "loading",
   });
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
@@ -74,10 +75,22 @@ export function ExploreView() {
     () => commitQuery(query.text),
   );
 
-  const modelOptions = React.useMemo(() => collectDistinct(points, "winning_model"), [points]);
+  // Filter options come from a per-corpus facets fetch so each tab lists only
+  // the chips it can filter to (a model private to "mine" never shows under
+  // "public"). The tutorial's demo corpus has no backend scope, so there we
+  // fall back to deriving options from the injected demo points.
+  const facets = useCorpusFacets(query.corpus, sessionUser);
+  const modelOptions = React.useMemo(
+    () => (demoPoints ? collectDistinct(demoPoints, "winning_model") : facets.models),
+    [demoPoints, facets.models],
+  );
   const optimizerOptions = React.useMemo(
-    () => collectDistinct(points, "optimizer_name"),
-    [points],
+    () => (demoPoints ? collectDistinct(demoPoints, "optimizer_name") : facets.optimizers),
+    [demoPoints, facets.optimizers],
+  );
+  const moduleOptions = React.useMemo(
+    () => (demoPoints ? collectDistinct(demoPoints, "module_name") : facets.modules),
+    [demoPoints, facets.modules],
   );
   // Popular searches for a blank field: real trending only — what people
   // actually searched (public corpus, logged server-side on explicit commit).
@@ -96,6 +109,13 @@ export function ExploreView() {
   // to "Mine" without first creating a public job.
   const isTrulyEmpty =
     isPublicCorpus && !corpusLoading && !corpusError && corpusTotal === 0;
+
+  // Until the session resolves we don't yet know the default corpus (mine when
+  // signed in, public when anonymous); show the skeleton rather than briefly
+  // mounting the wrong tab and flashing its results.
+  if (status === "loading") {
+    return <ExploreSkeleton />;
+  }
 
   if (isPublicCorpus && corpusLoading && points.length === 0) {
     return <ExploreSkeleton />;
@@ -123,25 +143,16 @@ export function ExploreView() {
             onSubmit={actions.setText}
             corpus={query.corpus}
             onCorpusChange={actions.setCorpus}
-            mineEnabled={sessionUser.length > 0}
+            signedIn={sessionUser.length > 0}
             filtersCount={appliedFilterCount}
             onOpenFilters={() => setDrawerOpen(true)}
+            onClearFilters={actions.clearFilters}
             loading={response.loading}
             onResultKeyDown={onInputKeyDown}
             activeResultIndex={activeIndex}
             recentQueries={recent}
             onClearRecent={clearRecent}
             suggestions={isPublicCorpus ? popularSearches : []}
-          />
-          <ActiveFilterChips
-            models={query.models}
-            optimizers={query.optimizers}
-            types={query.types}
-            dateFrom={query.dateFrom}
-            dateTo={query.dateTo}
-            onRemove={actions.removeFilter}
-            onClearDates={() => actions.setDateRange(null, null)}
-            onClearAll={actions.clearAll}
           />
         </div>
 
@@ -179,14 +190,17 @@ export function ExploreView() {
         onOpenChange={setDrawerOpen}
         modelOptions={modelOptions}
         optimizerOptions={optimizerOptions}
+        moduleOptions={moduleOptions}
         selectedModels={query.models}
         selectedOptimizers={query.optimizers}
         selectedTypes={query.types}
+        selectedModules={query.modules}
         dateFrom={query.dateFrom}
         dateTo={query.dateTo}
         onChangeModels={actions.setModels}
         onChangeOptimizers={actions.setOptimizers}
         onChangeTypes={actions.setTypes}
+        onChangeModules={actions.setModules}
         onChangeDateRange={actions.setDateRange}
         onClearAll={actions.clearAll}
       />
@@ -240,16 +254,22 @@ function ListPane({
   }
 
   if (!response.loading && response.results.length === 0) {
-    // Three distinct cases to keep the empty UI honest:
-    //   1. Mine + signed out — no auth, no list to show
+    // Distinct cases to keep the empty UI honest:
+    //   1. Session-scoped (Mine/Shared) + signed out — no auth, no list to show
     //   2. Mine + no filters — user has zero jobs; clear-filters is misleading
-    //   3. Otherwise — a real "no matches" state with clear-filters affordance
+    //   3. Shared + no filters — nothing has been shared with the user yet
+    //   4. Otherwise — a real "no matches" state with clear-filters affordance
     const isMine = query.corpus === "mine";
-    if (isMine && !sessionUser) {
+    const isShared = query.corpus === "shared";
+    if ((isMine || isShared) && !sessionUser) {
       return (
         <div className="mx-auto flex max-w-xl flex-col items-start gap-3 px-2 py-8">
           <p className="text-[13.5px] text-foreground/65">
-            {msg("explore.corpus.mine.signed_out")}
+            {msg(
+              isShared
+                ? "explore.corpus.shared.signed_out"
+                : "explore.corpus.mine.signed_out",
+            )}
           </p>
         </div>
       );
@@ -267,6 +287,15 @@ function ListPane({
             <Plus className="size-3.5" />
             {msg("explore.empty.cta")}
           </Link>
+        </div>
+      );
+    }
+    if (isShared && !response.isActive) {
+      return (
+        <div className="mx-auto flex max-w-xl flex-col items-start gap-3 px-2 py-8">
+          <p className="text-[13.5px] text-foreground/65">
+            {msg("explore.corpus.shared.empty")}
+          </p>
         </div>
       );
     }
@@ -337,125 +366,9 @@ function ListPane({
   );
 }
 
-function ActiveFilterChips({
-  models,
-  optimizers,
-  types,
-  dateFrom,
-  dateTo,
-  onRemove,
-  onClearDates,
-  onClearAll,
-}: {
-  models: string[];
-  optimizers: string[];
-  types: string[];
-  dateFrom: string | null;
-  dateTo: string | null;
-  onRemove: (kind: "model" | "optimizer" | "type", value: string) => void;
-  onClearDates: () => void;
-  onClearAll: () => void;
-}) {
-  const total =
-    models.length +
-    optimizers.length +
-    types.length +
-    (dateFrom ? 1 : 0) +
-    (dateTo ? 1 : 0);
-  if (total === 0) return null;
-
-  const typeLabels: Record<string, string> = {
-    run: msg("explore.filter.run"),
-    grid_search: msg("explore.filter.grid"),
-  };
-  const dateRangeLabel = formatDateRangeLabel(dateFrom, dateTo);
-
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-1.5 px-1">
-      {models.map((v) => (
-        <FilterChip
-          key={`m:${v}`}
-          label={v}
-          dir="ltr"
-          onRemove={() => onRemove("model", v)}
-        />
-      ))}
-      {optimizers.map((v) => (
-        <FilterChip
-          key={`o:${v}`}
-          label={v}
-          dir="ltr"
-          onRemove={() => onRemove("optimizer", v)}
-        />
-      ))}
-      {types.map((v) => (
-        <FilterChip
-          key={`t:${v}`}
-          label={typeLabels[v] ?? v}
-          dir="rtl"
-          onRemove={() => onRemove("type", v)}
-        />
-      ))}
-      {dateRangeLabel && (
-        <FilterChip
-          label={dateRangeLabel}
-          dir="ltr"
-          onRemove={onClearDates}
-        />
-      )}
-      {total > 1 && (
-        <button
-          type="button"
-          onClick={onClearAll}
-          className="ms-1 rounded-md px-1.5 py-0.5 text-[12px] text-foreground/55 underline-offset-4 transition-colors cursor-pointer hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-        >
-          {msg("explore.filters.clear")}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function formatDateRangeLabel(
-  from: string | null,
-  to: string | null,
-): string | null {
-  if (!from && !to) return null;
-  const fromLabel = (from && formatDisplayDate(from)) ?? "…";
-  const toLabel = (to && formatDisplayDate(to)) ?? "…";
-  return `${fromLabel} – ${toLabel}`;
-}
-
-function FilterChip({
-  label,
-  dir,
-  onRemove,
-}: {
-  label: string;
-  dir: "ltr" | "rtl";
-  onRemove: () => void;
-}) {
-  return (
-    <span
-      dir={dir}
-      className="group inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-background py-1 ps-2.5 pe-1 text-[12px] text-foreground/80 transition-colors hover:border-foreground/30"
-    >
-      <span className="min-w-0 truncate tabular-nums">{label}</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={formatMsg("explore.filters.chip.remove", { label })}
-        className="inline-flex size-5 items-center justify-center rounded-full text-foreground/45 transition-colors cursor-pointer hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-      >
-        <X className="size-3" aria-hidden="true" />
-      </button>
-    </span>
-  );
-}
-
 function collectDistinct(
   points: PublicDashboardPoint[],
-  key: "winning_model" | "optimizer_name",
+  key: "winning_model" | "optimizer_name" | "module_name",
 ): string[] {
   const set = new Set<string>();
   for (const p of points) {

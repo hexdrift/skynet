@@ -10,7 +10,7 @@ this file orchestrates them.
 import functools
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -101,7 +101,7 @@ from .training_ground.metrics import (
     replay_match_vector_reward,
     vector_reward,
 )
-from .training_ground.optimize import _AUTO_BUDGETS
+from .training_ground.optimize import _AUTO_BUDGETS, tool_severity
 from .trajectory import (
     capture_proposal_prompts,
     emit_valset_event,
@@ -181,13 +181,49 @@ def _tool_to_snapshot_spec(tool: Any) -> dict[str, Any]:
         tool: The resolved ``dspy.Tool`` from the run's roster.
 
     Returns:
-        A ``{"name", "description", "args"}`` spec mirroring the tool's schema.
+        A ``{"name", "description", "args"}`` spec mirroring the tool's schema,
+        plus ``"severity"`` when the live roster carried an approval hint.
     """
-    return {
+    spec: dict[str, Any] = {
         "name": tool.name,
         "description": tool.desc or "",
         "args": dict(tool.args) if isinstance(tool.args, dict) else {},
     }
+    severity = tool_severity(tool)
+    if severity is not None:
+        spec["severity"] = severity
+    return spec
+
+
+def _react_prediction_outputs(
+    prediction: Any, output_fields: Iterable[str]
+) -> dict[str, Any]:
+    """Pull a react rollout's per-field answer off its ``Prediction``.
+
+    Mirrors the on-demand ``evaluate-examples`` endpoint's extraction
+    (``getattr(prediction, sig_field)`` keyed by signature output field) so the
+    stored test-result ``outputs`` match the shape the DataTab already reads.
+    Non-scalar field values are stringified so the result stays JSON-serializable
+    for persistence.
+
+    Args:
+        prediction: The rollout ``Prediction``, or ``None`` for a failed rollout.
+        output_fields: Signature output field names (``column_mapping.outputs``
+            keys) to surface.
+
+    Returns:
+        ``{output_field: value}``; empty when ``prediction`` is ``None``.
+    """
+    if prediction is None:
+        return {}
+    outputs: dict[str, Any] = {}
+    for field_name in output_fields:
+        value = getattr(prediction, field_name, None)
+        if value is None or isinstance(value, (str, int, float, bool)):
+            outputs[field_name] = value
+        else:
+            outputs[field_name] = str(value)
+    return outputs
 
 
 def _build_lm_activity(
@@ -345,7 +381,6 @@ def _run_grid_pair(
                 ctx.payload.optimizer_name,
                 ctx.payload.optimizer_kwargs,
                 training_metric,
-                gen_cfg,
                 ref_cfg,
                 reflection_lm=reflection_lm,
                 log_dir=trajectory_log_dir,
@@ -661,7 +696,6 @@ class DspyService:
                 payload.optimizer_name,
                 payload.optimizer_kwargs,
                 training_metric,
-                payload.model_settings,
                 payload.reflection_model_settings,
                 reflection_lm=reflection_lm,
                 log_dir=trajectory_log_dir,
@@ -943,6 +977,7 @@ class DspyService:
                 match_mode=match_mode,
                 run_dir=trajectory_log_dir,
                 progress_callback=progress_callback,
+                timing_callbacks=(gen_timing,),
             )
 
         overlay = result["tool_overlay"]
@@ -998,15 +1033,36 @@ class DspyService:
 
         # Map per-example replay scalars into the standard EvalExampleResult shape
         # so the DataTab score overlay + Compare per-row diff render for react.
-        # Replay scoring doesn't capture rollout outputs; ``pass`` mirrors the
-        # scalar-run convention (score > 0) since the reward is a continuous 0–1
-        # fidelity score, not a clean 0/1.
+        # ``outputs`` carries the rollout's per-field answer (keyed by signature
+        # output field, matching the evaluate-examples endpoint) so the data view
+        # can show *what* the agent produced per example, not just the score;
+        # ``pass`` mirrors the scalar-run convention (score > 0) since the reward
+        # is a continuous 0–1 fidelity score, not a clean 0/1.
+        output_fields = list(payload.column_mapping.outputs.keys())
+        baseline_outputs = result.get("baseline_outputs_per_example") or []
+        optimized_outputs = result.get("optimized_outputs_per_example") or []
         baseline_test_results = [
-            {"index": i, "outputs": {}, "score": float(s), "pass": float(s) > 0}
+            {
+                "index": i,
+                "outputs": _react_prediction_outputs(
+                    baseline_outputs[i] if i < len(baseline_outputs) else None,
+                    output_fields,
+                ),
+                "score": float(s),
+                "pass": float(s) > 0,
+            }
             for i, s in enumerate(result.get("baseline_scalars_per_example") or [])
         ]
         optimized_test_results = [
-            {"index": i, "outputs": {}, "score": float(s), "pass": float(s) > 0}
+            {
+                "index": i,
+                "outputs": _react_prediction_outputs(
+                    optimized_outputs[i] if i < len(optimized_outputs) else None,
+                    output_fields,
+                ),
+                "score": float(s),
+                "pass": float(s) > 0,
+            }
             for i, s in enumerate(result.get("optimized_scalars_per_example") or [])
         ]
 
@@ -1038,9 +1094,11 @@ class DspyService:
             runtime_seconds=runtime_seconds,
             num_lm_calls=num_lm_calls,
             avg_response_time_ms=avg_response_time_ms,
-            # Generation-stage activity (student rollouts under dspy.context); the
-            # reflection LM runs inside gepa.optimize off the dspy callback path,
-            # so it isn't stage-tracked here.
+            # Generation-stage activity: student rollouts are bucketed into
+            # baseline/training/evaluation via the timing_callbacks passed into
+            # run_react_optimization. The reflection LM runs inside gepa.optimize
+            # off the dspy callback path, so it stays untracked (None) and its
+            # column is hidden by the activity panel.
             lm_activity=_build_lm_activity(gen_timing, None),
             baseline_test_results=baseline_test_results,
             optimized_test_results=optimized_test_results,
@@ -1186,6 +1244,11 @@ class DspyService:
                     _tool_to_snapshot_spec(tool) for tool in tools
                 ]
         tool_names = overlay.get("tool_names")
+        tool_severities = {
+            tool.name: severity
+            for tool in tools
+            if (severity := tool_severity(tool)) is not None
+        }
         artifact.react_overlay = ReactOverlay(
             tool_descriptions=dict(overlay["tool_descriptions"]),
             tool_arg_descriptions={
@@ -1195,6 +1258,7 @@ class DspyService:
             max_iters=int(overlay["max_iters"]),
             tool_source=source_meta,
             tool_names=dict(tool_names) if tool_names else None,
+            tool_severities=tool_severities,
         )
         return artifact
 

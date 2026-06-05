@@ -258,6 +258,31 @@ def set_embedding_privacy(job_store: Any, optimization_id: str, is_private: bool
         session.commit()
 
 
+def set_embedding_task_name(job_store: Any, optimization_id: str, task_name: str | None) -> None:
+    """Sync the denormalized display name on a job's embedding row.
+
+    Explore search and the corpus list resolve a job's label from
+    ``job_embeddings.task_name``; renaming a job after it was embedded updates
+    ``payload_overview`` but leaves this snapshot stale, so the rename handler
+    must propagate the new name here too. A no-op when the store exposes no
+    SQLAlchemy ``engine`` (local/offline mode, which has no embedding table) or
+    the job has no embedding row yet — the pipeline snapshots ``name`` from the
+    overview at embed time and picks up the current value then.
+
+    Args:
+        job_store: Job-store exposing the SQLAlchemy ``engine``.
+        optimization_id: Optimization whose embedding row should be updated.
+        task_name: New display name to denormalize onto the embedding row.
+    """
+    if getattr(job_store, "engine", None) is None:
+        return
+    with Session(job_store.engine) as session:
+        session.query(JobEmbeddingModel).filter(
+            JobEmbeddingModel.optimization_id == optimization_id
+        ).update({JobEmbeddingModel.task_name: task_name})
+        session.commit()
+
+
 def _fetch_missing_embedding_ids(job_store: Any) -> list[str]:
     """Return success-state job IDs that lack a summary embedding row.
 

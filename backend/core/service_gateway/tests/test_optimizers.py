@@ -351,9 +351,7 @@ def test_instantiate_optimizer_injects_metric_when_factory_requires_it() -> None
         factory=_MetricFactory,
         optimizer_name="my_opt",
         optimizer_kwargs={},
-        metric=_dummy_metric,
-        default_model=_model_cfg(),
-        reflection_model=None,
+        metric=_dummy_metric,        reflection_model=None,
     )
 
     assert captured["metric"] is _dummy_metric
@@ -377,9 +375,7 @@ def test_instantiate_optimizer_does_not_override_metric_if_already_in_kwargs() -
         factory=_MetricFactory,
         optimizer_name="my_opt",
         optimizer_kwargs={"metric": custom_metric},
-        metric=_dummy_metric,
-        default_model=_model_cfg(),
-        reflection_model=None,
+        metric=_dummy_metric,        reflection_model=None,
     )
 
     assert captured["metric"] is custom_metric
@@ -399,9 +395,7 @@ def test_instantiate_optimizer_gepa_requires_reflection_model_or_raises() -> Non
             factory=_GepaFactory,
             optimizer_name="gepa",
             optimizer_kwargs={},
-            metric=_dummy_metric,
-            default_model=_model_cfg(),
-            reflection_model=None,
+            metric=_dummy_metric,            reflection_model=None,
         )
 
 
@@ -422,9 +416,7 @@ def test_instantiate_optimizer_gepa_injects_reflection_lm_when_model_provided() 
             factory=_GepaFactory,
             optimizer_name="gepa",
             optimizer_kwargs={},
-            metric=_dummy_metric,
-            default_model=_model_cfg(),
-            reflection_model=_model_cfg("openai/gpt-4o"),
+            metric=_dummy_metric,            reflection_model=_model_cfg("openai/gpt-4o"),
         )
 
     assert captured["reflection_lm"] is fake_lm
@@ -447,9 +439,7 @@ def test_instantiate_optimizer_gepa_sets_auto_light_default() -> None:
             factory=_GepaFactory,
             optimizer_name="gepa",
             optimizer_kwargs={},
-            metric=_dummy_metric,
-            default_model=_model_cfg(),
-            reflection_model=_model_cfg("openai/gpt-4o"),
+            metric=_dummy_metric,            reflection_model=_model_cfg("openai/gpt-4o"),
         )
 
     assert captured["auto"] == "light"

@@ -278,6 +278,8 @@ def _realistic_envelope(schema_hashes: dict[str, str], tools: list[dspy.Tool]):
             "optimized_scalar": 0.8,
             "baseline_scalars_per_example": [0.4],
             "optimized_scalars_per_example": [0.8],
+            "baseline_outputs_per_example": [dspy.Prediction(assistant_message="baseline reply")],
+            "optimized_outputs_per_example": [dspy.Prediction(assistant_message="optimized reply")],
             "paired_bootstrap": PairedBootstrapResult(
                 resamples=10, mean_delta=0.4, ci95_lower=0.2, ci95_upper=0.6
             ),
@@ -336,6 +338,10 @@ def test_full_loop_validate_then_run_returns_typed_envelope() -> None:
     assert result.promotion.reasons == ["held-out scale: 1 < 200 required by §11"]
     assert result.baseline_test_metric == pytest.approx(0.4)
     assert result.optimized_test_metric == pytest.approx(0.8)
+    # The rollout's per-example answer is surfaced on the test results (keyed by
+    # signature output field) so the DataTab can show what the agent produced.
+    assert result.baseline_test_results[0]["outputs"] == {"assistant_message": "baseline reply"}
+    assert result.optimized_test_results[0]["outputs"] == {"assistant_message": "optimized reply"}
 
 
 def test_full_loop_artifact_carries_react_overlay_and_state() -> None:
