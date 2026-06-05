@@ -95,27 +95,6 @@ export const StaggerItem = React.memo(function StaggerItem({
   );
 });
 
-export function HoverScale({
-  children,
-  className,
-  scale = 1.02,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  scale?: number;
-}) {
-  const shouldReduceMotion = useReducedMotion();
-  return (
-    <motion.div
-      whileHover={shouldReduceMotion ? undefined : { scale }}
-      transition={shouldReduceMotion ? undefined : { duration: 0.2, ease: "easeOut" }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
 export function TiltCard({
   children,
   className,

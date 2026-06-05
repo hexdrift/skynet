@@ -3,10 +3,12 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
+  FilterX,
   Globe,
   Loader2,
   SlidersHorizontal,
   User,
+  Users,
   X,
 } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
@@ -23,10 +25,12 @@ interface SearchBarProps {
   onSubmit: (next: string) => void;
   corpus: ExploreCorpus;
   onCorpusChange: (next: ExploreCorpus) => void;
-  /** Hides Mine when no logged-in user — server-rendered fallback. */
-  mineEnabled: boolean;
+  /** Disables the session-scoped tabs (Mine, Shared) when no logged-in user. */
+  signedIn: boolean;
   filtersCount: number;
   onOpenFilters: () => void;
+  /** Quick-clears the metadata filters (preserving the text query). */
+  onClearFilters: () => void;
   /** True while a search request is in flight — drives the inline spinner. */
   loading: boolean;
   /**
@@ -53,8 +57,9 @@ const TYPING_DEBOUNCE_MS = 250;
 
 /**
  * The page's center of gravity. A segmented corpus toggle sits on top so the
- * user can pick where to search (their own jobs vs other users' public ones),
- * and the rounded input surface below carries the free-text query and
+ * user can pick where to search (their own jobs, runs shared with them, or
+ * other users' public ones), and the rounded input surface below carries the
+ * free-text query and
  * filters affordance. Keyboard: pressing "/" anywhere focuses the input;
  * Enter fires the search immediately.
  *
@@ -67,9 +72,10 @@ export function SearchBar({
   onSubmit,
   corpus,
   onCorpusChange,
-  mineEnabled,
+  signedIn,
   filtersCount,
   onOpenFilters,
+  onClearFilters,
   loading,
   onResultKeyDown,
   activeResultIndex,
@@ -149,7 +155,7 @@ export function SearchBar({
         <CorpusToggle
           value={corpus}
           onChange={onCorpusChange}
-          mineEnabled={mineEnabled}
+          signedIn={signedIn}
         />
       </div>
       <div
@@ -203,6 +209,18 @@ export function SearchBar({
           >
             <X className="size-4" aria-hidden="true" />
           </button>
+        )}
+        {filtersCount > 0 && (
+          <TooltipButton tooltip={msg("explore.filters.reset")} side="bottom">
+            <button
+              type="button"
+              onClick={onClearFilters}
+              aria-label={msg("explore.filters.reset")}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] cursor-pointer hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
+            >
+              <FilterX className="size-[1.05rem]" aria-hidden="true" />
+            </button>
+          </TooltipButton>
         )}
         <button
           type="button"
@@ -273,11 +291,11 @@ function detectInputDir(text: string): "rtl" | "ltr" {
 function CorpusToggle({
   value,
   onChange,
-  mineEnabled,
+  signedIn,
 }: {
   value: ExploreCorpus;
   onChange: (next: ExploreCorpus) => void;
-  mineEnabled: boolean;
+  signedIn: boolean;
 }) {
   const segments: ReadonlyArray<{
     value: ExploreCorpus;
@@ -291,7 +309,14 @@ function CorpusToggle({
       label: msg("explore.corpus.mine"),
       icon: User,
       aria: msg("explore.corpus.mine.aria"),
-      disabled: !mineEnabled,
+      disabled: !signedIn,
+    },
+    {
+      value: "shared",
+      label: msg("explore.corpus.shared"),
+      icon: Users,
+      aria: msg("explore.corpus.shared.aria"),
+      disabled: !signedIn,
     },
     {
       value: "public",

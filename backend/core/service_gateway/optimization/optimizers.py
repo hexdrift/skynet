@@ -352,7 +352,6 @@ def instantiate_optimizer(
     optimizer_name: str,
     optimizer_kwargs: dict[str, Any],
     metric: Callable[..., Any],
-    default_model: ModelConfig,
     reflection_model: ModelConfig | None,
     *,
     reflection_lm: Any | None = None,
@@ -373,8 +372,6 @@ def instantiate_optimizer(
         optimizer_name: The optimizer's registered name.
         optimizer_kwargs: User-supplied factory kwargs.
         metric: The DSPy-compatible metric callable to inject when needed.
-        default_model: Configuration for the generation model (currently
-            informational; reserved for future per-optimizer wiring).
         reflection_model: Configuration for the reflection model (required
             when ``optimizer_name`` is GEPA and no ``reflection_lm`` is
             already provided).

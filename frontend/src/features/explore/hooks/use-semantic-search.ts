@@ -4,7 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { searchPublicDashboard, type SearchResult, type SearchSort } from "@/shared/lib/api";
 
-export type ExploreCorpus = "mine" | "public";
+export type ExploreCorpus = "mine" | "public" | "shared";
 export type SearchType = "semantic" | "lexical";
 
 export interface SearchQueryState {
@@ -18,10 +18,12 @@ export interface SearchQueryState {
   models: string[];
   optimizers: string[];
   types: string[];
+  tasks: string[];
+  modules: string[];
   /** ISO date (YYYY-MM-DD), inclusive. */
   dateFrom: string | null;
   dateTo: string | null;
-  /** Which corpus to search: the user's own jobs or other users' public jobs. */
+  /** Which corpus to search: the user's own jobs, runs shared with them, or other users' public jobs. */
   corpus: ExploreCorpus;
   /**
    * Result ordering. Resolved to a concrete value (never "auto"): with a
@@ -43,12 +45,11 @@ export interface SearchResponseState {
 }
 
 const VALID_SIZES = new Set([10, 30, 50]);
-const VALID_CORPORA = new Set<ExploreCorpus>(["mine", "public"]);
+const VALID_CORPORA = new Set<ExploreCorpus>(["mine", "public", "shared"]);
 const VALID_SORTS = new Set<SearchSort>(["relevance", "recent", "gain"]);
 
 const DEFAULT_SIZE = 30;
 const DEFAULT_PAGE = 1;
-const DEFAULT_CORPUS: ExploreCorpus = "public";
 
 /**
  * The sort the UI defaults to for a given query. "relevance" only makes
@@ -67,7 +68,10 @@ function parseCsv(value: string | null): string[] {
     .filter(Boolean);
 }
 
-function readState(params: URLSearchParams): SearchQueryState {
+function readState(
+  params: URLSearchParams,
+  defaultCorpus: ExploreCorpus,
+): SearchQueryState {
   const sizeRaw = Number.parseInt(params.get("size") ?? "", 10);
   const pageRaw = Number.parseInt(params.get("page") ?? "", 10);
   const corpusRaw = params.get("corpus") as ExploreCorpus | null;
@@ -84,10 +88,12 @@ function readState(params: URLSearchParams): SearchQueryState {
     models: parseCsv(params.get("models")),
     optimizers: parseCsv(params.get("optimizers")),
     types: parseCsv(params.get("types")),
+    tasks: parseCsv(params.get("tasks")),
+    modules: parseCsv(params.get("modules")),
     dateFrom: params.get("from"),
     dateTo: params.get("to"),
     corpus:
-      corpusRaw && VALID_CORPORA.has(corpusRaw) ? corpusRaw : DEFAULT_CORPUS,
+      corpusRaw && VALID_CORPORA.has(corpusRaw) ? corpusRaw : defaultCorpus,
     sort,
   };
 }
@@ -97,6 +103,8 @@ function hasAnyFilter(state: SearchQueryState): boolean {
   if (state.models.length > 0) return true;
   if (state.optimizers.length > 0) return true;
   if (state.types.length > 0) return true;
+  if (state.tasks.length > 0) return true;
+  if (state.modules.length > 0) return true;
   if (state.dateFrom) return true;
   if (state.dateTo) return true;
   return false;
@@ -108,20 +116,26 @@ export interface SearchActions {
   setSize: (size: number) => void;
   setSort: (sort: SearchSort) => void;
   setCorpus: (corpus: ExploreCorpus) => void;
-  toggleModel: (model: string) => void;
-  toggleOptimizer: (optimizer: string) => void;
-  toggleType: (type: string) => void;
   setModels: (models: string[]) => void;
   setOptimizers: (optimizers: string[]) => void;
   setTypes: (types: string[]) => void;
+  setTasks: (tasks: string[]) => void;
+  setModules: (modules: string[]) => void;
   setDateRange: (from: string | null, to: string | null) => void;
+  /** Clears the metadata filters but keeps the free-text query. */
+  clearFilters: () => void;
   clearAll: () => void;
-  removeFilter: (kind: "model" | "optimizer" | "type", value: string) => void;
 }
 
 export interface UseSemanticSearchOptions {
   /** Logged-in user's name; empty string when signed out. Drives Mine corpus fetch. */
   sessionUser: string;
+  /**
+   * False while next-auth is still resolving the session. Gates the first
+   * fetch so a signed-in user never flashes the public corpus before their
+   * session-derived default ("mine") is known.
+   */
+  sessionReady: boolean;
 }
 
 export function useSemanticSearch(opts: UseSemanticSearchOptions): {
@@ -135,10 +149,20 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const sessionUser = opts.sessionUser;
+  const sessionReady = opts.sessionReady;
+  // Fresh-open default: a signed-in user lands on their own runs ("mine"); an
+  // anonymous visitor lands on the public archive (the only corpus open to
+  // them). Resolved purely from the URL, so every bare ``/explore`` open — the
+  // sidebar link carries no query — resets to this.
+  const defaultCorpus: ExploreCorpus = sessionUser ? "mine" : "public";
 
   const query = React.useMemo<SearchQueryState>(
-    () => readState(new URLSearchParams(searchParams?.toString() ?? "")),
-    [searchParams],
+    () =>
+      readState(
+        new URLSearchParams(searchParams?.toString() ?? ""),
+        defaultCorpus,
+      ),
+    [searchParams, defaultCorpus],
   );
 
   const [response, setResponse] = React.useState<SearchResponseState>({
@@ -204,34 +228,29 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
 
       setCorpus: (corpus: ExploreCorpus) =>
         updateUrl((p) => {
-          if (corpus === DEFAULT_CORPUS) p.delete("corpus");
+          if (corpus === defaultCorpus) p.delete("corpus");
           else p.set("corpus", corpus);
+          // Each tab has its own filter options (a model private to "mine"
+          // can't be filtered in "public"), so selections never carry across
+          // tabs — drop them all on switch and let the tab start clean.
+          for (const key of [
+            "models",
+            "optimizers",
+            "types",
+            "tasks",
+            "modules",
+            "from",
+            "to",
+          ]) {
+            p.delete(key);
+          }
         }, { resetPage: true }),
-
-      toggleModel: (model: string) => {
-        const current = new Set(query.models);
-        if (current.has(model)) current.delete(model);
-        else current.add(model);
-        writeList("models", Array.from(current));
-      },
-
-      toggleOptimizer: (optimizer: string) => {
-        const current = new Set(query.optimizers);
-        if (current.has(optimizer)) current.delete(optimizer);
-        else current.add(optimizer);
-        writeList("optimizers", Array.from(current));
-      },
-
-      toggleType: (type: string) => {
-        const current = new Set(query.types);
-        if (current.has(type)) current.delete(type);
-        else current.add(type);
-        writeList("types", Array.from(current));
-      },
 
       setModels: (models: string[]) => writeList("models", models),
       setOptimizers: (optimizers: string[]) => writeList("optimizers", optimizers),
       setTypes: (types: string[]) => writeList("types", types),
+      setTasks: (tasks: string[]) => writeList("tasks", tasks),
+      setModules: (modules: string[]) => writeList("modules", modules),
 
       setDateRange: (from: string | null, to: string | null) =>
         updateUrl((p) => {
@@ -241,52 +260,78 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
           else p.delete("to");
         }, { resetPage: true }),
 
-      clearAll: () =>
+      clearFilters: () =>
         updateUrl((p) => {
-          for (const key of ["q", "models", "optimizers", "types", "from", "to", "page"]) {
+          for (const key of [
+            "models",
+            "optimizers",
+            "types",
+            "tasks",
+            "modules",
+            "from",
+            "to",
+            "page",
+          ]) {
             p.delete(key);
           }
         }),
 
-      removeFilter: (kind: "model" | "optimizer" | "type", value: string) => {
-        const map = {
-          model: query.models,
-          optimizer: query.optimizers,
-          type: query.types,
-        } as const;
-        const next = map[kind].filter((v) => v !== value);
-        const key = kind === "model" ? "models" : kind === "optimizer" ? "optimizers" : "types";
-        writeList(key, next);
-      },
+      clearAll: () =>
+        updateUrl((p) => {
+          for (const key of [
+            "q",
+            "models",
+            "optimizers",
+            "types",
+            "tasks",
+            "modules",
+            "from",
+            "to",
+            "page",
+          ]) {
+            p.delete(key);
+          }
+        }),
     }),
-    [query.models, query.optimizers, query.types, updateUrl, writeList],
+    [defaultCorpus, updateUrl, writeList],
   );
 
   const appliedFilterCount =
     query.models.length +
     query.optimizers.length +
     query.types.length +
+    query.tasks.length +
+    query.modules.length +
     (query.dateFrom ? 1 : 0) +
     (query.dateTo ? 1 : 0);
 
   React.useEffect(() => {
     const active = hasAnyFilter(query);
-    const controller = new AbortController();
     setResponse((prev) => ({ ...prev, loading: true, error: null, isActive: active }));
+    // Hold in the loading state until next-auth resolves the session: firing
+    // now would fetch the public corpus before we know the user is signed in,
+    // flashing other users' runs before the "mine" default settles.
+    if (!sessionReady) return;
+    const controller = new AbortController();
 
-    const runSearch = async (ownerUsername: string | undefined) => {
+    const runSearch = async (
+      scope: { owner_username?: string; shared_with_username?: string },
+    ) => {
       const data = await searchPublicDashboard(
         {
           query: query.text.trim() || undefined,
           models: query.models.length ? query.models : undefined,
           optimizers: query.optimizers.length ? query.optimizers : undefined,
           optimization_types: query.types.length ? query.types : undefined,
+          tasks: query.tasks.length ? query.tasks : undefined,
+          modules: query.modules.length ? query.modules : undefined,
           date_from: query.dateFrom ?? undefined,
           date_to: query.dateTo ?? undefined,
           sort: query.sort,
           page: query.page,
           size: query.size,
-          owner_username: ownerUsername,
+          owner_username: scope.owner_username,
+          shared_with_username: scope.shared_with_username,
         },
         { signal: controller.signal },
       );
@@ -301,7 +346,7 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
       });
     };
 
-    const runMineSignedOut = () => {
+    const runSignedOut = () => {
       setResponse({
         results: [],
         total: 0,
@@ -315,11 +360,15 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
     const run = async () => {
       try {
         if (query.corpus === "public") {
-          await runSearch(undefined);
+          await runSearch({});
         } else if (!sessionUser) {
-          runMineSignedOut();
+          // Both "mine" and "shared" are session-scoped: nothing to show when
+          // signed out.
+          runSignedOut();
+        } else if (query.corpus === "shared") {
+          await runSearch({ shared_with_username: sessionUser });
         } else {
-          await runSearch(sessionUser);
+          await runSearch({ owner_username: sessionUser });
         }
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -340,7 +389,7 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
     return () => {
       controller.abort();
     };
-  }, [query, sessionUser]);
+  }, [query, sessionUser, sessionReady]);
 
   return { query, response, actions, appliedFilterCount };
 }

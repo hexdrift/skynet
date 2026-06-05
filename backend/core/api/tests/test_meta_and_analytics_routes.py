@@ -87,6 +87,21 @@ def test_rename_job_happy_path(client: TestClient, job_store: FakeJobStore) -> N
     assert job_store._jobs["rn2"]["payload_overview"]["name"] == "my renamed job"
 
 
+def test_rename_job_syncs_embedding_task_name(
+    client: TestClient, job_store: FakeJobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Renaming propagates the trimmed new name to the embedding-row snapshot."""
+    job_store.seed_job("rn-sync", payload_overview={})
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "core.api.routers.optimizations_meta.set_embedding_task_name",
+        lambda store, opt_id, name: calls.append((opt_id, name)),
+    )
+    r = client.patch("/optimizations/rn-sync/name", json={"name": "  fresh name  "})
+    assert r.status_code == 200
+    assert calls == [("rn-sync", "fresh name")]
+
+
 def test_rename_job_rejects_oversized(client: TestClient, job_store: FakeJobStore) -> None:
     """Names longer than the allowed maximum are rejected with 422."""
     job_store.seed_job("rn3", payload_overview={})

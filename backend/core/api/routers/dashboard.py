@@ -23,6 +23,7 @@ from ...service_gateway.dashboard import (
     SEARCH_PAGE_SIZE_MAX,
     SEARCH_SORT_RELEVANCE,
     SEARCH_SORTS,
+    fetch_corpus_facets,
     fetch_popular_queries,
     fetch_public_dashboard,
     record_public_search_query,
@@ -69,6 +70,19 @@ class PublicDashboardResponse(BaseModel):
     points: list[PublicDashboardPoint]
 
 
+class FacetsResponse(BaseModel):
+    """Distinct filter options for one corpus scope (``GET /dashboard/facets``).
+
+    Each list holds the model / optimizer / module values present in the
+    requested scope, so the /explore filter drawer offers exactly the chips
+    that scope can filter to.
+    """
+
+    models: list[str] = []
+    optimizers: list[str] = []
+    modules: list[str] = []
+
+
 class SearchRequest(BaseModel):
     """Free-text + structured filter query for ``POST /dashboard/search``.
 
@@ -80,6 +94,8 @@ class SearchRequest(BaseModel):
     models: list[str] | None = None
     optimizers: list[str] | None = None
     optimization_types: list[str] | None = None
+    tasks: list[str] | None = None
+    modules: list[str] | None = None
     date_from: date | None = None
     date_to: date | None = None
     sort: str = SEARCH_SORT_RELEVANCE
@@ -90,6 +106,10 @@ class SearchRequest(BaseModel):
     # verifies the requested owner matches the authenticated session before
     # forwarding it to the gateway.
     owner_username: str | None = None
+    # When set (and ``owner_username`` is not), scope the search to runs shared
+    # with that user via a member grant. Same session-match verification as
+    # ``owner_username`` — a caller may only query runs shared with themselves.
+    shared_with_username: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -180,6 +200,62 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
             points=[PublicDashboardPoint(**p) for p in data["points"]],
         )
 
+    @router.get(
+        "/dashboard/facets",
+        response_model=FacetsResponse,
+        status_code=200,
+        summary="Distinct filter options for one corpus scope",
+    )
+    def corpus_facets(
+        http_request: Request,
+        owner_username: str | None = None,
+        shared_with_username: str | None = None,
+        authorization: str | None = Header(default=None),
+    ) -> FacetsResponse:
+        """Distinct model / optimizer / module options for the requested corpus.
+
+        Lets each /explore tab list options drawn from its own scope rather
+        than the public archive's. Scope is resolved with the same
+        session-match check as ``/dashboard/search``: a caller may only ask
+        for their own (mine) or shared-with-them options.
+
+        Args:
+            http_request: Incoming request, forwarded to
+                ``get_authenticated_user`` so the PAT branch can reach
+                ``app.state.job_store`` when a scope is set.
+            owner_username: When set, scope to the caller's own jobs.
+            shared_with_username: When set (and ``owner_username`` is not),
+                scope to jobs shared with the caller.
+            authorization: Bearer token, required only when a scope is set.
+
+        Returns:
+            A :class:`FacetsResponse` with the distinct options for the scope.
+
+        Raises:
+            HTTPException: When a scope is set but the request is
+                unauthenticated or targets a different user than the session.
+        """
+        resolved_owner = _resolve_owner_username(
+            http_request, owner_username, authorization
+        )
+        resolved_shared = (
+            None
+            if resolved_owner is not None
+            else _resolve_owner_username(
+                http_request, shared_with_username, authorization
+            )
+        )
+        data = fetch_corpus_facets(
+            job_store=job_store,
+            owner_username=resolved_owner,
+            shared_with_username=resolved_shared,
+        )
+        return FacetsResponse(
+            models=data["models"],
+            optimizers=data["optimizers"],
+            modules=data["modules"],
+        )
+
     @router.post(
         "/dashboard/search",
         response_model=SearchResponse,
@@ -213,18 +289,28 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
         owner_username = _resolve_owner_username(
             http_request, request.owner_username, authorization
         )
+        shared_with_username = (
+            None
+            if owner_username is not None
+            else _resolve_owner_username(
+                http_request, request.shared_with_username, authorization
+            )
+        )
         data = search_optimizations(
             job_store=job_store,
             query=request.query,
             models=request.models,
             optimizers=request.optimizers,
             optimization_types=request.optimization_types,
+            tasks=request.tasks,
+            modules=request.modules,
             date_from=request.date_from,
             date_to=request.date_to,
             sort=sort,
             page=request.page,
             size=request.size,
             owner_username=owner_username,
+            shared_with_username=shared_with_username,
         )
         return SearchResponse(
             results=[SearchResult(**r) for r in data["results"]],
@@ -274,12 +360,16 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
 def _resolve_owner_username(
     request: Request, requested: str | None, authorization: str | None
 ) -> str | None:
-    """Verify a requested owner scope matches the authenticated session.
+    """Verify a requested user-scope matches the authenticated session.
+
+    Backs both the ``owner_username`` (mine) and ``shared_with_username``
+    (shared-with-me) scopes: a caller may only ask for runs scoped to their
+    own session, so the requested username must equal the authenticated user.
 
     Args:
         request: Incoming request, forwarded to ``get_authenticated_user`` so
             the PAT branch can reach ``app.state.job_store``.
-        requested: The ``owner_username`` value from the request body, or None
+        requested: The requested scope username from the request body, or None
             when the caller is searching the public corpus.
         authorization: Raw ``Authorization`` header.
 

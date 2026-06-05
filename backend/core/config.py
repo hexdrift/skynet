@@ -196,10 +196,6 @@ class Settings(BaseSettings):
     logs_dir: str = Field(default="logs", description="Directory for job execution logs")
 
     default_timeout: float = Field(default=30.0, ge=1.0, description="Standard request timeout in seconds")
-    long_running_timeout: float = Field(
-        default=120.0, ge=10.0, description="Extended timeout for complex operations in seconds"
-    )
-    subprocess_timeout: float = Field(default=300.0, ge=30.0, description="Timeout for subprocess execution in seconds")
 
     host: str = Field(default="0.0.0.0", description="Server bind address")
     port: int = Field(default=8000, ge=1024, le=65535, description="Server port")

@@ -65,18 +65,6 @@ export function useTagger() {
     }
   }, [data, annotations, config]);
 
-  const annotate = useCallback((id: string, value: Annotation) => {
-    setAnnotations((prev) => {
-      const next = { ...prev };
-      if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) {
-        delete next[id];
-      } else {
-        next[id] = value;
-      }
-      return next;
-    });
-  }, []);
-
   const toggleBinary = useCallback((id: string, value: "yes" | "no") => {
     (document.activeElement as HTMLElement)?.blur();
     setAnnotations((prev) => {
@@ -132,7 +120,6 @@ export function useTagger() {
     navigate,
     goTo,
     jumpToUntagged,
-    annotate,
     toggleBinary,
     toggleCategory,
     setFreetext,

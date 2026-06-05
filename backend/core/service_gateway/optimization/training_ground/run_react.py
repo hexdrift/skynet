@@ -33,6 +33,12 @@ import gepa
 from core.config import Settings
 from core.constants import DETAIL_BASELINE, PROGRESS_BASELINE
 
+from ..timing import (
+    STAGE_BASELINE,
+    STAGE_EVALUATION,
+    STAGE_TRAINING,
+    track_stage,
+)
 from ..trajectory import react_minibatch_feedback, react_valset_outputs
 from .gepa_adapter import (
     TrainingGroundDspyAdapter,
@@ -51,6 +57,7 @@ from .optimize import (
     _list_live_tools,
     _program_state_from,
     _resolve_promotion,
+    set_tool_severity,
 )
 from .persistence import paired_bootstrap_ci
 from .registry import hash_tool_schema
@@ -310,12 +317,13 @@ def _dataset_snapshot_tools(dataset: Sequence[Mapping[str, Any]] | None) -> list
     ``__tool_snapshot__`` key on any row (the first row that has it wins) and
     is a list of specs::
 
-        {"name": str, "description": str, "args": {<arg>: {<schema>}}}
+        {"name": str, "description": str, "args": {<arg>: {<schema>}},
+         "severity": str | None}
 
     Each spec becomes a no-op ``dspy.Tool`` — the roster is only used for its
-    ``name``/``desc``/``args`` (seed instructions, schema-hash snapshot, and
-    arg-description overlays); rollout-time calls route through the replay mock,
-    never these callables.
+    ``name``/``desc``/``args``/``severity`` (seed instructions, schema-hash
+    snapshot, arg-description and severity overlays); rollout-time calls route
+    through the replay mock, never these callables.
 
     Args:
         dataset: Raw dataset rows; scanned for the snapshot sidecar.
@@ -334,7 +342,15 @@ def _dataset_snapshot_tools(dataset: Sequence[Mapping[str, Any]] | None) -> list
             continue
         desc = str(spec.get("description") or spec.get("desc") or "")
         args = spec.get("args") if isinstance(spec.get("args"), Mapping) else {}
-        tools.append(_snapshot_tool(name=name, desc=desc, args=dict(args)))
+        severity = spec.get("severity")
+        tools.append(
+            _snapshot_tool(
+                name=name,
+                desc=desc,
+                args=dict(args),
+                severity=str(severity) if severity else None,
+            )
+        )
     return tools
 
 
@@ -363,7 +379,9 @@ def _find_snapshot_specs(
     return []
 
 
-def _snapshot_tool(*, name: str, desc: str, args: dict[str, Any]) -> dspy.Tool:
+def _snapshot_tool(
+    *, name: str, desc: str, args: dict[str, Any], severity: str | None = None
+) -> dspy.Tool:
     """Construct a no-op ``dspy.Tool`` carrying a snapshot spec's schema.
 
     The callable is never invoked (rollouts go through the replay mock), so it
@@ -373,6 +391,8 @@ def _snapshot_tool(*, name: str, desc: str, args: dict[str, Any]) -> dspy.Tool:
         name: Tool name.
         desc: Tool description.
         args: Per-arg JSON schema map.
+        severity: Optional approval severity to carry through (so a
+            snapshot-sourced run keeps the live roster's per-tool severity).
 
     Returns:
         A ``dspy.Tool`` whose ``args`` mirror the snapshot spec.
@@ -383,7 +403,9 @@ def _snapshot_tool(*, name: str, desc: str, args: dict[str, Any]) -> dspy.Tool:
 
     _noop.__name__ = name
     _noop.__doc__ = desc
-    return dspy.Tool(_noop, name=name, desc=desc, args=args or None)
+    tool = dspy.Tool(_noop, name=name, desc=desc, args=args or None)
+    set_tool_severity(tool, severity)
+    return tool
 
 
 def resolve_react_tools(
@@ -535,6 +557,7 @@ def run_react_optimization(
     match_mode: str = "exact",
     run_dir: str | None = None,
     progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+    timing_callbacks: Sequence[Any] = (),
 ) -> dict[str, Any]:
     """Optimise a react program against replay examples and report acceptance.
 
@@ -570,6 +593,10 @@ def run_react_optimization(
             candidate's full-valset sweep streams a ``PROGRESS_VALSET_OUTPUTS``
             event so the Pareto-cell prediction panel can render per-example
             outputs; ``None`` runs without that stream.
+        timing_callbacks: Stage-timing callbacks (typically the generation-LM
+            :class:`GenLMTimingCallback`) to attribute student-rollout latency
+            to the ``baseline``/``training``/``evaluation`` stages so the LM
+            activity panel populates. Empty by default (no stage bucketing).
 
     Returns:
         A dict with the servable ``program_state``, baseline/optimized objective
@@ -597,17 +624,19 @@ def run_react_optimization(
     # the baseline is known instead of only after the whole loop finishes. The
     # seed scoring is independent of optimize(), so moving it earlier is a pure
     # reorder — total runtime is unchanged.
-    baseline_scalars, baseline_objectives, baseline_objective_mean = (
-        _evaluate_candidate_on_examples(
-            adapter=adapter, candidate=seed_candidate, examples=test
+    with track_stage(STAGE_BASELINE, *timing_callbacks):
+        baseline_scalars, baseline_objectives, baseline_objective_mean, baseline_outputs = (
+            _evaluate_candidate_on_examples(
+                adapter=adapter, candidate=seed_candidate, examples=test
+            )
         )
-    )
     if progress_callback:
         progress_callback(PROGRESS_BASELINE, {DETAIL_BASELINE: _mean(baseline_scalars)})
 
     with (
         react_valset_outputs(adapter, val, progress_callback),
         react_minibatch_feedback(adapter, val, progress_callback),
+        track_stage(STAGE_TRAINING, *timing_callbacks),
     ):
         result = gepa.optimize(
             seed_candidate=seed_candidate,
@@ -628,11 +657,12 @@ def run_react_optimization(
     best_candidate = _best_candidate(result)
     program_state = _program_state_from(best_candidate=best_candidate, adapter=adapter)
 
-    optimized_scalars, optimized_objectives, optimized_objective_mean = (
-        _evaluate_candidate_on_examples(
-            adapter=adapter, candidate=best_candidate, examples=test
+    with track_stage(STAGE_EVALUATION, *timing_callbacks):
+        optimized_scalars, optimized_objectives, optimized_objective_mean, optimized_outputs = (
+            _evaluate_candidate_on_examples(
+                adapter=adapter, candidate=best_candidate, examples=test
+            )
         )
-    )
     bootstrap = _bootstrap_or_empty(
         baseline_scalars=baseline_scalars,
         optimized_scalars=optimized_scalars,
@@ -658,6 +688,8 @@ def run_react_optimization(
         "optimized_scalar": _mean(optimized_scalars),
         "baseline_scalars_per_example": baseline_scalars,
         "optimized_scalars_per_example": optimized_scalars,
+        "baseline_outputs_per_example": baseline_outputs,
+        "optimized_outputs_per_example": optimized_outputs,
         "paired_bootstrap": bootstrap,
         "promotion": {
             "promotable": verdict.promotable,

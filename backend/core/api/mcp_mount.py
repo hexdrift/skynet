@@ -34,6 +34,7 @@ from fastmcp.server.providers.openapi.components import (
     OpenAPITool,
 )
 from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
+from mcp.types import ToolAnnotations
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -56,6 +57,67 @@ AGENT_TAG = "agent"
 
 _MAX_DESCRIPTION_CHARS = 240
 _SCHEMA_NOISE_KEYS = frozenset({"examples", "example", "title"})
+
+# REST semantics carry an honest approval signal the OpenAPI projection drops:
+# a read is safe, a delete is destructive, any other write mutates state. We
+# surface that as MCP tool annotations so downstream consumers (and the
+# optimizer's severity capture) read a real hint instead of fabricating one.
+_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+_DESTRUCTIVE_METHODS = frozenset({"DELETE"})
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+# A route may author its own MCP annotations the same way its docstring authors
+# the description: by declaring partial hint fields under this OpenAPI extension
+# (``openapi_extra={_MCP_ANNOTATIONS_EXTENSION: {"destructiveHint": True}}``).
+# FastMCP surfaces ``x-`` operation extensions on ``HTTPRoute.extensions``; the
+# authored fields merge over the method default, so a body-carrying route whose
+# verb understates its effect (a POST that deletes) can state the truth.
+_MCP_ANNOTATIONS_EXTENSION = "x-mcp-annotations"
+
+
+def _annotations_for_method(method: str) -> ToolAnnotations | None:
+    """Derive MCP tool annotations from an HTTP method, or ``None`` if unmapped.
+
+    Args:
+        method: The route's HTTP verb (e.g. ``"GET"``).
+
+    Returns:
+        A ``ToolAnnotations`` whose read-only / destructive hints reflect the
+        method's REST semantics, or ``None`` for verbs with no clear hint.
+    """
+    if method in _READ_ONLY_METHODS:
+        return ToolAnnotations(readOnlyHint=True)
+    if method in _DESTRUCTIVE_METHODS:
+        return ToolAnnotations(readOnlyHint=False, destructiveHint=True)
+    if method in _MUTATING_METHODS:
+        return ToolAnnotations(readOnlyHint=False, destructiveHint=False)
+    return None
+
+
+def _annotations_for_route(route: HTTPRoute) -> ToolAnnotations | None:
+    """Resolve a route's MCP annotations from its HTTP method and authored hints.
+
+    The HTTP verb supplies a default hint (:func:`_annotations_for_method`); a
+    route may override or extend it by authoring partial annotation fields under
+    the ``x-mcp-annotations`` OpenAPI extension, which merge on top. This lets a
+    route whose verb understates its effect — a POST that deletes — declare
+    ``destructiveHint`` explicitly, the same way its docstring authors the
+    description, rather than relying on method derivation alone.
+
+    Args:
+        route: The originating FastAPI HTTP route metadata.
+
+    Returns:
+        The resolved ``ToolAnnotations``, or ``None`` when neither the method
+        nor the route authors any hint.
+    """
+    base = _annotations_for_method(route.method)
+    authored = route.extensions.get(_MCP_ANNOTATIONS_EXTENSION)
+    if not authored:
+        return base
+    fields = base.model_dump(exclude_none=True) if base else {}
+    fields.update(authored)
+    return ToolAnnotations(**fields)
 
 
 def _strip_schema_noise(node: Any) -> Any:
@@ -111,6 +173,8 @@ def _trim_tool_spec(
         # entirely — we trade machine-readable output validation for context
         # budget, which matters more for small-window models like Minimax.
         component.output_schema = None
+        if component.annotations is None:
+            component.annotations = _annotations_for_route(route)
 
 
 def mount_mcp_on_app(app: FastAPI) -> None:

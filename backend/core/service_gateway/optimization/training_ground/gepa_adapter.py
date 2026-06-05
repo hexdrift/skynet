@@ -593,10 +593,6 @@ def _serialize_tool_args(args: dict[str, Any] | None) -> dict[str, dict[str, Any
     return payload
 
 
-class TrainingGroundDspyAdapterInstance(TrainingGroundDspyAdapter):
-    """Public alias kept for readability in optimize.py."""
-
-
 def _grounding_feedback(
     *,
     mean_log_likelihood: float | None,

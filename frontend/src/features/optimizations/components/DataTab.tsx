@@ -42,6 +42,27 @@ function scoreColor(score: number): string {
   return `oklch(0.5 0.13 ${hue.toFixed(1)})`;
 }
 
+/**
+ * Render a dataset cell value as a string the table can display.
+ *
+ * React datasets carry structured columns — `chat_history` is an array of
+ * turn objects, `wizard_state` an object — that `String(value)` collapses to
+ * the useless `[object Object]`. Stringify those to JSON so the cell shows the
+ * real content (compact inline, indented for the hover title); scalars pass
+ * through unchanged. `null`/`undefined` render as an empty string.
+ */
+function formatCellValue(value: unknown, pretty = false): string {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value, null, pretty ? 2 : undefined);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
 export function DataTab({
   job,
   pairIndex,
@@ -234,15 +255,15 @@ export function DataTab({
     let result = rows.filter((r) => {
       for (const [col, allowed] of Object.entries(colFilters.filters)) {
         if (allowed.size === 0) continue;
-        const val = String(r.row[col] ?? "");
+        const val = formatCellValue(r.row[col]);
         if (!allowed.has(val)) return false;
       }
       return true;
     });
     if (sortKey) {
       result = [...result].sort((a, b) => {
-        const av = String(a.row[sortKey] ?? "");
-        const bv = String(b.row[sortKey] ?? "");
+        const av = formatCellValue(a.row[sortKey]);
+        const bv = formatCellValue(b.row[sortKey]);
         const cmp = av.localeCompare(bv, "he", { numeric: true });
         return sortDir === "asc" ? cmp : -cmp;
       });
@@ -253,7 +274,9 @@ export function DataTab({
   const filterOptions = useMemo(() => {
     const opts: Record<string, Array<{ value: string; label: string }>> = {};
     for (const col of allColumns) {
-      const vals = [...new Set(rows.map((r) => String(r.row[col] ?? "")))].filter(Boolean).sort();
+      const vals = [...new Set(rows.map((r) => formatCellValue(r.row[col])))]
+        .filter(Boolean)
+        .sort();
       opts[col] = vals.map((v) => ({
         value: v,
         label: v.length > 40 ? `${v.slice(0, 40)}...` : v,
@@ -275,9 +298,7 @@ export function DataTab({
   return (
     <div className="space-y-4 mt-4">
       <FadeIn>
-        <p className="text-sm text-muted-foreground">
-          {msg("optimizations.datatab.description")}
-        </p>
+        <p className="text-sm text-muted-foreground">{msg("optimizations.datatab.description")}</p>
       </FadeIn>
       {/* Test evaluation bar — shows cached results */}
       {split === "test" && (
@@ -503,9 +524,9 @@ export function DataTab({
                                   ? { width: colResize.widths[f], maxWidth: colResize.widths[f] }
                                   : undefined
                               }
-                              title={String(row.row[f] ?? "")}
+                              title={formatCellValue(row.row[f], true)}
                             >
-                              {String(row.row[f] ?? "")}
+                              {formatCellValue(row.row[f])}
                             </TableCell>
                           ))}
                           {outputFields.map((f) => (
@@ -517,9 +538,9 @@ export function DataTab({
                                   ? { width: colResize.widths[f], maxWidth: colResize.widths[f] }
                                   : undefined
                               }
-                              title={String(row.row[f] ?? "")}
+                              title={formatCellValue(row.row[f], true)}
                             >
-                              {String(row.row[f] ?? "")}
+                              {formatCellValue(row.row[f])}
                             </TableCell>
                           ))}
                           {split === "test" &&
@@ -543,9 +564,9 @@ export function DataTab({
                                       : {}),
                                     color: ev ? scoreColor(ev.score) : undefined,
                                   }}
-                                  title={pred != null ? String(pred) : ""}
+                                  title={formatCellValue(pred, true)}
                                 >
-                                  {pred != null ? String(pred) : ""}
+                                  {formatCellValue(pred)}
                                 </TableCell>
                               );
                             })}

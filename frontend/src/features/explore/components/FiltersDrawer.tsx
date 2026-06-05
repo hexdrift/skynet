@@ -1,7 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Calendar, Check, Cpu, Layers, Search, Sliders, X } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  Component,
+  Cpu,
+  Layers,
+  Search,
+  Target,
+  X,
+} from "lucide-react";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import {
   Sheet,
@@ -19,15 +28,19 @@ interface FiltersDrawerProps {
   modelOptions: string[];
   /** All distinct optimizer names in the corpus (sorted alphabetically by caller). */
   optimizerOptions: string[];
+  /** All distinct module names in the corpus (sorted alphabetically by caller). */
+  moduleOptions: string[];
   /** Currently active filter values. */
   selectedModels: string[];
   selectedOptimizers: string[];
   selectedTypes: string[];
+  selectedModules: string[];
   dateFrom: string | null;
   dateTo: string | null;
   onChangeModels: (next: string[]) => void;
   onChangeOptimizers: (next: string[]) => void;
   onChangeTypes: (next: string[]) => void;
+  onChangeModules: (next: string[]) => void;
   onChangeDateRange: (from: string | null, to: string | null) => void;
   /** Wipes every filter inside the drawer (excluding free-text query). */
   onClearAll: () => void;
@@ -58,14 +71,17 @@ export function FiltersDrawer({
   onOpenChange,
   modelOptions,
   optimizerOptions,
+  moduleOptions,
   selectedModels,
   selectedOptimizers,
   selectedTypes,
+  selectedModules,
   dateFrom,
   dateTo,
   onChangeModels,
   onChangeOptimizers,
   onChangeTypes,
+  onChangeModules,
   onChangeDateRange,
   onClearAll,
 }: FiltersDrawerProps) {
@@ -73,6 +89,7 @@ export function FiltersDrawer({
     selectedModels.length +
     selectedOptimizers.length +
     selectedTypes.length +
+    selectedModules.length +
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0);
 
@@ -85,11 +102,11 @@ export function FiltersDrawer({
       >
         <div dir="rtl" className="flex h-full flex-col">
           <SheetHeader className="flex-row items-start justify-between gap-3 border-b border-border/60 px-6 py-5">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
               <SheetTitle className="text-[17px] font-medium tracking-tight text-foreground">
                 {msg("explore.filters.title")}
               </SheetTitle>
-              <SheetDescription className="sr-only">
+              <SheetDescription className="text-[12.5px] leading-relaxed text-foreground/55">
                 {msg("explore.filters.subtitle")}
               </SheetDescription>
             </div>
@@ -104,65 +121,83 @@ export function FiltersDrawer({
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
-            <div className="flex flex-col gap-8">
-              <SearchableChipSection
-                title={msg("explore.filters.section.models")}
-                icon={Cpu}
-                options={modelOptions}
-                selected={selectedModels}
-                onToggle={(v) => onChangeModels(toggleValue(selectedModels, v))}
-                dir="ltr"
-              />
-
-              <SearchableChipSection
-                title={msg("explore.filters.section.optimizers")}
-                icon={Sliders}
-                options={optimizerOptions}
-                selected={selectedOptimizers}
-                onToggle={(v) =>
-                  onChangeOptimizers(toggleValue(selectedOptimizers, v))
-                }
-                dir="ltr"
-              />
-
-              <FilterSection
-                title={msg("explore.filters.section.types")}
-                icon={Layers}
-                selectedCount={selectedTypes.length}
-              >
-                <ChipGroup
-                  options={TYPE_VALUES.map((t) => t.value)}
-                  labels={Object.fromEntries(
-                    TYPE_VALUES.map((t) => [t.value, msg(t.labelKey)]),
-                  )}
-                  selected={selectedTypes}
+            {/* Two clusters, each held tighter (gap-7) than the space between
+                them (gap-10): the optimization itself (program, model,
+                optimizer), then the run's own metadata (kind, date). */}
+            <div className="flex flex-col gap-10">
+              <div className="flex flex-col gap-7">
+                <SearchableChipSection
+                  title={msg("explore.filters.section.modules")}
+                  icon={Component}
+                  options={moduleOptions}
+                  selected={selectedModules}
                   onToggle={(v) =>
-                    onChangeTypes(toggleValue(selectedTypes, v))
+                    onChangeModules(toggleValue(selectedModules, v))
                   }
-                  dir="rtl"
+                  dir="auto"
                 />
-              </FilterSection>
 
-              <FilterSection
-                title={msg("explore.filters.section.date")}
-                icon={Calendar}
-                selectedCount={(dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
-              >
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <DateRangeField
-                    label={msg("explore.filters.date.from")}
-                    value={dateFrom}
-                    max={dateTo ?? undefined}
-                    onChange={(v) => onChangeDateRange(v, dateTo)}
+                <SearchableChipSection
+                  title={msg("explore.filters.section.models")}
+                  icon={Cpu}
+                  options={modelOptions}
+                  selected={selectedModels}
+                  onToggle={(v) => onChangeModels(toggleValue(selectedModels, v))}
+                  dir="ltr"
+                />
+
+                <SearchableChipSection
+                  title={msg("explore.filters.section.optimizers")}
+                  icon={Target}
+                  options={optimizerOptions}
+                  selected={selectedOptimizers}
+                  onToggle={(v) =>
+                    onChangeOptimizers(toggleValue(selectedOptimizers, v))
+                  }
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="flex flex-col gap-7">
+                <FilterSection
+                  title={msg("explore.filters.section.types")}
+                  icon={Layers}
+                  selectedCount={selectedTypes.length}
+                >
+                  <ChipGroup
+                    options={TYPE_VALUES.map((t) => t.value)}
+                    labels={Object.fromEntries(
+                      TYPE_VALUES.map((t) => [t.value, msg(t.labelKey)]),
+                    )}
+                    selected={selectedTypes}
+                    onToggle={(v) =>
+                      onChangeTypes(toggleValue(selectedTypes, v))
+                    }
+                    dir="rtl"
                   />
-                  <DateRangeField
-                    label={msg("explore.filters.date.to")}
-                    value={dateTo}
-                    min={dateFrom ?? undefined}
-                    onChange={(v) => onChangeDateRange(dateFrom, v)}
-                  />
-                </div>
-              </FilterSection>
+                </FilterSection>
+
+                <FilterSection
+                  title={msg("explore.filters.section.date")}
+                  icon={Calendar}
+                  selectedCount={(dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <DateRangeField
+                      label={msg("explore.filters.date.from")}
+                      value={dateFrom}
+                      max={dateTo ?? undefined}
+                      onChange={(v) => onChangeDateRange(v, dateTo)}
+                    />
+                    <DateRangeField
+                      label={msg("explore.filters.date.to")}
+                      value={dateTo}
+                      min={dateFrom ?? undefined}
+                      onChange={(v) => onChangeDateRange(dateFrom, v)}
+                    />
+                  </div>
+                </FilterSection>
+              </div>
             </div>
           </div>
 
@@ -212,22 +247,29 @@ function FilterSection({
   selectedCount?: number;
   children: React.ReactNode;
 }) {
+  const active = selectedCount > 0;
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-[12px] font-medium tracking-wide text-foreground/55">
+        <h3
+          className={`inline-flex items-center gap-2 text-[12px] font-medium tracking-wide transition-colors ${
+            active ? "text-foreground/80" : "text-foreground/55"
+          }`}
+        >
           {Icon && (
             <Icon
-              className="size-[13px] text-foreground/45"
+              className={`size-3.5 transition-colors ${
+                active ? "text-foreground/70" : "text-foreground/45"
+              }`}
               aria-hidden="true"
               strokeWidth={1.75}
             />
           )}
           <span>{title}</span>
         </h3>
-        {selectedCount > 0 && (
+        {active && (
           <span
-            className="text-[11px] tabular-nums text-foreground/45"
+            className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums text-foreground/60"
             aria-label={formatMsg(
               selectedCount === 1
                 ? "explore.filters.section.selected"
@@ -262,7 +304,7 @@ function SearchableChipSection({
   options: string[];
   selected: string[];
   onToggle: (value: string) => void;
-  dir: "ltr" | "rtl";
+  dir: "ltr" | "rtl" | "auto";
 }) {
   const [query, setQuery] = React.useState("");
   const showSearch = options.length > SEARCH_THRESHOLD;
@@ -348,8 +390,11 @@ function ChipGroup({
   onToggle: (value: string) => void;
   /** Optional override for display strings (e.g. type values → Hebrew). */
   labels?: Record<string, string>;
-  /** Per-chip text direction. LTR for code identifiers, RTL for Hebrew labels. */
-  dir: "ltr" | "rtl";
+  /**
+   * Per-chip text direction. LTR for code identifiers, RTL for Hebrew labels,
+   * auto for user-authored names that may be either (tasks, modules).
+   */
+  dir: "ltr" | "rtl" | "auto";
 }) {
   if (options.length === 0) {
     return (
@@ -385,7 +430,7 @@ function SelectableChip({
 }: {
   label: string;
   active: boolean;
-  dir: "ltr" | "rtl";
+  dir: "ltr" | "rtl" | "auto";
   onClick: () => void;
 }) {
   return (

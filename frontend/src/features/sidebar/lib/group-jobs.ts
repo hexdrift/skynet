@@ -14,22 +14,6 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("he-IL", {
 });
 
 /**
- * Case-insensitive substring match across the sidebar's searchable fields.
- */
-export function matchesJobSearch(job: SidebarJobItem, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    (job.name ?? "").toLowerCase().includes(q) ||
-    (job.module_name ?? "").toLowerCase().includes(q) ||
-    job.optimization_id.toLowerCase().includes(q) ||
-    (job.optimizer_name ?? "").toLowerCase().includes(q) ||
-    (job.model_name ?? "").toLowerCase().includes(q) ||
-    (job.username ?? "").toLowerCase().includes(q)
-  );
-}
-
-/**
  * Bucket jobs into pinned → active → concrete calendar dates.
  * Empty buckets are dropped.
  */
