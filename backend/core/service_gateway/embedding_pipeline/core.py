@@ -74,8 +74,16 @@ def _extract_metadata(job: dict[str, Any]) -> tuple[str | None, str | None]:
 def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
     """Return ``(baseline_metric, optimized_metric)`` for a finished job.
 
-    Run jobs store the pair directly in ``latest_metrics``; grid jobs keep
-    the winning pair under ``result.best_pair``. Scale is 0-100 for both.
+    Run jobs publish the score pair to ``latest_metrics`` while running, but
+    only ``optimized_test_metric`` survives there at completion — the baseline
+    lands in ``result`` — so fall back to ``result`` for either missing half.
+    Grid jobs keep the winning pair under ``result.best_pair``. Scale is 0-100
+    for both.
+
+    A missing baseline matters: the gain sort ranks on
+    ``optimized - baseline``, so a ``None`` baseline would silently collapse
+    the ranking to raw optimized score and float an unimproved-but-high run
+    above one that actually gained.
 
     Args:
         job: The job-store record for a finished optimization.
@@ -87,14 +95,20 @@ def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
     overview = job.get("payload_overview") or {}
     job_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE)
     metrics = job.get("latest_metrics") or {}
+    result = job.get("result")
+    result = result if isinstance(result, dict) else {}
     baseline = metrics.get("baseline_test_metric")
     optimized = metrics.get("optimized_test_metric")
     if job_type == OPTIMIZATION_TYPE_GRID_SEARCH:
-        result = job.get("result") or {}
-        best = result.get("best_pair") if isinstance(result, dict) else None
+        best = result.get("best_pair")
         if isinstance(best, dict):
             baseline = best.get("baseline_test_metric", baseline)
             optimized = best.get("optimized_test_metric", optimized)
+    else:
+        if baseline is None:
+            baseline = result.get("baseline_test_metric")
+        if optimized is None:
+            optimized = result.get("optimized_test_metric")
     try:
         baseline_f = float(baseline) if baseline is not None else None
     except (TypeError, ValueError):

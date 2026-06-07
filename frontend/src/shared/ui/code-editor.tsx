@@ -51,9 +51,16 @@ const beigeEditorTheme = EditorView.theme(
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "#7C6350",
     },
-    /* Raise selection layer above the editor background (default is z-index:-2) */
+    /* Raise the selection layer so the highlight shows over the beige
+       background (its default negative z-index hides behind it). Lifting it
+       above .cm-content means it must stay click-through: the layer carries
+       no pointer-events:none of its own, so once on top a select-all would
+       blanket the editor and swallow every click — leaving it unclickable and
+       "stuck". pointer-events:none restores normal caret/click behaviour, the
+       same guard CM applies to its own .cm-cursorLayer. */
     ".cm-selectionLayer": {
       zIndex: "1 !important",
+      pointerEvents: "none",
     },
     /* Selection highlight — must be visually stronger than matches */
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {

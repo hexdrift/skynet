@@ -250,10 +250,12 @@ def evaluate_on_test(
             if hasattr(ex_score, "score"):
                 ex_score = ex_score.score
             ex_score = float(ex_score) if isinstance(ex_score, (int, float, bool)) else 0.0
-            # Per-row heartbeat: these baseline/optimized eval passes sit outside
-            # capture_tqdm, so dspy.Evaluate's bar never forwards — without this a
-            # large test split shows only a single aggregate with no live progress.
-            logger.info(
+            # Per-row heartbeat at DEBUG so it surfaces only in the Logs tab's
+            # verbose view: these baseline/optimized eval passes sit outside
+            # capture_tqdm, so dspy.Evaluate's bar never forwards. Normal mode
+            # keeps the single aggregate metric; verbose adds the live per-row
+            # progress. Demoted in lockstep with the react/predict heartbeats.
+            logger.debug(
                 "%s test eval %d/%d score=%.3f pass=%s",
                 program.__class__.__name__,
                 i + 1,

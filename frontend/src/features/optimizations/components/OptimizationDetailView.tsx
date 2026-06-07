@@ -11,7 +11,6 @@ import {
   TrendingUp,
   Timer,
   Send,
-  Copy,
   CopyPlus,
   Database,
   Settings,
@@ -1037,50 +1036,37 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
 
       {job.status === "failed" && !isPairContext && (job.message || (metrics.error as string)) && (
         <FadeIn delay={0.15}>
-          <div className="p-5 rounded-xl border border-red-300/60 bg-gradient-to-br from-red-50 to-red-100/40 shadow-[0_0_15px_rgba(239,68,68,0.06)]">
-            <div className="flex items-start gap-3">
-              <XCircle className="size-5 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-sm font-semibold text-red-800">
+          <div className="rounded-xl border border-[#B04030]/20 bg-gradient-to-br from-[#B04030]/[0.05] to-[#B04030]/[0.015] p-5 shadow-[0_1px_3px_rgba(176,64,48,0.07)]">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#B04030]/10 text-[#B04030]">
+                <XCircle className="size-5" />
+              </span>
+              <p className="min-w-0 flex-1 text-sm font-semibold text-[#7A2A1E]">
                 {msg("auto.app.optimizations.id.page.6")}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  const parts = [job.message ?? ""];
-                  if (
-                    typeof metrics.error === "string" &&
-                    !job.message?.includes(metrics.error)
-                  ) {
-                    parts.push(String(metrics.error));
-                  }
-                  void navigator.clipboard.writeText(parts.filter(Boolean).join("\n\n"));
-                  toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
-                }}
-                className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-red-300/60 bg-red-100/50 px-2 py-1 text-[0.6875rem] font-medium text-red-700 hover:bg-red-100 transition-colors cursor-pointer"
-                title={msg("shared.agent.copy")}
-                aria-label={msg("shared.agent.copy")}
-              >
-                <Copy className="size-3" />
-                {msg("shared.agent.copy")}
-              </button>
             </div>
-            <pre
-              className="text-xs text-red-700 mt-3 whitespace-pre-wrap break-words font-mono leading-relaxed"
-              dir="ltr"
-            >
-              {linkifyMessage(job.message ?? "", "underline hover:text-red-900 transition-colors")}
-            </pre>
-            {typeof metrics.error === "string" && !job.message?.includes(metrics.error) && (
+            <div className="mt-3 rounded-lg border border-[#B04030]/15 bg-[#B04030]/[0.035] px-3.5 py-2.5">
               <pre
-                className="text-xs text-red-700 mt-2 whitespace-pre-wrap break-words font-mono leading-relaxed border-t border-red-200 pt-2"
+                className="text-xs text-[#8A3326] whitespace-pre-wrap break-words font-mono leading-relaxed"
                 dir="ltr"
               >
                 {linkifyMessage(
-                  String(metrics.error),
-                  "underline hover:text-red-900 transition-colors",
+                  job.message ?? "",
+                  "underline decoration-[#B04030]/40 underline-offset-2 hover:text-[#7A2A1E] transition-colors",
                 )}
               </pre>
-            )}
+              {typeof metrics.error === "string" && !job.message?.includes(metrics.error) && (
+                <pre
+                  className="text-xs text-[#8A3326] whitespace-pre-wrap break-words font-mono leading-relaxed mt-2 border-t border-[#B04030]/15 pt-2"
+                  dir="ltr"
+                >
+                  {linkifyMessage(
+                    String(metrics.error),
+                    "underline decoration-[#B04030]/40 underline-offset-2 hover:text-[#7A2A1E] transition-colors",
+                  )}
+                </pre>
+              )}
+            </div>
           </div>
         </FadeIn>
       )}

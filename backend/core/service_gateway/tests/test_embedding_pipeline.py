@@ -120,6 +120,22 @@ def test_extract_scores_run_uses_latest_metrics() -> None:
     assert optimized == 72.5
 
 
+def test_extract_scores_run_falls_back_to_result_baseline() -> None:
+    """A run job recovers the baseline from ``result`` when latest_metrics drops it.
+
+    GEPA run jobs only keep ``optimized_test_metric`` in latest_metrics at
+    completion; the baseline survives in ``result``. Without the fallback the
+    embedded baseline is NULL and the gain sort collapses to raw score.
+    """
+    job = _success_job(
+        latest_metrics={"optimized_test_metric": 90.0},
+        result={"baseline_test_metric": 85.0, "optimized_test_metric": 90.0},
+    )
+    baseline, optimized = pipeline._extract_scores(job)
+    assert baseline == 85.0
+    assert optimized == 90.0
+
+
 def test_extract_scores_grid_search_uses_best_pair() -> None:
     """A grid-search job prefers the winning pair's scores over latest_metrics."""
     job = _success_job(
