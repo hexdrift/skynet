@@ -121,18 +121,6 @@ def test_run_request_module_kwargs_default_empty() -> None:
     assert req.module_kwargs == {}
 
 
-def test_run_request_react_without_metric_code_errors_even_with_preset() -> None:
-    """Verify react requires metric_code even when a reward preset is present.
-
-    React scoring moved from built-in presets to an authored metric over the
-    ``(example, rollout)`` pair, so metric_code is mandatory for every run.
-    """
-    payload = _base_payload(module_name="react", reward={"preset": "general"})
-    payload.pop("metric_code")
-    with pytest.raises(ValidationError, match="metric_code is required"):
-        RunRequest.model_validate(payload)
-
-
 def test_run_request_non_react_without_metric_code_errors() -> None:
     """Verify a non-react run without metric_code is still rejected."""
     payload = _base_payload()
@@ -141,21 +129,20 @@ def test_run_request_non_react_without_metric_code_errors() -> None:
         RunRequest.model_validate(payload)
 
 
-def test_run_request_react_without_metric_code_and_no_preset_errors() -> None:
-    """Verify a react run without metric_code and without a reward preset is rejected."""
+def test_run_request_react_without_metric_code_errors() -> None:
+    """Verify a react run without metric_code is rejected like any other run."""
     payload = _base_payload(module_name="react")
     payload.pop("metric_code")
     with pytest.raises(ValidationError, match="metric_code is required"):
         RunRequest.model_validate(payload)
 
 
-def test_run_request_react_with_metric_code_and_no_preset_ok() -> None:
-    """Verify a react run that supplies metric_code validates without a reward preset."""
+def test_run_request_react_with_metric_code_ok() -> None:
+    """Verify a react run that supplies metric_code validates."""
     payload = _base_payload(module_name="react")
     req = RunRequest.model_validate(payload)
 
     assert req.metric_code == "def m(e, p): return 1.0"
-    assert req.reward is None
 
 
 def test_run_request_parses_tool_source() -> None:
@@ -178,111 +165,11 @@ def test_run_request_parses_tool_source() -> None:
     assert req.tool_source.tool_filter == ["search", "fetch"]
 
 
-def test_run_request_parses_replay_mapping() -> None:
-    """Verify replay_mapping parses its required roles, including the state snapshots."""
-    payload = _base_payload(
-        module_name="react",
-        replay_mapping={
-            "steps": "trajectory",
-            "allowed_tools": "tools",
-            "tool_schema_hashes": "hashes",
-            "state_before": "before",
-            "state_after": "after",
-        },
-    )
-    req = RunRequest.model_validate(payload)
-
-    assert req.replay_mapping is not None
-    assert req.replay_mapping.steps == "trajectory"
-    assert req.replay_mapping.allowed_tools == "tools"
-    assert req.replay_mapping.tool_schema_hashes == "hashes"
-    assert req.replay_mapping.state_before == "before"
-    assert req.replay_mapping.state_after == "after"
-    assert req.replay_mapping.chat_history is None
-
-
-def test_run_request_replay_mapping_requires_state_snapshots() -> None:
-    """Verify replay_mapping rejects a payload missing the state_before/after roles.
-
-    The gate-progress signal a metric scores against is the before/after delta,
-    so an unmapped snapshot must be a hard error rather than silently empty.
-    """
-    payload = _base_payload(
-        module_name="react",
-        replay_mapping={
-            "steps": "trajectory",
-            "allowed_tools": "tools",
-            "tool_schema_hashes": "hashes",
-        },
-    )
-    with pytest.raises(ValidationError):
-        RunRequest.model_validate(payload)
-
-
-def test_run_request_reward_defaults() -> None:
-    """Verify reward defaults preset to ``general`` and grounding_weight to 0.05."""
-    payload = _base_payload(module_name="react", reward={})
-    req = RunRequest.model_validate(payload)
-
-    assert req.reward is not None
-    assert req.reward.preset == "general"
-    assert req.reward.grounding_weight == 0.05
-
-
-def test_run_request_reward_generalist_preset() -> None:
-    """Verify reward accepts the ``generalist`` preset and a custom grounding_weight."""
-    payload = _base_payload(
-        module_name="react",
-        reward={"preset": "generalist", "grounding_weight": 0.2},
-    )
-    req = RunRequest.model_validate(payload)
-
-    assert req.reward is not None
-    assert req.reward.preset == "generalist"
-    assert req.reward.grounding_weight == 0.2
-
-
-def test_run_request_reward_replay_match_preset() -> None:
-    """Verify reward accepts the ``replay_match`` preset without metric_code."""
-    payload = _base_payload(
-        module_name="react",
-        reward={"preset": "replay_match", "match_mode": "tool_name"},
-    )
-    req = RunRequest.model_validate(payload)
-
-    assert req.reward is not None
-    assert req.reward.preset == "replay_match"
-    assert req.reward.match_mode == "tool_name"
-
-
-def test_run_request_reward_match_mode_defaults_exact() -> None:
-    """Verify reward defaults ``match_mode`` to ``exact`` when omitted."""
-    payload = _base_payload(module_name="react", reward={})
-    req = RunRequest.model_validate(payload)
-
-    assert req.reward is not None
-    assert req.reward.match_mode == "exact"
-
-
-def test_run_request_reward_match_mode_tool_name() -> None:
-    """Verify reward accepts the opt-in ``tool_name`` match mode."""
-    payload = _base_payload(
-        module_name="react",
-        reward={"preset": "general", "match_mode": "tool_name"},
-    )
-    req = RunRequest.model_validate(payload)
-
-    assert req.reward is not None
-    assert req.reward.match_mode == "tool_name"
-
-
-def test_run_request_react_fields_default_none() -> None:
-    """Verify the new react fields default to None on a standard payload."""
+def test_run_request_tool_source_defaults_none() -> None:
+    """Verify tool_source defaults to None on a standard (non-react) payload."""
     req = RunRequest.model_validate(_base_payload())
 
     assert req.tool_source is None
-    assert req.replay_mapping is None
-    assert req.reward is None
 
 
 def _grid_base(**overrides: Any) -> dict[str, Any]:

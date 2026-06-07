@@ -1,17 +1,16 @@
 """Unit tests for the pure pieces of the react /run core.
 
-Covers the two building blocks that need no live model or ``gepa.optimize``:
-``build_replay_examples`` (row → :class:`EvaluationExample` conversion) and the
-``dataset_snapshot`` branch of ``resolve_react_tools`` (roster rebuild from the
-reserved sidecar), plus the ``gepa.optimize`` call contract of
-``run_react_optimization`` verified with that call stubbed (no live model). The
-full model-driven path is exercised by the gateway integration suite.
+Covers the ``dataset_snapshot`` branch of ``resolve_react_tools`` (roster
+rebuild from the reserved sidecar / persisted specs, including per-tool
+severity) and the ``gepa.optimize`` call contract of ``run_react_optimization``
+verified with the live model + adapter stubbed out. The full model-driven path
+(live MCP tools + real ``gepa.optimize``) is exercised by the gateway
+integration suite.
 """
 
 from __future__ import annotations
 
 import logging
-from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -19,7 +18,8 @@ import dspy
 import pytest
 
 from core.config import settings
-from core.models.submissions import ReplayMapping, ToolSource
+from core.models.submissions import ToolSource
+from core.service_gateway.optimization.core import _tool_to_snapshot_spec
 from core.service_gateway.optimization.timing import (
     STAGE_BASELINE,
     STAGE_EVALUATION,
@@ -28,135 +28,14 @@ from core.service_gateway.optimization.timing import (
 )
 from core.service_gateway.optimization.training_ground import run_react as run_react_mod
 from core.service_gateway.optimization.training_ground.registry import hash_tool_schema
-from core.service_gateway.optimization.core import _tool_to_snapshot_spec
-from core.service_gateway.optimization.training_ground.optimize import (
+from core.service_gateway.optimization.training_ground.run_react import (
+    _JobLogGepaLogger,
     _severity_from_annotations,
+    resolve_react_tools,
+    run_react_optimization,
     set_tool_severity,
     tool_severity,
 )
-from core.service_gateway.optimization.training_ground.run_react import (
-    _JobLogGepaLogger,
-    build_replay_examples,
-    resolve_react_tools,
-    run_react_optimization,
-)
-
-
-def _example_with_columns(**columns: object) -> dspy.Example:
-    """Build a ``dspy.Example`` with one signature input plus replay columns.
-
-    The replay-role columns are attached as plain attributes (mirroring
-    ``rows_to_examples(..., extra_columns=...)``) so they stay out of
-    ``example.inputs()``.
-    """
-    example = dspy.Example(question="what is the weather?").with_inputs("question")
-    for name, value in columns.items():
-        setattr(example, name, value)
-    return example
-
-
-def test_build_replay_examples_converts_v1_steps() -> None:
-    """A synthetic v1 row becomes an EvaluationExample with replay fields set."""
-    steps = [
-        {
-            "tool": "search",
-            "status": "done",
-            "payload": {"arguments": {"q": "weather"}, "result": {"hits": 3}},
-        },
-        {"tool": "submit", "status": "done", "payload": {}},
-        {"tool": "pending", "status": "running", "payload": {}},
-    ]
-    example = _example_with_columns(
-        turn_id="turn-7",
-        steps_col=steps,
-        allowed_col=["search", "submit", "lookup"],
-        hashes_col={"search": "abc123", "lookup": "def456"},
-        before_col={"phase": "start"},
-        after_col={"phase": "done"},
-        chat_col=[{"role": "user", "content": "hi"}, "not-a-mapping"],
-    )
-    mapping = ReplayMapping(
-        steps="steps_col",
-        allowed_tools="allowed_col",
-        tool_schema_hashes="hashes_col",
-        state_before="before_col",
-        state_after="after_col",
-        chat_history="chat_col",
-    )
-
-    result = build_replay_examples([example], mapping)
-
-    assert len(result) == 1
-    ev = result[0]
-    assert ev.turn_id == "turn-7"
-    assert ev.signature_inputs == {"question": "what is the weather?"}
-    assert ev.user_message == ""
-    assert [step.tool_name for step in ev.replay_steps] == ["search"]
-    assert ev.replay_steps[0].result == {"hits": 3}
-    assert isinstance(ev.allowed_tools, frozenset)
-    assert ev.allowed_tools == frozenset({"search", "lookup"})
-    assert "submit" not in ev.allowed_tools
-    assert ev.tool_schema_hashes == {"search": "abc123", "lookup": "def456"}
-    assert ev.wizard_state_before == {"phase": "start"}
-    assert ev.wizard_state_after == {"phase": "done"}
-    assert ev.chat_history == ({"role": "user", "content": "hi"},)
-
-
-def test_build_replay_examples_tolerates_json_string_cells() -> None:
-    """CSV-style JSON-string cells parse the same as native objects."""
-    example = _example_with_columns(
-        steps_col='[{"tool": "search", "status": "done", "payload": {"arguments": {}, "result": 1}}]',
-        allowed_col='["search"]',
-        hashes_col='{"search": "h"}',
-    )
-    mapping = ReplayMapping(
-        steps="steps_col",
-        allowed_tools="allowed_col",
-        tool_schema_hashes="hashes_col",
-        state_before="before_col",
-        state_after="after_col",
-    )
-
-    ev = build_replay_examples([example], mapping)[0]
-
-    assert [step.tool_name for step in ev.replay_steps] == ["search"]
-    assert ev.allowed_tools == frozenset({"search"})
-    assert ev.tool_schema_hashes == {"search": "h"}
-    assert ev.wizard_state_before == {}
-    assert ev.chat_history == ()
-
-
-def test_build_replay_examples_drops_errored_steps() -> None:
-    """Errored recorded calls are bad ground truth, so they are dropped here."""
-    steps = [
-        {
-            "tool": "search",
-            "status": "done",
-            "payload": {"arguments": {"q": "x"}, "result": {"hits": 1}},
-        },
-        {
-            "tool": "lookup",
-            "status": "error",
-            "payload": {"arguments": {"id": 9}, "result": "boom"},
-        },
-    ]
-    example = _example_with_columns(
-        steps_col=steps,
-        allowed_col=["search", "lookup"],
-        hashes_col={"search": "h"},
-    )
-    mapping = ReplayMapping(
-        steps="steps_col",
-        allowed_tools="allowed_col",
-        tool_schema_hashes="hashes_col",
-        state_before="before_col",
-        state_after="after_col",
-    )
-
-    ev = build_replay_examples([example], mapping)[0]
-
-    assert [step.tool_name for step in ev.replay_steps] == ["search"]
-    assert all(step.status == "done" for step in ev.replay_steps)
 
 
 def test_resolve_react_tools_dataset_snapshot_rebuilds_roster() -> None:
@@ -293,18 +172,27 @@ def test_resolve_react_tools_accepts_persisted_dict_snapshot() -> None:
     assert hashes["search"] == hash_tool_schema(tools[0])
 
 
-class _StopAfterOptimize(Exception):
+class _StopAfterOptimizeError(Exception):
     """Sentinel raised by the gepa.optimize spy to halt before the scoring tail."""
 
 
-@contextmanager
-def _noop_cm(*_args: object, **_kwargs: object):
-    """Stand in for the react trajectory recorders as a do-nothing context manager.
+def _stub_optimize_prelude(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the seed/adapter construction shared by the optimize-contract tests.
 
-    Yields:
-        Control, so the ``with`` block runs without touching a real adapter.
+    Replaces ``RetryingReActV2`` (seed program), ``seed_candidate_from_program``,
+    ``_build_feedback_map``, and the gepa-package ``DspyAdapter`` so
+    ``run_react_optimization`` reaches ``gepa.optimize`` without a live model or
+    a real tool-aware adapter.
+
+    Args:
+        monkeypatch: Pytest fixture used to install the stubs on ``run_react``.
     """
-    yield
+    monkeypatch.setattr(run_react_mod, "RetryingReActV2", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(
+        run_react_mod, "seed_candidate_from_program", lambda program: {"seed": True}
+    )
+    monkeypatch.setattr(run_react_mod, "_build_feedback_map", lambda program, metric: {})
+    monkeypatch.setattr(run_react_mod, "DspyAdapter", lambda **k: MagicMock())
 
 
 def test_job_log_gepa_logger_routes_to_logging(caplog: pytest.LogCaptureFixture) -> None:
@@ -331,26 +219,18 @@ def test_run_react_optimization_passes_progress_bar_and_logger(
     def _spy_optimize(**kwargs: object) -> None:
         """Record the optimize kwargs, then abort before the scoring tail."""
         captured.update(kwargs)
-        raise _StopAfterOptimize
+        raise _StopAfterOptimizeError
 
-    monkeypatch.setattr(run_react_mod.dspy, "ReActV2", lambda *a, **k: MagicMock())
-    monkeypatch.setattr(run_react_mod, "seed_candidate_from_program", lambda program: {"seed": True})
-    monkeypatch.setattr(run_react_mod, "TrainingGroundDspyAdapter", lambda **k: MagicMock())
-    monkeypatch.setattr(
-        run_react_mod, "_evaluate_candidate_on_examples", lambda **k: ([1.0], [{}], 1.0, [None])
-    )
-    monkeypatch.setattr(run_react_mod, "react_valset_outputs", _noop_cm)
-    monkeypatch.setattr(run_react_mod, "react_minibatch_feedback", _noop_cm)
+    _stub_optimize_prelude(monkeypatch)
+    monkeypatch.setattr(run_react_mod, "_scores_and_outputs", lambda *a, **k: ([1.0], [{}]))
     monkeypatch.setattr(run_react_mod.gepa, "optimize", _spy_optimize)
 
-    with pytest.raises(_StopAfterOptimize):
+    with pytest.raises(_StopAfterOptimizeError):
         run_react_optimization(
             signature_cls=object,
             tools=[],
             schema_hashes={},
-            reward_spec=MagicMock(),
-            vector_fn=MagicMock(),
-            grounding_weight=0.0,
+            metric=MagicMock(),
             train=[],
             val=[],
             test=[],
@@ -389,42 +269,30 @@ def test_run_react_optimization_buckets_lm_activity_per_stage(
         gen_timing.on_lm_start(call_id, student_lm, {})
         gen_timing.on_lm_end(call_id, {})
 
-    def _fake_eval(**_kwargs: object) -> tuple[list[float], list[dict], float, list[object]]:
-        """Stand in for ``_evaluate_candidate_on_examples`` with one simulated call."""
+    def _fake_scores_and_outputs(*_args: object, **_kwargs: object) -> tuple[list, list]:
+        """Stand in for ``_scores_and_outputs`` with one simulated student call."""
         _simulate_student_call()
-        return [1.0], [{}], 1.0, [None]
+        return [1.0], [{}]
 
     def _fake_optimize(**_kwargs: object) -> MagicMock:
         """Stand in for ``gepa.optimize`` with one simulated training call."""
         _simulate_student_call()
         return MagicMock()
 
-    monkeypatch.setattr(run_react_mod.dspy, "ReActV2", lambda *a, **k: MagicMock())
-    monkeypatch.setattr(run_react_mod, "seed_candidate_from_program", lambda program: {"seed": True})
-    monkeypatch.setattr(run_react_mod, "TrainingGroundDspyAdapter", lambda **k: MagicMock())
-    monkeypatch.setattr(run_react_mod, "_evaluate_candidate_on_examples", _fake_eval)
-    monkeypatch.setattr(run_react_mod, "react_valset_outputs", _noop_cm)
-    monkeypatch.setattr(run_react_mod, "react_minibatch_feedback", _noop_cm)
+    _stub_optimize_prelude(monkeypatch)
+    monkeypatch.setattr(run_react_mod, "_scores_and_outputs", _fake_scores_and_outputs)
     monkeypatch.setattr(run_react_mod.gepa, "optimize", _fake_optimize)
     monkeypatch.setattr(run_react_mod, "_best_candidate", lambda result: {"opt": True})
-    monkeypatch.setattr(run_react_mod, "_program_state_from", lambda **k: {})
-    monkeypatch.setattr(run_react_mod, "_bootstrap_or_empty", lambda **k: MagicMock())
-    monkeypatch.setattr(
-        run_react_mod,
-        "_resolve_promotion",
-        lambda **k: SimpleNamespace(promotable=True, reasons=[]),
-    )
+    monkeypatch.setattr(run_react_mod, "extract_program_state", lambda program: {})
     monkeypatch.setattr(run_react_mod, "_candidate_tool_descriptions", lambda c: {})
     monkeypatch.setattr(run_react_mod, "_candidate_tool_arg_descriptions", lambda c: {})
-    monkeypatch.setattr(run_react_mod, "_candidate_tool_names", lambda c: [])
+    monkeypatch.setattr(run_react_mod, "_candidate_tool_names", lambda c: {})
 
     run_react_optimization(
         signature_cls=object,
         tools=[],
         schema_hashes={},
-        reward_spec=MagicMock(),
-        vector_fn=MagicMock(),
-        grounding_weight=0.0,
+        metric=MagicMock(),
         train=[],
         val=[],
         test=[],

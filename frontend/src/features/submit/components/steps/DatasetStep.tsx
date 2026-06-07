@@ -11,19 +11,11 @@ import {
 import { Label } from "@/shared/ui/primitives/label";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Separator } from "@/shared/ui/primitives/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/primitives/select";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
-import type { ColumnRole } from "../../constants";
 
 export function DatasetStep({ w }: { w: SubmitWizardContext }) {
   const {
@@ -36,21 +28,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
     columnKinds,
     setColumnKinds,
     datasetProfile,
-    isReact,
   } = w;
-
-  // React datasets carry replay-only columns alongside the signature I/O, so a
-  // single dropdown exposes every role; non-react keeps the compact 3-way pill.
-  const reactRoleOptions: ReadonlyArray<readonly [ColumnRole, string]> = [
-    ["input", msg("auto.features.submit.components.steps.datasetstep.literal.2")],
-    ["output", msg("auto.features.submit.components.steps.datasetstep.literal.3")],
-    ["ignore", msg("auto.features.submit.components.steps.datasetstep.literal.4")],
-    ["steps", msg("submit.react.role_steps")],
-    ["allowed_tools", msg("submit.react.role_allowed_tools")],
-    ["tool_schema_hashes", msg("submit.react.role_tool_schema_hashes")],
-    ["state_before", msg("submit.react.role_state_before")],
-    ["state_after", msg("submit.react.role_state_after")],
-  ];
 
   // Auto-detected kinds straight from the profiler — used to mark a column
   // as "auto-detected as image" (vs a user-driven manual flip) in the UI.
@@ -117,9 +95,6 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
               <div className="space-y-2">
                 {parsedDataset.columns.map((col) => {
                   const isInput = columnRoles[col] === "input";
-                  const selectedRole = (columnRoles[col] ?? "ignore") as ColumnRole;
-                  const selectedRoleLabel =
-                    reactRoleOptions.find(([val]) => val === selectedRole)?.[1] ?? selectedRole;
                   const kind = columnKinds[col] ?? "text";
                   const wasAutoImage = autoDetectedKinds.get(col) === "image";
                   return (
@@ -164,76 +139,54 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
                           </button>
                         )}
                       </div>
-                      {isReact ? (
-                        <Select
-                          value={selectedRole}
-                          onValueChange={(v) =>
-                            setColumnRoles((prev) => ({ ...prev, [col]: v as ColumnRole }))
-                          }
-                        >
-                          <SelectTrigger size="sm" className="w-[190px] shrink-0 text-xs">
-                            <SelectValue aria-label={selectedRoleLabel} />
-                          </SelectTrigger>
-                          <SelectContent align="end">
-                            {reactRoleOptions.map(([val, label]) => (
-                              <SelectItem key={val} value={val} className="text-xs">
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        (() => {
-                          const options = [
-                            [
-                              "input",
-                              msg("auto.features.submit.components.steps.datasetstep.literal.2"),
-                            ],
-                            [
-                              "output",
-                              msg("auto.features.submit.components.steps.datasetstep.literal.3"),
-                            ],
-                            [
-                              "ignore",
-                              msg("auto.features.submit.components.steps.datasetstep.literal.4"),
-                            ],
-                          ] as const;
-                          const activeIdx = options.findIndex(([v]) => v === columnRoles[col]);
-                          const pillLeft =
-                            activeIdx >= 0 ? `calc(${activeIdx} * 100% / 3 + 2px)` : "2px";
-                          return (
+                      {(() => {
+                        const options = [
+                          [
+                            "input",
+                            msg("auto.features.submit.components.steps.datasetstep.literal.2"),
+                          ],
+                          [
+                            "output",
+                            msg("auto.features.submit.components.steps.datasetstep.literal.3"),
+                          ],
+                          [
+                            "ignore",
+                            msg("auto.features.submit.components.steps.datasetstep.literal.4"),
+                          ],
+                        ] as const;
+                        const activeIdx = options.findIndex(([v]) => v === columnRoles[col]);
+                        const pillLeft =
+                          activeIdx >= 0 ? `calc(${activeIdx} * 100% / 3 + 2px)` : "2px";
+                        return (
+                          <div
+                            className="relative inline-grid grid-cols-3 shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
+                            dir="rtl"
+                          >
                             <div
-                              className="relative inline-grid grid-cols-3 shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
-                              dir="rtl"
-                            >
-                              <div
-                                className="absolute top-0.5 bottom-0.5 rounded-md bg-stone-500/15 shadow-sm transition-[inset-inline-start] duration-100 ease-out"
-                                style={{
-                                  width: "calc((100% - 6px) / 3)",
-                                  insetInlineStart: pillLeft,
-                                }}
-                              />
-                              {options.map(([val, label]) => (
-                                <button
-                                  key={val}
-                                  type="button"
-                                  onClick={() =>
-                                    setColumnRoles((prev) => ({ ...prev, [col]: val }))
-                                  }
-                                  className={cn(
-                                    "relative z-10 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
-                                    columnRoles[col] === val
-                                      ? "text-stone-600"
-                                      : "text-muted-foreground hover:text-foreground",
-                                  )}
-                                >
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                          );
-                        })()
-                      )}
+                              className="absolute top-0.5 bottom-0.5 rounded-md bg-stone-500/15 shadow-sm transition-[inset-inline-start] duration-100 ease-out"
+                              style={{
+                                width: "calc((100% - 6px) / 3)",
+                                insetInlineStart: pillLeft,
+                              }}
+                            />
+                            {options.map(([val, label]) => (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => setColumnRoles((prev) => ({ ...prev, [col]: val }))}
+                                className={cn(
+                                  "relative z-10 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
+                                  columnRoles[col] === val
+                                    ? "text-stone-600"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}

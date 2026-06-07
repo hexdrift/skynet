@@ -6,7 +6,7 @@ import dspy
 import pytest
 
 from core.exceptions import ServiceError
-from core.models import ColumnMapping, ModelConfig, ReplayMapping, Reward, RunRequest, SplitFractions, ToolSource
+from core.models import ColumnMapping, ModelConfig, RunRequest, SplitFractions, ToolSource
 from core.registry import ServiceRegistry
 from core.service_gateway.optimization.core import DspyService
 
@@ -208,26 +208,21 @@ def test_validate_payload_gepa_accepts_five_arg_metric() -> None:
     service.validate_payload(payload)
 
 
-_REACT_DATASET = [
-    {"q": "hi", "a": "yo", "steps": "[]", "tools": "[]", "hashes": "{}", "before": "{}", "after": "{}"}
-]
-
-_REPLAY_MAPPING = ReplayMapping(
-    steps="steps",
-    allowed_tools="tools",
-    tool_schema_hashes="hashes",
-    state_before="before",
-    state_after="after",
-)
+_REACT_DATASET = [{"q": "hi", "a": "yo"}]
 
 _TOOL_SOURCE = ToolSource(kind="live_mcp", mcp_url="http://localhost:9000/mcp")
 
-# React metrics score the recorded trajectory over the (example, rollout) pair.
-_REACT_METRIC = "def metric(example, rollout):\n    return 1.0\n"
+# React is generic: rollouts are scored with the same standard 5-arg GEPA metric
+# the predict/cot path uses, so the arity gate applies identically.
+_REACT_METRIC = (
+    "import dspy\n"
+    "def metric(gold, pred, trace, pred_name, pred_trace):\n"
+    "    return dspy.Prediction(score=1.0, feedback='ok')\n"
+)
 
 
 def _react_payload(**overrides) -> RunRequest:
-    """Build a react ``RunRequest`` backed by an authored ``(example, rollout)`` metric."""
+    """Build a react ``RunRequest`` backed by a standard 5-arg GEPA metric."""
     base: dict = {
         "username": "tester",
         "module_name": "react",
@@ -240,15 +235,13 @@ def _react_payload(**overrides) -> RunRequest:
         "model_config": _MODEL_CFG,
         "reflection_model_config": _MODEL_CFG,
         "tool_source": _TOOL_SOURCE,
-        "replay_mapping": _REPLAY_MAPPING,
-        "reward": Reward(match_mode="tool_name"),
     }
     base.update(overrides)
     return RunRequest(**base)
 
 
 def test_validate_payload_react_passes() -> None:
-    """A react run with an authored metric and replay config validates."""
+    """A react run with a tool_source and a standard 5-arg metric validates."""
     service = _service()
     payload = _react_payload()
 
@@ -264,41 +257,17 @@ def test_validate_payload_react_requires_tool_source() -> None:
         service.validate_payload(payload)
 
 
-def test_validate_payload_react_requires_replay_mapping() -> None:
-    """A react run missing ``replay_mapping`` raises ``ServiceError``."""
-    service = _service()
-    payload = _react_payload(replay_mapping=None)
+def test_validate_payload_react_rejects_short_metric_arity() -> None:
+    """A react run applies the same 5-arg GEPA arity gate as predict/cot.
 
-    with pytest.raises(ServiceError, match="require replay_mapping"):
-        service.validate_payload(payload)
-
-
-def test_validate_payload_react_rejects_missing_replay_column() -> None:
-    """A replay role naming a column absent from the dataset raises."""
-    service = _service()
-    bad_mapping = ReplayMapping(
-        steps="steps",
-        allowed_tools="absent_col",
-        tool_schema_hashes="hashes",
-        state_before="before",
-        state_after="after",
-    )
-    payload = _react_payload(replay_mapping=bad_mapping)
-
-    with pytest.raises(ServiceError, match="replay_mapping references columns not found"):
-        service.validate_payload(payload)
-
-
-def test_validate_payload_react_with_metric_code_skips_arity_gate() -> None:
-    """A react run with a custom 2-arg metric loads without the 5-arg GEPA gate.
-
-    The replay harness invokes the metric directly, so the GEPA reflection
-    arity requirement does not apply to react runs even with a custom metric.
+    React is now a generic GEPA module — its rollouts are scored with the
+    standard ``(gold, pred, trace, pred_name, pred_trace)`` metric, so a 2-3 arg
+    metric is rejected before enqueue exactly as it is for any other GEPA run.
     """
     service = _service()
     payload = _react_payload(
         metric_code="def metric(example, prediction, trace=None): return 1.0",
-        reward=None,
     )
 
-    service.validate_payload(payload)
+    with pytest.raises(ServiceError, match="GEPA metric must accept 5 arguments"):
+        service.validate_payload(payload)

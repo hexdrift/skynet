@@ -1,22 +1,22 @@
-"""Shared core for the react ``POST /run`` path (Phase B).
+"""Live react optimization for the generic ``POST /run`` path.
 
-Bridges a generic :class:`dspy.Signature` + replay-mapped dataset onto the
-training-ground GEPA harness. Three pure-ish building blocks, none of which
-touch a live model on their own:
+ReAct is a generic module like ``predict``/``cot`` that additionally carries a
+tool roster. This module builds a live :class:`RetryingReActV2` over a resolved
+roster and optimizes its instructions *and* tool descriptions with GEPA's
+tool-aware DSPy adapter
+(``gepa.adapters.dspy_adapter.DspyAdapter`` with ``enable_tool_optimization``),
+scoring every candidate with the same standard
+``(gold, pred, trace, pred_name, pred_trace)`` metric the predict/cot path uses.
 
-- :func:`build_replay_examples` converts ``dspy.Example`` rows into the
-  harness's :class:`EvaluationExample` records, populating ``signature_inputs``
-  so the adapter drives the resolved signature instead of the generalist
-  three-key dict.
+There is no replay: rollouts execute the live MCP tools, so the optimized
+program behaves at eval time exactly as it will when served. Two building
+blocks live here:
+
 - :func:`resolve_react_tools` materialises the tool roster (live MCP listing or
-  a dataset-carried snapshot) plus its schema-hash map.
-- :func:`run_react_optimization` wires a seed ``ReActV2`` through
-  ``gepa.optimize`` with the parameterised ECHO adapter and returns the
-  servable program state + acceptance statistics.
-
-Mirrors the generalist CLI in ``optimize.py`` (it reuses that module's tool
-listing, candidate evaluation, and program-state helpers) so the two paths
-share one rollout/scoring contract. See ``training_ground_SPEC.md`` §6/§7.
+  a persisted snapshot) plus its schema-hash map.
+- :func:`run_react_optimization` wires a seed ``RetryingReActV2`` through
+  ``gepa.optimize`` and returns the servable program state, the
+  baseline/optimized scalars, and the tool-description overlay for the bundle.
 """
 
 from __future__ import annotations
@@ -24,50 +24,156 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import dspy
 import gepa
+from gepa.adapters.dspy_adapter.dspy_adapter import DspyAdapter
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 from core.config import Settings
-from core.constants import DETAIL_BASELINE, PROGRESS_BASELINE
+from core.constants import (
+    DETAIL_BASELINE,
+    DETAIL_OPTIMIZED,
+    PROGRESS_BASELINE,
+    PROGRESS_OPTIMIZED,
+)
 
+from ..retrying_react import RetryingReActV2
 from ..timing import (
     STAGE_BASELINE,
     STAGE_EVALUATION,
     STAGE_TRAINING,
     track_stage,
 )
-from ..trajectory import react_minibatch_feedback, react_valset_outputs
+from ..tool_overlay import hash_tool_schema
 from .gepa_adapter import (
-    TrainingGroundDspyAdapter,
-    VectorRewardFn,
     _candidate_tool_arg_descriptions,
     _candidate_tool_descriptions,
     _candidate_tool_names,
     seed_candidate_from_program,
 )
-from .grounding import ChatTemplate, PromptScorer
-from .metrics import RewardSpec
-from .optimize import (
-    _AUTO_BUDGETS,
-    _best_candidate,
-    _evaluate_candidate_on_examples,
-    _list_live_tools,
-    _program_state_from,
-    _resolve_promotion,
-    set_tool_severity,
-)
-from .persistence import paired_bootstrap_ci
-from .registry import hash_tool_schema
-from .replay import (
-    SUBMIT_TOOL_NAME,
-    adapt_agent_tool_calls_v1_to_replay,
-)
-from .types import EvaluationExample, PairedBootstrapResult, ReplayStep
 
 logger = logging.getLogger(__name__)
+
+SUBMIT_TOOL_NAME = "submit"
+"""The terminal tool ReActV2 appends to every roster. Excluded from the
+optimizable tool surface (snapshot rosters, overlay) because it carries no
+user-tunable description — it is DSPy's fixed loop-exit action."""
+
+_AUTO_BUDGETS: dict[str, int] = {
+    "light": 500,
+    "medium": 2000,
+    "heavy": 8000,
+}
+"""Translation table for an ``--auto`` tier into ``max_metric_calls``.
+
+GEPA's public API does not accept an ``auto`` enum; we resolve it here so the
+budget stays ergonomic. Numbers are operator-tunable via an explicit
+``max_metric_calls`` for any campaign that doesn't fit the table."""
+
+_TOOL_SEVERITY_ATTR = "_skynet_severity"
+
+
+def _severity_from_annotations(annotations: Any) -> str | None:
+    """Map MCP tool annotations to an approval severity, or ``None`` if unstated.
+
+    Mirrors the frontend ``ApprovalSeverity`` tiers from the MCP annotation
+    hints: a read-only tool is ``info``, an explicitly destructive one is
+    ``destructive``, and a declared-but-mutating tool is ``warning``. When the
+    server states no relevant hint we return ``None`` so the surface never
+    fabricates a severity it was not told.
+
+    Args:
+        annotations: The MCP ``ToolAnnotations`` object (or ``None``).
+
+    Returns:
+        ``"info"``/``"warning"``/``"destructive"``, or ``None`` when no hint
+        applies.
+    """
+    if annotations is None:
+        return None
+    if getattr(annotations, "readOnlyHint", None) is True:
+        return "info"
+    if getattr(annotations, "destructiveHint", None) is True:
+        return "destructive"
+    if getattr(annotations, "readOnlyHint", None) is False:
+        return "warning"
+    return None
+
+
+def set_tool_severity(tool: dspy.Tool, severity: str | None) -> None:
+    """Stash a derived approval severity on a wrapped tool (no-op when ``None``).
+
+    Args:
+        tool: The ``dspy.Tool`` to annotate.
+        severity: The severity tier, or ``None`` to leave the tool unmarked.
+    """
+    if severity is not None:
+        setattr(tool, _TOOL_SEVERITY_ATTR, severity)
+
+
+def tool_severity(tool: dspy.Tool) -> str | None:
+    """Read a tool's stashed approval severity, or ``None`` when unmarked.
+
+    Args:
+        tool: The ``dspy.Tool`` to read.
+
+    Returns:
+        The severity tier set by :func:`set_tool_severity`, or ``None``.
+    """
+    return getattr(tool, _TOOL_SEVERITY_ATTR, None)
+
+
+async def _list_live_tools(mcp_url: str, auth_header: str | None) -> list[dspy.Tool]:
+    """Open one MCP session and return the live ``dspy.Tool`` roster.
+
+    Each tool is wrapped via ``dspy.Tool.from_mcp_tool`` so the react rollouts
+    can invoke it, and carries its derived approval severity read from
+    ``.annotations`` (see :func:`set_tool_severity`).
+
+    Args:
+        mcp_url: MCP server URL.
+        auth_header: Optional ``Authorization`` header to forward.
+
+    Returns:
+        List of dspy.Tool objects, one per MCP-exposed tool, each carrying its
+        derived approval severity.
+    """
+    headers = {"Authorization": auth_header} if auth_header else None
+    async with (
+        streamablehttp_client(mcp_url, headers=headers) as (read, write, _),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        listing = await session.list_tools()
+        tools: list[dspy.Tool] = []
+        for tool in listing.tools:
+            wrapped = dspy.Tool.from_mcp_tool(session, tool)
+            set_tool_severity(
+                wrapped, _severity_from_annotations(getattr(tool, "annotations", None))
+            )
+            tools.append(wrapped)
+        return tools
+
+
+def extract_program_state(program: dspy.Module) -> dict[str, Any]:
+    """Return the JSON-shaped state dict from ``program.save``.
+
+    Mirrors the path used by
+    ``core/service_gateway/optimization/artifacts.persist_program``
+    so the persisted ``program_state`` round-trips with
+    ``fresh_program.load_state(state)`` at runtime.
+    """
+    with tempfile.TemporaryDirectory(prefix="tg_bundle_") as tmpdir:
+        state_path = Path(tmpdir) / "program.json"
+        program.save(str(state_path), save_program=False)
+        return json.loads(state_path.read_text())
 
 
 class _JobLogGepaLogger:
@@ -103,51 +209,6 @@ DEFAULT_MAX_ITERS = 8
 CLI default so a /run-produced bundle behaves like a CLI-produced one."""
 
 
-def _row_value(example: dspy.Example, column: str) -> Any:
-    """Read ``column`` off a ``dspy.Example`` as a plain attribute.
-
-    ``rows_to_examples(..., extra_columns=...)`` attaches the replay role
-    columns as unmarked attributes (so they stay out of ``example.inputs()``).
-    Returns ``None`` when the column is absent on this row.
-
-    Args:
-        example: The DSPy example carrying the replay role columns.
-        column: Source-column name to read.
-
-    Returns:
-        The stored value, or ``None`` when the example has no such attribute.
-    """
-    try:
-        return getattr(example, column)
-    except AttributeError:
-        return None
-
-
-def _as_mapping(value: Any) -> dict[str, Any]:
-    """Coerce a cell value into a plain dict, tolerating JSON-string cells.
-
-    Snapshot/state columns arrive either as already-parsed mappings or as
-    JSON strings (CSV ingestion keeps everything as text). Anything that is
-    neither parses to an empty dict so a malformed cell degrades to "no
-    state" rather than raising mid-build.
-
-    Args:
-        value: Raw cell value (mapping, JSON string, or other).
-
-    Returns:
-        A dict — empty when the value is missing or not object-shaped.
-    """
-    if isinstance(value, Mapping):
-        return dict(value)
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return {}
-        return dict(parsed) if isinstance(parsed, Mapping) else {}
-    return {}
-
-
 def _as_sequence(value: Any) -> list[Any]:
     """Coerce a cell value into a list, tolerating JSON-string cells.
 
@@ -168,162 +229,20 @@ def _as_sequence(value: Any) -> list[Any]:
     return []
 
 
-def _allowed_tools_from(value: Any) -> frozenset[str]:
-    """Build the allowed-tool roster from a recorded column, dropping submit.
-
-    Accepts either a list of tool names or a JSON-string of one. ``submit`` is
-    excluded — ReActV2 owns that synthetic terminal, never the recorded roster.
-
-    Args:
-        value: Raw cell value for the ``allowed_tools`` replay role.
-
-    Returns:
-        A frozenset of allowed tool names (never including ``submit``).
-    """
-    names = {str(name).strip() for name in _as_sequence(value) if str(name).strip()}
-    names.discard(SUBMIT_TOOL_NAME)
-    return frozenset(names)
-
-
-def _schema_hashes_from(value: Any) -> dict[str, str]:
-    """Build the ``{tool_name: hash}`` snapshot from a recorded column.
-
-    Args:
-        value: Raw cell value for the ``tool_schema_hashes`` replay role.
-
-    Returns:
-        A ``{str: str}`` map; empty when the cell is missing or malformed.
-    """
-    mapping = _as_mapping(value)
-    return {str(name): str(digest) for name, digest in mapping.items()}
-
-
-def _chat_history_from(value: Any) -> tuple[dict[str, Any], ...]:
-    """Build the chat-history tuple from a recorded column.
-
-    Each entry is kept as a plain dict (``{role, content}`` and friends);
-    non-mapping entries are skipped so a malformed row degrades gracefully.
-
-    Args:
-        value: Raw cell value for the ``chat_history`` replay role.
-
-    Returns:
-        A tuple of message dicts in recorded order.
-    """
-    return tuple(
-        dict(entry) for entry in _as_sequence(value) if isinstance(entry, Mapping)
-    )
-
-
-def _coerce_signature_inputs(inputs: Mapping[str, Any]) -> dict[str, Any]:
-    """Render structured signature inputs as JSON strings.
-
-    Recorded rows carry structured inputs natively (e.g. ``wizard_state`` as a
-    dict, ``chat_history`` as a list), but ReAct signature fields are typically
-    ``str``. Encode every non-string value as JSON so the rollout receives the
-    same string form the live agent produced (matching the CLI's ``json.dumps``
-    on ``wizard_state``/``chat_history``) instead of dspy's Python-repr
-    fallback coercion.
-
-    Args:
-        inputs: The signature input field values for one turn.
-
-    Returns:
-        The mapping with non-string values JSON-encoded.
-    """
-    return {
-        key: value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-        for key, value in dict(inputs).items()
-    }
-
-
-def build_replay_examples(
-    dspy_examples: Sequence[dspy.Example],
-    replay_mapping: Any,
-) -> list[EvaluationExample]:
-    """Convert replay-mapped ``dspy.Example`` rows into ``EvaluationExample`` s.
-
-    For each example the replay-role columns named by ``replay_mapping`` are
-    read off the example's attributes (carried there by
-    ``rows_to_examples(..., extra_columns=...)``) and assembled into the
-    harness's per-turn record. The recorded ``steps`` column is converted via
-    :func:`adapt_agent_tool_calls_v1_to_replay` into ordered ``ReplayStep`` s,
-    and ``signature_inputs`` is set to ``dict(example.inputs())`` so the
-    adapter feeds the resolved signature verbatim. ``user_message`` is left
-    empty because ``signature_inputs`` supersedes it on this path.
-
-    Args:
-        dspy_examples: Examples produced by ``rows_to_examples`` with the
-            replay role columns attached as extras.
-        replay_mapping: A ``ReplayMapping``-shaped object naming the dataset
-            columns for ``steps``/``allowed_tools``/``tool_schema_hashes`` and
-            the optional ``state_before``/``state_after``/``chat_history``.
-
-    Returns:
-        One :class:`EvaluationExample` per input example, ``signature_inputs``
-        populated, in input order.
-    """
-    examples: list[EvaluationExample] = []
-    for idx, example in enumerate(dspy_examples):
-        turn_id = str(_row_value(example, "turn_id") or idx)
-        steps_raw = _as_sequence(_row_value(example, replay_mapping.steps))
-        # Drop errored recorded calls: an error result is bad ground truth to
-        # replay back to the candidate, so only keep cleanly-resolved steps.
-        replay_steps: tuple[ReplayStep, ...] = tuple(
-            step
-            for step in adapt_agent_tool_calls_v1_to_replay(steps_raw, turn_id=turn_id)
-            if step.status == "done"
-        )
-        allowed = _allowed_tools_from(_row_value(example, replay_mapping.allowed_tools))
-        schema_hashes = _schema_hashes_from(
-            _row_value(example, replay_mapping.tool_schema_hashes)
-        )
-        state_before = (
-            _as_mapping(_row_value(example, replay_mapping.state_before))
-            if replay_mapping.state_before
-            else {}
-        )
-        state_after = (
-            _as_mapping(_row_value(example, replay_mapping.state_after))
-            if replay_mapping.state_after
-            else {}
-        )
-        chat_history = (
-            _chat_history_from(_row_value(example, replay_mapping.chat_history))
-            if replay_mapping.chat_history
-            else ()
-        )
-        examples.append(
-            EvaluationExample(
-                turn_id=turn_id,
-                user_message="",
-                wizard_state_before=state_before,
-                wizard_state_after=state_after,
-                allowed_tools=allowed,
-                tool_schema_hashes=schema_hashes,
-                replay_steps=replay_steps,
-                chat_history=chat_history,
-                signature_inputs=_coerce_signature_inputs(example.inputs()),
-            )
-        )
-    return examples
-
-
-def _dataset_snapshot_tools(dataset: Sequence[Mapping[str, Any]] | None) -> list[dspy.Tool]:
+def _dataset_snapshot_tools(
+    dataset: Sequence[Mapping[str, Any]] | None,
+) -> list[dspy.Tool]:
     """Rebuild a ``dspy.Tool`` roster from a dataset-carried snapshot sidecar.
 
-    A ``dataset_snapshot`` tool source carries the tool roster on the dataset
-    rather than from a live MCP. The reserved sidecar lives under a
-    ``__tool_snapshot__`` key on any row (the first row that has it wins) and
-    is a list of specs::
+    A persisted snapshot tool source carries the roster on a reserved
+    ``__tool_snapshot__`` key (the first row that has it wins), a list of specs::
 
         {"name": str, "description": str, "args": {<arg>: {<schema>}},
          "severity": str | None}
 
-    Each spec becomes a no-op ``dspy.Tool`` — the roster is only used for its
-    ``name``/``desc``/``args``/``severity`` (seed instructions, schema-hash
-    snapshot, arg-description and severity overlays); rollout-time calls route
-    through the replay mock, never these callables.
+    Each spec becomes a ``dspy.Tool`` whose ``name``/``desc``/``args``/severity
+    are read for the seed instructions, schema-hash snapshot, and overlay. The
+    serve path uses this to reconstruct the surface a run was optimized against.
 
     Args:
         dataset: Raw dataset rows; scanned for the snapshot sidecar.
@@ -382,10 +301,10 @@ def _find_snapshot_specs(
 def _snapshot_tool(
     *, name: str, desc: str, args: dict[str, Any], severity: str | None = None
 ) -> dspy.Tool:
-    """Construct a no-op ``dspy.Tool`` carrying a snapshot spec's schema.
+    """Construct a ``dspy.Tool`` carrying a snapshot spec's schema.
 
-    The callable is never invoked (rollouts go through the replay mock), so it
-    only has to exist for ``dspy.Tool`` to introspect ``name``/``desc``/``args``.
+    The serve path reconstructs the roster from these specs; the callable body
+    is a placeholder because serve re-binds live MCP callables when it executes.
 
     Args:
         name: Tool name.
@@ -399,7 +318,7 @@ def _snapshot_tool(
     """
 
     def _noop(**_kwargs: Any) -> None:
-        """Placeholder body — snapshot tools are never called at rollout time."""
+        """Placeholder body — serve re-binds live callables before executing."""
 
     _noop.__name__ = name
     _noop.__doc__ = desc
@@ -419,9 +338,8 @@ def resolve_react_tools(
 
     Two sources, mirroring ``ToolSource.kind``:
 
-    - ``live_mcp`` lists the live MCP roster via :func:`_list_live_tools`
-      (the same helper the generalist CLI uses), optionally filtering and
-      reordering by ``tool_source.tool_filter``.
+    - ``live_mcp`` lists the live MCP roster via :func:`_list_live_tools`,
+      optionally filtering and reordering by ``tool_source.tool_filter``.
     - ``dataset_snapshot`` rebuilds the roster from the dataset's reserved
       ``__tool_snapshot__`` sidecar (run path) or the source's own persisted
       ``tool_snapshot`` specs (serve path) via :func:`_dataset_snapshot_tools`.
@@ -536,114 +454,195 @@ def _apply_tool_filter(
     return [by_name[name] for name in tool_filter if name in by_name]
 
 
+def _build_feedback_map(
+    seed_program: dspy.Module, metric: Callable[..., Any]
+) -> dict[str, Callable[..., Any]]:
+    """Build GEPA's per-predictor feedback map from a standard DSPy metric.
+
+    Mirrors ``dspy.GEPA``'s ``feedback_fn_creator``: each predictor gets a
+    closure that calls the user metric with GEPA's 5-arg reflection signature
+    ``(gold, pred, trace, pred_name, pred_trace)`` and normalises the result
+    into the ``{score, feedback}`` shape the gepa-package adapter expects. The
+    only react-specific predictor (``react``) and the inner ``extract`` both get
+    an entry, but only the component GEPA actually proposes is ever read.
+
+    Args:
+        seed_program: The seed ReAct program whose predictors are mapped.
+        metric: The standard ``(gold, pred, trace, pred_name, pred_trace)``
+            metric, returning a float or a ``dspy.Prediction``-like object with
+            ``score``/``feedback``.
+
+    Returns:
+        ``{predictor_name: feedback_fn}`` for every named predictor.
+    """
+
+    def _make(pred_name: str, predictor: Any) -> Callable[..., Any]:
+        """Bind one predictor's feedback closure over the shared metric."""
+
+        def feedback_fn(
+            predictor_output: dict[str, Any],
+            predictor_inputs: dict[str, Any],
+            module_inputs: Any,
+            module_outputs: Any,
+            captured_trace: Any,
+        ) -> Any:
+            """Score one predictor invocation and wrap it as score+feedback."""
+            trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
+            outcome = metric(
+                module_inputs,
+                module_outputs,
+                captured_trace,
+                pred_name,
+                trace_for_pred,
+            )
+            if hasattr(outcome, "feedback"):
+                if outcome["feedback"] is None:
+                    outcome["feedback"] = f"This trajectory got a score of {outcome['score']}."
+                return outcome
+            return {
+                "score": outcome,
+                "feedback": f"This trajectory got a score of {outcome}.",
+            }
+
+        return feedback_fn
+
+    return {name: _make(name, pred) for name, pred in seed_program.named_predictors()}
+
+
+def _best_candidate(result: Any) -> dict[str, str]:
+    """Pull the best candidate dict out of GEPA's result wrapper.
+
+    Args:
+        result: The ``GEPAResult`` returned by ``gepa.optimize``.
+
+    Returns:
+        The best candidate as a ``{component: text}`` dict.
+
+    Raises:
+        ValueError: When the result exposes no dict-shaped best candidate.
+    """
+    best = getattr(result, "best_candidate", None) or getattr(result, "candidate", None)
+    if isinstance(best, dict):
+        return dict(best)
+    raise ValueError(
+        f"Unable to extract best candidate from GEPA result of type {type(result)!r}."
+    )
+
+
+def _scores_and_outputs(
+    adapter: DspyAdapter, candidate: dict[str, str], examples: list[dspy.Example]
+) -> tuple[list[float], list[Any]]:
+    """Score one candidate over ``examples`` and return scalars + predictions.
+
+    Runs the candidate through the adapter's own ``evaluate`` (the same
+    ``dspy.Evaluate`` path GEPA uses internally) so baseline and optimized
+    numbers are apples-to-apples with the optimization loop.
+
+    Args:
+        adapter: The configured gepa-package adapter.
+        candidate: The candidate component dict to evaluate.
+        examples: Held-out examples to score.
+
+    Returns:
+        ``(per_example_scalars, per_example_predictions)`` in ``examples``
+        order; predictions are raw ``dspy.Prediction`` objects (or ``None`` for
+        a failed rollout) so the caller can surface per-field answers.
+    """
+    if not examples:
+        return [], []
+    batch = adapter.evaluate(examples, candidate, capture_traces=False)
+    return list(batch.scores), list(batch.outputs)
+
+
 def run_react_optimization(
     *,
     signature_cls: type,
     tools: list[dspy.Tool],
     schema_hashes: dict[str, str],
-    reward_spec: RewardSpec,
-    vector_fn: VectorRewardFn,
-    grounding_weight: float,
-    train: list[EvaluationExample],
-    val: list[EvaluationExample],
-    test: list[EvaluationExample],
+    metric: Callable[..., Any],
+    train: list[dspy.Example],
+    val: list[dspy.Example],
+    test: list[dspy.Example],
     student_lm: dspy.LM,
     reflection_lm: dspy.LM,
     max_metric_calls: int = _AUTO_BUDGETS["medium"],
-    template: ChatTemplate | None = None,
-    scorer: PromptScorer | None = None,
     max_iters: int = DEFAULT_MAX_ITERS,
     seed: int = 0,
-    match_mode: str = "exact",
+    num_threads: int | None = None,
     run_dir: str | None = None,
     progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
     timing_callbacks: Sequence[Any] = (),
 ) -> dict[str, Any]:
-    """Optimise a react program against replay examples and report acceptance.
+    """Optimise a live react program and report baseline-vs-optimized scalars.
 
-    Builds a seed ``ReActV2`` over ``signature_cls`` + ``tools``, runs
-    ``gepa.optimize`` with the parameterised ECHO adapter (task reward from
-    ``reward_spec``/``vector_fn`` plus an optional grounding auxiliary), then
-    evaluates seed and best candidate on ``test`` so the §11 paired-bootstrap
-    delta is apples-to-apples (same instantiation path GEPA uses internally).
+    Builds a seed :class:`RetryingReActV2` over ``signature_cls`` + ``tools``,
+    then runs ``gepa.optimize`` with the tool-aware gepa-package adapter
+    (``enable_tool_optimization=True``) so GEPA jointly evolves the inner
+    instruction prompt and the tool descriptions. The seed and best candidate
+    are both scored on ``test`` through the adapter's own evaluator (live tool
+    execution) so the reported delta matches what serving will reproduce.
 
     Args:
         signature_cls: Resolved DSPy signature the program is built around.
         tools: Tool roster from :func:`resolve_react_tools`.
         schema_hashes: ``{tool_name: hash}`` snapshot carried into the overlay.
-        reward_spec: Scalarizer config for the task term.
-        vector_fn: Per-example reward-vector function paired with ``reward_spec``.
-        grounding_weight: ECHO's λ; ``> 0`` requires ``template`` + ``scorer``.
-        train: Train split (replay examples).
+        metric: Standard ``(gold, pred, trace, pred_name, pred_trace)`` metric.
+        train: Train split (plain ``dspy.Example`` rows).
         val: Validation split passed to ``gepa.optimize`` as the valset.
-        test: Held-out split scored for the acceptance statistics.
-        student_lm: Candidate-rollout model.
-        reflection_lm: Reflective-proposer model.
+        test: Held-out split scored for the reported baseline/optimized metrics.
+        student_lm: Candidate-rollout model (bound by the caller's
+            ``dspy.context``).
+        reflection_lm: Reflective-proposer model used by GEPA's adapter.
         max_metric_calls: GEPA metric-call budget (default medium = 2000).
-        template: Chat-template renderer; required when grounding is weighted.
-        scorer: Per-token echo scorer; required when grounding is weighted.
         max_iters: ReActV2 loop budget for the seed program.
-        seed: RNG seed shared by GEPA + the bootstrap.
-        match_mode: Replay step-matching policy (``"exact"`` default, or
-            ``"tool_name"``) forwarded to the adapter's replay mocks.
+        seed: RNG seed shared by GEPA and the adapter.
+        num_threads: Eval/rollout thread count for the adapter; ``None`` keeps
+            DSPy's default.
         run_dir: Directory where GEPA persists its state (``gepa_state.bin``) so
             the trajectory watcher can stream the candidate tree; ``None`` keeps
             the run in-memory with no persisted state.
-        progress_callback: Job-level progress callback. When provided, each
-            candidate's full-valset sweep streams a ``PROGRESS_VALSET_OUTPUTS``
-            event so the Pareto-cell prediction panel can render per-example
-            outputs; ``None`` runs without that stream.
+        progress_callback: Job-level progress sink; receives the baseline and
+            optimized scalar events.
         timing_callbacks: Stage-timing callbacks (typically the generation-LM
             :class:`GenLMTimingCallback`) to attribute student-rollout latency
-            to the ``baseline``/``training``/``evaluation`` stages so the LM
-            activity panel populates. Empty by default (no stage bucketing).
+            to the baseline/training/evaluation stages. Empty by default.
 
     Returns:
-        A dict with the servable ``program_state``, baseline/optimized objective
-        means and scalars, the ``paired_bootstrap`` result, an advisory
-        ``promotion`` verdict (``{promotable, reasons}``), and a ``tool_overlay``
-        (descriptions, arg descriptions, schema hashes, max_iters) for the bundle.
+        A dict with the servable ``program_state``, baseline/optimized scalar
+        means and per-example scalars/outputs, and a ``tool_overlay``
+        (descriptions, arg descriptions, names, schema hashes, max_iters) for
+        the bundle.
     """
-    seed_program = dspy.ReActV2(signature_cls, tools=tools, max_iters=max_iters)
+    seed_program = RetryingReActV2(signature_cls, tools, max_iters=max_iters)
     seed_candidate = seed_candidate_from_program(seed_program)
-    adapter = TrainingGroundDspyAdapter(
-        seed_program=seed_program,
-        student_lm=student_lm,
+    adapter = DspyAdapter(
+        student_module=seed_program,
+        metric_fn=metric,
+        feedback_map=_build_feedback_map(seed_program, metric),
+        num_threads=num_threads,
+        rng=random.Random(seed),
         reflection_lm=reflection_lm,
-        include_task_reward=True,
-        grounding_weight=grounding_weight,
-        template=template,
-        scorer=scorer,
-        reward_spec=reward_spec,
-        vector_fn=vector_fn,
-        match_mode=match_mode,
+        enable_tool_optimization=True,
     )
+
     # Score the seed on the held-out test set up front and surface it before the
-    # GEPA loop starts, mirroring the scalar run path (core._run_program): the
-    # early baseline_evaluated event lets the live score card render as soon as
-    # the baseline is known instead of only after the whole loop finishes. The
-    # seed scoring is independent of optimize(), so moving it earlier is a pure
-    # reorder — total runtime is unchanged.
+    # GEPA loop starts, mirroring the scalar run path: the early baseline event
+    # lets the live score card render as soon as the baseline is known instead
+    # of only after the whole loop finishes.
     with track_stage(STAGE_BASELINE, *timing_callbacks):
-        baseline_scalars, baseline_objectives, baseline_objective_mean, baseline_outputs = (
-            _evaluate_candidate_on_examples(
-                adapter=adapter, candidate=seed_candidate, examples=test
-            )
+        baseline_scalars, baseline_outputs = _scores_and_outputs(
+            adapter, seed_candidate, test
         )
     if progress_callback:
         progress_callback(PROGRESS_BASELINE, {DETAIL_BASELINE: _mean(baseline_scalars)})
 
-    with (
-        react_valset_outputs(adapter, val, progress_callback),
-        react_minibatch_feedback(adapter, val, progress_callback),
-        track_stage(STAGE_TRAINING, *timing_callbacks),
-    ):
+    with track_stage(STAGE_TRAINING, *timing_callbacks):
         result = gepa.optimize(
             seed_candidate=seed_candidate,
             trainset=train,
             valset=val,
             adapter=adapter,
-            frontier_type="objective",
+            reflection_lm=(lambda x: adapter.stripped_lm_call(x)[0]),
             max_metric_calls=max_metric_calls,
             seed=seed,
             run_dir=run_dir,
@@ -655,46 +654,26 @@ def run_react_optimization(
             display_progress_bar=True,
         )
     best_candidate = _best_candidate(result)
-    program_state = _program_state_from(best_candidate=best_candidate, adapter=adapter)
+    best_program = adapter.build_program(best_candidate)
+    program_state = extract_program_state(best_program)
 
     with track_stage(STAGE_EVALUATION, *timing_callbacks):
-        optimized_scalars, optimized_objectives, optimized_objective_mean, optimized_outputs = (
-            _evaluate_candidate_on_examples(
-                adapter=adapter, candidate=best_candidate, examples=test
-            )
+        optimized_scalars, optimized_outputs = _scores_and_outputs(
+            adapter, best_candidate, test
         )
-    bootstrap = _bootstrap_or_empty(
-        baseline_scalars=baseline_scalars,
-        optimized_scalars=optimized_scalars,
-        seed=seed,
-    )
-    # Advisory only: the service path has no wizard-phase notion, so the
-    # promotion verdict floors on total holdout scale (single bucket) rather
-    # than per-phase. It surfaces the §11 gate without blocking serving.
-    verdict = _resolve_promotion(
-        bootstrap=bootstrap,
-        baseline_objectives=baseline_objectives,
-        candidate_objectives=optimized_objectives,
-        holdout_examples=test,
-        stratifier=None,
-    )
+    if progress_callback:
+        progress_callback(
+            PROGRESS_OPTIMIZED, {DETAIL_OPTIMIZED: _mean(optimized_scalars)}
+        )
+
     return {
         "program_state": program_state,
-        "baseline_objective_scores": baseline_objective_mean,
-        "optimized_objective_scores": optimized_objective_mean,
-        "baseline_objective_per_example": baseline_objectives,
-        "optimized_objective_per_example": optimized_objectives,
         "baseline_scalar": _mean(baseline_scalars),
         "optimized_scalar": _mean(optimized_scalars),
         "baseline_scalars_per_example": baseline_scalars,
         "optimized_scalars_per_example": optimized_scalars,
         "baseline_outputs_per_example": baseline_outputs,
         "optimized_outputs_per_example": optimized_outputs,
-        "paired_bootstrap": bootstrap,
-        "promotion": {
-            "promotable": verdict.promotable,
-            "reasons": list(verdict.reasons),
-        },
         "tool_overlay": {
             "tool_descriptions": _candidate_tool_descriptions(best_candidate),
             "tool_arg_descriptions": _candidate_tool_arg_descriptions(best_candidate),
@@ -705,37 +684,6 @@ def run_react_optimization(
     }
 
 
-def _bootstrap_or_empty(
-    *,
-    baseline_scalars: list[float],
-    optimized_scalars: list[float],
-    seed: int,
-) -> PairedBootstrapResult:
-    """Run the paired bootstrap, returning a zeroed result on an empty test set.
-
-    ``paired_bootstrap_ci`` raises on an empty test split; a react run with no
-    held-out examples should still produce a (degenerate) envelope rather than
-    aborting, so the empty case collapses to a zero-delta result.
-
-    Args:
-        baseline_scalars: Per-example seed scalars on the test set.
-        optimized_scalars: Per-example optimized scalars on the test set.
-        seed: RNG seed for reproducibility.
-
-    Returns:
-        The paired-bootstrap result, or a zeroed one when the test set is empty.
-    """
-    if not baseline_scalars or not optimized_scalars:
-        return PairedBootstrapResult(
-            resamples=0, mean_delta=0.0, ci95_lower=0.0, ci95_upper=0.0
-        )
-    return paired_bootstrap_ci(
-        baseline_scores=baseline_scalars,
-        candidate_scores=optimized_scalars,
-        seed=seed,
-    )
-
-
 def _mean(values: list[float]) -> float:
     """Arithmetic mean, ``0.0`` for an empty list."""
     return sum(values) / len(values) if values else 0.0
@@ -743,11 +691,6 @@ def _mean(values: list[float]) -> float:
 
 __all__ = [
     "DEFAULT_MAX_ITERS",
-    "build_replay_examples",
     "resolve_react_tools",
     "run_react_optimization",
 ]
-
-
-# Keep ``Callable`` referenced for the VectorRewardFn alias signature parity.
-_ = Callable

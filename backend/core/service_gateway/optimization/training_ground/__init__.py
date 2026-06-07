@@ -1,12 +1,11 @@
-"""Training-ground harness for the generalist agent.
+"""Training-ground harness for generic ReAct optimization.
 
-A reusable package that optimizes the production generalist's prompts +
-tool descriptions via GEPA, scored on a hybrid trace-conditioned replay of
-recorded ``agent_messages`` trajectories.
+A reusable package that persists and re-hydrates GEPA-optimized ReAct
+bundles (program state + tool description/name overlays) and exposes the
+registry helpers the runtime needs to serve them against live MCP tools.
 
-Design contract lives in ``backend/training_ground_SPEC.md``. Top-level
-imports are deliberately kept narrow — the CLI uses the submodules
-directly, and the runtime only needs the registry helpers.
+Top-level imports are deliberately kept narrow — the runtime only needs the
+registry helpers and the bundle model.
 """
 
 from .registry import (
@@ -19,15 +18,13 @@ from .registry import (
     load_bundle,
     snapshot_tool_schema_hashes,
 )
-from .types import Bundle, EvaluationExample, PairedBootstrapResult, ReplayStep
+from .types import Bundle, PairedBootstrapResult
 
 __all__ = [
     "Bundle",
     "BundleIncompatibleError",
     "BundleNotFoundError",
-    "EvaluationExample",
     "PairedBootstrapResult",
-    "ReplayStep",
     "ToolSchemaDriftError",
     "bundle_path_for",
     "fresh_program_for_bundle",
