@@ -73,6 +73,7 @@ from .data import (
     rows_to_examples,
     split_examples,
 )
+from .llm_error import enrich_error_message
 from .optimizers import (
     compile_program,
     evaluate_on_test,
@@ -509,7 +510,9 @@ def _run_grid_pair(
 
     except Exception as exc:
         pair_runtime = (datetime.now(UTC) - pair_start).total_seconds()
-        error_msg = str(exc)
+        # DSPy reports a generic "Execution cancelled" when an LM call fails;
+        # recover the real cause (billing, auth, rate limit) it only logged.
+        error_msg = enrich_error_message(str(exc))
         result = PairResult(
             pair_index=i,
             generation_model=gen_cfg.name,

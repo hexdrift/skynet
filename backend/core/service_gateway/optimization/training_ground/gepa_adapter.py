@@ -21,6 +21,7 @@ from gepa.adapters.dspy_adapter.dspy_adapter import (
     DspyAdapter,
 )
 
+from ..retrying_react import RetryingReActV2
 from .grounding import (
     ChatTemplate,
     PromptScorer,
@@ -664,7 +665,7 @@ def _instantiate_program_shell(
     if signature is None:
         raise ValueError("Seed program missing signature")
     live_tools = _collect_tools(seed_program)
-    return dspy.ReActV2(
+    return RetryingReActV2(
         signature,
         tools=mock.tool_layer(live_tools=live_tools, proposed_names=proposed_names),
         max_iters=max_iters,

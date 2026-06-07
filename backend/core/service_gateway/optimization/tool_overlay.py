@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 
 import dspy
 
+from .retrying_react import RetryingReActV2
+
 if TYPE_CHECKING:
     from .training_ground.types import Bundle
 
@@ -85,7 +87,7 @@ def fresh_program_for_bundle(
         tool_arg_descriptions=bundle.tool_arg_descriptions,
     )
     _apply_tool_name_overrides(isolated_tools, bundle.tool_names)
-    program = dspy.ReActV2(
+    program = RetryingReActV2(
         seed_signature, tools=isolated_tools, max_iters=bundle.max_iters
     )
     program.load_state(bundle.program_state)
