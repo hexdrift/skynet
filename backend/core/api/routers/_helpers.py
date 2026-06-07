@@ -17,7 +17,6 @@ from collections.abc import AsyncIterable, AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
-import dspy
 from sqlalchemy.orm import Session
 
 from ...config import settings
@@ -47,6 +46,7 @@ from ...models import (
 )
 from ...registry import ResolverError, resolve_module_factory
 from ...service_gateway.optimization.data import load_signature_from_code
+from ...service_gateway.optimization.retrying_react import RetryingReActV2
 from ...service_gateway.optimization.tool_overlay import (
     ToolSchemaDriftError,
     _apply_bundle_tool_overrides,
@@ -717,7 +717,7 @@ def _materialize_react_program(artifact: ProgramArtifact, overview: dict) -> Any
     # above key on the original names). None preserves pre-rename behavior.
     _apply_tool_name_overrides(tools, react_overlay.tool_names)
 
-    program = dspy.ReActV2(
+    program = RetryingReActV2(
         signature_cls, tools=tools, max_iters=react_overlay.max_iters
     )
     program.load_state(artifact.program_state_json)

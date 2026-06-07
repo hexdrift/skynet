@@ -27,6 +27,7 @@ from typing import Any
 import dspy
 
 from ...exceptions import ServiceError
+from ..optimization.retrying_react import RetryingReActV2
 from ..optimization.tool_overlay import (
     ToolSchemaDriftError,
     _apply_bundle_tool_overrides,
@@ -186,7 +187,7 @@ async def _drive_react_chat(
         # overlay wording above is what the LM sees; the renamed names match
         # the names GEPA baked into the loaded instructions. ReActV2 adds its
         # own reserved ``submit`` tool (final answer carrier, never gated).
-        program = dspy.ReActV2(signature_cls, tools=wrapped, max_iters=react_overlay.max_iters)
+        program = RetryingReActV2(signature_cls, tools=wrapped, max_iters=react_overlay.max_iters)
         program.load_state(program_state_json)
 
         output_fields = list(signature_cls.output_fields)

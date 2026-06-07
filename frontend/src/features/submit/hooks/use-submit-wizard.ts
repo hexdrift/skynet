@@ -25,9 +25,7 @@ import type {
   DatasetProfile,
   SplitPlan,
   RunRequest,
-  Reward,
   ToolSource,
-  ReplayMapping,
 } from "@/shared/types/api";
 import { parseDatasetFile, type ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/shared/ui/code-editor";
@@ -36,17 +34,10 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { useWizardStateOptional } from "@/features/agent-panel";
 import { readPref, useUserPrefs } from "@/features/settings";
 
-import {
-  STEPS,
-  emptyModelConfig,
-  defaultSplit,
-  defaultReactConfig,
-  REACT_REPLAY_ROLES,
-  REQUIRED_REPLAY_ROLES,
-} from "../constants";
+import { STEPS, emptyModelConfig, defaultSplit, defaultReactConfig } from "../constants";
 import type { ReactConfig, ColumnRole } from "../constants";
 import { buildSignatureTemplate } from "../lib/build-signature";
-import { buildMetricTemplate, buildReactMetricTemplate } from "../lib/build-metric";
+import { buildMetricTemplate } from "../lib/build-metric";
 import { buildOptimizerKwargs } from "../lib/build-kwargs";
 import { useCodeAgent } from "@/shared/hooks/use-code-agent";
 import {
@@ -56,9 +47,9 @@ import {
   useRecentModelConfigs,
 } from "./use-submit-wizard-data";
 
-const COLUMN_ROLES = new Set<string>(["input", "output", "ignore", ...REACT_REPLAY_ROLES]);
+const COLUMN_ROLES = new Set<string>(["input", "output", "ignore"]);
 
-/** Type guard for a valid dataset column role (signature I/O or react replay). */
+/** Type guard for a valid dataset column role (signature I/O). */
 function isColumnRole(value: unknown): value is ColumnRole {
   return typeof value === "string" && COLUMN_ROLES.has(value);
 }
@@ -84,9 +75,9 @@ export function useSubmitWizard() {
   const [moduleName, setModuleName] = useState("predict");
   const [optimizerName, setOptimizerName] = useState("gepa");
 
-  // React (ReAct-agent) run configuration. Only sent when moduleName is
-  // "react"; the reward preset replaces the scalar metric, so a react run
-  // omits metric_code entirely (see handleSubmit).
+  // React (ReAct-agent) tool roster. Only sent when moduleName is "react".
+  // React is generic — it is scored by the same standard metric_code as
+  // predict/cot, and this config only carries the live tool source.
   const [reactConfig, setReactConfig] = useState<ReactConfig>(defaultReactConfig);
   const updateReactConfig = useCallback(
     (patch: Partial<ReactConfig>) => setReactConfig((prev) => ({ ...prev, ...patch })),
@@ -771,16 +762,10 @@ export function useSubmitWizard() {
   // edits from being clobbered when they toggle between columns afterwards.
   useEffect(() => {
     if (metricManuallyEdited) return;
-    // React scores a trajectory via metric(example, rollout), independent of
-    // output columns — seed the react template instead of the I/O comparison.
-    if (isReact) {
-      setMetricCode(buildReactMetricTemplate());
-      return;
-    }
     const hasOutputs = Object.values(columnRoles).some((r) => r === "output");
     if (!hasOutputs) return;
     setMetricCode(buildMetricTemplate(columnRoles));
-  }, [columnRoles, metricManuallyEdited, isReact]);
+  }, [columnRoles, metricManuallyEdited]);
 
   useEffect(() => {
     const cloneId = searchParams.get("clone");
@@ -951,24 +936,6 @@ export function useSubmitWizard() {
           return next;
         });
       }
-      // Replay mapping hydrates onto the dataset column roles (chat_history is
-      // left as a signature input — it is derived by name at submit).
-      const rm = payload.replay_mapping as Record<string, unknown> | undefined;
-      if (rm) {
-        setColumnRoles((prev) => {
-          const next = { ...prev };
-          const assign = (role: ColumnRole, col: unknown) => {
-            if (typeof col === "string" && col) next[col] = role;
-          };
-          assign("steps", rm.steps);
-          assign("allowed_tools", rm.allowed_tools);
-          assign("tool_schema_hashes", rm.tool_schema_hashes);
-          assign("state_before", rm.state_before);
-          assign("state_after", rm.state_after);
-          return next;
-        });
-      }
-
       toast.success(msg("submit.clone.success"));
     };
 
@@ -1012,13 +979,6 @@ export function useSubmitWizard() {
       })
       .finally(() => setCloneLoading(false));
   }, []);
-
-  // React is a single-run replay feature — it has no grid-search variant. When
-  // react is active, force the job back to a single run so BasicsStep can hide
-  // the grid option without leaving a stale grid_search selection behind.
-  useEffect(() => {
-    if (isReact && jobType === "grid_search") setOptimizationType("run");
-  }, [isReact, jobType]);
 
   const goNext = () => {
     if (step < STEPS.length - 1) {
@@ -1095,13 +1055,6 @@ export function useSubmitWizard() {
         if (Object.keys(m.outputs).length === 0) {
           if (showToast) toast.error(msg("submit.validation.output_column_required"));
           return false;
-        }
-        if (isReact) {
-          const assigned = new Set(Object.values(columnRoles));
-          if (REQUIRED_REPLAY_ROLES.some((role) => !assigned.has(role))) {
-            if (showToast) toast.error(msg("submit.validation.react_replay_roles_required"));
-            return false;
-          }
         }
         return true;
       }
@@ -1312,7 +1265,7 @@ export function useSubmitWizard() {
         const passed = await handleValidateDataset();
         if (!passed) return;
       }
-      if (step === 3 && signatureCode.trim() && parsedDataset && (isReact || metricCode.trim())) {
+      if (step === 3 && signatureCode.trim() && parsedDataset && metricCode.trim()) {
         const passed = await handleValidateCode();
         if (!passed) return;
       }
@@ -1401,7 +1354,7 @@ export function useSubmitWizard() {
       goTo(3);
       return;
     }
-    if (!isReact && !metricCode.trim()) {
+    if (!metricCode.trim()) {
       toast.error(msg("submit.validation.metric_required"));
       goTo(3);
       return;
@@ -1454,14 +1407,10 @@ export function useSubmitWizard() {
         ...(Object.keys(optKw).length > 0 && { optimizer_kwargs: optKw }),
       };
 
-      // Reshape the flat UI react config into the backend Reward / ToolSource /
-      // ReplayMapping wire models. mcp_auth_header is forwarded once on the wire
-      // but never persisted (backend) or mirrored into shared agent state.
-      const buildReactFields = (): {
-        reward: Reward;
-        tool_source: ToolSource;
-        replay_mapping: ReplayMapping;
-      } => {
+      // Reshape the flat UI react config into the backend ToolSource wire
+      // model. mcp_auth_header is forwarded once on the wire but never persisted
+      // (backend) or mirrored into shared agent state.
+      const buildReactFields = (): { tool_source: ToolSource } => {
         const filter = reactConfig.toolFilter
           .split(",")
           .map((s) => s.trim())
@@ -1476,33 +1425,7 @@ export function useSubmitWizard() {
             : {}),
           ...(filter.length > 0 ? { tool_filter: filter } : {}),
         };
-        // Replay mapping is derived from the per-column roles set in the
-        // dataset step: the column tagged "steps" is replay_mapping.steps, etc.
-        const colForRole = (role: ColumnRole) =>
-          Object.keys(columnRoles).find((c) => columnRoles[c] === role) ?? "";
-        // chat_history is a signature input, so it can't also carry a replay
-        // role in the single-toggle model — derive it from the canonical column
-        // name when present (the generalist trajectory convention).
-        const chatHistoryCol = Object.keys(columnRoles).find(
-          (c) => c === "chat_history" && columnRoles[c] !== "ignore",
-        );
-        const replay_mapping: ReplayMapping = {
-          steps: colForRole("steps"),
-          allowed_tools: colForRole("allowed_tools"),
-          tool_schema_hashes: colForRole("tool_schema_hashes"),
-          ...(colForRole("state_before") ? { state_before: colForRole("state_before") } : {}),
-          ...(colForRole("state_after") ? { state_after: colForRole("state_after") } : {}),
-          ...(chatHistoryCol ? { chat_history: chatHistoryCol } : {}),
-        };
-        return {
-          // Scoring is owned by metric_code; the only reward knob that can't
-          // live in the metric is match_mode (it governs the replay rollout the
-          // metric scores), fixed to the lenient substrate so the metric sees
-          // every step and decides argument-exactness itself.
-          reward: { match_mode: "tool_name" },
-          tool_source,
-          replay_mapping,
-        };
+        return { tool_source };
       };
 
       // Inject global API key + base URL into any model config that doesn't override

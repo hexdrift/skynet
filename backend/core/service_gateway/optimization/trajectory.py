@@ -90,12 +90,18 @@ def _normalize_field_value(value: Any) -> str:
 
 
 # Per-example fields that are internal provenance, not human-facing expected
-# output. ``tool_schema_hashes`` is a {tool: sha256} drift-detection snapshot
-# (consumed by the optimizer's roster-drift filter in training_ground/optimize,
-# never reviewed by a user), so it's dropped from the valset rows the trajectory
-# drawer renders. It stays on the EvaluationExample itself — only this display
-# serialization hides it.
-_HIDDEN_VALSET_FIELDS: frozenset[str] = frozenset({"tool_schema_hashes"})
+# output, so they're dropped from the valset rows the trajectory drawer renders.
+# Each stays on the EvaluationExample itself (the harness still feeds/scores on
+# them) — only this display serialization hides it:
+#   * ``tool_schema_hashes`` — {tool: sha256} drift snapshot consumed by the
+#     optimizer's roster-drift filter, never reviewed by a user.
+#   * ``wizard_state`` — turn-start state dict handed to the candidate as input
+#     context; load-bearing for the rollout but noise beside the answer.
+#   * ``state_before`` / ``state_after`` — replay-role snapshots the gate metric
+#     scores against; scoring detail, not review content.
+_HIDDEN_VALSET_FIELDS: frozenset[str] = frozenset(
+    {"tool_schema_hashes", "wizard_state", "state_before", "state_after"}
+)
 
 
 def _example_field_map(example: Any, method_name: str) -> dict[str, str]:
@@ -408,13 +414,14 @@ class MinibatchRecorder:
         score = _extract_score(result)
         prediction_text = _normalize_prediction(prediction)
 
-        # Per-example heartbeat, tagged with the run's module type and carrying
-        # the valset row id / sweep size — the predict/cot counterpart to the
-        # react adapter's per-rollout log, so non-react runs are observable in
-        # job_logs too. ``ex_id`` is the stable valset index (react's turn_id
-        # analog), "?" when the example isn't from the tracked valset (e.g. a
-        # BootstrapFewShot teacher pass over the trainset).
-        logger.info(
+        # Per-example heartbeat at DEBUG so it surfaces only in the Logs tab's
+        # verbose view — the predict/cot counterpart to the react adapter's
+        # per-rollout log, demoted in lockstep with it so non-react runs get the
+        # same normal=aggregates / verbose=per-example split. ``ex_id`` is the
+        # stable valset index (react's turn_id analog), "?" when the example
+        # isn't from the tracked valset (e.g. a BootstrapFewShot teacher pass
+        # over the trainset).
+        logger.debug(
             "%s eval id=%s/%d score=%.3f",
             self._module_name,
             ex_id,

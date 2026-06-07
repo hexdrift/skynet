@@ -1,10 +1,11 @@
-"""Tests for GEPA tool-NAME optimization with replay canonicalization.
+"""Tests for GEPA tool-NAME optimization.
 
 The candidate may propose a clearer display name per tool that the agent sees
-in its ReAct roster, while replay matching / reward dims / drift / persisted
-state all stay keyed on the original (canonical) name. These tests pin that
-contract: a renamed tool still hits its canonical recorded step, collisions
-fall back to canonical, and the proposed names round-trip through the overlay.
+in its ReAct roster, while persisted state / overlay application stay keyed on
+the original (canonical) name. These tests pin that contract: the proposed
+names parse out of the candidate blob, round-trip through the seed, apply to a
+live tool roster, collisions fall back to canonical, and the overlay model
+serializes the rename map.
 """
 
 from __future__ import annotations
@@ -22,115 +23,6 @@ from core.service_gateway.optimization.training_ground.gepa_adapter import (
     _candidate_tool_names,
     seed_candidate_from_program,
 )
-from core.service_gateway.optimization.training_ground.replay import (
-    TraceConditionedMCPMock,
-    canonical_argument_hash,
-    resolve_proposed_names,
-)
-from core.service_gateway.optimization.training_ground.types import (
-    EvaluationExample,
-    ReplayStep,
-)
-
-
-def _make_example(
-    *,
-    allowed_tools: frozenset[str],
-    replay_steps: tuple[ReplayStep, ...],
-) -> EvaluationExample:
-    """Build a minimal ``EvaluationExample`` for the replay mock."""
-    return EvaluationExample(
-        turn_id="t-1",
-        user_message="",
-        wizard_state_before={},
-        wizard_state_after={},
-        allowed_tools=allowed_tools,
-        tool_schema_hashes={},
-        replay_steps=replay_steps,
-        chat_history=(),
-    )
-
-
-def _make_step(tool: str, arguments: dict) -> ReplayStep:
-    """Build a done ``ReplayStep`` with a canonical argument hash."""
-    return ReplayStep(
-        tool_name=tool,
-        arguments=arguments,
-        argument_hash=canonical_argument_hash(arguments),
-        status="done",
-        result={"value": 42},
-        reason=None,
-        started_at_ms=None,
-        ended_at_ms=None,
-    )
-
-
-def _canonicalizer(proposed: dict[str, str], allowed: frozenset[str]):
-    """Build the proposed->canonical mapper the adapter wires into the mock."""
-    resolved = resolve_proposed_names(proposed, allowed)
-    canonical_by_proposed = {p: c for c, p in resolved.items()}
-    return lambda n: canonical_by_proposed.get(n, n)
-
-
-def test_renamed_call_hits_canonical_recorded_step() -> None:
-    """A call under the proposed name canonicalizes back and hits the canonical step."""
-    step = _make_step("alpha", {"k": 1})
-    example = _make_example(allowed_tools=frozenset({"alpha"}), replay_steps=(step,))
-    mock = TraceConditionedMCPMock(
-        example,
-        name_canonicalizer=_canonicalizer({"alpha": "search_records"}, example.allowed_tools),
-    )
-
-    # The agent invokes the proxy under the proposed display name.
-    assert mock._on_candidate_call("search_records", {"k": 1}) == {"value": 42}
-    rollout = mock.rollout_so_far()
-    assert [e.outcome for e in rollout.events] == ["hit"]
-    # The recorded event is keyed on the CANONICAL name so reward dims stay stable.
-    assert rollout.events[0].candidate_tool == "alpha"
-    assert not rollout.terminated_early
-
-
-def test_identity_canonicalizer_unchanged_behavior() -> None:
-    """With no rename, behavior is byte-identical to the pre-rename mock."""
-    step = _make_step("alpha", {"k": 1})
-    example = _make_example(allowed_tools=frozenset({"alpha"}), replay_steps=(step,))
-    mock = TraceConditionedMCPMock(example)
-
-    assert mock._on_candidate_call("alpha", {"k": 1}) == {"value": 42}
-    assert mock.rollout_so_far().events[0].candidate_tool == "alpha"
-
-
-def test_renamed_call_allowed_check_uses_canonical() -> None:
-    """Calling the canonical name when a rename is active is NOT in the display roster.
-
-    After a rename the agent only ever sees the proposed name; a call arriving
-    under the canonical name canonicalizes to itself (it's not in the
-    proposed->canonical map) and is checked against ``allowed_tools`` directly,
-    which still contains the canonical — so it is allowed and hits.
-    """
-    step = _make_step("alpha", {"k": 1})
-    example = _make_example(allowed_tools=frozenset({"alpha"}), replay_steps=(step,))
-    mock = TraceConditionedMCPMock(
-        example,
-        name_canonicalizer=_canonicalizer({"alpha": "search_records"}, example.allowed_tools),
-    )
-
-    assert mock._on_candidate_call("alpha", {"k": 1}) == {"value": 42}
-    assert mock.rollout_so_far().events[0].candidate_tool == "alpha"
-
-
-def test_resolve_proposed_names_collision_keeps_canonical() -> None:
-    """Two canonicals proposing the same name both keep their canonical name."""
-    resolved = resolve_proposed_names(
-        {"alpha": "dup", "beta": "dup"}, frozenset({"alpha", "beta"})
-    )
-    assert resolved == {"alpha": "alpha", "beta": "beta"}
-
-
-def test_resolve_proposed_names_identity_when_none() -> None:
-    """A ``None`` proposal map yields identity over the allowed tools."""
-    resolved = resolve_proposed_names(None, frozenset({"alpha", "beta"}))
-    assert resolved == {"alpha": "alpha", "beta": "beta"}
 
 
 def test_candidate_tool_names_parses_proposed() -> None:

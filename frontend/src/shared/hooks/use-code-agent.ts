@@ -108,9 +108,8 @@ export interface CodeAgentState {
 export interface UseCodeAgentArgs {
   codeAssistMode: "auto" | "manual";
   setCodeAssistMode: (m: "auto" | "manual") => void;
-  // Widened to plain string roles: react runs add replay roles (steps,
-  // allowed_tools, …) beyond the signature I/O set; this hook only reads the
-  // "input"/"output" roles, so the extra react roles pass through harmlessly.
+  // Plain string roles (input/output/ignore); this hook only reads the
+  // "input"/"output" roles.
   columnRoles: Record<string, string>;
   columnKinds: Record<string, "text" | "image">;
   parsedDataset: ParsedDataset | null;
@@ -559,14 +558,31 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
                 };
               }
             }
-            const hasErrors = responses.some(
-              (resp) => !!resp && !resp.valid && resp.errors.length > 0,
-            );
-            if (!hasErrors) return;
+            let signatureHasError = false;
+            let metricHasError = false;
+            for (let i = 0; i < pending.length; i++) {
+              const entry = pending[i];
+              const resp = responses[i];
+              const broken = !!resp && !resp.valid && resp.errors.length > 0;
+              if (!entry || !broken) continue;
+              if (entry.kind === "signature") signatureHasError = true;
+              else metricHasError = true;
+            }
+            if (!signatureHasError && !metricHasError) return;
             if (controller.signal.aborted) return;
             if (autoFixAttemptsRef.current >= MAX_AUTO_FIX) return;
             autoFixAttemptsRef.current += 1;
-            const fixMessage = formatMsg("auto.features.submit.hooks.use.code.agent.template.3", {
+            // Name only the artifact(s) that actually failed so the retry
+            // message (the chat bubble the user reads) points at the real
+            // problem instead of blaming both. The per-artifact validation
+            // summaries in the request body already carry the concrete errors.
+            const fixKey =
+              signatureHasError && metricHasError
+                ? "auto.features.submit.hooks.use.code.agent.template.3"
+                : metricHasError
+                  ? "auto.features.submit.hooks.use.code.agent.template.5"
+                  : "auto.features.submit.hooks.use.code.agent.template.4";
+            const fixMessage = formatMsg(fixKey, {
               p1: TERMS.dataset,
             });
             queueMicrotask(() => {

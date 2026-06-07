@@ -51,7 +51,7 @@ export function ActivityBreadcrumb({
 
   return (
     <div
-      className="relative flex w-full max-w-[240px] items-start justify-between"
+      className="relative flex w-full max-w-[340px] items-start justify-between"
       aria-live="polite"
     >
       <div className="absolute top-[9px] start-[9px] end-[9px] h-px bg-border/70" />

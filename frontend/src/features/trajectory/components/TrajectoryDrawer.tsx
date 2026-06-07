@@ -449,10 +449,14 @@ function MinibatchEntryCard({
   valsetRow: ValsetRow | null;
 }) {
   const passed = entry.score > 0;
-  const answerFields = useMemo(() => predictionToEntries(entry.prediction), [entry.prediction]);
-  const questionFields = useMemo(
-    () => (valsetRow ? Object.entries(valsetRow.inputs) : []),
-    [valsetRow],
+  // Render the example exactly like a validation example (ValsetFieldGroups):
+  // inputs with empty fields dropped, the candidate answer as a ReAct chat turn
+  // with replay metadata folded into a disclosure, and the expected answer. The
+  // subsample id is a valset id, so valsetRow is normally present; when it isn't
+  // (rare), fall back to just the candidate answer rendered the same way.
+  const fallbackPrediction = useMemo(
+    () => predictionToEntries(entry.prediction),
+    [entry.prediction],
   );
 
   return (
@@ -460,6 +464,9 @@ function MinibatchEntryCard({
       <div className="flex items-center justify-between gap-2 border-b border-border/30 bg-[#F8F4EF]/60 px-3 py-2">
         <div className="flex items-center gap-2 text-[11px]">
           <StatusChip passed={passed} />
+          <span className="font-mono text-[10px] text-muted-foreground" dir="ltr">
+            #{entry.example_id}
+          </span>
         </div>
         <HelpTip text={msg("trajectory.minibatch.score_label.explain")}>
           <span className="inline-flex items-baseline gap-1.5">
@@ -479,30 +486,14 @@ function MinibatchEntryCard({
       </div>
 
       <div className="space-y-2.5 px-3 pb-3 pt-2.5">
-        {questionFields.length > 0 ? (
-          <FieldSection
-            label={msg("trajectory.minibatch.question_label")}
-            info={msg("trajectory.minibatch.question_label.explain")}
-          >
-            {questionFields.map(([key, value]) => (
-              <FieldRow key={key} fieldName={key} value={value} />
-            ))}
-          </FieldSection>
-        ) : null}
-
-        {answerFields !== null && answerFields.length > 0 ? (
-          <FieldSection
-            label={msg("trajectory.minibatch.prediction_label")}
-            info={msg("trajectory.minibatch.prediction_label.explain")}
-          >
-            {answerFields.map(([key, value], idx) => (
-              <FieldRow
-                key={key.length === 0 ? `__raw_${idx}` : key}
-                fieldName={key.length > 0 ? key : undefined}
-                value={value}
-              />
-            ))}
-          </FieldSection>
+        {valsetRow !== null ? (
+          <ValsetFieldGroups row={valsetRow} prediction={entry.prediction} />
+        ) : fallbackPrediction !== null && fallbackPrediction.length > 0 ? (
+          <AgentTurnGroup
+            label={msg("trajectory.pareto.cell.prediction_label")}
+            info={msg("trajectory.pareto.cell.prediction_label.explain")}
+            entries={fallbackPrediction}
+          />
         ) : null}
 
         {entry.feedback.length > 0 ? <FeedbackBlock body={entry.feedback} /> : null}
@@ -516,28 +507,6 @@ function StatusChip({ passed }: { passed: boolean }) {
     <span className="inline-flex items-center gap-1 rounded-full border border-[#DDD4C8]/70 bg-background/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-foreground/75">
       {passed ? msg("trajectory.minibatch.pass_label") : msg("trajectory.minibatch.fail_label")}
     </span>
-  );
-}
-
-function FieldSection({
-  label,
-  info,
-  children,
-}: {
-  label: string;
-  info?: string;
-  children: React.ReactNode;
-}) {
-  const labelNode = (
-    <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-      {label}
-    </div>
-  );
-  return (
-    <div className="space-y-1">
-      {info !== undefined ? <HelpTip text={info}>{labelNode}</HelpTip> : labelNode}
-      <div className="space-y-1">{children}</div>
-    </div>
   );
 }
 
@@ -772,6 +741,22 @@ function isEmptyFieldValue(value: string): boolean {
   return false;
 }
 
+// Replay-provenance fields the backend keeps on each example for input context
+// and gate scoring, but which add no signal when reviewing an answer: the
+// turn-start wizard snapshot and the metric's before/after state. New runs omit
+// them server-side (see _HIDDEN_VALSET_FIELDS); this also strips them from runs
+// recorded before that change, so both validation and mini-batch cards stay
+// focused on inputs, the answer and the prediction.
+const HIDDEN_FIELD_KEYS: ReadonlySet<string> = new Set([
+  "wizard_state",
+  "state_before",
+  "state_after",
+]);
+
+function isHiddenField(key: string): boolean {
+  return HIDDEN_FIELD_KEYS.has(key.trim().toLowerCase());
+}
+
 // True for a field that lists tool names (e.g. ``allowed_tools``), which reads
 // better as a horizontal chip carousel than a tall numbered list.
 function isToolListField(fieldName: string | undefined): boolean {
@@ -790,14 +775,11 @@ function parseStringArray(value: string): string[] | null {
 
 const CHAT_ROLES: ReadonlySet<string> = new Set(["user", "assistant", "system", "tool"]);
 
-// Detect a captured chat transcript so it renders as a conversation instead of a
-// raw key/value tree. A chat_history field arrives as a serialized list of
-// `{role, content}` turns (JSON or Python-literal repr); this returns the
-// normalized turns only when *every* element is a chat-role message object, so
-// arbitrary arrays of objects don't false-trigger the chat renderer. Non-string
+// Normalize an already-parsed value into chat turns, or null when it isn't a
+// non-empty list where *every* element is a chat-role message object (so
+// arbitrary object arrays don't false-trigger the chat renderer). Non-string
 // content (multi-part messages) is JSON-encoded so a turn always carries text.
-function parseChatHistory(value: string): ChatMessage[] | null {
-  const parsed = parseStructuredValue(value);
+function normalizeChatMessages(parsed: unknown): ChatMessage[] | null {
   if (!Array.isArray(parsed) || parsed.length === 0) return null;
   const messages: ChatMessage[] = [];
   for (const item of parsed) {
@@ -810,6 +792,92 @@ function parseChatHistory(value: string): ChatMessage[] | null {
     messages.push({ role: role as ChatMessage["role"], content });
   }
   return messages;
+}
+
+// Recover the complete leading elements of a JSON array truncated mid-value —
+// the server caps captured strings at MINIBATCH_PREDICTION_CHAR_CAP (see
+// trajectory.py), so a long chat_history arrives as invalid JSON. Scans for the
+// last position where a depth-1 element closed, slices there, and re-closes the
+// array; quote/escape aware so braces inside string content don't miscount.
+// Returns null when nothing complete remains or the prefix still won't parse.
+function recoverJsonArrayPrefix(value: string): unknown[] | null {
+  const s = value.trim();
+  if (s.charAt(0) !== "[") return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let lastComplete = -1;
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charAt(i);
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "[" || c === "{") depth += 1;
+    else if (c === "]" || c === "}") {
+      depth -= 1;
+      if (depth === 1) lastComplete = i + 1;
+    }
+  }
+  if (lastComplete === -1) return null;
+  try {
+    const parsed: unknown = JSON.parse(`${s.slice(0, lastComplete)}]`);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Detect a captured chat transcript so it renders as a conversation instead of a
+// raw key/value tree. A chat_history field arrives as a serialized list of
+// `{role, content}` turns (JSON or Python-literal repr). When the value was
+// server-truncated mid-JSON, the complete leading turns are recovered so the
+// conversation still bubbles rather than dropping to a raw string.
+function parseChatHistory(value: string): ChatMessage[] | null {
+  const strict = normalizeChatMessages(parseStructuredValue(value));
+  if (strict !== null) return strict;
+  return normalizeChatMessages(recoverJsonArrayPrefix(value));
+}
+
+type HistoryTrace =
+  | { kind: "chat"; messages: ChatMessage[] }
+  | { kind: "turns"; turns: Array<Array<[string, string]>> };
+
+function safeJsonString(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return String(value);
+  }
+}
+
+// Detect a captured agent history: a `{messages: [...]}` object (a serialized
+// dspy History — JSON or `History(messages=[…])` repr). A history of plain
+// `{role, content}` turns is a transcript; otherwise each message is a per-turn
+// field map (user_message, chat_history, next_thought, tool_calls, …) the caller
+// renders as one turn. Non-string field values (nested tool_calls/results) are
+// JSON-encoded so they flow through the string-keyed field renderer. Returns
+// null when the value isn't a messages-wrapped history.
+function parseHistoryTrace(value: string): HistoryTrace | null {
+  const parsed = parseStructuredValue(value);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const messages = (parsed as Record<string, unknown>).messages;
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  const chat = normalizeChatMessages(messages);
+  if (chat !== null) return { kind: "chat", messages: chat };
+  const turns: Array<Array<[string, string]>> = [];
+  for (const m of messages) {
+    if (m === null || typeof m !== "object" || Array.isArray(m)) return null;
+    turns.push(
+      Object.entries(m as Record<string, unknown>).map(
+        ([k, v]): [string, string] => [k, typeof v === "string" ? v : safeJsonString(v)],
+      ),
+    );
+  }
+  return { kind: "turns", turns };
 }
 
 const JSON_VIEW_MAX_DEPTH = 8;
@@ -1008,9 +1076,19 @@ function FieldRow({ fieldName, value }: { fieldName?: string; value: string }) {
   // own header carries the label, so it breaks out of the bordered field cell
   // rather than sitting boxed (and inset) inside it.
   const chat = useMemo(() => parseChatHistory(value), [value]);
+  // A captured agent ``history`` ({messages: […]}) breaks out the same way and
+  // renders as a recorded conversation rather than a raw key/value tree.
+  const trace = useMemo(() => parseHistoryTrace(value), [value]);
   const toolDescriptions = useContext(ToolDescriptionsContext);
   if (chat !== null) {
     return <RecordedChatTranscript messages={chat} />;
+  }
+  if (trace !== null) {
+    return trace.kind === "chat" ? (
+      <RecordedChatTranscript messages={trace.messages} />
+    ) : (
+      <HistoryTraceView turns={trace.turns} />
+    );
   }
   // A user-message turn renders as the app's chat bubble — same look as the
   // live conversation and the recorded transcript — instead of a boxed field,
@@ -1131,6 +1209,7 @@ function splitAgentTurn(entries: Array<[string, string]>): AgentTurnParts {
   const transcripts: ChatMessage[][] = [];
   const meta: Array<[string, string]> = [];
   for (const [key, value] of entries) {
+    if (isHiddenField(key)) continue;
     if (isEmptyFieldValue(value)) continue;
     const chat = parseChatHistory(value);
     if (chat !== null) {
@@ -1163,6 +1242,50 @@ function splitAgentTurn(entries: Array<[string, string]>): AgentTurnParts {
 // metadata folded into a collapsed disclosure. Falls back to the plain field
 // list when nothing chat-shaped is present (e.g. a truncated, unparseable
 // prediction) so the raw value still shows.
+function turnHasChat(turn: AgentTurnParts): boolean {
+  return (
+    turn.userMessages.length > 0 ||
+    turn.assistantMessage !== null ||
+    turn.toolCalls !== null ||
+    turn.transcripts.length > 0
+  );
+}
+
+// The conversation body of a split turn (no section label): user bubbles, any
+// embedded transcripts, the assistant reply with its tool-call trajectory, and
+// the collapsed replay-metadata disclosure. Shared by the expected/actual
+// answer groups and the recorded history trace.
+function AgentTurnConversation({ turn }: { turn: AgentTurnParts }) {
+  const agentMsg: AgentMessage | null =
+    turn.assistantMessage !== null || turn.toolCalls !== null
+      ? {
+          role: "assistant",
+          content: turn.assistantMessage ?? "",
+          toolCalls: turn.toolCalls ?? undefined,
+        }
+      : null;
+  return (
+    <div className="space-y-2.5">
+      {turn.userMessages.map((content, idx) => (
+        <UserBubble key={`user_${idx}`} content={content} editable={false} />
+      ))}
+      {turn.transcripts.map((messages, idx) => (
+        <RecordedChatTranscript key={`transcript_${idx}`} messages={messages} />
+      ))}
+      {agentMsg !== null ? (
+        <div className="flex justify-end">
+          <AgentBubble
+            msg={agentMsg}
+            className="max-w-full"
+            renderToolCall={renderTrajectoryToolCall}
+          />
+        </div>
+      ) : null}
+      {turn.meta.length > 0 ? <AgentTurnMeta entries={turn.meta} /> : null}
+    </div>
+  );
+}
+
 function AgentTurnGroup({
   label,
   info,
@@ -1173,43 +1296,55 @@ function AgentTurnGroup({
   entries: Array<[string, string]>;
 }) {
   const turn = useMemo(() => splitAgentTurn(entries), [entries]);
-  const hasChat =
-    turn.userMessages.length > 0 ||
-    turn.assistantMessage !== null ||
-    turn.toolCalls !== null ||
-    turn.transcripts.length > 0;
-  if (!hasChat) {
+  if (!turnHasChat(turn)) {
     return <ValsetFieldGroup label={label} info={info} entries={entries} />;
   }
-  const agentMsg: AgentMessage | null =
-    turn.assistantMessage !== null || turn.toolCalls !== null
-      ? {
-          role: "assistant",
-          content: turn.assistantMessage ?? "",
-          toolCalls: turn.toolCalls ?? undefined,
-        }
-      : null;
   return (
     <div className="space-y-1">
       <SectionLabel label={label} info={info} />
-      <div className="space-y-2.5">
-        {turn.userMessages.map((content, idx) => (
-          <UserBubble key={`user_${idx}`} content={content} editable={false} />
-        ))}
-        {turn.transcripts.map((messages, idx) => (
-          <RecordedChatTranscript key={`transcript_${idx}`} messages={messages} />
-        ))}
-        {agentMsg !== null ? (
-          <div className="flex justify-end">
-            <AgentBubble
-              msg={agentMsg}
-              className="max-w-full"
-              renderToolCall={renderTrajectoryToolCall}
-            />
-          </div>
-        ) : null}
-        {turn.meta.length > 0 ? <AgentTurnMeta entries={turn.meta} /> : null}
-      </div>
+      <AgentTurnConversation turn={turn} />
+    </div>
+  );
+}
+
+// A captured agent ``history`` ({messages: [turn, …]}) rendered as a recorded
+// conversation: each turn's user/assistant bubbles and embedded chat_history,
+// with its reasoning/tool fields folded into the per-turn details disclosure
+// (the same split as the expected/actual answer turns). Several turns get a
+// light per-turn label; a lone turn renders bare.
+function HistoryTraceView({ turns }: { turns: Array<Array<[string, string]>> }) {
+  return (
+    <div className="space-y-3">
+      {turns.map((entries, idx) => (
+        <HistoryTurnRow key={idx} entries={entries} index={idx} total={turns.length} />
+      ))}
+    </div>
+  );
+}
+
+function HistoryTurnRow({
+  entries,
+  index,
+  total,
+}: {
+  entries: Array<[string, string]>;
+  index: number;
+  total: number;
+}) {
+  const turn = useMemo(() => splitAgentTurn(entries), [entries]);
+  const label = total > 1 ? formatMsg("trajectory.history.turn", { n: index + 1 }) : null;
+  if (!turnHasChat(turn)) {
+    return (
+      <ValsetFieldGroup
+        label={formatMsg("trajectory.history.turn", { n: index + 1 })}
+        entries={entries}
+      />
+    );
+  }
+  return (
+    <div className="space-y-1">
+      {label !== null ? <SectionLabel label={label} /> : null}
+      <AgentTurnConversation turn={turn} />
     </div>
   );
 }
@@ -2399,9 +2534,12 @@ function ValsetFieldGroup({
   info?: string;
   entries: Array<[string, string]>;
 }) {
-  // Empty containers/blank values would render as bare `[ ]` / `{ }` boxes next
-  // to the real content — drop them so the group shows only meaningful fields.
-  const visible = entries.filter(([, value]) => !isEmptyFieldValue(value));
+  // Drop hidden provenance keys (wizard/state snapshots) and empty
+  // containers/blank values — both render as noise next to the meaningful
+  // fields, so the group shows only what's worth reviewing.
+  const visible = entries.filter(
+    ([key, value]) => !isHiddenField(key) && !isEmptyFieldValue(value),
+  );
   return (
     <div className="space-y-1">
       <SectionLabel label={label} info={info} />
