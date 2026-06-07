@@ -407,8 +407,10 @@ function FilterDropdown({
   return createPortal(dropdown, document.body);
 }
 
-export function useColumnFilters() {
-  const [filters, setFilters] = useState<Filters>({});
+export function useColumnFilters(initial?: Filters) {
+  // `initial` seeds the first render only (e.g. the logs view opens pre-filtered
+  // to its default verbosity), so callers can avoid an unfiltered first paint.
+  const [filters, setFilters] = useState<Filters>(initial ?? {});
   const [openFilter, setOpenFilter] = useState<string | null>(null);
 
   const setColumnFilter = useCallback((col: string, values: Set<string>) => {

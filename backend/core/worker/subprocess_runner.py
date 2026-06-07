@@ -124,7 +124,7 @@ def run_service_in_subprocess(
     types onto ``event_queue``:
 
     - ``EVENT_LOG`` — every record from the ``dspy`` logger and the
-      ``core.service_gateway.optimization`` logger at INFO or above, forwarded
+      ``core.service_gateway.optimization`` logger at DEBUG or above, forwarded
       via ``SubprocessLogHandler``.
     - ``EVENT_PROGRESS`` — one event per ``progress_callback`` invocation from the
       optimizer, carrying ``event`` (phase name) and ``metrics`` (dict).
@@ -145,20 +145,23 @@ def run_service_in_subprocess(
     """
     service = _FORK_SERVICE if start_method == "fork" and _FORK_SERVICE is not None else DspyService(ServiceRegistry())
     log_handler = SubprocessLogHandler(event_queue)
-    log_handler.setLevel(logging.INFO)
+    log_handler.setLevel(logging.DEBUG)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
 
     # Forward DSPy's own records AND our optimization-harness records (rollout
-    # heartbeats, phase logs) so both surface in job_logs at INFO+. The app
-    # logger sits outside the ``dspy`` tree, so it needs its own hookup.
+    # heartbeats, phase logs) so both surface in job_logs at DEBUG+. The Logs
+    # tab defaults to an INFO+ view and only reveals DEBUG when the operator
+    # opts into the "verbose" verbosity level, so capturing DEBUG here is what
+    # makes that opt-in possible. The app logger sits outside the ``dspy`` tree,
+    # so it needs its own hookup.
     forwarded_loggers = (
         logging.getLogger("dspy"),
         logging.getLogger("core.service_gateway.optimization"),
     )
     saved_levels = [lg.level for lg in forwarded_loggers]
     for lg in forwarded_loggers:
-        if lg.level == 0 or lg.level > logging.INFO:
-            lg.setLevel(logging.INFO)
+        if lg.level == 0 or lg.level > logging.DEBUG:
+            lg.setLevel(logging.DEBUG)
         lg.addHandler(log_handler)
 
     try:
