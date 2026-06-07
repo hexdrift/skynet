@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { motion } from "framer-motion";
+import { Gauge } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
@@ -18,6 +20,80 @@ import { TERMS } from "@/shared/lib/terms";
 import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
 
+type Verbosity = "quiet" | "normal" | "verbose";
+
+// "verbose" carries no preset — it clears the level filter so every captured
+// level (incl. DEBUG) shows. Quiet/Normal map to explicit level sets that drive
+// the shared `level` column filter, so the segment and that filter remain one
+// source of truth.
+const VERBOSITY_LEVELS: Record<Exclude<Verbosity, "verbose">, readonly string[]> = {
+  quiet: ["WARNING", "ERROR", "CRITICAL"],
+  normal: ["INFO", "WARNING", "ERROR", "CRITICAL"],
+};
+
+const VERBOSITY_OPTIONS: ReadonlyArray<{ value: Verbosity; label: () => string }> = [
+  { value: "quiet", label: () => msg("optimizations.logs.verbosity.quiet") },
+  { value: "normal", label: () => msg("optimizations.logs.verbosity.normal") },
+  { value: "verbose", label: () => msg("optimizations.logs.verbosity.verbose") },
+];
+
+// Matches the explore sort pill so both segmented controls animate alike.
+const PILL_TRANSITION = { type: "tween", duration: 0.16, ease: [0.22, 1, 0.36, 1] } as const;
+
+/** Map the live `level` column-filter set back to the verbosity it represents. */
+function verbosityFromLevelFilter(levelSet: Set<string> | undefined): Verbosity | null {
+  if (!levelSet || levelSet.size === 0) return "verbose";
+  const matches = (levels: readonly string[]) =>
+    levels.length === levelSet.size && levels.every((l) => levelSet.has(l));
+  if (matches(VERBOSITY_LEVELS.quiet)) return "quiet";
+  if (matches(VERBOSITY_LEVELS.normal)) return "normal";
+  return null;
+}
+
+function VerbosityControl({
+  active,
+  onChange,
+}: {
+  active: Verbosity | null;
+  onChange: (verbosity: Verbosity) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={msg("optimizations.logs.verbosity.aria")}
+      className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/30 p-0.5"
+    >
+      <Gauge className="mx-1 size-3 text-foreground/35" aria-hidden="true" />
+      {VERBOSITY_OPTIONS.map((o) => {
+        const isActive = o.value === active;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => {
+              if (!isActive) onChange(o.value);
+            }}
+            className={`relative rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
+              isActive ? "text-foreground" : "cursor-pointer text-foreground/55 hover:text-foreground"
+            }`}
+          >
+            {isActive && (
+              <motion.span
+                layoutId="logs-verbosity-pill"
+                className="absolute inset-0 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
+                transition={PILL_TRANSITION}
+                aria-hidden="true"
+              />
+            )}
+            <span className="relative z-10">{o.label()}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function LogsTab({
   logs,
   pairNames,
@@ -26,8 +102,21 @@ export function LogsTab({
   pairNames?: Record<number, string>;
 }) {
   const showPairCol = !!pairNames && Object.keys(pairNames).length > 0;
-  const logFilters = useColumnFilters();
+  // Open at the Normal verbosity (INFO+) — DEBUG is captured but hidden until
+  // the operator opts into "verbose". Seeding here (vs. an effect) keeps the
+  // first paint already filtered, and resets to Normal on every mount.
+  const logFilters = useColumnFilters({ level: new Set(VERBOSITY_LEVELS.normal) });
   const logResize = useColumnResize();
+  const activeVerbosity = useMemo(
+    () => verbosityFromLevelFilter(logFilters.filters.level),
+    [logFilters.filters.level],
+  );
+  const setVerbosity = (verbosity: Verbosity) => {
+    logFilters.setColumnFilter(
+      "level",
+      verbosity === "verbose" ? new Set() : new Set(VERBOSITY_LEVELS[verbosity]),
+    );
+  };
   const [sortKey, setSortKey] = useState<string>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const toggleSort = (key: string) => {
@@ -121,6 +210,7 @@ export function LogsTab({
           data-tutorial="live-logs"
         >
           <div className="flex items-center gap-3">
+            <VerbosityControl active={activeVerbosity} onChange={setVerbosity} />
             <ResetColumnsButton resize={logResize} />
             <p className="text-sm text-muted-foreground">
               {formatMsg("auto.features.optimizations.components.logstab.template.2", {
@@ -136,7 +226,13 @@ export function LogsTab({
       </FadeIn>
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">
-          {msg("auto.features.optimizations.components.logstab.2")}
+          {logs.length === 0
+            ? msg("auto.features.optimizations.components.logstab.2")
+            : activeVerbosity === "quiet" &&
+                Object.keys(logFilters.filters).length === 1 &&
+                !!logFilters.filters.level
+              ? msg("optimizations.logs.verbosity.empty_quiet")
+              : msg("optimizations.logs.verbosity.empty_filtered")}
         </p>
       ) : (
         <Card>
