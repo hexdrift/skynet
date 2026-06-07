@@ -53,7 +53,6 @@ from ...models import (
     SplitCounts,
 )
 from ...models.artifacts import ProgramArtifact, ReactOverlay
-from ...models.results import PairedBootstrap, Promotion
 from ...registry import (
     ResolverError,
     ServiceRegistry,
@@ -73,6 +72,7 @@ from .data import (
     rows_to_examples,
     split_examples,
 )
+from .llm_error import enrich_error_message
 from .optimizers import (
     compile_program,
     evaluate_on_test,
@@ -91,17 +91,7 @@ from .timing import (
     track_stage,
 )
 from .training_ground import run_react
-from .training_ground.gepa_adapter import VectorRewardFn
-from .training_ground.metrics import (
-    GENERAL_REWARD_SPEC,
-    GENERALIST_REWARD_SPEC,
-    REPLAY_MATCH_REWARD_SPEC,
-    RewardSpec,
-    general_vector_reward,
-    replay_match_vector_reward,
-    vector_reward,
-)
-from .training_ground.optimize import _AUTO_BUDGETS, tool_severity
+from .training_ground.run_react import _AUTO_BUDGETS, tool_severity
 from .trajectory import (
     capture_proposal_prompts,
     emit_valset_event,
@@ -112,7 +102,6 @@ from .trajectory import (
 from .validators import (
     require_mapping_columns_in_dataset,
     require_mapping_matches_signature,
-    require_replay_mapping_valid,
 )
 
 logger = logging.getLogger(__name__)
@@ -509,7 +498,9 @@ def _run_grid_pair(
 
     except Exception as exc:
         pair_runtime = (datetime.now(UTC) - pair_start).total_seconds()
-        error_msg = str(exc)
+        # DSPy reports a generic "Execution cancelled" when an LM call fails;
+        # recover the real cause (billing, auth, rate limit) it only logged.
+        error_msg = enrich_error_message(str(exc))
         result = PairResult(
             pair_index=i,
             generation_model=gen_cfg.name,
@@ -847,18 +838,19 @@ class DspyService:
         artifact_id: str | None,
         progress_callback: Callable[[str, dict[str, Any]], None] | None,
     ) -> RunResponse:
-        """Optimize a react program over a replay-mapped dataset and assemble the response.
+        """Optimize a generic react program over a live tool roster and assemble the response.
 
-        Bridges a ``module_name="react"`` run onto the training-ground GEPA
-        harness: it resolves the tool roster from ``payload.tool_source``,
-        converts the replay-mapped dataset into the harness's per-turn
-        ``EvaluationExample`` records, picks the reward preset (or loads a
-        custom ``metric_code`` vector function), then delegates the actual
-        ``gepa.optimize`` to :func:`run_react.run_react_optimization`. The
-        servable program state is persisted into a :class:`ProgramArtifact`
-        carrying the react tool overlay, and the §11 acceptance statistics are
-        surfaced through ``optimization_metadata``/``details`` (Phase C makes
-        them typed).
+        React is a generic module like predict/cot that additionally carries a
+        tool roster, so this mirrors :meth:`run` end-to-end: it resolves the
+        roster from ``payload.tool_source``, converts the dataset into plain
+        ``dspy.Example`` rows, splits them, then delegates ``gepa.optimize`` to
+        :func:`run_react.run_react_optimization`, which scores the seed and the
+        optimized candidate against the *live* MCP tools with the same standard
+        ``(gold, pred, trace, pred_name, pred_trace)`` metric the scalar path
+        uses. There is no replay: rollouts execute the live tools, so the
+        optimized program behaves at eval time exactly as it will when served.
+        The servable program state is persisted into a :class:`ProgramArtifact`
+        carrying the react tool overlay.
 
         The scalar (non-react) ``run`` path never reaches here — the branch in
         :meth:`run` returns early — so this method owns the react contract
@@ -874,17 +866,9 @@ class DspyService:
 
         Returns:
             A populated :class:`RunResponse` whose scalar metrics mirror the
-            replay-reward baseline/optimized scalars and whose
-            ``program_artifact`` carries the react overlay.
-
-        Raises:
-            ServiceError: When the react payload omits the ``replay_mapping``
-                the rollout requires.
+            baseline/optimized means and whose ``program_artifact`` carries the
+            react tool overlay.
         """
-        if payload.replay_mapping is None:
-            raise ServiceError("react runs require replay_mapping.")
-        replay_mapping = payload.replay_mapping
-
         tools, schema_hashes = run_react.resolve_react_tools(
             payload.tool_source,
             signature_cls,
@@ -892,12 +876,13 @@ class DspyService:
             dataset=payload.dataset,
         )
 
-        role_columns = self._replay_role_columns(replay_mapping)
+        metric = load_metric_from_code(payload.metric_code)
+        metric_identifier = getattr(metric, "__name__", "inline_metric")
+
         examples = rows_to_examples(
             payload.dataset,
             payload.column_mapping,
             image_input_fields=image_input_field_names(signature_cls),
-            extra_columns=role_columns,
         )
         splits = split_examples(
             examples,
@@ -918,14 +903,6 @@ class DspyService:
             # GEPA scores against the replay valset built from splits.val in the
             # same order, so emitting splits.val here lines the cells up 1:1.
             emit_valset_event(splits.val, progress_callback)
-
-        train = run_react.build_replay_examples(splits.train, replay_mapping)
-        val = run_react.build_replay_examples(splits.val, replay_mapping)
-        test = run_react.build_replay_examples(splits.test, replay_mapping)
-
-        reward_spec, vector_fn, reward_preset = self._resolve_react_reward(payload)
-        grounding_weight = payload.reward.grounding_weight if payload.reward is not None else 0.0
-        match_mode = getattr(payload.reward, "match_mode", "exact") if payload.reward is not None else "exact"
 
         # Normalize through the reasoning-config helper so a minimax/reasoning
         # student model gets a safe max_tokens floor + extras automatically;
@@ -956,25 +933,28 @@ class DspyService:
             capture_proposal_prompts(payload.optimizer_name),
             trajectory_watch(trajectory_log_dir, progress_callback),
         ):
+            # Same minibatch recorder the scalar path wraps its metric in, so the
+            # per-example reflection feedback (משוב על ה-mini-batch) and the
+            # valset candidate outputs populate the trajectory drawer for react too.
+            training_metric = maybe_wrap_minibatch_recorder(
+                metric,
+                splits.val,
+                payload.optimizer_name,
+                progress_callback,
+                payload.module_name,
+            )
             result = run_react.run_react_optimization(
                 signature_cls=signature_cls,
                 tools=tools,
                 schema_hashes=schema_hashes,
-                reward_spec=reward_spec,
-                vector_fn=vector_fn,
-                # Grounding needs the optimizer-only 'training' extra + Fireworks;
-                # the service runtime carries neither, so the service-side react
-                # path scores on the task reward alone. The requested weight is
-                # still recorded on the overlay's tool_source for provenance.
-                grounding_weight=0.0,
-                train=train,
-                val=val,
-                test=test,
+                metric=training_metric,
+                train=splits.train,
+                val=splits.val,
+                test=splits.test,
                 student_lm=student_lm,
                 reflection_lm=reflection_lm,
                 max_metric_calls=max_metric_calls,
                 seed=seed,
-                match_mode=match_mode,
                 run_dir=trajectory_log_dir,
                 progress_callback=progress_callback,
                 timing_callbacks=(gen_timing,),
@@ -986,8 +966,6 @@ class DspyService:
             tools=tools,
             program_state=result["program_state"],
             overlay=overlay,
-            grounding_weight=grounding_weight,
-            reward_preset=reward_preset,
             tool_source=payload.tool_source,
             artifact_id=artifact_id,
         )
@@ -1006,16 +984,12 @@ class DspyService:
         split_counts = SplitCounts(
             train=len(splits.train), val=len(splits.val), test=len(splits.test)
         )
-        bootstrap = result["paired_bootstrap"]
         details: dict[str, Any] = {
             DETAIL_TRAIN: split_counts.train,
             DETAIL_VAL: split_counts.val,
             DETAIL_TEST: split_counts.test,
             DETAIL_BASELINE: baseline_scalar,
             DETAIL_OPTIMIZED: optimized_scalar,
-            "baseline_objective_scores": result["baseline_objective_scores"],
-            "optimized_objective_scores": result["optimized_objective_scores"],
-            "paired_bootstrap": bootstrap.model_dump(),
         }
         optimization_metadata = {
             META_OPTIMIZER: payload.optimizer_name,
@@ -1023,7 +997,6 @@ class DspyService:
             META_COMPILE_KWARGS: payload.compile_kwargs,
             META_MODULE_KWARGS: payload.module_kwargs,
             META_MODEL_IDENTIFIER: payload.model_settings.normalized_identifier(),
-            "reward_preset": reward_preset,
             "max_metric_calls": max_metric_calls,
         }
 
@@ -1031,13 +1004,12 @@ class DspyService:
         num_lm_calls = len(student_lm.history) if hasattr(student_lm, "history") else None
         _, avg_response_time_ms = gen_timing.summary()
 
-        # Map per-example replay scalars into the standard EvalExampleResult shape
-        # so the DataTab score overlay + Compare per-row diff render for react.
+        # Map per-example scalars into the standard EvalExampleResult shape so the
+        # DataTab score overlay + Compare per-row diff render for react.
         # ``outputs`` carries the rollout's per-field answer (keyed by signature
         # output field, matching the evaluate-examples endpoint) so the data view
         # can show *what* the agent produced per example, not just the score;
-        # ``pass`` mirrors the scalar-run convention (score > 0) since the reward
-        # is a continuous 0–1 fidelity score, not a clean 0/1.
+        # ``pass`` mirrors the scalar-run convention (score > 0).
         output_fields = list(payload.column_mapping.outputs.keys())
         baseline_outputs = result.get("baseline_outputs_per_example") or []
         optimized_outputs = result.get("optimized_outputs_per_example") or []
@@ -1067,26 +1039,19 @@ class DspyService:
         ]
 
         logger.info(
-            "React run finished: baseline=%.4f optimized=%.4f delta=%.4f "
-            "ci95=[%+.4f,%+.4f] promotable=%s",
+            "React run finished: baseline=%.4f optimized=%.4f delta=%.4f",
             baseline_scalar,
             optimized_scalar,
             metric_improvement,
-            bootstrap.ci95_lower,
-            bootstrap.ci95_upper,
-            result["promotion"]["promotable"],
         )
         return RunResponse(
             module_name=payload.module_name,
             optimizer_name=payload.optimizer_name,
-            metric_name=reward_preset,
+            metric_name=metric_identifier,
             split_counts=split_counts,
             baseline_test_metric=baseline_scalar,
             optimized_test_metric=optimized_scalar,
             metric_improvement=metric_improvement,
-            objective_scores=result["optimized_objective_scores"],
-            paired_bootstrap=PairedBootstrap(**bootstrap.model_dump()),
-            promotion=Promotion(**result["promotion"]),
             optimization_metadata=optimization_metadata,
             details=details,
             program_artifact_path=program_artifact.path if program_artifact else None,
@@ -1105,88 +1070,12 @@ class DspyService:
         )
 
     @staticmethod
-    def _replay_role_columns(replay_mapping: Any) -> set[str]:
-        """Collect the dataset columns a replay rollout reads off each example.
-
-        ``build_replay_examples`` reads the ``steps``/``allowed_tools``/
-        ``tool_schema_hashes`` roles plus the optional state/chat-history
-        roles and a ``turn_id`` column directly off the example attributes, so
-        they must be carried by ``rows_to_examples(extra_columns=...)``.
-
-        Args:
-            replay_mapping: The ``ReplayMapping`` naming the role columns.
-
-        Returns:
-            The set of source-column names to attach as example extras.
-        """
-        columns = {
-            replay_mapping.steps,
-            replay_mapping.allowed_tools,
-            replay_mapping.tool_schema_hashes,
-            "turn_id",
-        }
-        for optional in (
-            replay_mapping.state_before,
-            replay_mapping.state_after,
-            replay_mapping.chat_history,
-        ):
-            if optional:
-                columns.add(optional)
-        return columns
-
-    @staticmethod
-    def _resolve_react_reward(
-        payload: RunRequest,
-    ) -> tuple[RewardSpec, VectorRewardFn, str]:
-        """Pick the reward scalarizer + vector function for a react run.
-
-        A built-in preset maps to its frozen ``RewardSpec`` and vector function
-        (``general`` → §6.1 domain-agnostic, ``generalist`` → the 12-dim wizard
-        reward, ``replay_match`` → the named-dimension ``tool_name``-mode reward).
-        A custom ``metric_code`` is loaded and wrapped so it produces a
-        single-dimension vector the harness can scalarize.
-
-        Args:
-            payload: The react run request.
-
-        Returns:
-            ``(reward_spec, vector_fn, preset_label)`` — ``preset_label`` is the
-            preset name or ``"custom"`` for a code-supplied metric.
-        """
-        if payload.metric_code is None:
-            preset = payload.reward.preset if payload.reward is not None else "general"
-            if preset == "generalist":
-                return GENERALIST_REWARD_SPEC, vector_reward, "generalist"
-            if preset == "replay_match":
-                return (
-                    REPLAY_MATCH_REWARD_SPEC,
-                    replay_match_vector_reward,
-                    "replay_match",
-                )
-            return GENERAL_REWARD_SPEC, general_vector_reward, "general"
-        metric = load_metric_from_code(payload.metric_code)
-
-        def _custom_vector(example: Any, rollout: Any) -> dict[str, float]:
-            """Wrap a custom metric into the single-dimension reward vector."""
-            return {"custom": float(metric(example, rollout))}
-
-        spec = RewardSpec(
-            weights={"custom": 1.0},
-            critical_set=frozenset(),
-            critical_floor=0.0,
-            hard_cap=1.0,
-        )
-        return spec, _custom_vector, "custom"
-
-    @staticmethod
     def _persist_react_program(
         *,
         signature_cls: type,
         tools: list[Any],
         program_state: dict[str, Any],
         overlay: dict[str, Any],
-        grounding_weight: float,
-        reward_preset: str,
         tool_source: Any,
         artifact_id: str | None,
     ) -> ProgramArtifact | None:
@@ -1207,9 +1096,6 @@ class DspyService:
             tools: Tool roster resolved for the run.
             program_state: State dict returned by ``run_react_optimization``.
             overlay: ``tool_overlay`` dict from ``run_react_optimization``.
-            grounding_weight: The requested grounding weight, recorded for
-                provenance on the overlay's ``tool_source``.
-            reward_preset: Reward preset label, recorded for provenance.
             tool_source: The originating ``ToolSource`` (or ``None``).
             artifact_id: Optional identifier carried into artifact storage.
 
@@ -1224,10 +1110,7 @@ class DspyService:
         artifact = persist_program(program, artifact_id)
         if artifact is None:
             return None
-        source_meta: dict[str, Any] = {
-            "grounding_weight": grounding_weight,
-            "reward_preset": reward_preset,
-        }
+        source_meta: dict[str, Any] = {}
         if tool_source is not None:
             source_meta["kind"] = tool_source.kind
             if tool_source.tool_filter is not None:
@@ -1459,29 +1342,27 @@ class DspyService:
     def _validate_react_payload(self, payload: RunRequest) -> None:
         """Validate the react-specific portion of a run payload.
 
-        A react metric scores the recorded trajectory over the
-        ``(example, rollout)`` pair fed by the replay harness rather than
-        GEPA's reflection path, so the standard 5-arg arity gate must not
-        apply; ``metric_code`` is syntax/callable-checked without it. Every
-        react run requires a ``tool_source`` and a ``replay_mapping`` whose
-        roles name real dataset columns.
+        React is a generic module that scores rollouts with the same standard
+        ``(gold, pred, trace, pred_name, pred_trace)`` metric the predict/cot
+        path uses, so the 5-arg arity gate applies identically. The only
+        react-specific requirement is a ``tool_source`` naming the live MCP
+        roster (or the persisted snapshot) the rollouts execute against.
 
         Args:
             payload: The react run request to validate.
 
         Raises:
-            ServiceError: When ``tool_source``, ``replay_mapping``, or
-                ``metric_code`` is missing, when a replay role names a missing
-                column, or when ``metric_code`` fails to load.
+            ServiceError: When ``tool_source`` or ``metric_code`` is missing, or
+                when the metric is arity-incompatible with the optimizer.
         """
         if payload.tool_source is None:
             raise ServiceError("react runs require tool_source.")
-        if payload.replay_mapping is None:
-            raise ServiceError("react runs require replay_mapping.")
         if payload.metric_code is None:
             raise ServiceError("react runs require metric_code.")
-        validate_metric_code(payload.metric_code)
-        require_replay_mapping_valid(payload.replay_mapping, payload.dataset)
+        metric_info = validate_metric_code(payload.metric_code)
+        _require_metric_compatible_with_optimizer(
+            payload.optimizer_name, metric_info.param_names
+        )
 
     def _get_module_factory(self, name: str) -> tuple[Callable[..., Any], bool]:
         """Resolve a module factory by name from registry or built-in resolver.

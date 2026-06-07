@@ -19,31 +19,6 @@ class ToolSource(BaseModel):
     tool_filter: list[str] | None = None
 
 
-# Maps dataset columns onto the replay roles a react rollout needs (recorded
-# tool-call steps, the allowed-tool roster, per-tool schema hashes, and the
-# wizard-state snapshots). ``state_before``/``state_after`` are required: the
-# gate-progress signal a metric scores against is the delta between them, so an
-# unmapped snapshot would silently collapse that signal. ``chat_history`` stays
-# optional context.
-class ReplayMapping(BaseModel):
-    steps: str
-    allowed_tools: str
-    tool_schema_hashes: str
-    state_before: str
-    state_after: str
-    chat_history: str | None = None
-
-
-# Reward configuration for a react run: a built-in preset plus the grounding
-# weight applied to tool-grounding signals. ``match_mode`` controls replay
-# step-matching: "exact" keeps the byte-exact (tool, args) contract; "tool_name"
-# advances on a tool-name match so unreproducible free-text args still score.
-class Reward(BaseModel):
-    preset: Literal["general", "generalist", "replay_match"] = "general"
-    grounding_weight: float = 0.05
-    match_mode: Literal["exact", "tool_name"] = "exact"
-
-
 class _OptimizationRequestBase(BaseModel):
     """Shared fields for all optimization submissions."""
 
@@ -131,16 +106,15 @@ class RunRequest(_OptimizationRequestBase):
     reflection_model_settings: ModelConfig | None = Field(default=None, alias="reflection_model_config")
     task_model_settings: ModelConfig | None = Field(default=None, alias="task_model_config")
     tool_source: ToolSource | None = None
-    replay_mapping: ReplayMapping | None = None
-    reward: Reward | None = None
 
     @model_validator(mode="after")
     def _require_metric_code(self) -> RunRequest:
         """Re-require ``metric_code`` for every run, including react.
 
         ``metric_code`` is declared optional on the base only so the field can be
-        shared; every run must supply it. React runs author a metric over the
-        ``(example, rollout)`` pair instead of selecting a built-in reward preset.
+        shared; every run must supply it. React is a generic module that scores
+        rollouts with the same standard ``(gold, pred, trace, pred_name,
+        pred_trace)`` metric the predict/cot path uses.
 
         Returns:
             The validated request instance.

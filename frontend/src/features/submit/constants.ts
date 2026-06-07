@@ -10,47 +10,15 @@ export const emptyModelConfig = (): ModelConfig => ({
 
 export const defaultSplit: SplitFractions = { train: 0.7, val: 0.15, test: 0.15 };
 
-// Replay-only dataset roles for a react run. These columns are NOT signature
-// I/O — they carry the recorded tool-call steps, the allowed-tool roster, and
-// per-tool schema hashes the replay reward scores against. They map onto the
-// backend ReplayMapping (state_before/state_after are optional).
-export type ReactReplayRole =
-  | "steps"
-  | "allowed_tools"
-  | "tool_schema_hashes"
-  | "state_before"
-  | "state_after";
+// A dataset column's role. React is now a generic GEPA module, so every run —
+// react included — maps columns to signature I/O exactly the same way.
+export type ColumnRole = "input" | "output" | "ignore";
 
-// A dataset column's role. Non-react runs only ever use input/output/ignore;
-// react runs additionally assign the replay roles above so a single per-column
-// toggle in DatasetStep covers both the signature mapping and replay mapping.
-export type ColumnRole = "input" | "output" | "ignore" | ReactReplayRole;
-
-export const REACT_REPLAY_ROLES: readonly ReactReplayRole[] = [
-  "steps",
-  "allowed_tools",
-  "tool_schema_hashes",
-  "state_before",
-  "state_after",
-];
-
-// The replay roles the backend requires every react run to provide.
-// state_before/state_after are required too: the gate-progress signal a metric
-// scores against is the delta between them, so an unmapped snapshot silently
-// collapses that signal to zero.
-export const REQUIRED_REPLAY_ROLES: readonly ReactReplayRole[] = [
-  "steps",
-  "allowed_tools",
-  "tool_schema_hashes",
-  "state_before",
-  "state_after",
-];
-
-// UI-side model of the react (ReAct-agent) tool-source configuration. Scoring
-// is owned by the authored metric_code, not a preset, so no reward knobs live
-// here. `toolFilter` is a comma-separated string. The replay mapping is NOT
-// here — it is derived from the dataset column roles. `use-submit-wizard`
-// reshapes this into the backend's ToolSource wire model at submit time.
+// UI-side model of the react (ReAct-agent) tool-source configuration. React is
+// generic: scoring is owned by the standard authored metric_code, so no reward
+// knobs live here — only the live tool roster. `toolFilter` is a comma-separated
+// string. `use-submit-wizard` reshapes this into the backend's ToolSource wire
+// model at submit time.
 export interface ReactConfig {
   toolSourceKind: "live_mcp" | "dataset_snapshot";
   mcpUrl: string;

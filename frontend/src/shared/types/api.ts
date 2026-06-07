@@ -34,19 +34,9 @@ export interface SplitFractions {
 }
 
 // React (ReAct-agent) optimization configuration. Mirrors the backend
-// `Reward`, `ToolSource`, and `ReplayMapping` models on `RunRequest`. Only
-// sent when `module_name === "react"`.
-export type RewardPreset = "general" | "generalist" | "replay_match";
-export type MatchMode = "exact" | "tool_name";
-
-export interface Reward {
-  // ReAct runs score via a code-authored metric_code, so they omit the preset
-  // and send only match_mode (the replay-matching strictness).
-  preset?: RewardPreset;
-  grounding_weight?: number;
-  match_mode?: MatchMode;
-}
-
+// `ToolSource` model on `RunRequest`. React is a generic GEPA module that
+// carries a live tool roster; it is otherwise identical to predict/cot, scored
+// by the same standard `metric_code`. Only sent when `module_name === "react"`.
 export interface ToolSource {
   kind: "live_mcp" | "dataset_snapshot";
   mcp_url?: string | null;
@@ -54,15 +44,6 @@ export interface ToolSource {
   // backend and never mirrored into shared agent state.
   mcp_auth_header?: string | null;
   tool_filter?: string[] | null;
-}
-
-export interface ReplayMapping {
-  steps: string;
-  allowed_tools: string;
-  tool_schema_hashes: string;
-  state_before?: string | null;
-  state_after?: string | null;
-  chat_history?: string | null;
 }
 
 export interface SplitCounts {
@@ -78,7 +59,8 @@ interface OptimizationRequestBase {
   module_name: string;
   module_kwargs?: Record<string, unknown>;
   signature_code: string;
-  // Optional: react runs backed by a built-in reward preset omit it.
+  // Optional at the base level (grid-search shares this shape); the run path
+  // requires it, react included — react is scored by the same standard metric.
   metric_code?: string;
   optimizer_name: string;
   optimizer_kwargs?: Record<string, unknown>;
@@ -100,10 +82,8 @@ export interface RunRequest extends OptimizationRequestBase {
   model_config: ModelConfig;
   reflection_model_config?: ModelConfig;
   task_model_config?: ModelConfig;
-  // React-agent run fields — only populated when `module_name === "react"`.
-  reward?: Reward;
+  // React-agent tool roster — only populated when `module_name === "react"`.
   tool_source?: ToolSource;
-  replay_mapping?: ReplayMapping;
 }
 
 export interface GridSearchRequest extends OptimizationRequestBase {

@@ -721,8 +721,11 @@ def _search_semantic(
         order_sql = "je.embedding_summary <=> CAST(:query_vec AS vector) ASC, je.created_at DESC"
         relevance_sql = "1 - (je.embedding_summary <=> CAST(:query_vec AS vector))"
     elif sort == SEARCH_SORT_GAIN:
+        # Plain ``optimized - baseline`` (not COALESCE-to-0): a row missing
+        # either metric yields NULL and sinks via NULLS LAST, rather than a
+        # baseline-less run posing as a gain equal to its raw optimized score.
         order_sql = (
-            "(COALESCE(je.optimized_metric, 0) - COALESCE(je.baseline_metric, 0)) DESC NULLS LAST, "
+            "(je.optimized_metric - je.baseline_metric) DESC NULLS LAST, "
             "je.created_at DESC"
         )
         relevance_sql = "NULL::float"
@@ -965,8 +968,11 @@ def _search_lexical(
     where_sql = " AND ".join(where_parts)
 
     if sort == SEARCH_SORT_GAIN:
+        # Plain ``optimized - baseline`` (not COALESCE-to-0): a row missing
+        # either metric yields NULL and sinks via NULLS LAST, rather than a
+        # baseline-less run posing as a gain equal to its raw optimized score.
         order_sql = (
-            "(COALESCE(je.optimized_metric, 0) - COALESCE(je.baseline_metric, 0)) DESC NULLS LAST, "
+            "(je.optimized_metric - je.baseline_metric) DESC NULLS LAST, "
             "j.created_at DESC, j.optimization_id DESC"
         )
     else:

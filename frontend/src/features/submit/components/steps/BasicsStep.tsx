@@ -41,7 +41,6 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
     setIsPrivate,
     moduleName,
     setModuleName,
-    isReact,
   } = w;
   const { prefs } = useUserPrefs();
   const advancedMode = prefs.advancedMode;
@@ -198,7 +197,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             </div>
           </>
         )}
-        {advancedMode && !isReact && (
+        {advancedMode && (
           <>
             <Separator />
             <div className="space-y-3">

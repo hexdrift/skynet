@@ -63,8 +63,6 @@ from .serve import ServeInfoResponse, ServeRequest, ServeResponse
 from .submissions import (
     GridSearchRequest,
     OptimizationSubmissionResponse,
-    ReplayMapping,
-    Reward,
     RunRequest,
     ToolSource,
 )
@@ -120,8 +118,6 @@ __all__ = [
     "ProgressEvent",
     "QueueStatusResponse",
     "ReactOverlay",
-    "ReplayMapping",
-    "Reward",
     "RunRequest",
     "RunResponse",
     "ServeInfoResponse",

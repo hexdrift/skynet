@@ -939,19 +939,18 @@ class GeneralistSig(dspy.Signature):
 
     User says "הי" → one tool call only:
         submit(assistant_message="שלום! אני העוזר של Skynet לאופטימיזציית
-        DSPy. במה תרצה להתחיל — להעלות dataset, לשכפל הרצה קיימת, או
+        DSPy. במה תרצה/י להתחיל — להעלות dataset, לשכפל הרצה קיימת, או
         משהו אחר?")
 
     User says "אני רוצה להעלות דאטה סט" → two tool calls in order:
-        1. request_user_dataset_datasets_request_upload_post(prompt="צרף
+        1. request_user_dataset_datasets_request_upload_post(prompt="צרף/י
            קובץ CSV או JSON.")
-        2. submit(assistant_message="הצגתי קארד להעלאה — צרף את הקובץ
-           שלך וממשיכים משם.")
+        2. submit(assistant_message="הצגתי קארד להעלאה — צרף/י את הקובץ
+           שלך ואמשיך משם.")
 
     User says "תגיש" with the wizard fully configured → two tool calls:
         1. submit_job_run_post(name="…", …)
-        2. submit(assistant_message="ההגשה הוגשה. עוקבים אחר ההתקדמות
-           ביחד.")
+        2. submit(assistant_message="ההגשה הוגשה. עוקב אחר ההתקדמות.")
 
     You are the Skynet assistant driving a DSPy optimization wizard. The
     user is typically non-technical and communicates in Hebrew (RTL).

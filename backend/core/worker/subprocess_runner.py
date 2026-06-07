@@ -20,6 +20,11 @@ from ..constants import OPTIMIZATION_TYPE_GRID_SEARCH, OPTIMIZATION_TYPE_RUN
 from ..models import GridSearchRequest, RunRequest
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
+from ..service_gateway.optimization.llm_error import (
+    LlmErrorCapture,
+    enrich_error_message,
+    reset_llm_error,
+)
 from .constants import EVENT_ERROR, EVENT_LOG, EVENT_PROGRESS, EVENT_RESULT
 from .log_handler import get_current_pair_index
 
@@ -164,6 +169,14 @@ def run_service_in_subprocess(
             lg.setLevel(logging.DEBUG)
         lg.addHandler(log_handler)
 
+    # DSPy hides the real per-worker failure behind a generic "Execution
+    # cancelled" message; this handler keeps the logged cause so EVENT_ERROR
+    # can report what actually went wrong (e.g. an LLM billing/quota error).
+    dspy_logger = forwarded_loggers[0]
+    error_capture = LlmErrorCapture()
+    reset_llm_error()
+    dspy_logger.addHandler(error_capture)
+
     try:
         payload_dict = dict(payload_dict)
         optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
@@ -199,11 +212,13 @@ def run_service_in_subprocess(
             event_queue,
             {
                 "type": EVENT_ERROR,
-                "error": str(exc),
+                "error": enrich_error_message(str(exc)),
                 "traceback": traceback.format_exc(),
             },
         )
     finally:
+        dspy_logger.removeHandler(error_capture)
+        reset_llm_error()
         for lg, saved_level in zip(forwarded_loggers, saved_levels, strict=True):
             lg.removeHandler(log_handler)
             lg.setLevel(saved_level)

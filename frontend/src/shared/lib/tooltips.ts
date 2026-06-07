@@ -55,11 +55,6 @@ export const TOOLTIPS = {
     "ReAct — סוכן שמשלב חשיבה עם קריאה לכלים (tools) בלולאה, עד שהוא מפיק את הפלט שב-signature",
   "optimizer.choice": `השיטה שמנסה לשפר את הפרומפט ולמצוא גרסה עם ${TERMS.score} גבוה יותר`,
 
-  "react.reward":
-    "כיצד מתוגמל הסוכן: replay_match מתגמל שחזור של רצף הכלים שהוקלט; generalist משתמש בתגמול רב-ממדי; general הוא תגמול כללי",
-  "react.match_mode":
-    "exact דורש התאמה מדויקת של שם הכלי והארגומנטים; tool_name מתקדם בהתאמת שם הכלי בלבד",
-  "react.grounding": "כמה משקל לתת לאיתות העיגון (grounding signal) של הכלים בתוך התגמול",
   "react.tool_source": "מהיכן נטענת רשימת הכלים: שרת MCP חי, או תצלום כלים מתוך הדאטאסט",
   "react.mcp_url": "כתובת שרת ה-MCP שממנו נטענים הכלים של הסוכן",
   "react.auth": "כותרת אימות (Authorization header) לשרת ה-MCP. לא נשמרת בשרת ולא נחשפת לסוכן הצ'אט",
@@ -81,8 +76,8 @@ export const TOOLTIPS = {
 
   "pair.runtime": `משך ${TERMS.optimizationTypeRun} ה${TERMS.optimization} עבור ${TERMS.pair} המודלים הזה`,
 
-  "serve.section_pair": "כתובת API וקטעי קוד לשילוב הזוג הנבחר באפליקציה שלכם",
-  "serve.section_run": `כתובת API וקטעי קוד לשילוב ה${TERMS.program} המשופרת באפליקציה שלכם`,
+  "serve.section_pair": "כתובת API וקטעי קוד לשילוב הזוג הנבחר באפליקציה שלך",
+  "serve.section_run": `כתובת API וקטעי קוד לשילוב ה${TERMS.program} המשופרת באפליקציה שלך`,
   "serve.api_url_pair": "כתובת ה-API של הזוג הנבחר",
   "serve.api_url_run": `כתובת ה-API שאליה שולחים בקשות POST עם שדות הקלט כדי לקבל ${TERMS.prediction} מה${TERMS.program} המשופרת`,
   "serve.api_url_react":
@@ -95,10 +90,10 @@ export const TOOLTIPS = {
   "submit.eval_rounds": "כמה פעמים להריץ הערכה מלאה כדי לבדוק מועמדים לפרומפט",
   "submit.merge": "כשפעיל, GEPA יכול לבצע merge ולשלב רעיונות מכמה מועמדים טובים לפרומפט אחד",
 
-  "model_config.connection_section": `הרצת ה${TERMS.model} על שרת משלכם: נקודת קצה תואמת-OpenAI (Ollama, vLLM, LM Studio או שער ארגוני) ומפתח גישה. השאירו סגור כדי להשתמש בספקים המובנים`,
-  "model_config.model": `ה${TERMS.model} שיריץ את ה${TERMS.optimization}. בחרו מ${TERMS.modelCatalog}, או מודל מותאם אישית שהתגלה מכתובת ה-Base URL`,
-  "model_config.base_url": `כתובת לשרת תואם-OpenAI משלכם — Ollama, vLLM, LM Studio או שער ארגוני. השאירו ריק כדי להשתמש בשרת ברירת המחדל של ה${TERMS.provider}`,
-  "model_config.api_key": `מפתח גישה לשרת ה${TERMS.model}. אופציונלי — אם ריק, נלקח ממשתנה סביבה. לא נשמר אצלנו ונמחק מהטופס אחרי השליחה`,
+  "model_config.connection_section": `הרצת ה${TERMS.model} על שרת משלך: נקודת קצה תואמת-OpenAI (Ollama, vLLM, LM Studio או שער ארגוני) ומפתח גישה. השאר/השאירי סגור כדי להשתמש בספקים המובנים`,
+  "model_config.model": `ה${TERMS.model} שיריץ את ה${TERMS.optimization}. בחר/י מ${TERMS.modelCatalog}, או מודל מותאם אישית שהתגלה מכתובת ה-Base URL`,
+  "model_config.base_url": `כתובת לשרת תואם-OpenAI משלך — Ollama, vLLM, LM Studio או שער ארגוני. השאר/השאירי ריק כדי להשתמש בשרת ברירת המחדל של ה${TERMS.provider}`,
+  "model_config.api_key": `מפתח גישה לשרת ה${TERMS.model}. אופציונלי — אם ריק, נלקח ממשתנה סביבה. לא נשמר בשרת ונמחק מהטופס אחרי השליחה`,
   "model_config.temperature": `מידת היצירתיות של ה${TERMS.model} — ערך נמוך נותן תשובות עקביות, גבוה מגוון יותר`,
   "model_config.top_p": `top_p (nucleus sampling): מגביל את מגוון המילים שה${TERMS.model} שוקל — ערך נמוך ממקד, גבוה מאפשר יותר מגוון`,
   "model_config.max_tokens": `אורך ה${TERMS.prediction} המקסימלי — טוקן הוא בערך מילה אחת`,
@@ -108,13 +103,13 @@ export const TOOLTIPS = {
   "code.metric": `פונקציה שמודדת את איכות ה${TERMS.prediction} — מחזירה ${TERMS.score} מספרי לכל ${TERMS.example}`,
   "code.predictions_table": `תוצאות הרצת ה${TERMS.program} על דוגמאות הבדיקה — ${TERMS.score} לכל ${TERMS.example} וסיכום כולל`,
 
-  "tagger.upload_file": "העלו קובץ CSV, JSON או Excel. כל שורה תהפוך לפריט לתיוג",
-  "tagger.text_column": "בחרו את העמודה שמכילה את הטקסט לתיוג. שאר העמודות יישמרו בייצוא",
-  "tagger.mode": "בחרו את סוג התיוג שמתאים למשימה: כן/לא, בחירה מרשימה או טקסט חופשי",
+  "tagger.upload_file": "העלה/העלי קובץ CSV, JSON או Excel. כל שורה תהפוך לפריט לתיוג",
+  "tagger.text_column": "בחר/י את העמודה שמכילה את הטקסט לתיוג. שאר העמודות יישמרו בייצוא",
+  "tagger.mode": "בחר/י את סוג התיוג שמתאים למשימה: כן/לא, בחירה מרשימה או טקסט חופשי",
   "tagger.binary_question":
     "השאלה שתוצג מעל כפתורי כן/לא. כדאי לנסח שאלה שאפשר לענות עליה בבירור",
-  "tagger.multiclass_categories": "הגדירו את הקטגוריות הזמינות לבחירה בזמן התיוג — לפחות שתיים",
-  "tagger.freetext_instruction": "ההנחיה שתוצג מעל שדה הטקסט. הסבירו בקצרה מה צריך לכתוב",
+  "tagger.multiclass_categories": "הגדר/הגדירי את הקטגוריות הזמינות לבחירה בזמן התיוג — לפחות שתיים",
+  "tagger.freetext_instruction": "ההנחיה שתוצג מעל שדה הטקסט. הסבר/הסבירי בקצרה מה צריך לכתוב",
 
   "compare.winner_improvement": `אחוז ה${TERMS.scoreImprovement} של ה${TERMS.optimizationTypeRun} הזוכה — ההפרש בין ה${TERMS.optimizedScore} ל${TERMS.baselineScore}`,
   "compare.winner_runtime": `משך הזמן הכולל של ה${TERMS.optimizationTypeRun} הזוכה, מרגע השיגור ועד סיום ה${TERMS.optimization}`,

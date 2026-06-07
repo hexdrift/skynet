@@ -6,8 +6,10 @@
  * sourced from here — they live in the per-feature slice files under
  * ``frontend/src/features/<name>/messages.ts`` and are hand-edited.
  *
- * Hebrew copy should use gender-neutral plural imperatives: "לחצו", "בחרו",
- * "ראו". Avoid slash forms such as "לחצ/י" or "ראי/ה".
+ * Hebrew copy addresses the user in the singular, supporting both genders via
+ * slash forms: "לחץ/י", "בחר/י", "ראה/ראי". Avoid plural imperatives such as
+ * "לחצו" or "בחרו": the user is one person (male or female), and the agent
+ * ("סוכן") is masculine singular.
  *
  * Keep established borrowed ML terms: "אופטימיזציה", "אופטימייזר",
  * "דאטאסט", and "מודול". Use native Hebrew only for the owner-approved
