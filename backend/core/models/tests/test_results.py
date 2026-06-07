@@ -12,9 +12,7 @@ from core.models.results import (
     GridSearchResponse,
     LMActivity,
     LMStageStats,
-    PairedBootstrap,
     PairResult,
-    Promotion,
     RunResponse,
 )
 from core.models.telemetry import JobLogEntry
@@ -44,9 +42,6 @@ def test_run_response_minimal_construction() -> None:
     assert r.baseline_test_metric is None
     assert r.optimized_test_metric is None
     assert r.metric_improvement is None
-    assert r.objective_scores is None
-    assert r.paired_bootstrap is None
-    assert r.promotion is None
     assert r.optimization_metadata == {}
     assert r.details == {}
     assert r.program_artifact is None
@@ -77,36 +72,6 @@ def test_run_response_persists_metric_values() -> None:
     assert r.metric_improvement == pytest.approx(0.3)
     assert r.runtime_seconds == pytest.approx(120.0)
     assert r.num_lm_calls == 42
-
-
-def test_run_response_round_trips_react_objective_fields() -> None:
-    """Verify RunResponse round-trips objective_scores, paired_bootstrap, and promotion."""
-    r = RunResponse(
-        module_name="react",
-        optimizer_name="gepa",
-        metric_name="objective",
-        split_counts=_split_counts(),
-        objective_scores={"accuracy": 0.8, "grounding": 0.6},
-        paired_bootstrap=PairedBootstrap(
-            resamples=1000,
-            mean_delta=0.12,
-            ci95_lower=0.02,
-            ci95_upper=0.22,
-        ),
-        promotion=Promotion(promotable=True, reasons=["ci lower bound above floor"]),
-    )
-
-    restored = RunResponse.model_validate(r.model_dump())
-
-    assert restored.objective_scores == {"accuracy": pytest.approx(0.8), "grounding": pytest.approx(0.6)}
-    assert restored.paired_bootstrap is not None
-    assert restored.paired_bootstrap.resamples == 1000
-    assert restored.paired_bootstrap.mean_delta == pytest.approx(0.12)
-    assert restored.paired_bootstrap.ci95_lower == pytest.approx(0.02)
-    assert restored.paired_bootstrap.ci95_upper == pytest.approx(0.22)
-    assert restored.promotion is not None
-    assert restored.promotion.promotable is True
-    assert restored.promotion.reasons == ["ci lower bound above floor"]
 
 
 def test_run_response_persists_run_log() -> None:

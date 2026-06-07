@@ -1136,8 +1136,8 @@ export interface CodeAgentChatTurn {
 
 export interface CodeAgentRequest {
   dataset_columns: string[];
-  // Plain string roles: react adds replay roles (steps, allowed_tools, …)
-  // beyond the signature I/O set; the code agent only consumes input/output.
+  // Plain string roles (input/output/ignore); the code agent only consumes
+  // the input/output roles.
   column_roles: Record<string, string>;
   column_kinds?: Record<string, "text" | "image">;
   sample_rows: Array<Record<string, unknown>>;
