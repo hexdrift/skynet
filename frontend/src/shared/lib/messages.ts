@@ -19,6 +19,7 @@ import { submitMessages } from "@/features/submit/messages";
 import { dashboardMessages } from "@/features/dashboard/messages";
 import { sidebarMessages } from "@/features/sidebar/messages";
 import { exploreMessages } from "@/features/explore/messages";
+import { datasetsMessages } from "@/features/datasets/messages";
 import { compareMessages } from "@/features/compare/messages";
 import { taggerMessages } from "@/features/tagger/messages";
 import { tutorialMessages } from "@/features/tutorial/messages";
@@ -34,6 +35,7 @@ export const MESSAGES = {
   ...dashboardMessages,
   ...sidebarMessages,
   ...exploreMessages,
+  ...datasetsMessages,
   ...compareMessages,
   ...taggerMessages,
   ...tutorialMessages,

@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   Compass,
   CopyPlus,
+  Database,
   RotateCcw,
 } from "lucide-react";
 import { SidebarMoreSkeleton } from "./SidebarMoreSkeleton";
@@ -59,6 +60,7 @@ const NAV_ITEMS = [
   { href: "/tagger", label: msg("auto.features.sidebar.components.sidebar.literal.2"), icon: Tags },
   { href: "/submit", label: TERMS.notificationNewOpt, icon: Send },
   { href: "/explore", label: msg("sidebar.nav.explore"), icon: Compass },
+  { href: "/datasets", label: msg("sidebar.nav.datasets"), icon: Database },
 ] as const;
 
 const PAGE_SIZE = 20;
