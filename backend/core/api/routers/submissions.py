@@ -15,6 +15,7 @@ from typing import Annotated, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header
+from sqlalchemy.orm import Session
 
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
@@ -39,6 +40,7 @@ from ...constants import (
     PAYLOAD_OVERVIEW_SEED,
     PAYLOAD_OVERVIEW_SHUFFLE,
     PAYLOAD_OVERVIEW_SIGNATURE_CODE,
+    PAYLOAD_OVERVIEW_SOURCE_DATASET_ID,
     PAYLOAD_OVERVIEW_SPLIT_FRACTIONS,
     PAYLOAD_OVERVIEW_TASK_FINGERPRINT,
     PAYLOAD_OVERVIEW_TASK_MODEL,
@@ -59,8 +61,10 @@ from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ...service_gateway.safe_exec import validate_signature_code
+from ...storage.dataset_library import DatasetLibraryStore, PostgresDatasetBlobStore
 from ...worker.engine import get_worker
 from ..auth import AuthenticatedUser, get_authenticated_user
+from ..dataset_access import resolve_effective_role
 from ..errors import DomainError
 from ..model_catalog import get_catalog_cached
 from ._helpers import compute_task_fingerprint, enforce_user_quota, stable_seed, strip_api_key
@@ -244,6 +248,52 @@ def _evict_staged_dataset(job_store, staged_id: str | None, username: str) -> No
         )
 
 
+def _materialize_library_dataset(
+    payload: _OptimizationRequestBase,
+    *,
+    job_store,
+    user: AuthenticatedUser,
+) -> str | None:
+    """Inline a personal-library dataset into ``payload.dataset`` by reference.
+
+    The submit-wizard consumer path sends ``source_dataset_id`` instead of inline
+    rows so the browser never re-uploads a file already saved to the library.
+    This helper resolves the caller's access (viewer-or-above on the dataset),
+    loads the saved rows onto ``payload.dataset``, and clears the reference so the
+    persisted payload carries the exact rows the run used — the link back to the
+    dataset survives in the payload overview, not the payload. Unlike a staged
+    dataset, the library entry is never evicted: it is a durable, navigable source
+    every run that used it points at.
+
+    Args:
+        payload: The validated request body (mutated in place).
+        job_store: Backend whose ``engine`` carries the dataset tables.
+        user: Authenticated submitter; access is resolved against their grants.
+
+    Returns:
+        The source dataset id when one was consumed (recorded in the overview by
+        the caller), or ``None`` for inline/staged payloads.
+
+    Raises:
+        DomainError: 404 ``dataset.library.not_found`` when the caller cannot
+            reach the dataset or its rows are missing.
+    """
+    source_id = payload.source_dataset_id
+    if not source_id:
+        return None
+    with Session(job_store.engine) as session:
+        role = resolve_effective_role(session, source_id, user)
+    if role is None:
+        raise DomainError("dataset.library.not_found", status=404)
+    store = DatasetLibraryStore(job_store.engine, PostgresDatasetBlobStore(job_store.engine))
+    rows = store.get_rows(source_id)
+    if not rows:
+        raise DomainError("dataset.library.not_found", status=404)
+    payload.dataset = rows
+    payload.source_dataset_id = None
+    return source_id
+
+
 def _expand_catalog_grid_payload(payload: GridSearchRequest) -> None:
     """Populate generation/reflection model lists from the catalog when flagged.
 
@@ -333,6 +383,9 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         staged_id = _materialize_staged_dataset(
             payload, job_store=job_store, username=payload.username
         )
+        source_dataset_id = _materialize_library_dataset(
+            payload, job_store=job_store, user=current_user
+        )
 
         try:
             service.validate_payload(payload)
@@ -387,6 +440,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_COMPILE_KWARGS: dict(payload.compile_kwargs),
                 PAYLOAD_OVERVIEW_TASK_FINGERPRINT: task_fingerprint,
                 PAYLOAD_OVERVIEW_IS_PRIVATE: payload.is_private,
+                PAYLOAD_OVERVIEW_SOURCE_DATASET_ID: source_dataset_id,
             },
         )
         _evict_staged_dataset(job_store, staged_id, payload.username)
@@ -475,6 +529,9 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
         staged_id = _materialize_staged_dataset(
             payload, job_store=job_store, username=payload.username
         )
+        source_dataset_id = _materialize_library_dataset(
+            payload, job_store=job_store, user=current_user
+        )
 
         if hasattr(service, "validate_grid_search_payload"):
             try:
@@ -522,6 +579,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 PAYLOAD_OVERVIEW_REFLECTION_MODELS: [m.model_dump() for m in payload.reflection_models],
                 PAYLOAD_OVERVIEW_TASK_FINGERPRINT: task_fingerprint,
                 PAYLOAD_OVERVIEW_IS_PRIVATE: payload.is_private,
+                PAYLOAD_OVERVIEW_SOURCE_DATASET_ID: source_dataset_id,
             },
         )
         _evict_staged_dataset(job_store, staged_id, payload.username)

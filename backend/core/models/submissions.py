@@ -61,6 +61,14 @@ class _OptimizationRequestBase(BaseModel):
             "does not have to inline tens of thousands of dataset rows into its tool arguments."
         ),
     )
+    source_dataset_id: str | None = Field(
+        default=None,
+        description=(
+            "Id of a saved personal-library dataset to run by reference. The server resolves the caller's access, "
+            "loads the rows onto ``dataset``, and records the link from the optimization back to the dataset. "
+            "Mutually exclusive with ``dataset`` and ``staged_dataset_id``."
+        ),
+    )
     column_mapping: ColumnMapping
     column_order: list[str] | None = Field(
         default=None,
@@ -81,21 +89,22 @@ class _OptimizationRequestBase(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_dataset(self) -> _OptimizationRequestBase:
-        """Reject requests that supply neither ``dataset`` nor ``staged_dataset_id``.
+        """Require exactly one dataset source: inline rows, a staged id, or a library id.
 
         Returns:
             The validated request instance.
 
         Raises:
-            ValueError: When both ``dataset`` and ``staged_dataset_id`` are missing
-                or when both are supplied at the same time.
+            ValueError: When more than one of ``dataset``, ``staged_dataset_id``,
+                and ``source_dataset_id`` is supplied, or when none is.
         """
-        has_inline = bool(self.dataset)
-        has_staged = bool(self.staged_dataset_id)
-        if has_inline and has_staged:
-            raise ValueError("Provide either dataset or staged_dataset_id, not both.")
-        if not has_inline and not has_staged:
-            raise ValueError("Dataset must contain at least one row, or staged_dataset_id must be provided.")
+        provided = sum((bool(self.dataset), bool(self.staged_dataset_id), bool(self.source_dataset_id)))
+        if provided > 1:
+            raise ValueError("Provide exactly one of dataset, staged_dataset_id, or source_dataset_id.")
+        if provided == 0:
+            raise ValueError(
+                "Dataset must contain at least one row, or staged_dataset_id / source_dataset_id must be provided."
+            )
         return self
 
 

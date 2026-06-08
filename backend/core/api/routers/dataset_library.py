@@ -30,6 +30,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ...config import settings
+from ...constants import (
+    PAYLOAD_OVERVIEW_DATASET_FILENAME,
+    PAYLOAD_OVERVIEW_NAME,
+    PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
+    PAYLOAD_OVERVIEW_SOURCE_DATASET_ID,
+)
 from ...storage.dataset_library import (
     DatasetLibraryStore,
     DatasetRecord,
@@ -37,14 +43,24 @@ from ...storage.dataset_library import (
     StagedDataset,
 )
 from ..auth import AuthenticatedUser, get_authenticated_user
+from ..converters import parse_overview
 from ..dataset_access import (
     ShareRole,
     list_grants_for_user_all,
     require_role,
 )
 from ..errors import DomainError
+from ._helpers import load_job_for_user
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
+
+# Upper bound on how many of the caller's visible runs the reverse-link endpoint
+# scans for a matching ``source_dataset_id``. The payload-overview has no indexed
+# column to filter on, so the match is a list-then-filter in Python (the pattern
+# the analytics routes use); this caps that scan. A user with more than this many
+# runs that used one dataset would see the link truncate — acceptable for v1, and
+# the natural upgrade is a promoted indexed column.
+_REVERSE_LINK_SCAN_LIMIT = 1000
 
 
 class SaveDatasetRequest(BaseModel):
@@ -131,6 +147,33 @@ class DeleteDatasetResponse(BaseModel):
     deleted: bool
 
 
+class SaveFromOptimizationRequest(BaseModel):
+    """Optional body for ``POST /datasets/library/from-optimization/{id}``.
+
+    ``name`` overrides the name derived from the run's stored dataset filename or
+    optimization name; omit it to accept that default.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class DatasetOptimizationRef(BaseModel):
+    """One optimization that was submitted from a library dataset (lean ref)."""
+
+    optimization_id: str
+    name: str | None = None
+    status: str | None = None
+    optimization_type: str | None = None
+    username: str | None = None
+    created_at: str | None = None
+
+
+class DatasetOptimizationsResponse(BaseModel):
+    """Envelope for ``GET /datasets/library/{id}/optimizations`` — the reverse link."""
+
+    optimizations: list[DatasetOptimizationRef]
+
+
 def _summary(record: DatasetRecord, role: ShareRole) -> DatasetSummary:
     """Project a :class:`DatasetRecord` onto the client-facing summary.
 
@@ -171,6 +214,58 @@ def _columns_of(record: DatasetRecord, rows: list[dict[str, Any]]) -> list[str]:
     if isinstance(order, list) and order:
         return [str(col) for col in order]
     return list(rows[0].keys()) if rows else []
+
+
+def _mapping_columns(side: Any) -> list[str]:
+    """Extract dataset column names from one side of a stored column mapping.
+
+    A run's ``column_mapping`` stores ``inputs``/``outputs`` as
+    ``{signature_field: column_name}`` dicts; legacy rows stored bare lists of
+    column names. Both shapes are tolerated so saving a run's dataset never 500s
+    on an old row.
+
+    Args:
+        side: The ``inputs`` or ``outputs`` value from the stored mapping.
+
+    Returns:
+        The dataset column names bound on that side, or ``[]`` for an unusable
+        shape.
+    """
+    if isinstance(side, dict):
+        return [str(col) for col in side.values()]
+    if isinstance(side, list):
+        return [str(col) for col in side]
+    return []
+
+
+def _schema_from_run_payload(payload: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a library column schema from a run's payload for the save-run path.
+
+    Maps the run's ``column_mapping`` onto per-column roles (inputs → ``input``,
+    outputs → ``output``), preserves the submitted ``column_order``, and defaults
+    every column's kind to ``text`` — enough for the submit wizard to pre-fill its
+    column step when the saved dataset is later picked.
+
+    Args:
+        payload: The run's stored payload (its ``column_mapping`` / ``column_order``).
+        rows: The run's dataset rows, used to recover column order when unstored.
+
+    Returns:
+        A ``{column_order, column_roles, column_kinds}`` schema dict.
+    """
+    raw_mapping = payload.get("column_mapping") or {}
+    column_roles: dict[str, str] = {col: "input" for col in _mapping_columns(raw_mapping.get("inputs"))}
+    for col in _mapping_columns(raw_mapping.get("outputs")):
+        column_roles[col] = "output"
+    order = payload.get("column_order")
+    if not (isinstance(order, list) and order):
+        order = list(rows[0].keys()) if rows else []
+    column_order = [str(col) for col in order]
+    return {
+        "column_order": column_order,
+        "column_roles": column_roles,
+        "column_kinds": {col: "text" for col in column_order},
+    }
 
 
 def create_dataset_library_router(*, job_store) -> APIRouter:
@@ -522,5 +617,104 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
         _record, _role = _require(dataset_id, current_user, ShareRole.owner)
         store.delete_dataset(dataset_id)
         return DeleteDatasetResponse(deleted=True)
+
+    @router.get(
+        "/datasets/library/{dataset_id}/optimizations",
+        response_model=DatasetOptimizationsResponse,
+        summary="List optimizations submitted from a saved dataset (viewer+)",
+    )
+    def list_dataset_optimizations(
+        dataset_id: str,
+        current_user: AuthenticatedUserDep,
+    ) -> DatasetOptimizationsResponse:
+        """Return the runs the caller can see that were submitted from this dataset.
+
+        The dataset→optimization half of the live link. Access is gated at
+        ``viewer`` on the dataset, then scoped to runs the caller owns or holds a
+        grant on — a viewer never learns of private runs they could not otherwise
+        see. Matching is by the ``source_dataset_id`` recorded in each run's
+        payload overview at submit time.
+
+        Args:
+            dataset_id: Id of the dataset whose runs are listed.
+            current_user: Authenticated caller (viewer+ on the dataset).
+
+        Returns:
+            A :class:`DatasetOptimizationsResponse`, newest run first.
+
+        Raises:
+            DomainError: 404 when the dataset is unknown or inaccessible.
+        """
+        _require(dataset_id, current_user, ShareRole.viewer)
+        visible = job_store.list_jobs_visible_to(current_user.username, limit=_REVERSE_LINK_SCAN_LIMIT)
+        refs: list[DatasetOptimizationRef] = []
+        for job in visible:
+            overview = parse_overview(job)
+            if overview.get(PAYLOAD_OVERVIEW_SOURCE_DATASET_ID) != dataset_id:
+                continue
+            refs.append(
+                DatasetOptimizationRef(
+                    optimization_id=job["optimization_id"],
+                    name=overview.get(PAYLOAD_OVERVIEW_NAME),
+                    status=job.get("status"),
+                    optimization_type=overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE),
+                    username=job.get("username"),
+                    created_at=job.get("created_at"),
+                )
+            )
+        return DatasetOptimizationsResponse(optimizations=refs)
+
+    @router.post(
+        "/datasets/library/from-optimization/{optimization_id}",
+        response_model=SaveDatasetResponse,
+        summary="Save a run's dataset to the caller's library (viewer+ on the run)",
+    )
+    def save_dataset_from_optimization(
+        optimization_id: str,
+        current_user: AuthenticatedUserDep,
+        payload: SaveFromOptimizationRequest | None = None,
+    ) -> SaveDatasetResponse:
+        """Save the exact rows a run used as a new library entry the caller owns.
+
+        The Data-tab producer doorway. Access is gated at ``viewer`` on the run
+        (owner / admin / grantee); the saved dataset is owned by the caller and
+        gated on their own per-file cap and quota. The run's column mapping and
+        order are carried onto the saved schema so the dataset pre-fills the
+        submit wizard when picked later. A caller who already holds a byte-
+        identical entry gets it back instead of a second copy.
+
+        Args:
+            optimization_id: Id of the run whose dataset is saved.
+            current_user: Authenticated caller (viewer+ on the run).
+            payload: Optional name override; defaults to the run's dataset
+                filename or optimization name.
+
+        Returns:
+            A :class:`SaveDatasetResponse` for the caller-owned entry.
+
+        Raises:
+            DomainError: 404 when the run is unknown/inaccessible or carries no
+                dataset; 413 over the caller's per-file cap; 409 over their quota.
+        """
+        job_data = load_job_for_user(job_store, optimization_id, current_user)
+        run_payload = job_data.get("payload")
+        rows = run_payload.get("dataset") if isinstance(run_payload, dict) else None
+        if not rows or not isinstance(rows, list):
+            raise DomainError("optimization.dataset_unavailable", status=404)
+        overview = parse_overview(job_data)
+        name = (
+            (payload.name if payload else None)
+            or overview.get(PAYLOAD_OVERVIEW_DATASET_FILENAME)
+            or overview.get(PAYLOAD_OVERVIEW_NAME)
+            or optimization_id
+        )
+        record, deduped = _save_gated(
+            owner=current_user.username,
+            name=name,
+            source="optimization",
+            rows=rows,
+            column_schema=_schema_from_run_payload(run_payload, rows),
+        )
+        return SaveDatasetResponse(dataset=_summary(record, ShareRole.owner), deduplicated=deduped)
 
     return router
