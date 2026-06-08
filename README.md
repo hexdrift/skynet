@@ -34,8 +34,8 @@ createdb skynet_test
 cd backend
 
 # Create environment
-python -m venv ../.venv
-source ../.venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -e '.[dev]'
 
 # Configure
