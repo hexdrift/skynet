@@ -17,6 +17,7 @@ import {
   stageDatasetForAgent,
   getStagedDataset,
   getDatasetRows,
+  isStorageQuotaError,
   type DatasetSummary,
 } from "@/shared/lib/api";
 import type {
@@ -1581,7 +1582,11 @@ export function useSubmitWizard() {
         router.push(jobUrl);
       }, 1500);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("submit.submit_failed"));
+      // The storage-budget 409 opens the shared quota modal centrally; suppress
+      // the redundant toast so the modal is the single surface.
+      if (!isStorageQuotaError(err)) {
+        toast.error(err instanceof Error ? err.message : msg("submit.submit_failed"));
+      }
       setSubmitPhase("idle");
       setSubmitting(false);
     }

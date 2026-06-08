@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
 import { Input } from "@/shared/ui/primitives/input";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { saveDataset, type DatasetSummary } from "@/shared/lib/api";
+import { isStorageQuotaError, saveDataset, type DatasetSummary } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatBytes } from "@/shared/lib/formatters";
 import { parseDatasetFile } from "@/shared/lib/parse-dataset";
@@ -73,7 +73,11 @@ export function DatasetsView() {
         toast.success(msg("datasets.toast.uploaded"));
         refetch();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : msg("datasets.toast.upload_failed"));
+        // The storage-budget 409 opens the shared quota modal centrally, so
+        // suppress the redundant toast here (and at the other save producers).
+        if (!isStorageQuotaError(err)) {
+          toast.error(err instanceof Error ? err.message : msg("datasets.toast.upload_failed"));
+        }
       } finally {
         setUploading(false);
       }

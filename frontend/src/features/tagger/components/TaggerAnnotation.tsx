@@ -28,7 +28,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { cn } from "@/shared/lib/utils";
 import { exportAnnotations, buildLibraryRows } from "../lib/export-csv";
 import type { DataField, DataRow, Annotation, TaggerConfig } from "../lib/types";
-import { saveDataset } from "@/shared/lib/api";
+import { isStorageQuotaError, saveDataset } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface Props {
@@ -138,7 +138,9 @@ export function TaggerAnnotation({
           : formatMsg("tagger.library.saved", { name: res.dataset.name }),
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("tagger.library.save_failed"));
+      if (!isStorageQuotaError(err)) {
+        toast.error(err instanceof Error ? err.message : msg("tagger.library.save_failed"));
+      }
     } finally {
       setSavingToLibrary(false);
     }

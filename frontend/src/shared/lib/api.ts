@@ -19,7 +19,7 @@ import type {
   ValidateDatasetResponse,
 } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { tI18n } from "@/shared/lib/i18n";
+import { I18N_KEY, tI18n } from "@/shared/lib/i18n";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { readNdjsonStream, readServerSentEvents, type ServerSentEvent } from "@/shared/lib/sse";
 
@@ -159,6 +159,39 @@ if (typeof window !== "undefined") {
   );
 }
 
+/** Backend error code for the unified storage budget being exceeded (HTTP 409). */
+export const STORAGE_QUOTA_CODE = I18N_KEY.USER_STORAGE_QUOTA_EXCEEDED;
+
+/** Browser event the central error path fires when a write hits the storage budget. */
+export const STORAGE_QUOTA_EVENT = "storage-quota-exceeded";
+
+/**
+ * Error carrying the backend's structured envelope so callers can branch on the
+ * machine-readable ``code`` (not just the rendered message). Subclasses ``Error``
+ * so existing ``err instanceof Error`` / ``err.message`` handling keeps working.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly params?: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    opts: { status: number; code?: string; params?: Record<string, unknown> },
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = opts.status;
+    this.code = opts.code;
+    this.params = opts.params;
+  }
+}
+
+/** Narrow a caught value to the storage-budget 409 so its toast can be suppressed. */
+export function isStorageQuotaError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === STORAGE_QUOTA_CODE;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const send = (token: string | undefined) =>
     fetch(`${API}${path}`, {
@@ -181,26 +214,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
-      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.1", { p1: res.status }),
+    const parsed = parseError(text);
+    // The storage budget is account-wide, so any blocked write opens one shared
+    // modal regardless of which producer flow tripped it. The 409 still throws
+    // so the caller's success path halts; producers suppress their own toast via
+    // isStorageQuotaError so the modal is the single surface.
+    if (parsed.code === STORAGE_QUOTA_CODE && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(STORAGE_QUOTA_EVENT, { detail: parsed.params }));
+    }
+    throw new ApiError(
+      parsed.message ?? formatMsg("auto.shared.lib.api.template.1", { p1: res.status }),
+      { status: res.status, code: parsed.code, params: parsed.params },
     );
   }
   return res.json();
 }
 
 /**
- * Extract a human-readable error message from an error response body.
+ * Parse an error response body into its rendered message and structured fields.
  *
- * Preference order:
+ * Message preference order:
  *   1. ``body.code`` + ``body.params`` — re-rendered client-side via
  *      :func:`tI18n` so UI copy comes from the local catalog.
  *   2. ``body.detail`` — the rendered Hebrew string from the server.
  *   3. ``body.error`` — legacy envelope fallback.
  *
- * Returns ``undefined`` when the body is not JSON (e.g. an HTML error page)
- * so the caller can fall back to a status-code template.
+ * ``message`` is ``undefined`` when the body is not JSON (e.g. an HTML error
+ * page) so the caller can fall back to a status-code template; ``code`` /
+ * ``params`` are passed through for callers that branch on the error code.
  */
-function parseErrorMessage(text: string): string | undefined {
+function parseError(text: string): {
+  message?: string;
+  code?: string;
+  params?: Record<string, unknown>;
+} {
   try {
     const body = JSON.parse(text) as {
       code?: string;
@@ -208,17 +255,24 @@ function parseErrorMessage(text: string): string | undefined {
       detail?: unknown;
       error?: unknown;
     };
-    if (typeof body.code === "string") {
-      const translated = tI18n(body.code, body.params);
-      if (translated !== body.code) return translated;
+    const code = typeof body.code === "string" ? body.code : undefined;
+    if (code) {
+      const translated = tI18n(code, body.params);
+      if (translated !== code) return { message: translated, code, params: body.params };
     }
     const raw = body.detail ?? body.error;
-    if (typeof raw === "string") return raw;
-    if (raw != null) return JSON.stringify(raw);
+    if (typeof raw === "string") return { message: raw, code, params: body.params };
+    if (raw != null) return { message: JSON.stringify(raw), code, params: body.params };
+    return { code, params: body.params };
   } catch {
     /* response was not JSON (e.g. HTML error page) */
   }
-  return undefined;
+  return {};
+}
+
+/** Rendered message from an error body, or ``undefined`` for non-JSON bodies. */
+function parseErrorMessage(text: string): string | undefined {
+  return parseError(text).message;
 }
 
 export function submitRun(payload: RunRequest) {
@@ -747,6 +801,22 @@ export function cloneDataset(datasetId: string) {
   return request<SaveDatasetResponse>(`/datasets/library/${datasetId}/clone`, {
     method: "POST",
   });
+}
+
+/**
+ * The caller's account-wide storage usage against their budget. ``breakdown``
+ * maps each storage category to its byte contribution; ``used_bytes`` is their
+ * sum and the same total the save/run gate enforces.
+ */
+export interface StorageUsageResponse {
+  used_bytes: number;
+  quota_bytes: number;
+  breakdown: Record<string, number>;
+}
+
+/** Fetch the caller's unified storage usage backing the meter and quota modal. */
+export function getStorageUsage() {
+  return request<StorageUsageResponse>("/usage/storage");
 }
 
 /** Rename a saved dataset (owner only). */

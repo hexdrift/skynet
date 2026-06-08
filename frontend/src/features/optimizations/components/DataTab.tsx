@@ -22,6 +22,7 @@ import {
   getOptimizationDataset,
   getTestResults,
   getPairTestResults,
+  isStorageQuotaError,
   saveDatasetFromOptimization,
 } from "@/shared/lib/api";
 import type {
@@ -120,7 +121,9 @@ export function DataTab({
           : formatMsg("optimizations.save_dataset.saved", { name: res.dataset.name }),
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("optimizations.save_dataset.failed"));
+      if (!isStorageQuotaError(err)) {
+        toast.error(err instanceof Error ? err.message : msg("optimizations.save_dataset.failed"));
+      }
     } finally {
       setSavingToLibrary(false);
     }

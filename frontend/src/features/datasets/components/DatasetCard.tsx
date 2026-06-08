@@ -14,7 +14,7 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Input } from "@/shared/ui/primitives/input";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
-import { cloneDataset, deleteDataset, renameDataset, type DatasetSummary } from "@/shared/lib/api";
+import { cloneDataset, deleteDataset, isStorageQuotaError, renameDataset, type DatasetSummary } from "@/shared/lib/api";
 import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
 import { formatBytes, formatRelativeTime } from "@/shared/lib/formatters";
 import { DatasetShareDialog } from "./DatasetShareDialog";
@@ -90,7 +90,9 @@ export function DatasetCard({
       toast.success(res.deduplicated ? msg("datasets.toast.deduplicated") : msg("datasets.toast.cloned"));
       onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("datasets.toast.clone_failed"));
+      if (!isStorageQuotaError(err)) {
+        toast.error(err instanceof Error ? err.message : msg("datasets.toast.clone_failed"));
+      }
     } finally {
       setCloning(false);
     }
