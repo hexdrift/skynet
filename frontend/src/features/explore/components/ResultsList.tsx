@@ -159,7 +159,7 @@ function ScoreTag({
     >
       <span className="font-semibold text-foreground">{formatMetric(score)}</span>
       <span
-        className={`inline-flex items-baseline gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] ${GAIN_TONE[gain.kind]}`}
+        className={`inline-flex items-baseline gap-0.5 text-[11px] ${GAIN_TONE[gain.kind]}`}
       >
         <Icon className="size-2.5 self-center" aria-hidden="true" />
         <span>{gain.text}</span>
@@ -168,10 +168,13 @@ function ScoreTag({
   );
 }
 
+// A no-change gain recedes to bare muted text while ±gains stay filled
+// pills, so colour is reserved for runs that actually moved the metric —
+// the neutral case is the least interesting outcome and shouldn't compete.
 const GAIN_TONE: Record<"positive" | "negative" | "neutral", string> = {
-  positive: "bg-[oklch(0.93_0.04_140)] text-[oklch(0.42_0.12_140)]",
-  negative: "bg-destructive/10 text-destructive",
-  neutral: "bg-muted text-foreground/60",
+  positive: "rounded-full px-1.5 py-0.5 bg-[var(--success-dim)] text-[var(--success)]",
+  negative: "rounded-full px-1.5 py-0.5 bg-[var(--danger-dim)] text-[var(--danger)]",
+  neutral: "text-muted-foreground",
 };
 
 function OptimizerChip({ name }: { name: string }) {

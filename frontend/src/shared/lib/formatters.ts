@@ -81,23 +81,23 @@ export function formatDuration(seconds: number | undefined | null): string {
 export const formatElapsed = formatDuration;
 
 /**
- * Format a number (0..1 or 0..100) as percentage
- * @example 0.856 → "85.6%", 85.6 → "85.6%"
+ * Format an aggregate metric on the canonical 0–100 percentage scale.
+ * @example 85.6 → "85.6%", 60.3 → "60.3%"
  */
 export function formatPercent(n: number | undefined | null): string {
   if (n == null) return "—";
-  const pct = n > 1 ? n : n * 100;
-  return `${pct.toFixed(1)}%`;
+  return `${n.toFixed(1)}%`;
 }
 
 /**
- * Format improvement metric with +/- sign
- * @example 0.15 → "+15.0%", -0.05 → "-5.0%"
+ * Format a 0–100-scale improvement delta with an explicit sign. A 0.3-point
+ * gain renders "+0.3%", not "+30%": the value is already in percentage points,
+ * so it is never rescaled.
+ * @example 15 → "+15.0%", -5 → "-5.0%"
  */
 export function formatImprovement(v: number | undefined | null): string {
   if (v == null) return "—";
-  const pct = Math.abs(v) > 1 ? v : v * 100;
-  return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
+  return v >= 0 ? `+${v.toFixed(1)}%` : `${v.toFixed(1)}%`;
 }
 
 export function formatOutput(v: unknown): string {

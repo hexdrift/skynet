@@ -122,16 +122,8 @@ function GridOverviewImpl({
     const pairScoresData = completedPrs.map((p) => ({
       pair_index: p.pair_index,
       name: pairLabel(p),
-      baselineScore: Math.round(
-        (p.baseline_test_metric ?? 0) > 1
-          ? (p.baseline_test_metric ?? 0)
-          : (p.baseline_test_metric ?? 0) * 100,
-      ),
-      optimizedScore: Math.round(
-        (p.optimized_test_metric ?? 0) > 1
-          ? (p.optimized_test_metric ?? 0)
-          : (p.optimized_test_metric ?? 0) * 100,
-      ),
+      baselineScore: Math.round(p.baseline_test_metric ?? 0),
+      optimizedScore: Math.round(p.optimized_test_metric ?? 0),
       isBest: scoring.overallWinner === p.pair_index,
     }));
     const combinedScoresData = completedPrs
@@ -160,11 +152,10 @@ function GridOverviewImpl({
       .filter((p) => p.avg_response_time_ms != null && p.optimized_test_metric != null)
       .map((p) => {
         const raw = p.optimized_test_metric!;
-        const qPct = raw > 1 ? raw : raw * 100;
         return {
           pair_index: p.pair_index,
           name: pairLabel(p),
-          quality: +qPct.toFixed(1),
+          quality: +raw.toFixed(1),
           latency: +(p.avg_response_time_ms! / 1000).toFixed(2),
           isOverall: scoring.overallWinner === p.pair_index,
           isQuality: scoring.qualityWinner === p.pair_index,
