@@ -59,7 +59,7 @@ export function StageInfoModal({
                       </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-bold tabular-nums">
-                          {(job.baseline_test_metric * 100).toFixed(1)}%
+                          {job.baseline_test_metric.toFixed(1)}%
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {TERMS.baselineScore}
@@ -77,7 +77,7 @@ export function StageInfoModal({
                       <div className="flex items-baseline gap-3">
                         <div>
                           <span className="text-2xl font-bold tabular-nums text-[#3D2E22]">
-                            {(job.optimized_test_metric * 100).toFixed(1)}%
+                            {job.optimized_test_metric.toFixed(1)}%
                           </span>
                           <span className="text-[0.625rem] text-muted-foreground ms-1">
                             {msg("auto.features.optimizations.components.stageinfomodal.4")}
@@ -86,12 +86,12 @@ export function StageInfoModal({
                         {job.baseline_test_metric != null && (
                           <div className="text-xs text-muted-foreground">
                             {msg("auto.features.optimizations.components.stageinfomodal.5")}
-                            {(job.baseline_test_metric * 100).toFixed(1)}%
+                            {job.baseline_test_metric.toFixed(1)}%
                             <span
                               className={`ms-1 font-semibold ${(job.metric_improvement ?? 0) >= 0 ? "text-[#3D2E22]" : "text-[#B04030]"}`}
                             >
                               ({(job.metric_improvement ?? 0) >= 0 ? "+" : ""}
-                              {((job.metric_improvement ?? 0) * 100).toFixed(1)}%)
+                              {(job.metric_improvement ?? 0).toFixed(1)}%)
                             </span>
                           </div>
                         )}

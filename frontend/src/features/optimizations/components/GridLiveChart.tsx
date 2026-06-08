@@ -23,7 +23,7 @@ function shortName(model: unknown): string {
 
 function toPct(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isFinite(v)) return null;
-  return Math.round(v > 1 ? v : v * 100);
+  return Math.round(v);
 }
 
 function buildPairs(job: OptimizationStatusResponse): PairSnapshot[] {

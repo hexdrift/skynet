@@ -1,10 +1,12 @@
 /**
  * Pure formatters for the explore slice.
  *
- * Score values from the public dashboard are already on a 0–100 scale —
- * see `backend/service_gateway/embedding_pipeline._extract_scores`. Any
- * value received as a 0–1 ratio is an upstream bug; this module
- * canonicalizes to 0–100 without a runtime guess.
+ * Score values are on the canonical 0–100 percentage scale — the scale
+ * `dspy.Evaluate` reports and the one every job persists after the metric
+ * normalization migration (see
+ * `backend/service_gateway/embedding_pipeline._extract_scores`). Formatters
+ * append "%" and never rescale: a value is already in percentage points, so
+ * a 0.3-point gain reads "+0.3%", not "+30%".
  */
 
 import { msg } from "@/shared/lib/messages";
@@ -16,7 +18,7 @@ export type GainBadge = {
 
 export function formatMetric(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return value.toFixed(1);
+  return `${value.toFixed(1)}%`;
 }
 
 export function formatGain(
@@ -26,9 +28,9 @@ export function formatGain(
   if (baseline == null || optimized == null) return null;
   if (!Number.isFinite(baseline) || !Number.isFinite(optimized)) return null;
   const gain = optimized - baseline;
-  if (Math.abs(gain) < 0.05) return { text: "0.0", kind: "neutral" };
-  if (gain > 0) return { text: `+${gain.toFixed(1)}`, kind: "positive" };
-  return { text: gain.toFixed(1), kind: "negative" };
+  if (Math.abs(gain) < 0.05) return { text: "0.0%", kind: "neutral" };
+  if (gain > 0) return { text: `+${gain.toFixed(1)}%`, kind: "positive" };
+  return { text: `${gain.toFixed(1)}%`, kind: "negative" };
 }
 
 // Constructing Intl.RelativeTimeFormat is expensive (locale data + ICU

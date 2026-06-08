@@ -76,14 +76,12 @@ export function RunChip({
 
 export function fmt(v: number | null | undefined): string {
   if (v == null) return "—";
-  const pct = Math.abs(v) > 1 ? v : v * 100;
-  return `${pct.toFixed(1)}%`;
+  return `${v.toFixed(1)}%`;
 }
 
 export function fmtImprovement(v: number | null | undefined): string {
   if (v == null) return "—";
-  const pct = Math.abs(v) > 1 ? v : v * 100;
-  return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
+  return v >= 0 ? `+${v.toFixed(1)}%` : `${v.toFixed(1)}%`;
 }
 
 export function fmtElapsed(s: number | null | undefined): string {
@@ -111,13 +109,9 @@ export function deriveRunInfo(job: OptimizationStatusResponse): RunInfo {
       winnerIdx != null
         ? job.grid_result.pair_results.find((p) => p.pair_index === winnerIdx)
         : undefined;
-    const winnerScore = winnerIdx != null ? scoring.byIndex[winnerIdx] : null;
     const baseline = winnerPair?.baseline_test_metric ?? null;
-    const optimized = winnerScore?.quality ?? null;
-    const improvement =
-      baseline != null && optimized != null
-        ? optimized - (baseline > 1 ? baseline / 100 : baseline)
-        : null;
+    const optimized = winnerPair?.optimized_test_metric ?? null;
+    const improvement = baseline != null && optimized != null ? optimized - baseline : null;
     return {
       job,
       label,

@@ -77,8 +77,12 @@ def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
     Run jobs publish the score pair to ``latest_metrics`` while running, but
     only ``optimized_test_metric`` survives there at completion — the baseline
     lands in ``result`` — so fall back to ``result`` for either missing half.
-    Grid jobs keep the winning pair under ``result.best_pair``. Scale is 0-100
-    for both.
+    Grid jobs keep the winning pair under ``result.best_pair``.
+
+    Scores are passed through verbatim on the canonical 0-100 percentage
+    scale — the scale ``dspy.Evaluate`` reports and the one every job persists
+    after the metric-scale normalization migration — so no rescaling happens
+    here.
 
     A missing baseline matters: the gain sort ranks on
     ``optimized - baseline``, so a ``None`` baseline would silently collapse
@@ -89,8 +93,9 @@ def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
         job: The job-store record for a finished optimization.
 
     Returns:
-        A 2-tuple of ``(baseline_metric, optimized_metric)`` where each
-        entry is a 0-100 float or ``None`` when the score is missing.
+        A 2-tuple of ``(baseline_metric, optimized_metric)`` where each entry
+        is the metric's float on the 0-100 scale, or ``None`` when the score
+        is missing.
     """
     overview = job.get("payload_overview") or {}
     job_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE)

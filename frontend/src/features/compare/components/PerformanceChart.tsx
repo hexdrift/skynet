@@ -50,7 +50,7 @@ export function PerformanceChart({ runs }: { runs: RunInfo[] }) {
     const quality = (r: RunInfo) => {
       const v = r.optimized;
       if (v == null) return null;
-      return v > 1 ? v / 100 : v;
+      return v / 100;
     };
     const speed = (r: RunInfo) => {
       if (!hasSpeed || r.avgResponseMs == null || r.avgResponseMs <= 0) return null;
