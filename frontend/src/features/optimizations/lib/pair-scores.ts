@@ -14,10 +14,11 @@ export interface GridScoring {
   hasSpeedData: boolean;
 }
 
+// Metrics are stored on the canonical 0–100 scale; fold to 0–1 so quality
+// and speed share a unit range for the combined ranking and scatter charts.
 function normalizeQuality(v: number | undefined | null): number {
   if (v == null) return 0;
-  const q = v > 1 ? v / 100 : v;
-  return Math.max(0, Math.min(1, q));
+  return Math.max(0, Math.min(1, v / 100));
 }
 
 // Speed score: fastest pair = 1.0, others scale as min_time / their_time.

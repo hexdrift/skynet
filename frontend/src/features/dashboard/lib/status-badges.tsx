@@ -32,7 +32,7 @@ export function formatScore(job: OptimizationSummaryResponse): React.ReactNode {
           ? "text-[var(--danger)]"
           : "text-muted-foreground";
     const sign = improvement > 0 ? "+" : "";
-    const deltaPct = (Math.abs(improvement) > 1 ? improvement : improvement * 100).toFixed(1);
+    const deltaPct = improvement.toFixed(1);
     return (
       <span
         className="inline-flex items-center gap-1 text-xs whitespace-nowrap"

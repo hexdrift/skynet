@@ -64,10 +64,6 @@ const EMPTY_CHART_DATA: ChartData = {
   timelineDates: [],
 };
 
-// Raw metric deltas < 1 in magnitude are treated as 0-1 ratios and
-// scaled to percentage; larger values pass through unchanged.
-const toPct = (v: number) => (Math.abs(v) > 1 ? v : v * 100);
-
 const shortId = (id: string) => `${id.slice(0, 8)}…`;
 
 export function transformChartData(analyticsData: DashboardAnalytics | null): ChartData {
@@ -85,9 +81,9 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
     const bl = j.baseline_test_metric ?? 0;
     return {
       name: shortId(j.optimization_id),
-      optimizedScore: Math.round(opt > 1 ? opt : opt * 100),
-      baselineScore: Math.round(bl > 1 ? bl : bl * 100),
-      delta: j.metric_improvement != null ? toPct(j.metric_improvement) : undefined,
+      optimizedScore: Math.round(opt),
+      baselineScore: Math.round(bl),
+      delta: j.metric_improvement ?? undefined,
     };
   });
   const improvementJobIds = analyticsData.top_improvement.map((j) => j.optimization_id);
@@ -99,8 +95,7 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
 
   const kpis = {
     successRate: analyticsData.success_rate * 100,
-    avgImprovement:
-      analyticsData.avg_improvement != null ? toPct(analyticsData.avg_improvement) : 0,
+    avgImprovement: analyticsData.avg_improvement ?? 0,
     avgRuntime: analyticsData.avg_runtime_seconds ?? 0,
     totalRows: analyticsData.total_dataset_rows,
     successCount: analyticsData.success_count,
@@ -108,13 +103,12 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
     totalPairsRun: analyticsData.total_pairs_run,
     gridSearchCount: analyticsData.grid_search_count,
     singleRunCount: analyticsData.single_run_count,
-    bestImprovement:
-      analyticsData.best_improvement != null ? toPct(analyticsData.best_improvement) : 0,
+    bestImprovement: analyticsData.best_improvement ?? 0,
   };
 
   const avgByOptimizer = analyticsData.improvement_by_optimizer.map((o) => ({
     name: o.name,
-    avgImprovement: +toPct(o.average).toFixed(1),
+    avgImprovement: +o.average.toFixed(1),
     count: o.count,
   }));
 
@@ -153,7 +147,7 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
 
   const datasetVsImprovement = analyticsData.dataset_vs_improvement.map((j) => ({
     rows: j.dataset_rows ?? 0,
-    improvement: +toPct(j.metric_improvement ?? 0).toFixed(1),
+    improvement: +(j.metric_improvement ?? 0).toFixed(1),
     name: shortId(j.optimization_id),
   }));
   const datasetVsImprovementIds = analyticsData.dataset_vs_improvement.map(
@@ -163,7 +157,7 @@ export function transformChartData(analyticsData: DashboardAnalytics | null): Ch
   const efficiencyData = analyticsData.efficiency.map((j) => {
     const delta = j.metric_improvement ?? 0;
     const elapsed = j.elapsed_seconds ?? 0;
-    const efficiency = elapsed > 0 ? +((toPct(delta) / elapsed) * 60).toFixed(2) : 0;
+    const efficiency = elapsed > 0 ? +((delta / elapsed) * 60).toFixed(2) : 0;
     return { name: shortId(j.optimization_id), efficiency };
   });
   const efficiencyJobIds = analyticsData.efficiency.map((j) => j.optimization_id);
