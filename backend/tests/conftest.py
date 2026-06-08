@@ -104,7 +104,7 @@ requires_llm = pytest.mark.skipif(
 
 requires_server = pytest.mark.skipif(
     not is_server_available(),
-    reason="Backend server not running on localhost:8000 — start with: cd backend && ../.venv/bin/python main.py",
+    reason="Backend server not running on localhost:8000 — start with: cd backend && .venv/bin/python main.py",
 )
 
 

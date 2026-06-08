@@ -16,7 +16,7 @@ Latency thresholds assume a local dev machine with no network hop.
 Scale them up proportionally for remote deployments.
 
 Run:
-    cd backend && ../.venv/bin/python -m pytest tests/test_load.py -v -s
+    cd backend && .venv/bin/python -m pytest tests/test_load.py -v -s
 """
 
 from __future__ import annotations
