@@ -59,4 +59,7 @@ export const taggerMessages = {
   "auto.features.tagger.components.taggersetup.literal.16": "שם הקטגוריה",
   "auto.features.tagger.components.taggersetup.literal.17": "הוסף/הוסיפי קטגוריה",
   "auto.features.tagger.components.taggersetup.literal.18": "פרומפט שיוצג מעל שדה הטקסט",
+  "tagger.library.save": "שמירה לספרייה",
+  "tagger.library.saved": "«{name}» נשמר לספרייה",
+  "tagger.library.save_failed": "שגיאה בשמירת הדאטאסט לספרייה",
 } as const;

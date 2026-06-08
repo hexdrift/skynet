@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronRight, ChevronLeft, SkipBack, CircleMinus, Download, Keyboard } from "lucide-react";
+import {
+  ChevronRight,
+  ChevronLeft,
+  SkipBack,
+  CircleMinus,
+  Database,
+  Download,
+  Keyboard,
+} from "lucide-react";
+import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
 import { Badge } from "@/shared/ui/primitives/badge";
@@ -17,9 +26,10 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { cn } from "@/shared/lib/utils";
-import { exportAnnotations } from "../lib/export-csv";
+import { exportAnnotations, buildLibraryRows } from "../lib/export-csv";
 import type { DataField, DataRow, Annotation, TaggerConfig } from "../lib/types";
-import { msg } from "@/shared/lib/messages";
+import { saveDataset } from "@/shared/lib/api";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface Props {
   config: TaggerConfig;
@@ -55,6 +65,7 @@ export function TaggerAnnotation({
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [exportConfirm, setExportConfirm] = useState<"csv" | "json" | "xlsx" | "xls" | null>(null);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const confettiFired = useRef(false);
   const confettiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,6 +114,35 @@ export function TaggerAnnotation({
     },
     [data.length, taggedCount, doExport],
   );
+
+  const handleSaveToLibrary = useCallback(async () => {
+    if (savingToLibrary) return;
+    setSavingToLibrary(true);
+    try {
+      const { rows, columnOrder, columnRoles } = buildLibraryRows(
+        data,
+        columns,
+        annotations,
+        config,
+      );
+      const name = `tagging_${config.mode}_${new Date().toISOString().slice(0, 10)}`;
+      const res = await saveDataset({
+        name,
+        source: "tagger",
+        dataset: rows,
+        column_schema: { column_order: columnOrder, column_roles: columnRoles },
+      });
+      toast.success(
+        res.deduplicated
+          ? msg("datasets.toast.deduplicated")
+          : formatMsg("tagger.library.saved", { name: res.dataset.name }),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("tagger.library.save_failed"));
+    } finally {
+      setSavingToLibrary(false);
+    }
+  }, [savingToLibrary, data, columns, annotations, config]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -379,8 +419,20 @@ export function TaggerAnnotation({
                 <PopoverPrimitive.Content
                   side="bottom"
                   sideOffset={8}
-                  className="z-50 w-36 rounded-lg border bg-background p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
+                  className="z-50 w-44 rounded-lg border bg-background p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
                 >
+                  <PopoverPrimitive.Close asChild>
+                    <button
+                      type="button"
+                      onClick={handleSaveToLibrary}
+                      disabled={savingToLibrary}
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Database className="size-3.5 shrink-0" />
+                      {msg("tagger.library.save")}
+                    </button>
+                  </PopoverPrimitive.Close>
+                  <div className="my-1 h-px bg-border" />
                   {(["csv", "json", "xlsx", "xls"] as const).map((fmt) => (
                     <PopoverPrimitive.Close key={fmt} asChild>
                       <button
