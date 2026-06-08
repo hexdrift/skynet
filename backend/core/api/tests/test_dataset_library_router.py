@@ -4,8 +4,8 @@ Exercises the owner-scoped save/list/read/rename/delete surface against an
 in-memory SQLite store (the sibling routers' pattern: a ``RemoteDBJobStore``
 subclass that skips the pgvector bootstrap so ``Base.metadata.create_all``
 stands up the ``datasets`` and ``dataset_blobs`` tables). Covers the three save
-gates — per-file cap (413), content-hash dedupe, and per-user quota (409) — plus
-cross-user isolation.
+gates — per-file cap (413), content-hash dedupe, and the unified storage budget
+(409) — plus cross-user isolation.
 """
 
 from __future__ import annotations
@@ -165,16 +165,16 @@ def test_per_file_cap_rejects_with_413(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_quota_rejects_with_409(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A save that would exceed the per-user quota is rejected with 409."""
+    """A save that would exceed the unified storage budget is rejected with 409."""
     client, _ = _make_client(_ALICE)
     _save(client)
-    monkeypatch.setattr(dataset_library_module.settings, "dataset_user_quota_bytes", 1)
+    monkeypatch.setattr(dataset_library_module.settings, "user_storage_quota_bytes", 1)
     resp = client.post(
         "/datasets/library",
         json={"name": "Second", "source": "upload", "dataset": [{"q": "9", "a": "9"}], "column_schema": {}},
     )
     assert resp.status_code == 409
-    assert resp.json()["code"] == "dataset.library.quota_exceeded"
+    assert resp.json()["code"] == "user.storage.quota_exceeded"
 
 
 def test_delete_removes_entry_and_rows() -> None:

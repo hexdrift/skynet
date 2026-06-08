@@ -183,6 +183,10 @@ class JobModel(Base):
     # Optional client-supplied dedup key; lookups are scoped per submitter so
     # two users may legitimately reuse the same key without colliding.
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Precomputed byte size of this job's JSON columns (payload + result +
+    # overview), maintained at write time so the unified per-user storage total
+    # is a single indexed SUM rather than a scan that re-serializes every payload.
+    stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
 
     __table_args__ = (
         Index("ix_jobs_status_created_at", "status", "created_at"),

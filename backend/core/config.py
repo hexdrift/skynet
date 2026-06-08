@@ -125,10 +125,10 @@ class Settings(BaseSettings):
         ge=1,
         description="Per-file cap on compressed dataset bytes saved to a user's library",
     )
-    dataset_user_quota_bytes: int = Field(
-        default=500 * 1024 * 1024,
+    user_storage_quota_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
         ge=1,
-        description="Per-user cap on total compressed dataset bytes across their library",
+        description="Per-user unified storage budget in bytes across all of their Skynet data",
     )
     cancel_poll_interval: float = Field(
         default=1.0, ge=0.1, le=10.0, description="Seconds between cancel signal checks"

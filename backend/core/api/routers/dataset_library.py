@@ -15,10 +15,12 @@ the caller alongside their own.
 
 Saving gates on three limits, in order: the per-file compressed cap
 (``settings.dataset_max_file_bytes`` → 413), content-hash dedupe (a byte-
-identical re-save returns the existing entry, charged nothing), and the
-per-user compressed quota (``settings.dataset_user_quota_bytes`` → 409). All
-accounting is on the compressed ``stored_bytes``; the uncompressed ``byte_size``
-is what the UI shows.
+identical re-save returns the existing entry, charged nothing), and the unified
+per-user storage budget (``user.storage.quota_exceeded`` → 409, shared with
+optimizations and every other surface — see
+:func:`core.api.routers._helpers.enforce_storage_quota`). The budget counts the
+uncompressed ``byte_size``; the per-file cap still measures the compressed
+``stored_bytes``.
 """
 
 from __future__ import annotations
@@ -50,7 +52,7 @@ from ..dataset_access import (
     require_role,
 )
 from ..errors import DomainError
-from ._helpers import load_job_for_user
+from ._helpers import enforce_storage_quota, load_job_for_user
 
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
@@ -311,8 +313,8 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
 
         Shared by the save and clone paths: serialize/compress once, reject an
         over-cap file (413), return an existing byte-identical entry instead of
-        storing a copy (dedupe), then reject a save that would exceed the quota
-        (409) before committing.
+        storing a copy (dedupe), then reject a save that would push the owner
+        over their unified storage budget (409) before committing.
 
         Args:
             owner: Lowercased owner the entry is saved under.
@@ -326,7 +328,8 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
             an existing identical entry was returned instead of a new one.
 
         Raises:
-            DomainError: 413 over the per-file cap; 409 over the per-user quota.
+            DomainError: 413 over the per-file cap; 409 over the unified storage
+                budget.
         """
         staged: StagedDataset = store.stage(rows, column_schema)
         if staged.stored_bytes > settings.dataset_max_file_bytes:
@@ -338,14 +341,7 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
         existing = store.find_by_hash(owner, staged.digest)
         if existing is not None:
             return existing, True
-        used = store.used_bytes(owner)
-        if used + staged.stored_bytes > settings.dataset_user_quota_bytes:
-            raise DomainError(
-                "dataset.library.quota_exceeded",
-                status=409,
-                used_mb=round(used / (1024 * 1024), 1),
-                quota_mb=round(settings.dataset_user_quota_bytes / (1024 * 1024), 1),
-            )
+        enforce_storage_quota(job_store, owner, incoming_bytes=staged.byte_size)
         record = store.commit_staged(owner_username=owner, name=name, source=source, staged=staged)
         return record, False
 
@@ -372,7 +368,7 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
 
         Raises:
             DomainError: 413 when the compressed file exceeds the per-file cap;
-                409 when storing it would exceed the per-user quota.
+                409 when storing it would exceed the unified storage budget.
         """
         record, deduped = _save_gated(
             owner=current_user.username,
@@ -396,8 +392,9 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
 
         Owned entries come first (newest first) at the ``owner`` tier, then —
         when ``include_shared`` — datasets the caller holds a share grant on, at
-        their granted tier. The usage meter reflects only the caller's own bytes
-        (quota is per-owner; shared datasets cost the owner, not the viewer).
+        their granted tier. The usage meter reflects the caller's unified storage
+        total across all of their Skynet data against their budget (shared
+        datasets cost the owner, not the viewer).
 
         Args:
             current_user: Authenticated caller whose library is listed.
@@ -419,8 +416,8 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
                     continue
                 summaries.append(_summary(record, ShareRole(shared_roles[record.id])))
         usage = UsageMeter(
-            used_bytes=store.used_bytes(current_user.username),
-            quota_bytes=settings.dataset_user_quota_bytes,
+            used_bytes=job_store.compute_user_storage(current_user.username).total,
+            quota_bytes=job_store.get_effective_user_storage_quota(current_user.username),
         )
         return DatasetListResponse(datasets=summaries, usage=usage)
 

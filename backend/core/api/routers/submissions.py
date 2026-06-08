@@ -62,12 +62,13 @@ from ...registry import RegistryError
 from ...service_gateway import ServiceError
 from ...service_gateway.safe_exec import validate_signature_code
 from ...storage.dataset_library import DatasetLibraryStore, PostgresDatasetBlobStore
+from ...storage.usage import json_byte_size
 from ...worker.engine import get_worker
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..dataset_access import resolve_effective_role
 from ..errors import DomainError
 from ..model_catalog import get_catalog_cached
-from ._helpers import compute_task_fingerprint, enforce_user_quota, stable_seed, strip_api_key
+from ._helpers import compute_task_fingerprint, enforce_storage_quota, stable_seed, strip_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +399,11 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             candidate_models=[payload.model_settings],
         )
 
-        enforce_user_quota(job_store, payload.username)
+        enforce_storage_quota(
+            job_store,
+            payload.username,
+            incoming_bytes=json_byte_size(payload.model_dump(mode="json", by_alias=True)),
+        )
 
         optimization_id = str(uuid4())
         task_fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
@@ -545,7 +550,11 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             candidate_models=list(payload.generation_models),
         )
 
-        enforce_user_quota(job_store, payload.username)
+        enforce_storage_quota(
+            job_store,
+            payload.username,
+            incoming_bytes=json_byte_size(payload.model_dump(mode="json", by_alias=True)),
+        )
 
         optimization_id = str(uuid4())
         if payload.seed is None:
