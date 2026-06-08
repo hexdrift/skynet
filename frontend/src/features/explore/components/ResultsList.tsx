@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import type { SearchResult } from "@/shared/lib/api";
 import type { SearchType } from "../hooks/use-semantic-search";
@@ -98,7 +98,9 @@ function ResultRow({
         <h3 className="min-w-0 flex-1 text-start text-[15.5px] font-medium leading-snug tracking-tight text-foreground/90 transition-colors group-hover:text-foreground">
           <Highlighted text={title} tokens={tokens} />
         </h3>
-        {gain && <ScoreTag score={row.optimized_metric} gain={gain} />}
+        {row.optimized_metric != null && (
+          <ScoreTag score={row.optimized_metric} gain={gain} />
+        )}
       </div>
 
       {summary && (
@@ -148,22 +150,27 @@ function ScoreTag({
   gain,
 }: {
   score: number | null | undefined;
-  gain: { text: string; kind: "positive" | "negative" | "neutral" };
+  gain: { text: string; kind: "positive" | "negative" | "neutral" } | null;
 }) {
+  // A zero-change run carries no direction, so the neutral badge drops the
+  // ± arrow and recedes to muted text — only real movement earns an icon. A
+  // run without a baseline has no gain at all; the score still stands alone.
   const Icon =
-    gain.kind === "positive" ? ArrowUp : gain.kind === "negative" ? ArrowDown : Minus;
+    gain?.kind === "positive" ? ArrowUp : gain?.kind === "negative" ? ArrowDown : null;
   return (
     <span
       dir="ltr"
       className="inline-flex shrink-0 items-baseline gap-2 font-mono text-[12.5px] tabular-nums"
     >
       <span className="font-semibold text-foreground">{formatMetric(score)}</span>
-      <span
-        className={`inline-flex items-baseline gap-0.5 text-[11px] ${GAIN_TONE[gain.kind]}`}
-      >
-        <Icon className="size-2.5 self-center" aria-hidden="true" />
-        <span>{gain.text}</span>
-      </span>
+      {gain && (
+        <span
+          className={`inline-flex items-baseline gap-0.5 text-[11px] ${GAIN_TONE[gain.kind]}`}
+        >
+          {Icon && <Icon className="size-2.5 self-center" aria-hidden="true" />}
+          <span>{gain.text}</span>
+        </span>
+      )}
     </span>
   );
 }
