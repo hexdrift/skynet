@@ -626,6 +626,219 @@ export function searchUsers(q: string) {
   return request<UserSearchResponse>(`/users/search?q=${encodeURIComponent(q)}`);
 }
 
+// ── Personal dataset library ────────────────────────────────────────────────
+
+/** Per-column roles/kinds/order saved with a dataset so the wizard pre-fills. */
+export interface DatasetColumnSchema {
+  column_order?: string[];
+  column_roles?: Record<string, "input" | "output" | "ignore">;
+  column_kinds?: Record<string, "text" | "image">;
+}
+
+/** One library dataset's metadata. `role` distinguishes owned from shared-in. */
+export interface DatasetSummary {
+  id: string;
+  name: string;
+  source: string;
+  row_count: number;
+  column_count: number;
+  byte_size: number;
+  content_hash: string;
+  owner_username: string;
+  role: ShareRole;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Aggregate library storage used by the caller against their quota. */
+export interface DatasetUsageMeter {
+  used_bytes: number;
+  quota_bytes: number;
+}
+
+/** Envelope for ``GET /datasets/library`` — the caller's entries and usage. */
+export interface DatasetListResponse {
+  datasets: DatasetSummary[];
+  usage: DatasetUsageMeter;
+}
+
+/** Envelope for ``GET /datasets/library/{id}/rows`` — columns, rows, saved schema. */
+export interface DatasetRowsResponse {
+  id: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  row_count: number;
+  column_schema: DatasetColumnSchema;
+}
+
+/** Envelope for a save/clone — the entry plus whether the bytes deduped. */
+export interface SaveDatasetResponse {
+  dataset: DatasetSummary;
+  deduplicated: boolean;
+}
+
+/** One optimization that was submitted from a library dataset (reverse link). */
+export interface DatasetOptimizationRef {
+  optimization_id: string;
+  name?: string | null;
+  status?: string | null;
+  optimization_type?: string | null;
+  username?: string | null;
+  created_at?: string | null;
+}
+
+/** Envelope for ``GET /datasets/library/{id}/optimizations`` — the reverse link. */
+export interface DatasetOptimizationsResponse {
+  optimizations: DatasetOptimizationRef[];
+}
+
+/** One invited member of a dataset (username + tier role). */
+export interface DatasetSharingMember {
+  username: string;
+  role: MemberRole;
+}
+
+/**
+ * Owner-facing sharing config for one library dataset. Mirrors {@link SharingState}
+ * minus the optimization-only Explore visibility (`is_private`).
+ */
+export interface DatasetSharingState {
+  general_access: GeneralAccess;
+  general_role: LinkRole;
+  token: string | null;
+  share_path: string | null;
+  owner: string | null;
+  members: DatasetSharingMember[];
+}
+
+/** List the caller's saved datasets plus those shared with them, with usage. */
+export function listDatasets() {
+  return request<DatasetListResponse>("/datasets/library");
+}
+
+/** Fetch one saved dataset's rows and saved column schema (viewer+). */
+export function getDatasetRows(datasetId: string) {
+  return request<DatasetRowsResponse>(`/datasets/library/${datasetId}/rows`);
+}
+
+/** Save rows as a new library entry the caller owns. */
+export function saveDataset(body: {
+  name: string;
+  source?: string;
+  dataset: Array<Record<string, unknown>>;
+  column_schema?: DatasetColumnSchema;
+}) {
+  return request<SaveDatasetResponse>("/datasets/library", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Save the exact rows a run used as a caller-owned entry (Data-tab producer). */
+export function saveDatasetFromOptimization(optimizationId: string, body?: { name?: string }) {
+  return request<SaveDatasetResponse>(
+    `/datasets/library/from-optimization/${optimizationId}`,
+    { method: "POST", body: JSON.stringify(body ?? {}) },
+  );
+}
+
+/** Clone a dataset shared with the caller into their own library (viewer+). */
+export function cloneDataset(datasetId: string) {
+  return request<SaveDatasetResponse>(`/datasets/library/${datasetId}/clone`, {
+    method: "POST",
+  });
+}
+
+/** Rename a saved dataset (owner only). */
+export function renameDataset(datasetId: string, name: string) {
+  return request<DatasetSummary>(`/datasets/library/${datasetId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** Delete a saved dataset and its bytes (owner only). */
+export function deleteDataset(datasetId: string) {
+  return request<{ deleted: boolean }>(`/datasets/library/${datasetId}`, {
+    method: "DELETE",
+  });
+}
+
+/** List the runs the caller can see that were submitted from a dataset. */
+export function listDatasetOptimizations(datasetId: string) {
+  return request<DatasetOptimizationsResponse>(
+    `/datasets/library/${datasetId}/optimizations`,
+  );
+}
+
+/** Fetch the current sharing config (general access + members) for a dataset. */
+export function getDatasetSharing(datasetId: string) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing`);
+}
+
+/** Set the dataset link policy (general access + optional anyone-link role). */
+export function putDatasetSharing(
+  datasetId: string,
+  body: { general_access: GeneralAccess; general_role?: LinkRole },
+) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Invite a user to a dataset (add or replace a member grant). */
+export function addDatasetShareMember(
+  datasetId: string,
+  body: { username: string; role: MemberRole },
+) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing/members`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Change an existing dataset member's tier role. */
+export function updateDatasetShareMember(
+  datasetId: string,
+  username: string,
+  body: { role: MemberRole },
+) {
+  return request<DatasetSharingState>(
+    `/datasets/library/${datasetId}/sharing/members/${encodeURIComponent(username)}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+/** Remove a member's grant from a dataset. */
+export function removeDatasetShareMember(datasetId: string, username: string) {
+  return request<DatasetSharingState>(
+    `/datasets/library/${datasetId}/sharing/members/${encodeURIComponent(username)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Transfer dataset ownership to an existing member (owner-only). */
+export function transferDatasetOwnership(datasetId: string, username: string) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing/transfer`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
+/** Result of redeeming a dataset share link — the target id and granted tier. */
+export interface ClaimDatasetResult {
+  dataset_id: string;
+  role: ShareRole;
+}
+
+/** Redeem an ``anyone`` dataset link, durably granting its tier to the caller. */
+export function claimSharedDataset(token: string) {
+  return request<ClaimDatasetResult>(`/datasets/share/${encodeURIComponent(token)}/claim`, {
+    method: "POST",
+  });
+}
+
 /** Public read — no auth token required; the token in the path is the capability. */
 export function getSharedOptimization(token: string) {
   return request<SharedOptimizationData>(`/share/${encodeURIComponent(token)}`);
