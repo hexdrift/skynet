@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { motion, useReducedMotion } from "framer-motion";
 import { BarChart3, TableIcon } from "lucide-react";
 import { DashboardSkeleton } from "./DashboardSkeleton";
 import { toast } from "react-toastify";
@@ -31,8 +32,11 @@ import { DeleteDialogs } from "./DeleteDialogs";
 import { JobsTab } from "./JobsTab";
 import { AnalyticsTab } from "./AnalyticsTab";
 
+// The active-tab background is a single shared pill that slides between
+// triggers via Framer's layoutId (see DashboardView). The button itself stays
+// transparent and only fades text color + reacts to the press transform.
 const DASHBOARD_TAB_CLASS =
-  "relative z-10 min-h-10 rounded-md px-3 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,background-color,transform] data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:px-4";
+  "relative z-10 min-h-10 rounded-md px-3 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,transform] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:px-4";
 
 function getJobField(job: OptimizationSummaryResponse, key: string): unknown {
   return (job as unknown as Record<string, unknown>)[key];
@@ -57,6 +61,8 @@ export function DashboardView() {
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  const prefersReducedMotion = useReducedMotion();
 
   const [activeTab, setActiveTab] = useState("jobs");
   // Sync from URL on mount / when ?tab= changes (supports deep-linking from
@@ -314,6 +320,10 @@ export function DashboardView() {
     return <DashboardSkeleton />;
   }
 
+  const tabPillTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { type: "tween" as const, duration: 0.2, ease: [0.2, 0.8, 0.2, 1] as const };
+
   return (
     <>
       <div className="flex flex-col gap-8 -mt-2 md:-mt-4">
@@ -328,16 +338,36 @@ export function DashboardView() {
                   value="jobs"
                   className={DASHBOARD_TAB_CLASS}
                 >
-                  <TableIcon className="size-3.5" />
-                  {TERMS.optimizationPlural}
+                  {activeTab === "jobs" && (
+                    <motion.span
+                      layoutId="dashboardTabPill"
+                      transition={tabPillTransition}
+                      className="absolute inset-0 z-0 rounded-md bg-background shadow-sm"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="relative z-10 inline-flex items-center gap-1.5">
+                    <TableIcon className="size-3.5" />
+                    {TERMS.optimizationPlural}
+                  </span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="analytics"
                   data-tutorial="analytics-tab"
                   className={DASHBOARD_TAB_CLASS}
                 >
-                  <BarChart3 className="size-3.5" />
-                  {msg("auto.features.dashboard.components.dashboardview.1")}
+                  {activeTab === "analytics" && (
+                    <motion.span
+                      layoutId="dashboardTabPill"
+                      transition={tabPillTransition}
+                      className="absolute inset-0 z-0 rounded-md bg-background shadow-sm"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="relative z-10 inline-flex items-center gap-1.5">
+                    <BarChart3 className="size-3.5" />
+                    {msg("auto.features.dashboard.components.dashboardview.1")}
+                  </span>
                 </TabsTrigger>
               </TabsList>
 
