@@ -1,6 +1,7 @@
 "use client";
 
-import { Image as ImageIcon, Type as TypeIcon, Upload } from "lucide-react";
+import { useState } from "react";
+import { Image as ImageIcon, Library, Type as TypeIcon, Upload } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -8,12 +9,14 @@ import {
   CardTitle,
   CardDescription,
 } from "@/shared/ui/primitives/card";
+import { Button } from "@/shared/ui/primitives/button";
 import { Label } from "@/shared/ui/primitives/label";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
+import { DatasetPickerDialog } from "@/features/datasets";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
@@ -23,12 +26,14 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
     datasetFileName,
     fileInputRef,
     handleFileUpload,
+    handlePickFromLibrary,
     columnRoles,
     setColumnRoles,
     columnKinds,
     setColumnKinds,
     datasetProfile,
   } = w;
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Auto-detected kinds straight from the profiler — used to mark a column
   // as "auto-detected as image" (vs a user-driven manual flip) in the UI.
@@ -83,6 +88,28 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
             onChange={handleFileUpload}
           />
         </label>
+
+        <div className="flex items-center gap-3">
+          <Separator className="flex-1" />
+          <span className="text-xs text-muted-foreground">{msg("submit.dataset.library_or")}</span>
+          <Separator className="flex-1" />
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setPickerOpen(true)}
+          className="w-full justify-center gap-2"
+        >
+          <Library className="size-4" />
+          {msg("submit.dataset.library_pick")}
+        </Button>
+
+        <DatasetPickerDialog
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onPick={handlePickFromLibrary}
+        />
 
         {parsedDataset && parsedDataset.columns.length > 0 && (
           <>
