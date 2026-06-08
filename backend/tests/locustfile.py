@@ -9,7 +9,7 @@ Task tag summary:
     write — mutating requests (job submit + cancel, invalid submit)
 
 Run (interactive):
-    cd backend && ../.venv/bin/locust -f tests/locustfile.py --host=http://localhost:8000
+    cd backend && .venv/bin/locust -f tests/locustfile.py --host=http://localhost:8000
 
 Then open http://localhost:8089 for the Locust dashboard.
 

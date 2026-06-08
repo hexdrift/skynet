@@ -25,7 +25,7 @@ Requires:
     - PostgreSQL running with skynet database
 
 Run:
-    cd backend && ../.venv/bin/python -m pytest tests/test_llm_integration.py -v
+    cd backend && .venv/bin/python -m pytest tests/test_llm_integration.py -v
 """
 
 from __future__ import annotations
