@@ -447,10 +447,32 @@ export function Sidebar() {
                     ))}
                   </div>
                 ))}
-                {renderedTab === "shared" && loadedAll && groupedJobs.length === 0 && (
-                  <p className="px-3 py-6 text-center text-[0.6875rem] leading-relaxed text-muted-foreground/60">
-                    {msg("sidebar.shared.empty")}
-                  </p>
+                {loadedAll && groupedJobs.length === 0 && (
+                  <div className="flex flex-col items-center gap-2.5 px-4 pt-9 pb-6 text-center">
+                    {renderedTab === "shared" ? (
+                      <Share2
+                        className="size-6 text-muted-foreground/25"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Send
+                        className="size-6 text-muted-foreground/25"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <p className="text-[0.8125rem] font-medium text-muted-foreground/75">
+                      {msg(renderedTab === "shared" ? "sidebar.shared.empty" : "sidebar.mine.empty")}
+                    </p>
+                    <p className="max-w-[11rem] text-[0.6875rem] leading-relaxed text-muted-foreground/45">
+                      {msg(
+                        renderedTab === "shared"
+                          ? "sidebar.shared.empty.hint"
+                          : "sidebar.mine.empty.hint",
+                      )}
+                    </p>
+                  </div>
                 )}
               </motion.div>
             </AnimatePresence>
