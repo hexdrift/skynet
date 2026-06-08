@@ -27,6 +27,7 @@ class I18nKey(StrEnum):
     DATASET_COLUMN_ROLES_NEED_INPUT = 'dataset.column_roles_need_input'
     DATASET_COLUMN_ROLES_NEED_OUTPUT = 'dataset.column_roles_need_output'
     DATASET_COLUMN_ROLES_UNKNOWN = 'dataset.column_roles_unknown'
+    DATASET_LIBRARY_FORBIDDEN = 'dataset.library.forbidden'
     DATASET_LIBRARY_NOT_FOUND = 'dataset.library.not_found'
     DATASET_LIBRARY_QUOTA_EXCEEDED = 'dataset.library.quota_exceeded'
     DATASET_LIBRARY_TOO_LARGE = 'dataset.library.too_large'

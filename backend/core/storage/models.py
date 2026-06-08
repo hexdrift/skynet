@@ -477,3 +477,71 @@ class DatasetBlobModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
+
+
+class DatasetShareLinkModel(Base):
+    """Per-dataset sharing config keyed by a public link token.
+
+    Mirrors :class:`OptimizationShareLinkModel` for the dataset library: the
+    ``token`` is the unguessable capability embedded in the public
+    ``/datasets/share/<token>`` URL, stored in plaintext because it IS the
+    public identifier, not a credential hash. The active (``revoked_at IS
+    NULL``) row per dataset holds the config. ``general_access`` is
+    ``'restricted'`` (owner + invited members only) or ``'anyone'`` (anyone
+    holding the link). ``general_role`` is the tier an ``'anyone'`` link grants
+    a signed-in visitor — ``'viewer'`` or ``'editor'`` (never ``'owner'``).
+    Unlike the optimization variant, the ``dataset_id`` foreign key cascades, so
+    deleting a dataset removes its link rows automatically.
+    """
+
+    __tablename__ = "dataset_share_links"
+
+    token: Mapped[str] = mapped_column(String(48), primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    general_access: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="restricted", server_default="restricted"
+    )
+    general_role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="viewer", server_default="viewer"
+    )
+
+
+class DatasetShareGrantModel(Base):
+    """A single per-user access grant on a shared library dataset.
+
+    Mirrors :class:`OptimizationShareGrantModel`: each row invites one
+    ``grantee_username`` to a dataset with a tier ``role`` (``'viewer'`` /
+    ``'editor'`` / ``'owner'``). The pair ``(dataset_id, grantee_username)`` is
+    the primary key, so re-inviting a user replaces their grant. The
+    ``dataset_id`` foreign key cascades, removing grants when the dataset is
+    deleted.
+    """
+
+    __tablename__ = "dataset_share_grants"
+
+    dataset_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    grantee_username: Mapped[str] = mapped_column(String(255), primary_key=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    # The composite PK leads with dataset_id, so "list everything shared with
+    # this user" (filtering on grantee_username alone) could not use it.
+    __table_args__ = (Index("ix_dataset_share_grants_grantee", "grantee_username"),)

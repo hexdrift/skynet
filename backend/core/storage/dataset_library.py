@@ -409,6 +409,26 @@ class DatasetLibraryStore:
             ).all()
             return [_to_record(row) for row in rows]
 
+    def list_datasets_by_ids(self, dataset_ids: list[str]) -> list[DatasetRecord]:
+        """Return datasets for the given ids, newest first (for shared listing).
+
+        Args:
+            dataset_ids: Dataset ids to load (empty -> ``[]``).
+
+        Returns:
+            The matching :class:`DatasetRecord` list ordered by ``updated_at``
+            desc; unknown ids are simply absent.
+        """
+        if not dataset_ids:
+            return []
+        with Session(self._engine) as session:
+            rows = session.scalars(
+                select(DatasetModel)
+                .where(DatasetModel.id.in_(list(dataset_ids)))
+                .order_by(DatasetModel.updated_at.desc())
+            ).all()
+            return [_to_record(row) for row in rows]
+
     def get_rows(self, dataset_id: str) -> list[dict[str, Any]] | None:
         """Return the decompressed rows for ``dataset_id``.
 
@@ -481,6 +501,26 @@ class DatasetLibraryStore:
             if row is None:
                 return None
             row.name = name
+            row.updated_at = datetime.now(UTC)
+            session.commit()
+            session.refresh(row)
+            return _to_record(row)
+
+    def reassign_owner(self, dataset_id: str, owner_username: str) -> DatasetRecord | None:
+        """Reassign a dataset's owner (sharing transfer).
+
+        Args:
+            dataset_id: Dataset whose owner moves.
+            owner_username: The new owner's lowercased username.
+
+        Returns:
+            The updated :class:`DatasetRecord`, or ``None`` when unknown.
+        """
+        with Session(self._engine) as session:
+            row = session.get(DatasetModel, dataset_id)
+            if row is None:
+                return None
+            row.owner_username = owner_username
             row.updated_at = datetime.now(UTC)
             session.commit()
             session.refresh(row)

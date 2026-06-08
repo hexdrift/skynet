@@ -156,6 +156,7 @@
     "dataset.library.too_large": "ה{term.dataset} גדול מדי לשמירה בספרייה (המגבלה היא {max_mb}MB בדחיסה).",
     "dataset.library.quota_exceeded": "חרגת ממכסת האחסון של הספרייה ({used_mb}MB מתוך {quota_mb}MB). פנה/י מקום ונסה/י שוב.",
     "dataset.library.not_found": "ה{term.dataset} לא נמצא בספרייה שלך.",
+    "dataset.library.forbidden": "אין לך הרשאה לבצע פעולה זו על ה{term.dataset}.",
     "agent.approval.unknown_call_id": "אין אישור ממתין ל-call_id שצוין.",
     "agent.status.tool_start": "הסוכן מפעיל כלי…",
     "agent.status.tool_end": "הכלי סיים לפעול.",

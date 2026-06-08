@@ -115,6 +115,8 @@ def test_save_then_read_round_trip() -> None:
     dataset_id = saved["dataset"]["id"]
     assert saved["dataset"]["row_count"] == 2
     assert saved["dataset"]["column_count"] == 2
+    assert saved["dataset"]["owner_username"] == "alice"
+    assert saved["dataset"]["role"] == "owner"
 
     listing = client.get("/datasets/library").json()
     assert [d["id"] for d in listing["datasets"]] == [dataset_id]
