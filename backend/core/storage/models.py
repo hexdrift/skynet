@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -182,6 +183,10 @@ class JobModel(Base):
     # Optional client-supplied dedup key; lookups are scoped per submitter so
     # two users may legitimately reuse the same key without colliding.
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Precomputed byte size of this job's JSON columns (payload + result +
+    # overview), maintained at write time so the unified per-user storage total
+    # is a single indexed SUM rather than a scan that re-serializes every payload.
+    stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
 
     __table_args__ = (
         Index("ix_jobs_status_created_at", "status", "created_at"),
@@ -415,3 +420,132 @@ class AgentStagedDatasetModel(Base):
     )
 
     __table_args__ = (Index("ix_agent_staged_datasets_user_created", "username", "created_at"),)
+
+
+class DatasetModel(Base):
+    """One saved dataset in a user's personal library — a single file reference.
+
+    Metadata only: the row bytes live in the one-to-one :class:`DatasetBlobModel`
+    so this hot table stays narrow (a JSONB-inlined dataset would TOAST and slow
+    every list query). ``byte_size`` is the uncompressed logical size shown to
+    the user; ``stored_bytes`` is the compressed size that counts against the
+    per-user quota. ``content_hash`` is the SHA-256 of the canonical uncompressed
+    bytes — indexed with ``owner_username`` so a re-save of identical bytes can
+    dedupe instead of storing a second copy. ``column_schema`` carries the saved
+    column roles/kinds/order so picking the dataset in the submit wizard
+    pre-fills the column step. ``source`` records the producing surface
+    (``'upload'`` / ``'tagger'`` / ``'optimization'``).
+    """
+
+    __tablename__ = "datasets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_username: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="upload")
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    column_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    column_schema: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (Index("ix_datasets_owner_content_hash", "owner_username", "content_hash"),)
+
+
+class DatasetBlobModel(Base):
+    """The row bytes for one :class:`DatasetModel`, stored compressed and apart.
+
+    Split from the metadata table so the whole-file read pattern avoids the
+    random-access penalty TOAST imposes on a large JSONB column, and so the
+    bytes can later move behind an object-store seam without touching the
+    metadata schema. ``data`` holds the ``compression``-encoded serialization of
+    the rows in ``content_type`` (``'csv'`` / ``'json'``). Deleted with its
+    parent dataset via the cascading foreign key.
+    """
+
+    __tablename__ = "dataset_blobs"
+
+    dataset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("datasets.id", ondelete="CASCADE"), primary_key=True
+    )
+    content_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    compression: Mapped[str] = mapped_column(String(16), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class DatasetShareLinkModel(Base):
+    """Per-dataset sharing config keyed by a public link token.
+
+    Mirrors :class:`OptimizationShareLinkModel` for the dataset library: the
+    ``token`` is the unguessable capability embedded in the public
+    ``/datasets/share/<token>`` URL, stored in plaintext because it IS the
+    public identifier, not a credential hash. The active (``revoked_at IS
+    NULL``) row per dataset holds the config. ``general_access`` is
+    ``'restricted'`` (owner + invited members only) or ``'anyone'`` (anyone
+    holding the link). ``general_role`` is the tier an ``'anyone'`` link grants
+    a signed-in visitor — ``'viewer'`` or ``'editor'`` (never ``'owner'``).
+    Unlike the optimization variant, the ``dataset_id`` foreign key cascades, so
+    deleting a dataset removes its link rows automatically.
+    """
+
+    __tablename__ = "dataset_share_links"
+
+    token: Mapped[str] = mapped_column(String(48), primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    general_access: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="restricted", server_default="restricted"
+    )
+    general_role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="viewer", server_default="viewer"
+    )
+
+
+class DatasetShareGrantModel(Base):
+    """A single per-user access grant on a shared library dataset.
+
+    Mirrors :class:`OptimizationShareGrantModel`: each row invites one
+    ``grantee_username`` to a dataset with a tier ``role`` (``'viewer'`` /
+    ``'editor'`` / ``'owner'``). The pair ``(dataset_id, grantee_username)`` is
+    the primary key, so re-inviting a user replaces their grant. The
+    ``dataset_id`` foreign key cascades, removing grants when the dataset is
+    deleted.
+    """
+
+    __tablename__ = "dataset_share_grants"
+
+    dataset_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    grantee_username: Mapped[str] = mapped_column(String(255), primary_key=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    # The composite PK leads with dataset_id, so "list everything shared with
+    # this user" (filtering on grantee_username alone) could not use it.
+    __table_args__ = (Index("ix_dataset_share_grants_grantee", "grantee_username"),)

@@ -28,6 +28,7 @@ export const sidebarMessages = {
   "auto.features.sidebar.components.sidebar.literal.1": "לוח בקרה",
   "auto.features.sidebar.components.sidebar.literal.2": "תיוג טקסטים",
   "sidebar.nav.explore": "חיפוש",
+  "sidebar.nav.datasets": "דאטאסטים",
   "sidebar.tab.mine": "שלי",
   "sidebar.tab.shared": "משותף איתי",
   "sidebar.tab.aria": "סינון ריצות",

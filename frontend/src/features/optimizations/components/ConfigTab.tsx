@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import {
+  ArrowUpRight,
   Boxes,
   Brain,
   Coins,
@@ -12,6 +14,7 @@ import {
   Gauge,
   GitMerge,
   Layers,
+  Library,
   Repeat,
   Ruler,
   Settings,
@@ -397,6 +400,21 @@ export function ConfigTab({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {job.source_dataset_id && (
+              <Link
+                href={`/datasets?open=${job.source_dataset_id}`}
+                className="group/srclink flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/80 px-3 py-2.5 transition-colors hover:border-[#C8A882]/60 hover:bg-accent/40"
+              >
+                <Library className="size-3.5 shrink-0 text-[#A89680]" />
+                <span className="min-w-0 flex-1 text-xs text-foreground">
+                  {msg("optimizations.source_dataset.label")}
+                </span>
+                <span className="shrink-0 text-xs font-medium text-[#7C6350]">
+                  {msg("optimizations.source_dataset.view")}
+                </span>
+                <ArrowUpRight className="size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover/srclink:text-foreground" />
+              </Link>
+            )}
             <div className="space-y-2">
               <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680]">
                 <HelpTip text={tip("data.split_explanation")}>

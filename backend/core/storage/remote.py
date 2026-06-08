@@ -34,6 +34,7 @@ from .models import (
     UserQuotaOverrideModel,
 )
 from .schema_lock import schema_bootstrap_lock
+from .usage import StorageUsage, compute_user_storage, json_byte_size
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ MAX_PROGRESS_EVENTS = 5000
 MAX_LOG_ENTRIES = 5000
 PROGRESS_TRIM_SAMPLE_RATE = 100
 _IMMUTABLE_JOB_COLUMNS = frozenset({"optimization_id", "notified_at", "idempotency_key"})
+# The JSON columns whose serialized size dominates a job's storage footprint and
+# therefore make up ``jobs.stored_bytes``. ``latest_metrics`` / ``message`` are
+# tiny and intentionally excluded to keep the recompute read narrow.
+_STORED_BYTES_JSON_COLUMNS = ("payload", "result", "payload_overview")
 
 
 def _build_connect_args(db_url: str) -> dict[str, Any]:
@@ -409,6 +414,7 @@ class RemoteDBJobStore:
             raise ValueError(f"Unknown field '{invalid_fields[0]}' on JobModel")
 
         merging_metrics = "latest_metrics" in kwargs
+        recompute_stored = bool(set(_STORED_BYTES_JSON_COLUMNS) & set(kwargs))
         update_values: dict[str, Any] = {}
         for key, value in kwargs.items():
             if key in datetime_fields and isinstance(value, str):
@@ -429,6 +435,23 @@ class RemoteDBJobStore:
                 merged = dict(current_metrics)
                 merged.update(update_values["latest_metrics"])
                 update_values["latest_metrics"] = merged
+
+            if recompute_stored:
+                stored_row = (
+                    session.query(
+                        JobModel.payload,
+                        JobModel.result,
+                        JobModel.payload_overview,
+                    )
+                    .filter(JobModel.optimization_id == optimization_id)
+                    .first()
+                )
+                if stored_row is None:
+                    raise KeyError(f"Job '{optimization_id}' not found")
+                update_values["stored_bytes"] = sum(
+                    json_byte_size(update_values[col] if col in update_values else stored_row[i])
+                    for i, col in enumerate(_STORED_BYTES_JSON_COLUMNS)
+                )
 
             rows = (
                 session.query(JobModel)
@@ -626,6 +649,35 @@ class RemoteDBJobStore:
         if has_override:
             return quota
         return settings.get_user_quota(username)
+
+    def get_effective_user_storage_quota(self, username: str) -> int:
+        """Return the unified storage budget in bytes the user is held to.
+
+        The budget is a single self-service ceiling with no per-user admin
+        override — users free their own space — so every caller gets the static
+        ``settings.user_storage_quota_bytes``. It stays a method (rather than an
+        inline setting read) so the save/run gate, the usage meter, and the
+        quota modal all resolve the budget through one seam that tests can stub.
+
+        Args:
+            username: Accepted for symmetry with the usage and gate call sites;
+                the budget is identical for every user.
+
+        Returns:
+            The byte budget the user's total storage is checked against.
+        """
+        return settings.user_storage_quota_bytes
+
+    def compute_user_storage(self, username: str) -> StorageUsage:
+        """Return the user's unified storage usage across every owned table.
+
+        Args:
+            username: Owner whose footprint is summed.
+
+        Returns:
+            The :class:`StorageUsage` total and per-category breakdown.
+        """
+        return compute_user_storage(self._engine, username)
 
     def set_user_quota_override(self, username: str, quota: int | None, updated_by: str | None = None) -> None:
         """Create or update the live quota override for a user.
@@ -1063,6 +1115,9 @@ class RemoteDBJobStore:
                     job.username = (overview or {}).get("username")  # type: ignore[assignment]
                 if "optimization_type" in (overview or {}):
                     job.optimization_type = (overview or {}).get("optimization_type")  # type: ignore[assignment]
+                job.stored_bytes = (  # type: ignore[assignment]
+                    json_byte_size(job.payload) + json_byte_size(job.result) + json_byte_size(overview or {})
+                )
                 session.commit()
         finally:
             session.close()

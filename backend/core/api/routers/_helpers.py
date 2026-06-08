@@ -492,6 +492,42 @@ def enforce_user_quota(job_store, username: str) -> None:
         raise DomainError("quota.reached", status=409, quota=quota)
 
 
+def _mb(num_bytes: int) -> float:
+    """Return ``num_bytes`` as megabytes rounded to one decimal for messages."""
+    return round(num_bytes / (1024 * 1024), 1)
+
+
+def enforce_storage_quota(job_store, username: str, incoming_bytes: int) -> None:
+    """Raise if persisting ``incoming_bytes`` would exceed the storage budget.
+
+    The unified per-user storage total (jobs, datasets, logs, agent chats,
+    staged uploads, embeddings) plus the incoming write is compared against the
+    user's effective byte budget. This is the single gate that supersedes the
+    legacy per-job count cap and the per-library dataset quota.
+
+    Args:
+        job_store: Store exposing ``get_effective_user_storage_quota`` and
+            ``compute_user_storage``.
+        username: The user the budget belongs to.
+        incoming_bytes: Size of the not-yet-persisted write (payload or dataset).
+
+    Raises:
+        DomainError: ``user.storage.quota_exceeded`` (HTTP 409) when the user's
+            total would cross their budget.
+    """
+    quota = job_store.get_effective_user_storage_quota(username)
+    used = job_store.compute_user_storage(username).total
+    if used + incoming_bytes <= quota:
+        return
+    raise DomainError(
+        "user.storage.quota_exceeded",
+        status=409,
+        used_mb=_mb(used),
+        quota_mb=_mb(quota),
+        incoming_mb=_mb(incoming_bytes),
+    )
+
+
 def build_summary(job_data: dict) -> OptimizationSummaryResponse:
     """Build a compact dashboard-card summary from a raw job dict.
 

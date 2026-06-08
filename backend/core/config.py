@@ -120,6 +120,16 @@ class Settings(BaseSettings):
         ge=1,
         description="Maximum stored log entries per optimization job before old entries are evicted",
     )
+    dataset_max_file_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=1,
+        description="Per-file cap on compressed dataset bytes saved to a user's library",
+    )
+    user_storage_quota_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        ge=1,
+        description="Per-user unified storage budget in bytes across all of their Skynet data",
+    )
     cancel_poll_interval: float = Field(
         default=1.0, ge=0.1, le=10.0, description="Seconds between cancel signal checks"
     )
