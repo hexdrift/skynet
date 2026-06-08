@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -415,3 +416,64 @@ class AgentStagedDatasetModel(Base):
     )
 
     __table_args__ = (Index("ix_agent_staged_datasets_user_created", "username", "created_at"),)
+
+
+class DatasetModel(Base):
+    """One saved dataset in a user's personal library — a single file reference.
+
+    Metadata only: the row bytes live in the one-to-one :class:`DatasetBlobModel`
+    so this hot table stays narrow (a JSONB-inlined dataset would TOAST and slow
+    every list query). ``byte_size`` is the uncompressed logical size shown to
+    the user; ``stored_bytes`` is the compressed size that counts against the
+    per-user quota. ``content_hash`` is the SHA-256 of the canonical uncompressed
+    bytes — indexed with ``owner_username`` so a re-save of identical bytes can
+    dedupe instead of storing a second copy. ``column_schema`` carries the saved
+    column roles/kinds/order so picking the dataset in the submit wizard
+    pre-fills the column step. ``source`` records the producing surface
+    (``'upload'`` / ``'tagger'`` / ``'optimization'``).
+    """
+
+    __tablename__ = "datasets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_username: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="upload")
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    column_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    column_schema: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (Index("ix_datasets_owner_content_hash", "owner_username", "content_hash"),)
+
+
+class DatasetBlobModel(Base):
+    """The row bytes for one :class:`DatasetModel`, stored compressed and apart.
+
+    Split from the metadata table so the whole-file read pattern avoids the
+    random-access penalty TOAST imposes on a large JSONB column, and so the
+    bytes can later move behind an object-store seam without touching the
+    metadata schema. ``data`` holds the ``compression``-encoded serialization of
+    the rows in ``content_type`` (``'csv'`` / ``'json'``). Deleted with its
+    parent dataset via the cascading foreign key.
+    """
+
+    __tablename__ = "dataset_blobs"
+
+    dataset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("datasets.id", ondelete="CASCADE"), primary_key=True
+    )
+    content_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    compression: Mapped[str] = mapped_column(String(16), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
