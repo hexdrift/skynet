@@ -263,6 +263,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             **overview_to_base_fields(overview),
             compare_fingerprint=compute_compare_fingerprint(optimization_id, overview),
             message=job_data.get("message"),
+            stored_bytes=job_data.get("stored_bytes", 0),
             latest_metrics=latest_metrics,
             completed_pairs=completed_pairs,
             failed_pairs=failed_pairs,

@@ -5,7 +5,8 @@ import { TERMS } from "@/shared/lib/terms";
 export const exploreMessages = {
   "explore.filter.run": TERMS.optimizationTypeRun,
   "explore.filter.grid": TERMS.optimizationTypeGrid,
-  "explore.empty.title": "עדיין אין ריצות. הן יופיעו כאן אחרי שהמערכת תעבד אותן.",
+  "explore.empty.title": "עדיין אין ריצות",
+  "explore.empty.hint": "הן יופיעו כאן אחרי שהמערכת תעבד אותן",
   "explore.empty.cta": "צור/צרי ריצה ראשונה",
 
   // Semantic search
@@ -21,10 +22,12 @@ export const exploreMessages = {
   "explore.corpus.mine.aria": "ריצות שלי, פרטיות וציבוריות",
   "explore.corpus.shared.aria": "ריצות שמשתמשים אחרים שיתפו איתי",
   "explore.corpus.public.aria": "ריצות ציבוריות של משתמשים אחרים",
-  "explore.corpus.mine.empty": "עדיין אין לך ריצות. צור/צרי ריצה ראשונה.",
-  "explore.corpus.mine.signed_out": "התחבר/י כדי לראות את הריצות שלך.",
-  "explore.corpus.shared.empty": "עדיין לא שיתפו איתך ריצות.",
-  "explore.corpus.shared.signed_out": "התחבר/י כדי לראות ריצות ששיתפו איתך.",
+  "explore.corpus.mine.empty": "עדיין אין לך ריצות",
+  "explore.corpus.mine.empty.hint": "הריצה הראשונה שלכם תופיע כאן",
+  "explore.corpus.mine.signed_out": "התחבר/י כדי לראות את הריצות שלך",
+  "explore.corpus.shared.empty": "עדיין לא שיתפו איתך ריצות",
+  "explore.corpus.shared.empty.hint": "ריצות ששותפו איתך יופיעו כאן",
+  "explore.corpus.shared.signed_out": "התחבר/י כדי לראות ריצות ששיתפו איתך",
 
   "explore.results.empty.title": "לא נמצאו תוצאות עבור ״{query}״",
   "explore.results.empty.hint": "נסה/נסי ניסוח אחר או נקה/נקי את המסננים.",

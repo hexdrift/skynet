@@ -16,6 +16,9 @@ import {
   getPublicOptimization,
   stageDatasetForAgent,
   getStagedDataset,
+  getDatasetRows,
+  isStorageQuotaError,
+  type DatasetSummary,
 } from "@/shared/lib/api";
 import type {
   ModelConfig,
@@ -91,6 +94,12 @@ export function useSubmitWizard() {
   const [parsedDataset, setParsedDataset] = useState<ParsedDataset | null>(null);
   const [datasetFileName, setDatasetFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A by-reference submit (source_dataset_id) is only valid while the on-screen
+  // rows are still the ones we loaded from the library. Every other dataset
+  // source — upload, clone, agent-staged — replaces ``parsedDataset`` with a
+  // fresh object, so this identity-bound ref naturally goes stale and the submit
+  // falls back to inlining rows without clearing a flag at each call site.
+  const librarySourceRef = useRef<{ id: string; parsed: ParsedDataset } | null>(null);
 
   const [columnRoles, setColumnRoles] = useState<Record<string, ColumnRole>>({});
   // Manual override for input column modality. The dataset profiler auto-fills
@@ -1059,6 +1068,12 @@ export function useSubmitWizard() {
         return true;
       }
       case 2:
+        // React live-MCP runs need a tool endpoint; gate it here so the empty
+        // URL is caught when leaving the params step instead of only at submit.
+        if (isReact && reactConfig.toolSourceKind === "live_mcp" && !reactConfig.mcpUrl.trim()) {
+          if (showToast) toast.error(msg("submit.validation.mcp_url_required"));
+          return false;
+        }
         if (datasetValidation && datasetValidation.errors.length > 0) {
           if (showToast) toast.error(msg("submit.validation.split_too_small"));
           return false;
@@ -1330,6 +1345,51 @@ export function useSubmitWizard() {
     }
   }, []);
 
+  const handlePickFromLibrary = useCallback(async (dataset: DatasetSummary) => {
+    try {
+      const res = await getDatasetRows(dataset.id);
+      if (res.rows.length === 0) {
+        toast.error(msg("submit.dataset.library_empty"));
+        return;
+      }
+      const columns = res.columns.length > 0 ? res.columns : Object.keys(res.rows[0] ?? {});
+      const parsed: ParsedDataset = { columns, rows: res.rows, rowCount: res.row_count };
+      // Bind the reference to this exact object so handleSubmit can tell a live
+      // library pick from a later upload/clone by identity (see librarySourceRef).
+      librarySourceRef.current = { id: dataset.id, parsed };
+      setParsedDataset(parsed);
+      setDatasetFileName(dataset.name);
+      // Restore the saved roles; default any column the schema didn't cover to
+      // input so the column step opens fully populated.
+      const savedRoles = res.column_schema.column_roles ?? {};
+      const roles: Record<string, "input" | "output" | "ignore"> = {};
+      columns.forEach((col) => {
+        roles[col] = savedRoles[col] ?? "input";
+      });
+      setColumnRoles(roles);
+      // Seed saved modality kinds; the profiler effect only fills gaps, so these
+      // survive its auto-detection pass.
+      setColumnKinds(res.column_schema.column_kinds ?? {});
+      const pickedDefaultMode = readPref("wizardSplitMode");
+      splitModeRef.current = pickedDefaultMode;
+      setSplitModeState(pickedDefaultMode);
+      setDatasetProfile(null);
+      setSplitPlan(null);
+      setSignatureManuallyEdited(false);
+      setMetricManuallyEdited(false);
+      setSignatureValidation(null);
+      setMetricValidation(null);
+      toast.success(
+        formatMsg("submit.dataset.library_loaded", {
+          name: dataset.name,
+          count: parsed.rowCount,
+        }),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("submit.dataset.file_error"));
+    }
+  }, []);
+
   const updateSplit = (field: keyof SplitFractions, value: string) => {
     if (splitModeRef.current === "auto") return;
     const num = parseFloat(value);
@@ -1386,6 +1446,14 @@ export function useSubmitWizard() {
         reflectionMinibatchSize,
         useMerge,
       });
+      // Submit by reference when the on-screen rows are still the library dataset
+      // we loaded — the server inlines the rows and records the link back to it.
+      // Any other dataset source replaced the object identity, so fall back to
+      // sending the rows inline. The two are mutually exclusive server-side.
+      const librarySourceId =
+        librarySourceRef.current && librarySourceRef.current.parsed === parsedDataset
+          ? librarySourceRef.current.id
+          : null;
       const base = {
         name: jobName.trim() || undefined,
         description: jobDescription.trim() || undefined,
@@ -1394,7 +1462,9 @@ export function useSubmitWizard() {
         signature_code: signatureCode,
         metric_code: metricCode,
         optimizer_name: optimizerName,
-        dataset: parsedDataset.rows as Array<Record<string, unknown>>,
+        ...(librarySourceId
+          ? { source_dataset_id: librarySourceId }
+          : { dataset: parsedDataset.rows as Array<Record<string, unknown>> }),
         dataset_filename: datasetFileName || undefined,
         column_mapping: columnMapping,
         // Preserve the on-screen column order (file order) so a clone restores
@@ -1518,7 +1588,11 @@ export function useSubmitWizard() {
         router.push(jobUrl);
       }, 1500);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("submit.submit_failed"));
+      // The storage-budget 409 opens the shared quota modal centrally; suppress
+      // the redundant toast so the modal is the single surface.
+      if (!isStorageQuotaError(err)) {
+        toast.error(err instanceof Error ? err.message : msg("submit.submit_failed"));
+      }
       setSubmitPhase("idle");
       setSubmitting(false);
     }
@@ -1602,6 +1676,7 @@ export function useSubmitWizard() {
     setDatasetFileName,
     fileInputRef,
     handleFileUpload,
+    handlePickFromLibrary,
     columnRoles,
     setColumnRoles,
     columnKinds,

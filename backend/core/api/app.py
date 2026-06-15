@@ -77,6 +77,7 @@ from .observability import (
     start_event_loop_lag_monitor,
     start_orphan_recovery_sweeper,
     start_queue_metrics_refresher,
+    start_staged_dataset_sweeper,
     start_stale_conversation_sweeper,
 )
 from .routers.admin import create_admin_router
@@ -86,6 +87,8 @@ from .routers.api_tokens import create_api_tokens_router
 from .routers.code_agent import create_code_agent_router
 from .routers.code_validation import create_code_validation_router
 from .routers.dashboard import create_dashboard_router
+from .routers.dataset_library import create_dataset_library_router
+from .routers.dataset_share import create_dataset_share_router
 from .routers.datasets import create_datasets_router
 from .routers.generalist_agent import create_generalist_agent_router
 from .routers.models import create_models_router
@@ -95,6 +98,7 @@ from .routers.registry import create_registry_router
 from .routers.serve import create_serve_router
 from .routers.share import create_share_router
 from .routers.submissions import create_submissions_router
+from .routers.usage import create_usage_router
 from .routers.wizard import create_wizard_router
 
 logger = logging.getLogger(__name__)
@@ -674,6 +678,7 @@ def create_app(
     queue_metrics_refresher = None
     orphan_sweeper = None
     stale_conversation_sweeper = None
+    staged_dataset_sweeper = None
     loop_lag_monitor = None
 
     @asynccontextmanager
@@ -686,7 +691,7 @@ def create_app(
         Yields:
             ``None`` once the worker is running; stops the worker on exit.
         """
-        nonlocal loop_lag_monitor, orphan_sweeper, queue_metrics_refresher, stale_conversation_sweeper, worker
+        nonlocal loop_lag_monitor, orphan_sweeper, queue_metrics_refresher, staged_dataset_sweeper, stale_conversation_sweeper, worker
         # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
         # this only fails rows whose ``lease_expires_at`` is in the past — a
         # peer pod's in-flight job is not orphaned and is left alone. The
@@ -708,6 +713,7 @@ def create_app(
         stale_conversation_sweeper = start_stale_conversation_sweeper(
             getattr(job_store, "engine", None)
         )
+        staged_dataset_sweeper = start_staged_dataset_sweeper(getattr(job_store, "engine", None))
         if settings.event_loop_lag_monitor_enabled:
             loop_lag_monitor = start_event_loop_lag_monitor()
             logger.info("Event-loop lag monitor enabled (threshold %.0fms)", settings.event_loop_lag_threshold_ms)
@@ -782,6 +788,8 @@ def create_app(
                 orphan_sweeper.stop()
             if stale_conversation_sweeper:
                 stale_conversation_sweeper.stop()
+            if staged_dataset_sweeper:
+                staged_dataset_sweeper.stop()
             if loop_lag_monitor:
                 loop_lag_monitor.stop()
 
@@ -1134,6 +1142,9 @@ def create_app(
     app.include_router(create_agent_history_router(job_store=job_store), tags=["Optimizations"])
     app.include_router(create_api_tokens_router(job_store=job_store), tags=["Settings"])
     app.include_router(create_datasets_router(job_store=job_store), tags=["Datasets"])
+    app.include_router(create_dataset_library_router(job_store=job_store), tags=["Datasets"])
+    app.include_router(create_dataset_share_router(job_store=job_store), tags=["Datasets"])
+    app.include_router(create_usage_router(job_store=job_store), tags=["Settings"])
     app.include_router(create_wizard_router(), tags=["Wizard"])
     app.include_router(
         create_submissions_router(service=service, job_store=job_store),

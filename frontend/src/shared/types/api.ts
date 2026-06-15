@@ -65,8 +65,14 @@ interface OptimizationRequestBase {
   optimizer_name: string;
   optimizer_kwargs?: Record<string, unknown>;
   compile_kwargs?: Record<string, unknown>;
-  dataset: Array<Record<string, unknown>>;
+  // Optional because a submit can carry rows by reference instead: when
+  // `source_dataset_id` is set the server inlines the saved library rows and
+  // `dataset` is omitted. Exactly one of the two is sent.
+  dataset?: Array<Record<string, unknown>>;
   dataset_filename?: string | null;
+  // Id of a saved library dataset to run by reference (consumer path); mutually
+  // exclusive with inline `dataset`.
+  source_dataset_id?: string | null;
   column_mapping: ColumnMapping;
   // Dataset columns in the order the user arranged them at submit time. An
   // array (not object keys) so it survives JSONB storage and a clone can
@@ -126,6 +132,10 @@ export interface OptimizationSummaryResponse {
   optimizer_name?: string | null;
   column_mapping?: ColumnMapping;
   dataset_rows?: number | null;
+  /** Stored footprint of this run in bytes (artifacts + payload + logs), counted against the storage quota; 0 when unmeasured. */
+  stored_bytes?: number;
+  /** Id of the library dataset this run was submitted from (by-reference); null for inline/staged submits. */
+  source_dataset_id?: string | null;
   latest_metrics?: Record<string, unknown>;
   model_name?: string | null;
   model_settings?: Record<string, unknown>;

@@ -41,6 +41,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..config import settings
+from ..storage.usage import purge_expired_staged_datasets
 from .routers.agent_history import purge_stale_conversations
 
 # python-json-logger ships its formatter under two different names depending
@@ -109,6 +110,7 @@ QUEUE_METRICS_REFRESH_SECONDS = 5.0
 ORPHAN_SWEEP_LOCK_KEY = 742137000001
 STARTUP_WORK_LOCK_KEY = 742137000002
 STALE_CONVERSATION_SWEEP_LOCK_KEY = 742137000003
+STAGED_DATASET_SWEEP_LOCK_KEY = 742137000004
 _request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 _jobs_pending_gauge = _make_gauge(
@@ -538,6 +540,105 @@ def start_stale_conversation_sweeper(engine: Any) -> StaleConversationSweeper:
         The started sweeper; callers should invoke ``stop()`` during shutdown.
     """
     sweeper = StaleConversationSweeper(engine)
+    sweeper.start()
+    return sweeper
+
+
+class StagedDatasetSweeper:
+    """Periodically delete abandoned wizard staged-dataset rows past their TTL.
+
+    A staged row parks a wizard upload server-side; a successful submit evicts
+    it, but a wizard abandoned before submit leaves the row orphaned. The thread
+    polls at ``settings.staged_dataset_sweep_interval_seconds`` (default 5 min)
+    and deletes rows older than ``settings.staged_dataset_ttl_seconds`` (default
+    10 min). The human submit posts rows inline and an agent submit-by-id
+    consumes a row within seconds of staging, so the TTL never races a live
+    submit. Leader election uses a Postgres advisory lock so only one replica
+    per tick deletes; peers fall through cheaply.
+
+    On non-PostgreSQL dialects (tests / SQLite) the lock check is skipped and
+    the sweep runs unconditionally.
+    """
+
+    def __init__(self, engine: Any, interval_seconds: float | None = None) -> None:
+        """Initialize the sweeper.
+
+        Args:
+            engine: SQLAlchemy engine the ``agent_staged_datasets`` table is on.
+            interval_seconds: Override for the polling interval; defaults to
+                ``settings.staged_dataset_sweep_interval_seconds``.
+        """
+        self._engine = engine
+        resolved = (
+            interval_seconds
+            if interval_seconds is not None
+            else settings.staged_dataset_sweep_interval_seconds
+        )
+        self._interval_seconds = max(60.0, float(resolved))
+        self._ttl_seconds = int(settings.staged_dataset_ttl_seconds)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background sweep loop."""
+        self._thread = threading.Thread(
+            target=self._run, name="staged-dataset-sweeper", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the background sweep loop."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def sweep_once(self) -> int:
+        """Acquire the leader-election lock and run one staged-dataset TTL pass.
+
+        Returns:
+            The number of staged rows deleted by the sweep, or ``0`` if this
+            replica did not win the advisory lock (peer is sweeping).
+        """
+        if self._engine is None:
+            return 0
+        if self._engine.dialect.name != "postgresql":
+            try:
+                return purge_expired_staged_datasets(self._engine, max_age_seconds=self._ttl_seconds)
+            except Exception:
+                logger.warning("Staged dataset sweep failed", exc_info=True)
+                return 0
+        try:
+            with self._engine.begin() as conn:
+                acquired = conn.execute(
+                    text("SELECT pg_try_advisory_xact_lock(:k)"),
+                    {"k": STAGED_DATASET_SWEEP_LOCK_KEY},
+                ).scalar()
+                if not acquired:
+                    return 0
+            return purge_expired_staged_datasets(self._engine, max_age_seconds=self._ttl_seconds)
+        except Exception:
+            logger.warning("Staged dataset sweep failed", exc_info=True)
+            return 0
+
+    def _run(self) -> None:
+        """Run the sweep loop until stopped."""
+        # Run once immediately so a fresh process drains rows abandoned while it
+        # was down without waiting a full interval.
+        self.sweep_once()
+        while not self._stop_event.wait(self._interval_seconds):
+            self.sweep_once()
+
+
+def start_staged_dataset_sweeper(engine: Any) -> StagedDatasetSweeper:
+    """Start and return the staged-dataset TTL sweeper bound to ``engine``.
+
+    Args:
+        engine: SQLAlchemy engine the ``agent_staged_datasets`` table is on.
+
+    Returns:
+        The started sweeper; callers should invoke ``stop()`` during shutdown.
+    """
+    sweeper = StagedDatasetSweeper(engine)
     sweeper.start()
     return sweeper
 

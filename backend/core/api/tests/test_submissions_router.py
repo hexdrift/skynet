@@ -25,10 +25,8 @@ from ...constants import (
 from ...i18n_keys import I18nKey
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
+from ...storage.usage import StorageUsage
 from ..model_catalog import CatalogModel, ModelCatalogResponse
-
-# noinspection PyProtectedMember
-from ..routers import _helpers as _h
 from ..routers import submissions as _sub_mod
 from ..routers.submissions import create_submissions_router
 from .conftest import bypass_auth
@@ -39,16 +37,46 @@ class _FakeJobStore:
     """Minimal in-memory job store stub for the submissions router tests."""
 
     # create_job / set_payload_overview are the only write paths exercised here;
-    # count_jobs feeds the quota check.
+    # compute_user_storage + get_effective_user_storage_quota feed the unified
+    # byte gate (count_jobs is kept for the legacy count-quota helper's callers).
 
-    def __init__(self, *, job_count: int = 0) -> None:
-        """Initialise with a canned job count and empty job map.
+    def __init__(self, *, job_count: int = 0, storage_used: int = 0, storage_quota: int = 1 << 40) -> None:
+        """Initialise with canned counts/quota and an empty job map.
 
         Args:
-            job_count: Value returned from ``count_jobs`` (used by quota checks).
+            job_count: Value returned from ``count_jobs``.
+            storage_used: Canned total returned from ``compute_user_storage``.
+            storage_quota: Canned budget returned from
+                ``get_effective_user_storage_quota`` (defaults high enough that
+                the byte gate is a no-op unless a test lowers it).
         """
         self._count = job_count
+        self._storage_used = storage_used
+        self._storage_quota = storage_quota
         self._jobs: dict[str, dict] = {}
+
+    def compute_user_storage(self, username: str) -> StorageUsage:
+        """Return the canned unified storage usage for any caller.
+
+        Args:
+            username: Ignored; the canned total applies to every user.
+
+        Returns:
+            A :class:`StorageUsage` with the canned total and empty breakdown
+            (the gate reads only ``.total``).
+        """
+        return StorageUsage(total=self._storage_used, breakdown={})
+
+    def get_effective_user_storage_quota(self, username: str) -> int:
+        """Return the canned storage budget for any caller.
+
+        Args:
+            username: Ignored; the canned budget applies to every user.
+
+        Returns:
+            The canned byte budget from construction.
+        """
+        return self._storage_quota
 
     def count_jobs(self, *, username: str | None = None, **_: Any) -> int:
         """Return the canned job count regardless of filter args.
@@ -394,15 +422,15 @@ def test_submit_run_returns_400_on_registry_error(monkeypatch: pytest.MonkeyPatc
     assert resp.status_code == 400
 
 
-def test_submit_run_returns_409_when_user_at_quota(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A user already at their quota is rejected with 409."""
-    monkeypatch.setattr(_h.settings.__class__, "get_user_quota", lambda self, u: 5)
-    store = _FakeJobStore(job_count=5)
+def test_submit_run_returns_409_when_over_storage_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A submission that would exceed the user's storage budget is rejected with 409."""
+    store = _FakeJobStore(storage_quota=0)
     client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
 
     resp = client.post("/run", json=_run_payload())
 
     assert resp.status_code == 409
+    assert resp.json()["code"] == "user.storage.quota_exceeded"
 
 
 def test_submit_run_returns_422_on_missing_required_field(monkeypatch: pytest.MonkeyPatch) -> None:

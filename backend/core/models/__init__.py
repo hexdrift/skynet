@@ -22,6 +22,9 @@ from .analytics import (
 )
 from .artifacts import OptimizedDemo, OptimizedPredictor, ProgramArtifact, ReactOverlay
 from .common import (
+    BulkDeleteByIdsRequest,
+    BulkDeleteByIdsResponse,
+    BulkDeleteByIdsSkipped,
     ColumnMapping,
     ModelConfig,
     OptimizationStatus,
@@ -75,6 +78,9 @@ __all__ = [
     "BulkCancelRequest",
     "BulkCancelResponse",
     "BulkCancelSkipped",
+    "BulkDeleteByIdsRequest",
+    "BulkDeleteByIdsResponse",
+    "BulkDeleteByIdsSkipped",
     "BulkDeleteRequest",
     "BulkDeleteResponse",
     "BulkDeleteSkipped",

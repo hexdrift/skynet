@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from "@/shared/ui/primitives/tooltip";
 import { Button } from "@/shared/ui/primitives/button";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import dynamic from "next/dynamic";
@@ -1264,15 +1265,15 @@ export function CompareView() {
 
   if (error || !jobs || runs.length < 2) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <XCircle className="size-12 text-destructive" />
-        <p className="text-lg text-muted-foreground">
-          {error ?? formatMsg("auto.app.compare.page.template.6", { p1: TERMS.optimizationPlural })}
-        </p>
-        <Button variant="outline" asChild>
-          <Link href="/">{msg("auto.app.compare.page.18")}</Link>
-        </Button>
-      </div>
+      <EmptyState
+        variant="list"
+        icon={XCircle}
+        title={
+          error ?? formatMsg("auto.app.compare.page.template.6", { p1: TERMS.optimizationPlural })
+        }
+        action={{ label: msg("auto.app.compare.page.18"), href: "/" }}
+        className="min-h-[60vh] justify-center"
+      />
     );
   }
 

@@ -58,6 +58,31 @@ class UserQuotaOverrideListResponse(BaseModel):
     audit_events: list[UserQuotaAuditResponse]
 
 
+class StorageQuotaOverrideResponse(BaseModel):
+    """Live per-user storage-budget override returned to the admin UI."""
+
+    username: str
+    quota_bytes: int | None = None
+    updated_at: str | None = None
+    updated_by: str | None = None
+    effective_bytes: int = 0
+    used_bytes: int = 0
+
+
+class StorageQuotaOverrideRequest(BaseModel):
+    """Request body for setting a user's storage-budget override in bytes."""
+
+    username: str = Field(min_length=1)
+    quota_bytes: int = Field(ge=1)
+
+
+class StorageQuotaOverrideListResponse(BaseModel):
+    """Envelope for admin storage-budget override listing."""
+
+    default_bytes: int
+    overrides: list[StorageQuotaOverrideResponse]
+
+
 class DirectoryUserMatch(BaseModel):
     """Single autocomplete suggestion for the admin user search."""
 
@@ -112,6 +137,28 @@ def _build_audit_response(row: dict[str, Any]) -> UserQuotaAuditResponse:
         old_quota=row.get("old_quota"),
         new_quota=row.get("new_quota"),
         created_at=row.get("created_at"),
+    )
+
+
+def _build_storage_quota_response(row: dict[str, Any], *, job_store) -> StorageQuotaOverrideResponse:
+    """Build one admin storage-budget response row.
+
+    Args:
+        row: Raw storage override mapping from storage.
+        job_store: Backing job store used to resolve the effective budget and
+            the user's live footprint.
+
+    Returns:
+        A populated response model with the user's live usage and ceiling.
+    """
+    username = str(row["username"])
+    return StorageQuotaOverrideResponse(
+        username=username,
+        quota_bytes=row.get("quota_bytes"),
+        updated_at=row.get("updated_at"),
+        updated_by=row.get("updated_by"),
+        effective_bytes=job_store.get_effective_user_storage_quota(username),
+        used_bytes=job_store.compute_user_storage(username).total,
     )
 
 
@@ -259,6 +306,99 @@ def create_admin_router(
             effective_quota=job_store.get_effective_user_quota(normalized_username),
             job_count=job_store.count_jobs(username=normalized_username),
             last_action="delete",
+        )
+
+    @router.get(
+        "/storage-quotas",
+        response_model=StorageQuotaOverrideListResponse,
+        status_code=200,
+        summary="List per-user storage-budget overrides",
+    )
+    def list_user_storage_quota_overrides(
+        admin_user: AdminUserDep,
+    ) -> StorageQuotaOverrideListResponse:
+        """List per-user storage-budget overrides with live usage.
+
+        Args:
+            admin_user: Authenticated admin user from the signed bearer token.
+
+        Returns:
+            The default byte budget plus every per-user override.
+        """
+        del admin_user
+        rows = job_store.list_user_storage_quota_overrides()
+        return StorageQuotaOverrideListResponse(
+            default_bytes=settings.user_storage_quota_bytes,
+            overrides=[_build_storage_quota_response(row, job_store=job_store) for row in rows],
+        )
+
+    @router.put(
+        "/storage-quotas",
+        response_model=StorageQuotaOverrideResponse,
+        status_code=200,
+        summary="Set a per-user storage-budget override",
+    )
+    def set_user_storage_quota_override(
+        payload: StorageQuotaOverrideRequest,
+        admin_user: AdminUserDep,
+    ) -> StorageQuotaOverrideResponse:
+        """Create or update a per-user storage-budget override.
+
+        Args:
+            payload: Username and byte ceiling that replaces the default budget.
+            admin_user: Authenticated admin user from the signed bearer token.
+
+        Returns:
+            The saved override with the user's effective budget and live usage.
+        """
+        normalized_username = payload.username.strip().lower()
+        if not normalized_username:
+            raise DomainError("admin.invalid_username", status=400)
+        job_store.set_user_storage_quota_override(
+            normalized_username, payload.quota_bytes, updated_by=admin_user.username
+        )
+        return _build_storage_quota_response(
+            {
+                "username": normalized_username,
+                "quota_bytes": payload.quota_bytes,
+                "updated_at": None,
+                "updated_by": admin_user.username,
+            },
+            job_store=job_store,
+        )
+
+    @router.delete(
+        "/storage-quotas/{username}",
+        response_model=StorageQuotaOverrideResponse,
+        status_code=200,
+        summary="Delete a per-user storage-budget override",
+    )
+    def delete_user_storage_quota_override(
+        username: str,
+        admin_user: AdminUserDep,
+    ) -> StorageQuotaOverrideResponse:
+        """Delete a storage-budget override so the default budget applies again.
+
+        Args:
+            username: User whose storage-budget override should be removed.
+            admin_user: Authenticated admin user from the signed bearer token.
+
+        Returns:
+            The user's effective budget and live usage after deletion.
+        """
+        del admin_user
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            raise DomainError("admin.invalid_username", status=400)
+        job_store.delete_user_storage_quota_override(normalized_username)
+        return _build_storage_quota_response(
+            {
+                "username": normalized_username,
+                "quota_bytes": None,
+                "updated_at": None,
+                "updated_by": None,
+            },
+            job_store=job_store,
         )
 
     @router.get(

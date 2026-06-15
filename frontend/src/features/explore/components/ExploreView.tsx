@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Clock, FilterX, Plus, SearchX } from "lucide-react";
+import { AlertTriangle, Clock, FilterX, LogIn, Plus, SearchX, Send } from "lucide-react";
 import { logSearchQuery, type PublicDashboardPoint } from "@/shared/lib/api";
 import { msg, formatMsg } from "@/shared/lib/messages";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { registerTutorialHook } from "@/features/tutorial";
 import { usePublicDashboard } from "../hooks/use-public-dashboard";
 import { useCorpusFacets } from "../hooks/use-corpus-facets";
@@ -157,18 +157,14 @@ export function ExploreView() {
         </div>
 
         {isTrulyEmpty ? (
-          <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border bg-background px-6 py-10 text-center">
-            <p className="max-w-[40ch] text-sm text-foreground/80">
-              {msg("explore.empty.title")}
-            </p>
-            <Link
-              href="/submit"
-              className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-colors hover:bg-foreground/85"
-            >
-              <Plus className="size-3.5" />
-              {msg("explore.empty.cta")}
-            </Link>
-          </div>
+          <EmptyState
+            variant="list"
+            icon={Send}
+            title={msg("explore.empty.title")}
+            description={msg("explore.empty.hint")}
+            action={{ label: msg("explore.empty.cta"), href: "/submit", icon: Plus }}
+            className="min-h-[40vh] justify-center"
+          />
         ) : (
           <ListPane
             query={query}
@@ -263,74 +259,68 @@ function ListPane({
     const isShared = query.corpus === "shared";
     if ((isMine || isShared) && !sessionUser) {
       return (
-        <div className="mx-auto flex max-w-xl flex-col items-start gap-3 px-2 py-8">
-          <p className="text-[13.5px] text-foreground/65">
-            {msg(
-              isShared
-                ? "explore.corpus.shared.signed_out"
-                : "explore.corpus.mine.signed_out",
-            )}
-          </p>
-        </div>
+        <EmptyState
+          variant="list"
+          icon={LogIn}
+          title={msg(
+            isShared ? "explore.corpus.shared.signed_out" : "explore.corpus.mine.signed_out",
+          )}
+        />
       );
     }
     if (isMine && !response.isActive) {
       return (
-        <div className="mx-auto flex max-w-xl flex-col items-start gap-3 px-2 py-8">
-          <p className="text-[13.5px] text-foreground/65">
-            {msg("explore.corpus.mine.empty")}
-          </p>
-          <Link
-            href="/submit"
-            className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-colors hover:bg-foreground/85"
-          >
-            <Plus className="size-3.5" />
-            {msg("explore.empty.cta")}
-          </Link>
-        </div>
+        <EmptyState
+          variant="list"
+          icon={Send}
+          title={msg("explore.corpus.mine.empty")}
+          description={msg("explore.corpus.mine.empty.hint")}
+          action={{ label: msg("explore.empty.cta"), href: "/submit", icon: Plus }}
+        />
       );
     }
     if (isShared && !response.isActive) {
       return (
-        <div className="mx-auto flex max-w-xl flex-col items-start gap-3 px-2 py-8">
-          <p className="text-[13.5px] text-foreground/65">
-            {msg("explore.corpus.shared.empty")}
-          </p>
-        </div>
+        <EmptyState
+          variant="list"
+          title={msg("explore.corpus.shared.empty")}
+          description={msg("explore.corpus.shared.empty.hint")}
+          className="pt-4"
+        />
       );
     }
     return (
-      <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-2 py-12 text-center">
-        <SearchX className="size-6 text-foreground/30" strokeWidth={1.5} aria-hidden="true" />
-        <h3 className="mt-1 text-[17px] font-medium leading-tight tracking-tight text-foreground">
-          {formatMsg("explore.results.empty.title", { query: query.text || "—" })}
-        </h3>
-        <p className="max-w-md text-[13.5px] leading-relaxed text-foreground/55">
-          {msg("explore.results.empty.hint")}
-        </p>
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-          {query.text.trim().length > 0 && (
-            <button
-              type="button"
-              onClick={onClearQuery}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-[12.5px] text-foreground/75 transition-colors cursor-pointer hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-            >
-              <Clock className="size-3.5" aria-hidden="true" />
-              {msg("explore.results.empty.show_recent")}
-            </button>
-          )}
-          {hasFilters && (
-            <button
-              type="button"
-              onClick={onClearAll}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-[12.5px] text-foreground/75 transition-colors cursor-pointer hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-            >
-              <FilterX className="size-3.5" aria-hidden="true" />
-              {msg("explore.results.empty.clear_filters")}
-            </button>
-          )}
-        </div>
-      </div>
+      <EmptyState
+        variant="list"
+        icon={SearchX}
+        title={formatMsg("explore.results.empty.title", { query: query.text || "—" })}
+        description={msg("explore.results.empty.hint")}
+      >
+        {(query.text.trim().length > 0 || hasFilters) && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {query.text.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={onClearQuery}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-[12.5px] text-foreground/75 transition-colors cursor-pointer hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
+              >
+                <Clock className="size-3.5" aria-hidden="true" />
+                {msg("explore.results.empty.show_recent")}
+              </button>
+            )}
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={onClearAll}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-[12.5px] text-foreground/75 transition-colors cursor-pointer hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
+              >
+                <FilterX className="size-3.5" aria-hidden="true" />
+                {msg("explore.results.empty.clear_filters")}
+              </button>
+            )}
+          </div>
+        )}
+      </EmptyState>
     );
   }
 

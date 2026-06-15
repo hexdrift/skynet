@@ -2,18 +2,22 @@ import type { DataRow, Annotation, TaggerConfig } from "./types";
 
 type ExportFormat = "csv" | "json" | "xlsx" | "xls";
 
+/** Column the annotation is written under, keyed by tagging mode. */
+function annotationColumn(config: TaggerConfig): string {
+  return config.mode === "binary"
+    ? "binary_label"
+    : config.mode === "multiclass"
+      ? "selected_categories"
+      : "extracted_text";
+}
+
 function buildRows(
   data: DataRow[],
   columns: string[],
   annotations: Record<string, Annotation>,
   config: TaggerConfig,
 ): { allCols: string[]; rows: Array<Record<string, string>> } {
-  const annotCol =
-    config.mode === "binary"
-      ? "binary_label"
-      : config.mode === "multiclass"
-        ? "selected_categories"
-        : "extracted_text";
+  const annotCol = annotationColumn(config);
 
   const allCols = [...columns, annotCol];
   const rows: Array<Record<string, string>> = [];
@@ -90,6 +94,29 @@ async function exportExcel(
       ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       : "application/vnd.ms-excel";
   download(new Blob([buf], { type: mime }), filename);
+}
+
+/**
+ * Build annotated rows plus a saved column schema for the dataset library.
+ * Input columns keep the "input" role and the annotation column is marked
+ * "output", so picking the saved dataset in the submit wizard pre-fills the
+ * annotation as the target column.
+ */
+export function buildLibraryRows(
+  data: DataRow[],
+  columns: string[],
+  annotations: Record<string, Annotation>,
+  config: TaggerConfig,
+): {
+  rows: Array<Record<string, string>>;
+  columnOrder: string[];
+  columnRoles: Record<string, "input" | "output" | "ignore">;
+} {
+  const { allCols, rows } = buildRows(data, columns, annotations, config);
+  const annotCol = annotationColumn(config);
+  const columnRoles: Record<string, "input" | "output" | "ignore"> = {};
+  for (const col of allCols) columnRoles[col] = col === annotCol ? "output" : "input";
+  return { rows, columnOrder: allCols, columnRoles };
 }
 
 export async function exportAnnotations(

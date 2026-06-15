@@ -22,6 +22,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from ...config import settings
+from ...models import (
+    BulkDeleteByIdsRequest,
+    BulkDeleteByIdsResponse,
+    BulkDeleteByIdsSkipped,
+)
 from ...service_gateway.embedding_pipeline.embeddings import get_embedder
 from ...storage.models import AgentConversationModel, AgentMessageModel
 from ..auth import AuthenticatedUser, get_authenticated_user
@@ -311,6 +316,58 @@ def create_agent_history_router(*, job_store) -> APIRouter:
                 raise DomainError("agent.conversation.forbidden", status=403)
             session.delete(row)
             session.commit()
+
+    @router.post(
+        "/agent/conversations/bulk-delete",
+        response_model=BulkDeleteByIdsResponse,
+        summary="Delete many of the caller's conversations in one request",
+    )
+    def bulk_delete_conversations(
+        body: BulkDeleteByIdsRequest, user: AuthenticatedUserDep
+    ) -> BulkDeleteByIdsResponse:
+        """Delete a batch of the caller's conversations, reporting per-id outcomes.
+
+        Duplicate ids are deduplicated. Ownership is enforced per id by
+        ``username``: an id that is unknown or owned by someone else lands in
+        ``skipped`` as ``not_found`` (the batch never 403s on one bad id);
+        messages cascade via the FK on delete.
+
+        Args:
+            body: The bulk-delete request body carrying the conversation ids.
+            user: Authenticated caller; only rows they own are deleted.
+
+        Returns:
+            A :class:`BulkDeleteByIdsResponse` listing deleted and skipped ids.
+        """
+        deleted: list[str] = []
+        skipped: list[BulkDeleteByIdsSkipped] = []
+        seen: set[str] = set()
+        ordered_unique: list[str] = []
+        for conversation_id in body.ids:
+            if conversation_id in seen:
+                continue
+            seen.add(conversation_id)
+            ordered_unique.append(conversation_id)
+        if not ordered_unique:
+            return BulkDeleteByIdsResponse(deleted=deleted, skipped=skipped)
+
+        with Session(job_store.engine) as session:
+            owned = {
+                cast(str, row.id): row
+                for row in session.query(AgentConversationModel).filter(
+                    AgentConversationModel.id.in_(ordered_unique),
+                    AgentConversationModel.username == user.username,
+                )
+            }
+            for conversation_id in ordered_unique:
+                row = owned.get(conversation_id)
+                if row is None:
+                    skipped.append(BulkDeleteByIdsSkipped(id=conversation_id, reason="not_found"))
+                    continue
+                session.delete(row)
+                deleted.append(conversation_id)
+            session.commit()
+        return BulkDeleteByIdsResponse(deleted=deleted, skipped=skipped)
 
     return router
 

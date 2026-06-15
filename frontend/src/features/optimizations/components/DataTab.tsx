@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { Loader2 } from "lucide-react";
+import { Inbox, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
   ColumnHeader,
@@ -17,7 +18,11 @@ import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
-import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/shared/lib/api";
+import {
+  getOptimizationDataset,
+  getTestResults,
+  getPairTestResults,
+} from "@/shared/lib/api";
 import type {
   OptimizationDatasetResponse,
   OptimizationStatusResponse,
@@ -298,7 +303,9 @@ export function DataTab({
   return (
     <div className="space-y-4 mt-4">
       <FadeIn>
-        <p className="text-sm text-muted-foreground">{msg("optimizations.datatab.description")}</p>
+        <p className="text-sm text-muted-foreground">
+          {msg("optimizations.datatab.description")}
+        </p>
       </FadeIn>
       {/* Test evaluation bar — shows cached results */}
       {split === "test" && (
@@ -390,9 +397,11 @@ export function DataTab({
 
       <FadeIn delay={0.35}>
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">
-            {msg("auto.features.optimizations.components.datatab.5")}
-          </p>
+          <EmptyState
+            variant="list"
+            icon={Inbox}
+            title={msg("auto.features.optimizations.components.datatab.5")}
+          />
         ) : (
           <Card data-tutorial="data-table">
             <CardContent className="p-0">

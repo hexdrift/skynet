@@ -43,6 +43,10 @@ PAYLOAD_OVERVIEW_OPTIMIZER_KWARGS = "optimizer_kwargs"
 PAYLOAD_OVERVIEW_COMPILE_KWARGS = "compile_kwargs"
 PAYLOAD_OVERVIEW_TASK_FINGERPRINT = "task_fingerprint"
 PAYLOAD_OVERVIEW_IS_PRIVATE = "is_private"
+# Id of the personal-library dataset a run was submitted from, when the submit
+# was by-reference. Persisted so the optimization detail surfaces a live link
+# back to the dataset and the dataset page can list the runs that used it.
+PAYLOAD_OVERVIEW_SOURCE_DATASET_ID = "source_dataset_id"
 
 PROGRESS_SPLITS_READY = "dataset_splits_ready"
 PROGRESS_BASELINE = "baseline_evaluated"
