@@ -24,8 +24,8 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.literal.13": "טופס הגשה",
   "auto.features.tutorial.lib.steps.literal.14": "פרטים בסיסיים",
   "auto.features.tutorial.lib.steps.literal.15": "מיפוי עמודות",
-  "auto.features.tutorial.lib.steps.literal.16": "חלוקת נתונים",
-  "auto.features.tutorial.lib.steps.literal.17": "עומק אופטימיזציה",
+  "auto.features.tutorial.lib.steps.literal.16": "חלוקת דאטאסט",
+  "auto.features.tutorial.lib.steps.literal.17": "רמת החיפוש",
   "auto.features.tutorial.lib.steps.literal.18":
     "קל רץ מהר עם מעט ניסיונות. בינוני מאזן בין מהירות לאיכות. מעמיק בודק יותר אפשרויות ולכן לוקח יותר זמן, אבל מגדיל את הסיכוי לשיפור משמעותי.",
   "auto.features.tutorial.lib.steps.literal.19": "פרמטרי GEPA",
@@ -163,7 +163,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.20":
     "{p1}: דוגמאות שה{p2} משתמש בהן כדי לבנות מועמדים. {p4}: דוגמאות שמדרגות את המועמדים בזמן הריצה. {p6}: מדידה סופית על {p7} שלא שימשו לבחירת הפרומפט.",
   "auto.features.tutorial.lib.steps.template.21":
-    "גודל מדגם לרפלקציה: כמה {p1} ה{p2} מנתח בכל סבב כדי לזהות שגיאות. מספר סבבי הערכה מרבי: בדרך כלל נקבע לפי עומק האופטימיזציה, אבל אפשר להגדיר אותו ידנית. מיזוג מועמדים: שילוב רעיונות מכמה מועמדים טובים לפרומפט אחד.",
+    "גודל מדגם לרפלקציה: כמה {p1} ה{p2} מנתח בכל סבב כדי לזהות שגיאות. מספר סבבי הערכה מרבי: בדרך כלל נקבע לפי רמת החיפוש, אבל אפשר להגדיר אותו ידנית. מיזוג מועמדים: שילוב רעיונות מכמה מועמדים טובים לפרומפט אחד.",
   "auto.features.tutorial.lib.steps.template.22":
     "החתימה (Signature) מגדירה מה ה{p1} מקבל ומה הוא צריך להחזיר. היא נוצרת אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותה ולהוסיף תיאורים מדויקים לכל שדה כדי שתהיה איכותית.",
   "auto.features.tutorial.lib.steps.template.23":
@@ -179,7 +179,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.29":
     "אחרי שליחת {p1} מגיעים לדף התוצאות. בראש הדף מופיעים שם ה{p2}, התיאור, סטטוס הריצה והזמן שעבר. כפתור שכפול יוצר {p3} חדשה עם אותן הגדרות. בזמן ריצה פעילה מופיע כפתור ביטול, ולאחר סיום או כישלון מופיע כפתור מחיקה.",
   "auto.features.tutorial.lib.steps.template.30":
-    "כל {p1} עוברת חמישה שלבים: אימות הקלט, חלוקת הנתונים, ריצת {p2} לפני {p3}, ה{p4} עצמה והערכה סופית. כל שלב מתעדכן בזמן אמת.",
+    "כל {p1} עוברת חמישה שלבים: אימות הקלט, חלוקת הדאטאסט, ריצת {p2} לפני {p3}, ה{p4} עצמה והערכה סופית. כל שלב מתעדכן בזמן אמת.",
   "auto.features.tutorial.lib.steps.template.31": "כרטיסי {p1}",
   "auto.features.tutorial.lib.steps.template.32":
     "שלושה כרטיסים: {p1} (לפני {p2}), {p3} (אחרי), ואחוז השיפור ביניהם.",
@@ -193,7 +193,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.lib.steps.template.37":
     "לוגים בזמן אמת מה{p1}. הם מתעדכנים אוטומטית בזמן שהריצה פעילה. אפשר לסנן לפי רמה (info, warning, error ועוד), לפי מקור הלוג או לפי זוג בסריקה, לחפש בטקסט חופשי ולמיין לפי זמן.",
   "auto.features.tutorial.lib.steps.template.38":
-    "כל ההגדרות של הריצה במקום אחד: {p1}, פרמטרים וחלוקת נתונים.",
+    "כל ההגדרות של הריצה במקום אחד: {p1}, פרמטרים וחלוקת דאטאסט.",
   "auto.features.tutorial.lib.steps.template.39": "סריקת {p1} (Grid Search)",
   "auto.features.tutorial.lib.steps.template.40":
     "במקום להריץ {p1} אחד, סריקה משווה כמה {p2} של {p3} × {p4} על אותה {p5}. כל שורה היא {p6}: מימין {p7} האיכות, ובאמצע זמן התגובה הממוצע. הזוג המוביל הוא זה שקיבל את ציון האיכות הגבוה ביותר ומסומן בכתר.",
@@ -348,7 +348,7 @@ export const tutorialMessages = {
   "auto.features.tutorial.components.concepts.guide.literal.101":
     "3.1 תקציב ריצה",
   "auto.features.tutorial.components.concepts.guide.literal.102":
-    "GEPA מנוהל לפי תקציב קריאות לפונקציית המדידה ולמודלים, לא לפי מספר סבבים קבוע. ב-DSPy צריך לבחור דרך תקצוב אחת בלבד: auto, max_full_evals או max_metric_calls. ב-Skynet התחל/התחילי בדרך כלל מתקציב קל, בדוק/בדקי שהמשימה, הדאטאסט ופונקציית המדידה תקינים, ורק אחר כך העלה/העלי עומק.",
+    "GEPA מנוהל לפי תקציב קריאות לפונקציית המדידה ולמודלים, לא לפי מספר סבבים קבוע. ב-DSPy צריך לבחור דרך תקצוב אחת בלבד: auto, max_full_evals או max_metric_calls. ב-Skynet התחל/התחילי בדרך כלל מתקציב קל, בדוק/בדקי שהמשימה, הדאטאסט ופונקציית המדידה תקינים, ורק אחר כך העלה/העלי את רמת החיפוש.",
   "auto.features.tutorial.components.concepts.guide.literal.103":
     "תקציב אוטומטי. בחר/י ",
   "auto.features.tutorial.components.concepts.guide.literal.104": "\"light\"",

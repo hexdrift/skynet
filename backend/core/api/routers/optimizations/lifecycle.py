@@ -33,12 +33,13 @@ from ....models import (
     OptimizationStatus,
     OptimizationSubmissionResponse,
 )
+from ....storage.usage import json_byte_size
 from ...auth import AuthenticatedUser, get_authenticated_user
 from ...converters import parse_overview, status_to_job_status
 from ...errors import DomainError
 from ...sharing_access import ShareRole
 from .._helpers import (
-    enforce_user_quota,
+    enforce_storage_quota,
     filter_ids_at_least,
     load_job_for_user,
     require_role_at_least,
@@ -252,7 +253,11 @@ def register_lifecycle_routes(
         source_name = overview.get(PAYLOAD_OVERVIEW_NAME) or optimization_id[:8]
         cloned_payload_seed: dict[str, Any] = {**source_payload, "username": current_user.username}
 
-        enforce_user_quota(job_store, current_user.username)
+        enforce_storage_quota(
+            job_store,
+            current_user.username,
+            incoming_bytes=json_byte_size(cloned_payload_seed) * req.count,
+        )
 
         created: list[OptimizationSubmissionResponse] = []
         for i in range(req.count):
@@ -313,11 +318,14 @@ def register_lifecycle_routes(
 
         overview = parse_overview(job_data)
         optimization_type = overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE, OPTIMIZATION_TYPE_RUN)
-        enforce_user_quota(job_store, current_user.username)
-
         source_name = overview.get(PAYLOAD_OVERVIEW_NAME) or optimization_id[:8]
         retry_name = f"{RETRY_NAME_PREFIX} {source_name}".strip()
         retry_payload_seed: dict[str, Any] = {**source_payload, "username": current_user.username}
+        enforce_storage_quota(
+            job_store,
+            current_user.username,
+            incoming_bytes=json_byte_size(retry_payload_seed),
+        )
         new_id, payload = clone_payload(retry_payload_seed, optimization_type=optimization_type, new_name=retry_name)
         response = persist_and_enqueue(job_store, new_id, payload, optimization_type=optimization_type)
         logger.info("Retried optimization %s as %s", optimization_id, new_id)

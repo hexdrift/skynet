@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { toast } from "react-toastify";
 import {
   ChevronLeft,
@@ -8,6 +7,7 @@ import {
   ExternalLink,
   Pencil,
   Plus,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/shared/ui/primitives/badge";
@@ -185,16 +185,12 @@ export function JobsTab({
 
         {!loading && data && filteredItems.length === 0 && data.total === 0 && (
           <EmptyState
+            variant="list"
+            icon={Send}
             title={`${msg("auto.features.dashboard.components.jobstab.4")}${TERMS.optimizationPlural}`}
-            description={`${msg("auto.features.dashboard.components.jobstab.5")}${TERMS.dataset}${msg("auto.features.dashboard.components.jobstab.6")}${TERMS.signature}${msg("auto.features.dashboard.components.jobstab.7")}${TERMS.metric}${msg("auto.features.dashboard.components.jobstab.8")}`}
-          >
-            <Button asChild className="group mt-2 gap-2">
-              <Link href="/submit">
-                <Plus className="size-4 transition-transform duration-200 group-hover:rotate-90" />
-                {TERMS.notificationNewOpt}
-              </Link>
-            </Button>
-          </EmptyState>
+            description={msg("auto.features.dashboard.components.jobstab.5")}
+            action={{ label: TERMS.notificationNewOpt, href: "/submit", icon: Plus }}
+          />
         )}
 
         {filteredItems.length > 0 && (

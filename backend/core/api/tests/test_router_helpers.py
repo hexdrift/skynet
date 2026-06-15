@@ -15,6 +15,7 @@ from ...constants import TQDM_REMAINING_KEY
 from ...models import OptimizationStatus
 from ...models.artifacts import ProgramArtifact, ReactOverlay
 from ...service_gateway.optimization.tool_overlay import hash_tool_schema
+from ...storage.usage import StorageUsage
 from ..auth import AuthenticatedUser
 from ..errors import DomainError
 
@@ -27,6 +28,7 @@ from ..routers._helpers import (
     _stable_hash,
     build_summary,
     clear_program_cache,
+    enforce_storage_quota,
     enforce_user_quota,
     load_program,
     strip_api_key,
@@ -287,6 +289,61 @@ def test_enforce_user_quota_none_quota_bypasses_check(monkeypatch: pytest.Monkey
     monkeypatch.setattr(_helpers_mod.settings.__class__, "get_user_quota", lambda self, u: None)
     store = _MinimalJobStore(9999)
     enforce_user_quota(store, "admin")
+
+
+class _StorageJobStore:
+    """Store stub returning a canned storage total and budget for any user."""
+
+    def __init__(self, *, used: int, quota: int) -> None:
+        """Capture the canned used-bytes total and byte budget.
+
+        Args:
+            used: Bytes ``compute_user_storage`` reports for any user.
+            quota: Budget ``get_effective_user_storage_quota`` reports.
+        """
+        self._used = used
+        self._quota = quota
+
+    def compute_user_storage(self, username: str) -> StorageUsage:
+        """Return the canned usage for any user.
+
+        Args:
+            username: Ignored; present for signature compatibility.
+
+        Returns:
+            A :class:`StorageUsage` with the canned total and empty breakdown.
+        """
+        return StorageUsage(total=self._used, breakdown={})
+
+    def get_effective_user_storage_quota(self, username: str) -> int:
+        """Return the canned budget for any user.
+
+        Args:
+            username: Ignored; present for signature compatibility.
+
+        Returns:
+            The fixed byte budget captured during construction.
+        """
+        return self._quota
+
+
+def test_enforce_storage_quota_allows_write_under_budget() -> None:
+    """A write that stays under the budget passes without raising."""
+    enforce_storage_quota(_StorageJobStore(used=100, quota=1000), "alice", incoming_bytes=200)
+
+
+def test_enforce_storage_quota_allows_write_landing_exactly_on_budget() -> None:
+    """A write landing exactly on the budget is allowed — the boundary is inclusive."""
+    enforce_storage_quota(_StorageJobStore(used=800, quota=1000), "alice", incoming_bytes=200)
+
+
+def test_enforce_storage_quota_rejects_write_over_budget() -> None:
+    """A write that would cross the budget is rejected with a coded 409."""
+    with pytest.raises(HTTPException) as exc:
+        enforce_storage_quota(_StorageJobStore(used=900, quota=1000), "alice", incoming_bytes=200)
+    assert exc.value.status_code == 409
+    assert exc.value.code == "user.storage.quota_exceeded"
+    assert exc.value.params["quota_mb"] == pytest.approx(1000 / (1024 * 1024), abs=0.1)
 
 
 def _make_run_result_b64(obj: object) -> str:

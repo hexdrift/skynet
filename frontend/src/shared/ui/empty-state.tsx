@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/shared/ui/primitives/button";
@@ -19,13 +20,17 @@ interface EmptyStateProps {
   description?: string;
   /**
    * Density. "page" is the large empty for top-level routes; "compact" is the
-   * smaller variant used inside scroll panels (chats, side dialogs).
+   * smaller variant used inside scroll panels (chats, side dialogs); "list" is
+   * the small centered empty shown inside list/feed surfaces (sidebar runs,
+   * explore, dashboard) — tiny icon, two muted lines, one optional subtle CTA.
    */
-  variant?: "page" | "compact";
+  variant?: "page" | "compact" | "list";
   action?: {
     label: string;
     onClick?: () => void;
     href?: string;
+    /** Optional leading icon for the action (used by the "list" CTA). */
+    icon?: LucideIcon;
   };
   /** Extra content rendered after the action (e.g. demo cards). */
   children?: React.ReactNode;
@@ -43,6 +48,55 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   const isCompact = variant === "compact";
+  const isList = variant === "list";
+  const ActionIcon = action?.icon;
+
+  if (isList) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col items-center gap-2.5 px-4 pt-9 pb-6 text-center",
+          className,
+        )}
+      >
+        {Icon && (
+          <Icon
+            className="size-6 text-muted-foreground/25"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+        )}
+        <p className="text-[0.8125rem] font-medium text-muted-foreground/75">{title}</p>
+        {description && (
+          <p className="max-w-[11rem] text-[0.6875rem] leading-relaxed text-muted-foreground/45">
+            {description}
+          </p>
+        )}
+        {action && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={action.onClick}
+            className="mt-2"
+            {...(action.href ? { asChild: true } : {})}
+          >
+            {action.href ? (
+              <Link href={action.href}>
+                {ActionIcon && <ActionIcon className="size-3.5" aria-hidden="true" />}
+                {action.label}
+              </Link>
+            ) : (
+              <>
+                {ActionIcon && <ActionIcon className="size-3.5" aria-hidden="true" />}
+                {action.label}
+              </>
+            )}
+          </Button>
+        )}
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -95,7 +149,7 @@ export function EmptyState({
           className="mt-2"
           {...(action.href ? { asChild: true } : {})}
         >
-          {action.href ? <a href={action.href}>{action.label}</a> : action.label}
+          {action.href ? <Link href={action.href}>{action.label}</Link> : action.label}
         </Button>
       )}
 

@@ -70,7 +70,7 @@ function SortControl({
     <div
       role="group"
       aria-label={msg("explore.sort.aria")}
-      className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/30 p-0.5"
+      className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/30 p-0.5"
     >
       <ArrowUpDown className="mx-1 size-3 text-foreground/35" aria-hidden="true" />
       {options.map((o) => {
@@ -83,7 +83,7 @@ function SortControl({
               onClick={() => {
                 if (!active) onChange(o.value);
               }}
-              className={`relative rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
+              className={`relative rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
                 active
                   ? "text-foreground"
                   : "cursor-pointer text-foreground/55 hover:text-foreground"
@@ -92,7 +92,7 @@ function SortControl({
               {active && (
                 <motion.span
                   layoutId="explore-sort-pill"
-                  className="absolute inset-0 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
+                  className="absolute inset-0 rounded-md bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
                   transition={PILL_TRANSITION}
                   aria-hidden="true"
                 />

@@ -19,7 +19,7 @@ import type {
   ValidateDatasetResponse,
 } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { tI18n } from "@/shared/lib/i18n";
+import { I18N_KEY, tI18n } from "@/shared/lib/i18n";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { readNdjsonStream, readServerSentEvents, type ServerSentEvent } from "@/shared/lib/sse";
 
@@ -159,6 +159,42 @@ if (typeof window !== "undefined") {
   );
 }
 
+/** Backend error code for the unified storage budget being exceeded (HTTP 409). */
+export const STORAGE_QUOTA_CODE = I18N_KEY.USER_STORAGE_QUOTA_EXCEEDED;
+
+/** Browser event the central error path fires when a write hits the storage budget. */
+export const STORAGE_QUOTA_EVENT = "storage-quota-exceeded";
+
+/** Browser event fired after a storage-freeing delete so the meter re-reads usage. */
+export const STORAGE_CHANGED_EVENT = "storage-changed";
+
+/**
+ * Error carrying the backend's structured envelope so callers can branch on the
+ * machine-readable ``code`` (not just the rendered message). Subclasses ``Error``
+ * so existing ``err instanceof Error`` / ``err.message`` handling keeps working.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly params?: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    opts: { status: number; code?: string; params?: Record<string, unknown> },
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = opts.status;
+    this.code = opts.code;
+    this.params = opts.params;
+  }
+}
+
+/** Narrow a caught value to the storage-budget 409 so its toast can be suppressed. */
+export function isStorageQuotaError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === STORAGE_QUOTA_CODE;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const send = (token: string | undefined) =>
     fetch(`${API}${path}`, {
@@ -181,26 +217,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
-      parseErrorMessage(text) ?? formatMsg("auto.shared.lib.api.template.1", { p1: res.status }),
+    const parsed = parseError(text);
+    // The storage budget is account-wide, so any blocked write opens one shared
+    // modal regardless of which producer flow tripped it. The 409 still throws
+    // so the caller's success path halts; producers suppress their own toast via
+    // isStorageQuotaError so the modal is the single surface.
+    if (parsed.code === STORAGE_QUOTA_CODE && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(STORAGE_QUOTA_EVENT, { detail: parsed.params }));
+    }
+    throw new ApiError(
+      parsed.message ?? formatMsg("auto.shared.lib.api.template.1", { p1: res.status }),
+      { status: res.status, code: parsed.code, params: parsed.params },
     );
   }
   return res.json();
 }
 
 /**
- * Extract a human-readable error message from an error response body.
+ * Parse an error response body into its rendered message and structured fields.
  *
- * Preference order:
+ * Message preference order:
  *   1. ``body.code`` + ``body.params`` — re-rendered client-side via
  *      :func:`tI18n` so UI copy comes from the local catalog.
  *   2. ``body.detail`` — the rendered Hebrew string from the server.
  *   3. ``body.error`` — legacy envelope fallback.
  *
- * Returns ``undefined`` when the body is not JSON (e.g. an HTML error page)
- * so the caller can fall back to a status-code template.
+ * ``message`` is ``undefined`` when the body is not JSON (e.g. an HTML error
+ * page) so the caller can fall back to a status-code template; ``code`` /
+ * ``params`` are passed through for callers that branch on the error code.
  */
-function parseErrorMessage(text: string): string | undefined {
+function parseError(text: string): {
+  message?: string;
+  code?: string;
+  params?: Record<string, unknown>;
+} {
   try {
     const body = JSON.parse(text) as {
       code?: string;
@@ -208,17 +258,24 @@ function parseErrorMessage(text: string): string | undefined {
       detail?: unknown;
       error?: unknown;
     };
-    if (typeof body.code === "string") {
-      const translated = tI18n(body.code, body.params);
-      if (translated !== body.code) return translated;
+    const code = typeof body.code === "string" ? body.code : undefined;
+    if (code) {
+      const translated = tI18n(code, body.params);
+      if (translated !== code) return { message: translated, code, params: body.params };
     }
     const raw = body.detail ?? body.error;
-    if (typeof raw === "string") return raw;
-    if (raw != null) return JSON.stringify(raw);
+    if (typeof raw === "string") return { message: raw, code, params: body.params };
+    if (raw != null) return { message: JSON.stringify(raw), code, params: body.params };
+    return { code, params: body.params };
   } catch {
     /* response was not JSON (e.g. HTML error page) */
   }
-  return undefined;
+  return {};
+}
+
+/** Rendered message from an error body, or ``undefined`` for non-JSON bodies. */
+function parseErrorMessage(text: string): string | undefined {
+  return parseError(text).message;
 }
 
 export function submitRun(payload: RunRequest) {
@@ -266,32 +323,6 @@ export interface OptimizationCounts {
   shared?: number;
 }
 
-export interface UserQuotaOverride {
-  username: string;
-  quota: number | null;
-  updated_at?: string | null;
-  updated_by?: string | null;
-  effective_quota?: number | null;
-  job_count: number;
-  last_action?: string | null;
-}
-
-export interface UserQuotaAuditEvent {
-  id: number;
-  actor: string;
-  target_username: string;
-  action: string;
-  old_quota: number | null;
-  new_quota: number | null;
-  created_at?: string | null;
-}
-
-export interface UserQuotaOverridesResponse {
-  default_quota: number;
-  overrides: UserQuotaOverride[];
-  audit_events: UserQuotaAuditEvent[];
-}
-
 export function getOptimizationCounts(username?: string, includeShared?: boolean) {
   const q = new URLSearchParams();
   if (username) q.set("username", username);
@@ -300,19 +331,36 @@ export function getOptimizationCounts(username?: string, includeShared?: boolean
   return cachedGet<OptimizationCounts>(`/optimizations/counts${qs ? `?${qs}` : ""}`);
 }
 
-export function getUserQuotaOverrides() {
-  return request<UserQuotaOverridesResponse>("/admin/quotas");
+export interface StorageQuotaOverride {
+  username: string;
+  /** Per-user byte ceiling that replaces the default; null when no override. */
+  quota_bytes: number | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  /** Effective budget after override resolution (override or default). */
+  effective_bytes: number;
+  /** The user's current storage footprint in bytes. */
+  used_bytes: number;
 }
 
-export function setUserQuotaOverride(username: string, quota: number | null) {
-  return request<UserQuotaOverride>("/admin/quotas", {
+export interface StorageQuotaOverridesResponse {
+  default_bytes: number;
+  overrides: StorageQuotaOverride[];
+}
+
+export function getStorageQuotaOverrides() {
+  return request<StorageQuotaOverridesResponse>("/admin/storage-quotas");
+}
+
+export function setStorageQuotaOverride(username: string, quotaBytes: number) {
+  return request<StorageQuotaOverride>("/admin/storage-quotas", {
     method: "PUT",
-    body: JSON.stringify({ username, quota }),
+    body: JSON.stringify({ username, quota_bytes: quotaBytes }),
   });
 }
 
-export function deleteUserQuotaOverride(username: string) {
-  return request<UserQuotaOverride>(`/admin/quotas/${encodeURIComponent(username)}`, {
+export function deleteStorageQuotaOverride(username: string) {
+  return request<StorageQuotaOverride>(`/admin/storage-quotas/${encodeURIComponent(username)}`, {
     method: "DELETE",
   });
 }
@@ -626,6 +674,261 @@ export function searchUsers(q: string) {
   return request<UserSearchResponse>(`/users/search?q=${encodeURIComponent(q)}`);
 }
 
+// ── Personal dataset library ────────────────────────────────────────────────
+
+/** Per-column roles/kinds/order saved with a dataset so the wizard pre-fills. */
+export interface DatasetColumnSchema {
+  column_order?: string[];
+  column_roles?: Record<string, "input" | "output" | "ignore">;
+  column_kinds?: Record<string, "text" | "image">;
+}
+
+/** One library dataset's metadata. `role` distinguishes owned from shared-in. */
+export interface DatasetSummary {
+  id: string;
+  name: string;
+  source: string;
+  row_count: number;
+  column_count: number;
+  byte_size: number;
+  content_hash: string;
+  owner_username: string;
+  role: ShareRole;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Aggregate library storage used by the caller against their quota. */
+export interface DatasetUsageMeter {
+  used_bytes: number;
+  quota_bytes: number;
+}
+
+/** Envelope for ``GET /datasets/library`` — the caller's entries and usage. */
+export interface DatasetListResponse {
+  datasets: DatasetSummary[];
+  usage: DatasetUsageMeter;
+}
+
+/** Envelope for ``GET /datasets/library/{id}/rows`` — columns, rows, saved schema. */
+export interface DatasetRowsResponse {
+  id: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  row_count: number;
+  column_schema: DatasetColumnSchema;
+}
+
+/** Envelope for a save/clone — the entry plus whether the bytes deduped. */
+export interface SaveDatasetResponse {
+  dataset: DatasetSummary;
+  deduplicated: boolean;
+}
+
+/** One optimization that was submitted from a library dataset (reverse link). */
+export interface DatasetOptimizationRef {
+  optimization_id: string;
+  name?: string | null;
+  status?: string | null;
+  optimization_type?: string | null;
+  username?: string | null;
+  created_at?: string | null;
+}
+
+/** Envelope for ``GET /datasets/library/{id}/optimizations`` — the reverse link. */
+export interface DatasetOptimizationsResponse {
+  optimizations: DatasetOptimizationRef[];
+}
+
+/** One invited member of a dataset (username + tier role). */
+export interface DatasetSharingMember {
+  username: string;
+  role: MemberRole;
+}
+
+/**
+ * Owner-facing sharing config for one library dataset. Mirrors {@link SharingState}
+ * minus the optimization-only Explore visibility (`is_private`).
+ */
+export interface DatasetSharingState {
+  general_access: GeneralAccess;
+  general_role: LinkRole;
+  token: string | null;
+  share_path: string | null;
+  owner: string | null;
+  members: DatasetSharingMember[];
+}
+
+/** List the caller's saved datasets plus those shared with them, with usage. */
+export function listDatasets() {
+  return request<DatasetListResponse>("/datasets/library");
+}
+
+/** Fetch one saved dataset's rows and saved column schema (viewer+). */
+export function getDatasetRows(datasetId: string) {
+  return request<DatasetRowsResponse>(`/datasets/library/${datasetId}/rows`);
+}
+
+/** Save rows as a new library entry the caller owns. */
+export function saveDataset(body: {
+  name: string;
+  source?: string;
+  dataset: Array<Record<string, unknown>>;
+  column_schema?: DatasetColumnSchema;
+}) {
+  return request<SaveDatasetResponse>("/datasets/library", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Clone a dataset shared with the caller into their own library (viewer+). */
+export function cloneDataset(datasetId: string) {
+  return request<SaveDatasetResponse>(`/datasets/library/${datasetId}/clone`, {
+    method: "POST",
+  });
+}
+
+/**
+ * The caller's account-wide storage usage against their budget. ``breakdown``
+ * maps each storage category to its byte contribution; ``used_bytes`` is their
+ * sum and the same total the save/run gate enforces.
+ */
+export interface StorageUsageResponse {
+  used_bytes: number;
+  quota_bytes: number;
+  breakdown: Record<string, number>;
+}
+
+/** Fetch the caller's unified storage usage backing the meter and quota modal. */
+export function getStorageUsage() {
+  return request<StorageUsageResponse>("/usage/storage");
+}
+
+/**
+ * One owned object ranked by its individual storage footprint. ``bytes`` is the
+ * same per-row figure the meter attributes to it; ``id`` is the object's key so
+ * the cleanup list can deep-link to it (optimizations and datasets) and delete
+ * it (all types).
+ */
+export interface StorageItem {
+  id: string;
+  type: "optimization" | "dataset" | "chat" | "staged_upload";
+  name: string;
+  bytes: number;
+}
+
+/** Envelope for the cleanup item lists (biggest items and per-category drawers). */
+export interface StorageItemsResponse {
+  items: StorageItem[];
+}
+
+/**
+ * List every deletable item in one storage category for that category's cleanup
+ * drawer. ``category`` must be a deletable category (optimizations, datasets,
+ * agent_chats, staged_uploads); byproduct categories 404.
+ */
+export function getStorageCategoryItems(category: string) {
+  return request<StorageItemsResponse>(`/usage/storage/categories/${encodeURIComponent(category)}`);
+}
+
+/** Delete one of the caller's pending (staged) uploads to free its bytes. */
+export function deleteStagedUpload(stagedId: string) {
+  return request<{ deleted: boolean }>(`/usage/storage/staged/${encodeURIComponent(stagedId)}`, {
+    method: "DELETE",
+  });
+}
+
+/** Rename a saved dataset (owner only). */
+export function renameDataset(datasetId: string, name: string) {
+  return request<DatasetSummary>(`/datasets/library/${datasetId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** Delete a saved dataset and its bytes (owner only). */
+export function deleteDataset(datasetId: string) {
+  return request<{ deleted: boolean }>(`/datasets/library/${datasetId}`, {
+    method: "DELETE",
+  });
+}
+
+/** List the runs the caller can see that were submitted from a dataset. */
+export function listDatasetOptimizations(datasetId: string) {
+  return request<DatasetOptimizationsResponse>(
+    `/datasets/library/${datasetId}/optimizations`,
+  );
+}
+
+/** Fetch the current sharing config (general access + members) for a dataset. */
+export function getDatasetSharing(datasetId: string) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing`);
+}
+
+/** Set the dataset link policy (general access + optional anyone-link role). */
+export function putDatasetSharing(
+  datasetId: string,
+  body: { general_access: GeneralAccess; general_role?: LinkRole },
+) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Invite a user to a dataset (add or replace a member grant). */
+export function addDatasetShareMember(
+  datasetId: string,
+  body: { username: string; role: MemberRole },
+) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing/members`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Change an existing dataset member's tier role. */
+export function updateDatasetShareMember(
+  datasetId: string,
+  username: string,
+  body: { role: MemberRole },
+) {
+  return request<DatasetSharingState>(
+    `/datasets/library/${datasetId}/sharing/members/${encodeURIComponent(username)}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+/** Remove a member's grant from a dataset. */
+export function removeDatasetShareMember(datasetId: string, username: string) {
+  return request<DatasetSharingState>(
+    `/datasets/library/${datasetId}/sharing/members/${encodeURIComponent(username)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Transfer dataset ownership to an existing member (owner-only). */
+export function transferDatasetOwnership(datasetId: string, username: string) {
+  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing/transfer`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
+/** Result of redeeming a dataset share link — the target id and granted tier. */
+export interface ClaimDatasetResult {
+  dataset_id: string;
+  role: ShareRole;
+}
+
+/** Redeem an ``anyone`` dataset link, durably granting its tier to the caller. */
+export function claimSharedDataset(token: string) {
+  return request<ClaimDatasetResult>(`/datasets/share/${encodeURIComponent(token)}/claim`, {
+    method: "POST",
+  });
+}
+
 /** Public read — no auth token required; the token in the path is the capability. */
 export function getSharedOptimization(token: string) {
   return request<SharedOptimizationData>(`/share/${encodeURIComponent(token)}`);
@@ -719,6 +1022,64 @@ export async function bulkDeleteJobs(optimizationIds: string[]) {
   });
   invalidateCache("/optimizations");
   return res;
+}
+
+/** Outcome of an id-keyed bulk delete: the ids removed and the ones skipped (with a reason). */
+export interface BulkDeleteResult {
+  deleted: string[];
+  skipped: Array<{ id: string; reason: string }>;
+}
+
+/** Bulk-delete saved library datasets (owner only). */
+export async function bulkDeleteDatasets(ids: string[]): Promise<BulkDeleteResult> {
+  const res = await request<BulkDeleteResult>("/datasets/library/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  invalidateCache("/datasets/library", "/usage/storage");
+  return res;
+}
+
+/** Bulk-delete the caller's pending (staged) uploads. */
+export async function bulkDeleteStagedUploads(ids: string[]): Promise<BulkDeleteResult> {
+  const res = await request<BulkDeleteResult>("/usage/storage/staged/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  invalidateCache("/usage/storage");
+  return res;
+}
+
+/** Bulk-delete the caller's saved agent conversations. */
+export async function bulkDeleteConversations(ids: string[]): Promise<BulkDeleteResult> {
+  const res = await request<BulkDeleteResult>("/agent/conversations/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  invalidateCache("/agent/conversations", "/usage/storage");
+  return res;
+}
+
+/**
+ * Route a batch of storage items of one ``type`` to its bulk-delete endpoint,
+ * normalizing the optimizations response onto the shared ``{id, reason}`` shape so
+ * the cleanup drawer can treat every category uniformly.
+ */
+export async function bulkDeleteStorageItems(
+  type: StorageItem["type"],
+  ids: string[],
+): Promise<BulkDeleteResult> {
+  if (type === "optimization") {
+    const res = await bulkDeleteJobs(ids);
+    invalidateCache("/usage/storage");
+    return {
+      deleted: res.deleted,
+      skipped: res.skipped.map((s) => ({ id: s.optimization_id, reason: s.reason })),
+    };
+  }
+  if (type === "dataset") return bulkDeleteDatasets(ids);
+  if (type === "staged_upload") return bulkDeleteStagedUploads(ids);
+  return bulkDeleteConversations(ids);
 }
 
 export async function renameOptimization(optimizationId: string, name: string) {

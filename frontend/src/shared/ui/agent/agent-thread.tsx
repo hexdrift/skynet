@@ -30,7 +30,10 @@ export function AgentThread({
   return (
     <div
       ref={scrollRef}
-      className={cn("flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5", className)}
+      className={cn(
+        "flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-5",
+        className,
+      )}
     >
       {isEmpty && emptyState}
       {children}

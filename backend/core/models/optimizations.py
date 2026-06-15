@@ -38,6 +38,16 @@ class _JobResponseBase(BaseModel):
     column_mapping: ColumnMapping | None = None
     dataset_rows: int | None = None
 
+    # The run's persisted footprint (payload + result JSON) in bytes, mirrored
+    # from ``jobs.stored_bytes``. Powers the per-run size shown in the storage
+    # observability surfaces; 0 until the row's size has been accounted.
+    stored_bytes: int = 0
+
+    # Id of the personal-library dataset this run was submitted from (by-reference
+    # submit); null for inline/staged submits. Powers the live optimization→dataset
+    # link in the UI.
+    source_dataset_id: str | None = None
+
     latest_metrics: dict[str, Any] = Field(default_factory=dict)
 
     model_name: str | None = Field(default=None, description="Single-run model name; null for grid searches.")

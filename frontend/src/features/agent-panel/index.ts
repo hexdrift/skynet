@@ -12,6 +12,7 @@ export {
   useWizardStateOptional,
 } from "./hooks/use-wizard-state";
 export { isGeneralistAgentEnabled } from "./lib/feature-flag";
+export { deleteConversation } from "./lib/conversation-api";
 export type {
   ApprovalResolvedPayload,
   ChatTurn,

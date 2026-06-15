@@ -1,10 +1,22 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronRight, ChevronLeft, SkipBack, CircleMinus, Download, Keyboard } from "lucide-react";
+import {
+  ChevronRight,
+  ChevronLeft,
+  SkipBack,
+  CircleMinus,
+  Database,
+  Download,
+  Keyboard,
+  Loader2,
+} from "lucide-react";
+import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
 import { Badge } from "@/shared/ui/primitives/badge";
+import { Input } from "@/shared/ui/primitives/input";
+import { Label } from "@/shared/ui/primitives/label";
 import { Separator } from "@/shared/ui/primitives/separator";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import {
@@ -17,9 +29,10 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { cn } from "@/shared/lib/utils";
-import { exportAnnotations } from "../lib/export-csv";
+import { exportAnnotations, buildLibraryRows } from "../lib/export-csv";
 import type { DataField, DataRow, Annotation, TaggerConfig } from "../lib/types";
-import { msg } from "@/shared/lib/messages";
+import { isStorageQuotaError, saveDataset } from "@/shared/lib/api";
+import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface Props {
   config: TaggerConfig;
@@ -55,6 +68,9 @@ export function TaggerAnnotation({
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [exportConfirm, setExportConfirm] = useState<"csv" | "json" | "xlsx" | "xls" | null>(null);
+  const [nameDialogOpen, setNameDialogOpen] = useState(false);
+  const [datasetName, setDatasetName] = useState("");
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const confettiFired = useRef(false);
   const confettiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,6 +119,48 @@ export function TaggerAnnotation({
     },
     [data.length, taggedCount, doExport],
   );
+
+  const defaultLibraryName = useCallback(
+    () => `tagging_${config.mode}_${new Date().toISOString().slice(0, 10)}`,
+    [config.mode],
+  );
+
+  const openNameDialog = useCallback(() => {
+    setDatasetName(defaultLibraryName());
+    setNameDialogOpen(true);
+  }, [defaultLibraryName]);
+
+  const handleSaveToLibrary = useCallback(async () => {
+    if (savingToLibrary) return;
+    const name = datasetName.trim() || defaultLibraryName();
+    setSavingToLibrary(true);
+    try {
+      const { rows, columnOrder, columnRoles } = buildLibraryRows(
+        data,
+        columns,
+        annotations,
+        config,
+      );
+      const res = await saveDataset({
+        name,
+        source: "tagger",
+        dataset: rows,
+        column_schema: { column_order: columnOrder, column_roles: columnRoles },
+      });
+      toast.success(
+        res.deduplicated
+          ? msg("datasets.toast.deduplicated")
+          : formatMsg("tagger.library.saved", { name: res.dataset.name }),
+      );
+      setNameDialogOpen(false);
+    } catch (err) {
+      if (!isStorageQuotaError(err)) {
+        toast.error(err instanceof Error ? err.message : msg("tagger.library.save_failed"));
+      }
+    } finally {
+      setSavingToLibrary(false);
+    }
+  }, [savingToLibrary, datasetName, defaultLibraryName, data, columns, annotations, config]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -379,8 +437,19 @@ export function TaggerAnnotation({
                 <PopoverPrimitive.Content
                   side="bottom"
                   sideOffset={8}
-                  className="z-50 w-36 rounded-lg border bg-background p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
+                  className="z-50 w-44 rounded-lg border bg-background p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
                 >
+                  <PopoverPrimitive.Close asChild>
+                    <button
+                      type="button"
+                      onClick={openNameDialog}
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-accent"
+                    >
+                      <Database className="size-3.5 shrink-0" />
+                      {msg("tagger.library.save")}
+                    </button>
+                  </PopoverPrimitive.Close>
+                  <div className="my-1 h-px bg-border" />
                   {(["csv", "json", "xlsx", "xls"] as const).map((fmt) => (
                     <PopoverPrimitive.Close key={fmt} asChild>
                       <button
@@ -491,6 +560,56 @@ export function TaggerAnnotation({
               className="w-full justify-center"
             >
               {msg("auto.features.tagger.components.taggerannotation.19")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={nameDialogOpen}
+        onOpenChange={(open) => {
+          if (!savingToLibrary) setNameDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{msg("tagger.library.name_title")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="tagger-dataset-name">{msg("tagger.library.name_label")}</Label>
+            <Input
+              id="tagger-dataset-name"
+              value={datasetName}
+              onChange={(e) => setDatasetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && datasetName.trim() && !savingToLibrary) {
+                  e.preventDefault();
+                  void handleSaveToLibrary();
+                }
+              }}
+              autoFocus
+              dir="auto"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setNameDialogOpen(false)}
+              disabled={savingToLibrary}
+              className="w-full justify-center"
+            >
+              {msg("tagger.library.name_cancel")}
+            </Button>
+            <Button
+              onClick={() => void handleSaveToLibrary()}
+              disabled={savingToLibrary || !datasetName.trim()}
+              className="w-full justify-center"
+            >
+              {savingToLibrary ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                msg("tagger.library.name_save")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

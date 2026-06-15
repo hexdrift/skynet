@@ -94,6 +94,18 @@ class Settings(BaseSettings):
         description="Seconds between stale-conversation purge sweeps (advisory-lock-gated)",
         alias="STALE_CONVERSATION_SWEEP_INTERVAL",
     )
+    staged_dataset_ttl_seconds: float = Field(
+        default=600.0,
+        ge=60.0,
+        description="Seconds past a wizard staged-dataset's creation before it is auto-purged",
+        alias="STAGED_DATASET_TTL_SECONDS",
+    )
+    staged_dataset_sweep_interval_seconds: float = Field(
+        default=300.0,
+        ge=60.0,
+        description="Seconds between staged-dataset TTL purge sweeps (advisory-lock-gated)",
+        alias="STAGED_DATASET_SWEEP_INTERVAL",
+    )
     event_loop_lag_monitor_enabled: bool = Field(
         default=False,
         description=(
@@ -119,6 +131,16 @@ class Settings(BaseSettings):
         default=5000,
         ge=1,
         description="Maximum stored log entries per optimization job before old entries are evicted",
+    )
+    dataset_max_file_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=1,
+        description="Per-file cap on compressed dataset bytes saved to a user's library",
+    )
+    user_storage_quota_bytes: int = Field(
+        default=250 * 1024 * 1024,
+        ge=1,
+        description="Per-user unified storage budget in bytes across all of their Skynet data",
     )
     cancel_poll_interval: float = Field(
         default=1.0, ge=0.1, le=10.0, description="Seconds between cancel signal checks"

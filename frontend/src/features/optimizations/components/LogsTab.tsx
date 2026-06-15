@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { motion } from "framer-motion";
-import { Gauge } from "lucide-react";
+import { Gauge, ScrollText } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
@@ -16,7 +17,6 @@ import {
 } from "@/shared/ui/excel-filter";
 import { FadeIn } from "@/shared/ui/motion";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { TERMS } from "@/shared/lib/terms";
 import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
 
@@ -61,7 +61,7 @@ function VerbosityControl({
     <div
       role="group"
       aria-label={msg("optimizations.logs.verbosity.aria")}
-      className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/30 p-0.5"
+      className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/30 p-0.5"
     >
       <Gauge className="mx-1 size-3 text-foreground/35" aria-hidden="true" />
       {VERBOSITY_OPTIONS.map((o) => {
@@ -74,14 +74,14 @@ function VerbosityControl({
             onClick={() => {
               if (!isActive) onChange(o.value);
             }}
-            className={`relative rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
+            className={`relative rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 ${
               isActive ? "text-foreground" : "cursor-pointer text-foreground/55 hover:text-foreground"
             }`}
           >
             {isActive && (
               <motion.span
                 layoutId="logs-verbosity-pill"
-                className="absolute inset-0 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
+                className="absolute inset-0 rounded-md bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
                 transition={PILL_TRANSITION}
                 aria-hidden="true"
               />
@@ -212,11 +212,6 @@ export function LogsTab({
           <div className="flex items-center gap-3">
             <VerbosityControl active={activeVerbosity} onChange={setVerbosity} />
             <ResetColumnsButton resize={logResize} />
-            <p className="text-sm text-muted-foreground">
-              {formatMsg("auto.features.optimizations.components.logstab.template.2", {
-                p1: TERMS.optimization,
-              })}
-            </p>
           </div>
           <span className="text-xs text-muted-foreground shrink-0">
             {filtered.length}
@@ -225,15 +220,19 @@ export function LogsTab({
         </div>
       </FadeIn>
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          {logs.length === 0
-            ? msg("auto.features.optimizations.components.logstab.2")
-            : activeVerbosity === "quiet" &&
-                Object.keys(logFilters.filters).length === 1 &&
-                !!logFilters.filters.level
-              ? msg("optimizations.logs.verbosity.empty_quiet")
-              : msg("optimizations.logs.verbosity.empty_filtered")}
-        </p>
+        <EmptyState
+          variant="list"
+          icon={ScrollText}
+          title={
+            logs.length === 0
+              ? msg("auto.features.optimizations.components.logstab.2")
+              : activeVerbosity === "quiet" &&
+                  Object.keys(logFilters.filters).length === 1 &&
+                  !!logFilters.filters.level
+                ? msg("optimizations.logs.verbosity.empty_quiet")
+                : msg("optimizations.logs.verbosity.empty_filtered")
+          }
+        />
       ) : (
         <Card>
           <CardContent className="p-0">

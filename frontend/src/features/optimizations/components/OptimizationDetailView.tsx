@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -18,6 +19,7 @@ import {
   Eye,
   Pencil,
   RotateCcw,
+  HardDrive,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -49,6 +51,7 @@ import {
 } from "@/features/tutorial";
 import { OptimizationDetailSkeleton } from "./OptimizationDetailSkeleton";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { formatBytes } from "@/shared/lib/formatters";
 import { TERMS } from "@/shared/lib/terms";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-status";
@@ -937,6 +940,17 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                     {msg("auto.app.optimizations.id.page.3")}
                     {job.estimated_remaining}
                   </span>
+                )}
+                {!isPairContext && (job.stored_bytes ?? 0) > 0 && (
+                  <Link
+                    href="/storage"
+                    title={msg("optimization.storage_label")}
+                    dir="ltr"
+                    className="flex items-center gap-1.5 tabular-nums transition-colors hover:text-foreground"
+                  >
+                    <HardDrive className="size-3.5" />
+                    {formatBytes(job.stored_bytes ?? 0)}
+                  </Link>
                 )}
               </div>
             </div>
