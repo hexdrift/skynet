@@ -28,7 +28,7 @@ export const datasetsMessages = {
   "datasets.rename.save": "שמור/שמרי",
   "datasets.rename.cancel": "בטל/י",
   "datasets.delete.title": "מחיקת דאטאסט",
-  "datasets.delete.body": "הפעולה תמחק לצמיתות את הדאטאסט הזה מהספרייה. האם להמשיך?",
+  "datasets.delete.body": "הפעולה תמחק לצמיתות את הדאטאסט הזה מהספרייה. לא ניתן לבטל פעולה זו.",
   "datasets.delete.used_warning": "{count} אופטימיזציות נבנו מהדאטאסט הזה. הן יישארו תקינות, אבל הקישור אליו מתוכן יישבר.",
   "datasets.delete.confirm": "מחק/י",
   "datasets.delete.cancel": "בטל/י",

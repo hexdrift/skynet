@@ -10,6 +10,7 @@ export const sharedMessages = {
   "clipboard.copied": "הועתק בהצלחה",
   "clipboard.copied_short": "הועתק",
   "clipboard.copy_failed": "ההעתקה נכשלה",
+  "delete.irreversible": "לא ניתן לבטל פעולה זו.",
   "share.button": "שיתוף ופרטיות",
   "share.error": "פעולת השיתוף נכשלה",
   "share.not_found_title": "השיתוף לא נמצא",
@@ -227,7 +228,7 @@ export const sharedMessages = {
   "auto.features.optimizations.components.gridoverview.18": "מחיקת זוג",
   "auto.features.optimizations.components.gridoverview.19": "מחיקת זוג",
   "auto.features.optimizations.components.gridoverview.20": "האם למחוק את הזוג",
-  "auto.features.optimizations.components.gridoverview.21": "? פעולה זו אינה הפיכה.",
+  "auto.features.optimizations.components.gridoverview.21": "? לא ניתן לבטל פעולה זו.",
   "auto.features.optimizations.components.gridoverview.22": "בטל/י",
   "auto.features.optimizations.components.gridservetab.1": "מלא/י את כל השדות:",
   "auto.features.optimizations.components.gridservetab.2": 
