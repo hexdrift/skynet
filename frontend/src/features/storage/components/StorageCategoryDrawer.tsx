@@ -234,6 +234,10 @@ export function StorageCategoryDrawer({ category, onClose, onChanged }: StorageC
   // keeping the directional isolation ``formatTemplate`` would otherwise inject.
   const [deleteBefore, deleteRest = ""] = msg("storage.delete.body").split("{name}");
   const [deleteMid, deleteTail = ""] = deleteRest.split("{size}");
+  // Same split for the bulk confirm so the count and freed size get the bold
+  // emphasis the single-delete name does, instead of inlining into a flat string.
+  const [bulkBefore, bulkRest = ""] = msg("storage.bulk.confirm.body").split("{n}");
+  const [bulkMid, bulkTail = ""] = bulkRest.split("{size}");
 
   return (
     <>
@@ -333,7 +337,7 @@ export function StorageCategoryDrawer({ category, onClose, onChanged }: StorageC
                   {deleteBefore}
                   <bdi className="font-semibold text-foreground">{pending.name}</bdi>
                   {deleteMid}
-                  <bdi>{formatStorageSize(pending.bytes)}</bdi>
+                  <bdi className="font-semibold text-foreground">{formatStorageSize(pending.bytes)}</bdi>
                   {deleteTail}
                 </>
               ) : (
@@ -357,10 +361,11 @@ export function StorageCategoryDrawer({ category, onClose, onChanged }: StorageC
           <DialogHeader>
             <DialogTitle>{formatMsg("storage.bulk.confirm.title", { n: selected.size })}</DialogTitle>
             <DialogDescription>
-              {formatMsg("storage.bulk.confirm.body", {
-                n: selected.size,
-                size: formatStorageSize(selectedBytes),
-              })}
+              {bulkBefore}
+              <bdi className="font-semibold text-foreground">{selected.size}</bdi>
+              {bulkMid}
+              <bdi className="font-semibold text-foreground">{formatStorageSize(selectedBytes)}</bdi>
+              {bulkTail}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

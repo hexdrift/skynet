@@ -48,7 +48,7 @@ export function DeleteDialogs({
               ) : (
                 <>
                   {msg("auto.features.dashboard.components.deletedialogs.3")}
-                  <span className="font-semibold">{selectedCount}</span> {TERMS.optimizationPlural}
+                  <span className="font-semibold text-foreground">{selectedCount}</span> {TERMS.optimizationPlural}
                   {msg("auto.features.dashboard.components.deletedialogs.4")}
                 </>
               )
