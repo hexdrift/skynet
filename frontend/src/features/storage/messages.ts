@@ -46,7 +46,7 @@ export const storageMessages = {
   "storage.bulk.bar.summary": "נבחרו {n} · {size}",
   "storage.bulk.delete": "מחק/י {n}",
   "storage.bulk.confirm.title": "מחיקת {n} פריטים",
-  "storage.bulk.confirm.body": "הפעולה תמחק לצמיתות {n} פריטים ותפנה {size}. לא ניתן לבטל.",
+  "storage.bulk.confirm.body": "הפעולה תמחק לצמיתות {n} פריטים ותפנה {size}. לא ניתן לבטלה.",
   "storage.bulk.progress.title": "מוחק…",
   "storage.bulk.progress.count": "{done} מתוך {total}",
   "storage.bulk.deleted": "{n} פריטים נמחקו",

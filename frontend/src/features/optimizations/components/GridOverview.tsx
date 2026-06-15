@@ -926,7 +926,7 @@ function GridOverviewImpl({
             description={
               <>
                 {msg("auto.features.optimizations.components.gridoverview.20")}{" "}
-                <span className="font-mono font-medium text-foreground break-all">
+                <span className="font-mono font-semibold text-foreground break-all">
                   {pendingDelete ? pairLabel(pendingDelete) : ""}
                 </span>
                 {msg("auto.features.optimizations.components.gridoverview.21")}

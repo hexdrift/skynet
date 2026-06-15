@@ -501,7 +501,7 @@ export function Sidebar() {
             <DialogDescription>
               {msg("auto.features.sidebar.components.sidebar.4")}
               {TERMS.optimization}{" "}
-              <span className="font-medium text-foreground break-words" dir="auto">
+              <span className="font-semibold text-foreground break-words" dir="auto">
                 {deleteJobInfo?.name}
               </span>
               ?
