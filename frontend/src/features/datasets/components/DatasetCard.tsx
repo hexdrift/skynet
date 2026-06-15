@@ -261,11 +261,20 @@ export function DatasetCard({
             <DialogTitle>{msg("datasets.delete.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{msg("datasets.delete.body")}</p>
-          {usedCount !== null && usedCount > 0 && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              {formatMsg("datasets.delete.used_warning", { count: usedCount })}
-            </p>
-          )}
+          {usedCount !== null &&
+            usedCount > 0 &&
+            (() => {
+              // Bold the affected-run count to match how every other delete dialog
+              // emphasizes its key value; keep the amber colour (no text-foreground).
+              const [warnBefore, warnAfter = ""] = msg("datasets.delete.used_warning").split("{count}");
+              return (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {warnBefore}
+                  <span className="font-semibold">{usedCount}</span>
+                  {warnAfter}
+                </p>
+              );
+            })()}
           <DialogFooter>
             <Button
               variant="outline"
