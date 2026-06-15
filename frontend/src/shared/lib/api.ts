@@ -165,6 +165,9 @@ export const STORAGE_QUOTA_CODE = I18N_KEY.USER_STORAGE_QUOTA_EXCEEDED;
 /** Browser event the central error path fires when a write hits the storage budget. */
 export const STORAGE_QUOTA_EVENT = "storage-quota-exceeded";
 
+/** Browser event fired after a storage-freeing delete so the meter re-reads usage. */
+export const STORAGE_CHANGED_EVENT = "storage-changed";
+
 /**
  * Error carrying the backend's structured envelope so callers can branch on the
  * machine-readable ``code`` (not just the rendered message). Subclasses ``Error``
@@ -320,32 +323,6 @@ export interface OptimizationCounts {
   shared?: number;
 }
 
-export interface UserQuotaOverride {
-  username: string;
-  quota: number | null;
-  updated_at?: string | null;
-  updated_by?: string | null;
-  effective_quota?: number | null;
-  job_count: number;
-  last_action?: string | null;
-}
-
-export interface UserQuotaAuditEvent {
-  id: number;
-  actor: string;
-  target_username: string;
-  action: string;
-  old_quota: number | null;
-  new_quota: number | null;
-  created_at?: string | null;
-}
-
-export interface UserQuotaOverridesResponse {
-  default_quota: number;
-  overrides: UserQuotaOverride[];
-  audit_events: UserQuotaAuditEvent[];
-}
-
 export function getOptimizationCounts(username?: string, includeShared?: boolean) {
   const q = new URLSearchParams();
   if (username) q.set("username", username);
@@ -354,19 +331,36 @@ export function getOptimizationCounts(username?: string, includeShared?: boolean
   return cachedGet<OptimizationCounts>(`/optimizations/counts${qs ? `?${qs}` : ""}`);
 }
 
-export function getUserQuotaOverrides() {
-  return request<UserQuotaOverridesResponse>("/admin/quotas");
+export interface StorageQuotaOverride {
+  username: string;
+  /** Per-user byte ceiling that replaces the default; null when no override. */
+  quota_bytes: number | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  /** Effective budget after override resolution (override or default). */
+  effective_bytes: number;
+  /** The user's current storage footprint in bytes. */
+  used_bytes: number;
 }
 
-export function setUserQuotaOverride(username: string, quota: number | null) {
-  return request<UserQuotaOverride>("/admin/quotas", {
+export interface StorageQuotaOverridesResponse {
+  default_bytes: number;
+  overrides: StorageQuotaOverride[];
+}
+
+export function getStorageQuotaOverrides() {
+  return request<StorageQuotaOverridesResponse>("/admin/storage-quotas");
+}
+
+export function setStorageQuotaOverride(username: string, quotaBytes: number) {
+  return request<StorageQuotaOverride>("/admin/storage-quotas", {
     method: "PUT",
-    body: JSON.stringify({ username, quota }),
+    body: JSON.stringify({ username, quota_bytes: quotaBytes }),
   });
 }
 
-export function deleteUserQuotaOverride(username: string) {
-  return request<UserQuotaOverride>(`/admin/quotas/${encodeURIComponent(username)}`, {
+export function deleteStorageQuotaOverride(username: string) {
+  return request<StorageQuotaOverride>(`/admin/storage-quotas/${encodeURIComponent(username)}`, {
     method: "DELETE",
   });
 }
@@ -788,14 +782,6 @@ export function saveDataset(body: {
   });
 }
 
-/** Save the exact rows a run used as a caller-owned entry (Data-tab producer). */
-export function saveDatasetFromOptimization(optimizationId: string, body?: { name?: string }) {
-  return request<SaveDatasetResponse>(
-    `/datasets/library/from-optimization/${optimizationId}`,
-    { method: "POST", body: JSON.stringify(body ?? {}) },
-  );
-}
-
 /** Clone a dataset shared with the caller into their own library (viewer+). */
 export function cloneDataset(datasetId: string) {
   return request<SaveDatasetResponse>(`/datasets/library/${datasetId}/clone`, {
@@ -817,6 +803,40 @@ export interface StorageUsageResponse {
 /** Fetch the caller's unified storage usage backing the meter and quota modal. */
 export function getStorageUsage() {
   return request<StorageUsageResponse>("/usage/storage");
+}
+
+/**
+ * One owned object ranked by its individual storage footprint. ``bytes`` is the
+ * same per-row figure the meter attributes to it; ``id`` is the object's key so
+ * the cleanup list can deep-link to it (optimizations and datasets) and delete
+ * it (all types).
+ */
+export interface StorageItem {
+  id: string;
+  type: "optimization" | "dataset" | "chat" | "staged_upload";
+  name: string;
+  bytes: number;
+}
+
+/** Envelope for the cleanup item lists (biggest items and per-category drawers). */
+export interface StorageItemsResponse {
+  items: StorageItem[];
+}
+
+/**
+ * List every deletable item in one storage category for that category's cleanup
+ * drawer. ``category`` must be a deletable category (optimizations, datasets,
+ * agent_chats, staged_uploads); byproduct categories 404.
+ */
+export function getStorageCategoryItems(category: string) {
+  return request<StorageItemsResponse>(`/usage/storage/categories/${encodeURIComponent(category)}`);
+}
+
+/** Delete one of the caller's pending (staged) uploads to free its bytes. */
+export function deleteStagedUpload(stagedId: string) {
+  return request<{ deleted: boolean }>(`/usage/storage/staged/${encodeURIComponent(stagedId)}`, {
+    method: "DELETE",
+  });
 }
 
 /** Rename a saved dataset (owner only). */
@@ -1002,6 +1022,64 @@ export async function bulkDeleteJobs(optimizationIds: string[]) {
   });
   invalidateCache("/optimizations");
   return res;
+}
+
+/** Outcome of an id-keyed bulk delete: the ids removed and the ones skipped (with a reason). */
+export interface BulkDeleteResult {
+  deleted: string[];
+  skipped: Array<{ id: string; reason: string }>;
+}
+
+/** Bulk-delete saved library datasets (owner only). */
+export async function bulkDeleteDatasets(ids: string[]): Promise<BulkDeleteResult> {
+  const res = await request<BulkDeleteResult>("/datasets/library/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  invalidateCache("/datasets/library", "/usage/storage");
+  return res;
+}
+
+/** Bulk-delete the caller's pending (staged) uploads. */
+export async function bulkDeleteStagedUploads(ids: string[]): Promise<BulkDeleteResult> {
+  const res = await request<BulkDeleteResult>("/usage/storage/staged/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  invalidateCache("/usage/storage");
+  return res;
+}
+
+/** Bulk-delete the caller's saved agent conversations. */
+export async function bulkDeleteConversations(ids: string[]): Promise<BulkDeleteResult> {
+  const res = await request<BulkDeleteResult>("/agent/conversations/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  invalidateCache("/agent/conversations", "/usage/storage");
+  return res;
+}
+
+/**
+ * Route a batch of storage items of one ``type`` to its bulk-delete endpoint,
+ * normalizing the optimizations response onto the shared ``{id, reason}`` shape so
+ * the cleanup drawer can treat every category uniformly.
+ */
+export async function bulkDeleteStorageItems(
+  type: StorageItem["type"],
+  ids: string[],
+): Promise<BulkDeleteResult> {
+  if (type === "optimization") {
+    const res = await bulkDeleteJobs(ids);
+    invalidateCache("/usage/storage");
+    return {
+      deleted: res.deleted,
+      skipped: res.skipped.map((s) => ({ id: s.optimization_id, reason: s.reason })),
+    };
+  }
+  if (type === "dataset") return bulkDeleteDatasets(ids);
+  if (type === "staged_upload") return bulkDeleteStagedUploads(ids);
+  return bulkDeleteConversations(ids);
 }
 
 export async function renameOptimization(optimizationId: string, name: string) {

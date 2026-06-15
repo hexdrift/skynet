@@ -35,7 +35,7 @@ export const sidebarMessages = {
   "sidebar.mine.empty": "עדיין אין כאן ריצות",
   "sidebar.mine.empty.hint": "הריצה הראשונה שלכם תופיע כאן",
   "sidebar.shared.empty": "עדיין אין כאן ריצות משותפות",
-  "sidebar.shared.empty.hint": "ריצות ששותפו איתכם יופיעו כאן",
+  "sidebar.shared.empty.hint": "ריצות ששותפו איתך יופיעו כאן",
   "auto.features.sidebar.components.sidebar.literal.3": "פתח/י את סרגל הצד",
   "auto.features.sidebar.components.sidebar.literal.5": "כווץ/י את סרגל הצד",
   "auto.features.sidebar.components.sidebar.literal.7": "ניווט ראשי",

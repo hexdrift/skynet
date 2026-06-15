@@ -113,6 +113,21 @@ export function formatBytes(bytes: number | undefined | null): string {
   return `${rounded} ${units[exp]}`;
 }
 
+/**
+ * Format a byte count for the unified storage budget, never escalating past MB.
+ * Budgets are small (hundreds of MB), so GB reads as noise; sub-MB values still
+ * fall back to KB/B. Whole MB render with up to 4 digits (e.g. 9999 MB).
+ * @example 262_144_000 → "250 MB", 5_242_880 → "5 MB", 524_288 → "512 KB"
+ */
+export function formatStorageSize(bytes: number | undefined | null): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB"];
+  const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** exp;
+  const rounded = value >= 100 || exp === 0 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${units[exp]}`;
+}
+
 export function formatOutput(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;

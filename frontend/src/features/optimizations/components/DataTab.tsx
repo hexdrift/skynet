@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { Library, Loader2 } from "lucide-react";
+import { Inbox, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
-import { Button } from "@/shared/ui/primitives/button";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
   ColumnHeader,
@@ -16,14 +16,12 @@ import {
 import { DataTabSkeleton } from "./DataTabSkeleton";
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { formatMsg, msg } from "@/shared/lib/messages";
+import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import {
   getOptimizationDataset,
   getTestResults,
   getPairTestResults,
-  isStorageQuotaError,
-  saveDatasetFromOptimization,
 } from "@/shared/lib/api";
 import type {
   OptimizationDatasetResponse,
@@ -92,7 +90,6 @@ export function DataTab({
     { optimized: {}, baseline: {} },
   );
   const [testResultsLoading, setTestResultsLoading] = useState(false);
-  const [savingToLibrary, setSavingToLibrary] = useState(false);
 
   const colFilters = useColumnFilters();
   const [sortKey, setSortKey] = useState<string>("");
@@ -107,27 +104,6 @@ export function DataTab({
   const colResize = useColumnResize();
 
   const isDemoMode = job.optimization_id === DEMO_OPTIMIZATION_ID;
-  // Public-share and demo views have no authed session to own a saved copy.
-  const canSaveToLibrary = !isDemoMode && !sharedDataset;
-
-  const handleSaveToLibrary = async () => {
-    if (savingToLibrary) return;
-    setSavingToLibrary(true);
-    try {
-      const res = await saveDatasetFromOptimization(job.optimization_id);
-      toast.success(
-        res.deduplicated
-          ? msg("datasets.toast.deduplicated")
-          : formatMsg("optimizations.save_dataset.saved", { name: res.dataset.name }),
-      );
-    } catch (err) {
-      if (!isStorageQuotaError(err)) {
-        toast.error(err instanceof Error ? err.message : msg("optimizations.save_dataset.failed"));
-      }
-    } finally {
-      setSavingToLibrary(false);
-    }
-  };
 
   useEffect(() => {
     if (isDemoMode) {
@@ -327,28 +303,9 @@ export function DataTab({
   return (
     <div className="space-y-4 mt-4">
       <FadeIn>
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {msg("optimizations.datatab.description")}
-          </p>
-          {canSaveToLibrary && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleSaveToLibrary}
-              disabled={savingToLibrary}
-              className="shrink-0 gap-1.5"
-            >
-              {savingToLibrary ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Library className="size-3.5" />
-              )}
-              {msg("optimizations.save_dataset.button")}
-            </Button>
-          )}
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {msg("optimizations.datatab.description")}
+        </p>
       </FadeIn>
       {/* Test evaluation bar — shows cached results */}
       {split === "test" && (
@@ -440,9 +397,11 @@ export function DataTab({
 
       <FadeIn delay={0.35}>
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">
-            {msg("auto.features.optimizations.components.datatab.5")}
-          </p>
+          <EmptyState
+            variant="list"
+            icon={Inbox}
+            title={msg("auto.features.optimizations.components.datatab.5")}
+          />
         ) : (
           <Card data-tutorial="data-table">
             <CardContent className="p-0">

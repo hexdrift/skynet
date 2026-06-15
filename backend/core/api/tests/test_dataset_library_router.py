@@ -198,3 +198,52 @@ def test_owner_scoping_hides_other_users_dataset() -> None:
 
     assert client_b.get(f"/datasets/library/{dataset_id}").status_code == 404
     assert client_b.get("/datasets/library").json()["datasets"] == []
+
+
+def test_bulk_delete_removes_owned_entries() -> None:
+    """Bulk-delete clears every owned id and leaves the library empty."""
+    client, _ = _make_client(_ALICE)
+    first = _save(client, name="One")["dataset"]["id"]
+    second = _save(client, name="Two", rows=[{"q": "9", "a": "9"}])["dataset"]["id"]
+
+    resp = client.post("/datasets/library/bulk-delete", json={"ids": [first, second]})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert sorted(body["deleted"]) == sorted([first, second])
+    assert body["skipped"] == []
+    assert client.get("/datasets/library").json()["datasets"] == []
+
+
+def test_bulk_delete_dedupes_and_skips_unknown() -> None:
+    """Duplicate ids collapse to one delete; an unknown id is skipped, not fatal."""
+    client, _ = _make_client(_ALICE)
+    dataset_id = _save(client)["dataset"]["id"]
+
+    resp = client.post(
+        "/datasets/library/bulk-delete",
+        json={"ids": [dataset_id, dataset_id, "ghost"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["deleted"] == [dataset_id]
+    assert body["skipped"] == [{"id": "ghost", "reason": "not_found"}]
+
+
+def test_bulk_delete_skips_other_users_entries() -> None:
+    """A caller cannot bulk-delete another user's dataset — it is skipped, not deleted."""
+    client_a, store = _make_client(_ALICE)
+    alice_id = _save(client_a)["dataset"]["id"]
+
+    client_b = TestClient(_app_for(store, _BOB))
+    resp = client_b.post("/datasets/library/bulk-delete", json={"ids": [alice_id]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"deleted": [], "skipped": [{"id": alice_id, "reason": "not_found"}]}
+    assert client_a.get(f"/datasets/library/{alice_id}").status_code == 200
+
+
+def test_bulk_delete_empty_is_noop() -> None:
+    """An empty id list deletes nothing and returns empty result lists."""
+    client, _ = _make_client(_ALICE)
+    resp = client.post("/datasets/library/bulk-delete", json={"ids": []})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"deleted": [], "skipped": []}

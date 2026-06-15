@@ -92,11 +92,21 @@ function paramIcon(key: string): ReactNode {
   return PARAM_ICONS[key] ?? <Settings2 className="size-3.5" />;
 }
 
-function formatParamValue(_k: string, v: unknown): string {
+// The GEPA budget level arrives as the raw "light" / "medium" / "heavy"
+// string; translate it to the same Hebrew the submit summary shows so the
+// value reads consistently across surfaces.
+const AUTO_LEVEL_LABELS: Record<string, string> = {
+  light: msg("auto.features.optimizations.components.configtab.literal.18"),
+  medium: msg("auto.features.optimizations.components.configtab.literal.19"),
+  heavy: msg("auto.features.optimizations.components.configtab.literal.20"),
+};
+
+function formatParamValue(k: string, v: unknown): string {
   if (typeof v === "boolean")
     return v
       ? msg("auto.features.optimizations.components.configtab.literal.14")
       : msg("auto.features.optimizations.components.configtab.literal.15");
+  if (k === "auto" && typeof v === "string" && AUTO_LEVEL_LABELS[v]) return AUTO_LEVEL_LABELS[v];
   return String(v);
 }
 

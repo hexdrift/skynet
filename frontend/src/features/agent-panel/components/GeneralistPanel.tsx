@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { History, PanelLeftClose, Plus, RotateCcw, Sparkles, WandSparkles, XCircle } from "lucide-react";
 import { msg } from "@/shared/lib/messages";
@@ -21,7 +21,6 @@ import { formatMsg } from "@/shared/lib/messages";
 import { formatShortcut, useUserPrefs } from "@/features/settings";
 
 import { useConversationStore } from "../hooks/use-conversation-store";
-import { useFirstRunHint } from "../hooks/use-first-run-hint";
 import { useGeneralistAgent } from "../hooks/use-generalist-agent";
 import { useCodeAuthoringAgent } from "../hooks/use-code-authoring-agent";
 import { useGeneralistPanelState } from "../hooks/use-panel-state";
@@ -37,7 +36,6 @@ import { MAX_WIDTH, MIN_WIDTH, NARROW_VIEWPORT_QUERY } from "../constants";
 import { ApprovalCard } from "./ApprovalCard";
 import { ConversationDrawer } from "./ConversationDrawer";
 import { DatasetUploadCard, type ConfirmedDataset } from "./DatasetUploadCard";
-import { FirstRunHint } from "./FirstRunHint";
 import { InferenceFormCard } from "./InferenceFormCard";
 import { CodeAuthoringCard } from "./CodeAuthoringCard";
 import { MinimizedPill } from "./MinimizedPill";
@@ -100,23 +98,16 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   const { mode: trustMode, next: cycleTrust } = useTrustMode();
   const { prefs } = useUserPrefs();
   const shortcutLabel = formatShortcut(prefs.agentShortcut);
-  const hint = useFirstRunHint();
   const reduceMotion = useReducedMotion();
   const hue = TRUST_MODE_HUE[trustMode];
 
   const openPanel = React.useCallback(() => {
-    hint.dismiss();
     setOpen(true);
-  }, [hint, setOpen]);
+  }, [setOpen]);
 
   const closePanel = React.useCallback(() => {
-    hint.dismiss();
     setOpen(false);
-  }, [hint, setOpen]);
-
-  React.useEffect(() => {
-    if (open && hint.visible) hint.dismiss();
-  }, [open, hint]);
+  }, [setOpen]);
 
   React.useEffect(
     () => registerTutorialHook("setGeneralistPanelOpen", (next) => setOpen(next)),
@@ -156,6 +147,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   // details. The panel is mounted in the app shell (survives route changes),
   // so it owns this overlay regardless of which page the agent submitted from.
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [submitSplash, setSubmitSplash] = React.useState(false);
   const splashTimersRef = React.useRef<Array<ReturnType<typeof setTimeout>>>([]);
   React.useEffect(() => () => splashTimersRef.current.forEach(clearTimeout), []);
@@ -266,6 +258,20 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
     },
     [agent, store],
   );
+
+  // Honour ?chat=<id> deep-links (e.g. the storage page's chat rows): open the
+  // panel onto that conversation, then strip the param so a refresh or back-nav
+  // doesn't reopen it. The panel is client-only and globally mounted, so this
+  // works from whichever route the link was clicked on.
+  const chatDeepLinkRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const chatId = searchParams.get("chat");
+    if (!chatId || chatDeepLinkRef.current === chatId) return;
+    chatDeepLinkRef.current = chatId;
+    setOpen(true);
+    void handlePickConversation(chatId);
+    router.replace(window.location.pathname, { scroll: false });
+  }, [searchParams, setOpen, handlePickConversation, router]);
 
   const handleNewConversation = React.useCallback(() => {
     agent.reset();
@@ -784,7 +790,6 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             statusLabel={agent.statusLabel}
             hue={hue}
           />
-          {hint.visible && <FirstRunHint onDismiss={hint.dismiss} />}
         </>
       )}
 

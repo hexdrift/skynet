@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from ...config import settings
-from ...storage.models import Base
+from ...storage.models import AgentStagedDatasetModel, Base
 from ...storage.remote import RemoteDBJobStore
 from ...storage.usage import STORAGE_CATEGORIES
 from ..auth import AuthenticatedUser, get_authenticated_user
@@ -94,3 +94,136 @@ def test_usage_total_matches_library_meter() -> None:
     library = client.get("/datasets/library").json()["usage"]
     assert usage["used_bytes"] == library["used_bytes"]
     assert usage["quota_bytes"] == library["quota_bytes"]
+
+
+def test_storage_items_empty_for_fresh_user() -> None:
+    """A user with no data ranks to an empty items list."""
+    client, _ = _client(_ALICE)
+    body = client.get("/usage/storage/items").json()
+    assert body == {"items": []}
+
+
+def test_storage_items_lists_saved_dataset() -> None:
+    """A saved dataset surfaces in the ranked items with its size and type."""
+    client, _ = _client(_ALICE)
+    client.post(
+        "/datasets/library",
+        json={"name": "Math", "source": "upload", "dataset": _ROWS, "column_schema": {}},
+    )
+    items = client.get("/usage/storage/items").json()["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["type"] == "dataset"
+    assert item["name"] == "Math"
+    assert item["bytes"] > 0
+
+
+def test_storage_items_rejects_out_of_range_limit() -> None:
+    """The ``limit`` query param is clamped to ``1..100`` by validation."""
+    client, _ = _client(_ALICE)
+    assert client.get("/usage/storage/items", params={"limit": 0}).status_code == 422
+    assert client.get("/usage/storage/items", params={"limit": 101}).status_code == 422
+
+
+def test_category_items_empty_for_fresh_user() -> None:
+    """A deletable category lists empty for a user with no data."""
+    client, _ = _client(_ALICE)
+    body = client.get("/usage/storage/categories/optimizations").json()
+    assert body == {"items": []}
+
+
+def test_category_items_lists_saved_dataset() -> None:
+    """The datasets category surfaces a saved dataset with its size and type."""
+    client, _ = _client(_ALICE)
+    client.post(
+        "/datasets/library",
+        json={"name": "Math", "source": "upload", "dataset": _ROWS, "column_schema": {}},
+    )
+    items = client.get("/usage/storage/categories/datasets").json()["items"]
+    assert len(items) == 1
+    assert items[0]["type"] == "dataset"
+    assert items[0]["name"] == "Math"
+    assert items[0]["bytes"] > 0
+
+
+def test_category_items_rejects_non_deletable_category() -> None:
+    """A byproduct category (no standalone artifact) is a 404."""
+    client, _ = _client(_ALICE)
+    assert client.get("/usage/storage/categories/embeddings").status_code == 404
+    assert client.get("/usage/storage/categories/bogus").status_code == 404
+
+
+def test_staged_upload_lists_and_deletes() -> None:
+    """A pending upload lists under its category and the delete route clears it."""
+    client, store = _client(_ALICE)
+    with store._session_factory() as session:
+        session.add(
+            AgentStagedDatasetModel(
+                id="st-1", username="alice", dataset_filename="data.csv", rows=[{"q": "1"}], row_count=1
+            )
+        )
+        session.commit()
+
+    listed = client.get("/usage/storage/categories/staged_uploads").json()["items"]
+    assert [item["id"] for item in listed] == ["st-1"]
+    assert listed[0]["type"] == "staged_upload"
+    assert listed[0]["name"] == "data.csv"
+
+    deleted = client.delete("/usage/storage/staged/st-1")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": True}
+
+    again = client.delete("/usage/storage/staged/st-1")
+    assert again.json() == {"deleted": False}
+    assert client.get("/usage/storage/categories/staged_uploads").json()["items"] == []
+
+
+def test_staged_bulk_delete_clears_dedupes_and_skips_unknown() -> None:
+    """Bulk-delete removes owned staged rows, collapses dupes, and skips unknown ids."""
+    client, store = _client(_ALICE)
+    with store._session_factory() as session:
+        session.add_all(
+            AgentStagedDatasetModel(
+                id=f"st-{n}",
+                username="alice",
+                dataset_filename=f"d{n}.csv",
+                rows=[{"q": "1"}],
+                row_count=1,
+            )
+            for n in (1, 2)
+        )
+        session.commit()
+
+    resp = client.post(
+        "/usage/storage/staged/bulk-delete",
+        json={"ids": ["st-1", "st-1", "st-2", "ghost"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert sorted(body["deleted"]) == ["st-1", "st-2"]
+    assert body["skipped"] == [{"id": "ghost", "reason": "not_found"}]
+    assert client.get("/usage/storage/categories/staged_uploads").json()["items"] == []
+
+
+def test_staged_bulk_delete_scopes_to_caller() -> None:
+    """A caller cannot bulk-delete another user's staged upload — it is skipped."""
+    client, store = _client(_ALICE)
+    with store._session_factory() as session:
+        session.add(
+            AgentStagedDatasetModel(
+                id="bob-1", username="bob", dataset_filename="b.csv", rows=[{"q": "1"}], row_count=1
+            )
+        )
+        session.commit()
+
+    resp = client.post("/usage/storage/staged/bulk-delete", json={"ids": ["bob-1"]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"deleted": [], "skipped": [{"id": "bob-1", "reason": "not_found"}]}
+
+
+def test_staged_bulk_delete_empty_is_noop() -> None:
+    """An empty id list deletes nothing and returns empty result lists."""
+    client, _ = _client(_ALICE)
+    resp = client.post("/usage/storage/staged/bulk-delete", json={"ids": []})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"deleted": [], "skipped": []}

@@ -119,3 +119,23 @@ class OptimizationStatus(StrEnum):
     success = "success"
     failed = "failed"
     cancelled = "cancelled"
+
+
+class BulkDeleteByIdsRequest(BaseModel):
+    """Request body for the id-keyed bulk-delete endpoints (datasets, staged uploads, chats)."""
+
+    ids: list[str] = Field(default_factory=list)
+
+
+class BulkDeleteByIdsSkipped(BaseModel):
+    """One entry in the ``skipped`` list of an id-keyed bulk-delete response."""
+
+    id: str
+    reason: str
+
+
+class BulkDeleteByIdsResponse(BaseModel):
+    """Response payload for the id-keyed bulk-delete endpoints."""
+
+    deleted: list[str] = Field(default_factory=list)
+    skipped: list[BulkDeleteByIdsSkipped] = Field(default_factory=list)

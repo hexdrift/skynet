@@ -62,4 +62,8 @@ export const taggerMessages = {
   "tagger.library.save": "שמירה לספרייה",
   "tagger.library.saved": "«{name}» נשמר לספרייה",
   "tagger.library.save_failed": "שגיאה בשמירת הדאטאסט לספרייה",
+  "tagger.library.name_title": "שמירת דאטאסט בספרייה",
+  "tagger.library.name_label": "שם הדאטאסט",
+  "tagger.library.name_save": "שמירה",
+  "tagger.library.name_cancel": "ביטול",
 } as const;

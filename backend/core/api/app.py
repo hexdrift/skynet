@@ -77,6 +77,7 @@ from .observability import (
     start_event_loop_lag_monitor,
     start_orphan_recovery_sweeper,
     start_queue_metrics_refresher,
+    start_staged_dataset_sweeper,
     start_stale_conversation_sweeper,
 )
 from .routers.admin import create_admin_router
@@ -677,6 +678,7 @@ def create_app(
     queue_metrics_refresher = None
     orphan_sweeper = None
     stale_conversation_sweeper = None
+    staged_dataset_sweeper = None
     loop_lag_monitor = None
 
     @asynccontextmanager
@@ -689,7 +691,7 @@ def create_app(
         Yields:
             ``None`` once the worker is running; stops the worker on exit.
         """
-        nonlocal loop_lag_monitor, orphan_sweeper, queue_metrics_refresher, stale_conversation_sweeper, worker
+        nonlocal loop_lag_monitor, orphan_sweeper, queue_metrics_refresher, staged_dataset_sweeper, stale_conversation_sweeper, worker
         # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
         # this only fails rows whose ``lease_expires_at`` is in the past — a
         # peer pod's in-flight job is not orphaned and is left alone. The
@@ -711,6 +713,7 @@ def create_app(
         stale_conversation_sweeper = start_stale_conversation_sweeper(
             getattr(job_store, "engine", None)
         )
+        staged_dataset_sweeper = start_staged_dataset_sweeper(getattr(job_store, "engine", None))
         if settings.event_loop_lag_monitor_enabled:
             loop_lag_monitor = start_event_loop_lag_monitor()
             logger.info("Event-loop lag monitor enabled (threshold %.0fms)", settings.event_loop_lag_threshold_ms)
@@ -785,6 +788,8 @@ def create_app(
                 orphan_sweeper.stop()
             if stale_conversation_sweeper:
                 stale_conversation_sweeper.stop()
+            if staged_dataset_sweeper:
+                staged_dataset_sweeper.stop()
             if loop_lag_monitor:
                 loop_lag_monitor.stop()
 

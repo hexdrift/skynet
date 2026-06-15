@@ -10,6 +10,7 @@ export const optimizationsMessages = {
   "optimization.rerun.success": "נוצרה אופטימיזציה חדשה",
   "optimization.rerun.failed": "לא ניתן ליצור אופטימיזציה חדשה",
   "optimization.delete.failed": "מחיקה נכשלה",
+  "optimization.storage_label": "נפח האחסון של הריצה — לחצו לניהול",
   "optimization.file.parse_error": "שגיאה בפענוח הקובץ",
   "optimization.progress.gepa": "אופטימיזציית GEPA",
   "optimizations.react.optimized_tools": "כלים מותאמים (ReAct)",
@@ -31,7 +32,4 @@ export const optimizationsMessages = {
   "optimizations.lmactivity.description": `פעילות מודלי השפה לפי שלב — כמה קריאות היו וכמה זמן הן לקחו, ל${TERMS.generationModelShort} ולמודל הרפלקציה בנפרד.`,
   "optimizations.source_dataset.label": `מקור הנתונים: ${TERMS.dataset} מהספרייה`,
   "optimizations.source_dataset.view": `מעבר ל${TERMS.dataset}`,
-  "optimizations.save_dataset.button": "שמירה לספרייה",
-  "optimizations.save_dataset.saved": "«{name}» נשמר לספרייה",
-  "optimizations.save_dataset.failed": "שמירת הדאטאסט לספרייה נכשלה",
 } as const;

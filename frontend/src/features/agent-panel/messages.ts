@@ -1,8 +1,6 @@
 // Hebrew UI strings owned by the agent-panel feature slice. Edit directly.
 
 export const agentPanelMessages = {
-  "auto.features.agent.panel.components.firstrunhint.1": "סוכן חדש",
-  "auto.features.agent.panel.components.firstrunhint.2": "נסה/נסי — ",
   "auto.features.agent.panel.components.generalistpanel.1": "שלום, איך אפשר לעזור?",
   "auto.features.agent.panel.components.generalistpanel.3": "סוכן",
   "auto.features.agent.panel.components.generalistpanel.4": "מה אני יודע לעשות",
@@ -152,7 +150,6 @@ export const agentPanelMessages = {
   "auto.features.agent.panel.components.toolscarousel.literal.16": "פעולה שדורשת משנה זהירות",
   "auto.features.agent.panel.components.toolscarousel.literal.17":
     "פותח טופס בצ׳אט שבו מקלידים קלט ומריצים אותו דרך התוכנית המאומנת של ריצה שהסתיימה.",
-  "auto.features.agent.panel.components.firstrunhint.literal.1": "סגור/סגרי",
   "auto.features.agent.panel.components.submitsummarycard.literal.1": "הגשה נכשלה",
   "auto.features.agent.panel.components.toolcallrow.literal.1": "אישור פעולה",
   "auto.features.agent.panel.components.toolcallrow.literal.2": "ניסיון חוזר לאחר שגיאה",

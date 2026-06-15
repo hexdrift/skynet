@@ -132,6 +132,8 @@ export interface OptimizationSummaryResponse {
   optimizer_name?: string | null;
   column_mapping?: ColumnMapping;
   dataset_rows?: number | null;
+  /** Stored footprint of this run in bytes (artifacts + payload + logs), counted against the storage quota; 0 when unmeasured. */
+  stored_bytes?: number;
   /** Id of the library dataset this run was submitted from (by-reference); null for inline/staged submits. */
   source_dataset_id?: string | null;
   latest_metrics?: Record<string, unknown>;

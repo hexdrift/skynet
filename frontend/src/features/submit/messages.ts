@@ -195,7 +195,7 @@ export const submitMessages = {
   "auto.features.submit.components.steps.summarystep.16": "ערבוב",
   "auto.features.submit.components.steps.summarystep.17": "סה״כ זוגות",
   "auto.features.submit.components.steps.summarystep.18": "מודלי רפלקציה",
-  "auto.features.submit.components.steps.summarystep.19": "עומק אופטימיזציה",
+  "auto.features.submit.components.steps.summarystep.19": "רמת החיפוש",
   "auto.features.submit.components.steps.summarystep.20": "גודל מדגם לרפלקציה",
   "auto.features.submit.components.steps.summarystep.21": "מקסימום סבבי הערכה",
   "auto.features.submit.components.steps.summarystep.22": "מיזוג מועמדים",

@@ -11,7 +11,7 @@ import {
   Tags,
   Trash2,
   MoreHorizontal,
-  Share2,
+  Share,
   Pencil,
   Pin,
   Loader2,
@@ -48,8 +48,10 @@ import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
 import { groupJobsByRecency } from "@/features/sidebar";
 import { SettingsTrigger, useUserPrefs } from "@/features/settings";
+import { StorageMeter } from "@/features/storage";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 const NAV_ITEMS = [
   {
@@ -450,31 +452,18 @@ export function Sidebar() {
                   </div>
                 ))}
                 {loadedAll && groupedJobs.length === 0 && (
-                  <div className="flex flex-col items-center gap-2.5 px-4 pt-9 pb-6 text-center">
-                    {renderedTab === "shared" ? (
-                      <Share2
-                        className="size-6 text-muted-foreground/25"
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Send
-                        className="size-6 text-muted-foreground/25"
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                      />
+                  <EmptyState
+                    variant="list"
+                    icon={renderedTab === "shared" ? undefined : Send}
+                    title={msg(
+                      renderedTab === "shared" ? "sidebar.shared.empty" : "sidebar.mine.empty",
                     )}
-                    <p className="text-[0.8125rem] font-medium text-muted-foreground/75">
-                      {msg(renderedTab === "shared" ? "sidebar.shared.empty" : "sidebar.mine.empty")}
-                    </p>
-                    <p className="max-w-[11rem] text-[0.6875rem] leading-relaxed text-muted-foreground/45">
-                      {msg(
-                        renderedTab === "shared"
-                          ? "sidebar.shared.empty.hint"
-                          : "sidebar.mine.empty.hint",
-                      )}
-                    </p>
-                  </div>
+                    description={msg(
+                      renderedTab === "shared"
+                        ? "sidebar.shared.empty.hint"
+                        : "sidebar.mine.empty.hint",
+                    )}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>
@@ -489,8 +478,11 @@ export function Sidebar() {
           </div>
         </div>
 
-        <div className="px-3 py-2 border-t border-sidebar-border/60">
-          <SettingsTrigger />
+        <div className="border-t border-sidebar-border/60">
+          <StorageMeter />
+          <div className="px-3 py-2">
+            <SettingsTrigger />
+          </div>
         </div>
       </div>
 
@@ -871,7 +863,7 @@ function JobRow({
                 onClick={handleShare}
                 className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
               >
-                <Share2 className="size-3.5 text-muted-foreground" />
+                <Share className="size-3.5 text-muted-foreground" />
                 {msg("auto.features.sidebar.components.sidebar.7")}
               </button>
             )}

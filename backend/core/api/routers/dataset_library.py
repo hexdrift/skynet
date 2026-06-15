@@ -38,6 +38,11 @@ from ...constants import (
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_SOURCE_DATASET_ID,
 )
+from ...models import (
+    BulkDeleteByIdsRequest,
+    BulkDeleteByIdsResponse,
+    BulkDeleteByIdsSkipped,
+)
 from ...storage.dataset_library import (
     DatasetLibraryStore,
     DatasetRecord,
@@ -614,6 +619,48 @@ def create_dataset_library_router(*, job_store) -> APIRouter:
         _record, _role = _require(dataset_id, current_user, ShareRole.owner)
         store.delete_dataset(dataset_id)
         return DeleteDatasetResponse(deleted=True)
+
+    @router.post(
+        "/datasets/library/bulk-delete",
+        response_model=BulkDeleteByIdsResponse,
+        summary="Delete many saved datasets in a single request (owner only)",
+    )
+    def bulk_delete_datasets(
+        body: BulkDeleteByIdsRequest, current_user: AuthenticatedUserDep
+    ) -> BulkDeleteByIdsResponse:
+        """Delete a batch of owned library datasets and report per-id outcomes.
+
+        Duplicate ids are deduplicated. An id the caller cannot reach as its
+        owner — unknown, shared-but-not-owned, or below ``owner`` tier — lands in
+        ``skipped`` rather than failing the whole request; a per-id store failure
+        is likewise reported as skipped instead of raising.
+
+        Args:
+            body: The bulk-delete request body carrying the dataset ids.
+            current_user: Authenticated caller resolved from the bearer token.
+
+        Returns:
+            A :class:`BulkDeleteByIdsResponse` listing deleted and skipped ids.
+        """
+        deleted: list[str] = []
+        skipped: list[BulkDeleteByIdsSkipped] = []
+        seen: set[str] = set()
+        for dataset_id in body.ids:
+            if dataset_id in seen:
+                continue
+            seen.add(dataset_id)
+            try:
+                _require(dataset_id, current_user, ShareRole.owner)
+            except DomainError:
+                skipped.append(BulkDeleteByIdsSkipped(id=dataset_id, reason="not_found"))
+                continue
+            try:
+                store.delete_dataset(dataset_id)
+            except Exception as exc:
+                skipped.append(BulkDeleteByIdsSkipped(id=dataset_id, reason=f"error: {exc}"))
+                continue
+            deleted.append(dataset_id)
+        return BulkDeleteByIdsResponse(deleted=deleted, skipped=skipped)
 
     @router.get(
         "/datasets/library/{dataset_id}/optimizations",

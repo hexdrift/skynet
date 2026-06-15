@@ -1068,6 +1068,12 @@ export function useSubmitWizard() {
         return true;
       }
       case 2:
+        // React live-MCP runs need a tool endpoint; gate it here so the empty
+        // URL is caught when leaving the params step instead of only at submit.
+        if (isReact && reactConfig.toolSourceKind === "live_mcp" && !reactConfig.mcpUrl.trim()) {
+          if (showToast) toast.error(msg("submit.validation.mcp_url_required"));
+          return false;
+        }
         if (datasetValidation && datasetValidation.errors.length > 0) {
           if (showToast) toast.error(msg("submit.validation.split_too_small"));
           return false;

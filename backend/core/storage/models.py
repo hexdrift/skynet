@@ -265,6 +265,25 @@ class UserQuotaAuditModel(Base):
     )
 
 
+class UserStorageQuotaOverrideModel(Base):
+    """SQLAlchemy model for per-user storage-budget overrides.
+
+    ``quota_bytes`` is a per-user ceiling in bytes that replaces the global
+    ``settings.user_storage_quota_bytes`` default for this user. Uses
+    ``BigInteger`` because an admin override may grant multi-gigabyte budgets
+    that exceed the signed 32-bit range (2_147_483_647).
+    """
+
+    __tablename__ = "user_storage_quota_overrides"
+
+    username: Mapped[str] = mapped_column(String(255), primary_key=True)
+    quota_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class JobEmbeddingModel(Base):
     """Per-job embedding row backing the recommendation service.
 

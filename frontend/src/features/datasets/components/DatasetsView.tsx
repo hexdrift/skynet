@@ -2,14 +2,13 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import { Database, Loader2, Search, Upload } from "lucide-react";
+import { Database, Search, Upload } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
 import { Input } from "@/shared/ui/primitives/input";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { isStorageQuotaError, saveDataset, type DatasetSummary } from "@/shared/lib/api";
-import { formatMsg, msg } from "@/shared/lib/messages";
-import { formatBytes } from "@/shared/lib/formatters";
+import { msg } from "@/shared/lib/messages";
 import { parseDatasetFile } from "@/shared/lib/parse-dataset";
 import { cn } from "@/shared/lib/utils";
 import { useDatasets } from "../hooks/use-datasets";
@@ -27,7 +26,7 @@ const UPLOAD_ACCEPT = ".csv,.json,.xlsx,.xls";
  * preview and the reverse link to every optimization that used the dataset.
  */
 export function DatasetsView() {
-  const { datasets, usage, loading, error, refetch } = useDatasets();
+  const { datasets, loading, error, refetch } = useDatasets();
   const searchParams = useSearchParams();
   const [search, setSearch] = React.useState("");
   const [selected, setSelected] = React.useState<DatasetSummary | null>(null);
@@ -36,19 +35,20 @@ export function DatasetsView() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deepLinkedRef = React.useRef(false);
 
-  // Honour ?open=<id> once the list is in: open that dataset's detail sheet
+  // Honour ?open=<id> once the list has loaded: open that dataset's detail sheet
   // (the navigable link from an optimization's source-dataset row). Guarded so
-  // it fires a single time, not again after the user closes the sheet.
+  // it fires a single time, not again after the user closes the sheet. When the
+  // id resolves to nothing — the source dataset was deleted or unshared — say so
+  // rather than dead-ending silently on the click.
   React.useEffect(() => {
-    if (deepLinkedRef.current || datasets.length === 0) return;
+    if (deepLinkedRef.current || loading || error) return;
     const openId = searchParams.get("open");
     if (!openId) return;
+    deepLinkedRef.current = true;
     const match = datasets.find((d) => d.id === openId);
-    if (match) {
-      setSelected(match);
-      deepLinkedRef.current = true;
-    }
-  }, [datasets, searchParams]);
+    if (match) setSelected(match);
+    else toast.info(msg("datasets.open.not_found"));
+  }, [datasets, loading, error, searchParams]);
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -85,10 +85,6 @@ export function DatasetsView() {
     [uploading, refetch],
   );
 
-  const usedBytes = usage?.used_bytes ?? 0;
-  const quotaBytes = usage?.quota_bytes ?? 0;
-  const usagePct = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0;
-
   if (loading) return <DatasetsSkeleton />;
 
   return (
@@ -104,33 +100,11 @@ export function DatasetsView() {
         }}
       />
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">{msg("datasets.title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{msg("datasets.subtitle")}</p>
-        </div>
-        {usage && (
-          <div className="w-full max-w-[220px] shrink-0">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#E5DDD4]">
-              <div
-                className="h-full rounded-full bg-[#3D2E22]/70 transition-[width] duration-500 ease-out"
-                style={{ width: `${usagePct}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-end text-xs text-muted-foreground tabular-nums">
-              {formatMsg("datasets.usage", {
-                used: formatBytes(usedBytes),
-                total: formatBytes(quotaBytes),
-              })}
-            </p>
-          </div>
-        )}
-      </header>
-
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-2.5">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            dir="rtl"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={msg("datasets.search.placeholder")}
@@ -139,11 +113,12 @@ export function DatasetsView() {
           />
         </div>
         <Button
+          variant="outline"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="shrink-0 shadow-xs"
+          className="shrink-0"
         >
-          {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+          <Upload className="size-4" />
           {msg("datasets.upload")}
         </Button>
       </div>

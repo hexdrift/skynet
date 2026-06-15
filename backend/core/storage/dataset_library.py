@@ -527,10 +527,12 @@ class DatasetLibraryStore:
             return _to_record(row)
 
     def delete_dataset(self, dataset_id: str) -> bool:
-        """Delete a dataset and its bytes.
+        """Delete a dataset and its bytes in a single transaction.
 
-        The blob is removed explicitly (not relying on FK cascade) so the delete
-        behaves identically on SQLite test stores and Postgres.
+        The blob is removed in the same session as the metadata (not relying on FK
+        cascade) so the delete is atomic — a crash can never leave a metadata row
+        whose bytes are gone — and behaves identically on SQLite test stores,
+        where ``PRAGMA foreign_keys`` is off, and Postgres.
 
         Args:
             dataset_id: Dataset to delete.
@@ -538,8 +540,8 @@ class DatasetLibraryStore:
         Returns:
             ``True`` when a metadata row was deleted, ``False`` when none matched.
         """
-        self._blobs.delete(dataset_id)
         with Session(self._engine) as session:
+            session.execute(delete(DatasetBlobModel).where(DatasetBlobModel.dataset_id == dataset_id))
             deleted = session.execute(
                 delete(DatasetModel).where(DatasetModel.id == dataset_id)
             ).rowcount

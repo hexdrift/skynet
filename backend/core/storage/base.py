@@ -34,6 +34,7 @@ class JobRecord(TypedDict, total=False):
     code_version: str | None
     progress_count: int
     log_count: int
+    stored_bytes: int
 
 
 class ProgressEventRecord(TypedDict):

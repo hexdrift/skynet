@@ -14,7 +14,14 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Input } from "@/shared/ui/primitives/input";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
-import { cloneDataset, deleteDataset, isStorageQuotaError, renameDataset, type DatasetSummary } from "@/shared/lib/api";
+import {
+  cloneDataset,
+  deleteDataset,
+  isStorageQuotaError,
+  listDatasetOptimizations,
+  renameDataset,
+  type DatasetSummary,
+} from "@/shared/lib/api";
 import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
 import { formatBytes, formatRelativeTime } from "@/shared/lib/formatters";
 import { DatasetShareDialog } from "./DatasetShareDialog";
@@ -48,8 +55,27 @@ export function DatasetCard({
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [cloning, setCloning] = React.useState(false);
+  // How many optimizations were built from this dataset, fetched only when the
+  // delete dialog opens. ``null`` while unknown/loading; a positive count warns
+  // that those runs' back-link will dangle (the runs themselves keep working —
+  // they own a copy of the rows, not a reference). Owner-only, mirroring delete.
+  const [usedCount, setUsedCount] = React.useState<number | null>(null);
 
   const sourceKey = SOURCE_LABEL_KEYS[dataset.source];
+
+  React.useEffect(() => {
+    if (!deleteOpen || !isOwner) {
+      setUsedCount(null);
+      return;
+    }
+    let cancelled = false;
+    listDatasetOptimizations(dataset.id)
+      .then((res) => !cancelled && setUsedCount(res.optimizations.length))
+      .catch(() => !cancelled && setUsedCount(0));
+    return () => {
+      cancelled = true;
+    };
+  }, [deleteOpen, isOwner, dataset.id]);
 
   const handleRename = async () => {
     const name = renameValue.trim();
@@ -235,6 +261,11 @@ export function DatasetCard({
             <DialogTitle>{msg("datasets.delete.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{msg("datasets.delete.body")}</p>
+          {usedCount !== null && usedCount > 0 && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {formatMsg("datasets.delete.used_warning", { count: usedCount })}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"

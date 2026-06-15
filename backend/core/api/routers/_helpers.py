@@ -611,6 +611,7 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
         latest_metrics=latest_metrics,
         progress_count=job_data.get("progress_count", 0),
         log_count=job_data.get("log_count", 0),
+        stored_bytes=job_data.get("stored_bytes", 0),
         baseline_test_metric=baseline,
         optimized_test_metric=optimized,
         metric_improvement=metric_improvement,

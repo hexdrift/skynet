@@ -11,7 +11,7 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Button } from "@/shared/ui/primitives/button";
 import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
-import { formatBytes } from "@/shared/lib/formatters";
+import { formatStorageSize } from "@/shared/lib/formatters";
 import type { StorageUsageResponse } from "@/shared/lib/api";
 
 /** Per-category label keys, mirroring the backend ``STORAGE_CATEGORIES``. */
@@ -20,9 +20,6 @@ const CATEGORY_LABELS: Record<string, MessageKey> = {
   datasets: "storage.category.datasets",
   agent_chats: "storage.category.agent_chats",
   staged_uploads: "storage.category.staged_uploads",
-  logs: "storage.category.logs",
-  progress_events: "storage.category.progress_events",
-  embeddings: "storage.category.embeddings",
 };
 
 /** Inputs for the presentational quota modal; data is fetched by the host. */
@@ -67,8 +64,8 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
           </div>
           <p className="mt-1.5 text-end text-xs text-muted-foreground tabular-nums">
             {formatMsg("storage.quota.usage", {
-              used: formatBytes(usedBytes),
-              total: formatBytes(quotaBytes),
+              used: formatStorageSize(usedBytes),
+              total: formatStorageSize(quotaBytes),
             })}
           </p>
         </div>
@@ -90,7 +87,7 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
                       <div className="flex items-baseline justify-between text-sm">
                         <span className="text-foreground">{labelKey ? msg(labelKey) : key}</span>
                         <span className="text-muted-foreground tabular-nums">
-                          {formatBytes(bytes)}
+                          {formatStorageSize(bytes)}
                         </span>
                       </div>
                       <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#E5DDD4]/60">
@@ -107,14 +104,9 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button asChild variant="outline" onClick={onClose}>
-            <Link href="/datasets">{msg("storage.quota.cta.datasets")}</Link>
-          </Button>
-          <Button asChild variant="outline" onClick={onClose}>
-            <Link href="/optimizations">{msg("storage.quota.cta.optimizations")}</Link>
-          </Button>
-        </div>
+        <Button asChild onClick={onClose} className="w-full">
+          <Link href="/storage">{msg("storage.quota.cta.manage")}</Link>
+        </Button>
       </DialogContent>
     </Dialog>
   );

@@ -32,9 +32,17 @@ from .models import (
     ProgressEventModel,
     UserQuotaAuditModel,
     UserQuotaOverrideModel,
+    UserStorageQuotaOverrideModel,
 )
 from .schema_lock import schema_bootstrap_lock
-from .usage import StorageUsage, compute_user_storage, json_byte_size
+from .usage import (
+    StorageItem,
+    StorageUsage,
+    compute_user_storage,
+    compute_user_storage_category_items,
+    compute_user_storage_items,
+    json_byte_size,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +291,7 @@ class RemoteDBJobStore:
                 "optimization_type": job.optimization_type,
                 "attempts": job.attempts,
                 "code_version": job.code_version,
+                "stored_bytes": job.stored_bytes or 0,
             },
         )
 
@@ -653,19 +662,21 @@ class RemoteDBJobStore:
     def get_effective_user_storage_quota(self, username: str) -> int:
         """Return the unified storage budget in bytes the user is held to.
 
-        The budget is a single self-service ceiling with no per-user admin
-        override — users free their own space — so every caller gets the static
-        ``settings.user_storage_quota_bytes``. It stays a method (rather than an
-        inline setting read) so the save/run gate, the usage meter, and the
-        quota modal all resolve the budget through one seam that tests can stub.
+        Resolves an admin per-user override first (a live DB row that replaces
+        the default ceiling for that user), falling back to the static
+        ``settings.user_storage_quota_bytes`` default. Staying a method keeps the
+        save/run gate, the usage meter, and the quota modal resolving the budget
+        through one seam that tests can stub.
 
         Args:
-            username: Accepted for symmetry with the usage and gate call sites;
-                the budget is identical for every user.
+            username: Owner whose effective byte budget is resolved.
 
         Returns:
             The byte budget the user's total storage is checked against.
         """
+        override = self.get_user_storage_quota_override(username)
+        if override is not None:
+            return override
         return settings.user_storage_quota_bytes
 
     def compute_user_storage(self, username: str) -> StorageUsage:
@@ -678,6 +689,133 @@ class RemoteDBJobStore:
             The :class:`StorageUsage` total and per-category breakdown.
         """
         return compute_user_storage(self._engine, username)
+
+    def compute_user_storage_items(self, username: str, limit: int = 20) -> list[StorageItem]:
+        """Return the user's largest individual items for the cleanup list.
+
+        Args:
+            username: Owner whose items are ranked.
+            limit: Maximum number of items to return.
+
+        Returns:
+            Up to ``limit`` :class:`StorageItem` rows ordered by descending size.
+        """
+        return compute_user_storage_items(self._engine, username, limit)
+
+    def compute_user_storage_category_items(
+        self, username: str, category: str, limit: int = 1000
+    ) -> list[StorageItem]:
+        """List every deletable item the user owns in one storage category.
+
+        Args:
+            username: Owner whose items are listed.
+            category: One of the deletable storage categories; any other value
+                yields an empty list.
+            limit: Defensive upper bound on rows returned for the category.
+
+        Returns:
+            The category's :class:`StorageItem` rows ordered by descending size.
+        """
+        return compute_user_storage_category_items(self._engine, username, category, limit)
+
+    def get_user_storage_quota_override(self, username: str) -> int | None:
+        """Return the per-user storage-budget override in bytes, if present.
+
+        Args:
+            username: User identifier to resolve case-insensitively.
+
+        Returns:
+            The override byte budget, or ``None`` when no override row exists.
+        """
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            return None
+        session = self._get_session()
+        try:
+            row = session.get(UserStorageQuotaOverrideModel, normalized_username)
+            return row.quota_bytes if row is not None else None
+        finally:
+            session.close()
+
+    def set_user_storage_quota_override(
+        self, username: str, quota_bytes: int, updated_by: str | None = None
+    ) -> None:
+        """Create or update a per-user storage-budget override.
+
+        Args:
+            username: User identifier to store case-insensitively.
+            quota_bytes: Byte ceiling that replaces the default for this user.
+            updated_by: Optional operator identifier for accountability.
+
+        Raises:
+            ValueError: When ``username`` is blank or ``quota_bytes`` is below one.
+        """
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            raise ValueError("username must not be blank")
+        if quota_bytes < 1:
+            raise ValueError("quota_bytes must be at least 1")
+        session = self._get_session()
+        try:
+            row = session.get(UserStorageQuotaOverrideModel, normalized_username)
+            if row is None:
+                row = UserStorageQuotaOverrideModel(username=normalized_username)
+                session.add(row)
+            row.quota_bytes = quota_bytes
+            row.updated_at = datetime.now(UTC)
+            row.updated_by = updated_by
+            session.commit()
+        finally:
+            session.close()
+
+    def delete_user_storage_quota_override(self, username: str) -> bool:
+        """Delete a storage-budget override so the default budget applies again.
+
+        Args:
+            username: User identifier to clear case-insensitively.
+
+        Returns:
+            Whether a row was deleted.
+        """
+        normalized_username = username.strip().lower()
+        if not normalized_username:
+            return False
+        session = self._get_session()
+        try:
+            deleted = (
+                session.query(UserStorageQuotaOverrideModel)
+                .filter(UserStorageQuotaOverrideModel.username == normalized_username)
+                .delete()
+            )
+            session.commit()
+            return bool(deleted)
+        finally:
+            session.close()
+
+    def list_user_storage_quota_overrides(self) -> list[dict[str, Any]]:
+        """Return all storage-budget overrides ordered by username.
+
+        Returns:
+            Override rows with ISO-formatted ``updated_at`` values.
+        """
+        session = self._get_session()
+        try:
+            rows = (
+                session.query(UserStorageQuotaOverrideModel)
+                .order_by(UserStorageQuotaOverrideModel.username.asc())
+                .all()
+            )
+            return [
+                {
+                    "username": row.username,
+                    "quota_bytes": row.quota_bytes,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    "updated_by": row.updated_by,
+                }
+                for row in rows
+            ]
+        finally:
+            session.close()
 
     def set_user_quota_override(self, username: str, quota: int | None, updated_by: str | None = None) -> None:
         """Create or update the live quota override for a user.
