@@ -176,7 +176,7 @@ def test_tqdm_proxy_update_emits_event_on_state_change() -> None:
     initial_count = len(events)
 
     bar.n = 3  # advance bar so metrics differ from last emission
-    proxy.update(0)  # call update (bar.n already changed above)
+    proxy.update(0)
 
     assert len(events) == initial_count + 1
 

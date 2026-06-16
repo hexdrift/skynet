@@ -99,6 +99,7 @@ export const sharedMessages = {
   "shared.code_editor.format": "פרמט/י",
   "shared.code_editor.copy": "העתק/העתיקי",
   "shared.code_editor.copied": "הועתק",
+  "shared.code_editor.validation_failed": "Validation failed",
   "shared.code_editor.validating": "Running validation…",
   "shared.code_editor.valid": "No issues",
   "shared.code_editor.errors_count": "{count, plural, one {1 error} other {# errors}}",

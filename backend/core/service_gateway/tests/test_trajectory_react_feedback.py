@@ -42,6 +42,7 @@ def _make_reflective(n: int) -> Any:
     """
 
     def _fn(candidate: Any, eval_batch: Any, components: list[str], *a: Any, **k: Any):
+        """Return a per-component reflective dataset with ``n`` feedback entries."""
         entries = [
             {"Inputs": {}, "Generated Outputs": f"o{i}", "Feedback": f"fix {i}"}
             for i in range(n)
@@ -79,6 +80,7 @@ def test_example_id_prefers_valset_membership() -> None:
     )
 
     def _fn(candidate: Any, eval_batch: Any, components: list[str], *a: Any, **k: Any):
+        """Return one feedback-bearing reflective entry per requested component."""
         return {component: [{"Feedback": "fb"}] for component in components}
 
     adapter = SimpleNamespace(make_reflective_dataset=_fn)
@@ -93,6 +95,7 @@ def test_skips_examples_without_feedback() -> None:
     events: list[tuple[str, dict[str, Any]]] = []
 
     def _fn(candidate: Any, eval_batch: Any, components: list[str], *a: Any, **k: Any):
+        """Return one empty-feedback reflective entry per requested component."""
         return {component: [{"Feedback": ""}] for component in components}
 
     batch = SimpleNamespace(

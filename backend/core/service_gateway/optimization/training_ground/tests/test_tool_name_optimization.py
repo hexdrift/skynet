@@ -66,6 +66,7 @@ def test_apply_tool_name_overrides_renames_in_place() -> None:
     """The serve rename helper renames cloned tools to their proposed names."""
 
     def _body(**kwargs: object) -> object:
+        """Trivial tool body."""
         return kwargs
 
     tools = [
@@ -80,6 +81,7 @@ def test_apply_tool_name_overrides_none_is_noop() -> None:
     """A ``None`` map leaves tool names untouched (pre-rename behavior)."""
 
     def _body(**kwargs: object) -> object:
+        """Trivial tool body."""
         return kwargs
 
     tools = [dspy.Tool(_body, name="alpha", desc="a")]
@@ -91,6 +93,7 @@ def test_apply_tool_name_overrides_collision_keeps_canonical() -> None:
     """Two tools proposing the same display name both keep their canonical name."""
 
     def _body(**kwargs: object) -> object:
+        """Trivial tool body."""
         return kwargs
 
     tools = [

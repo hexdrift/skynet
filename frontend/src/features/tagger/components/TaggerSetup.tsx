@@ -134,7 +134,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       const guessText = columns.find((c) => c.toLowerCase() === "text") ?? columns[0];
       setInputCols(guessText ? [guessText] : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to parse file");
+      setError(e instanceof Error ? e.message : msg("tagger.upload.parse_failed"));
     }
   }, []);
 
