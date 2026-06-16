@@ -186,7 +186,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
                           activeIdx >= 0 ? `calc(${activeIdx} * 100% / 3 + 2px)` : "2px";
                         return (
                           <div
-                            className="relative inline-grid grid-cols-3 shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
+                            className="relative inline-flex shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
                             dir="rtl"
                           >
                             <div
@@ -202,7 +202,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
                                 type="button"
                                 onClick={() => setColumnRoles((prev) => ({ ...prev, [col]: val }))}
                                 className={cn(
-                                  "relative z-10 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
+                                  "relative z-10 flex-1 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
                                   columnRoles[col] === val
                                     ? "text-stone-600"
                                     : "text-muted-foreground hover:text-foreground",
