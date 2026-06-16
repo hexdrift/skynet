@@ -318,6 +318,7 @@ def _full_dataset(job_data: dict[str, Any], optimization_id: str) -> dict[str, A
     test_idx = indices[val_end:]
 
     def _rows(idx: list[int]) -> list[dict[str, Any]]:
+        """Project split indices into ``{index, row}`` dicts for the share view."""
         return [{"index": i, "row": dataset[i]} for i in idx]
 
     return {

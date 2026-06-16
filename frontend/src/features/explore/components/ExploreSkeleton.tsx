@@ -16,7 +16,7 @@ export function ExploreSkeleton() {
           </div>
         </div>
         <div className="border-t border-border/55">
-          <ResultsSkeleton rows={5} />
+          <ResultsSkeleton rows={4} />
         </div>
       </div>
     </div>

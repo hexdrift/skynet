@@ -467,10 +467,10 @@ function AnalyticsTabImpl({
                           <span className="w-4 shrink-0 text-end tabular-nums text-[0.6875rem] text-muted-foreground/70">
                             {i + 1}
                           </span>
-                          <span className="font-mono truncate" title={m.name}>
+                          <span className="font-mono truncate min-w-0" title={m.name}>
                             {m.name}
                           </span>
-                          <span className="ms-auto tabular-nums font-medium">{m.count}</span>
+                          <span className="ms-auto tabular-nums font-medium shrink-0">{m.count}</span>
                         </div>
                         <div className="h-2 rounded-full bg-muted overflow-hidden ms-6" dir="ltr">
                           <div

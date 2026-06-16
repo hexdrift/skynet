@@ -134,7 +134,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       const guessText = columns.find((c) => c.toLowerCase() === "text") ?? columns[0];
       setInputCols(guessText ? [guessText] : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to parse file");
+      setError(e instanceof Error ? e.message : msg("tagger.upload.parse_failed"));
     }
   }, []);
 
@@ -297,7 +297,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                       type="button"
                       onClick={() => toggleInputCol(col)}
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all cursor-pointer",
+                        "flex w-full min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all cursor-pointer",
                         selected
                           ? "bg-primary/10 border border-primary/40 text-primary font-medium"
                           : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -309,7 +309,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                       >
                         {selected && <Check className="size-2 text-primary" strokeWidth={3.5} />}
                       </span>
-                      <span className="font-mono text-xs" dir="ltr">
+                      <span className="font-mono text-xs truncate min-w-0" dir="ltr">
                         {col}
                       </span>
                     </button>

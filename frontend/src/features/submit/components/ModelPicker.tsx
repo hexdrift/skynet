@@ -257,7 +257,7 @@ export function ModelPicker({
               dir="auto"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search models..."
+              placeholder={msg("auto.features.submit.components.modelpicker.literal.4")}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               onKeyDown={(e) => {
                 if (e.key === "Escape") {

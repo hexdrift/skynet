@@ -27,6 +27,8 @@ export const submitMessages = {
 
   "submit.react.section_title": "הגדרות סוכן ReAct",
   "submit.react.tool_source_label": "מקור הכלים",
+  "submit.react.tool_source_live_mcp": "Live MCP",
+  "submit.react.tool_source_dataset_snapshot": `תמונת מצב של ${TERMS.dataset}`,
   "submit.react.mcp_url_label": "כתובת MCP",
   "submit.react.auth_label": "כותרת אימות (אופציונלי)",
   "submit.react.tool_filter_label": "סינון כלים (אופציונלי)",
@@ -244,6 +246,7 @@ export const submitMessages = {
   "auto.features.submit.components.modelpicker.literal.1": "בחר/י מודל…",
   "auto.features.submit.components.modelpicker.literal.2": "שגיאה באיתור מודלים",
   "auto.features.submit.components.modelpicker.literal.3": "רענן/י מודלים מהשרת",
+  "auto.features.submit.components.modelpicker.literal.4": "חיפוש מודלים…",
   "auto.features.submit.components.steps.datasetstep.literal.1":
     "לחץ/י להעלאת קובץ CSV, JSON או Excel",
   "auto.features.submit.components.steps.datasetstep.literal.2": "קלט",
