@@ -138,6 +138,15 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
     if (!transferTarget) return;
     setTransferring(true);
     try {
+      // Invite-as-owner: when the target isn't a grantee yet (picked straight
+      // from the invite row), add them first — the backend only hands ownership
+      // to an existing member.
+      const alreadyMember = state?.members.some(
+        (m) => m.username.toLowerCase() === transferTarget.toLowerCase(),
+      );
+      if (!alreadyMember) {
+        await addDatasetShareMember(datasetId, { username: transferTarget, role: "editor" });
+      }
       await transferDatasetOwnership(datasetId, transferTarget);
       toast.success(msg("share.transfer.success", { name: transferTarget }));
       setTransferTarget(null);
@@ -204,7 +213,12 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
             ) : (
               <>
                 <div className="shrink-0 border-b border-border/40 px-6 py-4">
-                  <InvitePeople ownerName={state.owner} onInvite={handleInvite} />
+                  <InvitePeople
+                    ownerName={state.owner}
+                    onInvite={handleInvite}
+                    canTransfer={isOwner}
+                    onTransfer={setTransferTarget}
+                  />
                 </div>
 
                 <div className="shrink-0 px-6 pt-3 pb-1">
@@ -444,14 +458,18 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
 function InvitePeople({
   ownerName,
   onInvite,
+  canTransfer,
+  onTransfer,
 }: {
   ownerName: string | null;
   onInvite: (username: string, role: MemberRole) => Promise<void>;
+  canTransfer: boolean;
+  onTransfer: (username: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
-  const [role, setRole] = useState<MemberRole>("viewer");
+  const [role, setRole] = useState<MemberRole | typeof TRANSFER_VALUE>("viewer");
   const [inviting, setInviting] = useState(false);
   const [open, setOpen] = useState(false);
   const lastQuery = useRef("");
@@ -487,6 +505,16 @@ function InvitePeople({
     if (target.length === 0 || inviting) return;
     if (ownerName && target === ownerName) {
       toast.error(msg("share.cannot_grant_self"));
+      return;
+    }
+    if (role === TRANSFER_VALUE) {
+      // Hand ownership off straight from the invite row; the parent confirms,
+      // then (if needed) adds the user before transferring.
+      onTransfer(target);
+      setQuery("");
+      setResults([]);
+      setOpen(false);
+      setRole("viewer");
       return;
     }
     setInviting(true);
@@ -530,7 +558,10 @@ function InvitePeople({
             className="h-8 flex-1 rounded-none border-0 bg-transparent px-0 text-xs shadow-none backdrop-blur-none focus-visible:border-transparent focus-visible:ring-0"
           />
           <div aria-hidden className="h-5 w-px shrink-0 bg-border/70" />
-          <Select value={role} onValueChange={(next) => setRole(next as MemberRole)}>
+          <Select
+            value={role}
+            onValueChange={(next) => setRole(next as MemberRole | typeof TRANSFER_VALUE)}
+          >
             <SelectTrigger
               size="sm"
               className="h-7 gap-1 rounded-md border-0 bg-transparent px-2 text-xs shadow-none hover:border-transparent hover:bg-accent/55 hover:shadow-none focus-visible:border-transparent focus-visible:bg-accent/55 focus-visible:ring-0 data-[state=open]:border-transparent data-[state=open]:bg-accent/60 data-[state=open]:shadow-none"
@@ -544,6 +575,11 @@ function InvitePeople({
                   {roleLabel(option)}
                 </SelectItem>
               ))}
+              {canTransfer && (
+                <SelectItem value={TRANSFER_VALUE}>
+                  {msg("share.transfer.action")}
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
           <TooltipButton tooltip={msg("share.invite")}>
@@ -596,7 +632,7 @@ function InvitePeople({
           </div>
         )}
       </div>
-      {roleDesc(role) ? (
+      {role !== TRANSFER_VALUE && roleDesc(role) ? (
         <p className="text-xs text-muted-foreground/80">{roleDesc(role)}</p>
       ) : null}
     </div>
