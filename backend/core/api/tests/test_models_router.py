@@ -157,7 +157,6 @@ def test_discover_models_happy_path_returns_model_list(models_client: TestClient
 
 def test_discover_models_invalid_body_returns_422(models_client: TestClient) -> None:
     """The discover endpoint requires ``base_url`` in the body."""
-    # base_url is required
     resp = models_client.post("/models/discover", json={})
 
     assert resp.status_code == 422

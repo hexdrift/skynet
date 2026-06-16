@@ -169,6 +169,12 @@ def extract_program_state(program: dspy.Module) -> dict[str, Any]:
     ``core/service_gateway/optimization/artifacts.persist_program``
     so the persisted ``program_state`` round-trips with
     ``fresh_program.load_state(state)`` at runtime.
+
+    Args:
+        program: The DSPy module whose state is serialised.
+
+    Returns:
+        The JSON-decoded ``program_state`` dict written by ``program.save``.
     """
     with tempfile.TemporaryDirectory(prefix="tg_bundle_") as tmpdir:
         state_path = Path(tmpdir) / "program.json"

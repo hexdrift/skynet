@@ -30,6 +30,7 @@ def _make_fake_tool(name: str, return_value: str = "ok") -> dspy.Tool:
     """
 
     async def func(**_kwargs: Any) -> str:
+        """Return the fixed value regardless of arguments."""
         return return_value
 
     return dspy.Tool(func=func, name=name, desc="t", args={}, arg_types={}, arg_desc={})
@@ -117,6 +118,7 @@ async def test_run_react_chat_pumps_emitted_events_then_done(monkeypatch: pytest
     """``run_react_chat`` forwards driver-emitted events and appends ``done``."""
 
     async def fake_drive(*, emit, **_kwargs):
+        """Emit two patch events then return a final assistant message."""
         emit({"event": "reasoning_patch", "data": {"chunk": "thinking"}})
         emit({"event": "message_patch", "data": {"chunk": "hello"}})
         return "hello world"
@@ -146,6 +148,7 @@ async def test_run_react_chat_surfaces_driver_error(monkeypatch: pytest.MonkeyPa
     """A driver exception is surfaced as a terminal ``error`` event, not raised."""
 
     async def boom(*, emit, **_kwargs):
+        """Raise to simulate the driver failing mid-turn."""
         raise RuntimeError("mcp unreachable")
 
     monkeypatch.setattr("core.service_gateway.agents.react_serve._drive_react_chat", boom)
