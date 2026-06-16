@@ -62,7 +62,8 @@ export function DeleteJobDialog({
                 <span className="font-mono font-semibold text-foreground break-all">
                   {optimizationId}
                 </span>
-                ?
+                ?{" "}
+                {msg("delete.irreversible")}
               </>
             }
           />

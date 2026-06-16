@@ -504,7 +504,8 @@ export function Sidebar() {
               <span className="font-semibold text-foreground break-words" dir="auto">
                 {deleteJobInfo?.name}
               </span>
-              ?
+              ?{" "}
+              {msg("delete.irreversible")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-2 gap-3">
