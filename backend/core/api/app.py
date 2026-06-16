@@ -572,6 +572,7 @@ class CacheControlMiddleware:
             return
 
         async def send_with_cache(message: Message) -> None:
+            """Stamp the resolved ``Cache-Control`` value on the response start message."""
             if message["type"] == "http.response.start":
                 MutableHeaders(scope=message)["Cache-Control"] = cache_value
             await send(message)

@@ -72,8 +72,8 @@ export function ReactConfigSection({ w }: { w: SubmitWizardContext }) {
           onChange={(v) => updateReactConfig({ toolSourceKind: v })}
           options={
             [
-              ["live_mcp", "Live MCP"],
-              ["dataset_snapshot", "Dataset snapshot"],
+              ["live_mcp", msg("submit.react.tool_source_live_mcp")],
+              ["dataset_snapshot", msg("submit.react.tool_source_dataset_snapshot")],
             ] as const
           }
         />

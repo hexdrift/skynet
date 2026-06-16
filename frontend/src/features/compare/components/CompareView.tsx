@@ -1278,7 +1278,7 @@ export function CompareView() {
   }
 
   const tabCls =
-    "relative flex-1 min-w-0 justify-center py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
+    "relative flex-1 min-w-0 overflow-hidden text-ellipsis justify-center py-2.5 rounded-none border-b-2 border-transparent data-[state=active]:border-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all duration-200 text-xs sm:text-sm";
 
   const panelMotion = {
     initial: { opacity: 0, y: 8 },

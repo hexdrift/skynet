@@ -363,7 +363,7 @@ export function CodeEditor({
       const res = await onRun();
       setResult(res);
     } catch {
-      setResult({ valid: false, errors: ["Validation failed"], warnings: [] });
+      setResult({ valid: false, errors: [msg("shared.code_editor.validation_failed")], warnings: [] });
     } finally {
       setRunning(false);
     }

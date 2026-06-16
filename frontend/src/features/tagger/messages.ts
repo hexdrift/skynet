@@ -66,4 +66,5 @@ export const taggerMessages = {
   "tagger.library.name_label": "שם הדאטאסט",
   "tagger.library.name_save": "שמירה",
   "tagger.library.name_cancel": "ביטול",
+  "tagger.upload.parse_failed": "טעינת הקובץ נכשלה",
 } as const;

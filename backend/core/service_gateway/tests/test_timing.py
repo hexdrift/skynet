@@ -191,6 +191,7 @@ def test_stage_visible_from_worker_thread() -> None:
     cb = GenLMTimingCallback(target)
 
     def worker(call_id: str) -> None:
+        """Record one start/end pair from inside the executor worker thread."""
         cb.on_lm_start(call_id, target, {})
         cb.on_lm_end(call_id, outputs={"ok": True})
 

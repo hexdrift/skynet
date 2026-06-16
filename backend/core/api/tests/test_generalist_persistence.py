@@ -83,6 +83,11 @@ class _StubStore:
     """Job-store double exposing only the engine the persistence path touches."""
 
     def __init__(self, engine: Engine) -> None:
+        """Store the engine the persistence path reads through.
+
+        Args:
+            engine: The SQLite engine backing the stub job-store.
+        """
         self.engine = engine
 
 
@@ -278,6 +283,7 @@ async def test_persist_on_early_close_after_successful_submit(wrapper_engine: En
     """
 
     async def _submit_then_dangle() -> AsyncIterator[dict[str, Any]]:
+        """Emit a successful submit turn that dangles without ever sending ``done``."""
         yield {"event": "message_patch", "data": {"chunk": "מגיש"}}
         yield {
             "event": "tool_start",
@@ -304,6 +310,7 @@ async def test_persist_on_done_writes_exactly_once(wrapper_engine: Engine) -> No
     """When ``done`` fires the turn persists once — the finally must not re-write."""
 
     async def _normal_turn() -> AsyncIterator[dict[str, Any]]:
+        """Emit a normal turn that reaches ``done``."""
         yield {"event": "message_patch", "data": {"chunk": "שלום"}}
         yield {"event": "done", "data": {"assistant_message": "שלום", "model": "test-model"}}
 
@@ -319,6 +326,7 @@ async def test_empty_greeting_turn_does_not_persist_on_teardown(wrapper_engine: 
     """A teardown with no text and no settled tool-calls writes no empty row."""
 
     async def _empty_then_dangle() -> AsyncIterator[dict[str, Any]]:
+        """Emit only a ``conversation_meta`` event, then dangle with no settled content."""
         yield {"event": "conversation_meta", "data": {}}
         while True:
             yield {"event": "ping", "data": {}}
