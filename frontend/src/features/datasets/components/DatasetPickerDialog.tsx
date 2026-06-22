@@ -12,16 +12,9 @@ import {
 import { Input } from "@/shared/ui/primitives/input";
 import { Badge } from "@/shared/ui/primitives/badge";
 import type { DatasetSummary } from "@/shared/lib/api";
-import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatBytes, formatRelativeTime } from "@/shared/lib/formatters";
 import { useDatasets } from "../hooks/use-datasets";
-
-const SOURCE_LABEL_KEYS: Record<string, MessageKey> = {
-  tagger: "datasets.source.tagger",
-  upload: "datasets.source.upload",
-  optimization: "datasets.source.optimization",
-  clone: "datasets.source.clone",
-};
 
 /**
  * Submit-wizard consumer picker: a searchable list of the caller's library
@@ -108,7 +101,6 @@ export function DatasetPickerDialog({
               </p>
             ) : (
               filtered.map((dataset) => {
-                const sourceKey = SOURCE_LABEL_KEYS[dataset.source];
                 return (
                   <button
                     key={dataset.id}
@@ -122,11 +114,6 @@ export function DatasetPickerDialog({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm font-semibold text-foreground">{dataset.name}</p>
-                        {sourceKey && (
-                          <Badge variant="meta" size="sm">
-                            {msg(sourceKey)}
-                          </Badge>
-                        )}
                         {dataset.role !== "owner" && (
                           <Badge variant="secondary" size="sm">
                             {msg("datasets.shared_badge")}
