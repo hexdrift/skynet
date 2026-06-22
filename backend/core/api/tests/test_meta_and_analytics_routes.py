@@ -345,3 +345,31 @@ def test_toggle_pin_third_call_returns_true_again(client: TestClient, job_store:
     client.patch("/optimizations/pin2/pin")  # → False
     r = client.patch("/optimizations/pin2/pin")  # → True
     assert r.json()["pinned"] is True
+
+
+def test_analytics_rejects_cross_user_username_for_nonadmin(nonadmin_client: TestClient) -> None:
+    """A non-admin asking for another user's analytics is refused with 403."""
+    r = nonadmin_client.get("/analytics/summary", params={"username": "carol"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "auth.owner_mismatch"
+
+
+def test_analytics_scopes_to_caller_when_username_omitted(nonadmin_client: TestClient, job_store: FakeJobStore) -> None:
+    """A non-admin's summary aggregates only their own jobs, not everyone's."""
+    job_store.seed_job(
+        "bobs",
+        status="success",
+        payload_overview={"job_type": "run", "username": "bob", "dataset_rows": 3},
+        result={"baseline_test_metric": 0.4, "optimized_test_metric": 0.7},
+    )
+    job_store.seed_job(
+        "carols",
+        status="success",
+        payload_overview={"job_type": "run", "username": "carol", "dataset_rows": 9},
+        result={"baseline_test_metric": 0.4, "optimized_test_metric": 0.7},
+    )
+    r = nonadmin_client.get("/analytics/summary")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total_jobs"] == 1
+    assert body["total_dataset_rows"] == 3

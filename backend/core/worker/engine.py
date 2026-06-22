@@ -392,12 +392,18 @@ class BackgroundWorker:
                 message="Validating payload",
             )
 
+            # Renew the lease before the validate/restore phase: a slow validate
+            # or checkpoint-restore must not let the claim expire and get the row
+            # orphan-recovered + double-run by a peer pod.
+            self._touch_activity(worker_id)
+
             service = self._get_service()
             if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH and hasattr(service, "validate_grid_search_payload"):
                 service.validate_grid_search_payload(grid_payload)
             elif optimization_type == OPTIMIZATION_TYPE_RUN:
                 service.validate_payload(run_payload)
 
+            self._touch_activity(worker_id)
             _raise_if_cancelled(cancel_event, optimization_id)  # before starting the optimization
 
             self._job_store.update_job(
@@ -430,6 +436,9 @@ class BackgroundWorker:
                         optimization_id,
                     )
                     gepa_dir = None
+                # Restoring checkpoint blobs from the DB can be slow; renew the
+                # lease so the upcoming subprocess spawn starts with a full window.
+                self._touch_activity(worker_id)
 
             # Preserve registry-backed service in child when using fork.
             if self._mp_start_method == "fork":
@@ -468,6 +477,7 @@ class BackgroundWorker:
                 while run_process.is_alive():
                     _raise_if_cancelled(cancel_event, optimization_id)
                     self._touch_activity(worker_id)
+                    self._raise_if_store_cancelled(optimization_id)
                     run_process.join(timeout=self._cancel_poll_interval)
                     drained_result, drained_error, drained_count = self._drain_subprocess_events(
                         optimization_id, event_queue
@@ -510,6 +520,27 @@ class BackgroundWorker:
                     raise RuntimeError(str(subprocess_error.get("error", "Unknown subprocess error")))
 
                 if run_process.exitcode not in (0, None) and result_dict is None:
+                    requeue = getattr(self._job_store, "requeue_for_resume", None)
+                    attempts = int(job_data.get("attempts") or 0)
+                    if run_process.exitcode == -9 and requeue is not None and attempts + 1 < settings.job_max_attempts:
+                        # SIGKILL with no error event is almost always an OOM kill,
+                        # not a logic failure. Persist the checkpoint and bounded-
+                        # re-queue so a worker resumes from it instead of failing
+                        # the whole run on one transient kill. There is no timed
+                        # backoff (that needs a schedule column); the attempt cap
+                        # bounds retries and the poll interval spaces them out.
+                        if gepa_dir is not None:
+                            with contextlib.suppress(Exception):
+                                self._persist_gepa_checkpoint(
+                                    optimization_id, gepa_dir, checkpoint_tracker, is_grid=is_grid
+                                )
+                        requeue(optimization_id)
+                        logger.warning(
+                            "Optimization %s subprocess killed (exit -9); re-queued (attempt %d)",
+                            optimization_id,
+                            attempts + 1,
+                        )
+                        return
                     raise RuntimeError(f"Optimization subprocess exited with code {run_process.exitcode}")
 
                 if result_dict is None:
@@ -545,13 +576,23 @@ class BackgroundWorker:
                         # to the DB. Stop cooperatively so we persist the checkpoint
                         # and never overwrite "cancelled"/"paused" with success/failed.
                         raise CancellationError()
-                    self._job_store.update_job(
-                        optimization_id,
-                        status=final_status,
-                        message=final_message,
-                        completed_at=datetime.now(UTC).isoformat(),
-                        result=result_dict,
-                    )
+                    # Compare-and-set the terminal write against the active
+                    # statuses so a pause/cancel that landed after the status read
+                    # just above isn't clobbered by this success/failed write; on a
+                    # lost race we yield cooperatively. Stores without the CAS
+                    # method keep last-writer-wins.
+                    completion_fields: dict[str, Any] = {
+                        "status": final_status,
+                        "message": final_message,
+                        "completed_at": datetime.now(UTC).isoformat(),
+                        "result": result_dict,
+                    }
+                    cas = getattr(self._job_store, "update_job_if_status", None)
+                    if cas is not None:
+                        if not cas(optimization_id, ("running", "validating"), **completion_fields):
+                            raise CancellationError()
+                    else:
+                        self._job_store.update_job(optimization_id, **completion_fields)
                     logger.info("Optimization %s completed with status=%s", optimization_id, final_status)
                     # Success retires resume state and frees its bytes. A single
                     # run drops its one checkpoint. A grid keeps each *failed*
@@ -699,9 +740,16 @@ class BackgroundWorker:
 
         if not self._threads:
             return
-        per_thread_timeout = timeout / len(self._threads)
+        # Worker threads run concurrently, so a single shared deadline lets any
+        # one in-flight job use up to the full ``timeout`` to finish its current
+        # DSPy/LLM call — instead of a fixed ``timeout / N`` slice that reaps a
+        # slow child early — while still bounding total shutdown to ``timeout``.
+        deadline = time.monotonic() + timeout
         for thread in self._threads:
-            thread.join(timeout=per_thread_timeout)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            thread.join(timeout=remaining)
 
         self._threads.clear()
         logger.info("Stopped background workers")
@@ -748,6 +796,34 @@ class BackgroundWorker:
                     event = self._cancel_events.get(current_job)
                 if event is not None:
                     event.set()
+
+    def _raise_if_store_cancelled(self, optimization_id: str) -> None:
+        """Raise ``CancellationError`` when a peer pod has cancelled/paused the job.
+
+        A cancel or pause that lands on a different replica only flips the DB
+        status — it can't reach this pod's in-memory cancel event. Polling the
+        lightweight status column on each lease-heartbeat tick makes cancellation
+        cross-pod, so a running subprocess stops promptly instead of burning its
+        full LLM budget to completion. A store without the lightweight read
+        (legacy/in-memory) is a no-op.
+
+        Args:
+            optimization_id: ID of the job whose persisted status to check.
+
+        Raises:
+            CancellationError: When the persisted status is cancelled/paused.
+        """
+        status_fields = getattr(self._job_store, "get_job_status_fields", None)
+        if status_fields is None:
+            return
+        try:
+            status = status_fields(optimization_id).get("status")
+        except Exception:
+            # A transient read failure must not abort an otherwise-healthy run;
+            # the next tick retries.
+            return
+        if status in ("cancelled", "paused"):
+            raise CancellationError()
 
     def _schedule_embedding_indexing(self, optimization_id: str) -> None:
         """Fire-and-forget embed the finished job for the explore search index.
@@ -1011,9 +1087,7 @@ class BackgroundWorker:
         try:
             self._job_store.save_gepa_checkpoint(optimization_id, data, next_n, pair_index)
         except Exception:
-            logger.exception(
-                "Optimization %s pair %s: failed to persist GEPA checkpoint", optimization_id, pair_index
-            )
+            logger.exception("Optimization %s pair %s: failed to persist GEPA checkpoint", optimization_id, pair_index)
             return
         cursor["mtime"] = mtime
         cursor["n"] = next_n
@@ -1037,9 +1111,7 @@ class BackgroundWorker:
             self._job_store.save_grid_pair_result(optimization_id, pair_index, result)
             self._job_store.delete_gepa_checkpoint(optimization_id, pair_index)
         except Exception:
-            logger.exception(
-                "Optimization %s pair %s: failed to persist pair result", optimization_id, pair_index
-            )
+            logger.exception("Optimization %s pair %s: failed to persist pair result", optimization_id, pair_index)
             return False
         return True
 

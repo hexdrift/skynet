@@ -87,6 +87,25 @@ def router_app(job_store: FakeJobStore) -> FastAPI:
 
 
 @pytest.fixture
+def nonadmin_client(job_store: FakeJobStore) -> TestClient:
+    """TestClient whose caller is a non-admin user ('bob') over the same store.
+
+    Shares the ``job_store`` fixture instance so a test can seed rows and then
+    assert how the analytics routes scope them for a non-admin caller.
+
+    Args:
+        job_store: In-memory store injected into the analytics router.
+
+    Returns:
+        A ``TestClient`` authenticated as a non-admin user.
+    """
+    app = FastAPI()
+    app.include_router(create_analytics_router(job_store=job_store))
+    bypass_auth(app, user=AuthenticatedUser(username="bob", role="user", groups=()))
+    return TestClient(app)
+
+
+@pytest.fixture
 def client(router_app: FastAPI) -> TestClient:
     """Wrap ``router_app`` in a FastAPI ``TestClient`` for HTTP assertions.
 

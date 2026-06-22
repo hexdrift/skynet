@@ -87,9 +87,7 @@ IdempotencyKeyHeader = Annotated[
 ]
 
 
-def _existing_submission_response(
-    job_store, optimization_id: str
-) -> OptimizationSubmissionResponse | None:
+def _existing_submission_response(job_store, optimization_id: str) -> OptimizationSubmissionResponse | None:
     """Rehydrate a previous submission's response from the persisted overview.
 
     Used when an ``Idempotency-Key`` header matches a prior submission so the
@@ -244,9 +242,7 @@ def _evict_staged_dataset(job_store, staged_id: str | None, username: str) -> No
     try:
         job_store.delete_staged_dataset(staged_id, username)
     except Exception:
-        logger.warning(
-            "Failed to evict staged dataset %s after consumption", staged_id, exc_info=True
-        )
+        logger.warning("Failed to evict staged dataset %s after consumption", staged_id, exc_info=True)
 
 
 def _materialize_library_dataset(
@@ -381,18 +377,16 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                     )
                     return cached
 
-        staged_id = _materialize_staged_dataset(
-            payload, job_store=job_store, username=payload.username
-        )
-        source_dataset_id = _materialize_library_dataset(
-            payload, job_store=job_store, user=current_user
-        )
+        staged_id = _materialize_staged_dataset(payload, job_store=job_store, username=payload.username)
+        source_dataset_id = _materialize_library_dataset(payload, job_store=job_store, user=current_user)
 
         try:
             service.validate_payload(payload)
         except (ServiceError, RegistryError) as exc:
+            # Log the resolver/validation detail server-side only; the client
+            # gets a stable code without the internal registry surface leaked.
             logger.warning("Payload validation failed: %s", exc)
-            raise DomainError("submission.validation_failed", status=400, error=str(exc)) from exc
+            raise DomainError("submission.validation_failed", status=400) from exc
 
         _enforce_vision_capability(
             signature_code=payload.signature_code,
@@ -531,19 +525,16 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                     )
                     return cached
 
-        staged_id = _materialize_staged_dataset(
-            payload, job_store=job_store, username=payload.username
-        )
-        source_dataset_id = _materialize_library_dataset(
-            payload, job_store=job_store, user=current_user
-        )
+        staged_id = _materialize_staged_dataset(payload, job_store=job_store, username=payload.username)
+        source_dataset_id = _materialize_library_dataset(payload, job_store=job_store, user=current_user)
 
         if hasattr(service, "validate_grid_search_payload"):
             try:
                 service.validate_grid_search_payload(payload)
             except (ServiceError, RegistryError) as exc:
+                # Log the detail server-side only; don't leak it to the client.
                 logger.warning("Grid search validation failed: %s", exc)
-                raise DomainError("submission.validation_failed", status=400, error=str(exc)) from exc
+                raise DomainError("submission.validation_failed", status=400) from exc
 
         _enforce_vision_capability(
             signature_code=payload.signature_code,

@@ -11,9 +11,9 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
@@ -39,10 +39,41 @@ from ...models import (
     OptimizerStatsResponse,
 )
 from ...models.common import OptimizationStatus
+from ..auth import AuthenticatedUser, get_authenticated_user, is_admin
 from ..converters import parse_overview
 from ._helpers import build_summary, grant_roles_for
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
+
+
+def _scope_analytics_username(current_user: AuthenticatedUser, requested: str | None) -> str | None:
+    """Resolve the username an analytics aggregation may read.
+
+    Non-admins are confined to their own runs: a missing or self-matching
+    ``requested`` resolves to their own username, and any other value is refused
+    so the aggregation can't leak another user's KPIs. Admins keep the
+    cross-user view — ``None`` aggregates across everyone, an explicit username
+    scopes to that user.
+
+    Args:
+        current_user: The authenticated caller.
+        requested: Client-supplied ``username`` query param.
+
+    Returns:
+        The trusted username to forward to the store, or None to aggregate
+        across all users (admins only).
+
+    Raises:
+        HTTPException: 403 when a non-admin requests another user's stats.
+    """
+    normalized = (requested or "").strip().lower()
+    if is_admin(current_user):
+        return normalized or None
+    if normalized and normalized != current_user.username:
+        raise HTTPException(status_code=403, detail="auth.owner_mismatch")
+    return current_user.username
 
 
 def _summary_to_analytics_job(s: OptimizationSummaryResponse) -> DashboardAnalyticsJob:
@@ -102,6 +133,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         tags=["agent"],
     )
     def get_analytics_summary(
+        current_user: AuthenticatedUserDep,
         optimizer: str | None = Query(default=None, description="Exact-match optimizer name (e.g. 'gepa')"),
         model: str | None = Query(
             default=None,
@@ -124,10 +156,12 @@ def create_analytics_router(*, job_store) -> APIRouter:
             model: Exact-match primary model name filter.
             status: Optimization status filter.
             username: Restrict to optimizations submitted by this user.
+            current_user: The authenticated caller (scopes the aggregation).
 
         Returns:
             A populated :class:`AnalyticsSummaryResponse` envelope.
         """
+        username = _scope_analytics_username(current_user, username)
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
@@ -239,6 +273,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         tags=["agent"],
     )
     def get_optimizer_stats(
+        current_user: AuthenticatedUserDep,
         model: str | None = Query(
             default=None, description="Exact-match model name to scope the stats to a single model"
         ),
@@ -254,10 +289,12 @@ def create_analytics_router(*, job_store) -> APIRouter:
             model: Exact-match model name filter.
             status: Restrict aggregation to a single status bucket.
             username: Only include jobs submitted by this user.
+            current_user: The authenticated caller (scopes the aggregation).
 
         Returns:
             A populated :class:`OptimizerStatsResponse` envelope.
         """
+        username = _scope_analytics_username(current_user, username)
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
@@ -351,6 +388,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         tags=["agent"],
     )
     def get_model_stats(
+        current_user: AuthenticatedUserDep,
         optimizer: str | None = Query(default=None, description="Exact-match optimizer name to scope the stats"),
         status: str | None = Query(default=None, description="Restrict aggregation to a single status bucket"),
         username: str | None = Query(default=None, description="Only include jobs submitted by this username"),
@@ -364,10 +402,12 @@ def create_analytics_router(*, job_store) -> APIRouter:
             optimizer: Exact-match optimizer name filter.
             status: Restrict aggregation to a single status bucket.
             username: Only include jobs submitted by this user.
+            current_user: The authenticated caller (scopes the aggregation).
 
         Returns:
             A populated :class:`ModelStatsResponse` envelope.
         """
+        username = _scope_analytics_username(current_user, username)
         all_jobs = job_store.list_jobs(
             status=status,
             username=username,
@@ -451,6 +491,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
         summary="Full pre-shaped dashboard analytics payload",
     )
     def get_dashboard_analytics(
+        current_user: AuthenticatedUserDep,
         optimizer: str | None = Query(default=None, description="Exact-match optimizer name filter"),
         model: str | None = Query(default=None, description="Exact-match primary model name filter"),
         status: str | None = Query(default=None, description="Optimization status filter"),
@@ -486,10 +527,12 @@ def create_analytics_router(*, job_store) -> APIRouter:
             include_shared: Union in runs shared with ``username``.
             owner: Restrict the aggregation to runs owned by this username.
             access: Restrict to a caller access tier (mine/owner/editor/viewer).
+            current_user: The authenticated caller (scopes the aggregation).
 
         Returns:
             A populated :class:`DashboardAnalyticsResponse` envelope.
         """
+        username = _scope_analytics_username(current_user, username)
         if include_shared and username and hasattr(job_store, "list_jobs_visible_to"):
             all_jobs_raw = job_store.list_jobs_visible_to(
                 username,
