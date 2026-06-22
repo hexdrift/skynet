@@ -275,7 +275,7 @@ export function AnimatedWordmark({
       aria-label="SKYNET"
     >
       <svg
-        className="overflow-visible transition-all duration-300"
+        className="overflow-visible transition-all duration-300 pointer-events-none"
         width={fluid ? undefined : svgWidth}
         height={fluid ? undefined : size}
         viewBox={`0 0 ${TOTAL_WIDTH} 92`}
