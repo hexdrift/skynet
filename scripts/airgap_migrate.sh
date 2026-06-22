@@ -21,8 +21,10 @@ INTERNAL_CA_SECRET="${INTERNAL_CA_SECRET:-}"
 INTERNAL_CA_FILENAME="${INTERNAL_CA_FILENAME:-ca-bundle.pem}"
 INTERNAL_CA_MOUNT_DIR="${INTERNAL_CA_MOUNT_DIR:-/etc/skynet/ca}"
 LLM_BASE_URL="${LLM_BASE_URL:-https://llm-gateway.internal/v1}"
+CODE_AGENT_MODEL="${CODE_AGENT_MODEL:-gpt-5}"
+GENERALIST_AGENT_MODEL="${GENERALIST_AGENT_MODEL:-gpt-5}"
 EMBEDDING_BASE_URL="${EMBEDDING_BASE_URL:-$LLM_BASE_URL}"
-EMBEDDING_MODEL="${EMBEDDING_MODEL:-jina-code-embeddings-0.5b}"
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-jina-embeddings-v4}"
 OIDC_ISSUER="${OIDC_ISSUER:-https://idp.internal/realms/skynet}"
 OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-skynet}"
 OIDC_SCOPE="${OIDC_SCOPE:-openid profile email groups}"
@@ -34,10 +36,9 @@ BACKEND_HOST="${BACKEND_HOST:-skynet-api.apps.internal}"
 LLM_EGRESS_CIDR="${LLM_EGRESS_CIDR:-10.0.5.0/24}"
 EMBEDDING_EGRESS_CIDR="${EMBEDDING_EGRESS_CIDR:-$LLM_EGRESS_CIDR}"
 IDP_EGRESS_CIDR="${IDP_EGRESS_CIDR:-10.0.6.0/24}"
+DB_EGRESS_CIDR="${DB_EGRESS_CIDR:-10.0.4.0/24}"
 LDAP_EGRESS_CIDR="${LDAP_EGRESS_CIDR:-}"
 LDAP_EGRESS_PORT="${LDAP_EGRESS_PORT:-636}"
-COMMS_WEBHOOK_URL="${COMMS_WEBHOOK_URL:-}"
-COMMS_EGRESS_CIDR="${COMMS_EGRESS_CIDR:-}"
 
 usage() {
   cat <<'EOF'
@@ -67,6 +68,9 @@ Commands:
   install              Run helm upgrade --install; the Helm migration hook runs first.
   status               Print rollout status commands for backend/frontend.
   all                  Run check, validate-migrations, values, render, install, status.
+                       NOTE: `all` does NOT build or push images — run build-images +
+                       push-images (after `docker login <registry>`) first, or install
+                       fails on ImagePullBackOff.
 
 Common environment overrides:
   RELEASE=skynet
@@ -80,8 +84,10 @@ Common environment overrides:
   FRONTEND_SECRET=skynet-frontend-secrets
   INTERNAL_CA_SECRET=skynet-internal-ca
   LLM_BASE_URL=https://llm-gateway.internal/v1
+  CODE_AGENT_MODEL=gpt-5
+  GENERALIST_AGENT_MODEL=gpt-5
   EMBEDDING_BASE_URL=https://llm-gateway.internal/v1
-  EMBEDDING_MODEL=jina-code-embeddings-0.5b
+  EMBEDDING_MODEL=jina-embeddings-v4
   OIDC_ISSUER=https://idp.internal/realms/skynet
   OIDC_CLIENT_ID=skynet
   OIDC_SCOPE="openid profile email groups"
@@ -93,10 +99,9 @@ Common environment overrides:
   LLM_EGRESS_CIDR=10.0.5.0/24
   EMBEDDING_EGRESS_CIDR=10.0.5.0/24              # set separately if embedding gateway differs
   IDP_EGRESS_CIDR=10.0.6.0/24
+  DB_EGRESS_CIDR=10.0.4.0/24                   # managed Postgres subnet; blank to omit dbEgress
   LDAP_EGRESS_CIDR=10.0.8.0/24                 # blank to omit ldapEgress
   LDAP_EGRESS_PORT=636                         # 389 if you really must use ldap://
-  COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet
-  COMMS_EGRESS_CIDR=10.0.7.0/24
 
 Image build / push overrides (build-images, push-images):
   DOCKER=docker                                # or `podman`
@@ -197,13 +202,10 @@ EOF
   prompt LLM_EGRESS_CIDR "LLM gateway egress CIDR"
   prompt EMBEDDING_EGRESS_CIDR "Embedding gateway egress CIDR"
   prompt IDP_EGRESS_CIDR "IdP egress CIDR"
+  prompt DB_EGRESS_CIDR "Managed Postgres egress CIDR (blank to omit)"
   prompt LDAP_EGRESS_CIDR "LDAP/AD controller egress CIDR (blank to omit)"
   if [[ -n "$LDAP_EGRESS_CIDR" ]]; then
     prompt LDAP_EGRESS_PORT "LDAP/AD egress port (636 ldaps / 389 ldap)"
-  fi
-  prompt COMMS_WEBHOOK_URL "Notifications webhook URL (blank to disable)"
-  if [[ -n "$COMMS_WEBHOOK_URL" ]]; then
-    prompt COMMS_EGRESS_CIDR "Notifications webhook egress CIDR"
   fi
 
   cmd_values
@@ -265,6 +267,8 @@ cmd_todos() {
 # Offline alembic SQL emission. Sandbox-friendly: needs no Postgres connection,
 # imports the same env.py as the migration Job. Use this to review the exact
 # schema delta before pushing the backend image to your internal registry.
+# Needs no network IF the backend deps are already importable: either a
+# pre-synced backend/.venv, or an internal PyPI mirror reachable via UV_INDEX_URL.
 cmd_validate_migrations() {
   local backend_dir="$ROOT_DIR/backend"
   local out="${MIGRATION_SQL_OUT:-$ROOT_DIR/migration.sql}"
@@ -276,8 +280,11 @@ cmd_validate_migrations() {
     # Materialize the lockfile-pinned env first. Without this the script
     # falls through to whatever 'alembic' the system Python happens to
     # expose, which is how validate-migrations silently produced an empty
-    # SQL file when ldap3 was missing from a stale .venv.
-    ( cd "$backend_dir" && uv sync --frozen --quiet ) || {
+    # SQL file from a stale .venv. UV_PYTHON_DOWNLOADS=never mirrors
+    # backend/Dockerfile so uv never reaches out to download a Python build;
+    # if UV_INDEX_URL is set we pass it through so an internal PyPI mirror
+    # satisfies the sync with no internet.
+    ( cd "$backend_dir" && UV_PYTHON_DOWNLOADS=never ${UV_INDEX_URL:+UV_INDEX_URL="$UV_INDEX_URL"} uv sync --frozen --quiet ) || {
       echo "uv sync --frozen failed; resolve dep conflicts before validate-migrations" >&2
       exit 1
     }
@@ -285,9 +292,10 @@ cmd_validate_migrations() {
   elif command -v alembic >/dev/null 2>&1; then
     # No uv: rely on the active Python. Confirm the migration deps are
     # actually importable so we fail loudly here instead of writing a
-    # truncated migration.sql.
-    python3 -c "import alembic, sqlalchemy, ldap3, pgvector" 2>/dev/null || {
-      echo "alembic on PATH but backend deps missing (alembic/sqlalchemy/ldap3/pgvector); install backend extras first" >&2
+    # truncated migration.sql. alembic/env.py never imports ldap3, so we do
+    # not require it — demanding it wrongly rejects otherwise-capable hosts.
+    python3 -c "import alembic, sqlalchemy, pgvector" 2>/dev/null || {
+      echo "alembic on PATH but backend deps missing (alembic/sqlalchemy/pgvector); install backend extras first" >&2
       exit 1
     }
     runner=""
@@ -338,6 +346,7 @@ cmd_push_images() {
   local docker_bin="${DOCKER:-docker}"
   local backend_tag="$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
   local frontend_tag="$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+  echo "Reminder: '$docker_bin login $REGISTRY' (or 'podman login') must have succeeded or these pushes 401." >&2
   "$docker_bin" push "$backend_tag"
   "$docker_bin" push "$frontend_tag"
   echo "Pushed:"
@@ -351,7 +360,6 @@ cmd_values() {
   local ca_backend_env=""
   local ca_backend_mounts=""
   local ca_frontend_mounts=""
-  local comms_egress=""
   if [[ -n "$INTERNAL_CA_SECRET" ]]; then
     ca_bundle_path="$INTERNAL_CA_MOUNT_DIR/$INTERNAL_CA_FILENAME"
     ca_backend_env=$(cat <<EOF
@@ -372,8 +380,9 @@ EOF
 )
     ca_frontend_mounts="$ca_backend_mounts"
   fi
-  if [[ -n "$COMMS_EGRESS_CIDR" ]]; then
-    comms_egress="    - \"$COMMS_EGRESS_CIDR\""
+  local db_egress=""
+  if [[ -n "$DB_EGRESS_CIDR" ]]; then
+    db_egress=$(printf '\n  # TODO: On-premise - the managed Postgres subnet. REQUIRED when\n  # postgres.enabled=false or the backend pool can never reach the DB.\n  dbEgress:\n    - cidr: "%s"\n      ports: [5432]' "$DB_EGRESS_CIDR")
   fi
   local embedding_egress=""
   if [[ -n "$EMBEDDING_EGRESS_CIDR" && "$EMBEDDING_EGRESS_CIDR" != "$LLM_EGRESS_CIDR" ]]; then
@@ -399,11 +408,14 @@ backend:
   env:
     # TODO: On-premise - point these at your OpenAI-compatible internal LLM gateway.
     CODE_AGENT_BASE_URL: "$LLM_BASE_URL"
-    CODE_AGENT_MODEL: "gpt-5"
     GENERALIST_AGENT_BASE_URL: "$LLM_BASE_URL"
-    GENERALIST_AGENT_MODEL: "gpt-5"
-    RECOMMENDATIONS_EMBEDDING_BASE_URL: "$EMBEDDING_BASE_URL"
-    RECOMMENDATIONS_EMBEDDING_MODEL: "$EMBEDDING_MODEL"
+    # TODO: On-premise - set to a model id your internal gateway actually serves (gpt-5 is a placeholder). LiteLLM forwards this id verbatim to CODE_AGENT_BASE_URL.
+    CODE_AGENT_MODEL: "$CODE_AGENT_MODEL"
+    GENERALIST_AGENT_MODEL: "$GENERALIST_AGENT_MODEL"
+    EMBEDDINGS_BASE_URL: "$EMBEDDING_BASE_URL"
+    EMBEDDINGS_MODEL: "$EMBEDDING_MODEL"
+    # Air-gap: use the bundled litellm cost map; do not fetch from GitHub on import.
+    LITELLM_LOCAL_MODEL_COST_MAP: "True"
 $ca_backend_env
     # TODO: On-premise - set to the public frontend route.
     FRONTEND_URL: "https://$FRONTEND_HOST"
@@ -411,7 +423,6 @@ $ca_backend_env
     ALLOWED_ORIGINS: "https://$FRONTEND_HOST"
     ADMIN_GROUPS: "$AUTH_ADMIN_GROUPS"
     ADMIN_USERNAMES: "$AUTH_ADMINS"
-    COMMS_WEBHOOK_URL: "$COMMS_WEBHOOK_URL"
     # TODO: On-premise - set to enable Active Directory username autocomplete
     # in the admin tab. Leave empty to keep the NullDirectoryClient fallback
     # (DB-known users only). See AIRGAP.html "Internal LDAP / Active Directory
@@ -424,7 +435,8 @@ $ca_backend_env
   secrets:
     # TODO: On-premise - must contain OPENAI_API_KEY and BACKEND_AUTH_SECRET.
     # OPENAI_API_KEY is also reused for the embedding API unless you add
-    # RECOMMENDATIONS_EMBEDDING_API_KEY to this Secret.
+    # EMBEDDINGS_API_KEY to this Secret.
+    # For an unauthenticated internal gateway, set OPENAI_API_KEY to any non-empty placeholder (e.g. "not-needed").
     # Add AD_LDAP_BIND_PASSWORD when AD_LDAP_URL is set.
     existingSecret: "$BACKEND_SECRET"
 $ca_backend_mounts
@@ -476,11 +488,10 @@ openshift:
       host: "$FRONTEND_HOST"
 
 networkPolicy:
-  enabled: true
+  enabled: true$db_egress
   # TODO: On-premise - use the exact IdP / internal service CIDRs for your cluster.
   egressCidrs:
     - "$IDP_EGRESS_CIDR"
-$comms_egress
   # TODO: On-premise - use the exact LLM gateway CIDRs and ports.
   llmEgress:
     - cidr: "$LLM_EGRESS_CIDR"
@@ -537,6 +548,8 @@ case "${1:-}" in
   install) cmd_install ;;
   status) cmd_status ;;
   all)
+    echo "Note: 'all' does NOT build or push images — run build-images + push-images" >&2
+    echo "(after 'docker login $REGISTRY') first, or install fails on ImagePullBackOff." >&2
     cmd_check
     cmd_validate_migrations
     cmd_values
