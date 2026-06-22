@@ -36,7 +36,7 @@ from ...auth import AuthenticatedUser, get_authenticated_user, is_admin
 from ...converters import parse_overview, parse_timestamp, status_to_job_status
 from ...errors import DomainError
 from ...response_limits import AGENT_DEFAULT_LIST, AGENT_MAX_LIST, clamp_limit
-from .._helpers import build_summary, grant_roles_for, job_owner
+from .._helpers import build_summary, grant_roles_for, is_resumable, job_owner
 from ..constants import VALID_OPTIMIZATION_TYPES, VALID_STATUSES
 from .schemas import (
     CompareJobSnapshot,
@@ -190,6 +190,8 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
                 offset=offset,
             )
         items = [build_summary(job_data) for job_data in rows]
+        for summary, job_data in zip(items, rows, strict=True):
+            summary.resumable = is_resumable(job_store, job_data)
         if use_shared:
             caller_norm = current_user.username.strip().lower()
             roles = grant_roles_for(job_store, [s.optimization_id for s in items], caller_norm)
@@ -308,6 +310,7 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
                     pinned=bool(overview.get("pinned", False)),
                     optimization_type=overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE),
                     total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
+                    resumable=is_resumable(job_store, row),
                 )
             )
         return SidebarJobsResponse(items=items, total=total)
@@ -364,6 +367,7 @@ def register_listing_routes(router: APIRouter, *, job_store) -> None:
                     pinned=bool(overview.get("pinned", False)),
                     optimization_type=overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE),
                     total_pairs=overview.get(PAYLOAD_OVERVIEW_TOTAL_PAIRS),
+                    resumable=is_resumable(job_store, row),
                     role=roles.get(row["optimization_id"]),
                 )
             )

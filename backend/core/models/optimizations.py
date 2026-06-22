@@ -48,6 +48,17 @@ class _JobResponseBase(BaseModel):
     # link in the UI.
     source_dataset_id: str | None = None
 
+    # True when this run stopped mid-optimization with a saved GEPA checkpoint and
+    # can be resumed in place (terminal failed/cancelled, checkpoint present,
+    # attempts below the cap). Drives the Resume-vs-Restart affordance; defaults
+    # False so non-resumable runs and legacy rows render exactly as before.
+    resumable: bool = False
+
+    # True while this run is actively ``running`` AND already has a saved checkpoint,
+    # so a manual Pause control is offered and is guaranteed resumable. Computed on the
+    # live detail-status response only; defaults False on summary/list rows.
+    pausable: bool = False
+
     latest_metrics: dict[str, Any] = Field(default_factory=dict)
 
     model_name: str | None = Field(default=None, description="Single-run model name; null for grid searches.")
@@ -134,6 +145,10 @@ class OptimizationStatusResponse(_JobResponseBase):
     logs_offset: int = 0
     result: RunResponse | None = None
     grid_result: GridSearchResponse | None = None
+    # Grid pair indices with a saved checkpoint: a failed pair listed here offers
+    # Resume (continue mid-GEPA), one not listed offers Restart (re-run fresh).
+    # Empty for single runs and for grids with no in-flight pair state.
+    grid_resumable_pairs: list[int] = Field(default_factory=list)
     effective_role: str | None = Field(
         default=None,
         description=(

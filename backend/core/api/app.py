@@ -109,15 +109,19 @@ _SCALAR_STATIC_DIR = Path(__file__).parent / "static" / "scalar"
 # route is still live and still appears in /openapi.json — the filter is
 # applied only to the copy served at /openapi.public.json, which is what
 # Scalar fetches. The cut is aimed at developers integrating with Skynet:
-# submit a job, poll status, fetch the artifact, run inference. Anything
-# not on this list is treated as internal (dashboard plumbing, SSE
-# streams, analytics aggregations, per-pair readers, admin tooling) and
-# auto-hidden from the docs without any further action.
+# discover the available optimizers/modules/models, submit a job, poll
+# status, fetch the artifact, run inference. Anything not on this list is
+# treated as internal (dashboard plumbing, SSE streams, analytics
+# aggregations, per-pair readers, admin tooling) and auto-hidden from the
+# docs without any further action.
 _SCALAR_PUBLIC_PATHS = frozenset(
     {
         # Service health
         "/health",
         "/queue",
+        # Discover valid optimizers, modules, and models for a submission
+        "/registry",
+        "/models",
         # Submit work
         "/run",
         "/grid-search",
@@ -135,6 +139,7 @@ _SCALAR_PUBLIC_PATHS = frozenset(
         "/optimizations/{optimization_id}/cancel",
         "/optimizations/{optimization_id}/clone",
         "/optimizations/{optimization_id}/retry",
+        "/optimizations/{optimization_id}/resume",
         # Inference on a finished optimization
         "/serve/{optimization_id}",
         "/serve/{optimization_id}/info",
@@ -457,6 +462,7 @@ _OPENAPI_TAGS = [
     {"name": "Inference", "description": "Run inference against an optimized program."},
     {"name": "Analytics", "description": "Aggregate stats across jobs, optimizers, and models."},
     {"name": "Models", "description": "Model catalog and provider discovery."},
+    {"name": "Registry", "description": "Optimizers and modules you can reference by name in a submission."},
     {"name": "Datasets", "description": "Profile uploaded datasets and recommend split plans."},
     {"name": "Code Validation", "description": "Format and validate user-supplied Python code."},
     {"name": "System", "description": "Health and queue status for readiness probes."},

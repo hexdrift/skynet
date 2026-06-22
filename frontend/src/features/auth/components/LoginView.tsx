@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 import { signIn, getProviders } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardDescription } from "@/shared/ui/primitives/card";
-import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
+import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { Input } from "@/shared/ui/primitives/input";
 import { Label } from "@/shared/ui/primitives/label";
-import { Loader2 } from "lucide-react";
+import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { msg } from "@/shared/lib/messages";
+import { LoginHalo } from "./LoginHalo";
+
+const ENTER_EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
  * Resolve where to send the user after login. next-auth's middleware appends a
@@ -31,6 +34,19 @@ function postLoginTarget(): string {
     // Malformed callbackUrl — ignore and use the default.
   }
   return "/";
+}
+
+/**
+ * Oversized SKYNET wordmark shared by every login state, so the SSO redirect
+ * moment and the dev form read as the same place. It fills the column width and
+ * morphs continuously as an ambient "alive" signal.
+ */
+function LoginHeader() {
+  return (
+    <div className="w-[min(90vw,520px)]">
+      <AnimatedWordmark fluid autoMorph morphSpeed={250} />
+    </div>
+  );
 }
 
 export function LoginView() {
@@ -80,82 +96,89 @@ export function LoginView() {
     router.refresh();
   };
 
-  if (mode === "loading" || mode === "sso") {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-dvh gap-4">
-        <Loader2 className="size-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">{msg("auth.login.loading")}</p>
-      </div>
-    );
-  }
+  const isWorking = mode === "loading" || mode === "sso";
 
   return (
-    <div className="flex items-center justify-center min-h-dvh px-4">
+    <div className="relative flex min-h-dvh w-full items-center justify-center px-4 py-10">
+      <LoginHalo />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[1]"
+        style={{
+          background:
+            "radial-gradient(58% 48% at 50% 44%, rgba(250,248,245,0.9) 0%, rgba(250,248,245,0.4) 46%, transparent 76%)",
+        }}
+      />
+
       <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[420px]"
+        transition={{ duration: 0.6, ease: ENTER_EASE }}
+        className="relative z-10 w-full max-w-[420px]"
       >
-        <Card className="border-border/30 shadow-2xl shadow-black/8 backdrop-blur-xl bg-card/90 overflow-hidden">
-          <CardHeader className="text-center pb-0 pt-10">
-            <div className="flex justify-center" data-slot="card-title">
-              <AnimatedWordmark size={32} />
+        {isWorking ? (
+          <div className="flex flex-col items-center">
+            <LoginHeader />
+            <div className="mt-9 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              <span>{msg("auth.login.loading")}</span>
             </div>
-            <CardDescription className="text-muted-foreground/60 mt-2 text-[0.8125rem] tracking-wide">
-              {msg("auth.login.tagline")}
-            </CardDescription>
-          </CardHeader>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center">
+            <LoginHeader />
+            <Card className="mt-9 w-full">
+              <CardContent className="px-6">
+                <form
+                  onSubmit={handleLogin}
+                  className="space-y-4"
+                  aria-label={msg("auth.login.form_aria")}
+                >
+                  <div>
+                    <Label htmlFor="login-username" className="sr-only">
+                      {msg("auth.login.username")}
+                    </Label>
+                    <Input
+                      id="login-username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder={msg("auth.login.username_placeholder")}
+                      autoFocus
+                      autoComplete="username"
+                      dir="auto"
+                      className="h-11 placeholder:text-right"
+                    />
+                  </div>
 
-          <CardContent className="px-6 sm:px-8 pb-5 pt-0">
-            <form
-              onSubmit={handleLogin}
-              className="space-y-5"
-              aria-label={msg("auth.login.form_aria")}
-            >
-              <div>
-                <Label htmlFor="login-username" className="sr-only">
-                  {msg("auth.login.username")}
-                </Label>
-                <Input
-                  id="login-username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={msg("auth.login.username_placeholder")}
-                  autoFocus
-                  autoComplete="username"
-                  dir="auto"
-                  className="h-11 bg-background/60 border-border/50 focus:border-primary/40 focus:ring-primary/20 transition-all duration-200 placeholder:text-muted-foreground/40 placeholder:text-right"
-                />
-              </div>
+                  <AnimatePresence>
+                    {error && (
+                      <motion.p
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-center text-sm text-destructive"
+                        role="alert"
+                      >
+                        {error}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
 
-              <AnimatePresence>
-                {error && (
-                  <motion.p
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="text-sm text-destructive text-center"
-                    role="alert"
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={loading || !username.trim()}
+                    className="h-11 w-full gap-2 text-[0.9375rem] font-medium"
                   >
-                    {error}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-
-              <Button
-                type="submit"
-                className="w-full h-11 text-[0.9375rem] font-medium gap-2 transition-all duration-200"
-                size="lg"
-                disabled={loading || !username.trim()}
-              >
-                {loading && <Loader2 className="size-4 animate-spin" />}
-                {msg("auth.login.submit")}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                    {loading && <Loader2 className="size-4 animate-spin" />}
+                    {msg("auth.login.submit")}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </motion.div>
     </div>
   );

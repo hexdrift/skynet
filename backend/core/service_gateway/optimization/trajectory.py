@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 
 
 GEPA_STATE_FILENAME = "gepa_state.bin"
+# A finished grid pair's serialized PairResult, written into its worker-owned
+# pair dir so the worker can durably record it and a resumed grid skips the pair.
+GRID_PAIR_RESULT_FILENAME = "result.json"
 
 VALSET_FIELD_CHAR_CAP = 4096
 
@@ -1415,12 +1418,39 @@ class TrajectoryWatcher:
         """Spawn the daemon watcher thread. Idempotent."""
         if self._thread is not None:
             return
+        # On resume the run dir already holds the prior segment's state; advance
+        # the cursors past it so those candidates are not re-emitted as new points.
+        self._prime_resume_baseline()
         self._thread = threading.Thread(
             target=self._run,
             daemon=True,
             name="gepa-trajectory-watcher",
         )
         self._thread.start()
+
+    def _prime_resume_baseline(self) -> None:
+        """Skip past candidates a resumed run's restored state already holds.
+
+        On resume the worker seeds ``gepa_state.bin`` into the run dir before GEPA
+        starts, so the first poll would otherwise re-emit every candidate from the
+        prior segment as a "new" trajectory point — duplicating the timeline the
+        original run already persisted. Reading the seeded baseline here (once,
+        before the poll thread starts) means only candidates produced *after* the
+        resume are emitted. A fresh run has no state file yet, so this is a no-op.
+        """
+        state_path = Path(self._run_dir) / GEPA_STATE_FILENAME
+        try:
+            mtime = state_path.stat().st_mtime
+        except OSError:
+            return
+        state = _load_state(state_path)
+        if state is None:
+            return
+        self._last_count = len(state.get("program_candidates") or [])
+        rejected = extract_rejected_from_trace(state, -1)
+        if rejected:
+            self._last_rejected_iteration = rejected[-1].iteration
+        self._last_mtime = mtime
 
     def stop(self, timeout: float = 5.0) -> None:
         """Signal the thread to stop, join, then run one final drain tick.
@@ -1497,23 +1527,35 @@ class TrajectoryWatcher:
 
 
 @contextlib.contextmanager
-def gepa_log_dir(optimizer_name: str) -> Iterator[str | None]:
-    """Allocate a temporary directory for GEPA's state file, or yield ``None``.
+def gepa_log_dir(optimizer_name: str, provided_dir: str | None = None) -> Iterator[str | None]:
+    """Allocate a directory for GEPA's state file, or yield ``None``.
 
     GEPA writes ``gepa_state.bin`` here on every iteration; the path is
     handed to ``instantiate_optimizer(log_dir=...)``. Non-GEPA optimizers
     don't use it, so no directory is created and ``None`` is yielded —
     ``instantiate_optimizer`` ignores ``log_dir`` for those.
 
+    When ``provided_dir`` is given (the worker owns a per-job directory so it
+    can persist/restore the checkpoint that backs resume), that directory is
+    used and left in place on exit — its lifecycle belongs to the caller. With
+    no ``provided_dir`` a fresh tempdir is created and removed on exit, the
+    original ephemeral behaviour kept for callers that don't resume.
+
     Args:
         optimizer_name: The optimizer's registered name.
+        provided_dir: A caller-owned directory to write the state into, or
+            ``None`` to allocate (and clean up) an ephemeral tempdir.
 
     Yields:
-        Absolute path to a fresh tempdir for GEPA, or ``None`` for other
-        optimizers. The directory is removed on context exit.
+        Absolute path to the directory GEPA writes into, or ``None`` for
+        non-GEPA optimizers.
     """
     if optimizer_name.lower() != OPTIMIZER_NAME_GEPA:
         yield None
+        return
+    if provided_dir is not None:
+        Path(provided_dir).mkdir(parents=True, exist_ok=True)
+        yield provided_dir
         return
     with tempfile.TemporaryDirectory(prefix="gepa_trajectory_") as tmpdir:
         yield tmpdir

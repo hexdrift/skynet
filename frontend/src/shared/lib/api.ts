@@ -983,11 +983,33 @@ export async function cancelJob(optimizationId: string) {
   return res;
 }
 
+// Pause suspends a running run at its checkpoint (status → "paused"), keeping it
+// resumable. Like cancel it acts on the SAME run in place, so callers refresh the
+// current view rather than navigating.
+export async function pauseJob(optimizationId: string) {
+  const res = await request<{ optimization_id: string; status: string }>(
+    `/optimizations/${optimizationId}/pause`,
+    { method: "POST" },
+  );
+  invalidateCache("/optimizations");
+  return res;
+}
+
 // Re-runs a failed/cancelled optimization. The response's optimization_id is the
 // NEW run, so callers navigate to it after success.
 export async function retryJob(optimizationId: string) {
   const res = await request<OptimizationSubmissionResponse>(
     `/optimizations/${optimizationId}/retry`,
+    { method: "POST" },
+  );
+  invalidateCache("/optimizations");
+  return res;
+}
+// Resume continues the SAME run from its checkpoint (no new id), so callers
+// refresh the current view rather than navigating, unlike retryJob.
+export async function resumeJob(optimizationId: string) {
+  const res = await request<{ optimization_id: string; status: string }>(
+    `/optimizations/${optimizationId}/resume`,
     { method: "POST" },
   );
   invalidateCache("/optimizations");
@@ -1007,6 +1029,24 @@ export async function deleteGridPair(optimizationId: string, pairIndex: number) 
   const res = await request<GridSearchResult>(
     `/optimizations/${optimizationId}/pair/${pairIndex}`,
     { method: "DELETE" },
+  );
+  invalidateCache("/optimizations");
+  return res;
+}
+// Per-pair re-run: like a single run's Restart/Resume scoped to one grid pair —
+// re-queues the grid in place to re-run only this pair, keeping the others.
+export async function restartGridPair(optimizationId: string, pairIndex: number) {
+  const res = await request<{ optimization_id: string; status: string }>(
+    `/optimizations/${optimizationId}/pair/${pairIndex}/restart`,
+    { method: "POST" },
+  );
+  invalidateCache("/optimizations");
+  return res;
+}
+export async function resumeGridPair(optimizationId: string, pairIndex: number) {
+  const res = await request<{ optimization_id: string; status: string }>(
+    `/optimizations/${optimizationId}/pair/${pairIndex}/resume`,
+    { method: "POST" },
   );
   invalidateCache("/optimizations");
   return res;
@@ -1329,6 +1369,8 @@ export interface SidebarJobItem {
   total_pairs?: number | null;
   completed_pairs?: number | null;
   failed_pairs?: number | null;
+  /** True when this run stopped mid-optimization and can be resumed in place; drives Resume vs Restart. */
+  resumable?: boolean;
   /** Caller's share role on a "shared with me" item; absent on own optimizations. */
   role?: ShareRole | null;
 }

@@ -12,7 +12,6 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { msg } from "@/shared/lib/messages";
 import { JobsStreamProvider } from "@/shared/hooks/use-jobs-stream";
-import { ParticleHero } from "@/shared/ui/particle-hero";
 import {
   GeneralistPanel,
   GeneralistPanelProvider,
@@ -42,12 +41,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (pathname === "/login") {
     return (
-      <div className="flex min-h-screen flex-col relative">
-        <ParticleHero />
-        <main className="flex-1 relative z-[1]" dir="rtl">
-          {children}
-        </main>
-      </div>
+      <main className="min-h-screen" dir="rtl">
+        {children}
+      </main>
     );
   }
 
@@ -132,7 +128,7 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
       >
         <div className="flex items-center gap-1.5 cursor-default">
           <div className="hidden sm:block">
-            <AnimatedWordmark size={16} />
+            <AnimatedWordmark size={16} autoMorph morphSpeed={250} />
           </div>
           <span
             className="sm:hidden text-sm font-bold tracking-[0.14em] uppercase text-foreground cursor-default"

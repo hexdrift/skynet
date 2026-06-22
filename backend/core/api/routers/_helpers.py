@@ -528,6 +528,108 @@ def enforce_storage_quota(job_store, username: str, incoming_bytes: int) -> None
     )
 
 
+def is_resumable(job_store: Any, job_data: dict) -> bool:
+    """Return whether a stopped run can be resumed in place from its checkpoint.
+
+    True only for the narrow case the Resume affordance targets: a terminal
+    ``failed``/``cancelled`` run that still has attempts left under
+    ``job_max_attempts`` and a saved GEPA checkpoint. The cheap, indexed
+    checkpoint lookup is gated behind the status/attempts checks so list pages
+    query only the few candidate rows, never the whole page.
+
+    Args:
+        job_store: The job store used to test for a saved checkpoint.
+        job_data: Raw job row from the store.
+
+    Returns:
+        ``True`` when the run should offer Resume rather than Restart.
+    """
+    status = status_to_job_status(job_data.get("status", "pending"))
+    if status not in {OptimizationStatus.failed, OptimizationStatus.cancelled, OptimizationStatus.paused}:
+        return False
+    # A grid is resumed per pair (in its results), not via a whole-job button, so
+    # the top-level flag stays False for grids — see ``grid_resumable_pairs``.
+    if parse_overview(job_data).get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) == OPTIMIZATION_TYPE_GRID_SEARCH:
+        return False
+    # A manual pause is user-driven, not failure recovery, so it is exempt from the
+    # attempt cap; only failed/cancelled (auto-recovery) runs are bounded by it.
+    if status != OptimizationStatus.paused and int(job_data.get("attempts") or 0) >= settings.job_max_attempts:
+        return False
+    optimization_id = job_data.get("optimization_id")
+    if not optimization_id:
+        return False
+    return _has_resumable_state(job_store, optimization_id)
+
+
+def is_pausable(job_store: Any, job_data: dict) -> bool:
+    """Return whether a running optimization can be manually paused.
+
+    True only while the run is actively ``running`` (not a grid) and already has
+    saved optimizer state, so a pause is guaranteed to be resumable — pausing
+    before the first checkpoint would otherwise strand the run. The checkpoint
+    lookup is gated behind the status/type checks so it runs for the single
+    candidate row only.
+
+    Args:
+        job_store: The job store used to test for a saved checkpoint.
+        job_data: Raw job row from the store.
+
+    Returns:
+        ``True`` when the run should offer a Pause control.
+    """
+    status = status_to_job_status(job_data.get("status", "pending"))
+    if status != OptimizationStatus.running:
+        return False
+    if parse_overview(job_data).get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) == OPTIMIZATION_TYPE_GRID_SEARCH:
+        return False
+    optimization_id = job_data.get("optimization_id")
+    if not optimization_id:
+        return False
+    return _has_resumable_state(job_store, optimization_id)
+
+
+def _has_resumable_state(job_store: Any, optimization_id: str) -> bool:
+    """Return whether saved state exists to resume from (single checkpoint or any grid pair).
+
+    A single run is resumable from its GEPA checkpoint; a grid is resumable when
+    any pair has an in-flight checkpoint OR any pair already finished (so the rest
+    can be re-run while finished pairs are kept).
+
+    Args:
+        job_store: The job store to query.
+        optimization_id: The job id to test.
+
+    Returns:
+        ``True`` when there is state to resume from.
+    """
+    has_checkpoint = getattr(job_store, "has_gepa_checkpoint", None)
+    if callable(has_checkpoint) and has_checkpoint(optimization_id):
+        return True
+    has_pairs = getattr(job_store, "has_grid_pair_results", None)
+    return bool(callable(has_pairs) and has_pairs(optimization_id))
+
+
+def grid_resumable_pairs(job_store: Any, optimization_id: str) -> list[int]:
+    """Return the grid pair indices that have a saved checkpoint to resume from.
+
+    Drives the per-pair control in the grid results: a failed pair whose index is
+    here crashed mid-GEPA and offers Resume; a failed pair not here failed without
+    state and offers Restart. Successful pairs have no checkpoint (dropped when
+    they finished), so they never appear.
+
+    Args:
+        job_store: The job store to query.
+        optimization_id: The grid job id.
+
+    Returns:
+        Sorted pair indices with a checkpoint (empty when none or unsupported).
+    """
+    lister = getattr(job_store, "list_gepa_checkpoints", None)
+    if not callable(lister):
+        return []
+    return sorted(cp.pair_index for cp in lister(optimization_id) if cp.pair_index >= 0)
+
+
 def build_summary(job_data: dict) -> OptimizationSummaryResponse:
     """Build a compact dashboard-card summary from a raw job dict.
 
@@ -588,7 +690,9 @@ def build_summary(job_data: dict) -> OptimizationSummaryResponse:
     if baseline is not None and optimized is not None:
         metric_improvement = round(optimized - baseline, 6)
 
-    elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
+    elapsed_str, elapsed_secs = compute_elapsed(
+        created_at, started_at, completed_at, job_data.get("accumulated_runtime_seconds") or 0.0
+    )
 
     optimization_id = job_data["optimization_id"]
     return OptimizationSummaryResponse(

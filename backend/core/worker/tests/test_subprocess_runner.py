@@ -332,7 +332,7 @@ def test_run_service_in_subprocess_progress_callback_emits_progress_events() -> 
 
     captured_callback = {}
 
-    def _fake_run(payload, *, artifact_id, progress_callback):
+    def _fake_run(payload, *, artifact_id, progress_callback, gepa_log_dir_path=None):
         """Stand-in for ``service.run`` that emits two progress events."""
         captured_callback["cb"] = progress_callback
         progress_callback("step_a", {"score": 0.3})
