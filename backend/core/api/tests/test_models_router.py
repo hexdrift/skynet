@@ -11,7 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ..model_catalog import CatalogModel, CatalogProvider, ModelCatalogResponse
-from ..routers.models import create_models_router
+from ..routers.models import _validate_discover_url, create_models_router
+from .conftest import bypass_auth
 
 
 def _make_catalog(*model_ids: str) -> ModelCatalogResponse:
@@ -40,6 +41,7 @@ def models_client() -> TestClient:
     """
     app = FastAPI()
     app.include_router(create_models_router())
+    bypass_auth(app)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -106,9 +108,7 @@ def test_list_models_serializes_per_data_center_entries(models_client: TestClien
     body = resp.json()
     dcs = sorted((p.get("data_center") or "") for p in body["providers"] if p["slug"] == "openai")
     assert dcs == ["", "On-prem gateway"]
-    on_prem = next(
-        p for p in body["providers"] if p["slug"] == "openai" and p.get("data_center") == "On-prem gateway"
-    )
+    on_prem = next(p for p in body["providers"] if p["slug"] == "openai" and p.get("data_center") == "On-prem gateway")
     assert on_prem["default_base_url"] == "https://llm.internal/v1"
     assert any(m.get("data_center") == "On-prem gateway" for m in body["models"])
 
@@ -145,7 +145,7 @@ def test_discover_models_happy_path_returns_model_list(models_client: TestClient
         def __exit__(self, *args):
             """Exit the context manager."""
 
-    with patch("urllib.request.urlopen", return_value=_FakeResp()):
+    with patch("core.api.routers.models._open_pinned", return_value=_FakeResp()):
         resp = models_client.post("/models/discover", json={"base_url": "http://localhost:11434"})
 
     assert resp.status_code == 200
@@ -182,10 +182,24 @@ def test_discover_models_404_fallback_exhausted_returns_error(models_client: Tes
         hdrs=Message(),
         fp=None,
     )
-    with patch("urllib.request.urlopen", side_effect=http_error):
+    with patch("core.api.routers.models._open_pinned", side_effect=http_error):
         resp = models_client.post("/models/discover", json={"base_url": "http://localhost:8080"})
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["models"] == []
     assert body["error"] is not None
+
+
+def test_validate_discover_url_pins_resolved_ip_for_loopback() -> None:
+    """A resolvable host returns a pinned IP and no error."""
+    _, pinned_ip, error = _validate_discover_url("http://localhost:11434")
+    assert error is None
+    assert pinned_ip in {"127.0.0.1", "::1"}
+
+
+def test_validate_discover_url_blocks_metadata_ip() -> None:
+    """The cloud metadata service address is refused with no pinned IP."""
+    _, pinned_ip, error = _validate_discover_url("http://169.254.169.254/latest")
+    assert pinned_ip is None
+    assert error is not None

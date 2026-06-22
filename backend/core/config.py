@@ -12,7 +12,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).parent.parent / ".env"
@@ -282,8 +282,12 @@ class Settings(BaseSettings):
     )
 
     generalist_agent_mcp_url: str = Field(
-        default="http://localhost:8000/mcp/",
-        description="URL of the MCP server the generalist agent connects to (usually the same app's /mcp mount)",
+        default="",
+        description=(
+            "URL of the MCP server the generalist agent connects to (usually the "
+            "same app's /mcp mount). When unset it is derived from HOST/PORT so "
+            "changing the API port doesn't strand the agent on a dead :8000."
+        ),
     )
     generalist_agent_model: str = Field(
         default=DEFAULT_AGENT_MODEL_ID,
@@ -419,6 +423,24 @@ class Settings(BaseSettings):
                 raise ValueError(f"QUOTA_OVERRIDES['{key}'] must be int or null, got {type(value).__name__}")
             normalised[key.strip().lower()] = value
         return json.dumps(normalised)
+
+    @model_validator(mode="after")
+    def _derive_generalist_mcp_url(self) -> Settings:
+        """Fill an unset generalist MCP URL from the server's own HOST/PORT.
+
+        Hardcoding ``http://localhost:8000/mcp/`` strands the agent on a dead
+        port whenever the API runs on a non-default PORT, surfacing a raw network
+        error instead of a config diagnostic. Deriving the default keeps the
+        agent pointed at this app's own ``/mcp`` mount; a bind-all ``0.0.0.0``
+        host is dialled as ``localhost``.
+
+        Returns:
+            The settings instance with ``generalist_agent_mcp_url`` populated.
+        """
+        if not self.generalist_agent_mcp_url:
+            host = "localhost" if self.host in ("0.0.0.0", "") else self.host
+            self.generalist_agent_mcp_url = f"http://{host}:{self.port}/mcp/"
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

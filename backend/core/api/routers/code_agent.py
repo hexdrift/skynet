@@ -8,16 +8,20 @@ interactively — not part of the dev integration surface.
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from ...service_gateway.agents.code import run_code_agent
+from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 from ._helpers import sse_from_events
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 
 class ChatTurn(BaseModel):
@@ -146,7 +150,7 @@ def create_code_agent_router() -> APIRouter:
         "/optimizations/ai-generate-code",
         summary="Stream AI-generated signature + metric code",
     )
-    async def ai_generate_code(req: CodeAgentRequest) -> StreamingResponse:
+    async def ai_generate_code(req: CodeAgentRequest, current_user: AuthenticatedUserDep) -> StreamingResponse:
         """Stream DSPy code-agent events as SSE.
 
         Event types:
@@ -163,6 +167,7 @@ def create_code_agent_router() -> APIRouter:
 
         Args:
             req: Request body controlling code-agent inputs and chat history.
+            current_user: The authenticated caller (required; gates LLM spend).
 
         Returns:
             A :class:`StreamingResponse` of Server-Sent Events.
@@ -198,7 +203,7 @@ def create_code_agent_router() -> APIRouter:
         summary="Delegate signature + metric editing to the code agent",
         tags=["agent"],
     )
-    async def edit_code(req: EditCodeRequest) -> EditCodeResponse:
+    async def edit_code(req: EditCodeRequest, current_user: AuthenticatedUserDep) -> EditCodeResponse:
         """Run the code agent to completion and return the final code.
 
         Consumes the same event stream as the SSE endpoint but blocks until
@@ -208,6 +213,7 @@ def create_code_agent_router() -> APIRouter:
 
         Args:
             req: Compact MCP-friendly input: goal plus current editor contents.
+            current_user: The authenticated caller (required; gates LLM spend).
 
         Returns:
             An :class:`EditCodeResponse` with the final signature, metric, and
@@ -258,6 +264,7 @@ def create_code_agent_router() -> APIRouter:
     )
     def request_code_authoring(
         req: RequestCodeAuthoringRequest,
+        current_user: AuthenticatedUserDep,
     ) -> RequestCodeAuthoringResponse:
         """Signal the chat UI to render an inline code-authoring card.
 
@@ -272,6 +279,7 @@ def create_code_agent_router() -> APIRouter:
 
         Args:
             req: Optional plain-language goal for the Signature/Metric.
+            current_user: The authenticated caller (required; gates LLM spend).
 
         Returns:
             A :class:`RequestCodeAuthoringResponse` marker carrying the goal

@@ -182,6 +182,27 @@ def test_process_job_sets_status_failed_on_nonzero_exit_without_result(
     assert store._jobs["opt-4"]["status"] == "failed"
 
 
+def test_process_job_requeues_on_sigkill_oom(
+    worker: BackgroundWorker,
+    store: FakeJobStore,
+) -> None:
+    """A SIGKILL (-9) with no result re-queues to ``pending`` under the attempt cap."""
+    store.seed_job("opt-oom", payload=REAL_RUN_PAYLOAD, attempts=0)
+    worker.enqueue_job("opt-oom")
+
+    # Exit code -9 (SIGKILL, likely OOM), no result → bounded re-queue, not failed.
+    ctx, _proc = make_mp_context(exitcode=-9, result_events=[])
+    worker._mp_ctx = ctx
+    worker._mp_start_method = "spawn"
+
+    with patch("core.worker.engine.notify_job_completed"), patch.object(worker, "_get_service") as mock_svc:
+        mock_svc.return_value.validate_payload = MagicMock()
+        worker._process_job("opt-oom", 0)
+
+    assert store._jobs["opt-oom"]["status"] == "pending"
+    assert store._jobs["opt-oom"]["attempts"] == 1
+
+
 def test_process_job_sets_status_failed_when_subprocess_sends_no_result(
     worker: BackgroundWorker,
     store: FakeJobStore,

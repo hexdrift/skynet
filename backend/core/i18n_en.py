@@ -130,7 +130,7 @@ ENGLISH_MESSAGES: dict[str, str] = {
     "share.not_found": "Shared optimization not found or the link was revoked.",
     "submission.module_resolve_failed": "Module load failed: {error}",
     "submission.staged_dataset_not_found": "staged_dataset_id '{staged_dataset_id}' not found for this user — re-upload the dataset and retry.",
-    "submission.validation_failed": "Payload validation failed: {error}",
+    "submission.validation_failed": "Payload validation failed. Check the optimizer, module, and column mapping.",
     "submission.vision_required": "Dataset contains image columns ({fields}) but the selected model ('{model}') does not support image inputs. Pick a vision-capable model.",
     "submit.no_models_available": "No models available in the catalog — configure a provider API key first.",
     "user.storage.quota_exceeded": "Storage quota exceeded ({used_mb}MB of {quota_mb}MB used). Free up space and try again.",

@@ -88,6 +88,30 @@ class FakeJobStore:
         """
         self._jobs[optimization_id].update(kwargs)
 
+    def requeue_for_resume(self, optimization_id: str, *, bump_attempts: bool = True) -> int | None:
+        """Re-queue a job to ``pending`` for resume, bumping the attempt count.
+
+        Args:
+            optimization_id: ID of the job to re-queue.
+            bump_attempts: Whether to count this re-queue against the attempt cap.
+
+        Returns:
+            The new attempt count, or ``None`` when the job is missing.
+        """
+        job = self._jobs.get(optimization_id)
+        if job is None:
+            return None
+        current = int(job.get("attempts") or 0)
+        next_attempt = current + 1 if bump_attempts else current
+        job.update(
+            attempts=next_attempt,
+            status="pending",
+            claimed_by=None,
+            lease_expires_at=None,
+            completed_at=None,
+        )
+        return next_attempt
+
     def append_log(
         self,
         optimization_id: str,

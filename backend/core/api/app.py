@@ -698,7 +698,13 @@ def create_app(
         Yields:
             ``None`` once the worker is running; stops the worker on exit.
         """
-        nonlocal loop_lag_monitor, orphan_sweeper, queue_metrics_refresher, staged_dataset_sweeper, stale_conversation_sweeper, worker
+        nonlocal \
+            loop_lag_monitor, \
+            orphan_sweeper, \
+            queue_metrics_refresher, \
+            staged_dataset_sweeper, \
+            stale_conversation_sweeper, \
+            worker
         # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
         # this only fails rows whose ``lease_expires_at`` is in the past — a
         # peer pod's in-flight job is not orphaned and is left alone. The
@@ -717,9 +723,7 @@ def create_app(
         # only requeued at the next pod restart. The sweeper is gated by a
         # Postgres advisory lock so only one replica per tick does the work.
         orphan_sweeper = start_orphan_recovery_sweeper(job_store)
-        stale_conversation_sweeper = start_stale_conversation_sweeper(
-            getattr(job_store, "engine", None)
-        )
+        stale_conversation_sweeper = start_stale_conversation_sweeper(getattr(job_store, "engine", None))
         staged_dataset_sweeper = start_staged_dataset_sweeper(getattr(job_store, "engine", None))
         if settings.event_loop_lag_monitor_enabled:
             loop_lag_monitor = start_event_loop_lag_monitor()
@@ -850,11 +854,23 @@ def create_app(
             if not isinstance(methods, dict):
                 continue
             for op in methods.values():
-                if isinstance(op, dict):
-                    for tag in op.get("tags", []):
-                        used_tags.add(tag)
+                if not isinstance(op, dict):
+                    continue
+                # ``agent`` is an internal MCP-projection marker, not a public
+                # docs group; strip it so each endpoint renders once under its
+                # real section instead of also appearing in an undocumented
+                # ``agent`` group.
+                if "tags" in op:
+                    op["tags"] = [t for t in op["tags"] if t != "agent"]
+                for tag in op.get("tags", []):
+                    used_tags.add(tag)
         if "tags" in spec:
             spec["tags"] = [t for t in spec["tags"] if t.get("name") in used_tags]
+        # Declare bearer auth on the public surface so the Scalar reference shows
+        # an Authorize button and Try-It sends the token, instead of every call
+        # returning 401 against an otherwise-unauthenticated-looking spec.
+        spec.setdefault("components", {})["securitySchemes"] = {"bearerAuth": {"type": "http", "scheme": "bearer"}}
+        spec["security"] = [{"bearerAuth": []}]
         return JSONResponse(spec)
 
     @app.get("/scalar", include_in_schema=False)
@@ -889,10 +905,9 @@ def create_app(
         html = html.replace("</body>", f"{script_tag}</body>")
         return HTMLResponse(content=html)
 
-    allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in allowed_origins],
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
