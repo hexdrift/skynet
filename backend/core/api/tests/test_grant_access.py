@@ -204,9 +204,7 @@ def test_filter_ids_at_least_admin_keeps_all() -> None:
     store = _MemStore()
     _seed_job(store, "a", owner="alice")
     _seed_job(store, "b", owner="dave")
-    allowed, denied = filter_ids_at_least(
-        store, ["a", "b"], _user("carol", admin=True), ShareRole.owner
-    )
+    allowed, denied = filter_ids_at_least(store, ["a", "b"], _user("carol", admin=True), ShareRole.owner)
     assert set(allowed) == {"a", "b"}
     assert denied == []
 
@@ -376,10 +374,15 @@ def test_counts_endpoint_include_shared_reports_shared() -> None:
     assert owner_only["shared"] == 0
 
 
-def _analytics_client(store: _MemStore) -> TestClient:
-    """Mount the analytics router over ``store`` (the analytics surface has no auth dependency)."""
+def _analytics_client(store: _MemStore, username: str = "bob") -> TestClient:
+    """Mount the analytics router over ``store`` authed as ``username``.
+
+    The dashboard analytics now scope to the authenticated caller, so the tests
+    authenticate as the user whose ``?username=`` view they assert on.
+    """
     app = FastAPI()
     app.include_router(create_analytics_router(job_store=store))
+    app.dependency_overrides[get_authenticated_user] = lambda: _user(username)
     return TestClient(app, raise_server_exceptions=False)
 
 

@@ -179,7 +179,7 @@ export const I18N_MESSAGES = {
   "serve.no_model_config": "לא נמצאו הגדרות {term.model} לריצה. ספק/י model_config_override.",
   "submission.module_resolve_failed": "טעינת ה{term.module} נכשלה: {error}",
   "submission.staged_dataset_not_found": "הדאטאסט השמור ({staged_dataset_id}) לא נמצא או שייך למשתמש אחר.",
-  "submission.validation_failed": "אימות ההגדרות נכשל: {error}",
+  "submission.validation_failed": "אימות ההגדרות נכשל. בדוק/בדקי את האופטימייזר, המודול ומיפוי העמודות.",
   "submission.vision_required": "ה{term.dataset} מכיל עמודות תמונה ({fields}) אך ה{term.model} שנבחר ('{model}') אינו תומך בקלט תמונות. בחר/י {term.model} עם תמיכה ב־vision.",
   "submit.no_models_available": "אין {term.modelPlural} זמינים בקטלוג — הגדר/הגדירי קודם API key של ספק.",
   "user.storage.quota_exceeded": "חרגת ממכסת האחסון שלך ({used_mb}MB מתוך {quota_mb}MB). פנה/י מקום ונסה/י שוב.",

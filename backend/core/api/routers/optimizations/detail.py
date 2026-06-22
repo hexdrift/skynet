@@ -19,12 +19,12 @@ import hashlib
 import logging
 import random
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 import dspy
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from ....config import settings
 from ....constants import (
@@ -107,17 +107,40 @@ def _delta_offset(raw: str | None, count: int, cap: int) -> int:
 
     Returns:
         The parsed cursor when it is a valid position into an append-only
-        (sub-cap) stream; ``0`` (send everything) otherwise.
+        (sub-cap) stream; ``0`` (send everything) for an out-of-range or
+        post-eviction cursor.
+
+    Raises:
+        HTTPException: 422 when ``raw`` is present but is not an integer.
     """
     if raw is None:
         return 0
     try:
         since = int(raw)
-    except ValueError:
-        return 0
+    except ValueError as exc:
+        # A non-integer cursor is a client bug, not an eviction edge — reject it
+        # loudly instead of silently re-sending the whole stream every tick.
+        raise HTTPException(status_code=422, detail="optimization.invalid_cursor") from exc
     if since <= 0 or since > count or count >= cap:
         return 0
     return since
+
+
+_EVALUATE_EXAMPLES_MAX_INDICES = 100
+
+
+class EvaluateExamplesRequest(BaseModel):
+    """Request body for ``POST /optimizations/{id}/evaluate-examples``."""
+
+    indices: list[int] = Field(
+        default_factory=list,
+        max_length=_EVALUATE_EXAMPLES_MAX_INDICES,
+        description="Dataset row indices to evaluate; out-of-range indices are skipped.",
+    )
+    program_type: Literal["optimized", "baseline"] = Field(
+        default="optimized",
+        description="Which program to run: the optimized result or the baseline.",
+    )
 
 
 def register_detail_routes(router: APIRouter, *, job_store) -> None:
@@ -204,16 +227,14 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         # progress tick. ``since_progress`` / ``since_log`` let it say "I already
         # hold N rows", so we return only the newer tail instead of re-sending
         # the entire (capped, but still multi-thousand-row) history each time.
-        # ``_delta_offset`` falls back to a full send when the cursor isn't a
-        # safe position (stale, or the stream has saturated its eviction cap).
+        # ``_delta_offset`` falls back to a full send for an out-of-range or
+        # post-eviction cursor, and rejects a non-integer cursor with 422.
         # ``progress_offset`` / ``logs_offset`` echo the honored start index so
         # the client knows whether to splice the tail on or replace wholesale.
         progress_offset = _delta_offset(
             request.query_params.get("since_progress"), progress_count, settings.progress_events_per_job_cap
         )
-        logs_offset = _delta_offset(
-            request.query_params.get("since_log"), log_count, settings.log_entries_per_job_cap
-        )
+        logs_offset = _delta_offset(request.query_params.get("since_log"), log_count, settings.log_entries_per_job_cap)
         progress_events = job_store.get_progress_events(optimization_id, since=progress_offset)
         logs = job_store.get_logs(optimization_id, offset=logs_offset)
 
@@ -418,14 +439,16 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         "/optimizations/{optimization_id}/evaluate-examples",
         summary="Run the optimized or baseline program on specific dataset rows",
     )
-    def evaluate_examples(optimization_id: str, req: dict, current_user: AuthenticatedUserDep) -> dict:
+    def evaluate_examples(
+        optimization_id: str, req: EvaluateExamplesRequest, current_user: AuthenticatedUserDep
+    ) -> dict:
         """Run the optimized or baseline program on specific dataset rows.
 
         Out-of-range indices are silently skipped.
 
         Args:
             optimization_id: Optimization id whose program should run.
-            req: Request body with ``indices`` and ``program_type`` keys.
+            req: Validated body with bounded ``indices`` and ``program_type``.
             current_user: Authenticated caller resolved from the bearer token.
 
         Returns:
@@ -437,8 +460,8 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
                 400 (no metric/model/module), 409 (no result available for
                 the optimized program).
         """
-        indices = req.get("indices", [])
-        program_type = req.get("program_type", "optimized")
+        indices = req.indices
+        program_type = req.program_type
 
         job_data = load_job_for_user(job_store, optimization_id, current_user)
 
@@ -450,7 +473,10 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         dataset = payload.get("dataset", [])
         total = len(dataset)
         column_mapping_raw = payload.get("column_mapping", {})
-        column_mapping = ColumnMapping.model_validate(column_mapping_raw)
+        try:
+            column_mapping = ColumnMapping.model_validate(column_mapping_raw)
+        except ValidationError:
+            raise DomainError("optimization.corrupt_column_mapping", status=500) from None
 
         metric_code = payload.get("metric_code", "")
         if not metric_code:
@@ -464,12 +490,17 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
 
         model_settings = payload.get("model_config") or overview.get(PAYLOAD_OVERVIEW_MODEL_SETTINGS, {})
         model_name_str = overview.get(PAYLOAD_OVERVIEW_MODEL_NAME, "")
+        model_config = None
         if model_settings:
-            model_config = ModelConfig.model_validate(model_settings)
-        elif model_name_str:
-            model_config = ModelConfig(name=model_name_str)
-        else:
-            raise DomainError("optimization.no_model_config", status=400)
+            try:
+                model_config = ModelConfig.model_validate(model_settings)
+            except ValidationError:
+                logger.warning("Optimization %s has a corrupt model_config; trying the model name", optimization_id)
+        if model_config is None:
+            if model_name_str:
+                model_config = ModelConfig(name=model_name_str)
+            else:
+                raise DomainError("optimization.no_model_config", status=400)
 
         lm = build_language_model(model_config)
 
@@ -502,16 +533,13 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
                 effective_overview = {
                     **overview,
                     PAYLOAD_OVERVIEW_SIGNATURE_CODE: (
-                        overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE)
-                        or payload.get("signature_code")
+                        overview.get(PAYLOAD_OVERVIEW_SIGNATURE_CODE) or payload.get("signature_code")
                     ),
                     PAYLOAD_OVERVIEW_MODULE_NAME: (
-                        overview.get(PAYLOAD_OVERVIEW_MODULE_NAME)
-                        or payload.get("module_name")
+                        overview.get(PAYLOAD_OVERVIEW_MODULE_NAME) or payload.get("module_name")
                     ),
                     PAYLOAD_OVERVIEW_MODULE_KWARGS: (
-                        overview.get(PAYLOAD_OVERVIEW_MODULE_KWARGS)
-                        or payload.get("module_kwargs", {})
+                        overview.get(PAYLOAD_OVERVIEW_MODULE_KWARGS) or payload.get("module_kwargs", {})
                     ),
                 }
                 _program_cache[optimization_id] = _materialize_program(artifact, effective_overview)
@@ -591,13 +619,19 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         if not result_data:
             raise DomainError("optimization.no_result_pending", status=409)
 
-        result = RunResponse.model_validate(result_data)
+        try:
+            result = RunResponse.model_validate(result_data)
+        except ValidationError:
+            raise DomainError("optimization.corrupt_result", status=500) from None
 
         payload = job_data.get("payload", {})
         dataset = payload.get("dataset", [])
         total = len(dataset)
         fractions_raw = payload.get("split_fractions", {})
-        fractions = SplitFractions.model_validate(fractions_raw)
+        try:
+            fractions = SplitFractions.model_validate(fractions_raw)
+        except ValidationError:
+            fractions = SplitFractions()
         shuffle = payload.get("shuffle", True)
         seed = payload.get("seed")
         effective_seed = seed if seed is not None else stable_seed(optimization_id)
@@ -725,9 +759,7 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         summary="Per-example test scores for one grid-search pair",
         tags=["agent"],
     )
-    def get_pair_test_results(
-        optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep
-    ) -> dict:
+    def get_pair_test_results(optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep) -> dict:
         """Per-pair analogue of ``GET /test-results`` with global-index remapping.
 
         Args:
@@ -762,7 +794,10 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         if not result_data or not isinstance(result_data, dict):
             raise DomainError("optimization.no_result", status=409)
 
-        grid_result = GridSearchResponse.model_validate(result_data)
+        try:
+            grid_result = GridSearchResponse.model_validate(result_data)
+        except ValidationError:
+            raise DomainError("grid_search.corrupt_result", status=500) from None
 
         pair = None
         for pr in grid_result.pair_results:
@@ -780,7 +815,10 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         dataset = payload.get("dataset", [])
         total = len(dataset)
         fractions_raw = payload.get("split_fractions", {})
-        fractions = SplitFractions.model_validate(fractions_raw)
+        try:
+            fractions = SplitFractions.model_validate(fractions_raw)
+        except ValidationError:
+            fractions = SplitFractions()
         shuffle = payload.get("shuffle", True)
         seed = payload.get("seed")
         effective_seed = seed if seed is not None else stable_seed(optimization_id)

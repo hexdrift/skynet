@@ -23,6 +23,7 @@ from ..constants import STRUCTURAL_PROGRESS_EVENTS, TQDM_KEY_PREFIX
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
 from .checkpoint_store import GepaCheckpoint, PostgresCheckpointBlobStore, PostgresGridPairResultStore
 from .models import (
+    EMBEDDING_DIM,
     AgentStagedDatasetModel,
     Base,
     ConversationEmbeddingModel,
@@ -124,9 +125,11 @@ class RemoteDBJobStore:
         ``DB_POOL_MAX_OVERFLOW`` so Kubernetes deployments can keep total
         Postgres connection budgets below the server cap.
 
-        pgvector bootstrap and the ``job_embeddings`` table are created only
-        when ``settings.embeddings_enabled`` is true, so a plain PostgreSQL
-        without the pgvector extension can host the rest of the schema.
+        pgvector bootstrap and the embedding tables are created only when
+        ``settings.embeddings_enabled`` is true *and* the pgvector extension is
+        available. If embeddings are disabled or the extension can't be created,
+        the rest of the schema is bootstrapped without the ``Vector`` columns so
+        a plain PostgreSQL without pgvector still boots (vector search stays off).
 
         Args:
             db_url: PostgreSQL DSN to connect to.
@@ -144,20 +147,32 @@ class RemoteDBJobStore:
             db_url,
             **_build_engine_kwargs(db_url),
         )
-        if settings.embeddings_enabled:
-            vector_extension_ready = self._bootstrap_pgvector()
+        if settings.embeddings_enabled and settings.embeddings_dim != EMBEDDING_DIM:
+            # The embedding columns are a fixed-width vector(EMBEDDING_DIM). A
+            # mismatched EMBEDDINGS_DIM boots fine but pgvector then rejects every
+            # mismatched-length insert on the daemon embed thread (warn-and-drop),
+            # so explore search silently degrades to lexical. Fail loudly instead.
+            raise RuntimeError(
+                f"EMBEDDINGS_DIM={settings.embeddings_dim} does not match the "
+                f"vector({EMBEDDING_DIM}) schema column; embedding writes would be "
+                f"silently rejected. Set EMBEDDINGS_DIM={EMBEDDING_DIM}, disable "
+                "embeddings, or run a migration to change the column width."
+            )
+        if settings.embeddings_enabled and self._bootstrap_pgvector():
             with schema_bootstrap_lock(self._engine) as conn:
                 Base.metadata.create_all(conn if conn is not None else self._engine)
-            vector_indexes_ready = self._bootstrap_vector_indexes()
-            self.vector_search_enabled = vector_extension_ready and vector_indexes_ready
+            self.vector_search_enabled = self._bootstrap_vector_indexes()
         else:
+            # Embeddings disabled, or pgvector is unavailable on this database
+            # (managed/plain Postgres without CREATE EXTENSION privilege). Create
+            # the full schema minus the Vector(512) tables so the app still boots;
+            # otherwise CREATE TABLE job_embeddings raises UndefinedObject and
+            # propagates unguarded out of create_app(). Vector search stays off.
             embedding_tables = {
                 JobEmbeddingModel.__table__,
                 ConversationEmbeddingModel.__table__,
             }
-            non_embedding_tables = [
-                table for table in Base.metadata.sorted_tables if table not in embedding_tables
-            ]
+            non_embedding_tables = [table for table in Base.metadata.sorted_tables if table not in embedding_tables]
             with schema_bootstrap_lock(self._engine) as conn:
                 Base.metadata.create_all(
                     conn if conn is not None else self._engine,
@@ -440,9 +455,7 @@ class RemoteDBJobStore:
         try:
             if merging_metrics:
                 existing = (
-                    session.query(JobModel.latest_metrics)
-                    .filter(JobModel.optimization_id == optimization_id)
-                    .first()
+                    session.query(JobModel.latest_metrics).filter(JobModel.optimization_id == optimization_id).first()
                 )
                 if existing is None:
                     raise KeyError(f"Job '{optimization_id}' not found")
@@ -476,6 +489,63 @@ class RemoteDBJobStore:
             if rows == 0:
                 raise KeyError(f"Job '{optimization_id}' not found")
             session.commit()
+        finally:
+            session.close()
+
+    def update_job_if_status(self, optimization_id: str, expected: tuple[str, ...], **kwargs: Any) -> bool:
+        """Update a job only while its status is one of ``expected`` (compare-and-set).
+
+        The conditional ``WHERE status IN (...)`` closes the last-writer-wins
+        race on the worker-completion and pause/cancel paths: a terminal write
+        can't clobber a status another writer already moved the row to. Datetime
+        strings are parsed and ``stored_bytes`` is recomputed exactly as
+        :meth:`update_job` does; ``latest_metrics`` merging is not supported.
+
+        Args:
+            optimization_id: ID of the job to update.
+            expected: Status values the row must currently hold for the write to
+                apply.
+            **kwargs: Column values to overwrite.
+
+        Returns:
+            ``True`` when the row matched and was updated; ``False`` when the
+            status no longer matched (the caller should treat the write as lost).
+
+        Raises:
+            ValueError: When ``kwargs`` names a column absent from ``JobModel``.
+        """
+        mutable_columns = set(JobModel.__table__.columns.keys()) - _IMMUTABLE_JOB_COLUMNS
+        invalid_fields = sorted(set(kwargs) - mutable_columns)
+        if invalid_fields:
+            raise ValueError(f"Unknown field '{invalid_fields[0]}' on JobModel")
+        datetime_fields = {"created_at", "started_at", "completed_at"}
+        update_values: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if key in datetime_fields and isinstance(value, str):
+                value = datetime.fromisoformat(value)
+            update_values[key] = value
+
+        session = self._get_session()
+        try:
+            if set(_STORED_BYTES_JSON_COLUMNS) & set(update_values):
+                stored_row = (
+                    session.query(JobModel.payload, JobModel.result, JobModel.payload_overview)
+                    .filter(JobModel.optimization_id == optimization_id)
+                    .first()
+                )
+                if stored_row is not None:
+                    update_values["stored_bytes"] = sum(
+                        json_byte_size(update_values[col] if col in update_values else stored_row[i])
+                        for i, col in enumerate(_STORED_BYTES_JSON_COLUMNS)
+                    )
+            rows = (
+                session.query(JobModel)
+                .filter(JobModel.optimization_id == optimization_id)
+                .filter(JobModel.status.in_(expected))
+                .update(update_values, synchronize_session=False)
+            )
+            session.commit()
+            return rows > 0
         finally:
             session.close()
 
@@ -561,12 +631,8 @@ class RemoteDBJobStore:
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).delete()
             session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id == optimization_id).delete()
-            session.query(GepaCheckpointModel).filter(
-                GepaCheckpointModel.optimization_id == optimization_id
-            ).delete()
-            session.query(GridPairResultModel).filter(
-                GridPairResultModel.optimization_id == optimization_id
-            ).delete()
+            session.query(GepaCheckpointModel).filter(GepaCheckpointModel.optimization_id == optimization_id).delete()
+            session.query(GridPairResultModel).filter(GridPairResultModel.optimization_id == optimization_id).delete()
             session.query(JobModel).filter(JobModel.optimization_id == optimization_id).delete()
             session.commit()
         finally:
@@ -625,12 +691,12 @@ class RemoteDBJobStore:
             session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id.in_(optimization_ids)).delete(
                 synchronize_session=False
             )
-            session.query(GepaCheckpointModel).filter(
-                GepaCheckpointModel.optimization_id.in_(optimization_ids)
-            ).delete(synchronize_session=False)
-            session.query(GridPairResultModel).filter(
-                GridPairResultModel.optimization_id.in_(optimization_ids)
-            ).delete(synchronize_session=False)
+            session.query(GepaCheckpointModel).filter(GepaCheckpointModel.optimization_id.in_(optimization_ids)).delete(
+                synchronize_session=False
+            )
+            session.query(GridPairResultModel).filter(GridPairResultModel.optimization_id.in_(optimization_ids)).delete(
+                synchronize_session=False
+            )
             deleted = (
                 session.query(JobModel)
                 .filter(JobModel.optimization_id.in_(optimization_ids))
@@ -641,9 +707,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def save_gepa_checkpoint(
-        self, optimization_id: str, data: bytes, iteration: int, pair_index: int = -1
-    ) -> None:
+    def save_gepa_checkpoint(self, optimization_id: str, data: bytes, iteration: int, pair_index: int = -1) -> None:
         """Persist (or replace) the latest GEPA state blob for one run or grid pair.
 
         Args:
@@ -880,9 +944,7 @@ class RemoteDBJobStore:
         """
         return compute_user_storage_items(self._engine, username, limit)
 
-    def compute_user_storage_category_items(
-        self, username: str, category: str, limit: int = 1000
-    ) -> list[StorageItem]:
+    def compute_user_storage_category_items(self, username: str, category: str, limit: int = 1000) -> list[StorageItem]:
         """List every deletable item the user owns in one storage category.
 
         Args:
@@ -915,9 +977,7 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def set_user_storage_quota_override(
-        self, username: str, quota_bytes: int, updated_by: str | None = None
-    ) -> None:
+    def set_user_storage_quota_override(self, username: str, quota_bytes: int, updated_by: str | None = None) -> None:
         """Create or update a per-user storage-budget override.
 
         Args:
@@ -1603,9 +1663,9 @@ class RemoteDBJobStore:
                 .order_by(structural_last.asc(), ProgressEventModel.timestamp.asc(), ProgressEventModel.id.asc())
                 .limit(excess)
             )
-            session.query(ProgressEventModel).filter(
-                ProgressEventModel.id.in_(old_ids.scalar_subquery())
-            ).delete(synchronize_session=False)
+            session.query(ProgressEventModel).filter(ProgressEventModel.id.in_(old_ids.scalar_subquery())).delete(
+                synchronize_session=False
+            )
             session.commit()
         finally:
             session.close()
@@ -1694,11 +1754,7 @@ class RemoteDBJobStore:
             # inserts, so the per-job row lock only serialized writers and starved
             # the connection pool under concurrent log bursts. The cap eviction
             # below tolerates a transient over-count without correctness loss.
-            exists = (
-                session.query(JobModel.optimization_id)
-                .filter(JobModel.optimization_id == optimization_id)
-                .first()
-            )
+            exists = session.query(JobModel.optimization_id).filter(JobModel.optimization_id == optimization_id).first()
             if exists is None:
                 logger.warning("Discarding log entry for missing job %s", optimization_id)
                 return
@@ -1894,9 +1950,7 @@ class RemoteDBJobStore:
             result.append(d)
         return result
 
-    def list_jobs_shared_with(
-        self, username: str, *, limit: int = 50, offset: int = 0
-    ) -> list[JobRecord]:
+    def list_jobs_shared_with(self, username: str, *, limit: int = 50, offset: int = 0) -> list[JobRecord]:
         """List jobs shared with ``username`` via a member grant, newest first.
 
         Joins ``optimization_share_grants`` on ``grantee_username`` so a member
@@ -1993,8 +2047,10 @@ class RemoteDBJobStore:
             grant_ids = session.query(OptimizationShareGrantModel.optimization_id).filter(
                 OptimizationShareGrantModel.grantee_username == normalized
             )
-            q = session.query(JobModel).options(defer(JobModel.payload)).filter(
-                or_(JobModel.username == username, JobModel.optimization_id.in_(grant_ids))
+            q = (
+                session.query(JobModel)
+                .options(defer(JobModel.payload))
+                .filter(or_(JobModel.username == username, JobModel.optimization_id.in_(grant_ids)))
             )
             if status:
                 q = q.filter(JobModel.status == status)
@@ -2192,4 +2248,3 @@ class RemoteDBJobStore:
             raise
         finally:
             session.close()
-

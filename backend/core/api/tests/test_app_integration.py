@@ -362,3 +362,25 @@ def test_openapi_public_retains_public_paths(app_client):
     paths = client.get("/openapi.public.json").json().get("paths", {})
     assert "/health" in paths
     assert "/queue" in paths
+
+
+def test_openapi_public_declares_bearer_security(app_client) -> None:
+    """The public spec declares a bearer security scheme and a global requirement."""
+    client, _, _ = app_client
+    body = client.get("/openapi.public.json").json()
+    schemes = body.get("components", {}).get("securitySchemes", {})
+    assert any(s.get("type") == "http" and s.get("scheme") == "bearer" for s in schemes.values())
+    assert body.get("security")
+
+
+def test_openapi_public_strips_internal_agent_tag(app_client) -> None:
+    """The internal ``agent`` MCP marker never leaks into the public spec."""
+    client, _, _ = app_client
+    body = client.get("/openapi.public.json").json()
+    assert all(t.get("name") != "agent" for t in body.get("tags", []))
+    for methods in body.get("paths", {}).values():
+        if not isinstance(methods, dict):
+            continue
+        for op in methods.values():
+            if isinstance(op, dict):
+                assert "agent" not in op.get("tags", [])

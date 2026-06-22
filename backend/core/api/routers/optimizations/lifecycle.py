@@ -62,6 +62,31 @@ logger = logging.getLogger(__name__)
 AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 
+def _set_terminal_if_active(job_store, optimization_id: str, expected: tuple[str, ...], **fields: Any) -> bool:
+    """Compare-and-set a lifecycle status, falling back to last-writer-wins.
+
+    Uses the store's ``update_job_if_status`` CAS when available so a pause /
+    cancel can't clobber a status the worker moved the row to in the race window
+    after the handler's status pre-check. Stores without the CAS (test fakes)
+    keep the prior unconditional write.
+
+    Args:
+        job_store: The active job store.
+        optimization_id: ID of the job to update.
+        expected: Statuses the row must currently hold for the write to apply.
+        **fields: Column values to write.
+
+    Returns:
+        ``True`` when the write applied (or the store has no CAS); ``False`` only
+        when the CAS found the row already past ``expected``.
+    """
+    cas = getattr(job_store, "update_job_if_status", None)
+    if cas is None:
+        job_store.update_job(optimization_id, **fields)
+        return True
+    return cas(optimization_id, expected, **fields)
+
+
 def register_lifecycle_routes(
     router: APIRouter,
     *,
@@ -101,9 +126,7 @@ def register_lifecycle_routes(
             DomainError: 404 if unknown or inaccessible, 403 if the caller's
                 share role is below ``editor``, 409 if already terminal.
         """
-        job_data, _role = require_role_at_least(
-            job_store, optimization_id, current_user, ShareRole.editor
-        )
+        job_data, _role = require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status in TERMINAL_STATUSES:
@@ -118,7 +141,18 @@ def register_lifecycle_routes(
             worker.cancel_job(optimization_id)
 
         now = datetime.now(UTC).isoformat()
-        job_store.update_job(optimization_id, status="cancelled", message=CANCELLATION_REASON, completed_at=now)
+        if not _set_terminal_if_active(
+            job_store,
+            optimization_id,
+            ("pending", "validating", "running"),
+            status="cancelled",
+            message=CANCELLATION_REASON,
+            completed_at=now,
+        ):
+            # The worker reached a terminal status in the window after the
+            # pre-check above; reflect the row's actual status.
+            current = status_to_job_status(job_store.get_job(optimization_id).get("status", "pending"))
+            raise DomainError("optimization.already_terminal", status=409, params={"status": current.value})
         logger.info("Optimization %s (%s) cancelled", optimization_id, status.value)
         return JobCancelResponse(optimization_id=optimization_id, status="cancelled")
 
@@ -152,9 +186,7 @@ def register_lifecycle_routes(
                 share role is below ``editor``, 409 if not running or without a
                 checkpoint to resume from.
         """
-        job_data, _role = require_role_at_least(
-            job_store, optimization_id, current_user, ShareRole.editor
-        )
+        job_data, _role = require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status != OptimizationStatus.running:
@@ -171,7 +203,13 @@ def register_lifecycle_routes(
             worker.cancel_job(optimization_id)
 
         now = datetime.now(UTC).isoformat()
-        job_store.update_job(optimization_id, status="paused", message=PAUSE_REASON, completed_at=now)
+        if not _set_terminal_if_active(
+            job_store, optimization_id, ("running",), status="paused", message=PAUSE_REASON, completed_at=now
+        ):
+            # The worker finished in the window after the running pre-check; the
+            # run is no longer pausable.
+            current = status_to_job_status(job_store.get_job(optimization_id).get("status", "pending"))
+            raise DomainError("optimization.pause_wrong_status", status=409, params={"status": current.value})
         logger.info("Optimization %s paused", optimization_id)
         return JobCancelResponse(optimization_id=optimization_id, status="paused")
 
@@ -211,12 +249,9 @@ def register_lifecycle_routes(
         if not ordered_unique:
             return BulkCancelResponse(cancelled=cancelled, skipped=skipped)
 
-        allowed, denied = filter_ids_at_least(
-            job_store, ordered_unique, current_user, ShareRole.editor
-        )
+        allowed, denied = filter_ids_at_least(job_store, ordered_unique, current_user, ShareRole.editor)
         skipped.extend(
-            BulkCancelSkipped(optimization_id=optimization_id, reason="not_found")
-            for optimization_id in denied
+            BulkCancelSkipped(optimization_id=optimization_id, reason="not_found") for optimization_id in denied
         )
 
         if not allowed:
@@ -275,9 +310,7 @@ def register_lifecycle_routes(
         summary="Duplicate an optimization and queue N copies",
         tags=["agent"],
     )
-    def clone_job(
-        optimization_id: str, req: CloneJobRequest, current_user: AuthenticatedUserDep
-    ) -> CloneJobResponse:
+    def clone_job(optimization_id: str, req: CloneJobRequest, current_user: AuthenticatedUserDep) -> CloneJobResponse:
         """Clone a finished or active optimization into ``count`` fresh runs.
 
         Reads the stored payload, assigns new ids and seeds, and enqueues each
@@ -357,9 +390,7 @@ def register_lifecycle_routes(
                 share role below ``editor``), 409 (wrong status / no payload —
                 use clone instead / saved payload no longer resubmittable).
         """
-        job_data, _role = require_role_at_least(
-            job_store, optimization_id, current_user, ShareRole.editor
-        )
+        job_data, _role = require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in {OptimizationStatus.failed, OptimizationStatus.cancelled}:
@@ -419,9 +450,7 @@ def register_lifecycle_routes(
                 below ``editor``), 409 (not mid-run / no checkpoint / attempts
                 exhausted).
         """
-        job_data, _role = require_role_at_least(
-            job_store, optimization_id, current_user, ShareRole.editor
-        )
+        job_data, _role = require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
 
         status = status_to_job_status(job_data.get("status", "pending"))
         if status not in {
@@ -488,9 +517,7 @@ def register_lifecycle_routes(
                 403 (share role below ``editor``), 409 (grid not terminal, or
                 resume with no checkpoint for the pair).
         """
-        job_data, _role = require_role_at_least(
-            job_store, optimization_id, current_user, ShareRole.editor
-        )
+        job_data, _role = require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
         overview = parse_overview(job_data)
         if overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
             raise DomainError("grid_search.not_a_grid_search", status=404)
@@ -595,4 +622,3 @@ def register_lifecycle_routes(
             A ``BulkMetadataResponse`` listing successful and skipped ids.
         """
         return bulk_set_flag(job_store, req, flag="pinned", user=current_user)
-

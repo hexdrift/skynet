@@ -47,13 +47,17 @@ def _sign(payload: dict[str, Any], secret: str = _SECRET) -> str:
     Returns:
         A compact ``header.body.signature`` JWT string.
     """
-    header = base64.urlsafe_b64encode(
-        json.dumps({"alg": "HS256", "typ": "JWT"}).encode("utf-8")
-    ).decode("ascii").rstrip("=")
+    header = (
+        base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode("utf-8")).decode("ascii").rstrip("=")
+    )
     body = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii").rstrip("=")
-    signature = base64.urlsafe_b64encode(
-        hmac.new(secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256).digest()
-    ).decode("ascii").rstrip("=")
+    signature = (
+        base64.urlsafe_b64encode(
+            hmac.new(secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256).digest()
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
     return f"{header}.{body}.{signature}"
 
 
@@ -103,12 +107,8 @@ def persistence_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Eng
         The bound ``TestClient`` and the SQLite ``Engine`` so tests can assert
         on the persisted rows directly.
     """
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(
-        engine, tables=[AgentConversationModel.__table__, AgentMessageModel.__table__]
-    )
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine, tables=[AgentConversationModel.__table__, AgentMessageModel.__table__])
     monkeypatch.setattr(auth_mod.settings, "backend_auth_secret", SecretStr(_SECRET))
     monkeypatch.setattr(agent_mod, "run_generalist_agent", _fake_stream)
     monkeypatch.setattr(agent_mod, "queue_conversation_embed", lambda *a, **k: None)
@@ -161,20 +161,20 @@ def test_authenticated_turn_persists_conversation_and_messages(
         ]
 
 
-def test_unauthenticated_turn_streams_without_persisting(
+def test_unauthenticated_turn_is_rejected(
     persistence_client: tuple[TestClient, Engine],
 ) -> None:
-    """Without a token the reply still streams but nothing is persisted.
+    """Without a token the turn is rejected with 401 and nothing is persisted.
 
-    This is the intended fallback (ephemeral mode); it also pins the contract
-    so the auth fix can't accidentally start persisting anonymous turns.
+    Pins the security contract: an anonymous caller must not drive the
+    orchestrator LLM, so the route 401s before streaming instead of degrading
+    to an ephemeral anonymous turn.
     """
     client, engine = persistence_client
 
     resp = _post_turn(client, "hi", token=None)
 
-    assert resp.status_code == 200
-    assert "conversation_meta" not in resp.text
+    assert resp.status_code == 401
     with Session(engine) as session:
         assert session.query(AgentConversationModel).count() == 0
         assert session.query(AgentMessageModel).count() == 0
@@ -194,17 +194,11 @@ def wrapper_engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
     Returns:
         The bound ``Engine`` holding one ``agent_conversations`` row.
     """
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(
-        engine, tables=[AgentConversationModel.__table__, AgentMessageModel.__table__]
-    )
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine, tables=[AgentConversationModel.__table__, AgentMessageModel.__table__])
     monkeypatch.setattr(agent_mod, "queue_conversation_embed", lambda *a, **k: None)
     with Session(engine) as session:
-        session.add(
-            AgentConversationModel(id=_CONV_ID, username="alice@example.com", title="hi")
-        )
+        session.add(AgentConversationModel(id=_CONV_ID, username="alice@example.com", title="hi"))
         session.commit()
     return engine
 
@@ -229,9 +223,7 @@ async def _drain(source: AsyncIterator[dict[str, Any]], engine: Engine) -> list[
     return [event async for event in wrapped]
 
 
-async def _drive_then_close(
-    source: AsyncIterator[dict[str, Any]], engine: Engine, *, until: str
-) -> None:
+async def _drive_then_close(source: AsyncIterator[dict[str, Any]], engine: Engine, *, until: str) -> None:
     """Pull events until one named ``until`` is seen, then ``aclose()`` early.
 
     Mirrors the frontend tearing down the SSE stream after a successful submit

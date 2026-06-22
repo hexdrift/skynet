@@ -21,10 +21,10 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Annotated, Any, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
@@ -37,11 +37,13 @@ from ...service_gateway.agents.generalist import (
 )
 from ...service_gateway.embedding_pipeline import queue_conversation_embed
 from ...storage.models import AgentConversationModel, AgentMessageModel
-from ..auth import get_authenticated_user
+from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 from ._helpers import sse_from_events
 
 logger = logging.getLogger(__name__)
+
+AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 
 TITLE_MAX_CHARS = 40
 
@@ -110,9 +112,7 @@ def _derive_title(user_message: str) -> str:
     return collapsed[: TITLE_MAX_CHARS - 1].rstrip() + "…"
 
 
-def _ensure_conversation(
-    job_store, conversation_id: str | None, username: str, user_message: str
-) -> tuple[str, str]:
+def _ensure_conversation(job_store, conversation_id: str | None, username: str, user_message: str) -> tuple[str, str]:
     """Create a new conversation row when one isn't supplied; touch existing rows.
 
     A fresh conversation gets an auto-derived title from the user's first
@@ -289,9 +289,7 @@ async def _wrap_with_persistence(
     model_used: str | None = None
     allowed_tools: list[str] | None = None
     tool_schema_hashes: dict[str, str] | None = None
-    wizard_state_after: dict[str, Any] = (
-        dict(wizard_state_before) if wizard_state_before else {}
-    )
+    wizard_state_after: dict[str, Any] = dict(wizard_state_before) if wizard_state_before else {}
     persisted = False
 
     async def _do_persist(content: str) -> None:
@@ -368,9 +366,7 @@ async def _wrap_with_persistence(
                     _merge_wizard_patch(wizard_state_after, result)
             elif name == "done":
                 final_text = data.get("assistant_message")
-                content = (
-                    final_text if isinstance(final_text, str) and final_text else "".join(assistant_buf)
-                )
+                content = final_text if isinstance(final_text, str) and final_text else "".join(assistant_buf)
                 raw_model = data.get("model")
                 model_used = raw_model if isinstance(raw_model, str) and raw_model else None
                 await _do_persist(content)
@@ -380,16 +376,11 @@ async def _wrap_with_persistence(
         # succeeds, so ``done`` often never arrives and the wrapped generator is
         # closed (GeneratorExit / CancelledError). Salvage the turn here when it
         # carries real content; an empty greeting turn writes nothing.
-        if not persisted and (
-            assistant_buf
-            or any(c["status"] in ("done", "error") for c in tool_calls.values())
-        ):
+        if not persisted and (assistant_buf or any(c["status"] in ("done", "error") for c in tool_calls.values())):
             await _do_persist("".join(assistant_buf))
 
 
-def _merge_wizard_patch(
-    state: dict[str, Any], result: Any
-) -> None:
+def _merge_wizard_patch(state: dict[str, Any], result: Any) -> None:
     """Merge a tool result's ``wizard_state`` patch into the running state.
 
     Tools that mutate the wizard (``update_wizard_state``,
@@ -430,8 +421,8 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         summary="Stream generalist-agent events for one user turn",
     )
     async def generalist_agent(
-        request: Request,
         req: GeneralistAgentRequest,
+        current_user: AuthenticatedUserDep,
         authorization: str | None = Header(default=None),
     ) -> StreamingResponse:
         """Stream the generalist agent's reasoning, tool calls, and reply as SSE.
@@ -442,45 +433,36 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         ``done``, ``error``.
 
         Args:
-            request: Incoming request, forwarded to ``get_authenticated_user``
-                so the PAT branch can reach ``app.state.job_store``.
             req: Request body with user message, chat history, wizard
                 snapshot, trust mode, and optional ``conversation_id``.
+            current_user: The authenticated caller. Required — the route 401s
+                before any streaming or LLM work when auth is missing/invalid,
+                and persisted conversations are attributed to this user.
             authorization: Caller's bearer token, forwarded into the agent's
                 MCP session so its tool calls authenticate against
-                ``get_authenticated_user`` on the same FastAPI app, and used
-                here to attribute persisted conversations to a user.
+                ``get_authenticated_user`` on the same FastAPI app.
 
         Returns:
             A :class:`StreamingResponse` of Server-Sent Events.
         """
-        def _setup_turn() -> tuple[str | None, str | None]:
-            """Resolve auth and persist the user turn off the event loop.
 
-            Runs the blocking psycopg2 auth lookup, conversation upsert, and
-            user-message insert in a worker thread so the single event loop is
-            not stalled before the SSE stream starts. Auth failures degrade to
-            an anonymous (unpersisted) stream; a conversation ``DomainError``
-            (403/404) is allowed to propagate.
+        def _setup_turn() -> tuple[str | None, str | None]:
+            """Persist the user turn off the event loop.
+
+            Runs the blocking conversation upsert and user-message insert in a
+            worker thread so the single event loop is not stalled before the SSE
+            stream starts. Auth is already enforced by the route dependency, so
+            the turn is always attributed to ``current_user``; a conversation
+            ``DomainError`` (403/404) is allowed to propagate.
 
             Returns:
-                ``(conversation_id, title)`` — both ``None`` when persistence
-                was skipped or failed non-fatally.
+                ``(conversation_id, title)`` — both ``None`` when persistence is
+                off (no ``job_store``) or failed non-fatally.
             """
-            resolved_username: str | None = None
-            if job_store is not None and authorization:
-                try:
-                    resolved_username = get_authenticated_user(
-                        request, authorization=authorization
-                    ).username
-                except Exception:
-                    resolved_username = None
-            if resolved_username is None or job_store is None:
+            if job_store is None:
                 return None, None
             try:
-                cid, ttl = _ensure_conversation(
-                    job_store, req.conversation_id, resolved_username, req.user_message
-                )
+                cid, ttl = _ensure_conversation(job_store, req.conversation_id, current_user.username, req.user_message)
                 _persist_user_turn(job_store, cid, req.user_message)
             except DomainError:
                 raise
@@ -521,11 +503,12 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         response_model=ConfirmApprovalResponse,
         summary="Resolve a pending generalist-agent approval",
     )
-    def confirm_approval(req: ConfirmApprovalRequest) -> ConfirmApprovalResponse:
+    def confirm_approval(req: ConfirmApprovalRequest, current_user: AuthenticatedUserDep) -> ConfirmApprovalResponse:
         """Resolve an outstanding approval from the client.
 
         Args:
             req: Confirm payload with the ``call_id`` and approval boolean.
+            current_user: The authenticated caller (required).
 
         Returns:
             A :class:`ConfirmApprovalResponse` with ``resolved=True`` on success.
