@@ -23,6 +23,7 @@ import json
 from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -206,6 +207,8 @@ class _BaseFakeJobStore:
         self._logs: dict[str, list] = {}
         self._progress: dict[str, list] = {}
         self._staged: dict[str, dict] = {}
+        self._checkpoints: dict[str, dict[int, dict]] = {}
+        self._grid_pair_results: dict[str, dict[int, dict]] = {}
 
     def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict]) -> str:
         """Persist staged rows in memory and return their opaque id.
@@ -291,6 +294,83 @@ class _BaseFakeJobStore:
         self._jobs.pop(optimization_id, None)
         self._logs.pop(optimization_id, None)
         self._progress.pop(optimization_id, None)
+        self._checkpoints.pop(optimization_id, None)
+        self._grid_pair_results.pop(optimization_id, None)
+
+    def save_gepa_checkpoint(self, optimization_id: str, data: bytes, iteration: int, pair_index: int = -1) -> None:
+        """Store GEPA checkpoint bytes in memory (test seam for resume tests)."""
+        self._checkpoints.setdefault(optimization_id, {})[pair_index] = {"data": data, "iteration": iteration}
+
+    def get_gepa_checkpoint(self, optimization_id: str, pair_index: int = -1):
+        """Return one run/pair's in-memory checkpoint as a record, or ``None``."""
+        row = self._checkpoints.get(optimization_id, {}).get(pair_index)
+        if row is None:
+            return None
+        return SimpleNamespace(
+            optimization_id=optimization_id,
+            pair_index=pair_index,
+            data=row["data"],
+            iteration=row["iteration"],
+            stored_bytes=len(row["data"]),
+        )
+
+    def list_gepa_checkpoints(self, optimization_id: str):
+        """Return every stored checkpoint record for a job."""
+        return [
+            self.get_gepa_checkpoint(optimization_id, pair_index)
+            for pair_index in self._checkpoints.get(optimization_id, {})
+        ]
+
+    def delete_gepa_checkpoint(self, optimization_id: str, pair_index: int = -1) -> None:
+        """Drop one run/pair's in-memory checkpoint."""
+        self._checkpoints.get(optimization_id, {}).pop(pair_index, None)
+
+    def delete_all_gepa_checkpoints(self, optimization_id: str) -> None:
+        """Drop every checkpoint for a job."""
+        self._checkpoints.pop(optimization_id, None)
+
+    def has_gepa_checkpoint(self, optimization_id: str) -> bool:
+        """Return whether any checkpoint exists for the job (single run or any pair)."""
+        return bool(self._checkpoints.get(optimization_id))
+
+    def save_grid_pair_result(self, optimization_id: str, pair_index: int, result: dict) -> None:
+        """Store one completed grid pair's result in memory."""
+        self._grid_pair_results.setdefault(optimization_id, {})[pair_index] = result
+
+    def get_grid_pair_results(self, optimization_id: str) -> dict:
+        """Return ``{pair_index: result}`` for the grid's completed pairs."""
+        return dict(self._grid_pair_results.get(optimization_id, {}))
+
+    def delete_grid_pair_results(self, optimization_id: str) -> None:
+        """Drop every stored pair result for a grid."""
+        self._grid_pair_results.pop(optimization_id, None)
+
+    def has_grid_pair_results(self, optimization_id: str) -> bool:
+        """Return whether the grid has any completed-pair result stored."""
+        return bool(self._grid_pair_results.get(optimization_id))
+
+    def requeue_for_resume(self, optimization_id: str, *, bump_attempts: bool = True):
+        """Flip a job back to ``pending`` in place, optionally bumping its attempt count."""
+        job = self._jobs.get(optimization_id)
+        if job is None:
+            return None
+        current = int(job.get("attempts") or 0)
+        next_attempt = current + 1 if bump_attempts else current
+        job["attempts"] = next_attempt
+        job["status"] = "pending"
+        start_raw = job.get("started_at")
+        if start_raw:
+            start = datetime.fromisoformat(start_raw)
+            end = datetime.fromisoformat(job.get("completed_at") or datetime.now(UTC).isoformat())
+            start = start if start.tzinfo else start.replace(tzinfo=UTC)
+            end = end if end.tzinfo else end.replace(tzinfo=UTC)
+            job["accumulated_runtime_seconds"] = float(
+                job.get("accumulated_runtime_seconds") or 0.0
+            ) + max(0.0, (end - start).total_seconds())
+        job["completed_at"] = None
+        job["started_at"] = None
+        job["message"] = "Resuming" if bump_attempts else "Re-running grid pair"
+        return next_attempt
 
     def get_job(self, optimization_id: str) -> dict:
         """Return a copy of the stored job row.

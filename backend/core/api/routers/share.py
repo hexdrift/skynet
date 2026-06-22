@@ -414,7 +414,9 @@ def _build_status_response(
             completed_pairs = latest_metrics.get("completed_so_far") or 0
             failed_pairs = latest_metrics.get("failed_so_far") or 0
 
-    elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
+    elapsed_str, elapsed_secs = compute_elapsed(
+        created_at, started_at, completed_at, job_data.get("accumulated_runtime_seconds") or 0.0
+    )
     logs = job_store.get_logs(optimization_id)
     progress_events = job_store.get_progress_events(optimization_id)
 

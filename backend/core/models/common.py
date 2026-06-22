@@ -119,6 +119,7 @@ class OptimizationStatus(StrEnum):
     success = "success"
     failed = "failed"
     cancelled = "cancelled"
+    paused = "paused"
 
 
 class BulkDeleteByIdsRequest(BaseModel):

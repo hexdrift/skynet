@@ -117,6 +117,7 @@ def compute_elapsed(
     created_at: datetime,
     started_at: datetime | None,
     completed_at: datetime | None,
+    accumulated_seconds: float = 0.0,
 ) -> tuple[str | None, float | None]:
     """Return a formatted elapsed string and raw seconds for a job.
 
@@ -124,14 +125,19 @@ def compute_elapsed(
         created_at: When the job row was created.
         started_at: When the worker actually picked the job up; ``None`` if not yet running.
         completed_at: When the job ended; ``None`` while still running.
+        accumulated_seconds: Net active seconds from earlier resumed legs, added to
+            the current leg so the total is cumulative compute across resumes (the
+            paused gap between legs is excluded). ``0`` for a never-resumed run.
 
     Returns:
-        A ``(HH:MM:SS, seconds)`` tuple, or ``(None, None)`` when the job has not started yet.
+        A ``(HH:MM:SS, seconds)`` tuple, or ``(None, None)`` when the job has neither
+        started its current leg nor banked any time from a prior leg.
     """
     seconds = _compute_elapsed_raw(created_at, started_at, completed_at)
-    if seconds is None:
+    if seconds is None and not accumulated_seconds:
         return None, None
-    return _seconds_to_hhmmss(seconds), round(seconds, 2)
+    total = (accumulated_seconds or 0.0) + (seconds or 0.0)
+    return _seconds_to_hhmmss(total), round(total, 2)
 
 
 def parse_overview(job_data: dict) -> dict:

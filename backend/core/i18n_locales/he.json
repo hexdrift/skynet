@@ -16,6 +16,7 @@
     "statusSuccess": "הצליחה",
     "statusFailed": "נכשלה",
     "statusCancelled": "בוטלה",
+    "statusPaused": "מושהית",
     "dataset": "דאטאסט",
     "row": "שורה",
     "example": "דוגמה",
@@ -63,7 +64,8 @@
     "candidate": "מועמד",
     "candidatePlural": "מועמדים",
     "winningCandidate": "מועמד מוביל",
-    "cancellationReason": "בוטלה על ידי המשתמש"
+    "cancellationReason": "בוטלה על ידי המשתמש",
+    "pauseReason": "הושהתה על ידי המשתמש"
   },
   "messages": {
     "admin.forbidden": "רק מנהלים יכולים לבצע את הפעולה הזו.",
@@ -99,6 +101,13 @@
     "optimization.retry_no_payload": "לאופטימיזציית המקור אין הגדרות שמורות להרצה חוזרת.",
     "optimization.retry_wrong_status": "אפשר להריץ מחדש רק {term.optimizationPlural} במצב 'נכשלה' או 'בוטלה' — זו במצב '{status}'. ניתן לשכפל אותה במקום.",
     "optimization.cannot_resubmit_payload": "לא ניתן לשלוח מחדש את ההגדרות השמורות: {error}",
+    "optimization.resume_wrong_status": "אפשר להמשיך רק {term.optimizationPlural} שנעצרו באמצע ריצה — זו במצב '{status}'.",
+    "optimization.resume_not_resumable": "אין נקודת המשך שמורה ל{term.optimization} הזו — ניתן להריץ אותה מחדש במקום.",
+    "optimization.resume_exhausted": "ה{term.optimization} מיצתה את מספר הניסיונות המרבי ({attempts}) — ניתן להריץ אותה מחדש במקום.",
+    "optimization.pause_wrong_status": "אפשר להשהות רק {term.optimizationPlural} שרצות כרגע — זו במצב '{status}'.",
+    "optimization.pause_not_pausable": "אפשר להשהות רק אחרי שנשמרה נקודת המשך ראשונה — אפשר לנסות שוב בעוד רגע.",
+    "optimization.pair_not_rerunnable": "לא ניתן להריץ מחדש זוג כשה{term.optimization} במצב '{status}'.",
+    "optimization.pair_not_resumable": "לזוג זה אין נקודת המשך שמורה — ניתן להריץ אותו מחדש במקום.",
     "optimization.pairs_label": "{count, plural, one {{term.pair} אחד} two {שני {term.pairPlural}} other {# {term.pairPlural}}}",
     "grid_search.no_best_pair": "לסריקה אין זוג מוביל.",
     "grid_search.no_best_program_artifact": "לזוג המוביל אין תוצר {term.program}.",

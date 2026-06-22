@@ -15,12 +15,15 @@ import logging
 import multiprocessing as mp
 import os
 import queue
+import shutil
 import socket
 import sys
+import tempfile
 import threading
 import time
 import traceback
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from ..config import settings
@@ -36,6 +39,7 @@ from ..notifications import notify_job_completed
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
 from ..service_gateway.embedding_pipeline import embed_finished_job
+from ..service_gateway.optimization.trajectory import GEPA_STATE_FILENAME, GRID_PAIR_RESULT_FILENAME
 from ..storage import JobStore
 from .constants import EVENT_ERROR, EVENT_LOG, EVENT_PROGRESS, EVENT_RESULT
 from .subprocess_runner import run_service_in_subprocess, set_fork_service
@@ -408,6 +412,25 @@ class BackgroundWorker:
             result_dict: dict[str, Any] | None = None
             subprocess_error: dict[str, Any] | None = None
 
+            # Resume support: the worker owns a per-job base directory it seeds
+            # from saved checkpoints (resume) and reads ``gepa_state.bin`` back
+            # from to persist each iteration. A single run keeps its state in the
+            # base; a grid keeps one ``pair_<i>`` subdir per pair. ``None`` when the
+            # run is not resumable (non-GEPA, or a store without checkpoint
+            # support), keeping every other path unchanged.
+            is_grid = optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH
+            gepa_dir: Path | None = None
+            checkpoint_tracker: dict[str, Any] = {}
+            if self._checkpoints_enabled(optimization_type):
+                try:
+                    gepa_dir = self._prepare_gepa_dir(optimization_id, is_grid=is_grid)
+                except Exception:
+                    logger.exception(
+                        "Optimization %s: failed to prepare GEPA checkpoint dir; running without resume",
+                        optimization_id,
+                    )
+                    gepa_dir = None
+
             # Preserve registry-backed service in child when using fork.
             if self._mp_start_method == "fork":
                 set_fork_service(service)
@@ -416,6 +439,12 @@ class BackgroundWorker:
                 # Inject job type so subprocess can dispatch without duck-typing.
                 # Pydantic ignores this unknown key during model_validate.
                 payload_dict["_optimization_type"] = optimization_type
+                if gepa_dir is not None:
+                    payload_dict["_gepa_log_dir"] = str(gepa_dir)
+                    if is_grid:
+                        # Resume: hand the child the pairs that already finished so
+                        # it keeps them and runs only the rest.
+                        payload_dict["_completed_pairs"] = self._job_store.get_grid_pair_results(optimization_id)
 
                 event_queue = self._mp_ctx.Queue()
                 run_process = self._mp_ctx.Process(  # type: ignore[attr-defined]
@@ -455,12 +484,16 @@ class BackgroundWorker:
                             "The run was terminated; a model call or other operation likely "
                             "hung without making progress."
                         )
+                    if gepa_dir is not None:
+                        self._persist_gepa_checkpoint(optimization_id, gepa_dir, checkpoint_tracker, is_grid=is_grid)
 
                 drained_result, drained_error, _ = self._drain_subprocess_events(optimization_id, event_queue)
                 if drained_result is not None:
                     result_dict = drained_result
                 if drained_error is not None:
                     subprocess_error = drained_error
+                if gepa_dir is not None:
+                    self._persist_gepa_checkpoint(optimization_id, gepa_dir, checkpoint_tracker, is_grid=is_grid)
 
                 if subprocess_error:
                     traceback_text = subprocess_error.get("traceback")
@@ -506,9 +539,11 @@ class BackgroundWorker:
 
                 try:
                     current = self._job_store.get_job(optimization_id)
-                    if current.get("status") == "cancelled":
-                        # Cancel endpoint raced us past the last _raise_if_cancelled() and
-                        # already wrote "cancelled" to the DB. Treat it as a cancellation.
+                    if current.get("status") in ("cancelled", "paused"):
+                        # Cancel/pause endpoint raced us past the last
+                        # _raise_if_cancelled() and already wrote its terminal status
+                        # to the DB. Stop cooperatively so we persist the checkpoint
+                        # and never overwrite "cancelled"/"paused" with success/failed.
                         raise CancellationError()
                     self._job_store.update_job(
                         optimization_id,
@@ -518,6 +553,19 @@ class BackgroundWorker:
                         result=result_dict,
                     )
                     logger.info("Optimization %s completed with status=%s", optimization_id, final_status)
+                    # Success retires resume state and frees its bytes. A single
+                    # run drops its one checkpoint. A grid keeps each *failed*
+                    # pair's checkpoint so that pair stays per-pair resumable even
+                    # though the grid as a whole succeeded — successful pairs'
+                    # checkpoints were already dropped when their result.json was
+                    # recorded, and the transient pair-result store is redundant
+                    # once the final result holds every pair, so clear it.
+                    if gepa_dir is not None and final_status == "success":
+                        with contextlib.suppress(Exception):
+                            if is_grid:
+                                self._job_store.delete_grid_pair_results(optimization_id)
+                            else:
+                                self._job_store.delete_gepa_checkpoint(optimization_id)
                     _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "")
                     _baseline = result_dict.get("baseline_test_metric") if isinstance(result_dict, dict) else None
                     _optimized = result_dict.get("optimized_test_metric") if isinstance(result_dict, dict) else None
@@ -540,10 +588,19 @@ class BackgroundWorker:
             # cleanup-and-reraise: ensure the subprocess is killed on ANY exit
             # path (including shutdown signals) before the exception propagates.
             except BaseException:
+                # Capture the last completed iteration's state before killing the
+                # child, so a 504/stall/cancel leaves a resume point on disk.
+                if gepa_dir is not None:
+                    with contextlib.suppress(Exception):
+                        self._persist_gepa_checkpoint(optimization_id, gepa_dir, checkpoint_tracker, is_grid=is_grid)
                 if run_process is not None and run_process.is_alive():
                     self._terminate_run_process(run_process, optimization_id)
                 raise
             finally:
+                # The DB holds the checkpoint bytes for a resumable failure; the
+                # local working copy is always removed.
+                if gepa_dir is not None:
+                    shutil.rmtree(gepa_dir, ignore_errors=True)
                 if event_queue is not None:
                     with contextlib.suppress(Exception):
                         event_queue.close()
@@ -568,8 +625,14 @@ class BackgroundWorker:
                 logger.exception("Optimization %s failed: %s", optimization_id, error_message)
             _username = overview.get(PAYLOAD_OVERVIEW_USERNAME, "") if isinstance(overview, dict) else ""
             if is_cancelled:
-                # Cancel endpoint already set status to "cancelled"; no further DB action needed.
-                if self._job_store.claim_completion_notification(optimization_id):
+                # The cancel/pause endpoint already wrote the terminal status
+                # ("cancelled" or "paused"); the worker adds no DB write here. A
+                # pause is a suspend-to-resume, not a completion, so it skips the
+                # finished-job notification that a real cancel sends.
+                persisted_status = None
+                with contextlib.suppress(Exception):
+                    persisted_status = self._job_store.get_job(optimization_id).get("status")
+                if persisted_status != "paused" and self._job_store.claim_completion_notification(optimization_id):
                     notify_job_completed(optimization_id=optimization_id, username=_username, status="cancelled")
             else:
                 # Failed jobs are retained so users can inspect the error
@@ -818,6 +881,167 @@ class BackgroundWorker:
                 error_payload = payload
 
         return result_payload, error_payload, drained_count
+
+    def _checkpoints_enabled(self, optimization_type: str) -> bool:
+        """Return whether this job is a GEPA run/grid on a checkpoint-capable store.
+
+        Covers both a single GEPA run and a grid search — each grid pair is its
+        own GEPA run that resumes from its own checkpoint. A store without
+        checkpoint support falls through to the existing restart path.
+
+        Args:
+            optimization_type: The job's optimization type.
+
+        Returns:
+            ``True`` when the run should persist and restore GEPA checkpoints.
+        """
+        return optimization_type in (OPTIMIZATION_TYPE_RUN, OPTIMIZATION_TYPE_GRID_SEARCH) and hasattr(
+            self._job_store, "save_gepa_checkpoint"
+        )
+
+    def _prepare_gepa_dir(self, optimization_id: str, *, is_grid: bool) -> Path:
+        """Allocate a clean worker-owned GEPA base dir, seeding saved checkpoints for resume.
+
+        The dir is wiped first so a stale state file from an earlier attempt of
+        the same id can never trigger an unintended resume. A single run's seed
+        lands at ``<base>/gepa_state.bin``; a grid's in-flight pairs each restore
+        to ``<base>/pair_<i>/gepa_state.bin`` so they continue mid-GEPA. Completed
+        grid pairs have no checkpoint (it was dropped when their result was
+        stored) — they are skipped from the stored results instead.
+
+        Args:
+            optimization_id: The job whose directory is prepared.
+            is_grid: Whether the job is a grid search (per-pair restore).
+
+        Returns:
+            The base path handed to the child as ``_gepa_log_dir``.
+        """
+        base = Path(tempfile.gettempdir()) / "skynet-gepa" / optimization_id
+        shutil.rmtree(base, ignore_errors=True)
+        base.mkdir(parents=True, exist_ok=True)
+        if is_grid:
+            checkpoints = self._job_store.list_gepa_checkpoints(optimization_id)
+            for cp in checkpoints:
+                pair_dir = base / f"pair_{cp.pair_index}"
+                pair_dir.mkdir(parents=True, exist_ok=True)
+                (pair_dir / GEPA_STATE_FILENAME).write_bytes(cp.data)
+            if checkpoints:
+                logger.info(
+                    "Optimization %s: restored %d in-flight grid pair checkpoint(s) — resuming",
+                    optimization_id,
+                    len(checkpoints),
+                )
+        else:
+            checkpoint = self._job_store.get_gepa_checkpoint(optimization_id)
+            if checkpoint is not None:
+                (base / GEPA_STATE_FILENAME).write_bytes(checkpoint.data)
+                logger.info(
+                    "Optimization %s: restored GEPA checkpoint (#%s, %d bytes) — resuming",
+                    optimization_id,
+                    checkpoint.iteration,
+                    checkpoint.stored_bytes,
+                )
+        return base
+
+    def _persist_gepa_checkpoint(
+        self, optimization_id: str, gepa_dir: Path, tracker: dict[str, Any], *, is_grid: bool
+    ) -> None:
+        """Persist advanced GEPA state to the store (single run, or every grid pair).
+
+        Single run: the one ``<dir>/gepa_state.bin`` (pair index -1). Grid: scan
+        each ``<dir>/pair_<i>`` — a ``result.json`` means that pair finished, so its
+        result is stored durably and its checkpoint dropped; otherwise its state
+        file is persisted when it advances. mtime-gated so the multi-MB blob is
+        written only on genuinely new state. Failures are swallowed.
+
+        Args:
+            optimization_id: The running job.
+            gepa_dir: The worker-owned base directory.
+            tracker: Per-key cursor (``pair_index -> {"mtime","n"}`` plus a
+                ``"_results"`` set of finished pairs), carried across calls.
+            is_grid: Whether to scan per-pair subdirs.
+        """
+        if not is_grid:
+            self._persist_one_checkpoint(optimization_id, gepa_dir / GEPA_STATE_FILENAME, -1, tracker)
+            return
+        results_done: set[int] = tracker.setdefault("_results", set())
+        try:
+            pair_dirs = sorted(gepa_dir.glob("pair_*"))
+        except OSError:
+            return
+        for pair_dir in pair_dirs:
+            try:
+                idx = int(pair_dir.name.split("_", 1)[1])
+            except (ValueError, IndexError):
+                continue
+            if idx in results_done:
+                continue
+            if (pair_dir / GRID_PAIR_RESULT_FILENAME).exists():
+                if self._store_grid_pair_result(optimization_id, idx, pair_dir / GRID_PAIR_RESULT_FILENAME):
+                    results_done.add(idx)
+                continue
+            self._persist_one_checkpoint(optimization_id, pair_dir / GEPA_STATE_FILENAME, idx, tracker)
+
+    def _persist_one_checkpoint(
+        self, optimization_id: str, state_path: Path, pair_index: int, tracker: dict[str, Any]
+    ) -> None:
+        """Persist one run/pair's ``gepa_state.bin`` when its mtime has advanced.
+
+        Args:
+            optimization_id: The running job.
+            state_path: Path to this run/pair's state file.
+            pair_index: ``-1`` for a single run, else the grid pair index.
+            tracker: Shared cursor; this pair's ``{"mtime","n"}`` sub-entry is
+                created and updated in place.
+        """
+        try:
+            mtime = state_path.stat().st_mtime
+        except OSError:
+            return
+        cursor = tracker.setdefault(pair_index, {"mtime": None, "n": 0})
+        if mtime == cursor.get("mtime"):
+            return
+        try:
+            data = state_path.read_bytes()
+        except OSError:
+            return
+        if not data:
+            return
+        next_n = int(cursor.get("n", 0)) + 1
+        try:
+            self._job_store.save_gepa_checkpoint(optimization_id, data, next_n, pair_index)
+        except Exception:
+            logger.exception(
+                "Optimization %s pair %s: failed to persist GEPA checkpoint", optimization_id, pair_index
+            )
+            return
+        cursor["mtime"] = mtime
+        cursor["n"] = next_n
+
+    def _store_grid_pair_result(self, optimization_id: str, pair_index: int, result_path: Path) -> bool:
+        """Durably store a finished grid pair's result and drop its checkpoint.
+
+        Args:
+            optimization_id: The running grid job.
+            pair_index: The finished pair's index.
+            result_path: The pair's ``result.json`` written by the child.
+
+        Returns:
+            ``True`` when the result was stored (so the caller stops re-reading it).
+        """
+        try:
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        try:
+            self._job_store.save_grid_pair_result(optimization_id, pair_index, result)
+            self._job_store.delete_gepa_checkpoint(optimization_id, pair_index)
+        except Exception:
+            logger.exception(
+                "Optimization %s pair %s: failed to persist pair result", optimization_id, pair_index
+            )
+            return False
+        return True
 
     def seconds_since_last_activity(self) -> float | None:
         """Return seconds since the most recent worker activity, or ``None`` if none recorded yet.

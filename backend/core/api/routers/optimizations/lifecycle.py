@@ -4,6 +4,7 @@ Public dev surface (in ``_SCALAR_PUBLIC_PATHS``):
 - ``POST /optimizations/{id}/cancel``
 - ``POST /optimizations/{id}/clone``
 - ``POST /optimizations/{id}/retry``
+- ``POST /optimizations/{id}/resume``
 
 Internal (dashboard plumbing, hidden from public docs):
 - ``POST /optimizations/bulk-cancel``
@@ -19,12 +20,14 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
+from ....config import settings
 from ....constants import (
+    OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
 )
-from ....i18n import CANCELLATION_REASON, CLONE_NAME_PREFIX, RETRY_NAME_PREFIX
+from ....i18n import CANCELLATION_REASON, CLONE_NAME_PREFIX, PAUSE_REASON, RETRY_NAME_PREFIX
 from ....models import (
     BulkCancelRequest,
     BulkCancelResponse,
@@ -41,6 +44,7 @@ from ...sharing_access import ShareRole
 from .._helpers import (
     enforce_storage_quota,
     filter_ids_at_least,
+    is_pausable,
     load_job_for_user,
     require_role_at_least,
 )
@@ -117,6 +121,59 @@ def register_lifecycle_routes(
         job_store.update_job(optimization_id, status="cancelled", message=CANCELLATION_REASON, completed_at=now)
         logger.info("Optimization %s (%s) cancelled", optimization_id, status.value)
         return JobCancelResponse(optimization_id=optimization_id, status="cancelled")
+
+    @router.post(
+        "/optimizations/{optimization_id}/pause",
+        response_model=JobCancelResponse,
+        status_code=200,
+        summary="Pause a running optimization, keeping its checkpoint for resume",
+        tags=["agent"],
+    )
+    def pause_job(optimization_id: str, current_user: AuthenticatedUserDep) -> JobCancelResponse:
+        """Suspend a running optimization at its last checkpoint so it can be resumed.
+
+        A manual pause is intentional, not a failure: it flips status to
+        ``paused`` (distinct from ``cancelled``) and signals the worker, which
+        stops between DSPy calls and persists the GEPA checkpoint on its way out —
+        the same cooperative path cancel uses. Valid only while the run is
+        actively ``running`` and already has a saved checkpoint, so a pause is
+        always resumable; pausing before the first checkpoint is rejected. Resume
+        from ``paused`` does not count against the attempt cap.
+
+        Args:
+            optimization_id: Optimization id to pause.
+            current_user: Authenticated caller resolved from the bearer token.
+
+        Returns:
+            A ``JobCancelResponse`` echoing the id and its new ``paused`` status.
+
+        Raises:
+            DomainError: 404 if unknown or inaccessible, 403 if the caller's
+                share role is below ``editor``, 409 if not running or without a
+                checkpoint to resume from.
+        """
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status != OptimizationStatus.running:
+            raise DomainError(
+                "optimization.pause_wrong_status",
+                status=409,
+                params={"status": status.value},
+            )
+        if not is_pausable(job_store, job_data):
+            raise DomainError("optimization.pause_not_pausable", status=409)
+
+        worker = get_worker_ref()
+        if worker:
+            worker.cancel_job(optimization_id)
+
+        now = datetime.now(UTC).isoformat()
+        job_store.update_job(optimization_id, status="paused", message=PAUSE_REASON, completed_at=now)
+        logger.info("Optimization %s paused", optimization_id)
+        return JobCancelResponse(optimization_id=optimization_id, status="paused")
 
     @router.post(
         "/optimizations/bulk-cancel",
@@ -330,6 +387,193 @@ def register_lifecycle_routes(
         response = persist_and_enqueue(job_store, new_id, payload, optimization_type=optimization_type)
         logger.info("Retried optimization %s as %s", optimization_id, new_id)
         return response
+
+    @router.post(
+        "/optimizations/{optimization_id}/resume",
+        response_model=JobCancelResponse,
+        status_code=202,
+        summary="Resume an optimization that stopped mid-run from its last checkpoint",
+        tags=["agent"],
+    )
+    def resume_job(optimization_id: str, current_user: AuthenticatedUserDep) -> JobCancelResponse:
+        """Resume a mid-run optimization in place from its saved GEPA checkpoint.
+
+        Valid only when the run stopped after producing optimizer state — a
+        terminal ``failed``/``cancelled`` or manually ``paused`` status with a
+        saved checkpoint. Unlike retry/clone this creates no new run: the existing
+        row is flipped back to ``pending`` with its original id, seed and budget,
+        and a worker continues GEPA from the last completed iteration with no
+        budget double-spend. A ``failed``/``cancelled`` resume shares the attempt
+        cap with automatic pod-failure recovery; a manual ``paused`` resume is
+        exempt (it neither consumes an attempt nor is bounded by the cap).
+
+        Args:
+            optimization_id: The optimization to resume.
+            current_user: Authenticated caller resolved from the bearer token.
+
+        Returns:
+            A ``JobCancelResponse`` echoing the id and its new ``pending`` status.
+
+        Raises:
+            DomainError: 404 (unknown / inaccessible), 403 (caller's share role
+                below ``editor``), 409 (not mid-run / no checkpoint / attempts
+                exhausted).
+        """
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
+
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status not in {
+            OptimizationStatus.failed,
+            OptimizationStatus.cancelled,
+            OptimizationStatus.paused,
+        }:
+            raise DomainError(
+                "optimization.resume_wrong_status",
+                status=409,
+                params={"status": status.value},
+            )
+
+        has_checkpoint = getattr(job_store, "has_gepa_checkpoint", None)
+        has_pairs = getattr(job_store, "has_grid_pair_results", None)
+        resumable_state = (callable(has_checkpoint) and has_checkpoint(optimization_id)) or (
+            callable(has_pairs) and has_pairs(optimization_id)
+        )
+        if not resumable_state:
+            raise DomainError("optimization.resume_not_resumable", status=409)
+
+        # A manual pause/resume is user-driven, not failure recovery: it neither
+        # consumes an attempt nor is bounded by the cap. Only failed/cancelled
+        # resumes share ``job_max_attempts`` with automatic pod-failure recovery.
+        is_paused = status == OptimizationStatus.paused
+        if not is_paused:
+            attempts = int(job_data.get("attempts") or 0)
+            if attempts >= settings.job_max_attempts:
+                raise DomainError(
+                    "optimization.resume_exhausted",
+                    status=409,
+                    params={"attempts": attempts},
+                )
+
+        new_attempt = job_store.requeue_for_resume(optimization_id, bump_attempts=not is_paused)
+        if new_attempt is None:
+            raise DomainError("optimization.not_found", status=404)
+        logger.info("Resumed optimization %s in place (attempt %s)", optimization_id, new_attempt)
+        return JobCancelResponse(optimization_id=optimization_id, status=OptimizationStatus.pending.value)
+
+    def _rerun_grid_pair(
+        optimization_id: str, pair_index: int, current_user: AuthenticatedUser, *, resume: bool
+    ) -> JobCancelResponse:
+        """Re-queue a terminal grid to re-run only ``pair_index``, keeping the others.
+
+        Treats one grid pair like a single run: every *other* pair is seeded from
+        the stored result so the worker keeps it, and the grid is re-queued in
+        place to run only the target — fresh (``resume=False``) or from its saved
+        checkpoint (``resume=True``). This is unbounded by ``job_max_attempts``
+        (a targeted user action), works regardless of the grid's overall status,
+        and merges the target's new result back into the grid result.
+
+        Args:
+            optimization_id: The grid optimization id.
+            pair_index: The pair to re-run.
+            current_user: Authenticated caller resolved from the bearer token.
+            resume: Continue the pair from its checkpoint instead of re-running it.
+
+        Returns:
+            A ``JobCancelResponse`` echoing the id and its new ``pending`` status.
+
+        Raises:
+            DomainError: 404 (unknown id / not a grid / no result / missing pair),
+                403 (share role below ``editor``), 409 (grid not terminal, or
+                resume with no checkpoint for the pair).
+        """
+        job_data, _role = require_role_at_least(
+            job_store, optimization_id, current_user, ShareRole.editor
+        )
+        overview = parse_overview(job_data)
+        if overview.get(PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE) != OPTIMIZATION_TYPE_GRID_SEARCH:
+            raise DomainError("grid_search.not_a_grid_search", status=404)
+        status = status_to_job_status(job_data.get("status", "pending"))
+        if status not in TERMINAL_STATUSES:
+            raise DomainError("optimization.pair_not_rerunnable", status=409, params={"status": status.value})
+
+        result_data = job_data.get("result")
+        pair_results = result_data.get("pair_results") if isinstance(result_data, dict) else None
+        if not pair_results:
+            raise DomainError("grid_search.no_result_to_modify", status=404)
+        by_index = {pr.get("pair_index"): pr for pr in pair_results if isinstance(pr, dict)}
+        if pair_index not in by_index:
+            raise DomainError("grid_search.pair_position_missing", status=404, params={"pair_index": pair_index})
+
+        if resume:
+            getter = getattr(job_store, "get_gepa_checkpoint", None)
+            checkpoint = getter(optimization_id, pair_index) if callable(getter) else None
+            if checkpoint is None:
+                raise DomainError("optimization.pair_not_resumable", status=409)
+
+        # Seed every other pair so the runner keeps it and re-runs only the target.
+        job_store.delete_grid_pair_results(optimization_id)
+        for idx, pr in by_index.items():
+            if idx != pair_index:
+                job_store.save_grid_pair_result(optimization_id, idx, pr)
+        if not resume:
+            job_store.delete_gepa_checkpoint(optimization_id, pair_index)
+
+        requeued = job_store.requeue_for_resume(optimization_id, bump_attempts=False)
+        if requeued is None:
+            raise DomainError("optimization.not_found", status=404)
+        logger.info("Re-running grid pair %s of %s (resume=%s)", pair_index, optimization_id, resume)
+        return JobCancelResponse(optimization_id=optimization_id, status=OptimizationStatus.pending.value)
+
+    @router.post(
+        "/optimizations/{optimization_id}/pair/{pair_index}/restart",
+        response_model=JobCancelResponse,
+        status_code=202,
+        summary="Re-run one failed grid-search pair from scratch, keeping the others",
+    )
+    def restart_grid_pair(
+        optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep
+    ) -> JobCancelResponse:
+        """Re-run a single grid pair fresh — like a single run's Restart, scoped to one pair.
+
+        Every other pair's result is kept; only this pair re-runs from scratch.
+        Works even on a grid that succeeded overall, so a failed pair never costs
+        you the good ones.
+
+        Args:
+            optimization_id: The grid optimization id.
+            pair_index: The pair to re-run from scratch.
+            current_user: Authenticated caller resolved from the bearer token.
+
+        Returns:
+            A ``JobCancelResponse`` for the re-queued grid.
+        """
+        return _rerun_grid_pair(optimization_id, pair_index, current_user, resume=False)
+
+    @router.post(
+        "/optimizations/{optimization_id}/pair/{pair_index}/resume",
+        response_model=JobCancelResponse,
+        status_code=202,
+        summary="Resume one grid-search pair from its checkpoint, keeping the others",
+    )
+    def resume_grid_pair(
+        optimization_id: str, pair_index: int, current_user: AuthenticatedUserDep
+    ) -> JobCancelResponse:
+        """Resume a single grid pair from its checkpoint — like a single run's Resume, per pair.
+
+        Every other pair's result is kept; only this pair continues mid-GEPA from
+        its saved checkpoint. 409 if the pair has no checkpoint (restart it instead).
+
+        Args:
+            optimization_id: The grid optimization id.
+            pair_index: The pair to resume.
+            current_user: Authenticated caller resolved from the bearer token.
+
+        Returns:
+            A ``JobCancelResponse`` for the re-queued grid.
+        """
+        return _rerun_grid_pair(optimization_id, pair_index, current_user, resume=True)
 
     @router.post(
         "/optimizations/bulk-pin",

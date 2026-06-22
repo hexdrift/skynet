@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
   success: "status-pill-success",
   failed: "status-pill-failed",
   cancelled: "status-pill-cancelled",
+  paused: "status-pill-paused",
 };
 
 export function StatusBadge({ status, className = "", compact = false }: StatusBadgeProps) {

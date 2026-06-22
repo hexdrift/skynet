@@ -160,6 +160,34 @@ def test_compute_elapsed_running_job_uses_wall_clock_and_is_positive() -> None:
     assert elapsed_secs >= 0.0
 
 
+def test_compute_elapsed_folds_accumulated_into_current_leg() -> None:
+    """A resumed run sums banked prior-leg time with the current leg's duration."""
+    created = _ts(2024, 1, 1, 10, 0, 0)
+    started = _ts(2024, 1, 1, 12, 0, 0)
+    completed = _ts(2024, 1, 1, 12, 1, 5)  # current leg = 65s
+
+    elapsed_str, elapsed_secs = compute_elapsed(created, started, completed, accumulated_seconds=100.0)
+
+    assert elapsed_secs == 165.0
+    assert elapsed_str == "00:02:45"
+
+
+def test_compute_elapsed_reports_banked_time_before_resumed_leg_starts() -> None:
+    """Between the resume and the worker re-stamping started_at, elapsed shows banked time only.
+
+    The paused gap (now - created) is never counted: with started_at cleared the
+    current leg contributes nothing and only the accumulated prior legs remain.
+    """
+    created = _ts(2024, 1, 1, 10, 0, 0)
+
+    elapsed_str, elapsed_secs = compute_elapsed(
+        created, started_at=None, completed_at=None, accumulated_seconds=180.0
+    )
+
+    assert elapsed_secs == 180.0
+    assert elapsed_str == "00:03:00"
+
+
 def test_parse_overview_returns_dict_when_already_dict() -> None:
     """An overview already stored as a dict is returned as-is."""
     job = {"payload_overview": {"job_type": "run"}}

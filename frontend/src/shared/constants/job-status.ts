@@ -25,6 +25,9 @@ const STATUS_LIFECYCLE = {
   success: "terminal",
   failed: "terminal",
   cancelled: "terminal",
+  // Paused is lifecycle-terminal (no worker holds it) but resumable — it carries
+  // a Resume affordance, unlike cancelled/failed which offer Resume-or-Restart.
+  paused: "terminal",
 } as const satisfies Record<JobStatus, StatusLifecycle>;
 
 const statusesWith = (kind: StatusLifecycle): ReadonlySet<JobStatus> =>
@@ -42,6 +45,7 @@ export const STATUS_LABELS = {
   success: TERMS.statusSuccess,
   failed: TERMS.statusFailed,
   cancelled: TERMS.statusCancelled,
+  paused: TERMS.statusPaused,
 } as const satisfies Record<JobStatus, string>;
 
 export const JOB_TYPE_LABELS = {

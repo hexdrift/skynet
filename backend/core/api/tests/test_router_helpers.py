@@ -70,11 +70,12 @@ def test_valid_statuses_match_enum() -> None:
 
 
 def test_terminal_statuses_are_finite() -> None:
-    """Only ``success``/``failed``/``cancelled`` are considered terminal."""
+    """Only ``success``/``failed``/``cancelled``/``paused`` are considered terminal."""
     assert {
         OptimizationStatus.success,
         OptimizationStatus.failed,
         OptimizationStatus.cancelled,
+        OptimizationStatus.paused,
     } == TERMINAL_STATUSES
 
 

@@ -182,17 +182,22 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
                           ],
                         ] as const;
                         const activeIdx = options.findIndex(([v]) => v === columnRoles[col]);
+                        // Track = 2px padding + 2px gaps, so each flex-1 button is
+                        // (100% - 8px)/3 wide and steps by (100% - 2px)/3. The pill must
+                        // match that stride or it drifts further off per segment.
                         const pillLeft =
-                          activeIdx >= 0 ? `calc(${activeIdx} * 100% / 3 + 2px)` : "2px";
+                          activeIdx >= 0
+                            ? `calc(2px + ${activeIdx} * (100% - 2px) / 3)`
+                            : "2px";
                         return (
                           <div
-                            className="relative inline-flex shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
+                            className="relative inline-grid grid-cols-3 shrink-0 rounded-lg bg-muted p-0.5 gap-0.5"
                             dir="rtl"
                           >
                             <div
                               className="absolute top-0.5 bottom-0.5 rounded-md bg-stone-500/15 shadow-sm transition-[inset-inline-start] duration-100 ease-out"
                               style={{
-                                width: "calc((100% - 6px) / 3)",
+                                width: "calc((100% - 8px) / 3)",
                                 insetInlineStart: pillLeft,
                               }}
                             />
@@ -202,7 +207,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
                                 type="button"
                                 onClick={() => setColumnRoles((prev) => ({ ...prev, [col]: val }))}
                                 className={cn(
-                                  "relative z-10 flex-1 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
+                                  "relative z-10 rounded-md px-3 py-1 text-xs font-medium text-center transition-colors duration-100 cursor-pointer",
                                   columnRoles[col] === val
                                     ? "text-stone-600"
                                     : "text-muted-foreground hover:text-foreground",

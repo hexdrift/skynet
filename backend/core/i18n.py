@@ -52,6 +52,7 @@ _TERM_KEYS: dict[str, str] = {
     "TERM_MODEL": "model",
     "TERM_PAIR_PLURAL": "pairPlural",
     "CANCELLATION_REASON": "cancellationReason",
+    "PAUSE_REASON": "pauseReason",
 }
 
 _CONSTANT_KEYS: dict[str, str] = {
