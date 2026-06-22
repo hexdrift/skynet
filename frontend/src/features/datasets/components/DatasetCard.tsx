@@ -22,19 +22,12 @@ import {
   renameDataset,
   type DatasetSummary,
 } from "@/shared/lib/api";
-import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatBytes, formatRelativeTime } from "@/shared/lib/formatters";
 import { DatasetShareDialog } from "./DatasetShareDialog";
 
-const SOURCE_LABEL_KEYS: Record<string, MessageKey> = {
-  tagger: "datasets.source.tagger",
-  upload: "datasets.source.upload",
-  optimization: "datasets.source.optimization",
-  clone: "datasets.source.clone",
-};
-
 /**
- * One library dataset rendered as a clickable card: name, source, row/column
+ * One library dataset rendered as a clickable card: name, row/column
  * counts, size and last-updated, plus role-gated actions. Owners get share /
  * rename / delete; everyone else (shared-in) gets clone-to-my-library. Clicking
  * the card body opens the detail sheet via ``onOpen``.
@@ -60,8 +53,6 @@ export function DatasetCard({
   // that those runs' back-link will dangle (the runs themselves keep working —
   // they own a copy of the rows, not a reference). Owner-only, mirroring delete.
   const [usedCount, setUsedCount] = React.useState<number | null>(null);
-
-  const sourceKey = SOURCE_LABEL_KEYS[dataset.source];
 
   React.useEffect(() => {
     if (!deleteOpen || !isOwner) {
@@ -149,11 +140,6 @@ export function DatasetCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-semibold text-foreground">{dataset.name}</p>
-            {sourceKey && (
-              <Badge variant="meta" size="sm">
-                {msg(sourceKey)}
-              </Badge>
-            )}
             {!isOwner && (
               <Badge variant="secondary" size="sm">
                 {msg("datasets.shared_badge")}
