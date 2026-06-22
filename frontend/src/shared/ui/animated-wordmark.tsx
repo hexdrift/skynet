@@ -179,13 +179,16 @@ export function AnimatedWordmark({
   className,
   autoMorph = false,
   morphSpeed = 250,
+  fluid = false,
 }: {
   size?: number;
   className?: string;
-  /** Start morphing immediately on mount (for splash screens) */
+  /** Morph continuously from mount, independent of hover (for splash/idle states) */
   autoMorph?: boolean;
   /** Interval in ms between morph ticks (default 250) */
   morphSpeed?: number;
+  /** Fill the parent's width (height derives from the viewBox) instead of using `size`. */
+  fluid?: boolean;
 }) {
   const [activeVariants, setActiveVariants] = useState<VariantName[]>(() =>
     LETTERS.map(() => "default"),
@@ -229,12 +232,18 @@ export function AnimatedWordmark({
   }, []);
 
   const handleMouseEnter = useCallback(() => {
+    // When autoMorph owns the lifecycle the wordmark is already morphing — hover
+    // must not spin up a second interval.
+    if (autoMorph) return;
     if (!reducedMotionRef.current) startMorph();
-  }, [startMorph]);
+  }, [autoMorph, startMorph]);
 
   const handleMouseLeave = useCallback(() => {
+    // Never reset a continuously-morphing wordmark on leave; it should keep
+    // morphing regardless of hover.
+    if (autoMorph) return;
     stopMorph();
-  }, [stopMorph]);
+  }, [autoMorph, stopMorph]);
 
   useEffect(() => {
     if (autoMorph && !reducedMotionRef.current) {
@@ -259,7 +268,7 @@ export function AnimatedWordmark({
   return (
     <span
       dir="ltr"
-      className={`inline-flex items-center select-none cursor-default ${className ?? ""}`}
+      className={`${fluid ? "flex w-full justify-center" : "inline-flex"} items-center select-none cursor-default ${className ?? ""}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       role="img"
@@ -267,13 +276,13 @@ export function AnimatedWordmark({
     >
       <svg
         className="overflow-visible transition-all duration-300"
-        width={svgWidth}
-        height={size}
+        width={fluid ? undefined : svgWidth}
+        height={fluid ? undefined : size}
         viewBox={`0 0 ${TOTAL_WIDTH} 92`}
         fill="currentColor"
         stroke="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ color: "var(--foreground)" }}
+        style={fluid ? { width: "100%", height: "auto", color: "var(--foreground)" } : { color: "var(--foreground)" }}
       >
         {LETTERS.map((letter, li) => (
           <g key={li} transform={`translate(${letter.offset}, 0)`}>

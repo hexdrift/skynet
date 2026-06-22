@@ -18,7 +18,7 @@ from core.models import (
     ToolSource,
 )
 from core.models.artifacts import ProgramArtifact, ReactOverlay
-from core.models.results import GridSearchResponse, LMActivity
+from core.models.results import GridSearchResponse, LMActivity, PairResult
 from core.models.submissions import GridSearchRequest
 from core.registry import ServiceRegistry
 from core.service_gateway.optimization.core import DspyService, _resolve_max_metric_calls
@@ -247,6 +247,44 @@ def test_run_grid_search_happy_path_returns_two_pair_results() -> None:
     assert len(result.pair_results) == 2
     assert result.completed_pairs == 2
     assert result.failed_pairs == 0
+
+
+def test_run_grid_search_skips_completed_pairs_on_resume() -> None:
+    """Resume seeds already-finished pairs verbatim and runs only the rest."""
+    service = _service()
+    payload = _grid_request()  # 2 pairs (indices 0, 1)
+    completed = {
+        0: {
+            "pair_index": 0,
+            "generation_model": "openai/gpt-4o-mini",
+            "reflection_model": "openai/gpt-4o-mini",
+            "optimized_test_metric": 0.9,
+        }
+    }
+    ran: list[int] = []
+
+    def _fake_pair(ctx, i, gen_cfg, ref_cfg):
+        """Stand-in pair worker that records which indices actually ran."""
+        ran.append(i)
+        return PairResult(
+            pair_index=i,
+            generation_model=gen_cfg.name,
+            reflection_model=ref_cfg.name,
+            optimized_test_metric=0.5,
+        )
+
+    with (
+        patch_core_dependencies(),
+        patch("core.service_gateway.optimization.core._run_grid_pair", side_effect=_fake_pair),
+        patch("core.worker.log_handler.set_current_pair_index"),
+    ):
+        result = service.run_grid_search(payload, completed_pairs=completed)
+
+    assert ran == [1]  # pair 0 was skipped, only the pending pair ran
+    assert result.total_pairs == 2
+    assert result.completed_pairs == 2
+    assert result.pair_results[0].optimized_test_metric == 0.9  # seeded result kept verbatim
+    assert result.pair_results[1].optimized_test_metric == 0.5  # freshly run
 
 
 def test_run_grid_search_best_pair_has_highest_score() -> None:

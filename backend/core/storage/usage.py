@@ -30,6 +30,8 @@ from .models import (
     AgentStagedDatasetModel,
     ConversationEmbeddingModel,
     DatasetModel,
+    GepaCheckpointModel,
+    GridPairResultModel,
     JobEmbeddingModel,
     JobModel,
     LogEntryModel,
@@ -168,6 +170,16 @@ def compute_user_storage(engine: Engine, username: str) -> StorageUsage:
                 ProgressEventModel.optimization_id.in_(user_job_ids)
             )
         )
+        checkpoints = scalar(
+            select(func.coalesce(func.sum(GepaCheckpointModel.stored_bytes), 0)).where(
+                GepaCheckpointModel.optimization_id.in_(user_job_ids)
+            )
+        )
+        grid_pairs = scalar(
+            select(func.coalesce(func.sum(GridPairResultModel.stored_bytes), 0)).where(
+                GridPairResultModel.optimization_id.in_(user_job_ids)
+            )
+        )
         agent_chats = scalar(
             select(
                 func.coalesce(
@@ -196,7 +208,12 @@ def compute_user_storage(engine: Engine, username: str) -> StorageUsage:
         chat_embeddings = conversation_embedding_rows * _CONVERSATION_EMBEDDING_ROW_BYTES
 
     breakdown = {
-        "optimizations": optimizations + logs + progress_events + optimization_embeddings,
+        "optimizations": optimizations
+        + logs
+        + progress_events
+        + checkpoints
+        + grid_pairs
+        + optimization_embeddings,
         "datasets": datasets,
         "agent_chats": agent_chats + chat_embeddings,
         "staged_uploads": staged_uploads,
@@ -355,7 +372,24 @@ def compute_user_storage_category_items(
                 .where(JobEmbeddingModel.optimization_id == JobModel.optimization_id)
                 .scalar_subquery()
             )
-            footprint = (JobModel.stored_bytes + logs_bytes + progress_bytes + embedding_bytes).label("footprint")
+            checkpoint_bytes = (
+                select(func.coalesce(func.sum(GepaCheckpointModel.stored_bytes), 0))
+                .where(GepaCheckpointModel.optimization_id == JobModel.optimization_id)
+                .scalar_subquery()
+            )
+            grid_pair_bytes = (
+                select(func.coalesce(func.sum(GridPairResultModel.stored_bytes), 0))
+                .where(GridPairResultModel.optimization_id == JobModel.optimization_id)
+                .scalar_subquery()
+            )
+            footprint = (
+                JobModel.stored_bytes
+                + logs_bytes
+                + progress_bytes
+                + checkpoint_bytes
+                + grid_pair_bytes
+                + embedding_bytes
+            ).label("footprint")
             optimization_rows = session.execute(
                 select(JobModel.optimization_id, JobModel.payload_overview, footprint)
                 .where(JobModel.username == normalized, JobModel.stored_bytes > 0)

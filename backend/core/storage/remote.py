@@ -21,10 +21,13 @@ from sqlalchemy.orm import Session, defer, sessionmaker
 from ..config import settings
 from ..constants import STRUCTURAL_PROGRESS_EVENTS, TQDM_KEY_PREFIX
 from .base import JobRecord, LogEntryRecord, ProgressEventRecord
+from .checkpoint_store import GepaCheckpoint, PostgresCheckpointBlobStore, PostgresGridPairResultStore
 from .models import (
     AgentStagedDatasetModel,
     Base,
     ConversationEmbeddingModel,
+    GepaCheckpointModel,
+    GridPairResultModel,
     JobEmbeddingModel,
     JobModel,
     LogEntryModel,
@@ -161,6 +164,8 @@ class RemoteDBJobStore:
                     tables=non_embedding_tables,
                 )
         self._session_factory = sessionmaker(bind=self._engine)
+        self._checkpoints = PostgresCheckpointBlobStore(self._engine)
+        self._grid_pair_results = PostgresGridPairResultStore(self._engine)
         parsed_url = urlparse(db_url)
         db_location = parsed_url.hostname or "<masked>"
         if parsed_url.port:
@@ -292,6 +297,7 @@ class RemoteDBJobStore:
                 "attempts": job.attempts,
                 "code_version": job.code_version,
                 "stored_bytes": job.stored_bytes or 0,
+                "accumulated_runtime_seconds": job.accumulated_runtime_seconds or 0.0,
             },
         )
 
@@ -555,6 +561,12 @@ class RemoteDBJobStore:
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).delete()
             session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id == optimization_id).delete()
+            session.query(GepaCheckpointModel).filter(
+                GepaCheckpointModel.optimization_id == optimization_id
+            ).delete()
+            session.query(GridPairResultModel).filter(
+                GridPairResultModel.optimization_id == optimization_id
+            ).delete()
             session.query(JobModel).filter(JobModel.optimization_id == optimization_id).delete()
             session.commit()
         finally:
@@ -590,9 +602,9 @@ class RemoteDBJobStore:
     def delete_jobs(self, optimization_ids: list[str]) -> int:
         """Hard-delete a batch of jobs in a single transaction.
 
-        Drops the associated log and progress-event rows first
-        (three bulk ``DELETE`` queries total) then commits once, so
-        the round-trip cost is bounded regardless of batch size.
+        Drops the associated log, progress-event, embedding and checkpoint rows
+        first then commits once, so the round-trip cost is bounded regardless of
+        batch size.
 
         Args:
             optimization_ids: IDs to remove. Duplicates and missing IDs are tolerated.
@@ -613,6 +625,12 @@ class RemoteDBJobStore:
             session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id.in_(optimization_ids)).delete(
                 synchronize_session=False
             )
+            session.query(GepaCheckpointModel).filter(
+                GepaCheckpointModel.optimization_id.in_(optimization_ids)
+            ).delete(synchronize_session=False)
+            session.query(GridPairResultModel).filter(
+                GridPairResultModel.optimization_id.in_(optimization_ids)
+            ).delete(synchronize_session=False)
             deleted = (
                 session.query(JobModel)
                 .filter(JobModel.optimization_id.in_(optimization_ids))
@@ -620,6 +638,166 @@ class RemoteDBJobStore:
             )
             session.commit()
             return int(deleted or 0)
+        finally:
+            session.close()
+
+    def save_gepa_checkpoint(
+        self, optimization_id: str, data: bytes, iteration: int, pair_index: int = -1
+    ) -> None:
+        """Persist (or replace) the latest GEPA state blob for one run or grid pair.
+
+        Args:
+            optimization_id: Owning job id.
+            data: Raw ``gepa_state.bin`` bytes for the latest iteration.
+            iteration: The iteration index the state was saved at.
+            pair_index: Grid pair index, or ``-1`` for a single run.
+        """
+        self._checkpoints.put(optimization_id, data=data, iteration=iteration, pair_index=pair_index)
+
+    def get_gepa_checkpoint(self, optimization_id: str, pair_index: int = -1) -> GepaCheckpoint | None:
+        """Return the saved GEPA checkpoint for one run/pair, or ``None``.
+
+        Args:
+            optimization_id: Job whose checkpoint is read.
+            pair_index: Grid pair index, or ``-1`` for a single run.
+
+        Returns:
+            The :class:`GepaCheckpoint` (state bytes plus iteration), or ``None``.
+        """
+        return self._checkpoints.get(optimization_id, pair_index)
+
+    def list_gepa_checkpoints(self, optimization_id: str) -> list[GepaCheckpoint]:
+        """Return every saved checkpoint for a job (all grid pairs, or the single run).
+
+        Args:
+            optimization_id: Job whose checkpoints are read.
+
+        Returns:
+            The job's :class:`GepaCheckpoint` rows (possibly empty).
+        """
+        return self._checkpoints.list_for_optimization(optimization_id)
+
+    def delete_gepa_checkpoint(self, optimization_id: str, pair_index: int = -1) -> None:
+        """Drop one run/pair's GEPA checkpoint (no-op when absent).
+
+        Args:
+            optimization_id: Owning job id.
+            pair_index: Grid pair index, or ``-1`` for a single run.
+        """
+        self._checkpoints.delete(optimization_id, pair_index)
+
+    def delete_all_gepa_checkpoints(self, optimization_id: str) -> None:
+        """Drop every checkpoint for a job (e.g. once a grid succeeds).
+
+        Args:
+            optimization_id: Job whose checkpoints are freed.
+        """
+        self._checkpoints.delete_all(optimization_id)
+
+    def has_gepa_checkpoint(self, optimization_id: str) -> bool:
+        """Return whether any resumable GEPA checkpoint exists for ``optimization_id``.
+
+        Cheap key-only existence check (single run or any grid pair) used to gate
+        the per-job ``resumable`` flag on the list/detail read paths.
+
+        Args:
+            optimization_id: Job to test.
+
+        Returns:
+            ``True`` when at least one checkpoint row exists.
+        """
+        return self._checkpoints.has_any(optimization_id)
+
+    def save_grid_pair_result(self, optimization_id: str, pair_index: int, result: dict[str, Any]) -> None:
+        """Persist (or replace) one completed grid pair's result so resume can skip it.
+
+        Args:
+            optimization_id: Owning grid job id.
+            pair_index: The completed pair's index.
+            result: The pair's serialized ``PairResult``.
+        """
+        self._grid_pair_results.put(optimization_id, pair_index, result)
+
+    def get_grid_pair_results(self, optimization_id: str) -> dict[int, dict[str, Any]]:
+        """Return ``{pair_index: result}`` for every completed pair of a grid.
+
+        Args:
+            optimization_id: Grid job whose finished pairs are read.
+
+        Returns:
+            Mapping of completed pair index to its serialized result (possibly empty).
+        """
+        return self._grid_pair_results.get_all(optimization_id)
+
+    def delete_grid_pair_results(self, optimization_id: str) -> None:
+        """Drop every stored pair result for a grid (e.g. once it succeeds).
+
+        Args:
+            optimization_id: Grid job whose pair results are freed.
+        """
+        self._grid_pair_results.delete_all(optimization_id)
+
+    def has_grid_pair_results(self, optimization_id: str) -> bool:
+        """Return whether the grid has any completed-pair result stored.
+
+        Args:
+            optimization_id: Grid job to test.
+
+        Returns:
+            ``True`` when at least one pair result exists.
+        """
+        return self._grid_pair_results.has_any(optimization_id)
+
+    def requeue_for_resume(self, optimization_id: str, *, bump_attempts: bool = True) -> int | None:
+        """Re-queue a terminal job in place so a worker resumes it from its checkpoint.
+
+        Flips the existing row back to ``pending`` — same id, payload, seed and
+        budget — and clears the prior claim/lease, mirroring
+        :meth:`recover_orphaned_jobs`. A whole-job resume increments ``attempts``
+        so it shares the ``job_max_attempts`` cap with pod-failure recovery; a
+        targeted per-pair grid re-run passes ``bump_attempts=False`` so retrying
+        individual pairs is not bounded by that cap. The caller owns the
+        resumability preconditions.
+
+        The finished leg's wall-clock duration is folded into
+        ``accumulated_runtime_seconds`` before ``started_at``/``completed_at`` are
+        cleared, so the resumed run's elapsed timer measures net active compute
+        across all legs and excludes the paused gap between them.
+
+        Args:
+            optimization_id: The job to resume.
+            bump_attempts: Whether to count this re-queue against the attempt cap.
+
+        Returns:
+            The new attempt count, or ``None`` when the job row is missing.
+        """
+        session = self._get_session()
+        try:
+            job = session.get(JobModel, optimization_id)
+            if job is None:
+                return None
+            current = int(job.attempts or 0)
+            next_attempt = current + 1 if bump_attempts else current
+            job.attempts = next_attempt  # type: ignore[assignment]
+            job.status = "pending"  # type: ignore[assignment]
+            job.claimed_by = None  # type: ignore[assignment]
+            job.claimed_at = None  # type: ignore[assignment]
+            job.lease_expires_at = None  # type: ignore[assignment]
+            # Fold the just-finished leg's exact duration into the running total
+            # before the timestamps are cleared, so the resumed run's elapsed timer
+            # reflects net active compute across legs and never the paused gap.
+            if job.started_at is not None:
+                leg_start = job.started_at if job.started_at.tzinfo else job.started_at.replace(tzinfo=UTC)
+                leg_end_raw = job.completed_at or datetime.now(UTC)
+                leg_end = leg_end_raw if leg_end_raw.tzinfo else leg_end_raw.replace(tzinfo=UTC)
+                job.accumulated_runtime_seconds = float(  # type: ignore[assignment]
+                    job.accumulated_runtime_seconds or 0.0
+                ) + max(0.0, (leg_end - leg_start).total_seconds())
+            job.completed_at = None  # type: ignore[assignment]
+            job.started_at = None  # type: ignore[assignment]
+            job.message = "Resuming" if bump_attempts else "Re-running grid pair"  # type: ignore[assignment]
+            session.commit()
+            return next_attempt
         finally:
             session.close()
 

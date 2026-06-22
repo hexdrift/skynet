@@ -69,6 +69,9 @@ from .._helpers import (
     _program_cache,
     build_summary,
     compute_compare_fingerprint,
+    grid_resumable_pairs,
+    is_pausable,
+    is_resumable,
     load_job_for_user,
     load_job_with_role,
     stable_seed,
@@ -248,7 +251,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
                 live_failed = latest_metrics.get("failed_so_far")
                 failed_pairs = live_failed if isinstance(live_failed, int) else 0
 
-        elapsed_str, elapsed_secs = compute_elapsed(created_at, started_at, completed_at)
+        elapsed_str, elapsed_secs = compute_elapsed(
+            created_at, started_at, completed_at, job_data.get("accumulated_runtime_seconds") or 0.0
+        )
 
         logger.debug("Returning status for optimization_id=%s state=%s", optimization_id, status)
         response_data = OptimizationStatusResponse(
@@ -274,6 +279,13 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             result=result,
             grid_result=grid_result,
             effective_role=effective_role,
+            resumable=is_resumable(job_store, job_data),
+            pausable=is_pausable(job_store, job_data),
+            grid_resumable_pairs=(
+                grid_resumable_pairs(job_store, optimization_id)
+                if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH
+                else []
+            ),
         )
 
         headers = {"ETag": etag}
@@ -316,7 +328,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
 
         job_data["progress_count"] = job_store.get_progress_count(optimization_id)
         job_data["log_count"] = job_store.get_log_count(optimization_id)
-        return build_summary(job_data)
+        summary = build_summary(job_data)
+        summary.resumable = is_resumable(job_store, job_data)
+        return summary
 
     @router.get(
         "/optimizations/{optimization_id}/dataset",

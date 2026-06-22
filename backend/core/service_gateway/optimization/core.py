@@ -8,12 +8,14 @@ this file orchestrates them.
 """
 
 import functools
+import json
 import logging
 import threading
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import dspy
@@ -93,6 +95,7 @@ from .timing import (
 from .training_ground import run_react
 from .training_ground.run_react import _AUTO_BUDGETS, tool_severity
 from .trajectory import (
+    GRID_PAIR_RESULT_FILENAME,
     capture_proposal_prompts,
     emit_valset_event,
     gepa_log_dir,
@@ -264,9 +267,29 @@ class _GridPairContext:
     splits: Any
     artifact_id: str | None
     progress_callback: Callable[[str, dict[str, Any]], None] | None
+    # Worker-owned base dir for resumable grids; each pair writes its GEPA state
+    # and (on success) ``result.json`` under ``<base>/pair_<i>``. None = ephemeral.
+    gepa_log_dir_base: str | None = None
     results_lock: threading.Lock = field(default_factory=threading.Lock)
     completed: int = 0
     failed: int = 0
+
+
+def _write_pair_result_json(pair_dir: str, result: PairResult) -> None:
+    """Atomically write a completed pair's result for the worker to persist.
+
+    The worker reads ``<pair_dir>/result.json`` to durably record finished pairs,
+    so a resumed grid skips them. Written via a temp file + ``os.replace`` so the
+    worker never sees a partial write.
+
+    Args:
+        pair_dir: The pair's worker-owned directory.
+        result: The completed :class:`PairResult` to serialize.
+    """
+    path = Path(pair_dir) / GRID_PAIR_RESULT_FILENAME
+    tmp = path.with_name(f"{path.name}.tmp")
+    tmp.write_text(json.dumps(result.model_dump(mode="json")), encoding="utf-8")
+    tmp.replace(path)
 
 
 def _tag_candidate_event(
@@ -321,6 +344,9 @@ def _run_grid_pair(
     """
     set_current_pair_index(i)
     pair_label = f"{gen_cfg.name} + {ref_cfg.name}"
+    # On a resumable grid each pair gets its own dir under the worker-owned base,
+    # so the worker can restore its checkpoint (resume) and persist its result.
+    pair_dir = str(Path(ctx.gepa_log_dir_base) / f"pair_{i}") if ctx.gepa_log_dir_base else None
     logger.info("Grid pair %d/%d: %s", i + 1, ctx.total_pairs, pair_label)
     if ctx.progress_callback:
         ctx.progress_callback(
@@ -351,7 +377,7 @@ def _run_grid_pair(
             callbacks.append(refl_timing)
 
         with dspy.context(lm=language_model, callbacks=callbacks), gepa_log_dir(
-            ctx.payload.optimizer_name
+            ctx.payload.optimizer_name, pair_dir
         ) as trajectory_log_dir:
             trajectory_callback: Callable[[str, dict[str, Any]], None] | None = (
                 functools.partial(_tag_candidate_event, ctx.progress_callback, i)
@@ -493,6 +519,9 @@ def _run_grid_pair(
                     "failed_so_far": f,
                 },
             )
+        # Record the finished pair so a resumed grid keeps it instead of re-running.
+        if pair_dir is not None:
+            _write_pair_result_json(pair_dir, result)
         set_current_pair_index(None)
         return result
 
@@ -561,6 +590,7 @@ class DspyService:
         *,
         artifact_id: str | None = None,
         progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+        gepa_log_dir_path: str | None = None,
     ) -> RunResponse:
         """Execute a single DSPy optimization run and return a structured response.
 
@@ -574,6 +604,10 @@ class DspyService:
             payload: The validated run request to execute.
             artifact_id: Optional identifier carried into artifact storage.
             progress_callback: Optional callback receiving ``(event, detail)`` updates.
+            gepa_log_dir_path: Worker-owned directory for GEPA's ``gepa_state.bin``.
+                When the directory already holds a prior state file the GEPA
+                engine resumes from it; when ``None`` an ephemeral tempdir is
+                used and the run starts fresh.
 
         Returns:
             A populated :class:`RunResponse` summarising the run.
@@ -602,6 +636,7 @@ class DspyService:
                 run_start=run_start,
                 artifact_id=artifact_id,
                 progress_callback=progress_callback,
+                gepa_log_dir_path=gepa_log_dir_path,
             )
         module_factory, auto_signature = self._get_module_factory(payload.module_name)
         module_kwargs = dict(payload.module_kwargs)
@@ -674,7 +709,7 @@ class DspyService:
         callbacks: list[Any] = [gen_timing]
         if refl_timing is not None:
             callbacks.append(refl_timing)
-        with gepa_log_dir(payload.optimizer_name) as trajectory_log_dir:
+        with gepa_log_dir(payload.optimizer_name, gepa_log_dir_path) as trajectory_log_dir:
             training_metric = maybe_wrap_minibatch_recorder(
                 metric,
                 splits.val,
@@ -837,6 +872,7 @@ class DspyService:
         run_start: datetime,
         artifact_id: str | None,
         progress_callback: Callable[[str, dict[str, Any]], None] | None,
+        gepa_log_dir_path: str | None = None,
     ) -> RunResponse:
         """Optimize a generic react program over a live tool roster and assemble the response.
 
@@ -863,6 +899,8 @@ class DspyService:
                 reported runtime.
             artifact_id: Optional identifier carried into artifact storage.
             progress_callback: Optional ``(event, detail)`` progress sink.
+            gepa_log_dir_path: Worker-owned directory for GEPA's state file; a
+                prior state file in it resumes the run, ``None`` starts fresh.
 
         Returns:
             A populated :class:`RunResponse` whose scalar metrics mirror the
@@ -927,7 +965,7 @@ class DspyService:
         # trajectory_watch streams candidate/rejected events, capture_proposal_prompts
         # records rejected proposal prompts, and capture_tqdm drives the live bar.
         with (
-            gepa_log_dir(payload.optimizer_name) as trajectory_log_dir,
+            gepa_log_dir(payload.optimizer_name, gepa_log_dir_path) as trajectory_log_dir,
             dspy.context(lm=student_lm, callbacks=[gen_timing]),
             capture_tqdm(progress_callback),
             capture_proposal_prompts(payload.optimizer_name),
@@ -1151,12 +1189,18 @@ class DspyService:
         *,
         artifact_id: str | None = None,
         progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+        gepa_log_dir_path: str | None = None,
+        completed_pairs: dict[int, dict[str, Any]] | None = None,
     ) -> GridSearchResponse:
         """Run one optimization per (generation_model, reflection_model) pair and return all results.
 
         Pairs are executed concurrently (up to 4 threads).  Each pair follows the
         same baseline-vs-optimized fallback logic as ``run()``.  Failed pairs are
         recorded with their error message rather than aborting the whole search.
+
+        On resume, ``completed_pairs`` (``pair_index`` → stored ``PairResult``) are
+        kept as-is and skipped, and ``gepa_log_dir_path`` is the worker-owned base
+        dir whose ``pair_<i>`` subdirs seed each in-flight pair's GEPA checkpoint.
 
         Args:
             payload: The validated grid-search request to execute.
@@ -1222,6 +1266,14 @@ class DspyService:
             emit_valset_event(splits.val, progress_callback)
 
         pair_results: list[PairResult] = [None] * total_pairs  # type: ignore[list-item]
+        completed = completed_pairs or {}
+        # Resume: keep already-finished pairs verbatim so they are neither re-run
+        # nor lost, and run only the rest.
+        for idx, stored in completed.items():
+            if 0 <= idx < total_pairs:
+                pair_results[idx] = PairResult.model_validate(stored)
+        pending = [(i, gen_cfg, ref_cfg) for i, (gen_cfg, ref_cfg) in enumerate(pairs) if i not in completed]
+
         grid_ctx = _GridPairContext(
             total_pairs=total_pairs,
             module_factory=module_factory,
@@ -1232,17 +1284,27 @@ class DspyService:
             splits=splits,
             artifact_id=artifact_id,
             progress_callback=progress_callback,
+            gepa_log_dir_base=gepa_log_dir_path,
+            completed=len(completed),
         )
+        if completed:
+            logger.info(
+                "Grid resume: %d/%d pairs already complete, running %d",
+                len(completed),
+                total_pairs,
+                len(pending),
+            )
 
-        max_workers = min(total_pairs, 4)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(_run_grid_pair, grid_ctx, i, gen_cfg, ref_cfg): i
-                for i, (gen_cfg, ref_cfg) in enumerate(pairs)
-            }
-            for future in as_completed(futures):
-                idx = futures[future]
-                pair_results[idx] = future.result()
+        if pending:
+            max_workers = min(len(pending), 4)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_run_grid_pair, grid_ctx, i, gen_cfg, ref_cfg): i
+                    for i, gen_cfg, ref_cfg in pending
+                }
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    pair_results[idx] = future.result()
 
         successful = [p for p in pair_results if p.error is None and p.optimized_test_metric is not None]
         best_pair = (

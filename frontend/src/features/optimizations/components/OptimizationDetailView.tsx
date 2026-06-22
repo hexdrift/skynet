@@ -12,6 +12,8 @@ import {
   TrendingUp,
   Timer,
   Send,
+  Copy,
+  Check,
   CopyPlus,
   Database,
   Settings,
@@ -19,6 +21,8 @@ import {
   Eye,
   Pencil,
   RotateCcw,
+  Play,
+  Pause,
   HardDrive,
 } from "lucide-react";
 import { toast } from "react-toastify";
@@ -32,7 +36,9 @@ import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
   getJob,
   cancelJob,
+  pauseJob,
   retryJob,
+  resumeJob,
   getOptimizationPayload,
   getServeInfo,
   getPairServeInfo,
@@ -171,8 +177,14 @@ function LiveElapsedBadge({
     }
     // Take the larger of wallclock (now - started_at) and the server anchor so
     // a stale upstream `elapsed_seconds` (e.g. cached 0) doesn't reset the
-    // header counter back to zero on every page reload.
-    const start = parseTimestampMs(startedAt ?? createdAt);
+    // header counter back to zero on every page reload. Anchor the wallclock on
+    // started_at ONLY — never fall back to created_at here. A resumed run is
+    // re-queued with started_at cleared, so between the resume click and the
+    // worker re-stamping started_at the job is "active" with started_at null;
+    // measuring from created_at there would fold the entire paused gap (which
+    // can be hours) into the timer. With no started_at we lean on the server
+    // anchor, which already measures only the live leg.
+    const start = parseTimestampMs(startedAt);
     const wall = start !== null ? Math.max(0, (now - start) / 1000) : 0;
     const anchored = elapsedAnchor
       ? elapsedAnchor.sec + Math.max(0, (now - elapsedAnchor.ms) / 1000)
@@ -185,6 +197,34 @@ function LiveElapsedBadge({
       <Clock className="size-3.5" />
       {liveElapsed}
     </span>
+  );
+}
+
+// Copy control for the failure card. Mirrors the app-wide icon-button copy
+// pattern (inline check-swap, tooltip flips to "copied"), tinted to the warm
+// error palette so it reads as part of the card rather than a generic action.
+function FailureCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const label = msg(copied ? "shared.code_editor.copied" : "shared.code_editor.copy");
+  return (
+    <TooltipButton tooltip={label}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={() => {
+          void navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+        className="-me-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[#B04030]/70 transition-colors hover:bg-[#B04030]/10 hover:text-[#B04030] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B04030]/30"
+      >
+        {copied ? (
+          <Check className="size-3.5 text-[#B04030]" />
+        ) : (
+          <Copy className="size-3.5" />
+        )}
+      </button>
+    </TooltipButton>
   );
 }
 
@@ -227,6 +267,8 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   // Re-run mints a brand-new run per call, so guard against a double-click
   // firing two retries (and creating two duplicate runs).
   const [retrying, setRetrying] = useState(false);
+  const [resuming, setResuming] = useState(false);
+  const [pausing, setPausing] = useState(false);
 
   // Bump to replay the demo optimization simulation. The deep-dive tour
   // triggers this when reaching the trajectory step so users watch the tree
@@ -482,6 +524,39 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
     } catch (err) {
       toast.error(err instanceof Error ? err.message : msg("optimization.rerun.failed"));
       setRetrying(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (skipNetwork || resuming) return;
+    setResuming(true);
+    try {
+      await resumeJob(id);
+      toast.success(msg("optimization.resume.success"));
+      window.dispatchEvent(new Event("optimizations-changed"));
+      // Resume continues the same run in place — refresh this view rather than
+      // navigating to a new id.
+      void fetchJob();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("optimization.resume.failed"));
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  const handlePause = async () => {
+    if (skipNetwork || pausing) return;
+    setPausing(true);
+    try {
+      await pauseJob(id);
+      toast.success(msg("optimization.pause.success"));
+      window.dispatchEvent(new Event("optimizations-changed"));
+      // Pause suspends the same run in place — refresh this view rather than navigating.
+      void fetchJob();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("optimization.pause.failed"));
+    } finally {
+      setPausing(false);
     }
   };
 
@@ -968,17 +1043,47 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   <CopyPlus className="size-4" />
                 </Button>
               </TooltipButton>
-              {canEditRun && (job.status === "failed" || job.status === "cancelled") && (
-                <TooltipButton tooltip={msg("optimization.rerun_tooltip")}>
+              {canEditRun &&
+                (job.status === "failed" || job.status === "cancelled" || job.status === "paused") &&
+                (job.resumable ? (
+                  <TooltipButton tooltip={msg("optimization.resume_tooltip")}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={handleResume}
+                      disabled={resuming}
+                      aria-label={msg("optimization.resume")}
+                    >
+                      {/* Mirrored so the triangle points in the RTL reading direction. */}
+                      <Play className={`size-4 -scale-x-100${resuming ? " animate-spin" : ""}`} />
+                    </Button>
+                  </TooltipButton>
+                ) : (
+                  <TooltipButton tooltip={msg("optimization.rerun_tooltip")}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={handleRetry}
+                      disabled={retrying}
+                      aria-label={msg("optimization.rerun")}
+                    >
+                      <RotateCcw className={`size-4${retrying ? " animate-spin" : ""}`} />
+                    </Button>
+                  </TooltipButton>
+                ))}
+              {canEditRun && isActive && job.pausable && (
+                <TooltipButton tooltip={msg("optimization.pause_tooltip")}>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="size-8"
-                    onClick={handleRetry}
-                    disabled={retrying}
-                    aria-label={msg("optimization.rerun")}
+                    onClick={handlePause}
+                    disabled={pausing}
+                    aria-label={msg("optimization.pause")}
                   >
-                    <RotateCcw className={`size-4${retrying ? " animate-spin" : ""}`} />
+                    <Pause className={`size-4${pausing ? " animate-pulse" : ""}`} />
                   </Button>
                 </TooltipButton>
               )}
@@ -1060,26 +1165,40 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
               </p>
             </div>
             <div className="mt-3 rounded-lg border border-[#B04030]/15 bg-[#B04030]/[0.035] px-3.5 py-2.5">
-              <pre
-                className="text-xs text-[#8A3326] whitespace-pre-wrap break-words font-mono leading-relaxed"
-                dir="ltr"
-              >
-                {linkifyMessage(
-                  job.message ?? "",
-                  "underline decoration-[#B04030]/40 underline-offset-2 hover:text-[#7A2A1E] transition-colors",
-                )}
-              </pre>
-              {typeof metrics.error === "string" && !job.message?.includes(metrics.error) && (
-                <pre
-                  className="text-xs text-[#8A3326] whitespace-pre-wrap break-words font-mono leading-relaxed mt-2 border-t border-[#B04030]/15 pt-2"
-                  dir="ltr"
-                >
-                  {linkifyMessage(
-                    String(metrics.error),
-                    "underline decoration-[#B04030]/40 underline-offset-2 hover:text-[#7A2A1E] transition-colors",
+              <div className="flex items-start gap-2" dir="ltr">
+                <div className="min-w-0 flex-1">
+                  <pre
+                    className="text-xs text-[#8A3326] whitespace-pre-wrap break-words font-mono leading-relaxed"
+                    dir="ltr"
+                  >
+                    {linkifyMessage(
+                      job.message ?? "",
+                      "underline decoration-[#B04030]/40 underline-offset-2 hover:text-[#7A2A1E] transition-colors",
+                    )}
+                  </pre>
+                  {typeof metrics.error === "string" && !job.message?.includes(metrics.error) && (
+                    <pre
+                      className="text-xs text-[#8A3326] whitespace-pre-wrap break-words font-mono leading-relaxed mt-2 border-t border-[#B04030]/15 pt-2"
+                      dir="ltr"
+                    >
+                      {linkifyMessage(
+                        String(metrics.error),
+                        "underline decoration-[#B04030]/40 underline-offset-2 hover:text-[#7A2A1E] transition-colors",
+                      )}
+                    </pre>
                   )}
-                </pre>
-              )}
+                </div>
+                <FailureCopyButton
+                  text={[
+                    job.message ?? "",
+                    typeof metrics.error === "string" && !job.message?.includes(metrics.error)
+                      ? String(metrics.error)
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                />
+              </div>
             </div>
           </div>
         </FadeIn>

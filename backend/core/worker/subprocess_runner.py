@@ -143,7 +143,8 @@ def run_service_in_subprocess(
     is constructed.
 
     Args:
-        payload_dict: Submission payload plus the ``_optimization_type`` key.
+        payload_dict: Submission payload plus the ``_optimization_type`` key and,
+            for resumable runs, the ``_gepa_log_dir`` path the worker owns.
         artifact_id: ID used to attach progress and logs to the right job.
         event_queue: Shared multiprocessing queue back to the parent.
         start_method: The active multiprocessing start method (e.g. ``"fork"``).
@@ -180,6 +181,8 @@ def run_service_in_subprocess(
     try:
         payload_dict = dict(payload_dict)
         optimization_type = payload_dict.pop("_optimization_type", OPTIMIZATION_TYPE_RUN)
+        gepa_log_dir_path = payload_dict.pop("_gepa_log_dir", None)
+        completed_pairs = payload_dict.pop("_completed_pairs", None)
         progress_callback = partial(_emit_progress_event, event_queue)
 
         if optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
@@ -190,6 +193,8 @@ def run_service_in_subprocess(
                 grid_payload,
                 artifact_id=artifact_id,
                 progress_callback=progress_callback,
+                gepa_log_dir_path=gepa_log_dir_path,
+                completed_pairs=completed_pairs,
             )
         else:
             run_payload = RunRequest.model_validate(payload_dict)
@@ -197,6 +202,7 @@ def run_service_in_subprocess(
                 run_payload,
                 artifact_id=artifact_id,
                 progress_callback=progress_callback,
+                gepa_log_dir_path=gepa_log_dir_path,
             )
         safe_queue_put(
             event_queue,

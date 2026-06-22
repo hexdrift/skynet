@@ -1,4 +1,11 @@
-export type JobStatus = "pending" | "validating" | "running" | "success" | "failed" | "cancelled";
+export type JobStatus =
+  | "pending"
+  | "validating"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "paused";
 export type OptimizationType = "run" | "grid_search";
 
 // Levels emitted by the backend (`backend/core/api/routers/optimizations_meta.py`).
@@ -136,6 +143,10 @@ export interface OptimizationSummaryResponse {
   stored_bytes?: number;
   /** Id of the library dataset this run was submitted from (by-reference); null for inline/staged submits. */
   source_dataset_id?: string | null;
+  /** True when this run stopped mid-optimization with a saved checkpoint and can be resumed in place; drives Resume vs Restart. */
+  resumable?: boolean;
+  /** True while this run is actively running AND already has a saved checkpoint; drives the Pause control. */
+  pausable?: boolean;
   latest_metrics?: Record<string, unknown>;
   model_name?: string | null;
   model_settings?: Record<string, unknown>;
@@ -311,6 +322,8 @@ export interface OptimizationStatusResponse extends OptimizationSummaryResponse 
   logs_offset?: number;
   result?: RunResult | null;
   grid_result?: GridSearchResult | null;
+  /** Grid pair indices with a saved checkpoint: a failed pair here offers Resume, one not here offers Restart. */
+  grid_resumable_pairs?: number[];
   /** Caller's share role when reached via a member grant; null for the owner's own view. */
   effective_role?: "viewer" | "editor" | "owner" | null;
 }

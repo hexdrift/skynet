@@ -24,14 +24,21 @@ from gepa.proposer.reflective_mutation.reflective_mutation import (
     ReflectiveMutationProposer,
 )
 
-from core.constants import PROGRESS_MINIBATCH, PROGRESS_VALSET, PROGRESS_VALSET_OUTPUTS
+from core.constants import (
+    PROGRESS_CANDIDATE,
+    PROGRESS_MINIBATCH,
+    PROGRESS_VALSET,
+    PROGRESS_VALSET_OUTPUTS,
+)
 from core.service_gateway.optimization.trajectory import (
+    GEPA_STATE_FILENAME,
     MINIBATCH_FEEDBACK_CHAR_CAP,
     MINIBATCH_PREDICTION_CHAR_CAP,
     VALSET_FIELD_CHAR_CAP,
     CandidateEvent,
     MinibatchRecorder,
     RejectedEvent,
+    TrajectoryWatcher,
     _current_proposal_iteration,
     _load_state,
     _normalize_prediction,
@@ -806,3 +813,47 @@ class TestNormalizePrediction:
         assert isinstance(out, dict)
         assert len(out["answer"]) == MINIBATCH_PREDICTION_CHAR_CAP + 1
         assert out["answer"].endswith("…")
+
+
+class TestResumeBaseline:
+    """On resume, the watcher must not re-emit candidates the restored state holds."""
+
+    @staticmethod
+    def _dump_state(run_dir: str, state: dict) -> None:
+        """Write ``state`` to ``<run_dir>/gepa_state.bin`` as GEPA would."""
+        with open(os.path.join(run_dir, GEPA_STATE_FILENAME), "wb") as fh:
+            cloudpickle.dump(state, fh)
+
+    def test_no_state_file_is_a_noop(self) -> None:
+        """A fresh run (no seeded state) leaves the cursor at zero."""
+        with tempfile.TemporaryDirectory() as run_dir:
+            watcher = TrajectoryWatcher(run_dir, lambda _m, _x: None)
+            watcher._prime_resume_baseline()
+            assert watcher._last_count == 0
+
+    def test_prime_skips_seeded_candidates_then_emits_only_new(self) -> None:
+        """Priming swallows the seeded candidates; only post-resume ones emit."""
+        emitted: list[tuple[str, dict]] = []
+        with tempfile.TemporaryDirectory() as run_dir:
+            self._dump_state(run_dir, _minimal_state())  # 2 prior-segment candidates
+            watcher = TrajectoryWatcher(run_dir, lambda m, x: emitted.append((m, x)))
+
+            watcher._prime_resume_baseline()
+            assert watcher._last_count == 2
+
+            # A forced tick over the unchanged state must emit nothing.
+            watcher._tick(force=True)
+            assert [m for m, _ in emitted if m == PROGRESS_CANDIDATE] == []
+
+            # GEPA appends a candidate after resume → only that one is emitted.
+            state = _minimal_state()
+            state["program_candidates"].append({"qa.predict": "Third."})
+            state["parent_program_for_candidate"].append([1])
+            state["prog_candidate_val_subscores"].append({"ex1": 0.9, "ex2": 0.9})
+            state["num_metric_calls_by_discovery"].append(8)
+            self._dump_state(run_dir, state)
+
+            watcher._tick(force=True)
+            candidates = [x for m, x in emitted if m == PROGRESS_CANDIDATE]
+            assert len(candidates) == 1
+            assert candidates[0]["candidate_id"] == "2"

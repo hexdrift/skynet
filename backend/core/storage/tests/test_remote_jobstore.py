@@ -54,6 +54,8 @@ class SQLiteJobStore(RemoteDBJobStore):
         )
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(bind=self._engine)
+        self._checkpoints = remote_mod.PostgresCheckpointBlobStore(self._engine)
+        self._grid_pair_results = remote_mod.PostgresGridPairResultStore(self._engine)
 
 
 def _parse_iso_datetime(value: str) -> datetime:
@@ -1009,3 +1011,125 @@ def test_immutable_columns_include_notification_and_idempotency_fields() -> None
     """``_IMMUTABLE_JOB_COLUMNS`` guards the new dedup columns from ``update_job``."""
     assert "notified_at" in remote_mod._IMMUTABLE_JOB_COLUMNS
     assert "idempotency_key" in remote_mod._IMMUTABLE_JOB_COLUMNS
+
+
+def test_gepa_checkpoint_save_get_delete_roundtrip(store: SQLiteJobStore) -> None:
+    """A checkpoint saves, reads back with its iteration/size, replaces, and deletes."""
+    store.create_job("ck1")
+    assert store.has_gepa_checkpoint("ck1") is False
+    assert store.get_gepa_checkpoint("ck1") is None
+
+    store.save_gepa_checkpoint("ck1", b"STATE-A", iteration=3)
+    assert store.has_gepa_checkpoint("ck1") is True
+    cp = store.get_gepa_checkpoint("ck1")
+    assert cp is not None
+    assert cp.data == b"STATE-A"
+    assert cp.iteration == 3
+    assert cp.stored_bytes == 7
+
+    store.save_gepa_checkpoint("ck1", b"STATE-B-longer", iteration=9)
+    cp = store.get_gepa_checkpoint("ck1")
+    assert cp.data == b"STATE-B-longer"
+    assert cp.iteration == 9
+
+    store.delete_gepa_checkpoint("ck1")
+    assert store.has_gepa_checkpoint("ck1") is False
+    store.delete_gepa_checkpoint("ck1")  # idempotent no-op
+
+
+def test_delete_job_removes_its_checkpoint(store: SQLiteJobStore) -> None:
+    """Deleting a job drops its checkpoint row too (no orphaned bytes)."""
+    store.create_job("ck2")
+    store.save_gepa_checkpoint("ck2", b"STATE", iteration=1)
+    store.delete_job("ck2")
+    assert store.has_gepa_checkpoint("ck2") is False
+
+
+def test_requeue_for_resume_flips_to_pending_and_bumps_attempts(store: SQLiteJobStore) -> None:
+    """Resume re-queues in place: same id, pending, claim cleared, attempts+1."""
+    store.create_job("ck3")
+    store.update_job("ck3", status="failed", attempts=0, claimed_by="pod-x", completed_at="2026-01-01T00:00:00Z")
+
+    new_attempt = store.requeue_for_resume("ck3")
+    assert new_attempt == 1
+    job = store.get_job("ck3")
+    assert job["status"] == "pending"
+    assert job["attempts"] == 1
+    assert job.get("claimed_by") is None
+    assert job.get("completed_at") is None
+
+
+def test_requeue_for_resume_missing_job_returns_none(store: SQLiteJobStore) -> None:
+    """Re-queuing an unknown id reports ``None`` rather than raising."""
+    assert store.requeue_for_resume("no-such-job") is None
+
+
+def test_requeue_for_resume_banks_finished_leg_runtime(store: SQLiteJobStore) -> None:
+    """Each resume folds the finished leg's duration in; the paused gap is excluded."""
+    store.create_job("ck-acc")
+    store.update_job(
+        "ck-acc",
+        status="failed",
+        attempts=0,
+        started_at="2026-01-01T00:00:00Z",
+        completed_at="2026-01-01T00:01:05Z",  # leg 1 = 65s
+    )
+
+    store.requeue_for_resume("ck-acc")
+    job = store.get_job("ck-acc")
+    assert job["accumulated_runtime_seconds"] == 65.0
+    assert job.get("started_at") is None
+    assert job.get("completed_at") is None
+
+    store.update_job(
+        "ck-acc",
+        status="failed",
+        started_at="2026-01-01T00:30:00Z",  # ~29 min paused before this leg
+        completed_at="2026-01-01T00:30:30Z",  # leg 2 = 30s
+    )
+    store.requeue_for_resume("ck-acc")
+    job = store.get_job("ck-acc")
+    assert job["accumulated_runtime_seconds"] == 95.0  # 65 + 30, the pause is never counted
+
+
+def test_gepa_checkpoints_are_isolated_per_grid_pair(store: SQLiteJobStore) -> None:
+    """A grid keeps an independent checkpoint per pair index; delete-all clears them."""
+    store.create_job("g1")
+    store.save_gepa_checkpoint("g1", b"P0", iteration=1, pair_index=0)
+    store.save_gepa_checkpoint("g1", b"P1", iteration=2, pair_index=1)
+    assert {c.pair_index for c in store.list_gepa_checkpoints("g1")} == {0, 1}
+    assert store.get_gepa_checkpoint("g1", 1).data == b"P1"
+
+    store.delete_gepa_checkpoint("g1", 0)
+    assert {c.pair_index for c in store.list_gepa_checkpoints("g1")} == {1}
+    assert store.has_gepa_checkpoint("g1") is True
+
+    store.delete_all_gepa_checkpoints("g1")
+    assert store.list_gepa_checkpoints("g1") == []
+    assert store.has_gepa_checkpoint("g1") is False
+
+
+def test_grid_pair_results_roundtrip(store: SQLiteJobStore) -> None:
+    """Completed grid pairs are stored, read as ``{index: result}``, and cleared."""
+    store.create_job("g2")
+    assert store.has_grid_pair_results("g2") is False
+    store.save_grid_pair_result("g2", 0, {"pair_index": 0, "optimized_test_metric": 0.8})
+    store.save_grid_pair_result("g2", 3, {"pair_index": 3})
+    assert store.has_grid_pair_results("g2") is True
+
+    results = store.get_grid_pair_results("g2")
+    assert set(results) == {0, 3}
+    assert results[0]["optimized_test_metric"] == 0.8
+
+    store.delete_grid_pair_results("g2")
+    assert store.has_grid_pair_results("g2") is False
+
+
+def test_delete_job_removes_grid_pair_results_and_pair_checkpoints(store: SQLiteJobStore) -> None:
+    """Deleting a grid job drops its per-pair checkpoints and stored pair results."""
+    store.create_job("g3")
+    store.save_gepa_checkpoint("g3", b"P0", iteration=1, pair_index=0)
+    store.save_grid_pair_result("g3", 1, {"pair_index": 1})
+    store.delete_job("g3")
+    assert store.has_gepa_checkpoint("g3") is False
+    assert store.has_grid_pair_results("g3") is False

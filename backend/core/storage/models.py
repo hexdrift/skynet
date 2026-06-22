@@ -187,6 +187,12 @@ class JobModel(Base):
     # overview), maintained at write time so the unified per-user storage total
     # is a single indexed SUM rather than a scan that re-serializes every payload.
     stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    # Running sum of every completed leg's wall-clock duration. ``requeue_for_resume``
+    # folds the finished leg in before clearing the timestamps, so elapsed reports net
+    # active compute across resumes without ever counting the paused gap between legs.
+    accumulated_runtime_seconds: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, server_default="0"
+    )
 
     __table_args__ = (
         Index("ix_jobs_status_created_at", "status", "created_at"),
@@ -234,6 +240,64 @@ class LogEntryModel(Base):
     # eviction in append_log, which otherwise scan on the single-column
     # optimization_id index and sort timestamps in memory.
     __table_args__ = (Index("ix_job_logs_optimization_timestamp", "optimization_id", "timestamp"),)
+
+
+class GepaCheckpointModel(Base):
+    """The latest GEPA optimizer state for one in-flight GEPA run.
+
+    Holds the pickled ``gepa_state.bin`` the GEPA engine writes at every
+    iteration, so a run that dies mid-optimization (provider timeout, stalled
+    worker, pod crash, user cancel) can be resumed from its last completed
+    iteration rather than restarting and re-spending the whole budget. Keyed by
+    ``(optimization_id, pair_index)``: a single run uses the sentinel
+    ``pair_index = -1`` (one row), while a grid search keeps one row per
+    in-flight model pair (``pair_index`` 0..N-1) — each pair is its own GEPA run.
+    A row is replaced in place on each iteration and deleted once that run/pair
+    succeeds, so its ``stored_bytes`` (the blob length, folded into the owner's
+    "optimizations" footprint) only counts while a resumable failure is pending.
+    Deleted with its parent job via the cascading foreign key. Postgres stores
+    ``data`` as BYTEA; the per-row whole-blob read/write is the only access
+    pattern, so it lives apart from the hot ``jobs`` table.
+    """
+
+    __tablename__ = "gepa_checkpoints"
+
+    optimization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("jobs.optimization_id", ondelete="CASCADE"), primary_key=True
+    )
+    pair_index: Mapped[int] = mapped_column(Integer, primary_key=True, default=-1)
+    iteration: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class GridPairResultModel(Base):
+    """One completed grid-search pair's result, persisted so resume can skip it.
+
+    A grid search runs one GEPA optimization per model pair and keeps no partial
+    results until the whole sweep finishes — so an interrupted grid would
+    otherwise re-run every pair. Persisting each pair's :class:`PairResult` as it
+    completes lets a resumed grid keep the finished pairs (``pair_index`` →
+    result) and re-run only the rest. Keyed by ``(optimization_id, pair_index)``;
+    ``stored_bytes`` folds into the owner's "optimizations" footprint and the
+    rows are dropped once the grid succeeds (or with the parent job via the
+    cascading foreign key).
+    """
+
+    __tablename__ = "grid_pair_results"
+
+    optimization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("jobs.optimization_id", ondelete="CASCADE"), primary_key=True
+    )
+    pair_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON_STORE, nullable=False)
+    stored_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class UserQuotaOverrideModel(Base):

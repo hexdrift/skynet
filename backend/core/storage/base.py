@@ -35,6 +35,7 @@ class JobRecord(TypedDict, total=False):
     progress_count: int
     log_count: int
     stored_bytes: int
+    accumulated_runtime_seconds: float
 
 
 class ProgressEventRecord(TypedDict):

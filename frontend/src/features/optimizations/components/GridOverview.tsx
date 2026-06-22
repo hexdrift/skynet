@@ -6,6 +6,8 @@ import {
   Crown,
   Gauge,
   Loader2,
+  Play,
+  RotateCcw,
   Trash2,
   Trophy,
   X,
@@ -35,7 +37,7 @@ import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/mot
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationStatusResponse, PairResult } from "@/shared/types/api";
 import { formatPercent } from "@/shared/lib";
-import { deleteGridPair } from "@/shared/lib/api";
+import { deleteGridPair, restartGridPair, resumeGridPair } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { computePairScores } from "../lib/pair-scores";
@@ -60,6 +62,7 @@ function GridOverviewImpl({
 }) {
   const [pendingDelete, setPendingDelete] = useState<PairResult | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [rerunningPair, setRerunningPair] = useState<number | null>(null);
   const [pairFilter, setPairFilter] = useState<number | null>(null);
   const [hiddenPairSeries, setHiddenPairSeries] = useState<Set<string>>(new Set());
   const [hiddenCombinedSeries, setHiddenCombinedSeries] = useState<Set<string>>(new Set());
@@ -104,6 +107,24 @@ function GridOverviewImpl({
       toast.error(err instanceof Error ? err.message : msg("optimization.delete.failed"));
     } finally {
       setDeleting(false);
+    }
+  };
+  const handlePairRerun = async (pairIndex: number, resume: boolean) => {
+    setRerunningPair(pairIndex);
+    try {
+      if (resume) await resumeGridPair(job.optimization_id, pairIndex);
+      else await restartGridPair(job.optimization_id, pairIndex);
+      toast.success(msg(resume ? "optimization.pair.resume.success" : "optimization.pair.restart.success"));
+      // The grid re-enters running in place — the parent's poll picks up the change.
+      window.dispatchEvent(new Event("optimizations-changed"));
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : msg(resume ? "optimization.pair.resume.failed" : "optimization.pair.restart.failed"),
+      );
+    } finally {
+      setRerunningPair(null);
     }
   };
   const gridResult = job.grid_result;
@@ -809,6 +830,10 @@ function GridOverviewImpl({
           const isSpeed = scoring.speedWinner === pr.pair_index;
           const s = scoring.byIndex[pr.pair_index];
           const barRatio = s?.quality ?? 0;
+          // A failed pair offers Resume if it crashed mid-run (has a checkpoint),
+          // else Restart — one-to-one with a single run.
+          const pairResumable = job.grid_resumable_pairs?.includes(pr.pair_index) ?? false;
+          const rerunBusy = rerunningPair === pr.pair_index;
           return (
             <div
               key={pr.pair_index}
@@ -878,6 +903,36 @@ function GridOverviewImpl({
                   >
                     {pr.error}
                   </span>
+                )}
+
+                {pr.error && (
+                  <TooltipButton
+                    tooltip={msg(
+                      pairResumable
+                        ? "optimization.pair.resume_tooltip"
+                        : "optimization.pair.restart_tooltip",
+                    )}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-muted-foreground/50 hover:text-foreground shrink-0"
+                      disabled={rerunBusy}
+                      aria-label={msg(
+                        pairResumable ? "optimization.pair.resume" : "optimization.pair.restart",
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handlePairRerun(pr.pair_index, pairResumable);
+                      }}
+                    >
+                      {pairResumable ? (
+                        <Play className={`size-3.5 -scale-x-100${rerunBusy ? " animate-spin" : ""}`} />
+                      ) : (
+                        <RotateCcw className={`size-3.5${rerunBusy ? " animate-spin" : ""}`} />
+                      )}
+                    </Button>
+                  </TooltipButton>
                 )}
 
                 <TooltipButton

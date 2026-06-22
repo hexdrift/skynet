@@ -21,6 +21,7 @@ import {
   CopyPlus,
   Database,
   RotateCcw,
+  Play,
 } from "lucide-react";
 import { SidebarMoreSkeleton } from "./SidebarMoreSkeleton";
 import { cn } from "@/shared/lib/utils";
@@ -40,6 +41,7 @@ import {
   renameOptimization,
   togglePinOptimization,
   retryJob,
+  resumeJob,
 } from "@/shared/lib/api";
 import type { SidebarJobItem } from "@/shared/lib/api";
 import { isActiveStatus } from "@/shared/constants/job-status";
@@ -635,6 +637,20 @@ function JobRow({
     }
   };
 
+  const handleResume = async () => {
+    setMenuOpen(false);
+    try {
+      await resumeJob(job.optimization_id);
+      toast.success(msg("sidebar.resume.success"));
+      // Resume continues the same run in place — refresh the list rather than
+      // navigating to a new id.
+      window.dispatchEvent(new Event("optimizations-changed"));
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : msg("sidebar.resume.failed"));
+    }
+  };
+
   // Enter triggers handleRename, then setRenaming(false) blurs the input,
   // which fires onBlur → handleRename again. Guard against the double-fire.
   const renameSubmittedRef = React.useRef(false);
@@ -895,17 +911,29 @@ function JobRow({
               {msg("auto.features.sidebar.components.sidebar.9")}
             </button>
 
-            {canEdit && (job.status === "failed" || job.status === "cancelled") && (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={handleRetry}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
-              >
-                <RotateCcw className="size-3.5 text-muted-foreground" />
-                {msg("sidebar.rerun")}
-              </button>
-            )}
+            {canEdit &&
+              (job.status === "failed" || job.status === "cancelled") &&
+              (job.resumable ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleResume}
+                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+                >
+                  <Play className="size-3.5 -scale-x-100 text-muted-foreground" />
+                  {msg("sidebar.resume")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleRetry}
+                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.6875rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="size-3.5 text-muted-foreground" />
+                  {msg("sidebar.rerun")}
+                </button>
+              ))}
 
             {canEdit && (
               <>
