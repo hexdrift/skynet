@@ -726,7 +726,7 @@
   <p data-deploy="k8s">Skynet runs as two pods (frontend + backend) plus an in-cluster migration Job, fronted by the OpenShift router. Every external dependency below resolves inside the air gap — your job is to point the chart at the right internal hosts.</p>
   <p data-deploy="compose">Skynet runs as a backend API container plus a bundled <code>pgvector</code> Postgres on a single host via Docker Compose — the fastest way to stand the app up inside the air gap. Every external dependency below still resolves internally; you point the backend's <code>.env</code> at the right internal hosts instead of a Helm values file. Start at <a href="#compose">Single-Host (Docker Compose)</a>.</p>
 
-  <figure class="arch">
+  <figure class="arch" data-deploy="k8s">
     <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
       <title id="arch-title">Skynet air-gap architecture</title>
       <desc id="arch-desc">Cluster workloads connect to internal identity, database, model, notification, package registry, and certificate services.</desc>
@@ -829,6 +829,101 @@
       </g>
     </svg>
     <figcaption>Solid arrows are required at runtime. Dashed arrows are optional runtime integrations. Amber dotted arrows are install-time or trust-bundle setup.</figcaption>
+  </figure>
+
+  <figure class="arch" data-deploy="compose">
+    <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title-c arch-desc-c">
+      <title id="arch-title-c">Skynet single-host (Docker Compose) architecture</title>
+      <desc id="arch-desc-c">A Docker Compose host runs the backend and a bundled pgvector Postgres, connecting to internal model, directory, notification, package-mirror, and certificate services.</desc>
+      <defs>
+        <marker id="arch-arrow-required-c" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#3d2e22"/>
+        </marker>
+        <marker id="arch-arrow-optional-c" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#8c7a6b"/>
+        </marker>
+        <marker id="arch-arrow-deploy-c" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#9a6a10"/>
+        </marker>
+        <style>
+          /* Self-contained: marker-referencing edge classes are -c suffixed so
+             they never override the k8s figure's arrows (and vice-versa). The
+             non-marker classes are identical to the k8s figure's — harmless to
+             redefine, and robust whichever figure is hidden. */
+          .zone { fill: rgba(240, 235, 228, 0.34); stroke: #ddd6cc; stroke-width: 1.1; }
+          .zone-title { font: 700 10px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #7c6350; letter-spacing: 0.08em; }
+          .node { fill: #fffdf9; stroke: #c8b9a8; stroke-width: 1.1; }
+          .node-core { stroke: #3d2e22; stroke-width: 1.35; }
+          .node-int { fill: #f5f1ec; }
+          .node-opt { stroke-dasharray: 4 3; }
+          .node-title { font: 700 12px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
+          .node-sub { font: 11px "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
+          .lane { stroke-linecap: round; stroke-linejoin: round; fill: none; }
+          .edge-required-c { stroke: #3d2e22; stroke-width: 1.35; marker-end: url(#arch-arrow-required-c); }
+          .edge-optional-c { stroke: #8c7a6b; stroke-width: 1.15; stroke-dasharray: 4 4; marker-end: url(#arch-arrow-optional-c); }
+          .edge-deploy-c { stroke: #9a6a10; stroke-width: 1.15; stroke-dasharray: 2 4; marker-end: url(#arch-arrow-deploy-c); }
+          .legend-label { font: 600 10.5px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
+        </style>
+      </defs>
+
+      <rect class="zone" x="16" y="38" width="330" height="300" rx="10"/>
+      <text x="32" y="62" class="zone-title">DOCKER COMPOSE HOST</text>
+
+      <rect class="node node-core" x="48" y="84" width="124" height="58" rx="7"/>
+      <text x="110" y="108" class="node-title" text-anchor="middle">Backend</text>
+      <text x="110" y="125" class="node-sub" text-anchor="middle">api · FastAPI · workers</text>
+
+      <rect class="node" x="196" y="84" width="124" height="58" rx="7"/>
+      <text x="258" y="108" class="node-title" text-anchor="middle">Postgres</text>
+      <text x="258" y="125" class="node-sub" text-anchor="middle">db · pgvector (bundled)</text>
+
+      <rect class="node node-opt" x="48" y="176" width="124" height="52" rx="7"/>
+      <text x="110" y="198" class="node-title" text-anchor="middle">Reverse proxy</text>
+      <text x="110" y="215" class="node-sub" text-anchor="middle">BYO TLS → :8000</text>
+
+      <rect class="node" x="48" y="262" width="272" height="52" rx="7"/>
+      <text x="184" y="284" class="node-title" text-anchor="middle">docker compose · .env</text>
+      <text x="184" y="301" class="node-sub" text-anchor="middle">backend/docker-compose.yml</text>
+
+      <rect class="zone" x="414" y="38" width="330" height="300" rx="10"/>
+      <text x="430" y="62" class="zone-title">INTERNAL DEPENDENCIES</text>
+
+      <path class="lane edge-required-c" d="M172 113 L196 113"/>
+      <path class="lane edge-required-c" d="M172 102 C330 70 470 82 594 104"/>
+      <path class="lane edge-optional-c" d="M172 124 C290 150 360 186 438 186"/>
+      <path class="lane edge-optional-c" d="M172 134 C320 235 480 222 594 192"/>
+      <path class="lane edge-deploy-c" d="M320 286 C440 278 510 266 594 262"/>
+      <path class="lane edge-deploy-c" d="M320 300 C360 305 400 309 438 309"/>
+
+      <rect class="node node-int" x="594" y="84" width="124" height="50" rx="7"/>
+      <text x="656" y="105" class="node-title" text-anchor="middle">LLM Gateway</text>
+      <text x="656" y="121" class="node-sub" text-anchor="middle">chat + embeddings</text>
+
+      <rect class="node node-int node-opt" x="438" y="162" width="124" height="50" rx="7"/>
+      <text x="500" y="183" class="node-title" text-anchor="middle">Notifications</text>
+      <text x="500" y="199" class="node-sub" text-anchor="middle">email (SMTP)</text>
+
+      <rect class="node node-int node-opt" x="594" y="162" width="124" height="50" rx="7"/>
+      <text x="656" y="183" class="node-title" text-anchor="middle">AD / LDAP</text>
+      <text x="656" y="199" class="node-sub" text-anchor="middle">user search</text>
+
+      <rect class="node node-int" x="594" y="240" width="124" height="50" rx="7"/>
+      <text x="656" y="261" class="node-title" text-anchor="middle">Internal mirrors</text>
+      <text x="656" y="277" class="node-sub" text-anchor="middle">images · pip · deb</text>
+
+      <rect class="node node-int" x="438" y="294" width="280" height="32" rx="7"/>
+      <text x="578" y="314" class="node-title" text-anchor="middle">Internal CA bundle · SSL_CERT_FILE</text>
+
+      <g transform="translate(380 358)">
+        <path class="lane edge-required-c" d="M-240 0 L-208 0"/>
+        <text x="-198" y="4" class="legend-label">required runtime</text>
+        <path class="lane edge-optional-c" d="M-65 0 L-33 0"/>
+        <text x="-23" y="4" class="legend-label">optional runtime</text>
+        <path class="lane edge-deploy-c" d="M110 0 L142 0"/>
+        <text x="152" y="4" class="legend-label">build / trust setup</text>
+      </g>
+    </svg>
+    <figcaption>Single host: <code>docker compose</code> runs the backend and a bundled <code>pgvector</code> Postgres. Solid arrows are required at runtime, dashed are optional integrations, amber dotted are build-time / trust-bundle setup. The Next.js frontend and SSO are a separate concern.</figcaption>
   </figure>
 </section>
 
