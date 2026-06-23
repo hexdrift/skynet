@@ -49,8 +49,8 @@ def fresh_program_for_bundle(
     mcp_tools: list[dspy.Tool],
     *,
     seed_signature: type[dspy.Signature],
-) -> dspy.ReActV2:
-    """Build a fresh ``ReActV2`` whose tool roster matches the bundle.
+) -> dspy.Module:
+    """Build a fresh ReAct program whose tool roster matches the bundle.
 
     Drift detection compares only the intersection of the bundle's
     recorded tools and the live phased roster. A live MCP turn may
@@ -73,7 +73,7 @@ def fresh_program_for_bundle(
             of re-importing it here.
 
     Returns:
-        A configured ``ReActV2`` ready to be ``dspy.streamify``-wrapped.
+        A configured ReAct program ready to be ``dspy.streamify``-wrapped.
 
     Raises:
         ToolSchemaDriftError: when a tool present in both the bundle and

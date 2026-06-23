@@ -64,6 +64,7 @@ from ...registry import (
 )
 from ...worker.log_handler import set_current_pair_index
 from ..language_models import apply_model_reasoning_config, build_language_model
+from ..react_compat import REACT_CLASS
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .artifacts import persist_program
 from .data import (
@@ -1141,7 +1142,7 @@ class DspyService:
             The persisted :class:`ProgramArtifact` with ``react_overlay`` set,
             or ``None`` when persistence produced no artifact.
         """
-        program = dspy.ReActV2(
+        program = REACT_CLASS(
             signature_cls, tools=tools, max_iters=overlay["max_iters"]
         )
         program.load_state(program_state)

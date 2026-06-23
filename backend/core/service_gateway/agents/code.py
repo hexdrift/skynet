@@ -38,6 +38,7 @@ from ...config import settings
 from ...exceptions import ServiceError
 from ...models import ModelConfig
 from ..language_models import build_language_model
+from ..react_compat import REACT_CLASS, react_uses_submit
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .constants import REASONING_FIELD
 
@@ -760,6 +761,78 @@ class ReasoningStreamListener(dspy.streaming.StreamListener):
         return
 
 
+class ReactReplyStream:
+    """Bridge the V2-vs-classic difference in how a ReAct program streams its reply.
+
+    ReActV2 carries the reply as a ``submit`` tool-call argument streamed on the
+    inner ``react`` predictor's ``tool_calls`` field; classic ReAct (DSPy 3.2.x)
+    streams the reply field straight off its separate ``extract`` predictor. This
+    bridges both so the agent loops stay identical: build ``listeners()`` once,
+    then feed every non-reasoning ``StreamResponse`` through ``reply_delta``.
+    """
+
+    def __init__(self, program: dspy.Module, reply_field: str):
+        """Bind to a constructed ReAct program and the signature's reply field.
+
+        Args:
+            program: The constructed ReAct/ReActV2 program (or subclass).
+            reply_field: Output field carrying the user-visible reply — a
+                ``submit`` arg on ReActV2, an ``extract`` output on classic ReAct.
+        """
+        self._program = program
+        self._reply_field = reply_field
+        self._uses_submit = react_uses_submit(program)
+        self._stream_field = "tool_calls" if self._uses_submit else reply_field
+        self._extractor = _SubmitArgExtractor(reply_field) if self._uses_submit else None
+
+    def listeners(self) -> list[dspy.streaming.StreamListener]:
+        """Return the reply + reasoning stream listeners for this program.
+
+        Returns:
+            On ReActV2: a ``tool_calls`` listener bound to the reused inner
+            predictor. On classic ReAct: a listener that auto-resolves the reply
+            field onto the ``extract`` predictor (the only one declaring it).
+            Both carry the same reasoning listener on the loop predictor.
+        """
+        if self._uses_submit:
+            reply_listener = dspy.streaming.StreamListener(
+                signature_field_name="tool_calls",
+                predict=self._program.react,
+                allow_reuse=True,
+            )
+        else:
+            reply_listener = dspy.streaming.StreamListener(
+                signature_field_name=self._reply_field
+            )
+        return [
+            reply_listener,
+            ReasoningStreamListener(predict=self._program.react, allow_reuse=True),
+        ]
+
+    def reply_delta(self, chunk: dspy.streaming.StreamResponse) -> str | None:
+        """Return the newly streamed reply text from a chunk, or ``None``.
+
+        On ReActV2 the chunk is partial ``submit`` JSON decoded incrementally;
+        on classic ReAct the chunk is already the field delta. Chunks for any
+        field other than the reply stream return ``None``.
+
+        Args:
+            chunk: A non-reasoning ``StreamResponse`` from the wrapped program.
+
+        Returns:
+            The new reply substring since the last call, or ``None`` when this
+            chunk carries no fresh reply content.
+        """
+        if chunk.signature_field_name != self._stream_field:
+            return None
+        if self._extractor is not None:
+            delta = self._extractor.feed(chunk.chunk)
+            if chunk.is_last_chunk:
+                self._extractor.reset()
+            return delta
+        return chunk.chunk or None
+
+
 def _build_agent_lm() -> dspy.LM:
     """Construct the LM used by the code agent from global settings.
 
@@ -1366,25 +1439,18 @@ async def _run_agent(
     # first edit fails validation: (1) edit fails → (2) edit succeeds →
     # submit carries reply. max_iters=3 covers the worst case without
     # room to run away.
-    react = dspy.ReActV2(
+    react = REACT_CLASS(
         CodeAssistant,
         tools=[session.edit_signature, session.edit_metric],
         max_iters=3,
     )
-    # ReActV2 has a single inner predict (``react.react``). It emits both
-    # reasoning and tool_calls per loop iteration; the user's ``reply`` is
-    # an argument of the internal ``submit`` tool, so we listen on
-    # ``tool_calls`` and stitch the message back together via
-    # ``_SubmitArgExtractor``. ``allow_reuse=True`` is mandatory because
-    # the predict fires once per loop step.
+    # The user's ``reply`` rides a ``submit`` tool call on ReActV2 or a separate
+    # ``extract`` predictor on classic ReAct; ``ReactReplyStream`` wires the right
+    # listeners and decodes whichever shape into reply deltas.
+    reply_stream = ReactReplyStream(react, "reply")
     program = dspy.streamify(
         react,
-        stream_listeners=[
-            dspy.streaming.StreamListener(
-                signature_field_name="tool_calls", predict=react.react, allow_reuse=True
-            ),
-            ReasoningStreamListener(predict=react.react, allow_reuse=True),
-        ],
+        stream_listeners=reply_stream.listeners(),
         async_streaming=True,
     )
 
@@ -1404,19 +1470,16 @@ async def _run_agent(
     }
 
     reply_text = ""
-    reply_extractor = _SubmitArgExtractor("reply")
     with dspy.context(lm=lm):
         async for chunk in program(**inputs):
             if isinstance(chunk, dspy.streaming.StreamResponse):
                 if chunk.signature_field_name == REASONING_FIELD:
                     await queue.put({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                elif chunk.signature_field_name == "tool_calls":
-                    delta = reply_extractor.feed(chunk.chunk)
+                else:
+                    delta = reply_stream.reply_delta(chunk)
                     if delta:
                         reply_text += delta
                         await queue.put({"event": "message_patch", "data": {"chunk": delta}})
-                    if chunk.is_last_chunk:
-                        reply_extractor.reset()
             elif isinstance(chunk, dspy.Prediction):
                 final = getattr(chunk, "reply", "") or ""
                 if final and final != reply_text:

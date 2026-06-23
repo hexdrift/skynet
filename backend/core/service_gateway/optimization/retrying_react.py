@@ -29,6 +29,8 @@ import logging
 import dspy
 from dspy.utils.exceptions import AdapterParseError
 
+from ..react_compat import REACT_CLASS
+
 logger = logging.getLogger(__name__)
 
 PARSE_RETRY_ATTEMPTS = 2
@@ -113,8 +115,14 @@ class RetryingPredict(dspy.Predict):
         return {**kwargs, "config": config}
 
 
-class RetryingReActV2(dspy.ReActV2):
-    """``dspy.ReActV2`` whose inner predictor resamples on parse failures."""
+class RetryingReActV2(REACT_CLASS):
+    """A ReAct program whose inner ``react`` predictor resamples on parse failures.
+
+    Subclasses whichever base the installed DSPy provides — ``ReActV2`` on 3.3+
+    or classic ``ReAct`` on 3.2.x. Both expose the same ``react`` loop predictor,
+    so the resample swap is identical across versions; classic ReAct's extra
+    ``extract`` predictor is left untouched (parse failures only strike the loop).
+    """
 
     def __init__(
         self,
@@ -124,16 +132,16 @@ class RetryingReActV2(dspy.ReActV2):
         *,
         parse_retries: int = PARSE_RETRY_ATTEMPTS,
     ):
-        """Build a stock ReActV2 then swap its inner predictor for a retrying one.
+        """Build a stock ReAct program then swap its inner predictor for a retrying one.
 
         The replacement keeps the SAME signature, so GEPA's named-predictor
         optimization and the ``load_state`` round-trip still see a plain
         ``react`` predictor — only its turn call gains the resample wrapper.
 
         Args:
-            signature: Task signature, as for ``dspy.ReActV2``.
-            tools: Tool roster, as for ``dspy.ReActV2``.
-            max_iters: Loop budget, as for ``dspy.ReActV2``.
+            signature: Task signature, as for the base ReAct program.
+            tools: Tool roster, as for the base ReAct program.
+            max_iters: Loop budget, as for the base ReAct program.
             parse_retries: Extra resample attempts per inner-predict call.
         """
         super().__init__(signature, tools, max_iters=max_iters)

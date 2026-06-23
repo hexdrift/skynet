@@ -19,9 +19,10 @@ from gepa.adapters.dspy_adapter.dspy_adapter import TOOL_MODULE_PREFIX
 
 logger = logging.getLogger(__name__)
 
-SUBMIT_TOOL_NAME = "submit"
-"""The terminal tool ReActV2 appends to every roster — excluded from the
-optimizable tool surface because it carries no user-tunable description."""
+TERMINAL_TOOL_NAMES = frozenset({"submit", "finish"})
+"""The synthetic loop-exit tool the program appends to every roster — ``submit``
+on ReActV2, ``finish`` on classic ReAct. Excluded from the optimizable tool
+surface because it carries no user-tunable description."""
 
 
 TOOL_MODULE_KEY = f"{TOOL_MODULE_PREFIX}:react"
@@ -61,7 +62,7 @@ def seed_candidate_from_program(program: dspy.Module) -> dict[str, str]:
     instructions = _extract_react_instructions(program)
     tools_payload: dict[str, dict[str, Any]] = {}
     for name, tool in _collect_tools(program).items():
-        if name == SUBMIT_TOOL_NAME:
+        if name in TERMINAL_TOOL_NAMES:
             continue
         tools_payload[name] = {
             "name": name,
