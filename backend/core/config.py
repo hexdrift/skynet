@@ -354,10 +354,12 @@ class Settings(BaseSettings):
         ),
     )
     embeddings_enabled: bool = Field(
-        default=True,
+        default=False,
         description=(
-            "Master switch for the explore search embedding pipeline. "
-            "Off = no rows are written to job_embeddings and explore falls back to lexical search."
+            "Master switch for the explore search embedding (semantic) pipeline. "
+            "Default off: explore search runs lexically and no rows are written to "
+            "job_embeddings, so the default deployment needs no embedding gateway. "
+            "Set true (plus EMBEDDINGS_BASE_URL/MODEL) to enable semantic search."
         ),
     )
 

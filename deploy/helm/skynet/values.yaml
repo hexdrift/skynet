@@ -83,7 +83,10 @@ backend:
     # during staged rollouts.
     REQUIRE_CODE_VERSION: "true"
     ALLOWED_ORIGINS: ""
-    EMBEDDINGS_ENABLED: "true"
+    # Default OFF: explore search runs lexically and the deployment needs no
+    # embedding gateway. Set "true" + EMBEDDINGS_BASE_URL/MODEL to turn on
+    # semantic (vector) search.
+    EMBEDDINGS_ENABLED: "false"
     EMBEDDINGS_BASE_URL: ""
     EMBEDDINGS_MODEL: "jina-embeddings-v4"
     # air-gap — use the bundled litellm cost map instead of fetching from GitHub on import.
