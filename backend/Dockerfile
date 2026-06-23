@@ -15,25 +15,26 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml requirements.txt ./
 
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
-# Lockfile-pinned install via uv: every build resolves to the exact wheel
-# set captured in uv.lock, which `pip install -e .` cannot guarantee.
-# uv itself comes from the same internal PyPI mirror, so air-gap operators
-# only need their existing PIP_INDEX_URL / PIP_TRUSTED_HOST args.
+# Pinned install: requirements.txt captures the exact transitive wheel set, so
+# every build resolves identically — the lockfile-equivalent guarantee. Kept in
+# its own layer (before the source copy) so it caches until deps actually change.
 RUN pip install --no-cache-dir \
         ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
         ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
-        uv \
-    && UV_INDEX_URL=${PIP_INDEX_URL:-} \
-       UV_PYTHON_DOWNLOADS=never \
-       uv sync --frozen --no-install-project
+        -r requirements.txt
 
 COPY . .
 
-RUN UV_PYTHON_DOWNLOADS=never uv sync --frozen
+# Install the project itself editable, without re-resolving — every dependency
+# is already pinned and present from the requirements.txt layer above.
+RUN pip install --no-cache-dir --no-deps \
+        ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
+        ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
+        -e .
 
 ARG GIT_SHA=unknown
 
@@ -47,7 +48,6 @@ RUN groupadd -g 1001 appuser 2>/dev/null || true \
 
 USER 1001
 
-ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV WORKER_CONCURRENCY=4
 ENV WORKER_POLL_INTERVAL=2.0

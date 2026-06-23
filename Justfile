@@ -5,23 +5,28 @@
 default:
     @just --list
 
+# Install backend deps (runtime + dev tools) into the active Python/venv.
+# Run once before backend/test/lint recipes; activate a venv first.
+install:
+    cd backend && pip install -e ".[dev]"
+
 backend:
-    cd backend && uv run python main.py
+    cd backend && python main.py
 
 frontend:
     cd frontend && npm run dev
 
 # Start both (backend in background, frontend in foreground)
 dev:
-    cd backend && uv run python main.py &
+    cd backend && python main.py &
     cd frontend && npm run dev
 
 test-unit:
-    cd backend && uv run --extra dev pytest core/ tests/unit/ -v
+    cd backend && pytest core/ tests/unit/ -v
 
 # Requires running server + OPENAI_API_KEY
 test-integration:
-    cd backend && uv run --extra dev pytest tests/test_llm_integration.py -v
+    cd backend && pytest tests/test_llm_integration.py -v
 
 # Frontend type check via build
 test-frontend:
@@ -30,7 +35,7 @@ test-frontend:
 test: test-unit test-frontend
 
 lint-backend:
-    cd backend && uv run ruff check .
+    cd backend && ruff check .
 
 lint-frontend:
     cd frontend && npm run lint
@@ -38,10 +43,10 @@ lint-frontend:
 lint: lint-backend lint-frontend
 
 format:
-    cd backend && uv run ruff format .
+    cd backend && ruff format .
 
 fix:
-    cd backend && uv run ruff check --fix .
+    cd backend && ruff check --fix .
 
 # Verify the generated i18n artefacts are in sync with i18n/locales/he.json.
 # Delegates to the script's built-in --check mode (renders artefacts in

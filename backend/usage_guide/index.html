@@ -243,7 +243,7 @@ pip install -e .</pre>
   <p>For self-hosted gateways (vLLM, Ollama, internal proxies), set <code>DSPY_LM_BASE_URL</code> to the gateway URL and <code>LM_API_KEY</code> to whatever token the gateway expects (any non-empty string works for endpoints that don't authenticate per-user).</p>
 
   <h3>Air-Gap / On-Prem Install</h3>
-  <p>The notebooks have no <code>!pip install</code> magics — install once via the local <code>pyproject.toml</code>. To resolve packages from an internal Artifactory mirror instead of public PyPI, see the snippet at the top of <code>pyproject.toml</code> (pip.conf, <code>PIP_INDEX_URL</code>, or a <code>[[tool.uv.index]]</code> block).</p>
+  <p>The notebooks have no <code>!pip install</code> magics — install once via the local <code>pyproject.toml</code>. To resolve packages from an internal Artifactory mirror instead of public PyPI, see the snippet at the top of <code>pyproject.toml</code> (pip.conf or <code>PIP_INDEX_URL</code>).</p>
 </section>
 
 <section>

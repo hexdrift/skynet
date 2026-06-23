@@ -274,7 +274,7 @@ function Invoke-Check {
         @{ Path = (Join-Path $RootDir 'backend\Dockerfile');           Type = 'File'; Label = 'backend/Dockerfile' },
         @{ Path = (Join-Path $RootDir 'frontend\Dockerfile');          Type = 'File'; Label = 'frontend/Dockerfile' },
         @{ Path = (Join-Path $RootDir 'frontend\package-lock.json');   Type = 'File'; Label = 'frontend/package-lock.json' },
-        @{ Path = (Join-Path $RootDir 'backend\uv.lock');              Type = 'File'; Label = 'backend/uv.lock' },
+        @{ Path = (Join-Path $RootDir 'backend\requirements.txt');     Type = 'File'; Label = 'backend/requirements.txt' },
         @{ Path = (Join-Path $RootDir 'backend\alembic\versions');     Type = 'Container'; Label = 'backend/alembic/versions' }
     )
     foreach ($r in $required) {
@@ -341,9 +341,6 @@ function Invoke-ValidateMigrations {
         exit 1
     }
 
-    $hasUv      = [bool](Get-Command uv -ErrorAction SilentlyContinue)
-    $hasAlembic = [bool](Get-Command alembic -ErrorAction SilentlyContinue)
-
     Push-Location $backendDir
     try {
         # env.py reads REMOTE_DB_URL but `--sql` only needs the dialect, so
@@ -353,45 +350,34 @@ function Invoke-ValidateMigrations {
         $previousDbUrl = $env:REMOTE_DB_URL
         $env:REMOTE_DB_URL = $dbUrl
         try {
-            if ($hasUv) {
-                # Materialize the lockfile-pinned env first. Without this we
-                # fall through to whatever 'alembic' the system Python happens
-                # to expose, which is how validate-migrations silently produced
-                # an empty SQL file from a stale .venv. UV_PYTHON_DOWNLOADS=never
-                # mirrors backend/Dockerfile so uv never reaches out to download
-                # a Python build; if UV_INDEX_URL is set we pass it through so an
-                # internal PyPI mirror satisfies the sync with no internet.
-                $previousUvDownloads = $env:UV_PYTHON_DOWNLOADS
-                $env:UV_PYTHON_DOWNLOADS = 'never'
-                try {
-                    & uv sync --frozen --quiet
-                }
-                finally {
-                    $env:UV_PYTHON_DOWNLOADS = $previousUvDownloads
-                }
+            # Confirm the migration deps are importable up front so we fail
+            # loudly here instead of writing a truncated migration.sql from
+            # whatever 'alembic' the system Python happens to expose.
+            # alembic/env.py never imports ldap3, so we do not require it —
+            # demanding it wrongly rejects otherwise-capable hosts.
+            & python -c 'import alembic, sqlalchemy, pgvector' 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                # Not importable: materialize the pinned set the same way
+                # backend/Dockerfile does. PIP_INDEX_URL / PIP_TRUSTED_HOST let
+                # an internal PyPI mirror satisfy the install with no internet.
+                $pipArgs = @('-m', 'pip', 'install', '--quiet')
+                $pipIndexUrl    = Get-OrDefault 'PIP_INDEX_URL'    ''
+                $pipTrustedHost = Get-OrDefault 'PIP_TRUSTED_HOST' ''
+                if ($pipIndexUrl)    { $pipArgs += @('--index-url', $pipIndexUrl) }
+                if ($pipTrustedHost) { $pipArgs += @('--trusted-host', $pipTrustedHost) }
+                $pipArgs += @('-r', 'requirements.txt')
+                & python @pipArgs
                 if ($LASTEXITCODE -ne 0) {
-                    Write-StdErr 'uv sync --frozen failed; resolve dep conflicts before validate-migrations'
+                    Write-StdErr 'pip install -r requirements.txt failed; resolve dep conflicts before validate-migrations'
                     exit 1
                 }
-                & uv run alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
-            }
-            elseif ($hasAlembic) {
-                # No uv: rely on the active Python. Confirm migration deps are
-                # actually importable so we fail loudly here instead of writing
-                # a truncated migration.sql. alembic/env.py never imports ldap3,
-                # so we do not require it — demanding it wrongly rejects
-                # otherwise-capable hosts.
                 & python -c 'import alembic, sqlalchemy, pgvector' 2>$null
                 if ($LASTEXITCODE -ne 0) {
-                    Write-StdErr 'alembic on PATH but backend deps missing (alembic/sqlalchemy/pgvector); install backend extras first'
+                    Write-StdErr 'backend deps still missing after pip install; aborting'
                     exit 1
                 }
-                & alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
             }
-            else {
-                Write-StdErr 'neither uv nor alembic on PATH; install one before running validate-migrations'
-                exit 1
-            }
+            & python -m alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
         }
         finally {
             $env:REMOTE_DB_URL = $previousDbUrl
