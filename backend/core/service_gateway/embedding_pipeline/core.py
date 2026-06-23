@@ -163,7 +163,7 @@ def embed_finished_job(optimization_id: str, *, job_store: Any) -> bool:
         DB error). The return value drives backfill progress logging.
     """
     if not settings.embeddings_enabled:
-        logger.info("Embedding skipped for %s: EMBEDDINGS_ENABLED is false.", optimization_id)
+        logger.info("Embedding skipped for %s: SEARCH_BACKEND is not 'semantic'.", optimization_id)
         return False
 
     embedder = get_embedder()

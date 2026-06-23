@@ -36,6 +36,7 @@ import os
 from collections.abc import Sequence
 
 from alembic import op
+from core.config import embeddings_schema_enabled
 
 revision: str = "b2c3d4e5f6a7"
 down_revision: str | None = "a1b2c3d4e5f6"
@@ -76,7 +77,11 @@ def _legacy_tz_sql() -> str:
 def upgrade() -> None:
     """Convert all datetime columns to TIMESTAMP WITH TIME ZONE."""
     legacy_tz = _legacy_tz_sql()
+    manage_embeddings = embeddings_schema_enabled()
     for table, column in _COLUMNS:
+        # job_embeddings exists only under the semantic backend; lexical/bm25 skip it.
+        if table == "job_embeddings" and not manage_embeddings:
+            continue
         op.execute(
             f'ALTER TABLE {table} '
             f'ALTER COLUMN {column} '
@@ -87,7 +92,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Revert columns back to TIMESTAMP WITHOUT TIME ZONE in UTC."""
+    manage_embeddings = embeddings_schema_enabled()
     for table, column in _COLUMNS:
+        if table == "job_embeddings" and not manage_embeddings:
+            continue
         op.execute(
             f'ALTER TABLE {table} '
             f'ALTER COLUMN {column} '

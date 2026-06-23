@@ -246,7 +246,7 @@ async def embeddings(request: Request) -> JSONResponse:
         A JSON response shaped like ``openai.CreateEmbeddingResponse`` with
         one zero-vector per input element. Backends with embeddings disabled
         will never hit this route; it is here for completeness when
-        operators flip ``EMBEDDINGS_ENABLED=true`` in a chaos run.
+        operators set ``SEARCH_BACKEND=semantic`` in a chaos run.
     """
     if _LATENCY_MS > 0:
         await asyncio.sleep(_LATENCY_MS / 1000.0)

@@ -83,7 +83,18 @@ backend:
     # during staged rollouts.
     REQUIRE_CODE_VERSION: "true"
     ALLOWED_ORIGINS: ""
-    EMBEDDINGS_ENABLED: "true"
+    # Explore search engine — also decides which Postgres extension the deploy
+    # needs. The single knob to switch search profiles:
+    #   "lexical"  (default): vanilla Postgres, no extension, ILIKE search. The
+    #              migrate Job never runs CREATE EXTENSION — the safe choice for
+    #              an air-gapped database you can't add extensions to.
+    #   "bm25":    needs the pg_search extension (ranked lexical; degrades to
+    #              ILIKE if pg_search is absent).
+    #   "semantic": needs the pgvector extension + the embedding gateway below
+    #              (vector search; the only profile whose migrate Job runs
+    #              CREATE EXTENSION vector and writes the job_embeddings schema).
+    SEARCH_BACKEND: "lexical"
+    # Only used when SEARCH_BACKEND=semantic.
     EMBEDDINGS_BASE_URL: ""
     EMBEDDINGS_MODEL: "jina-embeddings-v4"
     # air-gap — use the bundled litellm cost map instead of fetching from GitHub on import.

@@ -353,13 +353,83 @@ class Settings(BaseSettings):
             "Falls back to code_agent_model when empty."
         ),
     )
-    embeddings_enabled: bool = Field(
-        default=True,
+    search_backend: Literal["lexical", "bm25", "semantic"] = Field(
+        default="lexical",
+        alias="SEARCH_BACKEND",
         description=(
-            "Master switch for the explore search embedding pipeline. "
-            "Off = no rows are written to job_embeddings and explore falls back to lexical search."
+            "Explore search engine — the single knob that also decides which "
+            "Postgres extension (if any) the deployment requires:\n"
+            "  lexical  (default): vanilla Postgres, no extension. ILIKE substring "
+            "search. The safe choice for an air-gapped database that can't add "
+            "extensions — neither the migrate Job nor the app runs CREATE EXTENSION.\n"
+            "  bm25: requires the pg_search extension. Ranks lexical search with "
+            "BM25 relevance; degrades to ILIKE when pg_search is absent.\n"
+            "  semantic: requires the pgvector extension. Embedding (vector) "
+            "search; also enables the embedding pipeline and the job_embeddings "
+            "migration schema, so only this profile runs CREATE EXTENSION vector. "
+            "Set EMBEDDINGS_BASE_URL/MODEL alongside it.\n"
+            "Accepts the synonyms vanilla/ilike->lexical, pg_search/paradedb->bm25, "
+            "embeddings/vector/pgvector->semantic."
         ),
     )
+    # Derived from search_backend by _resolve_search_backend below — SEARCH_BACKEND
+    # is the only switch operators set. Kept as plain fields (not properties) so the
+    # test suite can patch them per-case; any EMBEDDINGS_ENABLED / SEARCH_BM25_ENABLED
+    # left in the environment is overridden by the value derived from SEARCH_BACKEND.
+    embeddings_enabled: bool = Field(default=False)
+    search_bm25_enabled: bool = Field(default=False)
+
+    @field_validator("search_backend", mode="before")
+    @classmethod
+    def _normalize_search_backend(cls, value: object) -> object:
+        """Trim, lower-case and map synonyms for SEARCH_BACKEND before validation.
+
+        Lets operators write 'vanilla' / 'pgvector' / ' BM25 ' and still land on
+        one of the canonical lexical/bm25/semantic values the Literal accepts.
+
+        Args:
+            value: Raw SEARCH_BACKEND input (string from env, or anything else).
+
+        Returns:
+            The canonical backend name when a string synonym matches, otherwise
+            the value unchanged for the Literal validator to accept or reject.
+        """
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower()
+        synonyms = {
+            "": "lexical",
+            "vanilla": "lexical",
+            "ilike": "lexical",
+            "none": "lexical",
+            "off": "lexical",
+            "pg_search": "bm25",
+            "pgsearch": "bm25",
+            "paradedb": "bm25",
+            "embeddings": "semantic",
+            "embedding": "semantic",
+            "vector": "semantic",
+            "pgvector": "semantic",
+        }
+        return synonyms.get(normalized, normalized)
+
+    @model_validator(mode="after")
+    def _resolve_search_backend(self) -> Settings:
+        """Derive the embedding / BM25 flags from the single SEARCH_BACKEND knob.
+
+        SEARCH_BACKEND is authoritative so the three profiles stay mutually
+        exclusive: ``embeddings_enabled`` (pgvector + embedding pipeline + the
+        job_embeddings migration schema) is on only for 'semantic', and
+        ``search_bm25_enabled`` (pg_search ranking) only for 'bm25'. 'lexical'
+        leaves both off, so neither the migrate Job nor the running app issues a
+        CREATE EXTENSION against a vanilla Postgres.
+
+        Returns:
+            This settings instance with the derived flags applied.
+        """
+        self.embeddings_enabled = self.search_backend == "semantic"
+        self.search_bm25_enabled = self.search_backend == "bm25"
+        return self
 
     max_jobs_per_user: int = Field(default=100, ge=1, description="Default per-user job cap")
     backend_auth_secret: SecretStr | None = Field(
@@ -527,3 +597,20 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def embeddings_schema_enabled() -> bool:
+    """Report whether migrations should manage the pgvector embedding schema.
+
+    True only for the semantic search backend. The lexical and bm25 backends run
+    on a vanilla Postgres with no pgvector extension, so the baseline and every
+    downstream embedding migration skip the ``job_embeddings`` table, its Vector
+    columns and the HNSW indexes — which is what keeps the migrate Job from
+    issuing ``CREATE EXTENSION vector`` on a database that doesn't have it. The
+    migrate Job inherits SEARCH_BACKEND from the backend ConfigMap, so this reads
+    the same value the application pods do.
+
+    Returns:
+        True when SEARCH_BACKEND selects semantic search, else False.
+    """
+    return settings.embeddings_enabled
