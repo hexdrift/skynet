@@ -23,6 +23,7 @@ INTERNAL_CA_MOUNT_DIR="${INTERNAL_CA_MOUNT_DIR:-/etc/skynet/ca}"
 LLM_BASE_URL="${LLM_BASE_URL:-https://llm-gateway.internal/v1}"
 CODE_AGENT_MODEL="${CODE_AGENT_MODEL:-gpt-5}"
 GENERALIST_AGENT_MODEL="${GENERALIST_AGENT_MODEL:-gpt-5}"
+SEARCH_BACKEND="${SEARCH_BACKEND:-lexical}"
 EMBEDDING_BASE_URL="${EMBEDDING_BASE_URL:-$LLM_BASE_URL}"
 EMBEDDING_MODEL="${EMBEDDING_MODEL:-jina-embeddings-v4}"
 OIDC_ISSUER="${OIDC_ISSUER:-https://idp.internal/realms/skynet}"
@@ -412,6 +413,11 @@ backend:
     # TODO: On-premise - set to a model id your internal gateway actually serves (gpt-5 is a placeholder). LiteLLM forwards this id verbatim to CODE_AGENT_BASE_URL.
     CODE_AGENT_MODEL: "$CODE_AGENT_MODEL"
     GENERALIST_AGENT_MODEL: "$GENERALIST_AGENT_MODEL"
+    # Explore search backend: lexical (vanilla Postgres, default) | bm25 (needs
+    # the pg_search extension) | semantic (needs pgvector + the embedding gateway
+    # below). Only "semantic" makes the migrate Job run CREATE EXTENSION vector.
+    SEARCH_BACKEND: "$SEARCH_BACKEND"
+    # Only used when SEARCH_BACKEND=semantic:
     EMBEDDINGS_BASE_URL: "$EMBEDDING_BASE_URL"
     EMBEDDINGS_MODEL: "$EMBEDDING_MODEL"
     # Air-gap: use the bundled litellm cost map; do not fetch from GitHub on import.

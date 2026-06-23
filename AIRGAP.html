@@ -812,8 +812,16 @@ Get-FileHash -Algorithm SHA256 backend-2026.04.30.tar</span></pre>
 </section>
 
 <section id="pg-prereqs">
-  <h2><a class="anchor" href="#pg-prereqs">§</a>External Postgres Prerequisites (pgvector)</h2>
-  <p>pgvector is a <strong>hard</strong> prerequisite. The squashed baseline migration runs <code>CREATE EXTENSION IF NOT EXISTS vector</code> as its first statement and creates <code>vector(512)</code> columns. If you point the chart at an external / managed Postgres (<code>postgres.enabled=false</code>), the database must satisfy both of these before install:</p>
+  <h2><a class="anchor" href="#pg-prereqs">§</a>External Postgres Prerequisites (search backend)</h2>
+  <p>Which Postgres extension — if any — the database needs is decided entirely by <code>SEARCH_BACKEND</code> in the backend env block. The pre-install migrate Job and the application pods read the same value:</p>
+  <ul>
+    <li><strong><code>SEARCH_BACKEND=lexical</code> (default) — no extension.</strong> Explore search uses <code>ILIKE</code> substring matching on a vanilla Postgres. The baseline migration <em>skips</em> <code>CREATE EXTENSION vector</code> and the <code>job_embeddings</code> vector schema, so a database with no extension privilege installs cleanly. Recommended when you can't add extensions in the air gap.</li>
+    <li><strong><code>SEARCH_BACKEND=bm25</code> — needs <code>pg_search</code>.</strong> Ranked lexical search via the ParadeDB <code>pg_search</code> extension; degrades to <code>ILIKE</code> if it's absent (best-effort, never blocks boot). Still no pgvector.</li>
+    <li><strong><code>SEARCH_BACKEND=semantic</code> — needs <code>pgvector</code>.</strong> Embedding (vector) search. Only this profile makes the baseline migration run <code>CREATE EXTENSION vector</code>, create the <code>vector(512)</code> columns and write <code>job_embeddings</code>; it also needs an internal embedding gateway (<code>EMBEDDINGS_BASE_URL</code>/<code>EMBEDDINGS_MODEL</code>).</li>
+  </ul>
+
+  <h3>Only if <code>SEARCH_BACKEND=semantic</code>: pgvector</h3>
+  <p>For the semantic profile pgvector is a <strong>hard</strong> prerequisite — the baseline migration runs <code>CREATE EXTENSION IF NOT EXISTS vector</code> and creates <code>vector(512)</code> columns. If you point the chart at an external / managed Postgres (<code>postgres.enabled=false</code>), the database must satisfy both of these before install:</p>
   <ul>
     <li>The pgvector <strong>server extension binary</strong> is installed on the database host. <code>CREATE EXTENSION</code> only <em>registers</em> an already-installed extension — it cannot install the binary. On RDS-like managed systems this means pgvector must be on the platform's extension allowlist.</li>
     <li>The migration role can run <code>CREATE EXTENSION vector</code> (a privileged operation), <strong>or</strong> a DBA has pre-created the extension and the migration role can see it.</li>
@@ -825,14 +833,14 @@ Get-FileHash -Algorithm SHA256 backend-2026.04.30.tar</span></pre>
 
   <div class="callout">
     <span class="label">TODO · On-premise</span>
-    <p>Setting <code>EMBEDDINGS_ENABLED=false</code> does <strong>not</strong> skip this — Alembic never reads that flag, so the baseline <code>CREATE EXTENSION vector</code> runs regardless. The migration runs as a <strong>pre-install hook</strong>, so a missing extension or insufficient privilege aborts the entire install before any application pod starts.</p>
+    <p>The pre-install <strong>migrate Job</strong> reads <code>SEARCH_BACKEND</code> from the same backend ConfigMap as the pods. With the default <code>lexical</code> (or <code>bm25</code>) the baseline migration skips <code>CREATE EXTENSION vector</code> entirely, so a vanilla Postgres with no extension privilege installs cleanly. Only <code>SEARCH_BACKEND=semantic</code> requires pgvector — and there, because the migration runs as a <strong>pre-install hook</strong>, a missing extension or insufficient privilege aborts the entire install before any application pod starts.</p>
   </div>
 
   <h3>Optional: <code>pg_search</code> for BM25 lexical ranking</h3>
-  <p>The default deployment runs <strong>lexical</strong> explore search (no embedding gateway needed). With the <code>pg_search</code> (ParadeDB) extension installed on this database, that search ranks results with true <strong>BM25</strong> relevance; without it, it falls back to <code>ILIKE</code> substring matching. This is <strong>optional</strong> and best-effort — at startup the backend tries to create the extension and a <code>bm25</code> index over the <code>jobs</code> corpus, and silently uses ILIKE if it can't (so a missing <code>pg_search</code> never blocks boot, unlike the <code>vector</code> requirement above). To enable BM25, install/allowlist <code>pg_search</code> on the managed Postgres and confirm:</p>
+  <p>The default deployment runs <strong>lexical</strong> explore search (no embedding gateway needed). Set <code>SEARCH_BACKEND=bm25</code> and install the <code>pg_search</code> (ParadeDB) extension on this database to rank that search with true <strong>BM25</strong> relevance; without the extension it falls back to <code>ILIKE</code> substring matching. This is <strong>best-effort</strong> — at startup the backend tries to create the extension and a <code>bm25</code> index over the <code>jobs</code> corpus, and silently uses ILIKE if it can't (so a missing <code>pg_search</code> never blocks boot, unlike the <code>vector</code> requirement above). To enable BM25, set <code>SEARCH_BACKEND=bm25</code>, install/allowlist <code>pg_search</code> on the managed Postgres, and confirm:</p>
 <pre><span class="k">CREATE EXTENSION IF NOT EXISTS</span> pg_search;
 <span class="k">SELECT</span> * <span class="k">FROM</span> pg_extension <span class="k">WHERE</span> extname = <span class="s">'pg_search'</span>;</pre>
-  <p>Backend logs show <code>BM25 lexical search enabled (pg_search)</code> when it activates. Set <code>SEARCH_BM25_ENABLED=false</code> to force ILIKE even where <code>pg_search</code> exists.</p>
+  <p>Backend logs show <code>BM25 lexical search enabled (pg_search)</code> when it activates.</p>
 </section>
 
 <section id="pre-transfer">
@@ -850,7 +858,7 @@ scripts\airgap_migrate.bat todos         <span class="c">REM every URL/secret/CI
     <li><code>backend/uv.lock</code> is present.</li>
     <li><code>backend/alembic/versions/</code> is present.</li>
     <li><code>migration.sql</code> (from <code>validate-migrations</code>) reflects the schema you expect.</li>
-    <li><em>Only if enabling semantic search</em> (<code>EMBEDDINGS_ENABLED=true</code>): your internal OpenAI-compatible embedding endpoint is ready and returns at least 512 dimensions (the <code>embeddings_dim</code> default) for <code>EMBEDDING_MODEL</code> (placeholder <code>jina-embeddings-v4</code>). The default lexical search needs no embedding endpoint.</li>
+    <li><em>Only if enabling semantic search</em> (<code>SEARCH_BACKEND=semantic</code>): your internal OpenAI-compatible embedding endpoint is ready and returns at least 512 dimensions (the <code>embeddings_dim</code> default) for <code>EMBEDDING_MODEL</code> (placeholder <code>jina-embeddings-v4</code>). The default lexical search needs no embedding endpoint.</li>
     <li>Backend, frontend, and pgvector images are available in the internal registry you will reference from Helm.</li>
     <li>If your IdP, LLM gateway, or Postgres uses a private CA, a Kubernetes Secret containing the CA bundle is ready.</li>
   </ul>
@@ -1430,7 +1438,7 @@ kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
   <ul>
     <li>Scalar API docs are vendored under <code>backend/core/api/static/scalar/</code>.</li>
     <li>Fonts are bundled through npm packages, not Google Fonts. Notification emails no longer reference Google Fonts either — they use self-hosted or system-fallback fonts only.</li>
-    <li>Explore search defaults to <strong>lexical</strong> (<code>EMBEDDINGS_ENABLED=false</code>), so the default deployment needs <strong>no embedding gateway</strong>. Semantic (vector) search is opt-in: set <code>EMBEDDINGS_ENABLED=true</code> plus an internal OpenAI-compatible <code>EMBEDDINGS_BASE_URL</code>/<code>EMBEDDINGS_MODEL</code>. No embedding model weights are bundled in the repo.</li>
+    <li>Explore search defaults to <strong>lexical</strong> (<code>SEARCH_BACKEND=lexical</code>) on a <strong>vanilla Postgres with no extensions</strong> — the migrate Job never runs <code>CREATE EXTENSION</code>, so the default deployment needs neither an embedding gateway nor pgvector. <code>SEARCH_BACKEND=bm25</code> adds ranked lexical search via <code>pg_search</code> (ILIKE fallback). <code>SEARCH_BACKEND=semantic</code> opts into vector search: it needs pgvector plus an internal OpenAI-compatible <code>EMBEDDINGS_BASE_URL</code>/<code>EMBEDDINGS_MODEL</code>. No embedding model weights are bundled in the repo.</li>
     <li>LiteLLM telemetry is disabled in backend configuration, and <code>LITELLM_LOCAL_MODEL_COST_MAP</code> pins it to its bundled cost map so it does not fetch the cost map from GitHub on import.</li>
     <li>Storage is Postgres; there is no S3/GCS/Azure Blob dependency.</li>
     <li>Auth is Credentials plus generic OIDC; no Google/GitHub OAuth provider is configured.</li>
@@ -1446,7 +1454,7 @@ kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
     <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, embedding gateway, LDAP, and DB.</li>
     <li>Backing up and restoring Postgres.</li>
     <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names. Leaving <code>CODE_AGENT_BASE_URL</code> / <code>GENERALIST_AGENT_BASE_URL</code> empty falls back to a public OpenRouter model that an air-gapped host cannot reach.</li>
-    <li>Only if you enable semantic search (<code>EMBEDDINGS_ENABLED=true</code>): choosing the internal embedding model exposed by your embedding gateway, and setting <code>EMBEDDINGS_BASE_URL</code>. With the default lexical search this gateway is not needed.</li>
+    <li>Only if you enable semantic search (<code>SEARCH_BACKEND=semantic</code>): provisioning pgvector on the database, choosing the internal embedding model exposed by your embedding gateway, and setting <code>EMBEDDINGS_BASE_URL</code>. With the default lexical search neither is needed.</li>
   </ul>
 </section>
 
