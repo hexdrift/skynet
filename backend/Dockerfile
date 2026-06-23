@@ -15,22 +15,27 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock requirements.txt ./
+COPY pyproject.toml uv.lock requirements.txt requirements.stable.txt ./
 
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
 # Dependency installer toggle. PKG_MANAGER=uv (default) installs the exact
-# uv.lock wheel set via uv; PKG_MANAGER=pip installs the equivalent pinned
-# requirements.txt with pip. Both resolve to the same set — pick whichever your
-# build pipeline standardises on:  docker build --build-arg PKG_MANAGER=pip ...
+# uv.lock wheel set via uv — always the 3.3 preview DSPy line. PKG_MANAGER=pip
+# installs a pinned requirements file; DSPY_LINE then selects which line:
+# "preview" (requirements.txt, dspy 3.3) or "stable" (requirements.stable.txt,
+# dspy 3.2.1). The agent layer bridges classic ReAct vs ReActV2, so the source
+# is identical either way — only the wheel set differs:
+#   docker build --build-arg PKG_MANAGER=pip --build-arg DSPY_LINE=stable ...
 # Either way the deps land in their own layer (before the source copy) so it
 # caches until the lockfile / requirements change.
 ARG PKG_MANAGER=uv
+ARG DSPY_LINE=preview
 RUN if [ "$PKG_MANAGER" = "pip" ]; then \
+        if [ "$DSPY_LINE" = "stable" ]; then REQ=requirements.stable.txt; else REQ=requirements.txt; fi; \
         pip install --no-cache-dir \
             ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
             ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
-            -r requirements.txt; \
+            -r "$REQ"; \
     else \
         pip install --no-cache-dir \
             ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \

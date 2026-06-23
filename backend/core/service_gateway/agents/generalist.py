@@ -50,7 +50,8 @@ from ..language_models import (
     build_language_model,
 )
 from ..optimization.training_ground.registry import hash_tool_schema
-from .code import ReasoningStreamListener, _format_agent_error, _SubmitArgExtractor
+from ..react_compat import REACT_CLASS
+from .code import ReactReplyStream, _format_agent_error
 from .constants import REASONING_FIELD
 
 
@@ -1389,27 +1390,19 @@ async def _drive_generalist_agent(
                 },
             }
         )
-        react = dspy.ReActV2(GeneralistSig, tools=dspy_tools, max_iters=8)
-        # ReActV2 has a single inner predict (``react.react``). It emits both
-        # reasoning and tool_calls per loop iteration; the user's
-        # ``assistant_message`` is an argument of the internal ``submit``
-        # tool, so we listen on ``tool_calls`` and stitch the message back
-        # together via ``_SubmitArgExtractor``. ``allow_reuse=True`` is
-        # mandatory because the predict fires once per loop step.
-        # ``is_async_program=True`` would route through ``ReActV2.acall``,
-        # which DSPy 3.3 implements by delegating to ``self.aforward`` — a
-        # method ReActV2 doesn't define. The result was an AttributeError
-        # on the very first user turn. Leaving the flag at its default
-        # (False) lets ``streamify`` wrap the sync ``forward`` with
-        # ``asyncify``; streaming behaviour and listeners are unchanged.
+        react = REACT_CLASS(GeneralistSig, tools=dspy_tools, max_iters=8)
+        # The user's ``assistant_message`` rides a ``submit`` tool call on ReActV2
+        # or a separate ``extract`` predictor on classic ReAct; ``ReactReplyStream``
+        # wires the right listeners and decodes whichever shape into reply deltas.
+        # Leaving ``is_async_program`` at its default (False) lets ``streamify``
+        # wrap the sync ``forward`` via ``asyncify``: on ReActV2 ``acall`` would
+        # otherwise delegate to an ``aforward`` the class never defines
+        # (AttributeError on the first turn), and classic ReAct's async path is
+        # likewise bypassed — streaming behaviour and listeners are unchanged.
+        reply_stream = ReactReplyStream(react, "assistant_message")
         program = dspy.streamify(
             react,
-            stream_listeners=[
-                dspy.streaming.StreamListener(
-                    signature_field_name="tool_calls", predict=react.react, allow_reuse=True
-                ),
-                ReasoningStreamListener(predict=react.react, allow_reuse=True),
-            ],
+            stream_listeners=reply_stream.listeners(),
             status_message_provider=GeneralistStatusProvider(),
             async_streaming=True,
         )
@@ -1420,7 +1413,6 @@ async def _drive_generalist_agent(
             "user_message": user_message,
         }
         reply_text = ""
-        reply_extractor = _SubmitArgExtractor("assistant_message")
         with dspy.context(lm=lm):
             async for chunk in program(**inputs):
                 if isinstance(chunk, dspy.streaming.StatusMessage):
@@ -1428,13 +1420,11 @@ async def _drive_generalist_agent(
                 elif isinstance(chunk, dspy.streaming.StreamResponse):
                     if chunk.signature_field_name == REASONING_FIELD:
                         emit({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                    elif chunk.signature_field_name == "tool_calls":
-                        delta = reply_extractor.feed(chunk.chunk)
+                    else:
+                        delta = reply_stream.reply_delta(chunk)
                         if delta:
                             reply_text += delta
                             emit({"event": "message_patch", "data": {"chunk": delta}})
-                        if chunk.is_last_chunk:
-                            reply_extractor.reset()
                 elif isinstance(chunk, dspy.Prediction):
                     final = getattr(chunk, "assistant_message", "") or ""
                     if final and final != reply_text:
