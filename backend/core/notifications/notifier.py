@@ -32,10 +32,9 @@ _MUTED = "#8c7a6b"  # --muted-foreground
 _PRIMARY = "#3d2e22"  # --primary
 _PRIMARY_FG = "#faf8f5"  # --primary-foreground
 _BORDER = "#ddd6cc"  # --border
-# Heebo is the app's UI typeface; the Google Fonts link below loads it in modern
-# clients (and in the preview), with Segoe UI/Arial as the desktop-Outlook fallback.
+# Heebo is the app's UI typeface; emails rely on the recipient's locally-available
+# Heebo, falling back to Segoe UI/Arial — no external font is fetched (air-gap safe).
 _FONT = "'Heebo','Heebo Variable','Segoe UI',Arial,sans-serif"
-_FONT_LINK = "https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap"
 # JetBrains Mono is the app's monospace face; used for the optimization id.
 _MONO = "'JetBrains Mono','JetBrains Mono Variable','SFMono-Regular',Consolas,'Courier New',monospace"
 _PRIMARY_HOVER = "#473528"  # primary lightened, echoing the app's hover:bg-primary/90
@@ -118,7 +117,6 @@ def _html_email(heading: str, body_lines: list[str], cta_label: str, cta_url: st
         "<!doctype html>"
         '<html lang="he" dir="rtl"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<link href="{_FONT_LINK}" rel="stylesheet">'
         "<style>"
         "@media (max-width:600px){.px{padding-left:24px!important;padding-right:24px!important}}"
         f"{WORDMARK_CSS}{_BUTTON_CSS}"

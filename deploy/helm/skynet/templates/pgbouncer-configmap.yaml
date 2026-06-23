@@ -20,6 +20,7 @@ data:
     pool_mode = transaction
     default_pool_size = {{ .Values.pgbouncer.defaultPoolSize }}
     max_client_conn = {{ .Values.pgbouncer.maxClientConn }}
+    server_tls_sslmode = {{ if .Values.externalDatabase.enabled }}require{{ else }}disable{{ end }}
     ignore_startup_parameters = extra_float_digits,options
     server_reset_query =
     admin_users = {{ include "skynet.dbUser" . }}

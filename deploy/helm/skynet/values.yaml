@@ -83,17 +83,19 @@ backend:
     # during staged rollouts.
     REQUIRE_CODE_VERSION: "true"
     ALLOWED_ORIGINS: ""
-    RECOMMENDATIONS_ENABLED: "true"
-    RECOMMENDATIONS_EMBEDDING_BASE_URL: ""
-    RECOMMENDATIONS_EMBEDDING_MODEL: "jina-code-embeddings-0.5b"
-    # Internal LLM gateway URLs — leave empty to use OpenAI/Fireworks public endpoints.
+    EMBEDDINGS_ENABLED: "true"
+    EMBEDDINGS_BASE_URL: ""
+    EMBEDDINGS_MODEL: "jina-embeddings-v4"
+    # air-gap — use the bundled litellm cost map instead of fetching from GitHub on import.
+    LITELLM_LOCAL_MODEL_COST_MAP: "True"
+    # WARNING: empty CODE_AGENT_BASE_URL / GENERALIST_AGENT_BASE_URL fall back to
+    # the public OpenRouter default model and are NOT air-gap-safe. Set them to
+    # your internal OpenAI-compatible gateway.
     CODE_AGENT_BASE_URL: ""
     CODE_AGENT_MODEL: ""
     GENERALIST_AGENT_BASE_URL: ""
     GENERALIST_AGENT_MODEL: ""
-    # Notifications
-    COMMS_WEBHOOK_URL: ""
-    COMMS_CHANNEL: ""
+    # Frontend address used when composing user-facing links.
     FRONTEND_URL: ""
     # Prefer IdP groups for admin authorization. ADMIN_USERNAMES is break-glass only.
     ADMIN_GROUPS: ""
@@ -118,7 +120,7 @@ backend:
       ANTHROPIC_API_KEY: ""
       FIREWORKS_AI_API_KEY: ""
       # Optional. If empty, OPENAI_API_KEY is reused for the embedding API.
-      RECOMMENDATIONS_EMBEDDING_API_KEY: ""
+      EMBEDDINGS_API_KEY: ""
       # Must match frontend.secrets.data.BACKEND_AUTH_SECRET.
       BACKEND_AUTH_SECRET: ""
       # REMOTE_DB_URL is composed below — see externalDatabase / postgres stanzas.
@@ -236,6 +238,9 @@ frontend:
     NODE_EXTRA_CA_CERTS: ""
     # DEV_AUTH=false to disable login in non-prod previews. Leave empty otherwise.
     DEV_AUTH: ""
+    # Set to the deployed version so the UI footer reflects it. Defaults to a
+    # stale 0.1.0 when unset.
+    APP_VERSION: ""
 
   envFrom: []
 
@@ -465,8 +470,8 @@ networkPolicy:
   # ("backend may reach api.openai.com on 443 only"). Use this when the
   # cluster default-denies egress; otherwise leave empty.
   #
-  # If egressCidrs, llmEgress, embeddingEgress, AND ldapEgress are all empty,
-  # the chart falls back to wide-open egress (0.0.0.0/0 except link-local).
+  # If egressCidrs, llmEgress, embeddingEgress, ldapEgress, AND dbEgress are all
+  # empty, the chart falls back to wide-open egress (0.0.0.0/0 except link-local).
   # The moment ANY of them is set, the chart treats it as the explicit
   # allowlist and removes the wide-open fallback — anything you forget here
   # will be denied.
@@ -497,15 +502,25 @@ networkPolicy:
   #     - cidr: 10.0.6.0/24      # AD controller subnet
   #       ports: [636]           # 389 if you really must use ldap://
   ldapEgress: []
+  # Backend + migration-Job egress to an EXTERNAL Postgres (postgres.enabled=false).
+  # REQUIRED on default-deny clusters or the backend pool and the pre-install
+  # migration Job can never reach the DB. Same shape as llmEgress; default port 5432.
+  #
+  # Example:
+  #   dbEgress:
+  #     - cidr: 10.0.4.0/24      # managed Postgres subnet
+  #       ports: [5432]
+  dbEgress: []
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Migration job — runs `alembic upgrade head` as a Helm pre-install/upgrade hook.
 # The runner reads REMOTE_DB_URL from the same envFrom as the backend pods so
-# both move forward in lockstep. To bootstrap a database that already has the
-# Wave-1 schema applied out-of-band, override to:
-#   command: ["alembic", "stamp", "0001"]
-# on the first deploy, then revert to "upgrade head" so subsequent revisions
-# (0002, 0003, …) apply normally.
+# both move forward in lockstep. To adopt a database that already sits at the
+# squashed baseline (revision 342f7449be26), override to:
+#   command: ["alembic", "stamp", "342f7449be26"]
+# on the first deploy, then revert to ["alembic", "upgrade", "head"] so the
+# remaining revisions apply normally. The live single head is c1d2e3f4a5b6;
+# verify with `alembic heads` against the shipped image before stamping.
 # ─────────────────────────────────────────────────────────────────────────────
 migration:
   enabled: true

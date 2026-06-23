@@ -97,3 +97,13 @@ NOTE: HPA uses an External metric ({{ .Values.backend.autoscaling.queueDepth.met
   Verify with:
     kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1" | grep {{ .Values.backend.autoscaling.queueDepth.metricName }}
 {{- end }}
+
+REMINDER: BACKEND_AUTH_SECRET must be byte-identical in the backend and frontend
+  Secrets. If they differ, every admin API call silently 401s.
+
+{{- if .Values.networkPolicy.enabled }}
+
+REMINDER: For an air-gap install, verify the rendered backend NetworkPolicy egress
+  is NOT 0.0.0.0/0 — an empty egress allowlist falls back to wide-open egress:
+    kubectl get networkpolicy {{ include "skynet.backend.fullname" . }} -n {{ .Release.Namespace }} -o yaml
+{{- end }}
