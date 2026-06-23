@@ -2,26 +2,40 @@
 # Usage: just <recipe> [args]
 # Requires: https://github.com/casey/just
 
+# Backend dependency manager: "uv" (default) or "pip". Toggle per-invocation
+# with `just pkg=pip test`, or persist it with `export SKYNET_PKG=pip`.
+pkg := env_var_or_default("SKYNET_PKG", "uv")
+# Command prefix that runs inside the backend env. uv wraps with `uv run`
+# (auto-syncing on demand); pip runs the tool directly, so `just install` the
+# deps first. `_dev` additionally pulls the dev extra under uv.
+_run := if pkg == "uv" { "uv run " } else { "" }
+_dev := if pkg == "uv" { "uv run --extra dev " } else { "" }
+
 default:
     @just --list
 
+# Install backend deps (with dev tools) for the selected manager. The pip path
+# needs this once before backend/test/lint; the uv path resolves on demand.
+install:
+    cd backend && {{ if pkg == "uv" { "uv sync --extra dev" } else { 'pip install -e ".[dev]"' } }}
+
 backend:
-    cd backend && uv run python main.py
+    cd backend && {{_run}}python main.py
 
 frontend:
     cd frontend && npm run dev
 
 # Start both (backend in background, frontend in foreground)
 dev:
-    cd backend && uv run python main.py &
+    cd backend && {{_run}}python main.py &
     cd frontend && npm run dev
 
 test-unit:
-    cd backend && uv run --extra dev pytest core/ tests/unit/ -v
+    cd backend && {{_dev}}pytest core/ tests/unit/ -v
 
 # Requires running server + OPENAI_API_KEY
 test-integration:
-    cd backend && uv run --extra dev pytest tests/test_llm_integration.py -v
+    cd backend && {{_dev}}pytest tests/test_llm_integration.py -v
 
 # Frontend type check via build
 test-frontend:
@@ -30,7 +44,7 @@ test-frontend:
 test: test-unit test-frontend
 
 lint-backend:
-    cd backend && uv run ruff check .
+    cd backend && {{_run}}ruff check .
 
 lint-frontend:
     cd frontend && npm run lint
@@ -38,10 +52,10 @@ lint-frontend:
 lint: lint-backend lint-frontend
 
 format:
-    cd backend && uv run ruff format .
+    cd backend && {{_run}}ruff format .
 
 fix:
-    cd backend && uv run ruff check --fix .
+    cd backend && {{_run}}ruff check --fix .
 
 # Verify the generated i18n artefacts are in sync with i18n/locales/he.json.
 # Delegates to the script's built-in --check mode (renders artefacts in

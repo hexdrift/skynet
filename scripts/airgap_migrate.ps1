@@ -275,6 +275,7 @@ function Invoke-Check {
         @{ Path = (Join-Path $RootDir 'frontend\Dockerfile');          Type = 'File'; Label = 'frontend/Dockerfile' },
         @{ Path = (Join-Path $RootDir 'frontend\package-lock.json');   Type = 'File'; Label = 'frontend/package-lock.json' },
         @{ Path = (Join-Path $RootDir 'backend\uv.lock');              Type = 'File'; Label = 'backend/uv.lock' },
+        @{ Path = (Join-Path $RootDir 'backend\requirements.txt');     Type = 'File'; Label = 'backend/requirements.txt' },
         @{ Path = (Join-Path $RootDir 'backend\alembic\versions');     Type = 'Container'; Label = 'backend/alembic/versions' }
     )
     foreach ($r in $required) {
@@ -341,8 +342,11 @@ function Invoke-ValidateMigrations {
         exit 1
     }
 
+    # PKG_MANAGER toggle (uv by default, pip when set to 'pip'); pip is also the
+    # fallback when uv is selected but absent.
+    $pkgManager = Get-OrDefault 'PKG_MANAGER' 'uv'
     $hasUv      = [bool](Get-Command uv -ErrorAction SilentlyContinue)
-    $hasAlembic = [bool](Get-Command alembic -ErrorAction SilentlyContinue)
+    $useUv      = ($pkgManager -eq 'uv') -and $hasUv
 
     Push-Location $backendDir
     try {
@@ -353,7 +357,7 @@ function Invoke-ValidateMigrations {
         $previousDbUrl = $env:REMOTE_DB_URL
         $env:REMOTE_DB_URL = $dbUrl
         try {
-            if ($hasUv) {
+            if ($useUv) {
                 # Materialize the lockfile-pinned env first. Without this we
                 # fall through to whatever 'alembic' the system Python happens
                 # to expose, which is how validate-migrations silently produced
@@ -375,22 +379,31 @@ function Invoke-ValidateMigrations {
                 }
                 & uv run alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
             }
-            elseif ($hasAlembic) {
-                # No uv: rely on the active Python. Confirm migration deps are
-                # actually importable so we fail loudly here instead of writing
-                # a truncated migration.sql. alembic/env.py never imports ldap3,
-                # so we do not require it — demanding it wrongly rejects
-                # otherwise-capable hosts.
+            else {
+                # pip path: confirm migration deps import; if not, materialize
+                # the pinned requirements.txt the same way backend/Dockerfile's
+                # pip path does. alembic/env.py never imports ldap3, so we do not
+                # require it — demanding it wrongly rejects otherwise-capable hosts.
                 & python -c 'import alembic, sqlalchemy, pgvector' 2>$null
                 if ($LASTEXITCODE -ne 0) {
-                    Write-StdErr 'alembic on PATH but backend deps missing (alembic/sqlalchemy/pgvector); install backend extras first'
-                    exit 1
+                    $pipArgs = @('-m', 'pip', 'install', '--quiet')
+                    $pipIndexUrl    = Get-OrDefault 'PIP_INDEX_URL'    ''
+                    $pipTrustedHost = Get-OrDefault 'PIP_TRUSTED_HOST' ''
+                    if ($pipIndexUrl)    { $pipArgs += @('--index-url', $pipIndexUrl) }
+                    if ($pipTrustedHost) { $pipArgs += @('--trusted-host', $pipTrustedHost) }
+                    $pipArgs += @('-r', 'requirements.txt')
+                    & python @pipArgs
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-StdErr 'pip install -r requirements.txt failed; resolve dep conflicts before validate-migrations'
+                        exit 1
+                    }
+                    & python -c 'import alembic, sqlalchemy, pgvector' 2>$null
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-StdErr 'backend deps still missing after pip install; aborting'
+                        exit 1
+                    }
                 }
-                & alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
-            }
-            else {
-                Write-StdErr 'neither uv nor alembic on PATH; install one before running validate-migrations'
-                exit 1
+                & python -m alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
             }
         }
         finally {
