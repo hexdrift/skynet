@@ -445,6 +445,113 @@
   [data-os="win"] { display: none; }
   body.os-windows [data-os="unix"] { display: none; }
   body.os-windows [data-os="win"] { display: inline; }
+
+  /* Row of labelled segmented controls in the header (OS · installer · search).
+     The OS control keeps its own class/behaviour; the installer and search
+     controls share the generic .seg-toggle below — same look, N buttons. */
+  .seg-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem 1.5rem;
+    margin-top: 1.25rem;
+    align-items: flex-end;
+  }
+  .seg-row .os-toggle { margin-top: 0; }
+  .seg-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .seg-label {
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-3);
+  }
+  /* Generic segmented control — same visual language as .os-toggle, but the
+     column count comes from the variant class so it scales 2-up (installer) or
+     3-up (search). The sliding indicator's width/offset is per-variant below. */
+  .seg-toggle {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    width: max-content;
+    padding: 3px;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow: inset 0 1px 1px rgba(28, 22, 18, 0.04);
+    user-select: none;
+  }
+  .seg-toggle::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    height: calc(100% - 6px);
+    background: var(--card);
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(28, 22, 18, 0.08), 0 0 0 1px rgba(28, 22, 18, 0.04);
+    transform: translate3d(0, 0, 0);
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+  }
+  .seg-toggle button {
+    position: relative;
+    z-index: 1;
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-3);
+    padding: 0.4rem 0.95rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    white-space: nowrap;
+    transition: color 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .seg-toggle button:hover { color: var(--text-2); }
+  .seg-toggle button[aria-pressed="true"] { color: var(--text-1); }
+  .seg-toggle button:focus { outline: none; }
+  .seg-toggle button:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seg-toggle::before, .seg-toggle button { transition: none; }
+  }
+  /* Installer (2-up): default uv at slot 0, pip slides to slot 1. The two
+     selectors place the indicator on first paint (root pref set in <head>) and
+     after clicks (body class). */
+  :root[data-pkg-pref="pip"] .pkg-toggle::before,
+  body.pkg-pip .pkg-toggle::before { transform: translate3d(100%, 0, 0); }
+  /* Search (3-up): narrower indicator, three slots. */
+  .search-toggle { grid-template-columns: 1fr 1fr 1fr; }
+  .search-toggle::before { width: calc((100% - 6px) / 3); }
+  :root[data-search-pref="bm25"] .search-toggle::before,
+  body.search-bm25 .search-toggle::before { transform: translate3d(100%, 0, 0); }
+  :root[data-search-pref="semantic"] .search-toggle::before,
+  body.search-semantic .search-toggle::before { transform: translate3d(200%, 0, 0); }
+
+  /* Content gated on the installer / search selection, same mechanism as the OS
+     spans: tag content with data-pkg / data-search; the non-default variants
+     stay hidden until the matching body class is set. `revert` restores each
+     element's natural display (table-row, list-item, block, inline). Defaults
+     before JS: pkg=uv, search=lexical. */
+  [data-pkg="pip"] { display: none; }
+  body.pkg-pip [data-pkg="uv"] { display: none; }
+  body.pkg-pip [data-pkg="pip"] { display: revert; }
+
+  [data-search="bm25"], [data-search="semantic"] { display: none; }
+  body.search-bm25 [data-search="lexical"], body.search-bm25 [data-search="semantic"] { display: none; }
+  body.search-bm25 [data-search="bm25"] { display: revert; }
+  body.search-semantic [data-search="lexical"], body.search-semantic [data-search="bm25"] { display: none; }
+  body.search-semantic [data-search="semantic"] { display: revert; }
 </style>
 <script>
   // Apply the saved OS class to <body> before first paint so the correct
@@ -459,6 +566,31 @@
         document.body.classList.add(saved === 'win' ? 'os-windows' : 'os-unix');
       });
     } catch (_) { /* localStorage blocked: fall through to unix default */ }
+  })();
+</script>
+<script>
+  // Installer (uv|pip) and search-backend (lexical|bm25|semantic) prefs, applied
+  // before first paint like the OS pref above so the right variant shows with no
+  // flash. Defaults: uv + lexical. Stored as 'airgap-pkg' / 'airgap-search'.
+  (function () {
+    var groups = [
+      { key: 'airgap-pkg',    attr: 'data-pkg-pref',    cls: 'pkg-',    def: 'uv',      vals: ['uv', 'pip'] },
+      { key: 'airgap-search', attr: 'data-search-pref', cls: 'search-', def: 'lexical', vals: ['lexical', 'bm25', 'semantic'] }
+    ];
+    try {
+      groups.forEach(function (g) {
+        var v = localStorage.getItem(g.key);
+        if (g.vals.indexOf(v) < 0) v = g.def;
+        document.documentElement.setAttribute(g.attr, v);
+      });
+      document.addEventListener('DOMContentLoaded', function () {
+        groups.forEach(function (g) {
+          var v = localStorage.getItem(g.key);
+          if (g.vals.indexOf(v) < 0) v = g.def;
+          document.body.classList.add(g.cls + v);
+        });
+      });
+    } catch (_) { /* localStorage blocked: defaults render */ }
   })();
 </script>
 </head>
@@ -503,15 +635,35 @@
   <p class="lede">
     Operator path for moving Skynet into an internet-isolated environment when you already have the required internal mirrors, images, secrets, IdP, LLM gateway, CA bundle, and Postgres available.
   </p>
-  <div class="os-toggle" role="group" aria-label="Operator OS">
-    <button type="button" data-os-set="unix" aria-pressed="true">
-      <svg class="os-glyph" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.182 8.027a3.265 3.265 0 0 1 1.555-2.74 3.342 3.342 0 0 0-2.633-1.424c-1.108-.116-2.18.663-2.748.663-.58 0-1.448-.65-2.382-.63a3.504 3.504 0 0 0-2.95 1.799c-1.275 2.21-.324 5.466.91 7.255.604.875 1.31 1.857 2.234 1.823.901-.037 1.24-.578 2.328-.578 1.078 0 1.395.578 2.346.557.97-.014 1.582-.886 2.165-1.768a7.832 7.832 0 0 0 .988-2.025 3.182 3.182 0 0 1-1.94-2.932zM9.485 3.072c.49-.59.81-1.405.722-2.222-.7.034-1.55.466-2.054 1.054-.456.523-.853 1.36-.747 2.157.78.06 1.578-.396 2.079-.99z"/></svg>
-      <span>macOS / Linux</span>
-    </button>
-    <button type="button" data-os-set="win" aria-pressed="false">
-      <svg class="os-glyph" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 1.91 6.564.992v6.342H0V1.91zm7.336-1.027L16 0v7.334H7.336V.883zM0 8.044h6.564v6.342L0 13.469V8.044zm7.336 0H16V16l-8.664-1.027V8.044z"/></svg>
-      <span>Windows</span>
-    </button>
+  <div class="seg-row">
+    <div class="seg-group">
+      <span class="seg-label" id="seg-lbl-os">Operator OS</span>
+      <div class="os-toggle" role="group" aria-labelledby="seg-lbl-os">
+        <button type="button" data-os-set="unix" aria-pressed="true">
+          <svg class="os-glyph" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.182 8.027a3.265 3.265 0 0 1 1.555-2.74 3.342 3.342 0 0 0-2.633-1.424c-1.108-.116-2.18.663-2.748.663-.58 0-1.448-.65-2.382-.63a3.504 3.504 0 0 0-2.95 1.799c-1.275 2.21-.324 5.466.91 7.255.604.875 1.31 1.857 2.234 1.823.901-.037 1.24-.578 2.328-.578 1.078 0 1.395.578 2.346.557.97-.014 1.582-.886 2.165-1.768a7.832 7.832 0 0 0 .988-2.025 3.182 3.182 0 0 1-1.94-2.932zM9.485 3.072c.49-.59.81-1.405.722-2.222-.7.034-1.55.466-2.054 1.054-.456.523-.853 1.36-.747 2.157.78.06 1.578-.396 2.079-.99z"/></svg>
+          <span>macOS / Linux</span>
+        </button>
+        <button type="button" data-os-set="win" aria-pressed="false">
+          <svg class="os-glyph" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 1.91 6.564.992v6.342H0V1.91zm7.336-1.027L16 0v7.334H7.336V.883zM0 8.044h6.564v6.342L0 13.469V8.044zm7.336 0H16V16l-8.664-1.027V8.044z"/></svg>
+          <span>Windows</span>
+        </button>
+      </div>
+    </div>
+    <div class="seg-group">
+      <span class="seg-label" id="seg-lbl-pkg">Installer</span>
+      <div class="seg-toggle pkg-toggle" role="group" aria-labelledby="seg-lbl-pkg">
+        <button type="button" data-set="uv" aria-pressed="true"><span>uv</span></button>
+        <button type="button" data-set="pip" aria-pressed="false"><span>pip</span></button>
+      </div>
+    </div>
+    <div class="seg-group">
+      <span class="seg-label" id="seg-lbl-search">Search backend</span>
+      <div class="seg-toggle search-toggle" role="group" aria-labelledby="seg-lbl-search">
+        <button type="button" data-set="lexical" aria-pressed="true"><span>Lexical</span></button>
+        <button type="button" data-set="bm25" aria-pressed="false"><span>BM25</span></button>
+        <button type="button" data-set="semantic" aria-pressed="false"><span>Semantic</span></button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -761,13 +913,13 @@ scripts\airgap_migrate.bat all</span></pre>
   <table>
     <thead><tr><th style="width:22%">Tool</th><th style="width:16%">Min version</th><th style="width:14%">Role</th><th>Why</th></tr></thead>
     <tbody>
-      <tr><td><code>uv</code></td><td>0.5+</td><td>build</td><td><strong>Default installer.</strong> Builds the backend image and runs the offline <code>validate-migrations</code> dump from <code>uv.lock</code>. Optional — set <code>PKG_MANAGER=pip</code> to install from <code>requirements.txt</code> with <code>pip</code> instead (no <code>uv</code> needed).</td></tr>
+      <tr data-pkg="uv"><td><code>uv</code></td><td>0.5+</td><td>build</td><td><strong>Default installer</strong> (this is the <em>Installer · uv</em> selection above). Builds the backend image and runs the offline <code>validate-migrations</code> dump from <code>uv.lock</code>. Switch the toggle to <em>pip</em> to install from <code>requirements.txt</code> with <code>pip</code> instead (no <code>uv</code> needed).</td></tr>
       <tr><td><code>helm</code></td><td>≥ 3.10</td><td>build + deploy</td><td><code>--set-json</code> (used by the stamp and one-off migration overrides) requires 3.10 or newer.</td></tr>
       <tr><td><code>docker</code> or <code>podman</code></td><td>recent</td><td>build</td><td>Builds and pushes the backend/frontend images. Set <code>DOCKER=podman</code> for Buildah-compatible hosts.</td></tr>
       <tr><td><code>kubectl</code> or <code>oc</code></td><td>matches cluster</td><td>deploy</td><td>Must be authenticated to the target cluster/namespace before <code>install</code> or <code>status</code>.</td></tr>
       <tr><td><code>openssl</code></td><td>1.1+</td><td>deploy</td><td>Generates <code>BACKEND_AUTH_SECRET</code> and <code>AUTH_SECRET</code>.</td></tr>
       <tr><td><code>git</code></td><td>recent</td><td>build</td><td>Source checkout and the <code>todos</code> / <code>git grep</code> TODO sweep.</td></tr>
-      <tr><td>Python 3.11 + <code>pip</code></td><td>3.11</td><td>build</td><td>The <code>PKG_MANAGER=pip</code> path, and the <code>validate-migrations</code> fallback when <code>uv</code> is absent. The dump needs <code>alembic</code>, <code>sqlalchemy</code>, <code>pgvector</code> importable; if they are not, the script installs the pinned <code>requirements.txt</code> (honouring <code>PIP_INDEX_URL</code>).</td></tr>
+      <tr data-pkg="pip"><td>Python 3.11 + <code>pip</code></td><td>3.11</td><td>build</td><td><strong>Selected installer</strong> (<em>Installer · pip</em>). Builds the backend image (<code>--build-arg PKG_MANAGER=pip</code>) and runs <code>validate-migrations</code> from the pinned <code>requirements.txt</code>; this path is also the fallback when <code>uv</code> is absent. The dump needs <code>alembic</code>, <code>sqlalchemy</code>, <code>pgvector</code> importable; if they are not, the script installs <code>requirements.txt</code> (honouring <code>PIP_INDEX_URL</code>).</td></tr>
     </tbody>
   </table>
 
@@ -837,6 +989,7 @@ Get-FileHash -Algorithm SHA256 backend-2026.04.30.tar</span></pre>
     <li><strong><code>SEARCH_BACKEND=semantic</code> — needs <code>pgvector</code>.</strong> Embedding (vector) search. Only this profile makes the baseline migration run <code>CREATE EXTENSION vector</code>, create the <code>vector(512)</code> columns and write <code>job_embeddings</code>; it also needs an internal embedding gateway (<code>EMBEDDINGS_BASE_URL</code>/<code>EMBEDDINGS_MODEL</code>).</li>
   </ul>
 
+  <div data-search="semantic">
   <h3>Only if <code>SEARCH_BACKEND=semantic</code>: pgvector</h3>
   <p>For the semantic profile pgvector is a <strong>hard</strong> prerequisite — the baseline migration runs <code>CREATE EXTENSION IF NOT EXISTS vector</code> and creates <code>vector(512)</code> columns. If you point the chart at an external / managed Postgres (<code>postgres.enabled=false</code>), the database must satisfy both of these before install:</p>
   <ul>
@@ -852,12 +1005,15 @@ Get-FileHash -Algorithm SHA256 backend-2026.04.30.tar</span></pre>
     <span class="label">TODO · On-premise</span>
     <p>The pre-install <strong>migrate Job</strong> reads <code>SEARCH_BACKEND</code> from the same backend ConfigMap as the pods. With the default <code>lexical</code> (or <code>bm25</code>) the baseline migration skips <code>CREATE EXTENSION vector</code> entirely, so a vanilla Postgres with no extension privilege installs cleanly. Only <code>SEARCH_BACKEND=semantic</code> requires pgvector — and there, because the migration runs as a <strong>pre-install hook</strong>, a missing extension or insufficient privilege aborts the entire install before any application pod starts.</p>
   </div>
+  </div>
 
+  <div data-search="bm25">
   <h3>Optional: <code>pg_search</code> for BM25 lexical ranking</h3>
   <p>The default deployment runs <strong>lexical</strong> explore search (no embedding gateway needed). Set <code>SEARCH_BACKEND=bm25</code> and install the <code>pg_search</code> (ParadeDB) extension on this database to rank that search with true <strong>BM25</strong> relevance; without the extension it falls back to <code>ILIKE</code> substring matching. This is <strong>best-effort</strong> — at startup the backend tries to create the extension and a <code>bm25</code> index over the <code>jobs</code> corpus, and silently uses ILIKE if it can't (so a missing <code>pg_search</code> never blocks boot, unlike the <code>vector</code> requirement above). To enable BM25, set <code>SEARCH_BACKEND=bm25</code>, install/allowlist <code>pg_search</code> on the managed Postgres, and confirm:</p>
 <pre><span class="k">CREATE EXTENSION IF NOT EXISTS</span> pg_search;
 <span class="k">SELECT</span> * <span class="k">FROM</span> pg_extension <span class="k">WHERE</span> extname = <span class="s">'pg_search'</span>;</pre>
   <p>Backend logs show <code>BM25 lexical search enabled (pg_search)</code> when it activates.</p>
+  </div>
 </section>
 
 <section id="pre-transfer">
@@ -875,7 +1031,7 @@ scripts\airgap_migrate.bat todos         <span class="c">REM every URL/secret/CI
     <li><code>backend/uv.lock</code> and <code>backend/requirements.txt</code> are present (the uv and pip installer inputs).</li>
     <li><code>backend/alembic/versions/</code> is present.</li>
     <li><code>migration.sql</code> (from <code>validate-migrations</code>) reflects the schema you expect.</li>
-    <li><em>Only if enabling semantic search</em> (<code>SEARCH_BACKEND=semantic</code>): your internal OpenAI-compatible embedding endpoint is ready and returns at least 512 dimensions (the <code>embeddings_dim</code> default) for <code>EMBEDDING_MODEL</code> (placeholder <code>jina-embeddings-v4</code>). The default lexical search needs no embedding endpoint.</li>
+    <li data-search="semantic">Your internal OpenAI-compatible embedding endpoint is ready and returns at least 512 dimensions (the <code>embeddings_dim</code> default) for <code>EMBEDDING_MODEL</code> (placeholder <code>jina-embeddings-v4</code>) — semantic search reaches it at runtime.</li>
     <li>Backend, frontend, and pgvector images are available in the internal registry you will reference from Helm.</li>
     <li>If your IdP, LLM gateway, or Postgres uses a private CA, a Kubernetes Secret containing the CA bundle is ready.</li>
   </ul>
@@ -931,7 +1087,8 @@ scripts\airgap_migrate.bat push-images</span></pre>
   --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote \
   --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
   --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
-  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
+<span data-pkg="pip">  --build-arg PKG_MANAGER=pip \
+</span>  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
 
 docker build frontend \
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 \
@@ -944,7 +1101,8 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span><spa
   --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote ^
   --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote ^
   --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple ^
-  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
+<span data-pkg="pip">  --build-arg PKG_MANAGER=pip ^
+</span>  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
 
 docker build frontend ^
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 ^
@@ -1472,7 +1630,7 @@ kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
     <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, embedding gateway, LDAP, and DB.</li>
     <li>Backing up and restoring Postgres.</li>
     <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names. Leaving <code>CODE_AGENT_BASE_URL</code> / <code>GENERALIST_AGENT_BASE_URL</code> empty falls back to a public OpenRouter model that an air-gapped host cannot reach.</li>
-    <li>Only if you enable semantic search (<code>SEARCH_BACKEND=semantic</code>): provisioning pgvector on the database, choosing the internal embedding model exposed by your embedding gateway, and setting <code>EMBEDDINGS_BASE_URL</code>. With the default lexical search neither is needed.</li>
+    <li data-search="semantic">Semantic search is selected: provision pgvector on the database, choose the internal embedding model exposed by your embedding gateway, and set <code>EMBEDDINGS_BASE_URL</code>. (Lexical / BM25 need none of this.)</li>
   </ul>
 </section>
 
@@ -1536,6 +1694,34 @@ git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></span></pre
         const os = b.getAttribute('data-os-set');
         try { localStorage.setItem('airgap-os', os); } catch (_) {}
         apply(os);
+      });
+    });
+  })();
+
+  // Installer + search-backend toggles. Same shape as the OS wiring, driven by
+  // a small config so both (2-up and 3-up) share one code path.
+  (function () {
+    const groups = [
+      { key: 'airgap-pkg',    cls: 'pkg-',    sel: '.pkg-toggle button[data-set]',    def: 'uv',      vals: ['uv', 'pip'] },
+      { key: 'airgap-search', cls: 'search-', sel: '.search-toggle button[data-set]', def: 'lexical', vals: ['lexical', 'bm25', 'semantic'] }
+    ];
+    groups.forEach(g => {
+      const buttons = document.querySelectorAll(g.sel);
+      function read() {
+        try { const v = localStorage.getItem(g.key); return g.vals.indexOf(v) >= 0 ? v : g.def; }
+        catch (_) { return g.def; }
+      }
+      function apply(val) {
+        g.vals.forEach(v => document.body.classList.toggle(g.cls + v, v === val));
+        buttons.forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-set') === val ? 'true' : 'false'));
+      }
+      apply(read());
+      buttons.forEach(b => {
+        b.addEventListener('click', () => {
+          const val = b.getAttribute('data-set');
+          try { localStorage.setItem(g.key, val); } catch (_) {}
+          apply(val);
+        });
       });
     });
   })();
