@@ -2,15 +2,13 @@
 
 import { memo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { StatusBadge } from "@/shared/ui/status-badge";
 import { HALO_CARDS } from "../login-samples";
 
 const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
 
 /**
- * The scattered "product halo" behind the login panel: fake finished-run cards
- * — built from the real `StatusBadge` so they read like Skynet's own UI — each
- * just a success pill + task name, no scores. Cards settle in once, then drift
+ * The scattered "product halo" behind the login panel: fake finished-run cards,
+ * each just a task name, no badge and no scores. Cards settle in once, then drift
  * gently and forever, and scale up under the pointer (the layer is
  * pointer-transparent; each card re-enables hover for itself). Decorative only
  * — hidden from assistive tech — and clipped so they bleed off the edges.
@@ -49,7 +47,7 @@ function LoginHaloImpl() {
             >
               <motion.div
                 dir="rtl"
-                className="flex w-max max-w-[14rem] items-center gap-1.5 rounded-xl border border-border/50 bg-card px-3 py-2 shadow-[0_8px_24px_-14px_rgba(28,22,18,0.28)]"
+                className="flex w-max max-w-[14rem] items-center rounded-xl border border-border/50 bg-card px-3 py-2 shadow-[0_8px_24px_-14px_rgba(28,22,18,0.28)]"
                 animate={
                   reduce
                     ? { rotate: card.rot }
@@ -72,7 +70,6 @@ function LoginHaloImpl() {
                   reduce ? undefined : { scale: 1.1, transition: { duration: 0.35, ease: EASE_OUT_EXPO } }
                 }
               >
-                <StatusBadge status="success" compact className="px-2 py-0.5 text-[0.6rem]" />
                 <span className="truncate text-[0.72rem] font-medium text-foreground/85">
                   {card.title}
                 </span>
