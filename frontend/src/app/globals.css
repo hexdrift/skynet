@@ -1284,6 +1284,10 @@ table {
     text-overflow: clip;
     text-align: start;
     border: 0;
+    /* Per-column max-w-* caps sized for the desktop grid (e.g. 100px on the id)
+       otherwise survive into the stack and pin label+value into a narrow strip
+       at the row start; release them so each cell fills the card width. */
+    max-width: none;
   }
   table.table-stack td::before {
     content: attr(data-label);
