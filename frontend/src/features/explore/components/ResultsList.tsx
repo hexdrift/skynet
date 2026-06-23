@@ -23,12 +23,10 @@ interface ResultsListProps {
 /**
  * Vertically-rhythmic list of search hits. Each row is a single-tap card:
  * title with an inline score+delta tag, two-line summary, and a thin meta
- * strip with the winning model anchored to the start and a relative
- * timestamp anchored to the end.
+ * strip carrying a relative timestamp at the end — plus a relevance badge at
+ * the start on semantic searches.
  *
- * The label noise ("model:") is intentionally dropped — the monospace value
- * already tells the reader what the field is. Hover lifts the title to
- * full-opacity; the row itself is the open affordance.
+ * Hover lifts the title to full-opacity; the row itself is the open affordance.
  */
 export function ResultsList({
   results,
@@ -112,7 +110,6 @@ function ResultRow({
         {searchType === "semantic" && row.relevance != null && (
           <RelevanceBadge relevance={row.relevance} />
         )}
-        {row.winning_model && <MonoValue value={row.winning_model} />}
         <time
           dateTime={row.created_at ?? undefined}
           title={row.created_at ?? undefined}
@@ -180,14 +177,6 @@ const GAIN_TONE: Record<"positive" | "negative" | "neutral", string> = {
   negative: "rounded-full px-1.5 py-0.5 bg-[var(--danger-dim)] text-[var(--danger)]",
   neutral: "text-muted-foreground",
 };
-
-function MonoValue({ value }: { value: string }) {
-  return (
-    <span dir="ltr" className="font-mono text-foreground/65">
-      {value}
-    </span>
-  );
-}
 
 function tokenize(query: string): string[] {
   return query
