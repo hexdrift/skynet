@@ -3,8 +3,8 @@
  *
  * These are FAKE, illustrative task labels — never real user data — used purely
  * as the scattered "product halo" behind the sign-in panel. Each is a finished
- * task shown as a status pill + its name, so the halo reads like a wall of
- * Skynet's own completed runs without exposing any numbers. Positions are
+ * task shown by its name, so the halo reads like a wall of Skynet's own
+ * completed runs without exposing any numbers. Positions are
  * hand-placed around the edges to keep a clean centre, and `mobile` keeps only a
  * sparse corner frame on small screens.
  */
@@ -19,23 +19,23 @@ export interface HaloCard {
 export const HALO_CARDS: HaloCard[] = [
   // Top band — front row
   { title: "סיווג כוונות", pos: { top: "-3%", left: "1%" }, rot: -5, mobile: true },
-  { title: "תקציר פגישה", pos: { top: "-4%", left: "15%" }, rot: 3 },
+  { title: "סיכום פגישה", pos: { top: "-4%", left: "15%" }, rot: 3 },
   { title: "תיוג מסמכים", pos: { top: "-2%", left: "29%" }, rot: -4 },
   { title: "זיהוי שפה", pos: { top: "-3%", left: "43%" }, rot: 4 },
   { title: "סינון תוכן", pos: { top: "-2%", left: "57%" }, rot: -3 },
-  { title: "תרגום שאילתות", pos: { top: "-4%", left: "71%" }, rot: 5 },
-  { title: "זיהוי טון", pos: { top: "-3%", right: "2%" }, rot: -5, mobile: true },
+  { title: "שכתוב שאילתה", pos: { top: "-4%", left: "71%" }, rot: 5 },
+  { title: "קישור ישויות", pos: { top: "-3%", right: "2%" }, rot: -5, mobile: true },
 
   // Top band — middle row
   { title: "חילוץ ישויות", pos: { top: "9%", left: "7%" }, rot: 4 },
   { title: "ניתוח סנטימנט", pos: { top: "11%", left: "26%" }, rot: -3 },
-  { title: "הפקת מילות מפתח", pos: { top: "9%", left: "45%" }, rot: 5 },
+  { title: "חילוץ מילות מפתח", pos: { top: "9%", left: "45%" }, rot: 5 },
   { title: "זיהוי ספאם", pos: { top: "11%", left: "64%" }, rot: -4 },
   { title: "תיקון דקדוק", pos: { top: "9%", left: "81%" }, rot: 3 },
 
   // Top band — back row
   { title: "חילוץ ציטוטים", pos: { top: "19%", left: "6%" }, rot: -4 },
-  { title: "סיווג רמת קושי", pos: { top: "20%", left: "47%" }, rot: 5 },
+  { title: "דירוג קושי", pos: { top: "20%", left: "47%" }, rot: 5 },
   { title: "תיוג חלקי דיבר", pos: { top: "19%", left: "80%" }, rot: -3 },
 
   // Left wing — outer column
@@ -49,25 +49,25 @@ export const HALO_CARDS: HaloCard[] = [
   { title: "חילוץ נושאים", pos: { top: "64%", left: "7%" }, rot: -3 },
 
   // Right wing — outer column
-  { title: "זיהוי כפילויות", pos: { top: "30%", right: "2%" }, rot: -5 },
+  { title: "שימוש בכלים", pos: { top: "30%", right: "2%" }, rot: -5 },
   { title: "דירוג תשובות", pos: { top: "44%", right: "3%" }, rot: -6 },
   { title: "זיהוי הונאה", pos: { top: "58%", right: "4%" }, rot: -4 },
-  { title: "סיכום ביקורות", pos: { top: "70%", right: "3%" }, rot: 5 },
+  { title: "חשיבה מתמטית", pos: { top: "70%", right: "3%" }, rot: 5 },
 
   // Right wing — inner column
-  { title: "ניתוח משוב", pos: { top: "37%", right: "9%" }, rot: 4 },
+  { title: "מענה מבוסס מקורות", pos: { top: "37%", right: "9%" }, rot: 4 },
   { title: "בדיקת עובדות", pos: { top: "64%", right: "9%" }, rot: 5 },
 
   // Bottom band — back row
   { title: "הרחבת שאילתה", pos: { bottom: "19%", left: "6%" }, rot: 4 },
-  { title: "ניקוד ביטחון", pos: { bottom: "20%", left: "47%" }, rot: -3 },
-  { title: "זיהוי כוונת המרה", pos: { bottom: "19%", left: "80%" }, rot: 4 },
+  { title: "הערכת ביטחון", pos: { bottom: "20%", left: "47%" }, rot: -3 },
+  { title: "חילוץ JSON", pos: { bottom: "19%", left: "80%" }, rot: 4 },
 
   // Bottom band — middle row
   { title: "חילוץ מאפייני מוצר", pos: { bottom: "10%", left: "9%" }, rot: -4 },
-  { title: "תמלול שמע", pos: { bottom: "11%", left: "25%" }, rot: 4 },
+  { title: "חילוץ יחסים", pos: { bottom: "11%", left: "25%" }, rot: 4 },
   { title: "חילוץ פרטי קשר", pos: { bottom: "9%", left: "41%" }, rot: -5 },
-  { title: "ניסוח מחדש", pos: { bottom: "11%", left: "57%" }, rot: 3 },
+  { title: "המרה ל-SQL", pos: { bottom: "11%", left: "57%" }, rot: 3 },
   { title: "זיהוי שפה פוגענית", pos: { bottom: "9%", left: "72%" }, rot: -4 },
   { title: "סיכום מסמך", pos: { bottom: "11%", left: "85%" }, rot: 4 },
 
@@ -75,7 +75,7 @@ export const HALO_CARDS: HaloCard[] = [
   { title: "חילוץ תאריכים", pos: { bottom: "-3%", left: "7%" }, rot: 4, mobile: true },
   { title: "סיווג קטגוריות", pos: { bottom: "2%", left: "23%" }, rot: 5 },
   { title: "זיהוי כוונת רכישה", pos: { bottom: "-2%", left: "40%" }, rot: -3 },
-  { title: "מיון פניות", pos: { bottom: "3%", left: "57%" }, rot: 4 },
+  { title: "אחזור רב-שלבי", pos: { bottom: "3%", left: "57%" }, rot: 4 },
   { title: "סיווג פניות", pos: { bottom: "-3%", left: "73%" }, rot: 5 },
   { title: "ניתוב פניות", pos: { bottom: "-2%", right: "4%" }, rot: 5, mobile: true },
 ];
