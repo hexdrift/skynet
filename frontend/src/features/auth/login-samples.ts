@@ -3,8 +3,8 @@
  *
  * These are FAKE, illustrative task labels — never real user data — used purely
  * as the scattered "product halo" behind the sign-in panel. Each is a finished
- * task shown as a status pill + its name, so the halo reads like a wall of
- * Skynet's own completed runs without exposing any numbers. Positions are
+ * task shown by its name, so the halo reads like a wall of Skynet's own
+ * completed runs without exposing any numbers. Positions are
  * hand-placed around the edges to keep a clean centre, and `mobile` keeps only a
  * sparse corner frame on small screens.
  */
