@@ -23,13 +23,12 @@ interface ResultsListProps {
 /**
  * Vertically-rhythmic list of search hits. Each row is a single-tap card:
  * title with an inline score+delta tag, two-line summary, and a thin meta
- * strip with the technical attributes (optimizer / model / module) anchored
- * to the start and a relative timestamp anchored to the end.
+ * strip with the technical attributes (model / module) anchored to the start
+ * and a relative timestamp anchored to the end.
  *
- * The label noise ("optimizer:", "model:") is intentionally dropped —
- * monospace values plus a coloured optimizer chip already tell the reader
- * what each field is. Hover lifts the title to full-opacity; the row itself
- * is the open affordance.
+ * The label noise ("model:", "module:") is intentionally dropped — the
+ * monospace values already tell the reader what each field is. Hover lifts the
+ * title to full-opacity; the row itself is the open affordance.
  */
 export function ResultsList({
   results,
@@ -113,7 +112,6 @@ function ResultRow({
         {searchType === "semantic" && row.relevance != null && (
           <RelevanceBadge relevance={row.relevance} />
         )}
-        {row.optimizer_name && <OptimizerChip name={row.optimizer_name} />}
         {row.winning_model && <MonoValue value={row.winning_model} />}
         {row.module_name && <MonoValue value={row.module_name} />}
         <time
@@ -183,17 +181,6 @@ const GAIN_TONE: Record<"positive" | "negative" | "neutral", string> = {
   negative: "rounded-full px-1.5 py-0.5 bg-[var(--danger-dim)] text-[var(--danger)]",
   neutral: "text-muted-foreground",
 };
-
-function OptimizerChip({ name }: { name: string }) {
-  return (
-    <span
-      dir="ltr"
-      className="inline-flex items-center rounded-full bg-foreground/[0.06] px-2 py-0.5 font-mono text-[11px] text-foreground/75"
-    >
-      {name}
-    </span>
-  );
-}
 
 function MonoValue({ value }: { value: string }) {
   return (
