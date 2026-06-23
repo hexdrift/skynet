@@ -80,8 +80,8 @@ helm upgrade skynet deploy/helm/skynet --reuse-values \
 |-------|---------|
 | `backend.env.WORKER_CONCURRENCY` | Threaded worker fan-out per replica (default 4). |
 | `backend.env.WORKER_POLL_INTERVAL` | DB poll cadence in seconds (default 2.0). |
-| `backend.env.EMBEDDINGS_ENABLED` | Master switch for the embedding/recommendation pipeline. |
-| `backend.env.EMBEDDINGS_BASE_URL` | Internal OpenAI-compatible embedding API base URL. |
+| `backend.env.SEARCH_BACKEND` | Explore search engine and the Postgres extension it needs: `lexical` (default, vanilla — no extension), `bm25` (needs `pg_search`), or `semantic` (needs `pgvector` + embedding gateway; the only profile whose migrate Job runs `CREATE EXTENSION vector`). |
+| `backend.env.EMBEDDINGS_BASE_URL` | Internal OpenAI-compatible embedding API base URL (only used when `SEARCH_BACKEND=semantic`). |
 | `networkPolicy.embeddingEgress` | Optional backend egress allowlist when the embedding API uses a separate CIDR. |
 | `backend.env.CODE_AGENT_BASE_URL` | Override for internal OpenAI-compatible gateway. |
 | `frontend.env.API_URL` | Runtime backend address. Empty → in-cluster service. |

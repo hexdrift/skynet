@@ -28,6 +28,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from alembic import context, op
+from core.config import embeddings_schema_enabled
 
 revision: str = "b4c5d6e7f8a9"
 down_revision: str | Sequence[str] | None = "f3c4d5e6f7a8"
@@ -193,18 +194,19 @@ def upgrade() -> None:
     # offline (--sql) mode can't serialize — op.get_bind().execute() yields no
     # cursor there, so a schema-only dump (validate-migrations) crashes on it.
     # Skip it offline; the in-cluster Job runs online and backfills normally.
-    # The job_embeddings rescale below is plain SQL and dumps either way.
     if context.is_offline_mode():
         op.execute("-- offline --sql dump: per-row jobs metric backfill runs online only")
     else:
         _backfill_jobs_metric_scale()
 
-    op.execute(
-        "UPDATE job_embeddings "
-        "SET baseline_metric = baseline_metric * 100, "
-        "optimized_metric = optimized_metric * 100 "
-        "WHERE optimized_metric IS NOT NULL AND optimized_metric > 0 AND optimized_metric <= 1"
-    )
+    # job_embeddings exists only under the semantic backend; lexical/bm25 skip it.
+    if embeddings_schema_enabled():
+        op.execute(
+            "UPDATE job_embeddings "
+            "SET baseline_metric = baseline_metric * 100, "
+            "optimized_metric = optimized_metric * 100 "
+            "WHERE optimized_metric IS NOT NULL AND optimized_metric > 0 AND optimized_metric <= 1"
+        )
 
 
 def downgrade() -> None:

@@ -135,6 +135,9 @@ class RemoteDBJobStore:
             db_url: PostgreSQL DSN to connect to.
         """
         self.vector_search_enabled = False
+        # Set after the schema exists: BM25 lexical ranking via pg_search when
+        # available, else explore search uses ILIKE substring matching.
+        self.bm25_search_enabled = False
         self._max_progress_events = settings.progress_events_per_job_cap
         self._max_log_entries = settings.log_entries_per_job_cap
         self._code_version = settings.code_version
@@ -178,6 +181,10 @@ class RemoteDBJobStore:
                     conn if conn is not None else self._engine,
                     tables=non_embedding_tables,
                 )
+        # Lexical search ranking. Independent of pgvector/embeddings: BM25
+        # serves the default (embeddings-off) explore search when pg_search is
+        # installed, otherwise the ILIKE fallback handles it.
+        self.bm25_search_enabled = settings.search_bm25_enabled and self._bootstrap_bm25()
         self._session_factory = sessionmaker(bind=self._engine)
         self._checkpoints = PostgresCheckpointBlobStore(self._engine)
         self._grid_pair_results = PostgresGridPairResultStore(self._engine)
@@ -256,6 +263,42 @@ class RemoteDBJobStore:
             return True
         except SQLAlchemyError as exc:
             logger.warning("HNSW index bootstrap skipped: %s", exc)
+            return False
+
+    def _bootstrap_bm25(self) -> bool:
+        """Best-effort: enable BM25 lexical ranking via the pg_search extension.
+
+        Creates the ``pg_search`` extension and a BM25 index over the ``jobs``
+        ``payload_overview`` corpus (task name/description/optimizer/model/module
+        — the text that exists when embeddings are off) so explore search ranks
+        lexically with real relevance scores. Entirely optional: when pg_search
+        is absent (the common case on a plain/managed Postgres without it) or the
+        role can't create it, this logs and returns False and search falls back
+        to ILIKE substring matching. Safe to call repeatedly; the
+        ``IF NOT EXISTS`` guards make it free on warm databases.
+
+        Returns:
+            True when pg_search and the BM25 index are in place, else False.
+        """
+        try:
+            with self._engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_jobs_bm25 ON jobs "
+                        "USING bm25 (optimization_id, payload_overview) "
+                        "WITH (key_field='optimization_id')"
+                    )
+                )
+                conn.commit()
+            logger.info("BM25 lexical search enabled (pg_search).")
+            return True
+        except SQLAlchemyError as exc:
+            logger.info(
+                "BM25 search unavailable (%s); explore search uses ILIKE lexical "
+                "matching. Install the pg_search extension to enable BM25 ranking.",
+                exc,
+            )
             return False
 
     @property

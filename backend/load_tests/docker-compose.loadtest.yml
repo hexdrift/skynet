@@ -107,10 +107,10 @@ services:
       LOG_LEVEL: WARNING
       LOG_FORMAT: text
       SKYNET_CODE_VERSION: loadtest
-      # Embeddings would otherwise hit the public Jina/OpenAI endpoint; the
-      # load test does not exercise the explore-map and disabling it keeps
-      # background tasks deterministic.
-      EMBEDDINGS_ENABLED: "false"
+      # Semantic search would otherwise hit the public Jina/OpenAI embedding
+      # endpoint; the load test does not exercise the explore-map and the
+      # default lexical backend keeps background tasks deterministic.
+      SEARCH_BACKEND: "lexical"
     expose:
       - "8000"
     # No host ports — every host-side request goes through the nginx LB.
