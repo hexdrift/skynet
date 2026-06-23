@@ -14,6 +14,7 @@ import pytest
 from dspy.utils.exceptions import AdapterParseError
 
 from ..optimization.retrying_react import RetryingPredict, RetryingReActV2
+from ..react_compat import REACT_CLASS, react_uses_submit
 
 
 class _Sig(dspy.Signature):
@@ -105,10 +106,12 @@ def test_subclass_swaps_inner_predict_only() -> None:
     """``RetryingReActV2`` re-homes ``react`` onto a retrying Predict, same signature."""
     program = RetryingReActV2(_Sig, tools=[_alpha_tool()], max_iters=2)
 
-    assert isinstance(program, dspy.ReActV2)
+    assert isinstance(program, REACT_CLASS)
     assert isinstance(program.react, RetryingPredict)
     predictors = dict(program.named_predictors())
     assert isinstance(predictors["react"], RetryingPredict)
-    # The synthetic submit tool and roster are untouched by the swap.
-    assert "submit" in program.tools
+    # The synthetic loop-exit tool (``submit`` on ReActV2, ``finish`` on classic
+    # ReAct) and the user roster are untouched by the swap.
+    terminal = "submit" if react_uses_submit(program) else "finish"
+    assert terminal in program.tools
     assert "alpha" in program.tools

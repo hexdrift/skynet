@@ -656,6 +656,7 @@
     <li><a href="#acceptance">Post-install Acceptance Checklist</a></li>
     <li><a href="#egress">Runtime Egress</a></li>
     <li><a href="#nophone">No-Phone-Home Checklist</a></li>
+    <li><a href="#dspy-line">DSPy Version Line</a></li>
     <li><a href="#ca">Private TLS / CA Bundles</a></li>
     <li data-deploy="k8s"><a href="#smoke">Smoke Test</a></li>
     <li><a href="#quotas">Live User Quotas</a></li>
@@ -1822,6 +1823,36 @@ EMBEDDINGS_MODEL=<span class="s">&lt;internal embedding model&gt;</span></pre>
     <li><strong>Leave <code>OPENROUTER_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> / <code>FIREWORKS_AI_API_KEY</code> unset.</strong> They only matter for public providers; an empty <code>*_BASE_URL</code> paired with one of these set is how the agent (and the grounding scorer) silently reach a public API.</li>
     <li><strong>Already handled for you:</strong> <code>LITELLM_LOCAL_MODEL_COST_MAP=True</code> is baked into the backend image and chart, so LiteLLM uses its bundled cost map instead of fetching it from GitHub on import, and LiteLLM telemetry is off. Don't unset them.</li>
   </ul>
+</section>
+
+<section id="dspy-line">
+  <h2><a class="anchor" href="#dspy-line">§</a>DSPy Version Line</h2>
+  <p>Skynet runs on either DSPy line. The agent layer bridges classic <code>ReAct</code> (3.2.x) and <code>ReActV2</code> (3.3) in <code>core.service_gateway.react_compat</code>, so the source is identical — only the vendored wheel set differs. Pick the line your change-control allows, then vendor that set.</p>
+  <table>
+    <thead><tr><th>Line</th><th>Pins</th><th>When to use</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Preview</strong> (default)</td>
+        <td><code>dspy==3.3.0b1</code> + <code>gepa==0.1.1</code><br>from <code>requirements.txt</code> / <code>uv.lock</code></td>
+        <td>What CI builds and tests against. Newest features — but it is a pre-release.</td>
+      </tr>
+      <tr>
+        <td><strong>Stable</strong></td>
+        <td><code>dspy==3.2.1</code> + <code>gepa==0.1.1</code><br>from <code>requirements.stable.txt</code></td>
+        <td>The latest stable DSPy release. Use when policy forbids pre-releases in production.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>The default build (<code>uv</code> installer, or <code>DSPY_LINE=preview</code>) pins the 3.3 preview from <code>uv.lock</code>. Build the stable line through the pip installer path:</p>
+<pre>docker build \
+  --build-arg PKG_MANAGER=pip \
+  --build-arg DSPY_LINE=stable \
+  -t skynet-backend:stable backend/</pre>
+  <p>Vendor the wheels matching the requirements file you build with — <code>requirements.stable.txt</code> resolves a different transitive set than <code>requirements.txt</code>, so mirror that exact set into your offline index before building.</p>
+  <div class="callout danger">
+    <span class="label">Keep gepa at 0.1.1 on the stable line</span>
+    <p>DSPy 3.2.1 pins <code>gepa==0.0.27</code> by default, but the react <code>/run</code> tool-optimization needs gepa's <code>enable_tool_optimization</code> adapter — a 0.1.x feature. <code>requirements.stable.txt</code> therefore overrides gepa up to <code>0.1.1</code> (DSPy 3.2.1 runs cleanly against it). Drop gepa back to 0.0.27 and react tool-wording optimization breaks at adapter construction.</p>
+  </div>
 </section>
 
 <section id="ca">

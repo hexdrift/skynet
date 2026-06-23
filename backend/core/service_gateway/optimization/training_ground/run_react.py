@@ -61,10 +61,11 @@ from .gepa_adapter import (
 
 logger = logging.getLogger(__name__)
 
-SUBMIT_TOOL_NAME = "submit"
-"""The terminal tool ReActV2 appends to every roster. Excluded from the
-optimizable tool surface (snapshot rosters, overlay) because it carries no
-user-tunable description — it is DSPy's fixed loop-exit action."""
+TERMINAL_TOOL_NAMES = frozenset({"submit", "finish"})
+"""The synthetic loop-exit tool the program appends to every roster — ``submit``
+on ReActV2, ``finish`` on classic ReAct. Excluded from the optimizable tool
+surface (snapshot rosters, overlay) because it carries no user-tunable
+description — it is DSPy's fixed loop-exit action."""
 
 _AUTO_BUDGETS: dict[str, int] = {
     "light": 500,
@@ -263,7 +264,7 @@ def _dataset_snapshot_tools(
         if not isinstance(spec, Mapping):
             continue
         name = str(spec.get("name") or "").strip()
-        if not name or name == SUBMIT_TOOL_NAME:
+        if not name or name in TERMINAL_TOOL_NAMES:
             continue
         desc = str(spec.get("description") or spec.get("desc") or "")
         args = spec.get("args") if isinstance(spec.get("args"), Mapping) else {}

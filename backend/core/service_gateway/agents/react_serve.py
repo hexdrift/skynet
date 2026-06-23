@@ -34,7 +34,7 @@ from ..optimization.tool_overlay import (
     _apply_tool_name_overrides,
     _assert_tool_set_matches,
 )
-from .code import ReasoningStreamListener, _format_agent_error, _SubmitArgExtractor
+from .code import ReactReplyStream, ReasoningStreamListener, _format_agent_error
 from .constants import REASONING_FIELD
 from .generalist import (
     ApprovalRegistry,
@@ -194,15 +194,14 @@ async def _drive_react_chat(
         input_fields = list(signature_cls.input_fields)
         primary_out = output_fields[0] if output_fields else None
 
+        reply_stream = ReactReplyStream(program, primary_out) if primary_out else None
+        listeners = (
+            reply_stream.listeners()
+            if reply_stream is not None
+            else [ReasoningStreamListener(predict=program.react, allow_reuse=True)]
+        )
         stream_program = dspy.streamify(
-            program,
-            stream_listeners=[
-                dspy.streaming.StreamListener(
-                    signature_field_name="tool_calls", predict=program.react, allow_reuse=True
-                ),
-                ReasoningStreamListener(predict=program.react, allow_reuse=True),
-            ],
-            async_streaming=True,
+            program, stream_listeners=listeners, async_streaming=True
         )
 
         # Single-composer chat: the user's message drives the primary input
@@ -213,19 +212,16 @@ async def _drive_react_chat(
             inputs[input_fields[0]] = user_message
 
         reply_text = ""
-        extractor = _SubmitArgExtractor(primary_out) if primary_out else None
         with dspy.context(lm=lm):
             async for chunk in stream_program(**inputs):
                 if isinstance(chunk, dspy.streaming.StreamResponse):
                     if chunk.signature_field_name == REASONING_FIELD:
                         emit({"event": "reasoning_patch", "data": {"chunk": chunk.chunk}})
-                    elif chunk.signature_field_name == "tool_calls" and extractor is not None:
-                        delta = extractor.feed(chunk.chunk)
+                    elif reply_stream is not None:
+                        delta = reply_stream.reply_delta(chunk)
                         if delta:
                             reply_text += delta
                             emit({"event": "message_patch", "data": {"chunk": delta}})
-                        if chunk.is_last_chunk:
-                            extractor.reset()
                 elif isinstance(chunk, dspy.Prediction):
                     final = _format_react_outputs(chunk, output_fields)
                     if final:
