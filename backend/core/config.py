@@ -362,6 +362,17 @@ class Settings(BaseSettings):
             "Set true (plus EMBEDDINGS_BASE_URL/MODEL) to enable semantic search."
         ),
     )
+    search_bm25_enabled: bool = Field(
+        default=True,
+        description=(
+            "Rank lexical explore search with BM25 when the pg_search extension "
+            "is present on the database. Best-effort: if pg_search is unavailable "
+            "or the index can't be built, search falls back to ILIKE substring "
+            "matching. Only affects the lexical path (i.e. when embeddings_enabled "
+            "is false); set false to force ILIKE even where pg_search exists."
+        ),
+        alias="SEARCH_BM25_ENABLED",
+    )
 
     max_jobs_per_user: int = Field(default=100, ge=1, description="Default per-user job cap")
     backend_auth_secret: SecretStr | None = Field(

@@ -827,6 +827,12 @@ Get-FileHash -Algorithm SHA256 backend-2026.04.30.tar</span></pre>
     <span class="label">TODO · On-premise</span>
     <p>Setting <code>EMBEDDINGS_ENABLED=false</code> does <strong>not</strong> skip this — Alembic never reads that flag, so the baseline <code>CREATE EXTENSION vector</code> runs regardless. The migration runs as a <strong>pre-install hook</strong>, so a missing extension or insufficient privilege aborts the entire install before any application pod starts.</p>
   </div>
+
+  <h3>Optional: <code>pg_search</code> for BM25 lexical ranking</h3>
+  <p>The default deployment runs <strong>lexical</strong> explore search (no embedding gateway needed). With the <code>pg_search</code> (ParadeDB) extension installed on this database, that search ranks results with true <strong>BM25</strong> relevance; without it, it falls back to <code>ILIKE</code> substring matching. This is <strong>optional</strong> and best-effort — at startup the backend tries to create the extension and a <code>bm25</code> index over the <code>jobs</code> corpus, and silently uses ILIKE if it can't (so a missing <code>pg_search</code> never blocks boot, unlike the <code>vector</code> requirement above). To enable BM25, install/allowlist <code>pg_search</code> on the managed Postgres and confirm:</p>
+<pre><span class="k">CREATE EXTENSION IF NOT EXISTS</span> pg_search;
+<span class="k">SELECT</span> * <span class="k">FROM</span> pg_extension <span class="k">WHERE</span> extname = <span class="s">'pg_search'</span>;</pre>
+  <p>Backend logs show <code>BM25 lexical search enabled (pg_search)</code> when it activates. Set <code>SEARCH_BM25_ENABLED=false</code> to force ILIKE even where <code>pg_search</code> exists.</p>
 </section>
 
 <section id="pre-transfer">

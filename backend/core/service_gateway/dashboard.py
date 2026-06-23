@@ -28,6 +28,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import DateTime, bindparam, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -532,6 +533,35 @@ def search_optimizations(
                 use_lexical = True
 
     if use_lexical:
+        # BM25 ranks by relevance, so it only serves the relevance sort with a
+        # query present; explicit gain/recent sorts keep the ILIKE path's
+        # ordering. Any pg_search failure degrades to the ILIKE search below.
+        if (
+            query_clean
+            and sort == SEARCH_SORT_RELEVANCE
+            and settings.search_bm25_enabled
+            and getattr(job_store, "bm25_search_enabled", False)
+        ):
+            try:
+                return _search_bm25(
+                    job_store=job_store,
+                    query=query_clean,
+                    models=models,
+                    optimizers=optimizers,
+                    optimization_types=optimization_types,
+                    tasks=tasks,
+                    modules=modules,
+                    date_from=date_from,
+                    date_to=date_to,
+                    page=page,
+                    size=size,
+                    owner_username=owner_username,
+                    shared_with_username=shared_with_username,
+                )
+            except SQLAlchemyError as exc:
+                logger.warning(
+                    "BM25 search failed (%s); falling back to ILIKE lexical search.", exc
+                )
         return _search_lexical(
             job_store=job_store,
             query=query_clean,
@@ -1067,4 +1097,195 @@ def _search_lexical(
         "total": total,
         "matched_ids": leaders,
         "search_type": "lexical",
+    }
+
+
+def _search_bm25(
+    *,
+    job_store: Any,
+    query: str,
+    models: list[str] | None,
+    optimizers: list[str] | None,
+    optimization_types: list[str] | None,
+    tasks: list[str] | None,
+    modules: list[str] | None,
+    date_from: date | None,
+    date_to: date | None,
+    page: int,
+    size: int,
+    owner_username: str | None = None,
+    shared_with_username: str | None = None,
+) -> dict[str, Any]:
+    """BM25-ranked lexical search over the jobs payload_overview corpus.
+
+    Mirrors :func:`_search_lexical`'s structured filters and result assembly,
+    but ranks by ParadeDB ``paradedb.score`` instead of recency and surfaces a
+    real ``relevance`` per row. Requires the ``pg_search`` extension and the
+    ``idx_jobs_bm25`` index (created best-effort at store init); the caller only
+    routes here when ``job_store.bm25_search_enabled`` is true and wraps the call
+    so any failure falls back to :func:`_search_lexical`.
+
+    Args:
+        job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
+        query: Pre-trimmed, non-empty query string (the BM25 match text).
+        models: Optional model whitelist.
+        optimizers: Optional optimizer whitelist.
+        optimization_types: Optional ``optimization_type`` whitelist.
+        tasks: Optional ``task_name`` whitelist.
+        modules: Optional ``module_name`` whitelist.
+        date_from: Inclusive lower bound on ``created_at``.
+        date_to: Inclusive upper bound on ``created_at``.
+        page: 1-indexed page number.
+        size: Page size (already clamped).
+        owner_username: When set, scope to that user (including private rows).
+        shared_with_username: When set (and ``owner_username`` is not), scope to
+            jobs shared with that user via a member grant.
+
+    Returns:
+        ``{"results": [...], "total": int, "matched_ids": [...], "search_type": "bm25"}``.
+    """
+    where_parts: list[str] = ["j.status = 'success'"]
+    params: dict[str, Any] = {}
+    if owner_username is not None:
+        where_parts.append("j.username = :owner_username")
+        params["owner_username"] = owner_username
+    elif shared_with_username is not None:
+        where_parts.append(_SHARED_GRANT_SCOPE_SQL)
+        params["shared_with_username"] = shared_with_username
+    else:
+        where_parts.append(
+            "NOT COALESCE(je.is_private, "
+            "(j.payload_overview->>'is_private')::boolean, FALSE)"
+        )
+
+    if models:
+        where_parts.append(
+            f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+            "= ANY(:models)"
+        )
+        params["models"] = list(models)
+    if optimizers:
+        where_parts.append(
+            f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+            "= ANY(:optimizers)"
+        )
+        params["optimizers"] = list(optimizers)
+    if optimization_types:
+        where_parts.append(
+            "COALESCE(je.optimization_type, j.optimization_type) = ANY(:optimization_types)"
+        )
+        params["optimization_types"] = list(optimization_types)
+    if tasks:
+        where_parts.append(
+            f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) "
+            "= ANY(:tasks)"
+        )
+        params["tasks"] = list(tasks)
+    if modules:
+        where_parts.append(
+            f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+            "= ANY(:modules)"
+        )
+        params["modules"] = list(modules)
+    if date_from is not None:
+        where_parts.append("j.created_at >= :date_from")
+        params["date_from"] = date_from
+    if date_to is not None:
+        where_parts.append("j.created_at < :date_to_excl")
+        params["date_to_excl"] = date_to + timedelta(days=1)
+
+    # BM25 match: @@@ against the indexed payload_overview corpus. paradedb.score
+    # then ranks the matched rows. Both require the pg_search bm25 index on jobs.
+    where_parts.append("j.payload_overview @@@ :bm25_query")
+    params["bm25_query"] = query
+
+    where_sql = " AND ".join(where_parts)
+
+    select_cols = (
+        "j.optimization_id, "
+        "COALESCE(je.optimization_type, j.optimization_type) AS optimization_type, "
+        f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+        "AS winning_model, "
+        "je.baseline_metric, je.optimized_metric, "
+        "je.summary_text, "
+        f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
+        f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+        "AS module_name, "
+        f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+        "AS optimizer_name, "
+        "j.created_at, "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_DESCRIPTION}' AS task_description"
+    )
+
+    engine = job_store.engine
+    with Session(engine) as session:
+        ranked_rows = (
+            session.execute(
+                text(
+                    "SELECT j.optimization_id, "
+                    "paradedb.score(j.optimization_id) AS relevance "
+                    "FROM jobs j "
+                    "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                    f"WHERE {where_sql} "
+                    "ORDER BY relevance DESC, j.created_at DESC, j.optimization_id DESC "
+                    "LIMIT :ids_cap"
+                ),
+                {**params, "ids_cap": SEARCH_MATCHED_IDS_CAP},
+            )
+            .mappings()
+            .all()
+        )
+
+        leaders = [row["optimization_id"] for row in ranked_rows]
+        relevance_by_id = {
+            row["optimization_id"]: _as_float(row.get("relevance")) for row in ranked_rows
+        }
+        total = len(leaders)
+        offset = (page - 1) * size
+        page_ids = leaders[offset : offset + size]
+
+        page_rows: list[Mapping[str, Any]] = []
+        if page_ids:
+            page_rows = (
+                session.execute(
+                    text(
+                        f"SELECT {select_cols} FROM jobs j "
+                        "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                        "WHERE j.optimization_id = ANY(:page_ids)"
+                    ),
+                    {"page_ids": page_ids},
+                )
+                .mappings()
+                .all()
+            )
+
+    by_id = {row["optimization_id"]: row for row in page_rows}
+    results: list[dict[str, Any]] = []
+    for opt_id in page_ids:
+        row = by_id.get(opt_id)
+        if row is None:
+            continue
+        summary = row["summary_text"] or row.get("task_description")
+        if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
+            summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
+        results.append(
+            {
+                "optimization_id": opt_id,
+                "optimization_type": row["optimization_type"],
+                "winning_model": row["winning_model"],
+                "baseline_metric": _as_float(row["baseline_metric"]),
+                "optimized_metric": _as_float(row["optimized_metric"]),
+                "summary_text": summary,
+                "task_name": row["task_name"],
+                "module_name": row["module_name"],
+                "optimizer_name": row["optimizer_name"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "relevance": relevance_by_id.get(opt_id),
+            }
+        )
+    return {
+        "results": results,
+        "total": total,
+        "matched_ids": leaders,
+        "search_type": "bm25",
     }
