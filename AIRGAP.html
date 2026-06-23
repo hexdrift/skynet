@@ -1143,6 +1143,7 @@ BACKEND_AUTH_SECRET</pre>
 <span class="c">REM wrote offline migration SQL: .\migration.sql</span></span></pre>
 
   <p>Under the hood this calls <code>alembic upgrade head --sql</code> against the same <code>alembic/env.py</code> the Job uses, so the offline output is byte-for-byte the DDL the cluster will run. Review <code>./migration.sql</code>, then proceed to <code>build-images</code> / <code>install</code>.</p>
+  <p>A few revisions also run a <strong>data backfill</strong> (per-row reads that branch in Python — e.g. the legacy 0-1 → 0-100 metric rescale). Those cannot be expressed as static SQL, so in the offline dump they appear as a <code>-- ... runs online only</code> marker and are executed for real by the in-cluster Job against a live connection. Their absence from <code>migration.sql</code> is expected; the schema (DDL) is still complete.</p>
 
   <h3>In-cluster migration Job</h3>
   <p>The Helm chart runs a pre-install/pre-upgrade Job:</p>

@@ -26,7 +26,8 @@ from collections.abc import Sequence
 from typing import Any
 
 import sqlalchemy as sa
-from alembic import op
+
+from alembic import context, op
 
 revision: str = "b4c5d6e7f8a9"
 down_revision: str | Sequence[str] | None = "f3c4d5e6f7a8"
@@ -148,8 +149,12 @@ def _is_legacy(result: dict[str, Any] | None, metrics: dict[str, Any] | None) ->
     return False
 
 
-def upgrade() -> None:
-    """Rescale legacy 0-1 aggregate metrics to 0-100 across jobs and embeddings."""
+def _backfill_jobs_metric_scale() -> None:
+    """Rescale every drifted ``jobs`` row's legacy 0-1 aggregates to 0-100.
+
+    Online-only: each candidate row is read and rewritten with values computed
+    in Python, which Alembic's offline ``--sql`` mode cannot serialize.
+    """
     bind = op.get_bind()
     rows = bind.execute(
         sa.text(
@@ -180,6 +185,19 @@ def upgrade() -> None:
                 "oid": optimization_id,
             },
         )
+
+
+def upgrade() -> None:
+    """Rescale legacy 0-1 aggregate metrics to 0-100 across jobs and embeddings."""
+    # The jobs backfill reads rows and branches in Python, which Alembic's
+    # offline (--sql) mode can't serialize — op.get_bind().execute() yields no
+    # cursor there, so a schema-only dump (validate-migrations) crashes on it.
+    # Skip it offline; the in-cluster Job runs online and backfills normally.
+    # The job_embeddings rescale below is plain SQL and dumps either way.
+    if context.is_offline_mode():
+        op.execute("-- offline --sql dump: per-row jobs metric backfill runs online only")
+    else:
+        _backfill_jobs_metric_scale()
 
     op.execute(
         "UPDATE job_embeddings "
