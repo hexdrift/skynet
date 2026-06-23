@@ -57,8 +57,10 @@ $INTERNAL_CA_SECRET     = Get-OrDefault 'INTERNAL_CA_SECRET'     ''
 $INTERNAL_CA_FILENAME   = Get-OrDefault 'INTERNAL_CA_FILENAME'   'ca-bundle.pem'
 $INTERNAL_CA_MOUNT_DIR  = Get-OrDefault 'INTERNAL_CA_MOUNT_DIR'  '/etc/skynet/ca'
 $LLM_BASE_URL           = Get-OrDefault 'LLM_BASE_URL'           'https://llm-gateway.internal/v1'
+$CODE_AGENT_MODEL       = Get-OrDefault 'CODE_AGENT_MODEL'       'gpt-5'
+$GENERALIST_AGENT_MODEL = Get-OrDefault 'GENERALIST_AGENT_MODEL' 'gpt-5'
 $EMBEDDING_BASE_URL     = Get-OrDefault 'EMBEDDING_BASE_URL'     $LLM_BASE_URL
-$EMBEDDING_MODEL        = Get-OrDefault 'EMBEDDING_MODEL'        'jina-code-embeddings-0.5b'
+$EMBEDDING_MODEL        = Get-OrDefault 'EMBEDDING_MODEL'        'jina-embeddings-v4'
 $OIDC_ISSUER            = Get-OrDefault 'OIDC_ISSUER'            'https://idp.internal/realms/skynet'
 $OIDC_CLIENT_ID         = Get-OrDefault 'OIDC_CLIENT_ID'         'skynet'
 $OIDC_SCOPE             = Get-OrDefault 'OIDC_SCOPE'             'openid profile email groups'
@@ -70,10 +72,9 @@ $BACKEND_HOST           = Get-OrDefault 'BACKEND_HOST'           'skynet-api.app
 $LLM_EGRESS_CIDR        = Get-OrDefault 'LLM_EGRESS_CIDR'        '10.0.5.0/24'
 $EMBEDDING_EGRESS_CIDR  = Get-OrDefault 'EMBEDDING_EGRESS_CIDR'  $LLM_EGRESS_CIDR
 $IDP_EGRESS_CIDR        = Get-OrDefault 'IDP_EGRESS_CIDR'        '10.0.6.0/24'
+$DB_EGRESS_CIDR         = Get-OrDefault 'DB_EGRESS_CIDR'         '10.0.4.0/24'
 $LDAP_EGRESS_CIDR       = Get-OrDefault 'LDAP_EGRESS_CIDR'       ''
 $LDAP_EGRESS_PORT       = Get-OrDefault 'LDAP_EGRESS_PORT'       '636'
-$COMMS_WEBHOOK_URL      = Get-OrDefault 'COMMS_WEBHOOK_URL'      ''
-$COMMS_EGRESS_CIDR      = Get-OrDefault 'COMMS_EGRESS_CIDR'      ''
 
 function Write-StdErr {
     param([string]$Message)
@@ -108,6 +109,9 @@ Commands:
   install              Run helm upgrade --install; the Helm migration hook runs first.
   status               Print rollout status commands for backend/frontend.
   all                  Run check, validate-migrations, values, render, install, status.
+                       NOTE: `all` does NOT build or push images — run build-images +
+                       push-images (after `docker login <registry>`) first, or install
+                       fails on ImagePullBackOff.
 
 Common environment overrides (set with `set NAME=value` in cmd or `$env:NAME='value'` in PowerShell):
   RELEASE=skynet
@@ -121,8 +125,10 @@ Common environment overrides (set with `set NAME=value` in cmd or `$env:NAME='va
   FRONTEND_SECRET=skynet-frontend-secrets
   INTERNAL_CA_SECRET=skynet-internal-ca
   LLM_BASE_URL=https://llm-gateway.internal/v1
+  CODE_AGENT_MODEL=gpt-5
+  GENERALIST_AGENT_MODEL=gpt-5
   EMBEDDING_BASE_URL=https://llm-gateway.internal/v1
-  EMBEDDING_MODEL=jina-code-embeddings-0.5b
+  EMBEDDING_MODEL=jina-embeddings-v4
   OIDC_ISSUER=https://idp.internal/realms/skynet
   OIDC_CLIENT_ID=skynet
   OIDC_SCOPE="openid profile email groups"
@@ -134,10 +140,9 @@ Common environment overrides (set with `set NAME=value` in cmd or `$env:NAME='va
   LLM_EGRESS_CIDR=10.0.5.0/24
   EMBEDDING_EGRESS_CIDR=10.0.5.0/24              # set separately if embedding gateway differs
   IDP_EGRESS_CIDR=10.0.6.0/24
+  DB_EGRESS_CIDR=10.0.4.0/24                   # managed Postgres subnet; blank to omit dbEgress
   LDAP_EGRESS_CIDR=10.0.8.0/24                 # blank to omit ldapEgress
   LDAP_EGRESS_PORT=636                         # 389 if you really must use ldap://
-  COMMS_WEBHOOK_URL=https://chat.internal/hooks/skynet
-  COMMS_EGRESS_CIDR=10.0.7.0/24
 
 Image build / push overrides (build-images, push-images):
   DOCKER=docker                                # or `podman`
@@ -229,13 +234,10 @@ name only; this script does not ask for secret values or write credentials.
     Read-Prompt 'LLM_EGRESS_CIDR'        'LLM gateway egress CIDR'
     Read-Prompt 'EMBEDDING_EGRESS_CIDR'  'Embedding gateway egress CIDR'
     Read-Prompt 'IDP_EGRESS_CIDR'        'IdP egress CIDR'
+    Read-Prompt 'DB_EGRESS_CIDR'         'Managed Postgres egress CIDR (blank to omit)'
     Read-Prompt 'LDAP_EGRESS_CIDR'       'LDAP/AD controller egress CIDR (blank to omit)'
     if (-not [string]::IsNullOrEmpty($script:LDAP_EGRESS_CIDR)) {
         Read-Prompt 'LDAP_EGRESS_PORT'       'LDAP/AD egress port (636 ldaps / 389 ldap)'
-    }
-    Read-Prompt 'COMMS_WEBHOOK_URL'      'Notifications webhook URL (blank to disable)'
-    if (-not [string]::IsNullOrEmpty($script:COMMS_WEBHOOK_URL)) {
-        Read-Prompt 'COMMS_EGRESS_CIDR'      'Notifications webhook egress CIDR'
     }
 
     Invoke-Values
@@ -354,8 +356,18 @@ function Invoke-ValidateMigrations {
                 # Materialize the lockfile-pinned env first. Without this we
                 # fall through to whatever 'alembic' the system Python happens
                 # to expose, which is how validate-migrations silently produced
-                # an empty SQL file when ldap3 was missing from a stale .venv.
-                & uv sync --frozen --quiet
+                # an empty SQL file from a stale .venv. UV_PYTHON_DOWNLOADS=never
+                # mirrors backend/Dockerfile so uv never reaches out to download
+                # a Python build; if UV_INDEX_URL is set we pass it through so an
+                # internal PyPI mirror satisfies the sync with no internet.
+                $previousUvDownloads = $env:UV_PYTHON_DOWNLOADS
+                $env:UV_PYTHON_DOWNLOADS = 'never'
+                try {
+                    & uv sync --frozen --quiet
+                }
+                finally {
+                    $env:UV_PYTHON_DOWNLOADS = $previousUvDownloads
+                }
                 if ($LASTEXITCODE -ne 0) {
                     Write-StdErr 'uv sync --frozen failed; resolve dep conflicts before validate-migrations'
                     exit 1
@@ -365,10 +377,12 @@ function Invoke-ValidateMigrations {
             elseif ($hasAlembic) {
                 # No uv: rely on the active Python. Confirm migration deps are
                 # actually importable so we fail loudly here instead of writing
-                # a truncated migration.sql.
-                & python -c 'import alembic, sqlalchemy, ldap3, pgvector' 2>$null
+                # a truncated migration.sql. alembic/env.py never imports ldap3,
+                # so we do not require it — demanding it wrongly rejects
+                # otherwise-capable hosts.
+                & python -c 'import alembic, sqlalchemy, pgvector' 2>$null
                 if ($LASTEXITCODE -ne 0) {
-                    Write-StdErr 'alembic on PATH but backend deps missing (alembic/sqlalchemy/ldap3/pgvector); install backend extras first'
+                    Write-StdErr 'alembic on PATH but backend deps missing (alembic/sqlalchemy/pgvector); install backend extras first'
                     exit 1
                 }
                 & alembic upgrade head --sql | Out-File -FilePath $out -Encoding utf8
@@ -436,6 +450,7 @@ function Invoke-PushImages {
     Test-Need $dockerBin
     $backendTag  = "$REGISTRY/$BACKEND_REPOSITORY`:$IMAGE_TAG"
     $frontendTag = "$REGISTRY/$FRONTEND_REPOSITORY`:$IMAGE_TAG"
+    Write-StdErr "Reminder: '$dockerBin login $REGISTRY' (or 'podman login') must have succeeded or these pushes 401."
     & $dockerBin push $backendTag
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $dockerBin push $frontendTag
@@ -455,7 +470,7 @@ function Invoke-Values {
     $caBackendEnv      = ''
     $caBackendMounts   = ''
     $caFrontendMounts  = ''
-    $commsEgress       = ''
+    $dbEgress          = ''
     $embeddingEgress   = ''
     $ldapEgress        = ''
 
@@ -478,8 +493,8 @@ function Invoke-Values {
         $caFrontendMounts = $caBackendMounts
     }
 
-    if (-not [string]::IsNullOrEmpty($script:COMMS_EGRESS_CIDR)) {
-        $commsEgress = "    - `"$($script:COMMS_EGRESS_CIDR)`""
+    if (-not [string]::IsNullOrEmpty($script:DB_EGRESS_CIDR)) {
+        $dbEgress = "`n  # TODO: On-premise - the managed Postgres subnet. REQUIRED when`n  # postgres.enabled=false or the backend pool can never reach the DB.`n  dbEgress:`n    - cidr: `"$($script:DB_EGRESS_CIDR)`"`n      ports: [5432]"
     }
 
     if ((-not [string]::IsNullOrEmpty($script:EMBEDDING_EGRESS_CIDR)) -and
@@ -507,11 +522,14 @@ backend:
   env:
     # TODO: On-premise - point these at your OpenAI-compatible internal LLM gateway.
     CODE_AGENT_BASE_URL: "$($script:LLM_BASE_URL)"
-    CODE_AGENT_MODEL: "gpt-5"
     GENERALIST_AGENT_BASE_URL: "$($script:LLM_BASE_URL)"
-    GENERALIST_AGENT_MODEL: "gpt-5"
-    RECOMMENDATIONS_EMBEDDING_BASE_URL: "$($script:EMBEDDING_BASE_URL)"
-    RECOMMENDATIONS_EMBEDDING_MODEL: "$($script:EMBEDDING_MODEL)"
+    # TODO: On-premise - set to a model id your internal gateway actually serves (gpt-5 is a placeholder). LiteLLM forwards this id verbatim to CODE_AGENT_BASE_URL.
+    CODE_AGENT_MODEL: "$($script:CODE_AGENT_MODEL)"
+    GENERALIST_AGENT_MODEL: "$($script:GENERALIST_AGENT_MODEL)"
+    EMBEDDINGS_BASE_URL: "$($script:EMBEDDING_BASE_URL)"
+    EMBEDDINGS_MODEL: "$($script:EMBEDDING_MODEL)"
+    # Air-gap: use the bundled litellm cost map; do not fetch from GitHub on import.
+    LITELLM_LOCAL_MODEL_COST_MAP: "True"
 $caBackendEnv
     # TODO: On-premise - set to the public frontend route.
     FRONTEND_URL: "https://$($script:FRONTEND_HOST)"
@@ -519,7 +537,6 @@ $caBackendEnv
     ALLOWED_ORIGINS: "https://$($script:FRONTEND_HOST)"
     ADMIN_GROUPS: "$($script:AUTH_ADMIN_GROUPS)"
     ADMIN_USERNAMES: "$($script:AUTH_ADMINS)"
-    COMMS_WEBHOOK_URL: "$($script:COMMS_WEBHOOK_URL)"
     # TODO: On-premise - set to enable Active Directory username autocomplete
     # in the admin tab. Leave empty to keep the NullDirectoryClient fallback
     # (DB-known users only). See AIRGAP.html "Internal LDAP / Active Directory
@@ -532,7 +549,8 @@ $caBackendEnv
   secrets:
     # TODO: On-premise - must contain OPENAI_API_KEY and BACKEND_AUTH_SECRET.
     # OPENAI_API_KEY is also reused for the embedding API unless you add
-    # RECOMMENDATIONS_EMBEDDING_API_KEY to this Secret.
+    # EMBEDDINGS_API_KEY to this Secret.
+    # For an unauthenticated internal gateway, set OPENAI_API_KEY to any non-empty placeholder (e.g. "not-needed").
     # Add AD_LDAP_BIND_PASSWORD when AD_LDAP_URL is set.
     existingSecret: "$($script:BACKEND_SECRET)"
 $caBackendMounts
@@ -584,11 +602,10 @@ openshift:
       host: "$($script:FRONTEND_HOST)"
 
 networkPolicy:
-  enabled: true
+  enabled: true$dbEgress
   # TODO: On-premise - use the exact IdP / internal service CIDRs for your cluster.
   egressCidrs:
     - "$($script:IDP_EGRESS_CIDR)"
-$commsEgress
   # TODO: On-premise - use the exact LLM gateway CIDRs and ports.
   llmEgress:
     - cidr: "$($script:LLM_EGRESS_CIDR)"
@@ -658,6 +675,8 @@ switch ($Command) {
     'install'             { Invoke-Install;            break }
     'status'              { Invoke-Status;             break }
     'all' {
+        Write-StdErr "Note: 'all' does NOT build or push images — run build-images + push-images"
+        Write-StdErr "(after 'docker login $REGISTRY') first, or install fails on ImagePullBackOff."
         Invoke-Check
         Invoke-ValidateMigrations
         Invoke-Values

@@ -25,6 +25,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Baked at build time for air-gap correctness: Next.js inlines these NEXT_PUBLIC_*
+# values at `npm run build`, so they cannot be overridden on a prebuilt image.
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_FEATURE_GENERALIST_AGENT
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_FEATURE_GENERALIST_AGENT=$NEXT_PUBLIC_FEATURE_GENERALIST_AGENT
 RUN npm run build
 
 FROM base AS runner

@@ -56,14 +56,22 @@ helm upgrade skynet deploy/helm/skynet --reuse-values \
 
 ## Production checklist
 
-- [ ] `global.imageRegistry` set to your internal Artifactory.
+- [ ] `global.imageRegistry` set to your internal Artifactory. It must prefix
+      ALL FOUR images — `skynet/backend`, `skynet/frontend`, `pgvector/pgvector:pg16`,
+      and `edoburu/pgbouncer`. The last two are easy to forget on the bundled-DB /
+      pooler paths and will `ImagePullBackOff` from Docker Hub otherwise.
 - [ ] `global.imagePullSecrets` references a `kubernetes.io/dockerconfigjson` secret.
 - [ ] `externalDatabase.enabled=true` pointing at managed pgvector (set `postgres.enabled=false`).
+- [ ] External-DB deployments (`postgres.enabled=false`) MUST set `networkPolicy.dbEgress`
+      to the managed Postgres subnet, or the backend pool and migration Job cannot reach it.
 - [ ] Backend secrets sourced from an external secret store (set `backend.secrets.existingSecret`).
 - [ ] `frontend.secrets.data.AUTH_SECRET` rotated (`openssl rand -base64 32`).
 - [ ] OIDC vars populated: `AUTH_SSO_ISSUER`, `AUTH_SSO_CLIENT_ID`, `AUTH_SSO_CLIENT_SECRET`.
 - [ ] `openshift.routes.*.host` pinned to a real DNS name with a valid certificate.
 - [ ] `networkPolicy.egressCidrs` narrowed to your LLM gateway + IdP CIDRs.
+- [ ] An empty egress allowlist renders `0.0.0.0/0` (NOT air-gapped). After install,
+      verify with `kubectl get networkpolicy <release>-skynet-backend -o yaml` that the
+      egress `ipBlock` is NOT `0.0.0.0/0`.
 - [ ] `backend.env.ALLOWED_ORIGINS` lists every front-door host.
 
 ## Key values
@@ -72,15 +80,15 @@ helm upgrade skynet deploy/helm/skynet --reuse-values \
 |-------|---------|
 | `backend.env.WORKER_CONCURRENCY` | Threaded worker fan-out per replica (default 4). |
 | `backend.env.WORKER_POLL_INTERVAL` | DB poll cadence in seconds (default 2.0). |
-| `backend.env.RECOMMENDATIONS_ENABLED` | Master switch for the embedding/recommendation pipeline. |
-| `backend.env.RECOMMENDATIONS_EMBEDDING_BASE_URL` | Internal OpenAI-compatible embedding API base URL. |
+| `backend.env.EMBEDDINGS_ENABLED` | Master switch for the embedding/recommendation pipeline. |
+| `backend.env.EMBEDDINGS_BASE_URL` | Internal OpenAI-compatible embedding API base URL. |
 | `networkPolicy.embeddingEgress` | Optional backend egress allowlist when the embedding API uses a separate CIDR. |
 | `backend.env.CODE_AGENT_BASE_URL` | Override for internal OpenAI-compatible gateway. |
 | `frontend.env.API_URL` | Runtime backend address. Empty → in-cluster service. |
 | `openshift.routes.backend.annotations` | Default `haproxy.router.openshift.io/timeout: 5m` for long optimization runs. |
 | `backend.autoscaling.queueDepth` | External metric target for pending jobs; requires Prometheus Adapter. CPU remains as fallback. |
 | `pgbouncer.enabled` | Optional transaction-pooler in front of Postgres; backend pods set `DB_PGBOUNCER_TRANSACTION_MODE=true` when enabled. |
-| `migration.command` | Will switch to `["alembic", "upgrade", "head"]` after Wave 3. |
+| `migration.command` | Pre-install/upgrade hook command; default `["alembic","upgrade","head"]`. Override to `["alembic","stamp","342f7449be26"]` once when adopting a DB already at the baseline. |
 
 ## Uninstall
 
