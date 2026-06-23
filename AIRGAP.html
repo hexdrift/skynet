@@ -57,6 +57,8 @@
     --warning: #9a6a10;
     --warning-dim: rgba(154, 106, 16, 0.1);
     --warning-border: rgba(154, 106, 16, 0.35);
+    --danger: #a8331d;
+    --danger-dim: rgba(168, 51, 29, 0.09);
     --shadow-sm: 0 1px 2px rgba(28, 22, 18, 0.05);
     --shadow-card: 0 1px 3px rgba(28, 22, 18, 0.06), 0 1px 2px rgba(28, 22, 18, 0.04);
     --radius: 0.5rem;
@@ -270,6 +272,9 @@
     margin-bottom: 0.25rem;
   }
   .callout p:last-child { margin-bottom: 0; }
+  /* Red variant for genuine security footguns, vs the amber on-prem TODOs. */
+  .callout.danger { border-left-color: var(--danger); background: var(--danger-dim); }
+  .callout.danger .label { color: var(--danger); }
   .arch {
     background: linear-gradient(180deg, var(--surface-1), #fbfaf7);
     border: 1px solid var(--border);
@@ -537,6 +542,18 @@
   body.search-bm25 .search-toggle::before { transform: translate3d(100%, 0, 0); }
   :root[data-search-pref="semantic"] .search-toggle::before,
   body.search-semantic .search-toggle::before { transform: translate3d(200%, 0, 0); }
+  /* Deploy (2-up): default k8s at slot 0, compose slides to slot 1. */
+  :root[data-deploy-pref="compose"] .deploy-toggle::before,
+  body.deploy-compose .deploy-toggle::before { transform: translate3d(100%, 0, 0); }
+  /* LLM gateway (4-up): default litellm at slot 0; vllm/ollama/azure slide right. */
+  .gateway-toggle { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .gateway-toggle::before { width: calc((100% - 6px) / 4); }
+  :root[data-gateway-pref="vllm"] .gateway-toggle::before,
+  body.gateway-vllm .gateway-toggle::before { transform: translate3d(100%, 0, 0); }
+  :root[data-gateway-pref="ollama"] .gateway-toggle::before,
+  body.gateway-ollama .gateway-toggle::before { transform: translate3d(200%, 0, 0); }
+  :root[data-gateway-pref="azure"] .gateway-toggle::before,
+  body.gateway-azure .gateway-toggle::before { transform: translate3d(300%, 0, 0); }
 
   /* Content gated on the installer / search selection, same mechanism as the OS
      spans: tag content with data-pkg / data-search; the non-default variants
@@ -552,6 +569,20 @@
   body.search-bm25 [data-search="bm25"] { display: revert; }
   body.search-semantic [data-search="lexical"], body.search-semantic [data-search="bm25"] { display: none; }
   body.search-semantic [data-search="semantic"] { display: revert; }
+
+  /* Deploy target (default k8s shows with no body class; compose is opt-in). */
+  [data-deploy="compose"] { display: none; }
+  body.deploy-compose [data-deploy="k8s"] { display: none; }
+  body.deploy-compose [data-deploy="compose"] { display: revert; }
+
+  /* LLM gateway (default litellm shows with no body class; other flavors opt-in). */
+  [data-gateway="vllm"], [data-gateway="ollama"], [data-gateway="azure"] { display: none; }
+  body.gateway-vllm [data-gateway="litellm"], body.gateway-vllm [data-gateway="ollama"], body.gateway-vllm [data-gateway="azure"] { display: none; }
+  body.gateway-vllm [data-gateway="vllm"] { display: revert; }
+  body.gateway-ollama [data-gateway="litellm"], body.gateway-ollama [data-gateway="vllm"], body.gateway-ollama [data-gateway="azure"] { display: none; }
+  body.gateway-ollama [data-gateway="ollama"] { display: revert; }
+  body.gateway-azure [data-gateway="litellm"], body.gateway-azure [data-gateway="vllm"], body.gateway-azure [data-gateway="ollama"] { display: none; }
+  body.gateway-azure [data-gateway="azure"] { display: revert; }
 </style>
 <script>
   // Apply the saved OS class to <body> before first paint so the correct
@@ -569,13 +600,17 @@
   })();
 </script>
 <script>
-  // Installer (uv|pip) and search-backend (lexical|bm25|semantic) prefs, applied
-  // before first paint like the OS pref above so the right variant shows with no
-  // flash. Defaults: uv + lexical. Stored as 'airgap-pkg' / 'airgap-search'.
+  // Installer (uv|pip), search-backend (lexical|bm25|semantic), deploy target
+  // (k8s|compose) and LLM-gateway flavor (litellm|vllm|ollama|azure) prefs,
+  // applied before first paint like the OS pref above so the right variant
+  // shows with no flash. Defaults: uv + lexical + k8s + litellm (each def is
+  // the no-class slot-0 variant). Stored under the matching 'airgap-*' keys.
   (function () {
     var groups = [
-      { key: 'airgap-pkg',    attr: 'data-pkg-pref',    cls: 'pkg-',    def: 'uv',      vals: ['uv', 'pip'] },
-      { key: 'airgap-search', attr: 'data-search-pref', cls: 'search-', def: 'lexical', vals: ['lexical', 'bm25', 'semantic'] }
+      { key: 'airgap-pkg',     attr: 'data-pkg-pref',     cls: 'pkg-',     def: 'uv',      vals: ['uv', 'pip'] },
+      { key: 'airgap-search',  attr: 'data-search-pref',  cls: 'search-',  def: 'lexical', vals: ['lexical', 'bm25', 'semantic'] },
+      { key: 'airgap-deploy',  attr: 'data-deploy-pref',  cls: 'deploy-',  def: 'k8s',     vals: ['k8s', 'compose'] },
+      { key: 'airgap-gateway', attr: 'data-gateway-pref', cls: 'gateway-', def: 'litellm', vals: ['litellm', 'vllm', 'ollama', 'azure'] }
     ];
     try {
       groups.forEach(function (g) {
@@ -601,25 +636,28 @@
   <p class="toc-title">Contents</p>
   <ol>
     <li><a href="#overview">Overview</a></li>
-    <li><a href="#migration-plan">Migration Plan</a></li>
-    <li><a href="#operator-script">Operator Script</a></li>
+    <li data-deploy="compose"><a href="#compose">Single-Host (Docker Compose)</a></li>
+    <li><a href="#must-change">Secrets You Must Change</a></li>
+    <li data-deploy="k8s"><a href="#migration-plan">Migration Plan</a></li>
+    <li data-deploy="k8s"><a href="#operator-script">Operator Script</a></li>
     <li><a href="#host-prereqs">Host Prerequisites</a></li>
     <li><a href="#crossing">Crossing the Air Gap: Images &amp; Checksums</a></li>
     <li><a href="#pg-prereqs">External Postgres Prerequisites (pgvector)</a></li>
     <li><a href="#pre-transfer">Pre-Transfer Checklist</a></li>
     <li><a href="#build-images">Build Images</a></li>
-    <li><a href="#secrets">Kubernetes Secrets</a></li>
+    <li data-deploy="k8s"><a href="#secrets">Kubernetes Secrets</a></li>
     <li><a href="#oidc">ADFS / OIDC Setup</a></li>
     <li><a href="#ldap">LDAP / AD User Search</a></li>
-    <li><a href="#tls">TLS Certificates</a></li>
-    <li><a href="#db">Database Migration</a></li>
-    <li><a href="#backup">Backup, Upgrade &amp; Rollback</a></li>
+    <li data-deploy="k8s"><a href="#tls">TLS Certificates</a></li>
+    <li data-deploy="k8s"><a href="#db">Database Migration</a></li>
+    <li data-deploy="k8s"><a href="#backup">Backup, Upgrade &amp; Rollback</a></li>
     <li><a href="#sizing">Resource Sizing</a></li>
     <li><a href="#troubleshooting">Offline Troubleshooting</a></li>
     <li><a href="#acceptance">Post-install Acceptance Checklist</a></li>
     <li><a href="#egress">Runtime Egress</a></li>
+    <li><a href="#nophone">No-Phone-Home Checklist</a></li>
     <li><a href="#ca">Private TLS / CA Bundles</a></li>
-    <li><a href="#smoke">Smoke Test</a></li>
+    <li data-deploy="k8s"><a href="#smoke">Smoke Test</a></li>
     <li><a href="#quotas">Live User Quotas</a></li>
     <li><a href="#clean">What Is Already Air-Gap Clean</a></li>
     <li><a href="#operator-responsibilities">Operator Responsibilities</a></li>
@@ -664,12 +702,29 @@
         <button type="button" data-set="semantic" aria-pressed="false"><span>Semantic</span></button>
       </div>
     </div>
+    <div class="seg-group">
+      <span class="seg-label" id="seg-lbl-deploy">Deployment</span>
+      <div class="seg-toggle deploy-toggle" role="group" aria-labelledby="seg-lbl-deploy">
+        <button type="button" data-set="k8s" aria-pressed="true"><span>Kubernetes</span></button>
+        <button type="button" data-set="compose" aria-pressed="false"><span>Compose</span></button>
+      </div>
+    </div>
+    <div class="seg-group">
+      <span class="seg-label" id="seg-lbl-gateway">LLM gateway</span>
+      <div class="seg-toggle gateway-toggle" role="group" aria-labelledby="seg-lbl-gateway">
+        <button type="button" data-set="litellm" aria-pressed="true"><span>LiteLLM</span></button>
+        <button type="button" data-set="vllm" aria-pressed="false"><span>vLLM</span></button>
+        <button type="button" data-set="ollama" aria-pressed="false"><span>Ollama</span></button>
+        <button type="button" data-set="azure" aria-pressed="false"><span>Azure</span></button>
+      </div>
+    </div>
   </div>
 </header>
 
 <section id="overview">
   <h2><a class="anchor" href="#overview">§</a>Overview</h2>
-  <p>Skynet runs as two pods (frontend + backend) plus an in-cluster migration Job, fronted by the OpenShift router. Every external dependency below resolves inside the air gap — your job is to point the chart at the right internal hosts.</p>
+  <p data-deploy="k8s">Skynet runs as two pods (frontend + backend) plus an in-cluster migration Job, fronted by the OpenShift router. Every external dependency below resolves inside the air gap — your job is to point the chart at the right internal hosts.</p>
+  <p data-deploy="compose">Skynet runs as a backend API container plus a bundled <code>pgvector</code> Postgres on a single host via Docker Compose — the fastest way to stand the app up inside the air gap. Every external dependency below still resolves internally; you point the backend's <code>.env</code> at the right internal hosts instead of a Helm values file. Start at <a href="#compose">Single-Host (Docker Compose)</a>.</p>
 
   <figure class="arch">
     <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
@@ -777,7 +832,77 @@
   </figure>
 </section>
 
-<section id="migration-plan">
+<section id="compose" data-deploy="compose">
+  <h2><a class="anchor" href="#compose">§</a>Single-Host (Docker Compose)</h2>
+  <p>The fastest path inside the air gap: one backend API container plus a bundled <code>pgvector</code> Postgres, defined in <code>backend/docker-compose.yml</code>. No Helm, no cluster, no separate migration Job — the backend creates its own schema on first boot. This brings up the <strong>backend service and its database</strong>; the Next.js frontend and SSO are a separate concern not covered by this compose file.</p>
+
+  <div class="callout">
+    <span class="label">Prerequisites</span>
+    <p>Docker Engine with the Compose v2 plugin (<code>docker compose version</code>). Everything else — the <code>pgvector/pgvector:pg16</code> image and the backend image's build dependencies — comes from your internal mirrors via the build args below, so nothing touches Docker Hub or public PyPI.</p>
+  </div>
+
+  <h3>1 · Configure <code>.env</code></h3>
+  <p>Copy the template and change the placeholders (see <a href="#must-change">Secrets You Must Change</a>):</p>
+<pre><span data-os="unix">cd backend
+cp .env.example .env            <span class="c"># then edit .env</span></span><span data-os="win">cd backend
+copy .env.example .env          <span class="c">REM then edit .env</span></span></pre>
+  <p>At minimum set <code>POSTGRES_PASSWORD</code> (the bundled DB refuses to start without it), point <code>OPENAI_API_BASE</code> and the agent <code>*_BASE_URL</code> at your internal gateway, and set <code>OPENAI_API_KEY</code> to the token it expects. The exact model-id prefix and base-URL suffix depend on your gateway flavor — pick it with the <strong>LLM gateway</strong> selector above and copy the matching block from <a href="#egress">Runtime Egress</a>. Compose passes <code>.env</code> to the backend verbatim and composes <code>REMOTE_DB_URL</code> for you against the bundled <code>db</code> service, so you never hand-write a database URL.</p>
+
+  <h3>2 · Point the build + image pulls at internal mirrors</h3>
+  <p>Set these before <code>up</code> so neither the Postgres image nor the backend build reaches a public registry:</p>
+<pre><span data-os="unix">export REGISTRY_PREFIX=artifactory.example.com/docker-remote
+export DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
+export PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple</span><span data-os="win">set REGISTRY_PREFIX=artifactory.example.com/docker-remote
+set DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
+set PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple</span></pre>
+  <p><code>REGISTRY_PREFIX</code> prefixes the <code>pgvector/pgvector:pg16</code> image and the backend base image; <code>DEBIAN_MIRROR</code> / <code>PIP_INDEX_URL</code> feed the backend build. The image installs from <code>uv.lock</code> via <code>uv</code> by default — the <em>Installer · uv</em> selection.<span data-pkg="pip"> To build the pip path instead, add <code>PKG_MANAGER: pip</code> under <code>services.api.build.args</code> in <code>docker-compose.yml</code>; the compose file does not forward it by default.</span></p>
+
+  <h3>3 · Bring it up</h3>
+<pre>docker compose up --build</pre>
+  <p>Add <code>-d</code> to run detached. On first connect the backend bootstraps its full schema under a Postgres advisory lock (<code>Base.metadata.create_all</code>), so a fresh database needs <strong>no</strong> manual migration. When <code>SEARCH_BACKEND=semantic</code> it also runs <code>CREATE EXTENSION vector</code> and builds the HNSW indexes automatically — the bundled <code>pgvector/pgvector</code> image's local role has the privilege.</p>
+
+  <h3>4 · Smoke test</h3>
+<pre><span data-os="unix">curl -f http://localhost:8000/health</span><span data-os="win">curl.exe -f http://localhost:8000/health</span></pre>
+  <p>The API listens on host port <code>8000</code>, Postgres on <code>5432</code>. The backend serves plain HTTP — put your own reverse proxy in front of <code>:8000</code> if you need TLS; Compose terminates none.</p>
+
+  <h3>Search backend on Compose</h3>
+  <ul>
+    <li><strong>Lexical</strong> (default) and <strong>semantic</strong> both work out of the box — the bundled image is <code>pgvector/pgvector</code>, so <code>SEARCH_BACKEND=semantic</code> only needs an internal <code>EMBEDDINGS_BASE_URL</code> / <code>EMBEDDINGS_MODEL</code> in <code>.env</code>.</li>
+    <li><strong>BM25</strong> needs the <code>pg_search</code> extension, which is <em>not</em> in <code>pgvector/pgvector:pg16</code>; there <code>SEARCH_BACKEND=bm25</code> falls back to <code>ILIKE</code>. Swap in a ParadeDB image for true BM25.</li>
+  </ul>
+
+  <h3>Upgrades &amp; persistence</h3>
+  <p>Data lives in the named volume <code>skynet-pgdata</code>. The first-boot bootstrap only <em>creates</em> missing tables (current as of the running image) — it records no Alembic version and never alters an existing schema. To track it for future delta migrations, stamp it once at the head the image already built, then upgrade through new revisions when you move to a newer image:</p>
+<pre><span class="c"># one-time: adopt the auto-created schema into Alembic</span>
+docker compose run --rm api alembic stamp head
+
+<span class="c"># later, after pulling a newer backend image:</span>
+docker compose run --rm api alembic upgrade head
+docker compose up --build -d</pre>
+  <p>Take a <code>pg_dump</code> (or snapshot the <code>skynet-pgdata</code> volume) before every upgrade — some revisions are destructive, and the pre-upgrade dump is the only real recovery path.</p>
+</section>
+
+<section id="must-change">
+  <h2><a class="anchor" href="#must-change">§</a>Secrets You Must Change</h2>
+  <p>Several shipped values are placeholders that work in dev and fail — or open a hole — in production. Change every one before exposing the app. Where they live depends on the deploy target: <code>.env</code> for Compose, or the Kubernetes Secrets for the Helm path.</p>
+
+  <table>
+    <thead><tr><th style="width:22%">Value</th><th style="width:22%">Ships as</th><th>Set it to / failure mode</th></tr></thead>
+    <tbody>
+      <tr><td><code>POSTGRES_PASSWORD</code></td><td><code>replace-me</code></td><td>A strong random string. Compose's <code>db</code> refuses to start without it; on Helm it backs the <code>skynet-db-password</code> Secret.</td></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td><code>replace-me</code></td><td>The bearer token your internal LLM gateway expects (any non-empty placeholder like <code>not-needed</code> for an unauthenticated gateway — an <em>empty</em> value can break client init). Doubles as the embeddings bearer unless <code>EMBEDDINGS_API_KEY</code> is set.</td></tr>
+      <tr><td><code>BACKEND_AUTH_SECRET</code></td><td><code>change-me-in-production</code></td><td>One <code>openssl rand -base64 32</code>, <strong>byte-identical</strong> in the backend and frontend. Mismatch ⇒ every admin API call returns <code>401</code>; unset on the backend ⇒ <code>500 auth.not_configured</code>. Rotating it needs a coordinated restart of both.</td></tr>
+      <tr><td><code>AUTH_SECRET</code></td><td><code>change-me-in-production</code></td><td>A separate <code>openssl rand -base64 32</code> for NextAuth session signing (frontend, from <code>frontend/.env.example</code>). Generate your own; don't ship the placeholder.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout danger">
+    <span class="label">Security · do not ship dev login</span>
+    <p>When SSO is left unconfigured — any of <code>AUTH_SSO_ISSUER</code>, <code>AUTH_SSO_CLIENT_ID</code>, or <code>AUTH_SSO_CLIENT_SECRET</code> missing — the frontend falls back to a <strong>passwordless &ldquo;Dev Login&rdquo;</strong>: any username signs in. In that state <code>AUTH_ADMINS</code> defaults to <code>admin</code>, so whoever logs in as user <code>admin</code> is auto-granted admin. For any real deployment configure OIDC (see <a href="#oidc">ADFS / OIDC Setup</a>), set <code>AUTH_ADMIN_GROUPS</code> / backend <code>ADMIN_GROUPS</code> to a real IdP group, and keep <code>AUTH_ADMINS</code> / <code>ADMIN_USERNAMES</code> as a named break-glass list only.</p>
+  </div>
+</section>
+
+<section id="migration-plan" data-deploy="k8s">
   <h2><a class="anchor" href="#migration-plan">§</a>Migration Plan</h2>
   <p>The flow assumes you cloned the repo onto a host inside the air gap and have an internal Artifactory + OpenShift cluster ready. Each step has a matching <code><span data-os="unix">scripts/airgap_migrate.sh</span><span data-os="win">scripts\airgap_migrate.bat</span></code> command — none of them need internet.</p>
 
@@ -798,7 +923,7 @@
   <p><code><span data-os="unix">scripts/airgap_migrate.sh all</span><span data-os="win">scripts\airgap_migrate.bat all</span></code> runs steps 4, 5, 8, 9, 10, 11 in sequence once you have your env vars set. Step 2 stays manual because edits don't script themselves; step 3 is yours.</p>
 </section>
 
-<section id="operator-script">
+<section id="operator-script" data-deploy="k8s">
   <h2><a class="anchor" href="#operator-script">§</a>Operator Script</h2>
 <pre><span class="c"># guided values setup</span>
 <span data-os="unix">scripts/airgap_migrate.sh configure</span><span data-os="win">scripts\airgap_migrate.bat configure</span>
@@ -914,9 +1039,9 @@ scripts\airgap_migrate.bat all</span></pre>
     <thead><tr><th style="width:22%">Tool</th><th style="width:16%">Min version</th><th style="width:14%">Role</th><th>Why</th></tr></thead>
     <tbody>
       <tr data-pkg="uv"><td><code>uv</code></td><td>0.5+</td><td>build</td><td><strong>Default installer</strong> (this is the <em>Installer · uv</em> selection above). Builds the backend image and runs the offline <code>validate-migrations</code> dump from <code>uv.lock</code>. Switch the toggle to <em>pip</em> to install from <code>requirements.txt</code> with <code>pip</code> instead (no <code>uv</code> needed).</td></tr>
-      <tr><td><code>helm</code></td><td>≥ 3.10</td><td>build + deploy</td><td><code>--set-json</code> (used by the stamp and one-off migration overrides) requires 3.10 or newer.</td></tr>
-      <tr><td><code>docker</code> or <code>podman</code></td><td>recent</td><td>build</td><td>Builds and pushes the backend/frontend images. Set <code>DOCKER=podman</code> for Buildah-compatible hosts.</td></tr>
-      <tr><td><code>kubectl</code> or <code>oc</code></td><td>matches cluster</td><td>deploy</td><td>Must be authenticated to the target cluster/namespace before <code>install</code> or <code>status</code>.</td></tr>
+      <tr data-deploy="k8s"><td><code>helm</code></td><td>≥ 3.10</td><td>build + deploy</td><td><code>--set-json</code> (used by the stamp and one-off migration overrides) requires 3.10 or newer.</td></tr>
+      <tr><td><code>docker</code> or <code>podman</code></td><td>recent</td><td>build</td><td>Builds and pushes the backend/frontend images. Set <code>DOCKER=podman</code> for Buildah-compatible hosts. <span data-deploy="compose">For Compose you also need the <code>docker compose</code> v2 plugin.</span></td></tr>
+      <tr data-deploy="k8s"><td><code>kubectl</code> or <code>oc</code></td><td>matches cluster</td><td>deploy</td><td>Must be authenticated to the target cluster/namespace before <code>install</code> or <code>status</code>.</td></tr>
       <tr><td><code>openssl</code></td><td>1.1+</td><td>deploy</td><td>Generates <code>BACKEND_AUTH_SECRET</code> and <code>AUTH_SECRET</code>.</td></tr>
       <tr><td><code>git</code></td><td>recent</td><td>build</td><td>Source checkout and the <code>todos</code> / <code>git grep</code> TODO sweep.</td></tr>
       <tr data-pkg="pip"><td>Python 3.11 + <code>pip</code></td><td>3.11</td><td>build</td><td><strong>Selected installer</strong> (<em>Installer · pip</em>). Builds the backend image (<code>--build-arg PKG_MANAGER=pip</code>) and runs <code>validate-migrations</code> from the pinned <code>requirements.txt</code>; this path is also the fallback when <code>uv</code> is absent. The dump needs <code>alembic</code>, <code>sqlalchemy</code>, <code>pgvector</code> importable; if they are not, the script installs <code>requirements.txt</code> (honouring <code>PIP_INDEX_URL</code>).</td></tr>
@@ -1129,7 +1254,7 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span></pr
   </ul>
 </section>
 
-<section id="secrets">
+<section id="secrets" data-deploy="k8s">
   <h2><a class="anchor" href="#secrets">§</a>Required Kubernetes Secrets</h2>
   <p>Create these before running the Helm install. Names match the generated values file; change them there if your platform uses different names.</p>
 
@@ -1306,7 +1431,7 @@ BACKEND_AUTH_SECRET</pre>
   </div>
 </section>
 
-<section id="tls">
+<section id="tls" data-deploy="k8s">
   <h2><a class="anchor" href="#tls">§</a>TLS Certificates</h2>
   <p>By default the chart uses the OpenShift router's wildcard certificate. To serve a custom certificate:</p>
 <pre><span data-os="unix">helm upgrade --install skynet deploy/helm/skynet \
@@ -1323,7 +1448,7 @@ BACKEND_AUTH_SECRET</pre>
   <p>For <code>reencrypt</code> termination, also set <code>openshift.routes.frontend.tls.destinationCACertificate</code>.</p>
 </section>
 
-<section id="db">
+<section id="db" data-deploy="k8s">
   <h2><a class="anchor" href="#db">§</a>Database Migration</h2>
 
   <h3>Offline schema review (no DB required)</h3>
@@ -1370,7 +1495,7 @@ BACKEND_AUTH_SECRET</pre>
   </div>
 </section>
 
-<section id="backup">
+<section id="backup" data-deploy="k8s">
   <h2><a class="anchor" href="#backup">§</a>Backup, Upgrade &amp; Rollback</h2>
   <p>The schema migration is destructive on some revisions, so the real recovery path is always a fresh dump taken immediately before you change anything.</p>
 
@@ -1503,6 +1628,56 @@ helm upgrade --install skynet deploy\helm\skynet ^
   </table>
   <p>Leaving any <code>*_BASE_URL</code> empty falls through to a <strong>public OpenRouter default</strong> (<code>openrouter/minimax/minimax-m3</code>), which an air-gapped host cannot reach — set every base URL to your internal gateway. The <code>*_MODEL</code> ids must exactly match models your gateway serves; the shipped <code>gpt-5</code> default is only a placeholder. The embedding model placeholder is <code>jina-embeddings-v4</code> and must return at least 512 dimensions.</p>
 
+  <h4>Gateway flavor: id prefix + base-URL suffix</h4>
+  <p>The runtime is gateway-agnostic, but the two strings you hand-type differ per flavor: the model-id <strong>prefix</strong> and the base-URL <strong>suffix</strong>. Pick yours with the <strong>LLM gateway</strong> selector above. In every case repoint <code>OPENAI_API_BASE</code> at the same internal gateway and leave <code>OPENROUTER_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> / <code>FIREWORKS_AI_API_KEY</code> unset — a wrong prefix or a public default <code>404</code>s (or phones home) the moment egress is blocked.</p>
+
+  <div data-gateway="litellm">
+<pre><span class="c"># LiteLLM proxy — serves /v1; one proxy can front every backing model</span>
+CODE_AGENT_MODEL=<span class="s">openai/&lt;your-litellm-tag&gt;</span>        <span class="c"># e.g. openai/minimax-m3</span>
+CODE_AGENT_BASE_URL=<span class="s">https://llm.corp.internal/v1</span>
+GENERALIST_AGENT_MODEL=<span class="s">openai/&lt;your-litellm-tag&gt;</span>
+GENERALIST_AGENT_BASE_URL=<span class="s">https://llm.corp.internal/v1</span>
+OPENAI_API_KEY=<span class="s">&lt;proxy virtual/master key&gt;</span></pre>
+  </div>
+  <div data-gateway="vllm">
+<pre><span class="c"># vLLM — launch with --served-model-name; OpenAI-compatible /v1</span>
+CODE_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
+CODE_AGENT_BASE_URL=<span class="s">http://vllm.corp.internal:8000/v1</span>
+GENERALIST_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
+GENERALIST_AGENT_BASE_URL=<span class="s">http://vllm.corp.internal:8000/v1</span>
+OPENAI_API_KEY=<span class="s">not-needed</span>          <span class="c"># any non-empty string</span></pre>
+  </div>
+  <div data-gateway="ollama">
+<pre><span class="c"># Ollama — native API, NO /v1 suffix; the ollama/ prefix is load-bearing</span>
+CODE_AGENT_MODEL=<span class="s">ollama/&lt;model&gt;</span>             <span class="c"># e.g. ollama/llama3.1</span>
+CODE_AGENT_BASE_URL=<span class="s">http://ollama-host:11434</span>
+GENERALIST_AGENT_MODEL=<span class="s">ollama/&lt;model&gt;</span>
+GENERALIST_AGENT_BASE_URL=<span class="s">http://ollama-host:11434</span>
+OPENAI_API_KEY=<span class="s">not-needed</span></pre>
+  </div>
+  <div data-gateway="azure">
+<pre><span class="c"># Azure OpenAI — the id is the DEPLOYMENT name, not the model name</span>
+CODE_AGENT_MODEL=<span class="s">azure/&lt;deployment-name&gt;</span>
+CODE_AGENT_BASE_URL=<span class="s">https://&lt;resource&gt;.openai.azure.com</span>
+GENERALIST_AGENT_MODEL=<span class="s">azure/&lt;deployment-name&gt;</span>
+GENERALIST_AGENT_BASE_URL=<span class="s">https://&lt;resource&gt;.openai.azure.com</span>
+AZURE_API_VERSION=<span class="s">2024-02-01</span>
+OPENAI_API_KEY=<span class="s">&lt;resource api-key&gt;</span></pre>
+  </div>
+
+  <p data-deploy="k8s">On the Helm worksheet (<code>scripts/airgap.env.example</code>) the same values carry the names <code>LLM_BASE_URL</code> and the <code>*_MODEL</code> ids; they flow into <code>CODE_AGENT_BASE_URL</code> / <code>GENERALIST_AGENT_BASE_URL</code> unchanged.</p>
+
+  <div data-search="semantic">
+<pre><span class="c"># Semantic search also needs the embedding gateway (same flavor convention,</span>
+<span class="c"># /v1 for LiteLLM/vLLM/Azure, no /v1 for Ollama):</span>
+EMBEDDINGS_BASE_URL=<span class="s">https://llm.corp.internal/v1</span>
+EMBEDDINGS_MODEL=<span class="s">&lt;internal embedding model&gt;</span></pre>
+    <div class="callout">
+      <span class="label">TODO · On-premise</span>
+      <p><code>EMBEDDINGS_DIM</code> defaults to <code>512</code> and must equal the <code>vector(512)</code> schema column — a mismatch fails loudly at boot with a <code>RuntimeError</code>, it does not silently degrade. An embedding model whose native dimension isn't 512 therefore needs a schema migration to widen the column before you can raise <code>EMBEDDINGS_DIM</code> to match.</p>
+    </div>
+  </div>
+
   <h4>Known intended runtime egress</h4>
   <ul>
     <li>Frontend to internal OIDC issuer.</li>
@@ -1512,6 +1687,7 @@ helm upgrade --install skynet deploy\helm\skynet ^
   </ul>
   <p>Notifications are <strong>email-only</strong>; there is no outbound notification webhook.</p>
 
+  <div data-deploy="k8s">
   <h4>Egress slots the chart supports</h4>
   <table>
     <thead><tr><th style="width:26%">Value</th><th>Carries</th></tr></thead>
@@ -1526,18 +1702,31 @@ helm upgrade --install skynet deploy\helm\skynet ^
 
   <h4>External Postgres egress</h4>
   <p>When <code>postgres.enabled=false</code>, you <strong>must</strong> set <code>networkPolicy.dbEgress</code>. Without it, default-deny blocks both the backend connection pool and the pre-install migration Job from reaching the managed DB, so the install aborts on the migration hook and the backend pods crash-loop. Set <code>DB_EGRESS_CIDR</code> before running <code>values</code> to emit it.</p>
+  </div>
 
   <h4>Known risky endpoint by design</h4>
   <ul>
     <li><code>POST /models/discover</code> accepts a user-supplied <code>base_url</code> so operators can discover models from an internal OpenAI-compatible gateway. In an air gap, enforce egress with NetworkPolicy/firewall rules.</li>
   </ul>
 
-  <p>The generated values file sets these slots to placeholders. Tighten every one to exact internal CIDRs.</p>
+  <p data-deploy="k8s">The generated values file sets these slots to placeholders. Tighten every one to exact internal CIDRs.</p>
 
-  <div class="callout">
+  <div class="callout" data-deploy="k8s">
     <span class="label">TODO · On-premise</span>
     <p>Record the exact CIDRs for IdP, LLM gateway, embedding gateway, LDAP, and managed Postgres in your environment-specific values file.</p>
   </div>
+</section>
+
+<section id="nophone">
+  <h2><a class="anchor" href="#nophone">§</a>No-Phone-Home Checklist</h2>
+  <p>The default config looks deployed but quietly reaches the public internet. Confirm each of these before you cut egress — one missed item keeps a model or summarisation call going out.</p>
+  <ul>
+    <li><strong>Both agents</strong> default to <code>openrouter/minimax/minimax-m3</code> (<code>DEFAULT_AGENT_MODEL_ID</code>), which needs egress to <code>openrouter.ai</code>. Override <code>CODE_AGENT_MODEL</code> + <code>CODE_AGENT_BASE_URL</code> <em>and</em> <code>GENERALIST_AGENT_MODEL</code> + <code>GENERALIST_AGENT_BASE_URL</code> to your internal gateway (see the <a href="#egress">gateway-flavor blocks</a>).</li>
+    <li><strong>Leave <code>EMBEDDINGS_SUMMARY_MODEL</code> empty.</strong> Empty, the job-summary step reuses <code>CODE_AGENT_MODEL</code> (already internal). Setting it to a public model id routes summarisation calls outside the air gap.</li>
+    <li><strong><code>DISCOVER_ALLOW_PRIVATE</code> is the counterintuitive one.</strong> If you use <code>POST /models/discover</code> to enumerate models from an internal gateway on a private (RFC1918, e.g. <code>10.x</code>) address, set <code>DISCOVER_ALLOW_PRIVATE=true</code> — the default <code>false</code> blocks it as SSRF protection, so discovery against your own gateway fails closed. Loopback (Ollama on <code>localhost</code>) always works; cloud-metadata IPs (<code>169.254.169.254</code>) stay blocked regardless.</li>
+    <li><strong>Leave <code>OPENROUTER_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> / <code>FIREWORKS_AI_API_KEY</code> unset.</strong> They only matter for public providers; an empty <code>*_BASE_URL</code> paired with one of these set is how the agent (and the grounding scorer) silently reach a public API.</li>
+    <li><strong>Already handled for you:</strong> <code>LITELLM_LOCAL_MODEL_COST_MAP=True</code> is baked into the backend image and chart, so LiteLLM uses its bundled cost map instead of fetching it from GitHub on import, and LiteLLM telemetry is off. Don't unset them.</li>
+  </ul>
 </section>
 
 <section id="ca">
@@ -1562,7 +1751,7 @@ scripts\airgap_migrate.bat values</span></pre>
   </div>
 </section>
 
-<section id="smoke">
+<section id="smoke" data-deploy="k8s">
   <h2><a class="anchor" href="#smoke">§</a>Smoke Test</h2>
   <p>After install:</p>
 <pre><span data-os="unix">kubectl -n skynet rollout status deploy/skynet-skynet-backend
@@ -1665,8 +1854,12 @@ git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></span></pre
   const sections = Array.from(document.querySelectorAll('main section[id]'));
   function setActive() {
     const y = window.scrollY + 120;
-    let current = sections[0];
-    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    // Deploy-gated sections collapse to display:none (offsetParent === null);
+    // skip them so the active link never sticks on a hidden section.
+    const visible = sections.filter(s => s.offsetParent !== null);
+    if (!visible.length) return;
+    let current = visible[0];
+    for (const s of visible) { if (s.offsetTop <= y) current = s; }
     links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + current.id));
   }
   window.addEventListener('scroll', setActive, { passive: true });
@@ -1702,8 +1895,10 @@ git grep -n <span class="s">"TODO: On-premise\|TODO: On-prem"</span></span></pre
   // a small config so both (2-up and 3-up) share one code path.
   (function () {
     const groups = [
-      { key: 'airgap-pkg',    cls: 'pkg-',    sel: '.pkg-toggle button[data-set]',    def: 'uv',      vals: ['uv', 'pip'] },
-      { key: 'airgap-search', cls: 'search-', sel: '.search-toggle button[data-set]', def: 'lexical', vals: ['lexical', 'bm25', 'semantic'] }
+      { key: 'airgap-pkg',     cls: 'pkg-',     sel: '.pkg-toggle button[data-set]',     def: 'uv',      vals: ['uv', 'pip'] },
+      { key: 'airgap-search',  cls: 'search-',  sel: '.search-toggle button[data-set]',  def: 'lexical', vals: ['lexical', 'bm25', 'semantic'] },
+      { key: 'airgap-deploy',  cls: 'deploy-',  sel: '.deploy-toggle button[data-set]',  def: 'k8s',     vals: ['k8s', 'compose'] },
+      { key: 'airgap-gateway', cls: 'gateway-', sel: '.gateway-toggle button[data-set]', def: 'litellm', vals: ['litellm', 'vllm', 'ollama', 'azure'] }
     ];
     groups.forEach(g => {
       const buttons = document.querySelectorAll(g.sel);
