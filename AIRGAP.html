@@ -761,19 +761,19 @@ scripts\airgap_migrate.bat all</span></pre>
   <table>
     <thead><tr><th style="width:22%">Tool</th><th style="width:16%">Min version</th><th style="width:14%">Role</th><th>Why</th></tr></thead>
     <tbody>
-      <tr><td><code>uv</code></td><td>0.5+</td><td>build</td><td>Builds the backend image and runs the offline <code>validate-migrations</code> dump. A pre-synced <code>backend/.venv</code> can stand in for it on a host with no <code>uv</code>.</td></tr>
+      <tr><td><code>uv</code></td><td>0.5+</td><td>build</td><td><strong>Default installer.</strong> Builds the backend image and runs the offline <code>validate-migrations</code> dump from <code>uv.lock</code>. Optional — set <code>PKG_MANAGER=pip</code> to install from <code>requirements.txt</code> with <code>pip</code> instead (no <code>uv</code> needed).</td></tr>
       <tr><td><code>helm</code></td><td>≥ 3.10</td><td>build + deploy</td><td><code>--set-json</code> (used by the stamp and one-off migration overrides) requires 3.10 or newer.</td></tr>
       <tr><td><code>docker</code> or <code>podman</code></td><td>recent</td><td>build</td><td>Builds and pushes the backend/frontend images. Set <code>DOCKER=podman</code> for Buildah-compatible hosts.</td></tr>
       <tr><td><code>kubectl</code> or <code>oc</code></td><td>matches cluster</td><td>deploy</td><td>Must be authenticated to the target cluster/namespace before <code>install</code> or <code>status</code>.</td></tr>
       <tr><td><code>openssl</code></td><td>1.1+</td><td>deploy</td><td>Generates <code>BACKEND_AUTH_SECRET</code> and <code>AUTH_SECRET</code>.</td></tr>
       <tr><td><code>git</code></td><td>recent</td><td>build</td><td>Source checkout and the <code>todos</code> / <code>git grep</code> TODO sweep.</td></tr>
-      <tr><td>Python 3.11 + <code>alembic</code>, <code>sqlalchemy</code>, <code>pgvector</code></td><td>3.11</td><td>build</td><td>Fallback for <code>validate-migrations</code> when <code>uv</code> is unavailable: the offline <code>alembic upgrade head --sql</code> dump needs these importable.</td></tr>
+      <tr><td>Python 3.11 + <code>pip</code></td><td>3.11</td><td>build</td><td>The <code>PKG_MANAGER=pip</code> path, and the <code>validate-migrations</code> fallback when <code>uv</code> is absent. The dump needs <code>alembic</code>, <code>sqlalchemy</code>, <code>pgvector</code> importable; if they are not, the script installs the pinned <code>requirements.txt</code> (honouring <code>PIP_INDEX_URL</code>).</td></tr>
     </tbody>
   </table>
 
   <div class="callout">
     <span class="label">TODO · On-premise</span>
-    <p>If the build host has no <code>uv</code> and no pre-synced <code>backend/.venv</code>, the <code>validate-migrations</code> dump cannot run and <code>migration.sql</code> comes out empty. Provision one of the two before crossing the air gap.</p>
+    <p>The build host needs <em>one</em> working installer for the <code>validate-migrations</code> dump: either <code>uv</code> (with <code>uv.lock</code>) or <code>pip</code> (with <code>requirements.txt</code>) able to make the backend deps importable — directly, or from a reachable PyPI mirror. If neither can, the dump cannot run and <code>migration.sql</code> comes out empty.</p>
   </div>
 </section>
 
@@ -872,7 +872,7 @@ scripts\airgap_migrate.bat todos         <span class="c">REM every URL/secret/CI
   <h4>Confirm</h4>
   <ul>
     <li><code>frontend/package-lock.json</code> is present.</li>
-    <li><code>backend/uv.lock</code> is present.</li>
+    <li><code>backend/uv.lock</code> and <code>backend/requirements.txt</code> are present (the uv and pip installer inputs).</li>
     <li><code>backend/alembic/versions/</code> is present.</li>
     <li><code>migration.sql</code> (from <code>validate-migrations</code>) reflects the schema you expect.</li>
     <li><em>Only if enabling semantic search</em> (<code>SEARCH_BACKEND=semantic</code>): your internal OpenAI-compatible embedding endpoint is ready and returns at least 512 dimensions (the <code>embeddings_dim</code> default) for <code>EMBEDDING_MODEL</code> (placeholder <code>jina-embeddings-v4</code>). The default lexical search needs no embedding endpoint.</li>
@@ -965,7 +965,7 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span></pr
   <ul>
     <li><strong>Container base images:</strong> pass <code>REGISTRY_PREFIX</code> for backend and <code>BASE_IMAGE</code> for frontend. You can also pre-bake internal <code>skynet/python-base</code> and <code>skynet/node-base</code> images.</li>
     <li><strong>Debian packages:</strong> pass <code>DEBIAN_MIRROR</code>, or pre-bake <code>build-essential</code> and <code>curl</code> into the Python base image.</li>
-    <li><strong>Python packages:</strong> pass <code>PIP_INDEX_URL</code> and <code>PIP_TRUSTED_HOST</code>.</li>
+    <li><strong>Python packages:</strong> pass <code>PIP_INDEX_URL</code> and <code>PIP_TRUSTED_HOST</code>. The backend image installs from <code>uv.lock</code> via <code>uv</code> by default; add <code>--build-arg PKG_MANAGER=pip</code> to install the equivalent pinned <code>requirements.txt</code> with <code>pip</code> instead. Both resolve to the same wheel set.</li>
     <li><strong>npm packages:</strong> pass <code>NPM_REGISTRY</code>; the Dockerfile sets <code>replace-registry-host=always</code> so lockfile tarball hosts are rewritten to the mirror.</li>
     <li><strong>Helm images:</strong> set <code>global.imageRegistry</code> and <code>global.imagePullSecrets</code> in the generated values file. That prefixes backend, frontend, and <code>pgvector/pgvector</code> images.</li>
   </ul>
@@ -1095,7 +1095,7 @@ BACKEND_AUTH_SECRET</pre>
 
   <p>The lookup goes through <code>backend/core/api/directory_client.py</code>. When LDAP is not configured the backend uses <code>NullDirectoryClient</code>: the autocomplete combobox falls back to usernames already seen in the local job + override tables, which is enough for any user who has signed in or has an existing override. Admins can still type a brand-new username manually and save a quota for them — the field accepts free text. LDAP only adds <strong>discovery</strong> of users who have not yet touched the system.</p>
 
-  <p>The Python client uses the <code>ldap3</code> package (already in <code>backend/pyproject.toml</code> and <code>backend/uv.lock</code>, so it ships in the airgap install bundle without extra wheels).</p>
+  <p>The Python client uses the <code>ldap3</code> package (already in <code>backend/pyproject.toml</code>, <code>backend/uv.lock</code>, and <code>backend/requirements.txt</code>, so it ships in the airgap install bundle without extra wheels).</p>
 
   <h3>Backend env vars</h3>
   <p>Set these in the generated Helm values under <code>backend.env</code> (with the bind password sourced from <code>skynet-backend-secrets</code>):</p>
@@ -1310,9 +1310,9 @@ helm upgrade --install skynet deploy\helm\skynet ^
         <td>Regenerate it once and set the identical value in both Secrets (see <a href="#secrets">Required Kubernetes Secrets</a>).</td>
       </tr>
       <tr>
-        <td><code>uv sync --frozen failed</code> / empty <code>migration.sql</code></td>
-        <td>No internal PyPI mirror (<code>UV_INDEX_URL</code>) and no pre-synced <code>backend/.venv</code>.</td>
-        <td>Point <code>UV_INDEX_URL</code> at the internal mirror, or ship a pre-synced <code>.venv</code> (see <a href="#host-prereqs">Host Prerequisites</a>).</td>
+        <td><code>uv sync --frozen failed</code> / <code>pip install -r requirements.txt failed</code> / empty <code>migration.sql</code></td>
+        <td>The selected installer could not reach a PyPI mirror to make the backend deps importable.</td>
+        <td>Point the mirror env var at your internal index — <code>UV_INDEX_URL</code> for the uv path, <code>PIP_INDEX_URL</code> for <code>PKG_MANAGER=pip</code> — or pre-install the backend deps so <code>alembic</code>, <code>sqlalchemy</code>, <code>pgvector</code> import (see <a href="#host-prereqs">Host Prerequisites</a>).</td>
       </tr>
     </tbody>
   </table>
