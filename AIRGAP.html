@@ -673,6 +673,23 @@
 
   <p>Start with <code>configure</code> if you want a guided setup. It asks for registry, image tags, hosts, IdP, database, optional internal CA Secret, and egress CIDRs, then writes the Helm values file and offers to run <code>check</code>, <code>render</code>, and <code>install</code>.</p>
 
+  <div class="callout">
+    <span class="label">Fill-in worksheet</span>
+    <p>When the site-specific values are only knowable <em>inside</em> the air gap, carry <code>scripts/airgap.env.example</code> across in the bundle. Inside, copy it, fill every <code>&lt;&lt;FILL: …&gt;&gt;</code> in a text editor, then drive the whole install from it with no internet and nothing to memorise:</p>
+<pre><span data-os="unix">cp scripts/airgap.env.example airgap.env   <span class="c"># then edit airgap.env</span>
+source airgap.env
+scripts/airgap_migrate.sh values           <span class="c"># writes the Helm values file</span>
+scripts/airgap_migrate.sh render           <span class="c"># helm lint + template — review</span>
+scripts/airgap_migrate.sh install          <span class="c"># helm upgrade --install</span>
+scripts/airgap_migrate.sh status</span><span data-os="win"><span class="c">REM Edit a copy of scripts\airgap.env.example, then set each value with `set`</span>
+<span class="c">REM (or run the .sh worksheet flow under Git Bash / WSL), then:</span>
+scripts\airgap_migrate.bat values
+scripts\airgap_migrate.bat render
+scripts\airgap_migrate.bat install
+scripts\airgap_migrate.bat status</span></pre>
+    <p>Every field maps 1:1 to the environment overrides below; the worksheet just keeps them in one editable place. Unfilled placeholders render obviously-wrong hosts/CIDRs so a forgotten value fails loudly at <code>render</code>/<code>install</code>, never silently.</p>
+  </div>
+
   <div class="callout" data-os="win">
     <span class="label">TODO · On-premise</span>
     <p>Windows operators: run <code>configure</code> from an interactive PowerShell prompt, not by double-clicking <code>airgap_migrate.bat</code> — the guided prompts need a live console. If you cannot run it interactively, use the non-interactive <code>values</code> path with the environment overrides below instead.</p>
@@ -856,6 +873,7 @@ scripts\airgap_migrate.bat todos         <span class="c">REM every URL/secret/CI
     <li><code>frontend</code> image tar or internal registry image.</li>
     <li><code>pgvector/pgvector:pg16</code> mirror, unless using an external managed DB.</li>
     <li>Helm chart under <code>deploy/helm/skynet</code>.</li>
+    <li><code>scripts/airgap.env.example</code> — the fill-in worksheet for every site-specific value (registry, hosts, IdP, gateway, DB, egress CIDRs).</li>
     <li>Secrets material handled by your secret-management process, not committed into the bundle.</li>
   </ul>
 </section>
