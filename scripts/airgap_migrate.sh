@@ -243,6 +243,7 @@ cmd_check() {
   [[ -f "$ROOT_DIR/frontend/Dockerfile" ]] || { echo "missing frontend/Dockerfile" >&2; exit 1; }
   [[ -f "$ROOT_DIR/frontend/package-lock.json" ]] || { echo "missing frontend/package-lock.json" >&2; exit 1; }
   [[ -f "$ROOT_DIR/backend/uv.lock" ]] || { echo "missing backend/uv.lock" >&2; exit 1; }
+  [[ -f "$ROOT_DIR/backend/requirements.txt" ]] || { echo "missing backend/requirements.txt" >&2; exit 1; }
   [[ -d "$ROOT_DIR/backend/alembic/versions" ]] || { echo "missing backend/alembic/versions" >&2; exit 1; }
   echo "air-gap artifact check passed"
 }
@@ -268,16 +269,18 @@ cmd_todos() {
 # Offline alembic SQL emission. Sandbox-friendly: needs no Postgres connection,
 # imports the same env.py as the migration Job. Use this to review the exact
 # schema delta before pushing the backend image to your internal registry.
-# Needs no network IF the backend deps are already importable: either a
-# pre-synced backend/.venv, or an internal PyPI mirror reachable via UV_INDEX_URL.
+# Honours the PKG_MANAGER toggle (uv by default, pip when set to "pip"); needs
+# no network IF the backend deps are already importable, or an internal PyPI
+# mirror is reachable via UV_INDEX_URL (uv) / PIP_INDEX_URL (pip).
 cmd_validate_migrations() {
   local backend_dir="$ROOT_DIR/backend"
   local out="${MIGRATION_SQL_OUT:-$ROOT_DIR/migration.sql}"
   [[ -d "$backend_dir/alembic/versions" ]] || {
     echo "missing backend/alembic/versions" >&2; exit 1
   }
+  local pkg_manager="${PKG_MANAGER:-uv}"
   local runner=""
-  if command -v uv >/dev/null 2>&1; then
+  if [[ "$pkg_manager" == "uv" ]] && command -v uv >/dev/null 2>&1; then
     # Materialize the lockfile-pinned env first. Without this the script
     # falls through to whatever 'alembic' the system Python happens to
     # expose, which is how validate-migrations silently produced an empty
@@ -290,19 +293,30 @@ cmd_validate_migrations() {
       exit 1
     }
     runner="uv run"
-  elif command -v alembic >/dev/null 2>&1; then
-    # No uv: rely on the active Python. Confirm the migration deps are
-    # actually importable so we fail loudly here instead of writing a
-    # truncated migration.sql. alembic/env.py never imports ldap3, so we do
-    # not require it — demanding it wrongly rejects otherwise-capable hosts.
-    python3 -c "import alembic, sqlalchemy, pgvector" 2>/dev/null || {
-      echo "alembic on PATH but backend deps missing (alembic/sqlalchemy/pgvector); install backend extras first" >&2
-      exit 1
-    }
-    runner=""
   else
-    echo "neither uv nor alembic on PATH; install one before running validate-migrations" >&2
-    exit 1
+    # pip path — also the fallback when PKG_MANAGER=uv but uv is absent.
+    # Confirm the migration deps import; if not, materialize the pinned
+    # requirements.txt the same way backend/Dockerfile's pip path does.
+    # alembic/env.py never imports ldap3, so we do not require it — demanding
+    # it wrongly rejects otherwise-capable hosts.
+    if ! python3 -c "import alembic, sqlalchemy, pgvector" 2>/dev/null; then
+      python3 -m pip --version >/dev/null 2>&1 || {
+        echo "backend deps not importable and pip unavailable; install alembic/sqlalchemy/pgvector before validate-migrations" >&2
+        exit 1
+      }
+      ( cd "$backend_dir" && python3 -m pip install --quiet \
+          ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"} \
+          ${PIP_TRUSTED_HOST:+--trusted-host "$PIP_TRUSTED_HOST"} \
+          -r requirements.txt ) || {
+        echo "pip install -r requirements.txt failed; resolve dep conflicts before validate-migrations" >&2
+        exit 1
+      }
+      python3 -c "import alembic, sqlalchemy, pgvector" 2>/dev/null || {
+        echo "backend deps still missing after pip install; aborting" >&2
+        exit 1
+      }
+    fi
+    runner="python3 -m"
   fi
   # env.py reads REMOTE_DB_URL but offline --sql only needs the dialect, so
   # supply a placeholder when the operator hasn't set one. A real value is

@@ -15,25 +15,45 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock requirements.txt ./
 
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
-# Lockfile-pinned install via uv: every build resolves to the exact wheel
-# set captured in uv.lock, which `pip install -e .` cannot guarantee.
-# uv itself comes from the same internal PyPI mirror, so air-gap operators
-# only need their existing PIP_INDEX_URL / PIP_TRUSTED_HOST args.
-RUN pip install --no-cache-dir \
-        ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
-        ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
-        uv \
-    && UV_INDEX_URL=${PIP_INDEX_URL:-} \
-       UV_PYTHON_DOWNLOADS=never \
-       uv sync --frozen --no-install-project
+# Dependency installer toggle. PKG_MANAGER=uv (default) installs the exact
+# uv.lock wheel set via uv; PKG_MANAGER=pip installs the equivalent pinned
+# requirements.txt with pip. Both resolve to the same set — pick whichever your
+# build pipeline standardises on:  docker build --build-arg PKG_MANAGER=pip ...
+# Either way the deps land in their own layer (before the source copy) so it
+# caches until the lockfile / requirements change.
+ARG PKG_MANAGER=uv
+RUN if [ "$PKG_MANAGER" = "pip" ]; then \
+        pip install --no-cache-dir \
+            ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
+            ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
+            -r requirements.txt; \
+    else \
+        pip install --no-cache-dir \
+            ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
+            ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
+            uv \
+        && UV_INDEX_URL=${PIP_INDEX_URL:-} \
+           UV_PYTHON_DOWNLOADS=never \
+           uv sync --frozen --no-install-project; \
+    fi
 
 COPY . .
 
-RUN UV_PYTHON_DOWNLOADS=never uv sync --frozen
+# Install the project itself. pip does an editable --no-deps install (every
+# dependency is already present from the layer above); uv re-syncs now that the
+# project source is in place.
+RUN if [ "$PKG_MANAGER" = "pip" ]; then \
+        pip install --no-cache-dir --no-deps \
+            ${PIP_INDEX_URL:+--index-url $PIP_INDEX_URL} \
+            ${PIP_TRUSTED_HOST:+--trusted-host $PIP_TRUSTED_HOST} \
+            -e .; \
+    else \
+        UV_PYTHON_DOWNLOADS=never uv sync --frozen; \
+    fi
 
 ARG GIT_SHA=unknown
 
