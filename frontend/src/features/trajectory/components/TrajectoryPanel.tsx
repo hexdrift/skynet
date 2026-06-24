@@ -10,6 +10,7 @@ import { HelpTip } from "@/shared/ui/help-tip";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { cn } from "@/shared/lib/utils";
+import { useLiteMode } from "@/features/settings";
 import {
   extractCandidates,
   extractMinibatch,
@@ -19,6 +20,7 @@ import {
 } from "../lib/extract-events";
 import { layoutTrajectory } from "../lib/layout";
 import { TrajectoryTree } from "./TrajectoryTree";
+import { TrajectoryOutline } from "./TrajectoryOutline";
 import { TrajectoryDrawer, type DrawerSelection } from "./TrajectoryDrawer";
 
 const NEWEST_HIGHLIGHT_MS = 2200;
@@ -49,6 +51,7 @@ export function TrajectoryPanel({
   toolSeverities,
 }: TrajectoryPanelProps) {
   const live = isLive(job);
+  const lite = useLiteMode();
   const { candidates, rejected, valsetRows, minibatch, valsetOutputs } = useMemo(() => {
     const events = job.progress_events ?? [];
     const scoped =
@@ -218,14 +221,26 @@ export function TrajectoryPanel({
               isLive={live}
             />
           ) : null}
-          <TrajectoryTree
-            layout={layout}
-            selectedId={selectedTreeId}
-            newestId={newestId}
-            onSelectCandidate={handleSelectCandidate}
-            onSelectRejected={handleSelectRejected}
-            previewLayout={previewLayout}
-          />
+          {lite ? (
+            <TrajectoryOutline
+              candidates={visibleCandidates}
+              rejected={visibleRejected}
+              winnerId={layout.winnerId}
+              selectedId={selectedTreeId}
+              newestId={newestId}
+              onSelectCandidate={handleSelectCandidate}
+              onSelectRejected={handleSelectRejected}
+            />
+          ) : (
+            <TrajectoryTree
+              layout={layout}
+              selectedId={selectedTreeId}
+              newestId={newestId}
+              onSelectCandidate={handleSelectCandidate}
+              onSelectRejected={handleSelectRejected}
+              previewLayout={previewLayout}
+            />
+          )}
           <TrajectoryDrawer
             selection={drawerSelection}
             open={drawerOpen}

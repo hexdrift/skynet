@@ -45,6 +45,9 @@ export const trajectoryMessages = {
 
   "trajectory.ghost.legend": "הצעות שנדחו",
 
+  "trajectory.outline.best": "הטוב ביותר",
+  "trajectory.outline.rejected_row": "הצעה {id}",
+
   "trajectory.node.header.accepted_title": "מועמד {id}",
   "trajectory.node.header.rejected_title": "הצעה שנדחתה",
   "trajectory.node.header.label.iteration": "סבב",

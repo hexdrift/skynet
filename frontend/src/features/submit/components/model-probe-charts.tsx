@@ -11,6 +11,8 @@ import {
 } from "recharts";
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
+import { useLiteMode } from "@/features/settings";
+import { ChartTable } from "@/shared/charts/chart-table";
 import { bestSoFar, rowColor, type ModelRow, type TrajectoryPoint } from "./model-probe-model";
 
 export function TrajectorySparkline({
@@ -114,12 +116,38 @@ export function TrajectoryDetailChart({
   asymptote: number | null;
   color?: string;
 }) {
+  const lite = useLiteMode();
   const bsf = bestSoFar(points);
   const data = points.map((p, i) => ({
     step: p.step,
     score: p.score,
     best: bsf[i]?.score ?? p.score,
   }));
+
+  if (lite) {
+    return (
+      <div dir="ltr" className="h-[340px] w-full min-w-0">
+        <ChartTable
+          rows={data}
+          columns={[
+            { key: "step", label: msg("auto.features.submit.components.modelprobedialog.literal.4") },
+            {
+              key: "score",
+              label: msg("auto.features.submit.components.modelprobedialog.literal.6"),
+              align: "end",
+              format: (value: unknown) => (typeof value === "number" ? value.toFixed(1) : "—"),
+            },
+            {
+              key: "best",
+              label: msg("auto.features.submit.components.modelprobedialog.literal.7"),
+              align: "end",
+              format: (value: unknown) => (typeof value === "number" ? value.toFixed(1) : "—"),
+            },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div dir="ltr" className="h-[340px] w-full min-w-0">

@@ -14,6 +14,12 @@ import {
 import { ChartTooltip, ChartEmptyState } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { useLiteMode } from "@/features/settings";
+import { ChartTable } from "@/shared/charts/chart-table";
+
+function formatScoreCell(value: unknown): string {
+  return typeof value === "number" ? value.toFixed(1) : "—";
+}
 
 interface ScoresChartProps {
   data: Array<{ name: string; baselineScore: number; optimizedScore: number; delta?: number }>;
@@ -22,8 +28,39 @@ interface ScoresChartProps {
 }
 
 export function ScoresChart({ data, optimizationIds, onBarClick }: ScoresChartProps) {
+  const lite = useLiteMode();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+
+  if (lite) {
+    return (
+      <ChartTable
+        rows={data}
+        columns={[
+          { key: "name", label: TERMS.optimization },
+          {
+            key: "baselineScore",
+            label: TERMS.baselineScore,
+            align: "end",
+            format: formatScoreCell,
+          },
+          {
+            key: "optimizedScore",
+            label: TERMS.optimizedScore,
+            align: "end",
+            format: formatScoreCell,
+          },
+        ]}
+        onRowClick={
+          onBarClick
+            ? (_, index) => {
+                if (optimizationIds?.[index]) onBarClick(optimizationIds[index]);
+              }
+            : undefined
+        }
+      />
+    );
+  }
 
   if (data.length === 0) {
     return (

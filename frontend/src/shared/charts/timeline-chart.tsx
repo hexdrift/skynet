@@ -14,6 +14,8 @@ import {
 import { ChartTooltip } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { useLiteMode } from "@/features/settings";
+import { ChartTable } from "@/shared/charts/chart-table";
 
 interface TimelineChartProps {
   data: Array<{ name: string; [valueKey: string]: string | number }>;
@@ -22,9 +24,37 @@ interface TimelineChartProps {
 }
 
 export function TimelineChart({ data, dates, onBarClick }: TimelineChartProps) {
+  const lite = useLiteMode();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   if (data.length === 0) return null;
+
+  if (lite) {
+    const valueKeys = Array.from(
+      new Set(data.flatMap((row) => Object.keys(row).filter((key) => key !== "name"))),
+    );
+    return (
+      <ChartTable
+        rows={data}
+        columns={[
+          { key: "name", label: msg("auto.shared.charts.timeline.chart.literal.1") },
+          ...valueKeys.map((key) => ({
+            key,
+            label: key,
+            align: "end" as const,
+            format: (value: unknown) => (typeof value === "number" ? String(value) : "—"),
+          })),
+        ]}
+        onRowClick={
+          onBarClick
+            ? (_: { name: string; [valueKey: string]: string | number }, index: number) => {
+                if (dates?.[index]) onBarClick(dates[index]);
+              }
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
     <div className="h-[160px] min-w-0">

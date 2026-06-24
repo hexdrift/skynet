@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { useLiteMode } from "@/features/settings";
+import { ChartTable } from "@/shared/charts/chart-table";
 
 interface DatasetVsImprovementChartProps {
   data: Array<{ rows: number; improvement: number; name: string }>;
@@ -24,7 +26,41 @@ export function DatasetVsImprovementChart({
   optimizationIds,
   onDotClick,
 }: DatasetVsImprovementChartProps) {
+  const lite = useLiteMode();
+
   if (data.length === 0) return null;
+
+  if (lite) {
+    return (
+      <ChartTable
+        rows={data}
+        columns={[
+          {
+            key: "rows",
+            label: formatMsg("auto.shared.charts.dataset.vs.improvement.chart.template.1", {
+              p1: TERMS.dataset,
+            }),
+            align: "end",
+            format: (value) => (typeof value === "number" ? String(value) : "—"),
+          },
+          {
+            key: "improvement",
+            label: msg("auto.shared.charts.dataset.vs.improvement.chart.literal.1"),
+            align: "end",
+            format: (value) => (typeof value === "number" ? String(value) : "—"),
+          },
+          { key: "name", label: TERMS.optimization },
+        ]}
+        onRowClick={
+          onDotClick
+            ? (_, index) => {
+                if (optimizationIds?.[index]) onDotClick(optimizationIds[index]);
+              }
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
     <div className="h-[250px] min-w-0">

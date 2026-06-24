@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { fetchWithAuthRetry } from "@/shared/lib/api";
 import { readServerSentEvents } from "@/shared/lib/sse";
+import { useLiteMode } from "@/features/settings";
 
 export interface StreamWithPollFallbackOptions {
   url: string;
@@ -56,6 +57,7 @@ export function useStreamWithPollFallback({
   const pollRef = useRef(poll);
   const shouldStopRef = useRef(shouldStopPolling);
   const onAuthErrorRef = useRef(onAuthError);
+  const lite = useLiteMode();
 
   useEffect(() => {
     onMessageRef.current = onMessage;
@@ -89,6 +91,18 @@ export function useStreamWithPollFallback({
       stopped = true;
       abort.abort();
     };
+
+    // Lite mode: skip the SSE transport entirely and poll instead. A persistent
+    // stream plus a re-render per event is a real cost on weak hardware; polling
+    // at the caller's fallback cadence keeps updates flowing far more cheaply.
+    if (lite) {
+      pollRef.current();
+      startPolling();
+      return () => {
+        stop();
+        if (fallbackInterval) clearInterval(fallbackInterval);
+      };
+    }
 
     const run = async () => {
       let res: Response;
@@ -147,5 +161,5 @@ export function useStreamWithPollFallback({
       stop();
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
-  }, [url, enabled, pollIntervalMs, pollOnlyOnClosed]);
+  }, [url, enabled, pollIntervalMs, pollOnlyOnClosed, lite]);
 }

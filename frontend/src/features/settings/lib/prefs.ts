@@ -12,6 +12,10 @@ export interface AgentShortcut {
 
 export interface UserPrefs {
   advancedMode: boolean;
+  // Lightweight mode for low-resource machines: kills motion/blur and swaps the
+  // heavy visualizations (charts, SVG trajectory tree, code editor) for static
+  // equivalents. See LiteModeProvider.
+  liteMode: boolean;
   wizardCodeAssist: CodeAssistDefault;
   wizardSplitMode: SplitModeDefault;
   agentTrustMode: TrustModeDefault;
@@ -20,6 +24,7 @@ export interface UserPrefs {
 
 export const PREF_KEYS: Record<keyof UserPrefs, string> = {
   advancedMode: "skynet.prefs.advanced-mode",
+  liteMode: "skynet.prefs.lite-mode",
   wizardCodeAssist: "skynet.prefs.wizard.code-assist",
   wizardSplitMode: "skynet.prefs.wizard.split-mode",
   agentTrustMode: "skynet.prefs.agent.trust-mode",
@@ -36,6 +41,7 @@ export const DEFAULT_AGENT_SHORTCUT: AgentShortcut = {
 
 export const DEFAULT_PREFS: UserPrefs = {
   advancedMode: false,
+  liteMode: false,
   wizardCodeAssist: "auto",
   wizardSplitMode: "auto",
   agentTrustMode: "ask",

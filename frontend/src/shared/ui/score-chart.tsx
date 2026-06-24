@@ -10,6 +10,12 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { useLiteMode } from "@/features/settings";
+import { ChartTable } from "@/shared/charts/chart-table";
+
+function formatScore(value: unknown): string {
+  return typeof value === "number" ? value.toFixed(1) : "—";
+}
 
 function ScoreChartTooltip({
   active,
@@ -44,6 +50,29 @@ export function ScoreChart({
 }: {
   data: Array<{ trial: number; score: number; best: number }>;
 }) {
+  const lite = useLiteMode();
+  if (lite) {
+    return (
+      <ChartTable
+        rows={data}
+        columns={[
+          { key: "trial", label: msg("shared.score_chart.prompt_version_axis") },
+          {
+            key: "score",
+            label: msg("shared.score_chart.version_score"),
+            align: "end",
+            format: formatScore,
+          },
+          {
+            key: "best",
+            label: msg("shared.score_chart.best"),
+            align: "end",
+            format: formatScore,
+          },
+        ]}
+      />
+    );
+  }
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 5, right: 10, left: 5, bottom: 18 }}>
