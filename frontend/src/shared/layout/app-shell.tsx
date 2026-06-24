@@ -4,7 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Menu, LogOut, GraduationCap, Lightbulb, Feather } from "lucide-react";
+import { Menu, LogOut, GraduationCap, Lightbulb, Feather, Sparkles } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { useTutorialContext, ConceptsGuide, registerTutorialHook } from "@/features/tutorial";
@@ -153,6 +153,24 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
               </TooltipTrigger>
               <TooltipContent side="bottom" dir="rtl">
                 {msg("app.shell.lite.tooltip")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {prefs.advancedMode && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setPref("advancedMode", false)}
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-accent/60 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
+                  aria-label={msg("app.shell.advanced.exit_aria")}
+                >
+                  <Sparkles className="size-3" aria-hidden="true" />
+                  {msg("app.shell.advanced.badge")}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" dir="rtl">
+                {msg("app.shell.advanced.tooltip")}
               </TooltipContent>
             </Tooltip>
           )}
