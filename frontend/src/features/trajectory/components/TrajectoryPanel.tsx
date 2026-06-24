@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { GitBranch } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,7 +22,15 @@ import {
 import { layoutTrajectory } from "../lib/layout";
 import { TrajectoryTree } from "./TrajectoryTree";
 import { TrajectoryOutline } from "./TrajectoryOutline";
-import { TrajectoryDrawer, type DrawerSelection } from "./TrajectoryDrawer";
+import type { DrawerSelection } from "./TrajectoryDrawer";
+
+// Code-split the drawer (~2.5k loc) out of the initial bundle. It renders null
+// until opened, so `ssr: false` keeps the closed state identical on server and
+// client and the chunk loads lazily post-hydration — no visible change.
+const TrajectoryDrawer = dynamic(
+  () => import("./TrajectoryDrawer").then((m) => m.TrajectoryDrawer),
+  { ssr: false },
+);
 
 const NEWEST_HIGHLIGHT_MS = 2200;
 

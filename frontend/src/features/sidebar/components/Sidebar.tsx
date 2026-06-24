@@ -538,7 +538,10 @@ export function Sidebar() {
   );
 }
 
-function JobRow({
+// Memoized: each row is heavy, and the list re-renders on poll/refresh. Its
+// parent passes stable useCallback handlers and primitive flags, so referential
+// equality holds and untouched rows skip re-rendering. Pure perf, same output.
+const JobRow = React.memo(function JobRow({
   job,
   isShared,
   isActive,
@@ -977,7 +980,7 @@ function JobRow({
         )}
     </div>
   );
-}
+});
 
 function derivePairStatus(
   index: number,
