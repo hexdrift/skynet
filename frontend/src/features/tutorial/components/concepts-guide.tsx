@@ -163,6 +163,7 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
 
       <div
         ref={dialogRef}
+        dir={getActiveDir()}
         className="relative w-full max-w-5xl h-[min(88vh,920px)] rounded-2xl border border-[#E5DDD4] bg-[#FAF8F5] shadow-[0_24px_64px_rgba(28,22,18,0.22)] overflow-hidden flex flex-col"
       >
         <GuideHeader
