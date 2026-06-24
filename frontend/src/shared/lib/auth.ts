@@ -28,7 +28,7 @@ import { createHmac, randomUUID } from "crypto";
  *   AUTH_ADMINS           — comma-separated admin emails/usernames
  *   AUTH_GROUP_CLAIM      — profile claim containing groups (default: "groups")
  *   BACKEND_AUTH_SECRET   — shared secret for backend bearer tokens and the
- *                           internal /auth/register|login calls
+ *                           internal /auth/login call
  *   API_URL               — backend base URL the credentials provider calls
  *   NODE_EXTRA_CA_CERTS   — path to CA bundle .pem for self-signed certs
  */

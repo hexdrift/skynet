@@ -36,9 +36,8 @@ export const HALO_CARDS: HaloCard[] = [
   { title: "זיהוי ספאם", pos: { top: "11%", left: "64%" }, rot: -4 },
   { title: "תיקון דקדוק", pos: { top: "9%", left: "81%" }, rot: 3 },
 
-  // Top band — back row
+  // Top band — back row (centre chip dropped so it never sits behind the wordmark)
   { title: "חילוץ ציטוטים", pos: { top: "19%", left: "6%" }, rot: -4 },
-  { title: "דירוג קושי", pos: { top: "20%", left: "47%" }, rot: 5 },
   { title: "תיוג חלקי דיבר", pos: { top: "19%", left: "80%" }, rot: -3 },
 
   // Left wing — outer column
@@ -61,9 +60,8 @@ export const HALO_CARDS: HaloCard[] = [
   { title: "מענה מבוסס מקורות", pos: { top: "37%", right: "9%" }, rot: 4 },
   { title: "בדיקת עובדות", pos: { top: "64%", right: "9%" }, rot: 5, mobilePos: { bottom: "20%", right: "20%" } },
 
-  // Bottom band — back row
+  // Bottom band — back row (centre chip dropped so it never sits behind the login card)
   { title: "הרחבת שאילתה", pos: { bottom: "19%", left: "6%" }, rot: 4 },
-  { title: "הערכת ביטחון", pos: { bottom: "20%", left: "47%" }, rot: -3 },
   { title: "חילוץ JSON", pos: { bottom: "19%", left: "80%" }, rot: 4, mobilePos: { bottom: "6%", right: "4%" } },
 
   // Bottom band — middle row
