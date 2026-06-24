@@ -29,6 +29,7 @@ import { TRUST_MODE_HUE, useTrustMode } from "../hooks/use-trust-mode";
 import { extractWizardPatch, useWizardStateOptional } from "../hooks/use-wizard-state";
 import type { ToolEndPayload, ToolStartPayload, WizardState } from "../lib/types";
 import { stageDatasetForAgent } from "@/shared/lib/api";
+import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { registerTutorialHook } from "@/features/tutorial";
 
 import { MAX_WIDTH, MIN_WIDTH, NARROW_VIEWPORT_QUERY } from "../constants";
@@ -590,7 +591,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             )}
             aria-label={msg("auto.features.agent.panel.components.generalistpanel.literal.1")}
           >
-            <div dir="rtl" className="relative flex min-w-0 flex-1 flex-col" data-tutorial="agent-panel">
+            <div dir={getActiveDir()} className="relative flex min-w-0 flex-1 flex-col" data-tutorial="agent-panel">
               <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2.5 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <span

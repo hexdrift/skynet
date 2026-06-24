@@ -19,7 +19,7 @@
  */
 
 import { cache } from "react";
-import { DEFAULT_LOCALE, isLocale, type Locale } from "@/shared/lib/locale";
+import { DEFAULT_LOCALE, dirForLocale, isLocale, type Locale } from "@/shared/lib/locale";
 
 declare global {
   interface Window {
@@ -87,6 +87,16 @@ export function getActiveLocale(): Locale {
   const injected = window.__SKYNET_LOCALE__;
   clientLocale = isLocale(injected) ? injected : DEFAULT_LOCALE;
   return clientLocale;
+}
+
+/**
+ * Writing direction for the active locale — a one-call convenience for the many
+ * `dir={...}` attributes that must follow the locale (RTL for Hebrew, LTR for
+ * English) rather than being pinned to one direction. Safe in both bundles since
+ * it delegates to `getActiveLocale()`.
+ */
+export function getActiveDir(): "rtl" | "ltr" {
+  return dirForLocale(getActiveLocale());
 }
 
 /**

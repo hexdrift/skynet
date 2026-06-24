@@ -7,6 +7,7 @@ import { msg } from "@/shared/lib/messages";
 // barrel re-exports demo-data, which pulls in @/features/trajectory and loops
 // back through the settings barrel — a cycle that makes Turbopack fail to
 // resolve useLiteMode's re-export. The bridge module is a pure leaf.
+// eslint-disable-next-line no-restricted-imports -- deliberate leaf import; see above
 import { registerTutorialHook } from "@/features/tutorial/lib/bridge";
 import {
   DEFAULT_PREFS,
