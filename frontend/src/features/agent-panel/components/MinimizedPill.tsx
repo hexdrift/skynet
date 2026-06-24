@@ -31,7 +31,6 @@ export function MinimizedPill({
     <button
       type="button"
       onClick={onOpen}
-      dir="rtl"
       data-tutorial="agent-pill"
       aria-label={ariaLabel}
       title={ariaLabel}

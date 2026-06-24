@@ -173,7 +173,7 @@ export function LoginView() {
           <div className="flex flex-col items-center">
             <LoginHeader />
             <Card className="mt-9 w-full">
-              <CardContent className="px-6" dir="rtl">
+              <CardContent className="px-6">
                 {hasOAuth && (
                   <>
                     <div className="space-y-2.5">
