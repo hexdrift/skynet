@@ -30,6 +30,18 @@ dev:
     cd backend && {{_run}}python main.py &
     cd frontend && npm run dev
 
+# Boot the full production stack in one command: build the frontend, then run the backend (:8000) + `next start` (:3001) together; Ctrl+C stops both.
+prod:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ( cd frontend && npm run build )
+    cd backend
+    {{_run}}python main.py &
+    backend_pid=$!
+    cd ..
+    trap 'kill "$backend_pid" 2>/dev/null || true' EXIT INT TERM
+    cd frontend && npm start
+
 test-unit:
     cd backend && {{_dev}}pytest core/ tests/unit/ -v
 
