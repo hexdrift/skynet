@@ -3,4 +3,18 @@
 
 import type { authMessages } from "./messages";
 
-export const authMessagesEn: Partial<Record<keyof typeof authMessages, string>> = {};
+export const authMessagesEn: Partial<Record<keyof typeof authMessages, string>> = {
+  "auth.login.error": "Sign-in failed",
+  "auth.login.loading": "Signing in…",
+  "auth.login.form_aria": "Sign-in form",
+  "auth.login.meta_description": "Sign in to Skynet, a prompt-optimization platform",
+  "auth.login.email": "Email",
+  "auth.login.email_placeholder": "you@example.com",
+  "auth.login.password": "Password",
+  "auth.login.password_placeholder": "Your password",
+  "auth.login.signin_submit": "Sign in",
+  "auth.login.with_google": "Continue with Google",
+  "auth.login.with_github": "Continue with GitHub",
+  "auth.login.divider": "or",
+  "auth.login.invalid_credentials": "Incorrect email or password",
+};
