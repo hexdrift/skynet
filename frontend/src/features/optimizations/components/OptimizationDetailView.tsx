@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -67,7 +68,7 @@ import type { SharedOptimizationData } from "@/shared/lib/api";
 import type { PipelineStage } from "../constants";
 import { extractScoresFromLogs } from "../lib/extract-scores";
 import { reconstructGridResult } from "../lib/reconstruct-grid";
-import { DataTab } from "./DataTab";
+import { DataTabSkeleton } from "./DataTabSkeleton";
 import { LogsTab } from "./LogsTab";
 import { ExportMenu } from "./ExportMenu";
 import { DeleteJobDialog } from "./DeleteJobDialog";
@@ -85,6 +86,13 @@ import { ReactServeApi } from "./ReactServeApi";
 import { RunPlayground } from "./RunPlayground";
 import { linkifyMessage } from "@/shared/lib/linkify";
 import { useStreamWithPollFallback } from "@/shared/hooks/use-stream-with-poll-fallback";
+
+// Code-split the data tab into its own chunk. It only mounts when the "data" tab
+// is selected, and its loading fallback is the same skeleton DataTab already
+// renders during its own fetch — so the deferred chunk load is visually seamless.
+const DataTab = dynamic(() => import("./DataTab").then((m) => m.DataTab), {
+  loading: () => <DataTabSkeleton />,
+});
 
 // Treat naive ISO timestamps (no trailing tz marker) as UTC — that matches the
 // backend, which stores UTC datetimes that Pydantic emits without a suffix.

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { AlertTriangle, Boxes, Check, Loader2, Sparkles, Trash2 } from "lucide-react";
 import {
   Card,
@@ -16,10 +17,16 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip, AddModelButton } from "@/shared/ui/model-chip";
 import { ModelConfigModal } from "../ModelConfigModal";
-import { ModelProbeDialog } from "../ModelProbeDialog";
 
 import { emptyModelConfig } from "../../constants";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
+
+// Probe dialog pulls in recharts; it renders null until opened, so deferring its
+// chunk with `ssr: false` keeps /submit's initial JS lighter with no visible change.
+const ModelProbeDialog = dynamic(
+  () => import("../ModelProbeDialog").then((m) => m.ModelProbeDialog),
+  { ssr: false },
+);
 
 interface AllAvailableChipProps {
   availableCount: number;
