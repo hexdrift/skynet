@@ -10,6 +10,7 @@ import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { useTutorialContext, ConceptsGuide, registerTutorialHook } from "@/features/tutorial";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
+import { LanguageSwitcher } from "@/shared/ui/language-switcher";
 import { msg } from "@/shared/lib/messages";
 import { JobsStreamProvider } from "@/shared/hooks/use-jobs-stream";
 import { useUserPrefs, LiteModeHint } from "@/features/settings";
@@ -207,6 +208,7 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <LanguageSwitcher />
           {session?.user && (
             <>
               <span className="hidden sm:inline text-xs font-semibold text-foreground">
