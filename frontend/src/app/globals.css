@@ -1342,3 +1342,27 @@ table {
     animation: none;
   }
 }
+
+/* ─── Lite mode ──────────────────────────────────────────────────────────────
+   Toggled by LiteModeProvider, which sets data-lite on <html>. Two cheap,
+   high-leverage global wins for low-resource machines:
+     1. Collapse transition timings so every interaction is instant (no animated
+        tweens to schedule/composite). framer-motion JS animation is handled
+        separately via MotionConfig reducedMotion="always".
+     2. Drop the GPU-expensive frosted-glass backdrop-filter (the sticky header).
+   Deliberately NOT touched: CSS @keyframes animations (spinners must keep
+   spinning) and box-shadow (Tailwind focus rings are box-shadow — flattening it
+   would break keyboard-focus visibility). */
+[data-lite] *,
+[data-lite] *::before,
+[data-lite] *::after {
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
+[data-lite] [class*="backdrop-blur"],
+[data-lite] [class*="backdrop-saturate"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

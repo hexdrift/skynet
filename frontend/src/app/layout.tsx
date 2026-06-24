@@ -6,7 +6,12 @@ import { TooltipProvider } from "@/shared/ui/primitives/tooltip";
 import { SessionProvider, ThemeProvider, ToastContainer } from "@/shared/providers";
 import { SplashScreen } from "@/shared/layout/splash-screen";
 import { TutorialOverlay, TutorialMenu, TutorialProvider } from "@/features/tutorial";
-import { UserPrefsProvider, SettingsModalProvider, SettingsModal } from "@/features/settings";
+import {
+  UserPrefsProvider,
+  LiteModeProvider,
+  SettingsModalProvider,
+  SettingsModal,
+} from "@/features/settings";
 import { StorageQuotaModalHost } from "@/features/storage";
 import { AppSkeletonTheme } from "@/shared/ui/skeleton";
 import { msg } from "@/shared/lib/messages";
@@ -121,21 +126,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning>
         <SessionProvider>
           <UserPrefsProvider>
-            <ThemeProvider>
-              <TooltipProvider>
-                <AppSkeletonTheme>
-                  <SplashScreen />
-                  <TutorialProvider>
-                    <SettingsModalProvider>
-                      <AppShell>{children}</AppShell>
-                      <SettingsModal />
-                    </SettingsModalProvider>
-                    <TutorialOverlay />
-                    <TutorialMenu />
-                  </TutorialProvider>
-                </AppSkeletonTheme>
-              </TooltipProvider>
-            </ThemeProvider>
+            <LiteModeProvider>
+              <ThemeProvider>
+                <TooltipProvider>
+                  <AppSkeletonTheme>
+                    <SplashScreen />
+                    <TutorialProvider>
+                      <SettingsModalProvider>
+                        <AppShell>{children}</AppShell>
+                        <SettingsModal />
+                      </SettingsModalProvider>
+                      <TutorialOverlay />
+                      <TutorialMenu />
+                    </TutorialProvider>
+                  </AppSkeletonTheme>
+                </TooltipProvider>
+              </ThemeProvider>
+            </LiteModeProvider>
           </UserPrefsProvider>
         </SessionProvider>
         <StorageQuotaModalHost />

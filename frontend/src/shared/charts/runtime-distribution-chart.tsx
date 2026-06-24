@@ -14,6 +14,8 @@ import {
 import { ChartTooltip } from "./chart-utils";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { useLiteMode } from "@/features/settings";
+import { ChartTable } from "@/shared/charts/chart-table";
 
 interface RuntimeDistributionChartProps {
   data: Array<{ name: string; runtimeMinutes: number }>;
@@ -26,9 +28,39 @@ export function RuntimeDistributionChart({
   optimizationIds,
   onBarClick,
 }: RuntimeDistributionChartProps) {
+  const lite = useLiteMode();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   if (data.length === 0) return null;
+
+  if (lite) {
+    return (
+      <ChartTable
+        rows={data}
+        columns={[
+          {
+            key: "name",
+            label: formatMsg("auto.shared.charts.runtime.distribution.chart.template.1", {
+              p1: TERMS.optimization,
+            }),
+          },
+          {
+            key: "runtimeMinutes",
+            label: msg("auto.shared.charts.runtime.distribution.chart.literal.2"),
+            align: "end",
+            format: (value) => (typeof value === "number" ? value.toFixed(1) : "—"),
+          },
+        ]}
+        onRowClick={
+          onBarClick
+            ? (_, index) => {
+                if (optimizationIds?.[index]) onBarClick(optimizationIds[index]);
+              }
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
     <div className="h-[250px] min-w-0">

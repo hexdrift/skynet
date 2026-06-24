@@ -38,6 +38,8 @@ import { HelpTip } from "@/shared/ui/help-tip";
 import type { OptimizationStatusResponse, PairResult } from "@/shared/types/api";
 import { formatPercent } from "@/shared/lib";
 import { deleteGridPair, restartGridPair, resumeGridPair } from "@/shared/lib/api";
+import { ChartTable } from "@/shared/charts/chart-table";
+import { useLiteMode } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { computePairScores } from "../lib/pair-scores";
@@ -60,6 +62,7 @@ function GridOverviewImpl({
   onPairSelect: (pairIndex: number) => void;
   onPairDeleted?: (pairIndex: number) => void;
 }) {
+  const lite = useLiteMode();
   const [pendingDelete, setPendingDelete] = useState<PairResult | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [rerunningPair, setRerunningPair] = useState<number | null>(null);
@@ -317,6 +320,40 @@ function GridOverviewImpl({
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
+                {lite ? (
+                  <div className="h-[280px] min-w-0">
+                    <ChartTable
+                      rows={scatterPoints.filter((p) => matchesFilter(p.pair_index))}
+                      onRowClick={(row) => handleBarClick(row)}
+                      columns={[
+                        {
+                          key: "name",
+                          label: msg(
+                            "auto.features.optimizations.components.gridoverview.9",
+                          ),
+                        },
+                        {
+                          key: "quality",
+                          label: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.4",
+                          ),
+                          align: "end",
+                          format: (value) =>
+                            typeof value === "number" ? `${value.toFixed(1)}%` : "—",
+                        },
+                        {
+                          key: "latency",
+                          label: msg(
+                            "auto.features.optimizations.components.gridoverview.literal.3",
+                          ),
+                          align: "end",
+                          format: (value) =>
+                            typeof value === "number" ? `${value.toFixed(2)}s` : "—",
+                        },
+                      ]}
+                    />
+                  </div>
+                ) : (
                 <div className="h-[280px] min-w-0" dir="ltr">
                   <ResponsiveContainer width="100%" height="100%">
                     <ScatterChart margin={{ top: 10, right: 30, bottom: 35, left: 20 }}>
@@ -381,6 +418,7 @@ function GridOverviewImpl({
                     </ScatterChart>
                   </ResponsiveContainer>
                 </div>
+                )}
                 <div
                   className="mt-2 flex items-center justify-center gap-4 text-[0.6875rem]"
                   dir="rtl"
@@ -443,6 +481,40 @@ function GridOverviewImpl({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
+                    {lite ? (
+                      <div className="h-[220px] min-w-0">
+                        <ChartTable
+                          rows={pairScoresFiltered}
+                          onRowClick={(row) => handleBarClick(row)}
+                          columns={[
+                            {
+                              key: "name",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.8",
+                              ),
+                            },
+                            {
+                              key: "baselineScore",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.10",
+                              ),
+                              align: "end",
+                              format: (value) =>
+                                typeof value === "number" ? `${value}%` : "—",
+                            },
+                            {
+                              key: "optimizedScore",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.12",
+                              ),
+                              align: "end",
+                              format: (value) =>
+                                typeof value === "number" ? `${value}%` : "—",
+                            },
+                          ]}
+                        />
+                      </div>
+                    ) : (
                     <div className="h-[220px] min-w-0" dir="ltr">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
@@ -528,6 +600,7 @@ function GridOverviewImpl({
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
                     <div className="flex justify-center gap-4 mt-1">
                       {[
                         {
@@ -580,6 +653,40 @@ function GridOverviewImpl({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
+                    {lite ? (
+                      <div className="h-[220px] min-w-0">
+                        <ChartTable
+                          rows={combinedScoresFiltered}
+                          onRowClick={(row) => handleBarClick(row)}
+                          columns={[
+                            {
+                              key: "name",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.16",
+                              ),
+                            },
+                            {
+                              key: "quality",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.18",
+                              ),
+                              align: "end",
+                              format: (value) =>
+                                typeof value === "number" ? `${value}%` : "—",
+                            },
+                            {
+                              key: "speed",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.20",
+                              ),
+                              align: "end",
+                              format: (value) =>
+                                typeof value === "number" ? `${value}%` : "—",
+                            },
+                          ]}
+                        />
+                      </div>
+                    ) : (
                     <div className="h-[220px] min-w-0" dir="ltr">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
@@ -665,6 +772,7 @@ function GridOverviewImpl({
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
                     <div className="flex flex-wrap justify-center gap-3 mt-1">
                       {[
                         {
@@ -719,6 +827,33 @@ function GridOverviewImpl({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
+                    {lite ? (
+                      <div className="h-[220px] min-w-0">
+                        <ChartTable
+                          rows={pairRespTimeFiltered}
+                          onRowClick={(row) => handleBarClick(row)}
+                          columns={[
+                            {
+                              key: "name",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.27",
+                              ),
+                            },
+                            {
+                              key: "responseTime",
+                              label: msg(
+                                "auto.features.optimizations.components.gridoverview.literal.28",
+                              ),
+                              align: "end",
+                              format: (value) =>
+                                typeof value === "number"
+                                  ? `${value}${msg("auto.features.optimizations.components.gridoverview.14")}`
+                                  : "—",
+                            },
+                          ]}
+                        />
+                      </div>
+                    ) : (
                     <div className="h-[220px] min-w-0" dir="ltr">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
@@ -815,6 +950,7 @@ function GridOverviewImpl({
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
                   </CardContent>
                 </Card>
               )}

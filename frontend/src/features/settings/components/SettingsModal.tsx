@@ -11,6 +11,7 @@ import {
   Copy,
   KeyRound,
   ExternalLink,
+  Feather,
   HardDrive,
   Keyboard,
   LogOut,
@@ -194,6 +195,14 @@ function AccountTab() {
           checked={prefs.advancedMode}
           onCheckedChange={(v) => setPref("advancedMode", v)}
         />
+      </SettingsRow>
+
+      <SettingsRow
+        icon={Feather}
+        label={msg("settings.account.lite.label")}
+        description={msg("settings.account.lite.description")}
+      >
+        <Switch checked={prefs.liteMode} onCheckedChange={(v) => setPref("liteMode", v)} />
       </SettingsRow>
 
       <SettingsRow icon={LogOut} label={msg("settings.account.logout.label")}>

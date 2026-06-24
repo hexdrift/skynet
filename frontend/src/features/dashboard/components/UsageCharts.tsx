@@ -3,6 +3,8 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartTooltip } from "@/shared/charts/chart-utils";
+import { ChartTable } from "@/shared/charts/chart-table";
+import { useLiteMode } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
 
 type NameCount = { name: string; count: number };
@@ -101,6 +103,7 @@ function OwnerDonut({
   sessionUser: string;
   onSelect: (name: string) => void;
 }) {
+  const lite = useLiteMode();
   const total = owners.reduce((sum, o) => sum + o.count, 0);
   const data = owners.map((o, i) => {
     const isMe = o.name.toLowerCase() === sessionUser.toLowerCase();
@@ -113,6 +116,22 @@ function OwnerDonut({
         : (OWNER_RAMP[i % OWNER_RAMP.length] ?? "var(--color-chart-5)"),
     };
   });
+
+  if (lite) {
+    return (
+      <div>
+        <PanelHeading>{msg("dashboard.analytics.by_owner")}</PanelHeading>
+        <ChartTable
+          rows={data}
+          onRowClick={(row) => onSelect(row.name)}
+          columns={[
+            { key: "label", label: msg("dashboard.analytics.by_owner") },
+            { key: "count", label: msg("dashboard.analytics.runs"), align: "end" },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div>

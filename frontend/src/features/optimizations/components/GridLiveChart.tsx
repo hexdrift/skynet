@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
+import { ChartTable } from "@/shared/charts/chart-table";
+import { useLiteMode } from "@/features/settings";
 import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -106,7 +108,12 @@ function LiveTip({
   );
 }
 
+function formatLivePct(value: unknown): string {
+  return typeof value === "number" ? `${value}%` : "—";
+}
+
 export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
+  const lite = useLiteMode();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // Recompute only when new progress events land, not on every parent tick —
   // this chart lives under the live-updating OverviewTab.
@@ -144,6 +151,31 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
+        {lite ? (
+          <div className="h-[220px] min-w-0">
+            <ChartTable
+              rows={pairs}
+              columns={[
+                {
+                  key: "name",
+                  label: msg("auto.features.optimizations.components.gridlivechart.literal.1"),
+                },
+                {
+                  key: "baselineScore",
+                  label: msg("auto.features.optimizations.components.gridlivechart.literal.3"),
+                  align: "end",
+                  format: formatLivePct,
+                },
+                {
+                  key: "optimizedScore",
+                  label: msg("auto.features.optimizations.components.gridlivechart.literal.5"),
+                  align: "end",
+                  format: formatLivePct,
+                },
+              ]}
+            />
+          </div>
+        ) : (
         <div className="h-[220px] min-w-0" dir="ltr">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -203,6 +235,7 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
         <div className="flex justify-center gap-4 mt-1">
           {[
             {

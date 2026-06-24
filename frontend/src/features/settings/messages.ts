@@ -15,6 +15,9 @@ export const settingsMessages = {
   "settings.tab.about": "אודות",
   "settings.account.advanced.label": "מצב מתקדם",
   "settings.account.advanced.description": "מציג אפשרויות מתקדמות כמו סריקות והגדרות נוספות",
+  "settings.account.lite.label": "מצב קל",
+  "settings.account.lite.description":
+    "מכבה אנימציות ומחליף תצוגות כבדות בגרסאות פשוטות — לחוויה חלקה במחשבים חלשים",
   "settings.wizard.code_assist.label": `אופן כתיבת הקוד ב${TERMS.optimization} חדשה`,
   "settings.wizard.code_assist.auto": "הסוכן כותב",
   "settings.wizard.code_assist.manual": "כתיבה ידנית",

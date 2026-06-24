@@ -13,8 +13,10 @@ import {
   YAxis,
 } from "recharts";
 import { ChartTooltip } from "@/shared/charts/chart-utils";
+import { ChartTable } from "@/shared/charts/chart-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { useLiteMode } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
 import { RunChip, colorFor, runToken, type RunInfo } from "./compare-model";
 
@@ -24,6 +26,7 @@ type ChartRow = {
 };
 
 export function PerformanceChart({ runs }: { runs: RunInfo[] }) {
+  const lite = useLiteMode();
   const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
   const toggleRun = useCallback(
     (id: string) => {
@@ -86,6 +89,21 @@ export function PerformanceChart({ runs }: { runs: RunInfo[] }) {
       </CardHeader>
       <CardContent>
         <div className="h-[280px] min-w-0" dir="ltr">
+          {lite ? (
+            <ChartTable
+              rows={chartData.rows}
+              columns={[
+                { key: "metric", label: msg("auto.app.compare.page.6") },
+                ...runs.map((run, i) => ({
+                  key: runToken(i),
+                  label: `${runToken(i)} · ${run.label}`,
+                  align: "end" as const,
+                  format: (value: unknown) =>
+                    typeof value === "number" ? `${value.toFixed(1)}%` : "—",
+                })),
+              ]}
+            />
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData.rows}
@@ -135,6 +153,7 @@ export function PerformanceChart({ runs }: { runs: RunInfo[] }) {
               })}
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
         <div className="flex flex-wrap justify-center gap-4 mt-3" dir="rtl">
           {runs.map((run, i) => {

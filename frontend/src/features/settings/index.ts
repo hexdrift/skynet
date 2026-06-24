@@ -1,6 +1,8 @@
 export { UserPrefsProvider, useUserPrefs } from "./hooks/use-user-prefs";
+export { LiteModeProvider, useLiteMode } from "./hooks/use-lite-mode";
 export { SettingsModalProvider, useSettingsModal } from "./hooks/use-settings-modal";
 export { SettingsModal } from "./components/SettingsModal";
+export { LiteModeHint } from "./components/LiteModeHint";
 export { SettingsTrigger } from "./components/SettingsTrigger";
 export {
   readPref,
