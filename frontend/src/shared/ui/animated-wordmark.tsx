@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLiteMode } from "@/features/settings";
 
 /**
  * Animated "SKYNET" wordmark — matching the story.foundation morphing SVG style.
@@ -195,6 +196,7 @@ export function AnimatedWordmark({
   );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotionRef = useRef(false);
+  const lite = useLiteMode();
 
   useEffect(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -233,10 +235,10 @@ export function AnimatedWordmark({
 
   const handleMouseEnter = useCallback(() => {
     // When autoMorph owns the lifecycle the wordmark is already morphing — hover
-    // must not spin up a second interval.
-    if (autoMorph) return;
+    // must not spin up a second interval. Lite mode disables the morph outright.
+    if (autoMorph || lite) return;
     if (!reducedMotionRef.current) startMorph();
-  }, [autoMorph, startMorph]);
+  }, [autoMorph, lite, startMorph]);
 
   const handleMouseLeave = useCallback(() => {
     // Never reset a continuously-morphing wordmark on leave; it should keep
@@ -246,6 +248,12 @@ export function AnimatedWordmark({
   }, [autoMorph, stopMorph]);
 
   useEffect(() => {
+    // Lite mode keeps the wordmark static — kill any running morph and never
+    // start one, even for callers that opt into autoMorph (splash/idle states).
+    if (lite) {
+      stopMorph();
+      return;
+    }
     if (autoMorph && !reducedMotionRef.current) {
       // Clear any stale ref before starting to avoid the guard in startMorph
       if (intervalRef.current) {
@@ -260,7 +268,7 @@ export function AnimatedWordmark({
         intervalRef.current = null;
       }
     };
-  }, [autoMorph, startMorph]);
+  }, [autoMorph, lite, startMorph, stopMorph]);
 
   const aspectRatio = TOTAL_WIDTH / 92;
   const svgWidth = size * aspectRatio;
