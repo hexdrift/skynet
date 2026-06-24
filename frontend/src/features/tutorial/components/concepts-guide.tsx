@@ -13,6 +13,7 @@ import {
   Compass,
 } from "lucide-react";
 import { msg, formatMsg } from "@/shared/lib/messages";
+import { getActiveDir } from "@/shared/lib/runtime-locale";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
@@ -512,7 +513,7 @@ function GepaLoopDiagram() {
     { i: 5, name: msg("auto.features.tutorial.components.concepts.guide.literal.61") },
   ];
   return (
-    <figure className="my-4 rounded-lg border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]" dir="rtl">
+    <figure className="my-4 rounded-lg border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]" dir={getActiveDir()}>
       <svg viewBox="0 0 700 130" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
         <defs>
           <marker id="gepa-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
