@@ -11,5 +11,9 @@
 const FALLBACK_SITE_URL = "https://skynet.app";
 
 export function getSiteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? FALLBACK_SITE_URL;
+  // An unset Docker build ARG arrives as "" (not undefined), so `??` would let
+  // it through and `new URL("")` in the metadata layer throws ERR_INVALID_URL.
+  // Treat empty/whitespace as unset so the build falls back instead of crashing.
+  const value = process.env.NEXT_PUBLIC_SITE_URL;
+  return value && value.trim() ? value : FALLBACK_SITE_URL;
 }
