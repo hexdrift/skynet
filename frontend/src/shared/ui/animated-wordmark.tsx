@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLiteMode } from "@/features/settings";
 
 /**
  * Animated "SKYNET" wordmark — matching the story.foundation morphing SVG style.
@@ -196,7 +195,12 @@ export function AnimatedWordmark({
   );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotionRef = useRef(false);
-  const lite = useLiteMode();
+  // Lite mode is signalled by LiteModeProvider via a data-lite attribute on
+  // <html>. Read it straight from the DOM rather than the settings hook so this
+  // shared/ui leaf imports nothing from features/: a feature import here closes
+  // a client-module cycle (wordmark → settings → prefs → tutorial barrel →
+  // tutorial-overlay → wordmark) that traps Turbopack in an endless recompile.
+  const [lite, setLite] = useState(false);
 
   useEffect(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -206,6 +210,15 @@ export function AnimatedWordmark({
     };
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const read = () => setLite(root.hasAttribute("data-lite"));
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-lite"] });
+    return () => observer.disconnect();
   }, []);
 
   const startMorph = useCallback(() => {
