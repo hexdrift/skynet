@@ -212,6 +212,13 @@ export type TermKey = keyof typeof TERMS;
 export type I18nMessageKey = keyof typeof I18N_MESSAGES;
 export type ErrorCode = I18nMessageKey;
 
+// English overlay — partial; runtime falls back to Hebrew for absent keys.
+export const TERMS_EN: Partial<Record<TermKey, string>> = {
+};
+
+export const I18N_MESSAGES_EN: Partial<Record<I18nMessageKey, string>> = {
+};
+
 export const I18N_KEY = {
   ACCOUNTS_EMAIL_TAKEN: "accounts.email_taken",
   ACCOUNTS_INVALID_CREDENTIALS: "accounts.invalid_credentials",
