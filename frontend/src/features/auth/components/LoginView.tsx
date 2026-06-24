@@ -11,8 +11,6 @@ import { Input } from "@/shared/ui/primitives/input";
 import { Label } from "@/shared/ui/primitives/label";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { msg } from "@/shared/lib/messages";
-import { tI18n } from "@/shared/lib/i18n";
-import { cn } from "@/shared/lib/utils";
 import { LoginHalo } from "./LoginHalo";
 
 const ENTER_EASE = [0.16, 1, 0.3, 1] as const;
@@ -75,17 +73,13 @@ function GoogleMark({ className }: { className?: string }) {
   );
 }
 
-type AuthMode = "signin" | "signup";
-
 export function LoginView() {
   const router = useRouter();
   const [mode, setMode] = useState<"loading" | "sso" | "ready">("loading");
-  const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [oauth, setOauth] = useState<{ google: boolean; github: boolean }>({
     google: false,
     github: false,
   });
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -110,21 +104,6 @@ export function LoginView() {
       });
   }, []);
 
-  /**
-   * Localize an error returned by /api/register. Backend semantic codes
-   * (``accounts.*``, ``auth.not_configured``) resolve through the shared backend
-   * catalog; anything else collapses to a generic "couldn't create the account".
-   */
-  function describeRegisterError(code: string): string {
-    if (code.startsWith("accounts.") || code === "auth.not_configured") return tI18n(code);
-    return msg("auth.login.register_failed");
-  }
-
-  function switchMode(next: AuthMode) {
-    setAuthMode(next);
-    setError("");
-  }
-
   function handleOAuth(provider: "google" | "github") {
     setError("");
     void signIn(provider, { callbackUrl: postLoginTarget() });
@@ -137,21 +116,6 @@ export function LoginView() {
     setError("");
     setLoading(true);
     try {
-      if (authMode === "signup") {
-        const res = await fetch("/api/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), email: cleanEmail, password }),
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { error?: string };
-          setError(describeRegisterError(data.error ?? "auth.login.register_failed"));
-          setLoading(false);
-          return;
-        }
-      }
-      // Both paths finish by minting a session from the same credentials — signup
-      // logs the new account straight in rather than bouncing back to the form.
       const result = await signIn("credentials", {
         email: cleanEmail,
         password,
@@ -208,30 +172,6 @@ export function LoginView() {
             <LoginHeader />
             <Card className="mt-9 w-full">
               <CardContent className="px-6" dir="rtl">
-                <div
-                  role="tablist"
-                  aria-label={msg("auth.login.form_aria")}
-                  className="mb-5 flex rounded-lg bg-accent/60 p-1"
-                >
-                  {(["signin", "signup"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      role="tab"
-                      aria-selected={authMode === tab}
-                      onClick={() => switchMode(tab)}
-                      className={cn(
-                        "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200",
-                        authMode === tab
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {msg(tab === "signin" ? "auth.login.tab_signin" : "auth.login.tab_signup")}
-                    </button>
-                  ))}
-                </div>
-
                 {hasOAuth && (
                   <>
                     <div className="space-y-2.5">
@@ -270,35 +210,11 @@ export function LoginView() {
                   </>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-3.5">
-                  <AnimatePresence initial={false}>
-                    {authMode === "signup" && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <Label
-                          htmlFor="login-name"
-                          className="mb-1.5 block text-xs font-medium text-muted-foreground"
-                        >
-                          {msg("auth.login.name")}
-                        </Label>
-                        <Input
-                          id="login-name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder={msg("auth.login.name_placeholder")}
-                          autoComplete="name"
-                          dir="auto"
-                          className="h-11"
-                        />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
+                <form
+                  onSubmit={handleSubmit}
+                  aria-label={msg("auth.login.form_aria")}
+                  className="space-y-3.5"
+                >
                   <div>
                     <Label
                       htmlFor="login-email"
@@ -332,15 +248,10 @@ export function LoginView() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={msg("auth.login.password_placeholder")}
-                      autoComplete={authMode === "signup" ? "new-password" : "current-password"}
+                      autoComplete="current-password"
                       dir="ltr"
                       className="h-11 text-left"
                     />
-                    {authMode === "signup" && (
-                      <p className="mt-1.5 text-xs text-muted-foreground">
-                        {msg("auth.login.password_hint")}
-                      </p>
-                    )}
                   </div>
 
                   <AnimatePresence>
@@ -365,11 +276,7 @@ export function LoginView() {
                     className="h-11 w-full gap-2 text-[0.9375rem] font-medium"
                   >
                     {loading && <Loader2 className="size-4 animate-spin" />}
-                    {msg(
-                      authMode === "signin"
-                        ? "auth.login.signin_submit"
-                        : "auth.login.signup_submit",
-                    )}
+                    {msg("auth.login.signin_submit")}
                   </Button>
                 </form>
               </CardContent>
