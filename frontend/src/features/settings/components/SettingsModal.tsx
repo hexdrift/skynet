@@ -1228,7 +1228,6 @@ export function SettingsModal() {
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as SettingsTab)}
-          dir="rtl"
           className="px-6 pb-6 pt-2"
         >
           <TabsList

@@ -330,7 +330,6 @@ export function Sidebar() {
     <aside
       className="relative flex h-full shrink-0 flex-col border-l border-sidebar-border/60 bg-sidebar/80 backdrop-blur-xl overflow-hidden"
       style={{ width: `min(${width}px, 40vw, 92vw)` }}
-      dir="rtl"
       data-tutorial="sidebar-full"
     >
       <button
@@ -366,7 +365,7 @@ export function Sidebar() {
                   <motion.div
                     layoutId="sidebar-active"
                     className="absolute inset-0 rounded-lg bg-primary/[0.08] ring-1 ring-primary/10"
-                    style={{ borderRight: "3px solid var(--primary)" }}
+                    style={{ borderInlineStart: "3px solid var(--primary)" }}
                     transition={{ type: "spring", stiffness: 350, damping: 28 }}
                   />
                 )}

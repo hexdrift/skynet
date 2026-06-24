@@ -619,7 +619,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                               </button>
                             </PopoverTrigger>
                           </TooltipTrigger>
-                          <TooltipContent side="bottom" dir="rtl">
+                          <TooltipContent side="bottom">
                             {msg("auto.features.agent.panel.components.generalistpanel.4")}
                           </TooltipContent>
                         </Tooltip>
@@ -650,7 +650,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                         <History className="size-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" dir="rtl">
+                    <TooltipContent side="bottom">
                       {msg("auto.features.agent.panel.components.generalistpanel.history_button")}
                     </TooltipContent>
                   </Tooltip>
@@ -668,7 +668,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                           <Plus className="size-3.5" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" dir="rtl">
+                      <TooltipContent side="bottom">
                         {msg("auto.features.agent.panel.components.generalistpanel.new_conversation")}
                       </TooltipContent>
                     </Tooltip>
@@ -686,7 +686,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                         <PanelLeftClose className="size-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" dir="rtl">
+                    <TooltipContent side="bottom">
                       {msg("auto.features.agent.panel.components.generalistpanel.6")}{" "}
                       <span className="opacity-70 font-mono">({shortcutLabel})</span>
                     </TooltipContent>

@@ -150,7 +150,6 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-6 animate-[fadeIn_180ms_ease-out]"
-      dir="rtl"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -232,7 +231,7 @@ function GuideHeader({
 
 function GuideSidebar({ activeId, onJump }: { activeId: string; onJump: (id: string) => void }) {
   return (
-    <aside className="border-l border-[#E5DDD4] bg-[#F5F1EC]/40 px-3 py-4 hidden md:block overflow-y-auto">
+    <aside className="border-e border-[#E5DDD4] bg-[#F5F1EC]/40 px-3 py-4 hidden md:block overflow-y-auto">
       <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8C7A6B] px-2 mb-2">
         {msg("auto.features.tutorial.components.concepts.guide.literal.11")}
       </p>
@@ -245,7 +244,7 @@ function GuideSidebar({ activeId, onJump }: { activeId: string; onJump: (id: str
                 type="button"
                 onClick={() => onJump(s.id)}
                 className={[
-                  "w-full text-right flex items-start gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer",
+                  "w-full text-start flex items-start gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer",
                   isActive
                     ? "bg-[#EDE7DD] text-[#3D2E22] font-semibold"
                     : "text-[#5C4D40] hover:bg-[#EDE7DD]/60 hover:text-[#3D2E22]",
@@ -361,13 +360,13 @@ function ParamTable({
         <thead>
           <tr className="bg-[#F0EBE4] text-[#3D2E22]">
             <th
-              className="text-right font-semibold px-3 py-2 w-[34%]"
+              className="text-start font-semibold px-3 py-2 w-[34%]"
               style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
             >
               {msg("auto.features.tutorial.components.concepts.guide.literal.14")}
             </th>
             <th
-              className="text-right font-semibold px-3 py-2"
+              className="text-start font-semibold px-3 py-2"
               style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
             >
               {msg("auto.features.tutorial.components.concepts.guide.literal.15")}
@@ -425,7 +424,7 @@ function SectionBackground() {
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.20")}</SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.21")}</p>
-      <ul className="list-disc pr-5 space-y-1.5">
+      <ul className="list-disc ps-5 space-y-1.5">
         <li>
           <strong>
             {msg("auto.features.tutorial.components.concepts.guide.literal.22")}
@@ -442,7 +441,7 @@ function SectionBackground() {
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.26")}</SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.27")}</p>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.28")}</strong>{" "}
           {msg("auto.features.tutorial.components.concepts.guide.literal.29")}
@@ -475,7 +474,7 @@ function SectionBackground() {
         <em>{msg("auto.features.tutorial.components.concepts.guide.literal.41")}</em>
         {msg("auto.features.tutorial.components.concepts.guide.literal.42")}
       </p>
-      <ol className="list-decimal pr-5 space-y-1">
+      <ol className="list-decimal ps-5 space-y-1">
         <li>
           <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.43")}</strong>
           {msg("auto.features.tutorial.components.concepts.guide.literal.44")}
@@ -493,7 +492,7 @@ function SectionBackground() {
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.50")}</SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.51")}</p>
-      <ol className="list-decimal pr-5 space-y-1">
+      <ol className="list-decimal ps-5 space-y-1">
         <li>{msg("auto.features.tutorial.components.concepts.guide.literal.52")}</li>
         <li>{msg("auto.features.tutorial.components.concepts.guide.literal.53")}</li>
         <li>{msg("auto.features.tutorial.components.concepts.guide.literal.54")}</li>
@@ -621,7 +620,7 @@ function SectionGepa() {
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.70")}</SubHeading>
       <GepaLoopDiagram />
-      <ol className="list-decimal pr-5 space-y-1.5">
+      <ol className="list-decimal ps-5 space-y-1.5">
         <li>
           <strong>{msg("auto.features.tutorial.components.concepts.guide.literal.71")}</strong>
           {msg("auto.features.tutorial.components.concepts.guide.literal.72")}
@@ -860,7 +859,7 @@ function SectionParameters() {
         </strong>
         {msg("auto.features.tutorial.components.concepts.guide.literal.124")}
       </p>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <strong>
             <InlineCode>
@@ -887,7 +886,7 @@ function SectionTaskDefinition() {
         {msg("auto.features.tutorial.components.concepts.guide.literal.129")}
       </SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.130")}</p>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <strong>
             {msg("auto.features.tutorial.components.concepts.guide.literal.131")}
@@ -934,13 +933,13 @@ class AnswerQuestion(dspy.Signature):
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
-                className="text-right font-semibold px-3 py-2 w-[24%]"
+                className="text-start font-semibold px-3 py-2 w-[24%]"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.141")}
               </th>
               <th
-                className="text-right font-semibold px-3 py-2"
+                className="text-start font-semibold px-3 py-2"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.142")}
@@ -1011,7 +1010,7 @@ class AnswerQuestion(dspy.Signature):
         code={msg("auto.features.tutorial.components.concepts.guide.literal.300")}
       />
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.154")}</p>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <strong>
             {msg("auto.features.tutorial.components.concepts.guide.literal.155")}
@@ -1072,7 +1071,7 @@ function WorkflowFlow() {
 
   return (
     <figure className="my-4 rounded-xl border border-[#E5DDD4] bg-white p-4 shadow-[0_1px_2px_rgba(28,22,18,0.05)]">
-      <div className="space-y-3" dir="rtl">
+      <div className="space-y-3">
         {groups.map((group, groupIdx) => (
           <section key={group.title} className="relative">
             <div className="mb-3 flex items-center gap-2.5">
@@ -1304,13 +1303,13 @@ function SectionWorkflow() {
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
-                className="text-right font-semibold px-3 py-2 w-[40%]"
+                className="text-start font-semibold px-3 py-2 w-[40%]"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.196")}
               </th>
               <th
-                className="text-right font-semibold px-3 py-2"
+                className="text-start font-semibold px-3 py-2"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.142")}
@@ -1336,7 +1335,7 @@ function SectionWorkflow() {
         {msg("auto.features.tutorial.components.concepts.guide.literal.213")}
       </SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.214")}</p>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <InlineCode>
             {msg("auto.features.tutorial.components.concepts.guide.literal.290")}
@@ -1427,7 +1426,7 @@ function SectionTips() {
       <SubHeading>
         {msg("auto.features.tutorial.components.concepts.guide.literal.221")}
       </SubHeading>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <strong>
             {msg("auto.features.tutorial.components.concepts.guide.literal.222")}
@@ -1457,7 +1456,7 @@ function SectionTips() {
       <SubHeading>
         {msg("auto.features.tutorial.components.concepts.guide.literal.230")}
       </SubHeading>
-      <ul className="list-disc pr-5 space-y-1">
+      <ul className="list-disc ps-5 space-y-1">
         <li>
           <strong>
             {msg("auto.features.tutorial.components.concepts.guide.literal.231")}
@@ -1496,13 +1495,13 @@ function SectionTips() {
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
-                className="text-right font-semibold px-3 py-2 w-[36%]"
+                className="text-start font-semibold px-3 py-2 w-[36%]"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.239")}
               </th>
               <th
-                className="text-right font-semibold px-3 py-2"
+                className="text-start font-semibold px-3 py-2"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.240")}
@@ -1604,13 +1603,13 @@ function SectionGlossary() {
           <thead>
             <tr className="bg-[#F0EBE4] text-[#3D2E22]">
               <th
-                className="text-right font-semibold px-3 py-2 w-[34%]"
+                className="text-start font-semibold px-3 py-2 w-[34%]"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.253")}
               </th>
               <th
-                className="text-right font-semibold px-3 py-2"
+                className="text-start font-semibold px-3 py-2"
                 style={{ fontFamily: '"Inter Variable", "Heebo Variable", system-ui, sans-serif' }}
               >
                 {msg("auto.features.tutorial.components.concepts.guide.literal.254")}
