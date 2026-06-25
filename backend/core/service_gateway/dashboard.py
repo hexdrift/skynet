@@ -74,6 +74,35 @@ _SHARED_GRANT_SCOPE_SQL = (
 )
 
 
+def _job_embeddings_relation() -> str:
+    """Return the SQL relation to stand in for ``job_embeddings`` in corpus joins.
+
+    On the semantic backend the table exists and is referenced by name. On the
+    lexical backend (``SEARCH_BACKEND=lexical``) it is never created — the job
+    store bootstraps the schema without the pgvector embedding tables — so the
+    corpus/search queries that ``LEFT JOIN`` it would hit a missing relation.
+    Those joins exist only to prefer an embedding row's metadata over
+    ``payload_overview``; with embeddings off there are no rows to prefer, so an
+    empty, identically-shaped subquery makes the join resolve to all-NULL ``je``
+    columns and the existing ``COALESCE(je.*, payload_overview->>...)`` fallbacks
+    take over unchanged.
+
+    Returns:
+        ``"job_embeddings"`` when embeddings are enabled, otherwise a zero-row
+        subquery exposing every ``je`` column the corpus/search SQL reads.
+    """
+    if settings.embeddings_enabled:
+        return "job_embeddings"
+    return (
+        "(SELECT NULL::varchar AS optimization_id, NULL::varchar AS optimization_type, "
+        "NULL::varchar AS winning_model, NULL::double precision AS baseline_metric, "
+        "NULL::double precision AS optimized_metric, NULL::text AS summary_text, "
+        "NULL::varchar AS task_name, NULL::varchar AS module_name, "
+        "NULL::varchar AS optimizer_name, NULL::boolean AS is_private, "
+        "NULL::text AS embedding_summary, NULL::timestamptz AS created_at WHERE FALSE)"
+    )
+
+
 def _fetch_fingerprint(session: Session) -> str:
     """Cheap content fingerprint over the searchable corpus.
 
@@ -92,7 +121,7 @@ def _fetch_fingerprint(session: Session) -> str:
         session.execute(
             text(
                 "SELECT COUNT(*) AS n, MAX(je.created_at) AS max_ts "
-                "FROM job_embeddings je "
+                f"FROM {_job_embeddings_relation()} je "
                 "INNER JOIN jobs j ON j.optimization_id = je.optimization_id "
                 "WHERE j.status = 'success' "
                 "AND je.embedding_summary IS NOT NULL AND je.is_private = FALSE"
@@ -106,7 +135,7 @@ def _fetch_fingerprint(session: Session) -> str:
             text(
                 "SELECT COUNT(*) AS n, MAX(j.created_at) AS max_ts "
                 "FROM jobs j "
-                "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                 "WHERE j.status = 'success' "
                 "AND (je.optimization_id IS NULL OR je.embedding_summary IS NULL) "
                 "AND NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
@@ -175,7 +204,7 @@ def _fetch_corpus_points(session: Session) -> list[dict[str, Any]]:
                 "j.created_at, "
                 f"j.payload_overview->>'{PAYLOAD_OVERVIEW_DESCRIPTION}' AS task_description "
                 "FROM jobs j "
-                "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                 "WHERE j.status = 'success' "
                 "AND NOT COALESCE(je.is_private, "
                 "(j.payload_overview->>'is_private')::boolean, FALSE) "
@@ -310,7 +339,7 @@ def fetch_corpus_facets(
                     "COALESCE(je.module_name, "
                     f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') AS module "
                     "FROM jobs j "
-                    "LEFT JOIN job_embeddings je "
+                    f"LEFT JOIN {_job_embeddings_relation()} je "
                     "ON je.optimization_id = j.optimization_id "
                     f"WHERE j.status = 'success' AND {scope_sql}"
                     ") sub"
@@ -637,7 +666,7 @@ def _has_unembedded_success_jobs(
             row = session.execute(
                 text(
                     "SELECT 1 FROM jobs j "
-                    "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                    f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                     "WHERE j.status = 'success' "
                     "AND (je.optimization_id IS NULL OR je.embedding_summary IS NULL) "
                     f"AND {scope_sql} "
@@ -697,7 +726,7 @@ def _search_semantic(
     # and so the status filter is enforced regardless of how the embedding row
     # was written.
     from_sql = (
-        "FROM job_embeddings je "
+        f"FROM {_job_embeddings_relation()} je "
         "INNER JOIN jobs j ON j.optimization_id = je.optimization_id"
     )
     where_parts: list[str] = [
@@ -1034,7 +1063,7 @@ def _search_lexical(
                     "SELECT j.optimization_id, j.payload_overview, "
                     "NULL::float AS relevance "
                     "FROM jobs j "
-                    "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                    f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                     f"WHERE {where_sql} "
                     f"ORDER BY {order_sql} "
                     "LIMIT :ids_cap"
@@ -1056,7 +1085,7 @@ def _search_lexical(
                 session.execute(
                     text(
                         f"SELECT {select_cols} FROM jobs j "
-                        "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                        f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                         "WHERE j.optimization_id = ANY(:page_ids)"
                     ),
                     {"page_ids": page_ids},
@@ -1225,7 +1254,7 @@ def _search_bm25(
                     "SELECT j.optimization_id, "
                     "paradedb.score(j.optimization_id) AS relevance "
                     "FROM jobs j "
-                    "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                    f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                     f"WHERE {where_sql} "
                     "ORDER BY relevance DESC, j.created_at DESC, j.optimization_id DESC "
                     "LIMIT :ids_cap"
@@ -1250,7 +1279,7 @@ def _search_bm25(
                 session.execute(
                     text(
                         f"SELECT {select_cols} FROM jobs j "
-                        "LEFT JOIN job_embeddings je ON je.optimization_id = j.optimization_id "
+                        f"LEFT JOIN {_job_embeddings_relation()} je ON je.optimization_id = j.optimization_id "
                         "WHERE j.optimization_id = ANY(:page_ids)"
                     ),
                     {"page_ids": page_ids},
