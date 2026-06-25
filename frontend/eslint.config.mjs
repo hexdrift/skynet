@@ -116,6 +116,7 @@ export default defineConfig([
       "src/shared/constants/job-status.ts",
       "src/shared/messages/**",
       "src/features/*/messages.ts",
+      "src/features/auth/login-samples.ts",
     ],
     rules: {
       "no-restricted-syntax": [
