@@ -33,18 +33,28 @@ class QA(dspy.Signature):
 _OPTIMIZED_INSTRUCTIONS = "OPTIMIZED: reason step by step, then answer concisely."
 
 
-def _persisted_artifact() -> tuple[ProgramArtifact, dict]:
+def _persisted_artifact(module_alias: str = "predict") -> tuple[ProgramArtifact, dict]:
     """Build a ProgramArtifact + overview the way the gateway persists them.
 
+    Args:
+        module_alias: Module the program is built from — ``"predict"`` or
+            ``"cot"`` (ChainOfThought). Other tests rely on the ``predict``
+            default, so changing it only affects callers that pass it.
+
     Returns:
-        A ``(ProgramArtifact, overview)`` pair carrying a real DSPy ``Predict``
+        A ``(ProgramArtifact, overview)`` pair carrying a real compiled DSPy
         program's state-only JSON plus the reconstruction recipe.
     """
     namespace: dict = {"dspy": dspy}
     exec(compile(_SIGNATURE_CODE, "<sig>", "exec", dont_inherit=True), namespace)
-    program = dspy.Predict(namespace["QA"])
-    program.signature = program.signature.with_instructions(_OPTIMIZED_INSTRUCTIONS)
-    program.demos = [dspy.Example(question="2+2?", answer="four").with_inputs("question")]
+    factory = {"predict": dspy.Predict, "cot": dspy.ChainOfThought}[module_alias]
+    program = factory(namespace["QA"])
+    demo = dspy.Example(question="2+2?", answer="four").with_inputs("question")
+    # Set on every predictor so the optimized state survives for both the
+    # flat Predict and ChainOfThought (whose instructions live on an inner one).
+    for predictor in program.predictors():
+        predictor.signature = predictor.signature.with_instructions(_OPTIMIZED_INSTRUCTIONS)
+        predictor.demos = [demo]
     state = program.dump_state()
 
     artifact = ProgramArtifact(
@@ -58,7 +68,7 @@ def _persisted_artifact() -> tuple[ProgramArtifact, dict]:
     )
     overview = {
         "signature_code": _SIGNATURE_CODE,
-        "module_name": "predict",
+        "module_name": module_alias,
         "module_kwargs": {},
         "model_name": "openai/gpt-4o-mini",
         "optimizer_name": "gepa",
@@ -133,9 +143,18 @@ def test_loader_uses_only_dspy_and_stdlib() -> None:
     assert "import dspy" in loader_src
 
 
-def test_export_reconstructs_optimized_program(tmp_path) -> None:
-    """The standalone loader rebuilds the program with its optimized state intact."""
-    artifact, overview = _persisted_artifact()
+@pytest.mark.parametrize(
+    ("module_alias", "expected_type"),
+    [("predict", "Predict"), ("cot", "ChainOfThought")],
+)
+def test_export_reconstructs_optimized_program(tmp_path, module_alias, expected_type) -> None:
+    """The standalone loader rebuilds the program with its optimized state intact.
+
+    Asserts module-agnostically via ``predictors()`` so it covers both a flat
+    ``Predict`` and ``ChainOfThought`` (whose optimized instructions and demos
+    live on an inner predictor).
+    """
+    artifact, overview = _persisted_artifact(module_alias)
     zip_bytes = build_program_export_zip(
         optimization_id="abcd1234-export", artifact=artifact, overview=overview
     )
@@ -143,10 +162,10 @@ def test_export_reconstructs_optimized_program(tmp_path) -> None:
     loader = _load_program_from_zip(zip_bytes, tmp_path)
     program = loader.load_program()
 
-    assert type(program).__name__ == "Predict"
-    assert program.signature.instructions == _OPTIMIZED_INSTRUCTIONS
-    assert len(program.demos) == 1
-    assert program.demos[0]["answer"] == "four"
+    assert type(program).__name__ == expected_type
+    predictors = list(program.predictors())
+    assert any(p.signature.instructions == _OPTIMIZED_INSTRUCTIONS for p in predictors)
+    assert any(len(p.demos) == 1 and p.demos[0]["answer"] == "four" for p in predictors)
 
 
 def test_react_export_requires_tools(tmp_path) -> None:
