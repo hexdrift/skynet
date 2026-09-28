@@ -1030,10 +1030,6 @@ export type MessageKey =
   | "auto.features.submit.components.submitnav.2"
   | "auto.features.submit.components.submitnav.3"
   | "auto.features.submit.components.submitnav.4"
-  | "auto.features.submit.constants.literal.1"
-  | "auto.features.submit.constants.literal.2"
-  | "auto.features.submit.constants.literal.3"
-  | "auto.features.submit.constants.literal.4"
   | "auto.features.submit.hooks.use.code.agent.literal.1"
   | "auto.features.submit.hooks.use.code.agent.literal.2"
   | "auto.features.submit.hooks.use.code.agent.literal.3"
@@ -2281,7 +2277,6 @@ export type MessageKey =
   | "submit.basics.privacy.public"
   | "submit.basics.privacy.public_desc"
   | "submit.clone.failed"
-  | "submit.clone.success"
   | "submit.code.agent.tool.metric.title"
   | "submit.code.agent.tool.signature.title"
   | "submit.code.interview.brief.add"
@@ -2361,6 +2356,8 @@ export type MessageKey =
   | "submit.react.tools_list_label"
   | "submit.react.tools_next"
   | "submit.react.tools_prev"
+  | "submit.split.empty"
+  | "submit.split.example_count"
   | "submit.split.label_test"
   | "submit.split.label_train"
   | "submit.split.label_val"
@@ -2373,6 +2370,11 @@ export type MessageKey =
   | "submit.split.rationale_aria"
   | "submit.split.rationale_title"
   | "submit.split.recommended_title"
+  | "submit.split.step_desc"
+  | "submit.stage.evaluation"
+  | "submit.stage.goal"
+  | "submit.stage.optimization"
+  | "submit.stage.review"
   | "submit.submit_failed"
   | "submit.summary.estimate_capped"
   | "submit.summary.estimate_cost"
@@ -2402,6 +2404,10 @@ export type MessageKey =
   | "submit.validation.split_too_small"
   | "submit.validation.target_score_invalid"
   | "submit.validation.target_score_requires_val"
+  | "submit.validation.toast.checking_code"
+  | "submit.validation.toast.checking_split"
+  | "submit.validation.toast.passed"
+  | "submit.validation.toast.running"
   | "submit.validation.username_required"
   | "submit.validation.vision_required"
   | "submit.validation.workflow_invalid"
@@ -3822,7 +3828,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.steps.paramsstep.14": "מקסימום סבבי הערכה",
   "auto.features.submit.components.steps.paramsstep.15": "מיזוג מועמדים",
   "auto.features.submit.components.steps.paramsstep.16": "עצירה כשהציון באימות מגיע ל־",
-  "auto.features.submit.components.steps.paramsstep.2": "חלוקת הדאטאסט והגדרות החיפוש",
+  "auto.features.submit.components.steps.paramsstep.2": "הגדרות החיפוש",
   "auto.features.submit.components.steps.paramsstep.4": "חלוקת ",
   "auto.features.submit.components.steps.paramsstep.5": "סכום: ",
   "auto.features.submit.components.steps.paramsstep.6": "אימון",
@@ -3875,10 +3881,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.submitnav.2": "המשך/המשיכי",
   "auto.features.submit.components.submitnav.3": "נשלח…",
   "auto.features.submit.components.submitnav.4": "שלח/י ",
-  "auto.features.submit.constants.literal.1": "פרטים בסיסיים",
-  "auto.features.submit.constants.literal.2": "פרמטרים",
-  "auto.features.submit.constants.literal.3": "קוד",
-  "auto.features.submit.constants.literal.4": "סיכום ושליחה",
   "auto.features.submit.hooks.use.code.agent.literal.1": "חושב…",
   "auto.features.submit.hooks.use.code.agent.literal.2": "כותב פרומפט (Signature)…",
   "auto.features.submit.hooks.use.code.agent.literal.3": "כותב פונקציית מדידה…",
@@ -5126,7 +5128,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.basics.privacy.public": "ציבורי",
   "submit.basics.privacy.public_desc": "מופיע ב{term.exploreTitle}",
   "submit.clone.failed": "שגיאה בטעינת הגדרות לשכפול",
-  "submit.clone.success": "הגדרות שוכפלו בהצלחה",
   "submit.code.agent.tool.metric.title": "עריכת {term.metric}",
   "submit.code.agent.tool.signature.title": "עריכת {term.signature}",
   "submit.code.interview.brief.add": "הוספת הנחיה",
@@ -5206,6 +5207,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.react.tools_list_label": "כלים מחוברים",
   "submit.react.tools_next": "כלים הבאים",
   "submit.react.tools_prev": "כלים קודמים",
+  "submit.split.empty": "אין עדיין מה לחלק. אחרי שתעלו {term.dataset} ותסמנו עמודות קלט ופלט, החלוקה המומלצת תופיע כאן.",
+  "submit.split.example_count": "{term.examplePlural}: {count}",
   "submit.split.label_test": "{term.splitTest}",
   "submit.split.label_train": "{term.splitTrain}",
   "submit.split.label_val": "{term.splitVal}",
@@ -5218,6 +5221,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.split.rationale_aria": "הסבר לבחירת החלוקה המומלצת",
   "submit.split.rationale_title": "למה נבחרה החלוקה הזו",
   "submit.split.recommended_title": "החלוקה המומלצת",
+  "submit.split.step_desc": "איך ה{term.examplePlural} מתחלקות בין {term.splitTrain}, {term.splitVal} ו{term.splitTest}.",
+  "submit.stage.evaluation": "הערכה",
+  "submit.stage.goal": "מטרה",
+  "submit.stage.optimization": "אופטימיזציה",
+  "submit.stage.review": "סקירה",
   "submit.submit_failed": "שגיאה בשליחת ה{term.optimization}",
   "submit.summary.estimate_capped": "תקרה קשיחה {cap} קרדיטים",
   "submit.summary.estimate_cost": "עלות משוערת",
@@ -5247,9 +5255,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.validation.split_too_small": "ה{term.dataset} קטן מדי כדי להריץ {term.optimization} — נדרשות לפחות דוגמאות ל{term.splitVal} או ל{term.splitTest}",
   "submit.validation.target_score_invalid": "הזינו יעד אימות בין 1 ל־100",
   "submit.validation.target_score_requires_val": "יש להגדיר חלוקת אימות לפני שימוש ביעד ציון",
+  "submit.validation.toast.checking_code": "מאמתים את הקוד",
+  "submit.validation.toast.checking_split": "בודקים את חלוקת ה{term.dataset}",
+  "submit.validation.toast.passed": "ההגדרות אומתו",
+  "submit.validation.toast.running": "בודקים את ההגדרות…",
   "submit.validation.username_required": "הזן/הזיני שם משתמש",
   "submit.validation.vision_required": "העמודות {fields} מוגדרות כתמונה, אבל ה{term.model} '{model}' לא תומך בקלט תמונות",
-  "submit.validation.workflow_invalid": "יש בעיות בגרף תהליך העבודה — פתחו את שלב הקוד לפרטים",
+  "submit.validation.workflow_invalid": "יש בעיות בגרף תהליך העבודה — פתחו את שלב ההערכה לפרטים",
   "tagger.assist.autotag.browse": "מעבר לשורות",
   "tagger.assist.autotag.cancel": "ביטול — לשמור את מה שתויג",
   "tagger.assist.autotag.canceled_title": "התיוג בוטל",

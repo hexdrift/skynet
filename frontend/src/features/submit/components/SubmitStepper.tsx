@@ -2,7 +2,7 @@
 
 import { WizardStepper } from "@/shared/ui/wizard-stepper";
 
-import { STEPS } from "../constants";
+import { WIZARD_STAGES } from "../constants";
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";
 
 export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
@@ -10,7 +10,7 @@ export function SubmitStepper({ w }: { w: SubmitWizardContext }) {
 
   return (
     <WizardStepper
-      steps={STEPS.map((s) => ({ id: s.id, label: s.label() }))}
+      steps={WIZARD_STAGES.map((s) => ({ id: s.id, label: s.label() }))}
       step={step}
       maxReachableStep={maxReachableStep}
       validateStep={validateStep}

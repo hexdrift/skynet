@@ -7,7 +7,7 @@ import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 
-import { STEPS } from "../constants";
+import { LAST_WIZARD_STAGE } from "../lib/wizard-steps";
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";
 
 export function SubmitNav({ w }: { w: SubmitWizardContext }) {
@@ -19,7 +19,7 @@ export function SubmitNav({ w }: { w: SubmitWizardContext }) {
   const BackChevron = rtl ? CaretRight : CaretLeft;
   const NextChevron = rtl ? CaretLeft : CaretRight;
 
-  if (step < STEPS.length - 1) {
+  if (step < LAST_WIZARD_STAGE) {
     return (
       <div className="flex items-stretch justify-between gap-3">
         <Button

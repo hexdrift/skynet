@@ -1,7 +1,6 @@
 import type { ModelConfig, SplitFractions } from "@/shared/types/api";
-import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
-import { sentenceCase } from "@/shared/lib/formatters";
+import { WIZARD_STAGE_ORDER, type WizardStageId } from "./lib/wizard-steps";
 
 export const emptyModelConfig = (): ModelConfig => ({
   name: "",
@@ -38,17 +37,15 @@ export const defaultReactConfig = (): ReactConfig => ({
 // server (frozen process-wide to the raw key) but populated in the browser —
 // resolving eagerly here would hydrate-mismatch. Resolving per render keeps both
 // sides inside the request, where the catalog is pinned.
-export const STEPS = [
-  { id: "basics", label: () => msg("auto.features.submit.constants.literal.1") },
-  // Glossary terms are lowercase for mid-sentence use; the stepper sits them
-  // beside capitalized labels ("Basic details", "Parameters"), so they get
-  // sentence case here.
-  { id: "data", label: () => sentenceCase(TERMS.dataset) },
-  { id: "params", label: () => msg("auto.features.submit.constants.literal.2") },
-  { id: "code", label: () => msg("auto.features.submit.constants.literal.3") },
-  { id: "model", label: () => sentenceCase(TERMS.model) },
-  { id: "review", label: () => msg("auto.features.submit.constants.literal.4") },
-] as const;
+const STAGE_LABELS: Record<WizardStageId, () => string> = {
+  goal: () => msg("submit.stage.goal"),
+  evaluation: () => msg("submit.stage.evaluation"),
+  optimization: () => msg("submit.stage.optimization"),
+  review: () => msg("submit.stage.review"),
+};
+
+export const WIZARD_STAGES: ReadonlyArray<{ id: WizardStageId; label: () => string }> =
+  WIZARD_STAGE_ORDER.map((id) => ({ id, label: STAGE_LABELS[id] }));
 
 export const RECENT_KEY = "skynet:recent-model-configs";
 export const MAX_RECENT = 5;

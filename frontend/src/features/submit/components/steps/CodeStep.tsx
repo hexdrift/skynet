@@ -34,6 +34,7 @@ import { CodeAgentPanel, VersionStepper } from "./CodeAgentPanel";
 import { CodeInterviewPanel } from "./CodeInterviewPanel";
 import { ReactConfigSection } from "./ReactConfigSection";
 import { workflowUsesTools } from "../../workflow/model";
+import { WIZARD_STAGE } from "../../lib/wizard-steps";
 
 // The atomic DSPy modules offered on the picker's "single module" tier. Names
 // are technical terms kept in English; descriptions reuse the localized tooltip
@@ -118,14 +119,14 @@ const WorkflowCanvas = dynamic(
   { ssr: false, loading: () => <Skeleton height={480} borderRadius={8} /> },
 );
 
-export function CodeStep({ w }: { w: SubmitWizardContext }) {
+export function CodeStep({ w, part }: { w: SubmitWizardContext; part: "module" | "code" }) {
   const {
     isWorkflow,
     isReact,
     moduleName,
     moduleSelectionRequired,
     chooseModule,
-    reopenModulePicker,
+    goTo,
     workflowSpec,
     setWorkflowSpec,
     workflowRevision,
@@ -181,20 +182,34 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
         })
     : undefined;
 
+  // Picking on the Goal stage is the stage's whole job, so it moves straight
+  // on to Evaluation; a pick from the Evaluation fallback stays put.
+  const handleModuleChoose = React.useCallback(
+    (name: string) => {
+      chooseModule(name);
+      if (part === "module") goTo(WIZARD_STAGE.evaluation);
+    },
+    [chooseModule, goTo, part],
+  );
+
+  // The picker lives on the Goal stage, so switching modules is a hop back
+  // rather than an in-place swap.
   const moduleChip = {
     label: moduleLabel(moduleName),
-    onChangeModule: reopenModulePicker,
+    onChangeModule: () => goTo(WIZARD_STAGE.goal),
   };
 
-  // The step opens on the picker and stays there until a module is picked;
-  // afterwards the chip in the header reopens it to switch. The three views
-  // share one AnimatePresence so picking or switching a module cross-fades
+  // The module part is the Goal stage: the picker stays up so the current
+  // choice is visible and switchable. The code part is the Evaluation stage's
+  // authoring section and falls back to the picker if no module was ever
+  // chosen. The views share one AnimatePresence so switching cross-fades
   // instead of hard-swapping the card.
-  const view = moduleSelectionRequired ? "picker" : isWorkflow ? "workflow" : "code";
+  const view =
+    part === "module" || moduleSelectionRequired ? "picker" : isWorkflow ? "workflow" : "code";
 
   let content: React.ReactNode;
   if (view === "picker") {
-    content = <ModulePicker current={moduleName} onChoose={chooseModule} />;
+    content = <ModulePicker current={moduleName} onChoose={handleModuleChoose} />;
   } else if (view === "workflow") {
     content = (
       <div className="overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-xl shadow-lg">
@@ -437,7 +452,7 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
   }
 
   return (
-    <div data-tutorial="wizard-step-4">
+    <div data-tutorial={part === "module" ? "wizard-stage-goal" : "wizard-stage-code"}>
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={view}

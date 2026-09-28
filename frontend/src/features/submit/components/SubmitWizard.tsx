@@ -1,11 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { msg } from "@/shared/lib/messages";
 
 import { useSubmitWizard } from "../hooks/use-submit-wizard";
 import { slideVariants, emptyModelConfig } from "../constants";
+import { WIZARD_STAGE, stageAt, type WizardStageId } from "../lib/wizard-steps";
 import { SubmitStepper } from "./SubmitStepper";
 import { SubmitNav } from "./SubmitNav";
 import { SubmitSplash } from "./SubmitSplash";
@@ -15,24 +17,43 @@ import { DatasetStep } from "./steps/DatasetStep";
 import { ModelStep } from "./steps/ModelStep";
 import { CodeStep } from "./steps/CodeStep";
 import { ParamsStep } from "./steps/ParamsStep";
+import { SplitSection } from "./steps/SplitSection";
 import { SummaryStep } from "./steps/SummaryStep";
 
 export function SubmitWizard() {
   const w = useSubmitWizard();
 
-  const steps = [
-    <BasicsStep key="basics" w={w} />,
-    <DatasetStep key="data" w={w} />,
-    <ParamsStep key="params" w={w} />,
-    <CodeStep key="code" w={w} />,
-    <ModelStep key="model" w={w} />,
-    <SummaryStep key="review" w={w} />,
-  ];
+  // The Evaluation stage widens for the two-pane code section in auto mode;
+  // its other sections keep the regular column so they don't stretch with it.
+  const stageViews: Record<WizardStageId, ReactNode> = {
+    goal: <CodeStep w={w} part="module" />,
+    evaluation: (
+      <div className="space-y-4 md:space-y-6">
+        <div className="mx-auto w-full max-w-2xl">
+          <DatasetStep w={w} />
+        </div>
+        <CodeStep w={w} part="code" />
+        <div className="mx-auto w-full max-w-2xl">
+          <SplitSection w={w} />
+        </div>
+      </div>
+    ),
+    optimization: (
+      <div className="space-y-4 md:space-y-6">
+        <ParamsStep w={w} />
+        <ModelStep w={w} />
+      </div>
+    ),
+    review: (
+      <div className="space-y-4 md:space-y-6">
+        <BasicsStep w={w} />
+        <SummaryStep w={w} />
+      </div>
+    ),
+  };
 
-  // Code step (index 3) renders a two-pane layout with an agent side-panel
-  // in auto mode, so it needs more horizontal room than the other steps.
-  const isCodeStep = w.step === 3;
-  const containerWidthClass = isCodeStep && w.codeAssistMode === "auto" ? "max-w-5xl" : "max-w-2xl";
+  const containerWidthClass =
+    w.step === WIZARD_STAGE.evaluation && w.codeAssistMode === "auto" ? "max-w-5xl" : "max-w-2xl";
 
   return (
     <div
@@ -51,7 +72,7 @@ export function SubmitWizard() {
             exit="exit"
             transition={{ duration: 0.1 }}
           >
-            {steps[w.step]}
+            {stageViews[stageAt(w.step)]}
           </motion.div>
         </AnimatePresence>
       </div>

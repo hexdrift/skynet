@@ -9,7 +9,6 @@ import {
   CardDescription,
 } from "@/shared/ui/primitives/card";
 import { Label } from "@/shared/ui/primitives/label";
-import { Badge } from "@/shared/ui/primitives/badge";
 import { Separator } from "@/shared/ui/primitives/separator";
 import { Switch } from "@/shared/ui/primitives/switch";
 import { NumberInput } from "@/shared/ui/number-input";
@@ -21,7 +20,6 @@ import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
-import { SplitRecommendationCard } from "../SplitRecommendationCard";
 
 // The empty level is the escape hatch: no preset, the user sets the budget.
 const DEPTH_LEVELS = ["light", "medium", "heavy", ""] as const;
@@ -31,12 +29,6 @@ const DEFAULT_CUSTOM_METRIC_CALLS = 500;
 
 export function ParamsStep({ w }: { w: SubmitWizardContext }) {
   const {
-    split,
-    updateSplit,
-    splitSum,
-    splitMode,
-    shuffle,
-    setShuffle,
     autoLevel,
     setAutoLevel,
     reflectionMinibatchSize,
@@ -69,7 +61,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
   return (
     <Card
       className=" border-border/50 bg-card/80 backdrop-blur-xl shadow-lg"
-      data-tutorial="wizard-step-5"
+      data-tutorial="wizard-stage-optimization"
     >
       <CardHeader className="px-4 sm:px-6">
         <CardTitle className="text-lg">
@@ -80,102 +72,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6 px-4 sm:px-6">
-        <div className="space-y-3" data-tutorial="data-splits">
-          <div className="flex items-center justify-between">
-            <Label className="font-semibold">
-              <HelpTip text={tip("data.split_explanation")}>
-                {msg("auto.features.submit.components.steps.paramsstep.4")}
-                {TERMS.dataset}
-              </HelpTip>
-            </Label>
-            {splitSum !== 1 && (
-              <Badge variant="destructive" className="text-xs">
-                {msg("auto.features.submit.components.steps.paramsstep.5")}
-                {splitSum}
-              </Badge>
-            )}
-          </div>
-          <SplitRecommendationCard w={w} />
-          {splitMode === "manual" && (
-            <div className="space-y-3">
-              <div className="flex h-3 rounded-full overflow-hidden">
-                <div
-                  className="bg-[#3D2E22] transition-all"
-                  style={{ width: `${split.train * 100}%` }}
-                />
-                <div
-                  className="bg-[#C8A882] transition-all"
-                  style={{ width: `${split.val * 100}%` }}
-                />
-                <div
-                  className="bg-[#8C7A6B] transition-all"
-                  style={{ width: `${split.test * 100}%` }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="split-train" className="flex items-center gap-1.5 text-xs">
-                    <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]" />
-                    <HelpTip text={tip("data.split.train")}>
-                      {msg("auto.features.submit.components.steps.paramsstep.6")}
-                    </HelpTip>
-                  </Label>
-                  <NumberInput
-                    id="split-train"
-                    step={0.05}
-                    min={0}
-                    max={1}
-                    value={split.train}
-                    onChange={(v) => updateSplit("train", String(v))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="split-val" className="flex items-center gap-1.5 text-xs">
-                    <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]" />
-                    <HelpTip text={tip("data.split.val")}>
-                      {msg("auto.features.submit.components.steps.paramsstep.7")}
-                    </HelpTip>
-                  </Label>
-                  <NumberInput
-                    id="split-val"
-                    step={0.05}
-                    min={0}
-                    max={1}
-                    value={split.val}
-                    onChange={(v) => updateSplit("val", String(v))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="split-test" className="flex items-center gap-1.5 text-xs">
-                    <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]" />
-                    <HelpTip text={tip("data.split.test")}>
-                      {msg("auto.features.submit.components.steps.paramsstep.8")}
-                    </HelpTip>
-                  </Label>
-                  <NumberInput
-                    id="split-test"
-                    step={0.05}
-                    min={0}
-                    max={1}
-                    value={split.test}
-                    onChange={(v) => updateSplit("test", String(v))}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-          <div className="flex items-center justify-between">
-            <Label htmlFor="shuffle" className="cursor-pointer text-sm">
-              <HelpTip text={tip("data.shuffle_explanation")}>
-                {msg("auto.features.submit.components.steps.paramsstep.10")}
-              </HelpTip>
-            </Label>
-            <Switch id="shuffle" checked={shuffle} onCheckedChange={setShuffle} />
-          </div>
-        </div>
-
-        <Separator />
-
         <div className="space-y-3" data-tutorial="auto-level">
           <Label className="text-sm font-semibold">
             <HelpTip text={tip("submit.depth")}>

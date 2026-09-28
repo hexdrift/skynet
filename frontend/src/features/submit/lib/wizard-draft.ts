@@ -1,7 +1,18 @@
-import type { ModelConfig, SplitFractions, WorkflowSpec } from "@/shared/types/api";
+import type {
+  ModelConfig,
+  SplitFractions,
+  ValidateCodeResponse,
+  WorkflowSpec,
+} from "@/shared/types/api";
 import type { ParsedDataset } from "@/shared/lib/parse-dataset";
 import { LOCALE_RELOAD_EVENT } from "@/shared/lib/locale";
 import type { ReactConfig, ColumnRole } from "../constants";
+import {
+  isWizardStageId,
+  migrateLegacyFurthest,
+  migrateLegacyStep,
+  type WizardStageId,
+} from "./wizard-steps";
 
 /**
  * In-memory draft of the new-optimization wizard.
@@ -17,8 +28,8 @@ import type { ReactConfig, ColumnRole } from "../constants";
  * sessionStorage for that single hop (see LOCALE_RELOAD_EVENT below).
  */
 export interface WizardDraftData {
-  step: number;
-  furthestReachedStep: number;
+  stage: WizardStageId;
+  furthestStage: WizardStageId;
   summaryTab: number;
   summaryCodeTab: string;
   jobType: "run" | "grid_search";
@@ -34,6 +45,10 @@ export interface WizardDraftData {
   metricCode: string;
   signatureManuallyEdited: boolean;
   metricManuallyEdited: boolean;
+  // The last server check of the code, so a restored Evaluation stage isn't
+  // held for evidence the user already earned. Optional: older drafts lack it.
+  signatureValidation?: ValidateCodeResponse | null;
+  metricValidation?: ValidateCodeResponse | null;
   parsedDataset: ParsedDataset | null;
   datasetFileName: string | null;
   columnRoles: Record<string, ColumnRole>;
@@ -71,6 +86,29 @@ let draft: { savedAt: number; data: WizardDraftData } | null = null;
 // cleared) on the next load. Ordinary hard refreshes stay non-durable.
 const RELOAD_STASH_KEY = "skynet.wizard-draft.reload-stash";
 
+// A stash written by the six-step layout carries numeric `step` and
+// `furthestReachedStep` instead of stage ids.
+type StoredDraft = Omit<WizardDraftData, "stage" | "furthestStage"> & {
+  stage?: unknown;
+  furthestStage?: unknown;
+  step?: unknown;
+  furthestReachedStep?: unknown;
+};
+
+/** Bring a stashed draft onto the stage model, migrating a legacy step layout. */
+function normalizeDraft(stored: StoredDraft): WizardDraftData {
+  const { step, furthestReachedStep, stage, furthestStage, ...rest } = stored;
+  const legacyStep = typeof step === "number" ? step : 0;
+  const legacyFurthest = typeof furthestReachedStep === "number" ? furthestReachedStep : legacyStep;
+  return {
+    ...rest,
+    stage: isWizardStageId(stage) ? stage : migrateLegacyStep(legacyStep),
+    furthestStage: isWizardStageId(furthestStage)
+      ? furthestStage
+      : migrateLegacyFurthest(legacyFurthest),
+  };
+}
+
 /** Stash a draft in sessionStorage so it survives the locale-switch reload. */
 export function stashWizardDraftForReload(data: WizardDraftData): void {
   try {
@@ -92,8 +130,10 @@ if (typeof window !== "undefined") {
     const raw = window.sessionStorage.getItem(RELOAD_STASH_KEY);
     if (raw) {
       window.sessionStorage.removeItem(RELOAD_STASH_KEY);
-      const parsed = JSON.parse(raw) as { savedAt: number; data: WizardDraftData };
-      if (parsed?.data && typeof parsed.savedAt === "number") draft = parsed;
+      const parsed = JSON.parse(raw) as { savedAt: number; data: StoredDraft };
+      if (parsed?.data && typeof parsed.savedAt === "number") {
+        draft = { savedAt: parsed.savedAt, data: normalizeDraft(parsed.data) };
+      }
     }
   } catch {
     // Corrupt or inaccessible stash — start clean.

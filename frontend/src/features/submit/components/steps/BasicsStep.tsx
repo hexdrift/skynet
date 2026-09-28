@@ -50,11 +50,12 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
       </CardHeader>
       <CardContent className="space-y-4 px-4 sm:px-6">
         <div className="space-y-2">
-          <Label>
+          <Label htmlFor="job-name">
             {msg("auto.features.submit.components.steps.basicsstep.3")}
             {TERMS.optimization}
           </Label>
           <Input
+            id="job-name"
             placeholder={msg("auto.features.submit.components.steps.basicsstep.literal.1")}
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
