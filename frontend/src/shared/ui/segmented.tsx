@@ -80,7 +80,9 @@ export function Segmented<T extends string>({
     }
     const option = options[next];
     if (!option || option.disabled) return false;
-    onChange(option.value);
+    // Home/End onto the current option must not re-fire onChange: callers
+    // such as ParamsStep treat picking the active value as "clear".
+    if (next !== selectedIndex) onChange(option.value);
     target.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
     return true;
   };

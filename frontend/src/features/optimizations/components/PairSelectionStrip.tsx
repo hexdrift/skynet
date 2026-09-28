@@ -13,6 +13,8 @@ import { ReasoningPill } from "./ui-primitives";
 import { pairLabel } from "./grid-overview-helpers";
 import { deleteGridPair } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
+import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 import { useIsPhone } from "@/shared/hooks/use-device-class";
 import type { OptimizationStatusResponse, PairResult } from "@/shared/types/api";
 
@@ -73,6 +75,13 @@ export function PairSelectionStrip({
         <div
           data-tutorial="pair-detail-summary"
           className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#C8A882]/30 bg-gradient-to-l from-[#FAF8F5] to-[#F5F1EC] p-3"
+          onKeyDown={(event) => {
+            const step = arrowPageStep(event, getActiveDir() === "rtl");
+            if (step === 0) return;
+            event.preventDefault();
+            if (step > 0 && activePairIndex < pairCount - 1) onNext();
+            if (step < 0 && activePairIndex > 0) onPrev();
+          }}
         >
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <BackLink

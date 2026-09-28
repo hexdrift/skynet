@@ -608,7 +608,7 @@ export function ConfigTab({
                   ) : job.generation_models && job.reflection_models ? (
                     <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                       <div className="space-y-3">
-                        <p className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[#8C7A6B]">
+                        <p className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                           <span className="grid size-7 place-items-center rounded-lg bg-[#3D2E22] text-[#FAF8F5]">
                             <Cpu className="size-3.5" aria-hidden="true" />
                           </span>
@@ -625,7 +625,7 @@ export function ConfigTab({
                         ))}
                       </div>
                       <div className="space-y-3">
-                        <p className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[#8C7A6B]">
+                        <p className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                           <span className="grid size-7 place-items-center rounded-lg bg-[#C8A882] text-[#3D2E22]">
                             <Brain className="size-3.5" aria-hidden="true" />
                           </span>
@@ -665,7 +665,7 @@ export function ConfigTab({
                         <Books className="size-6" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-[#8C7A6B]">
+                        <span className="block text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                           {msg("optimizations.source_dataset.label")}
                         </span>
                         <span
@@ -684,10 +684,10 @@ export function ConfigTab({
                   {advanced && (
                     <div className="flex flex-1 flex-col gap-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="grid size-9 place-items-center rounded-xl bg-[#EDE7DD] text-[#8C7A6B]">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
                           <Database className="size-4" aria-hidden="true" />
                         </span>
-                        <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-[#8C7A6B]">
+                        <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                           <HelpTip text={tip("data.split_explanation")}>
                             {msg("auto.features.optimizations.components.configtab.9")}
                             {TERMS.dataset}

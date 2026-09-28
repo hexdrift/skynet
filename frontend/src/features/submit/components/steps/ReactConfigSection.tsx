@@ -11,6 +11,7 @@ import { TOUCH_FIELD } from "@/shared/ui/touch";
 import { cn } from "@/shared/lib/utils";
 import { tip } from "@/shared/lib/tooltips";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 import { probeMcp, type McpProbeTool } from "@/shared/lib/api";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -150,7 +151,17 @@ export function ReactConfigSection({ w }: { w: SubmitWizardContext }) {
                 />
               )}
               {tools.length > 1 && (
-                <div className="flex shrink-0 items-center gap-1.5" dir="ltr">
+                <div
+                  className="flex shrink-0 items-center gap-1.5"
+                  dir="ltr"
+                  // Pinned LTR like its carets: ← previous, → next in every locale.
+                  onKeyDown={(event) => {
+                    const step = arrowPageStep(event, false);
+                    if (step === 0) return;
+                    event.preventDefault();
+                    setToolIndex((i) => Math.max(0, Math.min(tools.length - 1, i + step)));
+                  }}
+                >
                   <button
                     type="button"
                     aria-label={msg("submit.react.tools_prev")}
