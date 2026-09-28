@@ -1,3 +1,0 @@
-# Never ship local secrets into the Railway build context. The image bakes only
-# config.yaml (see Dockerfile); runtime secrets come from Railway service vars.
-.env

@@ -47,7 +47,7 @@ The API reference is at `http://localhost:8000/reference`.
 frontend/   Next.js 16, React 19, Hebrew RTL UI, NextAuth OIDC/local login
 backend/    FastAPI, SQLAlchemy, DSPy, GEPA, embedded Postgres-lease worker
 postgres/   users, jobs, datasets, sharing, BYOK metadata, telemetry, queue leases
-deploy/     OpenShift/Kubernetes Helm chart and optional Postgres-only LiteLLM proxy
+deploy/     OpenShift/Kubernetes Helm chart
 ```
 
 Horizontal backend replicas safely share work through PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` claims and renewable leases. Crashed work is reclaimed after lease expiry. Resource admission delays new claims when a container approaches its memory limit.
