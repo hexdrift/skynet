@@ -1526,7 +1526,6 @@ export type MessageKey =
   | "auto.features.tutorial.lib.steps.literal.9"
   | "auto.features.tutorial.lib.steps.template.1"
   | "auto.features.tutorial.lib.steps.template.14"
-  | "auto.features.tutorial.lib.steps.template.15"
   | "auto.features.tutorial.lib.steps.template.16"
   | "auto.features.tutorial.lib.steps.template.17"
   | "auto.features.tutorial.lib.steps.template.18"
@@ -4372,7 +4371,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.literal.9": "סטטיסטיקות",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
   "auto.features.tutorial.lib.steps.template.14": "אלה שלבי ההגשה: פרטים בסיסיים, {p1}, פרמטרים, קוד, {p2}, סיכום ושליחה.",
-  "auto.features.tutorial.lib.steps.template.15": "בשלב הראשון נותנים ל{p1} שם והקשר, בוחרים את רמת הפרטיות, ובמצב מתקדם בוחרים {p2} יחיד או {p3} אחת שבודקת כמה זוגות מודלים על אותה משימה.",
   "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
   "auto.features.tutorial.lib.steps.template.17": "אפשר להעלות CSV, ‏JSON או Excel, להדביק JSON או לבחור דאטאסט שמור מהספרייה. כל שורה היא דוגמה שהמערכת יכולה ללמוד ממנה. קבוצה קטנה, נקייה ומייצגת של {p1} בדרך כלל מועילה יותר ל{p2} מקבוצה גדולה ורועשת.",
   "auto.features.tutorial.lib.steps.template.18": "סמן/סמני כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר אוטומטית את הפרומפט (Signature).",
