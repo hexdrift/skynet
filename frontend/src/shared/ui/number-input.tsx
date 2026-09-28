@@ -4,6 +4,7 @@ import * as React from "react";
 import { Minus, Plus } from "@/shared/ui/icons";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
+import { TOUCH_FIELD, TOUCH_FIELD_SM } from "@/shared/ui/touch";
 
 interface NumberInputProps {
   id?: string;
@@ -14,6 +15,8 @@ interface NumberInputProps {
   step?: number;
   className?: string;
   disabled?: boolean;
+  /** ``"sm"`` for dense settings rows: 32px on desktop instead of 36px. */
+  size?: "default" | "sm";
 }
 
 export function NumberInput({
@@ -25,6 +28,7 @@ export function NumberInput({
   step = 1,
   className,
   disabled,
+  size = "default",
 }: NumberInputProps) {
   const numValue = typeof value === "number" ? value : 0;
   const decimals = step < 1 ? Math.max(String(step).split(".")[1]?.length ?? 0, 2) : 0;
@@ -76,7 +80,8 @@ export function NumberInput({
   return (
     <div
       className={cn(
-        "flex items-center h-9 rounded-xl border border-input/90 bg-background/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm overflow-hidden",
+        "flex items-center rounded-xl border border-input/90 bg-background/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm overflow-hidden",
+        size === "sm" ? TOUCH_FIELD_SM : TOUCH_FIELD,
         disabled && "opacity-50 pointer-events-none",
         className,
       )}
@@ -85,7 +90,7 @@ export function NumberInput({
         type="button"
         onClick={decrement}
         disabled={disabled || (min != null && numValue <= min)}
-        className="flex items-center justify-center size-9 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+        className="flex items-center justify-center h-full aspect-square shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
         aria-label={msg("shared.number_input.decrease")}
       >
         <Minus className="size-3" />
@@ -117,14 +122,14 @@ export function NumberInput({
           }
         }}
         disabled={disabled}
-        className="flex-1 min-w-0 h-full bg-transparent text-center text-sm tabular-nums outline-none"
+        className="flex-1 min-w-0 h-full bg-transparent text-center text-base sm:text-sm tabular-nums outline-none"
         dir="ltr"
       />
       <button
         type="button"
         onClick={increment}
         disabled={disabled || (max != null && numValue >= max)}
-        className="flex items-center justify-center size-9 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+        className="flex items-center justify-center h-full aspect-square shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
         aria-label={msg("shared.number_input.increase")}
       >
         <Plus className="size-3" />

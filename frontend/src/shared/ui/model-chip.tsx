@@ -16,7 +16,9 @@ import {
 import { cn } from "@/shared/lib/utils";
 import type { CatalogModel, ModelConfig } from "@/shared/types/api";
 import { msg } from "@/shared/lib/messages";
+import { effortLabel } from "@/shared/lib/model-efforts";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { Button } from "@/shared/ui/primitives/button";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 
 interface ModelChipProps {
@@ -27,9 +29,6 @@ interface ModelChipProps {
   onRemove?: () => void;
   /** If true, shows a subtle "required" style */
   required?: boolean;
-  /** Shows a visible "copy from X" button when the chip is empty */
-  copyFromLabel?: string;
-  onCopyFrom?: () => void;
   /** Catalog used to resolve a model's vision capability for the badge. */
   catalogModels?: CatalogModel[];
   /** Placeholder when no model is set; overrides the required/not-configured copy. */
@@ -39,29 +38,37 @@ interface ModelChipProps {
   className?: string;
 }
 
-const REASONING_EFFORT_LABELS: Record<string, string> = {
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
-
 function reasoningEffortLabel(value: string | null | undefined): string | null {
   if (!value) return null;
-  return REASONING_EFFORT_LABELS[value.toLowerCase()] ?? value;
+  return effortLabel(value.toLowerCase());
+}
+
+/** Tiny model capability pill (reasoning, token source, vision). */
+export function MicroPill({
+  tone = "muted",
+  className,
+  ...props
+}: React.ComponentProps<"span"> & { tone?: "muted" | "primary" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-semibold",
+        tone === "primary" ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground/80",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 function ReasoningPill({ value }: { value: string | null | undefined }) {
   const label = reasoningEffortLabel(value);
   if (!label) return null;
   return (
-    <span
-      className="shrink-0 inline-flex items-center gap-0.5 rounded bg-muted/50 px-1 py-0.5 text-[9px] font-semibold text-muted-foreground/80"
-      title={`Reasoning effort: ${label}`}
-    >
+    <MicroPill title={`Reasoning effort: ${label}`}>
       <Brain className="size-2.5" />
       {label}
-    </span>
+    </MicroPill>
   );
 }
 
@@ -70,14 +77,10 @@ function TokenSourcePill({ source }: { source: ModelConfig["token_source"] }) {
   if (source !== "byok") return null;
   const label = msg("model_source.byok");
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-0.5 rounded bg-muted/50 px-1 py-0.5 text-[9px] font-semibold text-muted-foreground/80"
-      title={label}
-      dir="auto"
-    >
+    <MicroPill title={label} dir="auto">
       <Key className="size-2.5" aria-hidden="true" />
       {label}
-    </span>
+    </MicroPill>
   );
 }
 
@@ -88,8 +91,6 @@ export function ModelChip({
   onClone,
   onRemove,
   required,
-  copyFromLabel,
-  onCopyFrom,
   catalogModels,
   emptyLabel,
   tooltip,
@@ -149,12 +150,9 @@ export function ModelChip({
             {effort && <ReasoningPill value={effort} />}
             <TokenSourcePill source={config.token_source} />
             {supportsVision && (
-              <span
-                className="inline-flex items-center gap-0.5 rounded-sm bg-primary/10 px-1 py-px text-primary"
-                title={msg("shared.model_chip.vision_badge")}
-              >
+              <MicroPill tone="primary" title={msg("shared.model_chip.vision_badge")}>
                 <Eye className="size-2.5" />
-              </span>
+              </MicroPill>
             )}
           </div>
         )}
@@ -177,64 +175,58 @@ export function ModelChip({
           the card body itself must stay quiet. */}
       {content}
 
-      {isEmpty && copyFromLabel && onCopyFrom && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCopyFrom();
-          }}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-dashed border-primary/30 px-2 py-1 text-[0.625rem] font-medium text-primary/80 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer"
-        >
-          <Copy className="size-2.5" />
-          {copyFromLabel}
-        </button>
-      )}
-
       <div className="flex shrink-0 items-center gap-1">
         {tooltip && (
           <TooltipButton
             tooltip={tooltip}
             side="top"
             dir={getActiveDir()}
-            contentClassName="max-w-80 text-center leading-relaxed"
+            contentClassName="max-w-64 text-center leading-relaxed"
           >
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               aria-label={tooltip}
               onClick={(e) => e.stopPropagation()}
-              className="rounded-md p-1 text-muted-foreground/60 hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+              className="text-muted-foreground hover:text-foreground"
             >
               <Info className="size-3.5" aria-hidden="true" />
-            </button>
+            </Button>
           </TooltipButton>
         )}
         {onClone && !isEmpty && (
           <TooltipButton tooltip={msg("shared.model_chip.clone")} side="top">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={msg("shared.model_chip.clone")}
               onClick={(e) => {
                 e.stopPropagation();
                 onClone();
               }}
-              className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground transition-all cursor-pointer"
+              className="text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground"
             >
-              <Copy className="size-3" />
-            </button>
+              <Copy className="size-3.5" />
+            </Button>
           </TooltipButton>
         )}
         {onRemove && !isEmpty && (
           <TooltipButton tooltip={msg("shared.model_chip.remove")} side="top">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={msg("shared.model_chip.remove")}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove();
               }}
-              className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all cursor-pointer"
+              className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
             >
-              <Trash className="size-3" />
-            </button>
+              <Trash className="size-3.5" />
+            </Button>
           </TooltipButton>
         )}
         <Gear className="size-3.5 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />

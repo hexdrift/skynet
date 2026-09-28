@@ -1,26 +1,15 @@
 "use client";
 
+import { ProgressBar, StorageUsageBar } from "@/shared/ui/progress-bar";
 import * as React from "react";
 import Link from "next/link";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Button } from "@/shared/ui/primitives/button";
-import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatStorageSize } from "@/shared/lib/formatters";
 import type { StorageUsageResponse } from "@/shared/lib/api";
-
-/** Per-category label keys, mirroring the backend ``STORAGE_CATEGORIES``. */
-const CATEGORY_LABELS: Record<string, MessageKey> = {
-  optimizations: "storage.category.optimizations",
-  datasets: "storage.category.datasets",
-  agent_chats: "storage.category.agent_chats",
-  staged_uploads: "storage.category.staged_uploads",
-};
+import { categoryLabel } from "../lib/categories";
 
 /** Inputs for the presentational quota modal; data is fetched by the host. */
 interface StorageQuotaModalProps {
@@ -49,19 +38,14 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{msg("storage.quota.title")}</DialogTitle>
-          <DialogDescription>{msg("storage.quota.body")}</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+        <DialogTitleRow
+          title={msg("storage.quota.title")}
+          description={msg("storage.quota.body")}
+        />
 
         <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#E5DDD4]">
-            <div
-              className="h-full rounded-full bg-[#3D2E22]/70 transition-[width] duration-500 ease-out"
-              style={{ width: `${usagePct}%` }}
-            />
-          </div>
+          <StorageUsageBar value={usagePct} over={quotaBytes > 0 && usedBytes > quotaBytes} />
           <p className="mt-1.5 text-end text-xs text-muted-foreground tabular-nums">
             {formatMsg("storage.quota.usage", {
               used: formatStorageSize(usedBytes),
@@ -80,22 +64,21 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
             ) : (
               <ul className="flex flex-col gap-2.5">
                 {rows.map(([key, bytes]) => {
-                  const labelKey = CATEGORY_LABELS[key];
                   const pct = usedBytes > 0 ? Math.max(2, (bytes / usedBytes) * 100) : 0;
                   return (
                     <li key={key}>
                       <div className="flex items-baseline justify-between text-sm">
-                        <span className="text-foreground">{labelKey ? msg(labelKey) : key}</span>
+                        <span className="text-foreground">{categoryLabel(key)}</span>
                         <span className="text-muted-foreground tabular-nums">
                           {formatStorageSize(bytes)}
                         </span>
                       </div>
-                      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#E5DDD4]/60">
-                        <div
-                          className="h-full rounded-full bg-[#3D2E22]/30"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                      <ProgressBar
+                        value={pct}
+                        size="sm"
+                        className="mt-1 bg-[#E5DDD4]/60"
+                        fillClassName="bg-[#3D2E22]/30"
+                      />
                     </li>
                   );
                 })}

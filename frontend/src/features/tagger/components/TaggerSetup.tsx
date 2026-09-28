@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/shared/ui/primitives/badge";
 import { useState, useCallback, useEffect } from "react";
 import {
   UploadSimple,
@@ -10,8 +11,8 @@ import {
   Trash,
   CaretLeft,
   CaretRight,
-  Check,
   Books,
+  Sparkle,
 } from "@/shared/ui/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/shared/ui/primitives/button";
@@ -26,10 +27,12 @@ import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
-import { parseDatasetFile } from "@/shared/lib/parse-dataset";
+import { DATASET_UPLOAD_ACCEPT, parseDatasetFile } from "@/shared/lib/parse-dataset";
 import { getDatasetRows } from "@/shared/lib/api";
 import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
 import { DatasetPickerDialog } from "@/features/datasets";
+import { WizardStepper } from "@/shared/ui/wizard-stepper";
+import { CheckboxIndicator } from "@/shared/ui/select-checkbox";
 import { useUserPrefs } from "@/features/settings";
 import type {
   AnnotationMode,
@@ -42,6 +45,8 @@ import { isTaggerAssistEnabled } from "../lib/feature-flag";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { Input } from "@/shared/ui/primitives/input";
+import { TOUCH_FIELD } from "@/shared/ui/touch";
 
 interface TaggerSetupProps {
   onStart: (
@@ -156,10 +161,18 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const [libraryName, setLibraryName] = useState<string | null>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The third data source: no file at all. Nothing is configured here — the
+  // interview asks what data is wanted and the rows are written from its
+  // answers — so it needs the assistant, and it rules out the manual flow.
+  const [synthetic, setSynthetic] = useState(false);
 
   const { prefs } = useUserPrefs();
   const assistAvailable = isTaggerAssistEnabled() && prefs.taggerAssist;
-  const effectiveAssistMode = assistAvailable ? assistMode : "manual";
+  const effectiveAssistMode = assistAvailable
+    ? synthetic && assistMode === "manual"
+      ? "copilot"
+      : assistMode
+    : "manual";
   // Assisted flows leave the answer style to the interview, so only manual
   // flows get the task-definition step (interface + question/categories).
   const needsTaskStep = effectiveAssistMode === "manual";
@@ -200,11 +213,29 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     () => registerTutorialQuery("hasTaggerData", () => parsedRows.length > 0),
     [parsedRows],
   );
+  useEffect(
+    () => registerTutorialQuery("taggerAssistAvailable", () => assistAvailable),
+    [assistAvailable],
+  );
+  // Finishing or leaving the guide must not strand its fake rows in a real
+  // setup, one click from starting a run on them.
+  useEffect(() => {
+    const onExit = () => {
+      if (file?.name !== "demo_dataset.csv") return;
+      setFile(null);
+      setParsedRows([]);
+      setParsedCols([]);
+      setInputCols([]);
+    };
+    window.addEventListener("tutorial-exited", onExit);
+    return () => window.removeEventListener("tutorial-exited", onExit);
+  }, [file]);
 
   const handleFile = useCallback(async (f: File) => {
     setError(null);
     setFile(f);
     setLibraryName(null);
+    setSynthetic(false);
     try {
       const { columns, rows } = await parseDatasetFile(f);
       setParsedRows(rows as DataRow[]);
@@ -228,6 +259,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       setParsedRows(detail.rows as DataRow[]);
       setParsedCols(detail.columns);
       setFile(null);
+      setSynthetic(false);
       setLibraryName(name || msg("tagger.setup.library_fallback_name"));
       const roles = detail.column_schema?.column_roles ?? {};
       const inputs = detail.columns.filter((c) => roles[c] === "input");
@@ -281,7 +313,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   // task step), so gate on the step's id rather than its index.
   const validateStep = (s: number): boolean => {
     const id = activeSteps[s]?.id;
-    if (id === "data") return parsedRows.length > 0 && inputCols.length > 0;
+    if (id === "data") return synthetic || (parsedRows.length > 0 && inputCols.length > 0);
     if (id === "assist") return assistAvailable;
     if (id === "task") {
       if (!mode) return false;
@@ -296,8 +328,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   // only — a fully-defined task. Assisted flows define the task (including the
   // answer style) in the interview instead.
   const canStart = (): boolean =>
-    parsedRows.length > 0 &&
-    inputCols.length > 0 &&
+    (synthetic || (parsedRows.length > 0 && inputCols.length > 0)) &&
     (effectiveAssistMode !== "manual" ||
       (!!mode &&
         (mode !== "binary" || question.trim().length > 0) &&
@@ -335,6 +366,25 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
 
   const handleStart = () => {
     if (!canStart()) return;
+    // A synthetic session is created empty: the interview specifies the data
+    // and the rows (and their input columns) land when the contract is
+    // confirmed.
+    if (synthetic) {
+      onStart(
+        {
+          mode: "freetext",
+          modeProvisional: true,
+          inputColumns: [],
+          synthetic: true,
+          assistMode: effectiveAssistMode,
+          sourceName: msg("tagger.setup.synthetic_source_name"),
+        },
+        [],
+        [],
+        effectiveAssistMode,
+      );
+      return;
+    }
     const mapped: DataRow[] = parsedRows.map((row, i) => {
       const fields = inputCols.map((col) => ({ column: col, value: row[col] }));
       // ``text`` stays as a flat string for CSV export / search / single-col
@@ -371,9 +421,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   };
 
   const steps = [
-    <Card key="data">
+    <Card key="data" data-tutorial="tagger-data">
       <CardHeader>
-        <CardTitle className="text-base">
+        <CardTitle className="text-lg">
           <HelpTip text={tip("tagger.upload_file")}>
             {msg("auto.features.tagger.components.taggersetup.1")}
           </HelpTip>
@@ -385,7 +435,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           onDragOver={(e) => e.preventDefault()}
           className={cn(
             "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-all duration-300 group",
-            file ? "border-primary/40 bg-primary/5" : "hover:border-primary/50 hover:bg-muted/30",
+            file || libraryName || synthetic
+              ? "border-primary/40 bg-primary/5"
+              : "hover:border-primary/50 hover:bg-muted/30",
           )}
         >
           <UploadSimple className="size-8 text-muted-foreground group-hover:text-primary/70 transition-colors duration-300" />
@@ -406,6 +458,13 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                 {formatMsg("datasets.count.rows", { count: parsedRows.length })}
               </p>
             </div>
+          ) : synthetic ? (
+            <div className="text-center">
+              <p className="font-medium text-foreground" dir="auto">
+                {msg("tagger.setup.synthetic_source_name")}
+              </p>
+              <p className="text-sm text-muted-foreground">{msg("tagger.setup.synthetic_hint")}</p>
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               {msg("auto.features.tagger.components.taggersetup.3")}
@@ -413,7 +472,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           )}
           <input
             type="file"
-            accept=".json,.csv,.xlsx,.xls"
+            accept={DATASET_UPLOAD_ACCEPT}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -424,7 +483,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         {libraryLoading && (
           <p className="text-sm text-muted-foreground">{msg("tagger.setup.library_loading")}</p>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-xs leading-snug text-destructive">
+            {error}
+          </p>
+        )}
 
         <div className="flex items-center gap-3">
           <Separator className="flex-1" />
@@ -448,6 +511,44 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           onPick={(ds) => void loadLibraryDataset(ds.id, ds.name)}
         />
 
+        {assistAvailable && (
+          <>
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">
+                {msg("tagger.setup.library_or")}
+              </span>
+              <Separator className="flex-1" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              aria-pressed={synthetic}
+              onClick={() => {
+                if (synthetic) {
+                  setSynthetic(false);
+                  return;
+                }
+                setError(null);
+                setFile(null);
+                setLibraryName(null);
+                setParsedRows([]);
+                setParsedCols([]);
+                setInputCols([]);
+                setSynthetic(true);
+              }}
+              className={cn(
+                "w-full justify-center gap-2",
+                synthetic && "border-primary/40 bg-primary/5 text-primary",
+              )}
+            >
+              <Sparkle className="size-4" />
+              {msg("tagger.setup.synthetic_pick")}
+            </Button>
+          </>
+        )}
+
         {parsedCols.length > 0 && (
           <>
             <Separator />
@@ -464,21 +565,17 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     <button
                       key={`${col}-${i}`}
                       type="button"
-                      aria-pressed={selected}
+                      role="checkbox"
+                      aria-checked={selected}
                       onClick={() => toggleInputCol(col)}
                       className={cn(
-                        "flex min-h-[44px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
+                        "group flex min-h-[44px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
                         selected
                           ? "bg-primary/10 border border-primary/40 text-primary font-medium"
                           : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                       )}
                     >
-                      <span
-                        className="size-3 rounded-[3px] border-2 flex items-center justify-center shrink-0"
-                        style={{ borderColor: selected ? "var(--primary)" : "var(--border)" }}
-                      >
-                        {selected && <Check className="size-2 text-primary" />}
-                      </span>
+                      <CheckboxIndicator checked={selected} />
                       <span className="font-mono text-xs truncate min-w-0" dir="ltr">
                         {col}
                       </span>
@@ -498,7 +595,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const taskCard = (
     <Card key="task" data-tutorial={assistAvailable ? undefined : "tagger-modes"}>
       <CardHeader>
-        <CardTitle className="text-base">
+        <CardTitle className="text-lg">
           <HelpTip text={tip("tagger.mode")}>
             {msg("auto.features.tagger.components.taggersetup.5")}
           </HelpTip>
@@ -551,11 +648,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                   {msg("auto.features.tagger.components.taggersetup.6")}
                 </HelpTip>
               </p>
-              <input
+              <Input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                className="min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className={TOUCH_FIELD}
                 placeholder={msg("auto.features.tagger.components.taggersetup.literal.15")}
                 dir="auto"
               />
@@ -580,11 +677,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
               </p>
               {categories.map((cat) => (
                 <div key={cat.id} className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="text"
                     value={cat.label}
                     onChange={(e) => updateCategory(cat.id, e.target.value)}
-                    className="min-h-[44px] flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className={cn(TOUCH_FIELD, "flex-1")}
                     placeholder={msg("auto.features.tagger.components.taggersetup.literal.16")}
                     dir="auto"
                   />
@@ -594,7 +691,6 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     onClick={() => removeCategory(cat.id)}
                     disabled={categories.length <= 2}
                     aria-label={msg("auto.features.tagger.components.taggersetup.16")}
-                    className="size-[44px] lg:size-7"
                   >
                     <Trash className="size-3.5 text-muted-foreground" />
                   </Button>
@@ -620,21 +716,24 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     steps.push(
       <Card key="assist" data-tutorial="tagger-modes">
         <CardHeader>
-          <CardTitle className="text-base">{msg("tagger.assist.setup.title")}</CardTitle>
+          <CardTitle className="text-lg">{msg("tagger.assist.setup.title")}</CardTitle>
           <CardDescription>{msg("tagger.assist.setup.description")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {ASSIST_OPTIONS.map((opt) => {
-            const selected = assistMode === opt.mode;
+            const selected = effectiveAssistMode === opt.mode;
+            const unavailable = synthetic && opt.mode === "manual";
             return (
               <button
                 key={opt.mode}
                 type="button"
                 aria-pressed={selected}
+                disabled={unavailable}
                 onClick={() => setAssistMode(opt.mode)}
                 className={cn(
                   "flex min-w-0 flex-col gap-0.5 rounded-xl border p-3.5 text-start transition-all cursor-pointer",
                   "hover:border-primary/40 hover:bg-primary/5",
+                  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-transparent",
                   selected ? "border-primary bg-primary/10 shadow-sm" : "border-border/50",
                 )}
               >
@@ -648,12 +747,14 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     {opt.label}
                   </span>
                   {opt.recommended && (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <Badge variant="tint" size="sm">
                       {msg("tagger.assist.setup.recommended")}
-                    </span>
+                    </Badge>
                   )}
                 </span>
-                <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                <span className="text-xs text-muted-foreground">
+                  {unavailable ? msg("tagger.setup.synthetic_manual_hint") : opt.desc}
+                </span>
               </button>
             );
           })}
@@ -672,65 +773,13 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-8 -mt-2 md:-mt-4" data-tutorial="tagger-setup">
-      <div className="relative">
-        <div className="flex items-center justify-between">
-          {activeSteps.map((s, i) => {
-            const reachable = i <= maxReachableStep;
-            const completed = i < step && validateStep(i);
-            const active = i === step;
-            return (
-              <div key={s.id} className="flex flex-col items-center relative z-10 flex-1">
-                <button
-                  type="button"
-                  onClick={() => handleTabClick(i)}
-                  disabled={!reachable && i > step}
-                  className={cn(
-                    "relative flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer",
-                    "size-[44px] text-sm font-semibold lg:size-10",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(124,99,80,0.4)] scale-110"
-                      : completed
-                        ? "bg-primary/15 text-primary hover:bg-primary/25"
-                        : reachable
-                          ? "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                          : "bg-muted/50 text-muted-foreground/30 cursor-not-allowed",
-                  )}
-                >
-                  {completed ? <Check className="size-4" /> : i + 1}
-                  {active && (
-                    <motion.span
-                      layoutId="tagger-step-ring"
-                      className="absolute inset-0 rounded-full border-2 border-primary"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                </button>
-                <span
-                  className={cn(
-                    "mt-2 text-[0.6875rem] font-medium transition-colors duration-200 hidden sm:block text-center",
-                    active
-                      ? "text-foreground"
-                      : completed
-                        ? "text-primary"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {s.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="absolute top-[18px] sm:top-5 inset-x-[10%] h-[2px] bg-muted -z-0 rounded-full">
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: "var(--gradient-progress)" }}
-            initial={{ width: 0 }}
-            animate={{ width: `${(step / (activeSteps.length - 1)) * 100}%` }}
-            transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
-          />
-        </div>
-      </div>
+      <WizardStepper
+        steps={activeSteps}
+        step={step}
+        maxReachableStep={maxReachableStep}
+        validateStep={validateStep}
+        onSelect={handleTabClick}
+      />
 
       {/* x-clip (not hidden): only the horizontal slide animation needs
           clipping — y stays visible so focus rings and shadows aren't cut. */}
@@ -754,12 +803,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           modes, straight to annotating for manual) — same footer, no separate
           "start" button. */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={goPrev}
-          disabled={step === 0}
-          className="min-h-[44px] gap-2 lg:min-h-0"
-        >
+        <Button variant="outline" onClick={goPrev} disabled={step === 0} className="gap-2">
           <BackIcon className="h-4 w-4" />
           {msg("auto.features.tagger.components.taggersetup.13")}
         </Button>
@@ -769,7 +813,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         <Button
           onClick={isLastStep ? handleStart : handleNext}
           disabled={isLastStep ? !canStart() : !validateStep(step)}
-          className="min-h-[44px] gap-2 lg:min-h-0"
+          className="gap-2"
         >
           {msg("auto.features.tagger.components.taggersetup.14")}
           <NextIcon className="h-4 w-4" />

@@ -6,6 +6,7 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveLocale } from "@/shared/lib/runtime-locale";
 
 import type { AgentMessage, AgentStatus, AgentToolCall } from "@/shared/ui/agent/types";
+import { parseTurnStats } from "@/shared/ui/agent/turn-stats";
 
 import { confirmGeneralistApproval, streamGeneralistAgent } from "../lib/stream";
 import type {
@@ -82,6 +83,9 @@ const OPTIMIZATION_MUTATING_TOOLS: ReadonlySet<string> = new Set([
   "clone_job_optimizations",
   "retry_job_optimizations",
   "bulk_pin_jobs_optimizations_bulk_pin_post",
+  "pause_job_optimizations",
+  "resume_job_optimizations",
+  "restart_job_optimizations",
 ]);
 
 // Submit tools whose success consumes the staged dataset + readiness. After
@@ -91,6 +95,25 @@ const SUBMIT_TOOLS: ReadonlySet<string> = new Set([
   "submit_job_run_post",
   "submit_grid_search_grid_search_post",
 ]);
+
+// Cap on each prior tool result echoed back in chat history; the backend
+// bounds it again, this just keeps the request body small.
+const HISTORY_TOOL_RESULT_MAX_CHARS = 400;
+
+function historyToolCalls(m: AgentMessage): ChatTurn["tool_calls"] {
+  const calls = (m.toolCalls ?? []).filter((c) => c.tool !== "submit" && c.status !== "running");
+  if (m.role !== "assistant" || calls.length === 0) return undefined;
+  return calls.map((c) => {
+    const result = c.payload?.result;
+    return {
+      tool: c.tool,
+      status: c.status === "error" ? "error" : "done",
+      ...(result === undefined
+        ? {}
+        : { result: JSON.stringify(result).slice(0, HISTORY_TOOL_RESULT_MAX_CHARS) }),
+    };
+  });
+}
 
 // SSE streams hold one HTTP connection each for their whole lifetime. Over
 // HTTP/1.1 the browser allows six connections per origin, so an uncapped
@@ -387,10 +410,6 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
             rt.reasoningBuf += chunk;
             patchSession(key, { reasoning: rt.reasoningBuf });
           },
-          onStatusPatch: (label) => {
-            if (controller.signal.aborted) return;
-            if (label) patchSession(key, { statusLabel: label });
-          },
           onToolStart: (ev) => {
             if (controller.signal.aborted) return;
             patchSession(key, {
@@ -413,6 +432,9 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
           onToolEnd: (ev) => {
             if (controller.signal.aborted) return;
             finishToolCall(key, ev.id, ev.status === "ok" ? "done" : "error", ev.result);
+            patchSession(key, {
+              statusLabel: msg("auto.features.agent.panel.hooks.use.generalist.agent.literal.1"),
+            });
             if (ev.status === "ok") {
               if (OPTIMIZATION_MUTATING_TOOLS.has(ev.tool)) {
                 window.dispatchEvent(new Event("optimizations-changed"));
@@ -467,6 +489,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
               next[next.length - 1] = {
                 ...last,
                 content: result.assistant_message || fallback,
+                stats: parseTurnStats(result.stats),
               };
               return next;
             });
@@ -579,7 +602,10 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
 
       const chatHistory: ChatTurn[] = history
         .filter((m) => m.content.trim().length > 0)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) => {
+          const toolCalls = historyToolCalls(m);
+          return { role: m.role, content: m.content, ...(toolCalls ? { tool_calls: toolCalls } : {}) };
+        });
       // Merge order: snapshot (from wizardCtx if mounted) <- sticky extras
       // (accumulated across turns from panel-side derivations like
       // ``staged_dataset_id``) <- this-turn override. The sticky layer

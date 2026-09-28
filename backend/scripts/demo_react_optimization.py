@@ -118,7 +118,6 @@ def _export_model_keys() -> None:
     for env_name, value in (
         ("FIREWORKS_AI_API_KEY", getattr(settings, "fireworks_ai_api_key", None)),
         ("OPENAI_API_KEY", getattr(settings, "openai_api_key", None)),
-        ("OPENROUTER_API_KEY", getattr(settings, "openrouter_api_key", None)),
     ):
         if value is None or os.environ.get(env_name):
             continue

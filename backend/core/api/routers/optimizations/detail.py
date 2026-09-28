@@ -53,6 +53,7 @@ from ....models import (
     SplitFractions,
 )
 from ....registry import ResolverError, resolve_module_factory
+from ....service_gateway.datasets.split_counts import split_counts_for_version
 from ....service_gateway.language_models import build_language_model
 from ....service_gateway.optimization.data import load_metric_from_code, load_signature_from_code
 from ...auth import AuthenticatedUser, get_authenticated_user
@@ -420,8 +421,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
             rng = random.Random(effective_seed)
             rng.shuffle(indices)
 
-        train_end = int(total * fractions.train)
-        val_end = train_end + int(total * fractions.val)
+        counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+        train_end = counts.train
+        val_end = train_end + counts.val
         train_indices = indices[:train_end]
         val_indices = indices[train_end:val_end]
         test_indices = indices[val_end:]
@@ -662,8 +664,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         if shuffle:
             rng = random.Random(effective_seed)
             rng.shuffle(ordered)
-        train_end = int(total * fractions.train)
-        val_end = train_end + int(total * fractions.val)
+        counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+        train_end = counts.train
+        val_end = train_end + counts.val
         test_indices = ordered[val_end:]
 
         return {
@@ -957,8 +960,9 @@ def register_detail_routes(router: APIRouter, *, job_store) -> None:
         if shuffle:
             rng = random.Random(effective_seed)
             rng.shuffle(ordered)
-        train_end = int(total * fractions.train)
-        val_end = train_end + int(total * fractions.val)
+        counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+        train_end = counts.train
+        val_end = train_end + counts.val
         test_indices = ordered[val_end:]
 
         return {

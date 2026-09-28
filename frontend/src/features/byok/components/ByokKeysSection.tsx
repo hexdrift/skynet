@@ -1,7 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Check, CircleNotch, Key, PencilSimple, Plus, Trash, X } from "@/shared/ui/icons";
+import {
+  Check,
+  CircleNotch,
+  FloppyDisk,
+  Key,
+  PencilSimple,
+  Plus,
+  Trash,
+  X,
+} from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
@@ -9,32 +18,23 @@ import { useLocale } from "@/shared/providers";
 import { Button } from "@/shared/ui/primitives/button";
 import { Input } from "@/shared/ui/primitives/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
+import { KeyFormActions } from "@/shared/ui/key-form-actions";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { StatusPill, type StatusTone } from "@/shared/ui/status-badge";
+import { TOUCH_FIELD, TOUCH_FIELD_SM } from "@/shared/ui/touch";
 import { useByokKeys } from "../providers/byok-provider";
 import { type KeyStatus, type ProviderKey } from "../lib/byok";
 import { ByokJsonImport } from "./ByokJsonImport";
 
-/** The status pill next to a saved key. Gold for verified, calm muted/destructive otherwise. */
-function StatusPill({ status }: { status: KeyStatus }) {
-  const map: Record<KeyStatus, { label: string; className: string }> = {
-    verified: {
-      label: msg("settings.keys.verified"),
-      className: "bg-[#C8A882]/15 text-[#8a6d44]",
-    },
-    unverified: {
-      label: msg("settings.keys.unverified"),
-      className: "bg-muted text-muted-foreground",
-    },
-    invalid: {
-      label: msg("settings.keys.invalid"),
-      className: "bg-destructive/10 text-destructive",
-    },
+/** The status pill next to a saved key. */
+function KeyStatusPill({ status }: { status: KeyStatus }) {
+  const map: Record<KeyStatus, { label: string; tone: StatusTone }> = {
+    verified: { label: msg("settings.keys.verified"), tone: "success" },
+    unverified: { label: msg("settings.keys.unverified"), tone: "pending" },
+    invalid: { label: msg("settings.keys.invalid"), tone: "failed" },
   };
-  const { label, className } = map[status];
-  return (
-    <span className={cn("rounded-full px-2 py-0.5 text-[0.6875rem] font-medium", className)}>
-      {label}
-    </span>
-  );
+  const { label, tone } = map[status];
+  return <StatusPill tone={tone}>{label}</StatusPill>;
 }
 
 function ConnectionRow({ connection }: { connection: ProviderKey }) {
@@ -128,7 +128,7 @@ function ConnectionRow({ connection }: { connection: ProviderKey }) {
                   last4: connection.last4,
                 })}
               </code>
-              <StatusPill status={connection.status} />
+              <KeyStatusPill status={connection.status} />
             </span>
             {connection.apiBase && (
               <code
@@ -143,15 +143,12 @@ function ConnectionRow({ connection }: { connection: ProviderKey }) {
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {connection.status !== "verified" && !editing && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={verifying}
-              onClick={handleVerify}
-              className="min-h-[44px] sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-            >
+            <Button variant="outline" size="sm" disabled={verifying} onClick={handleVerify}>
               {verifying ? (
-                <CircleNotch className="size-3.5 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 <Check className="size-3.5" />
               )}
@@ -163,13 +160,13 @@ function ConnectionRow({ connection }: { connection: ProviderKey }) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="icon-sm"
                     onClick={startEditing}
-                    className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                    className="text-muted-foreground hover:text-foreground"
                     aria-label={msg("settings.keys.replace")}
                   >
-                    <PencilSimple className="size-3.5" />
+                    <PencilSimple className="size-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{msg("settings.keys.replace")}</TooltipContent>
@@ -177,13 +174,13 @@ function ConnectionRow({ connection }: { connection: ProviderKey }) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="icon-sm"
                     onClick={handleRemove}
-                    className="size-[44px] text-destructive hover:text-destructive sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     aria-label={msg("settings.keys.remove")}
                   >
-                    <Trash className="size-3.5" />
+                    <Trash className="size-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{msg("settings.keys.remove")}</TooltipContent>
@@ -201,43 +198,20 @@ function ConnectionRow({ connection }: { connection: ProviderKey }) {
 
       {editing && (
         <div className="mt-2.5 flex flex-col gap-2 animate-in fade-in-0 slide-in-from-top-1">
-          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-            <Input
-              dir="ltr"
-              type="password"
-              autoFocus
-              autoComplete="new-password"
-              placeholder={msg("settings.keys.secret_placeholder")}
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleSave();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              className="h-[44px] flex-1 sm:h-8 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
-            />
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={!secret.trim() || saving}
-              className="min-h-[44px] sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-            >
-              {saving ? (
-                <CircleNotch className="size-3.5 animate-spin" />
-              ) : (
-                msg("settings.keys.save")
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setEditing(false)}
-              className="size-[44px] self-end sm:size-8 sm:self-auto [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-              aria-label={msg("settings.keys.cancel")}
-            >
-              <X className="size-3.5" />
-            </Button>
-          </div>
+          <Input
+            dir="ltr"
+            type="password"
+            autoFocus
+            autoComplete="new-password"
+            placeholder={msg("settings.keys.secret_placeholder")}
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleSave();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className={TOUCH_FIELD_SM}
+          />
           <Input
             dir="ltr"
             type="url"
@@ -249,11 +223,19 @@ function ConnectionRow({ connection }: { connection: ProviderKey }) {
               if (e.key === "Enter") void handleSave();
               if (e.key === "Escape") setEditing(false);
             }}
-            className="h-[44px] text-xs sm:h-7 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
+            className={cn(TOUCH_FIELD_SM, "text-xs")}
           />
           <p className="text-[0.6875rem] text-muted-foreground/70">
             {msg("settings.keys.base_url_hint")}
           </p>
+          <KeyFormActions
+            submitLabel={msg("settings.keys.save")}
+            submitIcon={<FloppyDisk className="size-4" aria-hidden="true" />}
+            busy={saving}
+            disabled={!secret.trim() || saving}
+            onSubmit={() => void handleSave()}
+            onCancel={() => setEditing(false)}
+          />
         </div>
       )}
     </div>
@@ -308,12 +290,7 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
 
   if (!open) {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        className="min-h-[44px] w-full sm:min-h-9"
-        onClick={() => setOpen(true)}
-      >
+      <Button type="button" variant="outline" className="w-full" onClick={() => setOpen(true)}>
         <Plus className="size-4" />
         {msg("settings.keys.add_provider")}
       </Button>
@@ -339,10 +316,10 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
           variant="ghost"
           size="icon-sm"
           onClick={close}
-          className="size-[44px] sm:size-8"
+          className="text-muted-foreground hover:text-foreground"
           aria-label={msg("settings.keys.cancel")}
         >
-          <X className="size-3.5" />
+          <X className="size-4" />
         </Button>
       </div>
 
@@ -359,7 +336,7 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
             onChange={(event) => setProvider(event.target.value)}
             placeholder={msg("settings.keys.provider_placeholder")}
             aria-invalid={duplicate}
-            className="h-[44px] sm:h-9"
+            className={TOUCH_FIELD}
           />
           {duplicate && (
             <span className="text-[0.6875rem] font-normal text-destructive">
@@ -375,7 +352,7 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             placeholder={msg("settings.keys.connection_label_placeholder")}
-            className="h-[44px] sm:h-9"
+            className={TOUCH_FIELD}
           />
         </label>
         <label
@@ -392,7 +369,7 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
             value={secret}
             onChange={(event) => setSecret(event.target.value)}
             placeholder={msg("settings.keys.secret_placeholder")}
-            className="h-[44px] sm:h-9"
+            className={TOUCH_FIELD}
           />
         </label>
         <label
@@ -409,7 +386,7 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
             placeholder={msg("settings.keys.base_url_placeholder")}
-            className="h-[44px] sm:h-9"
+            className={TOUCH_FIELD}
           />
         </label>
       </div>
@@ -418,22 +395,19 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
         {msg("settings.keys.base_url_hint")}
       </p>
       <div className="mt-3 flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-[44px] sm:min-h-8"
-          onClick={close}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={close}>
           {msg("settings.keys.cancel")}
         </Button>
         <Button
           type="submit"
           size="sm"
-          className="min-h-[44px] sm:min-h-8"
           disabled={!normalizedProvider || !secret.trim() || duplicate || saving}
         >
-          {saving ? <CircleNotch className="size-3.5 animate-spin" /> : msg("settings.keys.save")}
+          {saving ? (
+            <CircleNotch className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          ) : (
+            msg("settings.keys.save")
+          )}
         </Button>
       </div>
     </form>
@@ -443,10 +417,7 @@ function NewConnectionForm({ existingProviders }: { existingProviders: Set<strin
 /** Render provider-agnostic BYOK connection management. */
 export function ByokKeysSection() {
   const { keys, loading } = useByokKeys();
-  const existingProviders = React.useMemo(
-    () => new Set(keys.map((key) => key.provider)),
-    [keys],
-  );
+  const existingProviders = React.useMemo(() => new Set(keys.map((key) => key.provider)), [keys]);
 
   return (
     <div className="space-y-3">
@@ -461,9 +432,7 @@ export function ByokKeysSection() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <CircleNotch className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingState className="py-8" />
       ) : keys.length > 0 ? (
         <div className="flex flex-col gap-2">
           {keys.map((connection) => (

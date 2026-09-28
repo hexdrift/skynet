@@ -11,7 +11,7 @@ export default function NotFound() {
         <h1 className="text-2xl font-bold text-foreground">{msg("not_found.title")}</h1>
         <p className="text-sm text-muted-foreground">{msg("not_found.description")}</p>
       </div>
-      <Button asChild variant="outline">
+      <Button asChild variant="outline" className="min-h-[44px]">
         <Link href="/">{msg("not_found.back_dashboard")}</Link>
       </Button>
     </div>

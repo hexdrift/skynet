@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from typing import cast
+import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any, cast
 
 import dspy
 import litellm
@@ -14,15 +17,17 @@ from sqlalchemy.pool import StaticPool
 from core.service_gateway.agents import generalist as generalist_module
 from core.service_gateway.agents.code import _agent_error_payload, _SubmitArgExtractor
 from core.service_gateway.agents.generalist import (
+    GENERALIST_SYSTEM_PROMPT,
     ApprovalRegistry,
-    GeneralistSig,
     WizardState,
     _needs_approval,
     _TurnAuthoringFlag,
     _wrap_tool_with_approval,
+    approval_key,
     tools_for,
     validate_wizard_patch_order,
 )
+from core.service_gateway.language_models import MeteredLM
 from core.storage.models import Base
 
 
@@ -891,7 +896,7 @@ def test_system_prompt_forbids_submit_in_authoring_turn() -> None:
     Guards against a future prompt edit silently dropping the ordering rule that
     is the primary defense for this bug.
     """
-    prompt = GeneralistSig.__doc__ or ""
+    prompt = GENERALIST_SYSTEM_PROMPT
     assert "NEVER call ``submit_job_run_post`` in the SAME turn as" in prompt
     assert "request_code_authoring" in prompt
 
@@ -984,3 +989,408 @@ def test_agent_error_payload_plain_error_has_no_code() -> None:
     """Unclassified failures keep the text-only payload."""
     payload = _agent_error_payload(RuntimeError("boom"))
     assert payload == {"error": "RuntimeError: boom"}
+
+
+def test_new_always_and_lifecycle_tools_are_reachable() -> None:
+    """Sample datasets, the split check and pause/resume/restart need no wizard progress."""
+    allowed = tools_for(cast(WizardState, {}))
+    assert {
+        "list_sample_datasets_datasets_samples_get",
+        "stage_sample_dataset_datasets_samples",
+        "pause_job_optimizations",
+        "resume_job_optimizations",
+        "restart_job_optimizations",
+    } <= allowed
+
+
+def test_trust_gating_of_lifecycle_tools() -> None:
+    """Compute-starting tools gate in auto-safe; pause and samples only gate in ask."""
+    for tool in ("resume_job_optimizations", "restart_job_optimizations"):
+        assert _needs_approval(tool, "auto_safe") is True
+        assert _needs_approval(tool, "yolo") is False
+    for tool in ("pause_job_optimizations", "stage_sample_dataset_datasets_samples"):
+        assert _needs_approval(tool, "ask") is True
+        assert _needs_approval(tool, "auto_safe") is False
+
+
+def test_order_allows_target_score_and_react_config_as_params() -> None:
+    """The new Params fields follow the same order rule as the rest of the step."""
+    ready = cast(WizardState, {"job_name": "x", "dataset_ready": True})
+    assert validate_wizard_patch_order({"target_score": 90, "react_config": {"mcp_url": "https://m"}}, ready) is None
+    assert validate_wizard_patch_order({"target_score": 90}, cast(WizardState, {"job_name": "x"})) is not None
+
+
+def test_approval_key_binds_to_owner() -> None:
+    """Different owners derive different keys; an owner-less caller keeps the bare id."""
+    assert approval_key("abc123", None) == "abc123"
+    alice = approval_key("abc123", "alice")
+    assert alice.startswith("abc123.")
+    assert alice != approval_key("abc123", "bob")
+    assert alice == approval_key("abc123", "alice")
+    assert len(alice) <= 45
+
+
+@pytest.mark.asyncio
+async def test_pending_approval_resolves_only_with_owner_key() -> None:
+    """The bare call id from the event cannot resolve an owner-bound approval."""
+    events: list[dict] = []
+    registry = ApprovalRegistry()
+    tool = _wrap_tool_with_approval(
+        _make_fake_tool("delete_job_optimizations", return_value="deleted"),
+        trust_mode="ask",
+        registry=registry,
+        emit=events.append,
+        outer_loop=asyncio.get_running_loop(),
+        approval_owner="alice",
+    )
+    call_task = asyncio.create_task(tool.func._async_body())
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if any(e["event"] == "pending_approval" for e in events):
+            break
+    call_id = next(e for e in events if e["event"] == "pending_approval")["data"]["id"]
+    assert registry.resolve(call_id, True) is False
+    assert registry.resolve(approval_key(call_id, "bob"), True) is False
+    assert registry.resolve(approval_key(call_id, "alice"), True) is True
+    assert await call_task == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_submit_fills_params_from_snapshot() -> None:
+    """Params-step choices the agent omitted reach submit; a supplied argument wins."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(
+            WizardState,
+            {
+                "module_name": "cot",
+                "optimizer_name": "gepa",
+                "target_score": 85,
+                "seed": 7,
+                "split_fractions": {"train": 0.6, "val": 0.2, "test": 0.2},
+            },
+        ),
+    )
+    await tool.func._async_body(seed=11)
+    assert seen["module_name"] == "cot"
+    assert seen["optimizer_name"] == "gepa"
+    assert seen["target_score"] == 85
+    assert seen["split_fractions"] == {"train": 0.6, "val": 0.2, "test": 0.2}
+    assert seen["seed"] == 11
+    assert "tool_source" not in seen
+
+
+@pytest.mark.asyncio
+async def test_run_submit_injects_tool_source_for_react_module() -> None:
+    """A react run ships the wizard's MCP server as its live tool source."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(
+            WizardState,
+            {"module_name": "react", "react_config": {"mcpUrl": "https://mcp.example/mcp"}},
+        ),
+    )
+    await tool.func._async_body()
+    assert seen["tool_source"] == {"kind": "live_mcp", "mcp_url": "https://mcp.example/mcp"}
+
+
+@pytest.mark.asyncio
+async def test_tool_source_skipped_for_grid_and_toolless_modules() -> None:
+    """The grid request has no tool_source, and a predict run never needs one."""
+    react_state = {"module_name": "react", "react_config": {"mcpUrl": "https://mcp.example/mcp"}}
+    for tool_name, state in (
+        ("submit_grid_search_grid_search_post", react_state),
+        ("submit_job_run_post", {**react_state, "module_name": "predict"}),
+    ):
+        tool, seen = _make_recording_tool(tool_name)
+        _wrap_tool_with_approval(
+            tool,
+            trust_mode="yolo",
+            registry=ApprovalRegistry(),
+            emit=lambda _e: None,
+            outer_loop=asyncio.get_running_loop(),
+            wizard_state=cast(WizardState, state),
+        )
+        await tool.func._async_body()
+        assert "tool_source" not in seen
+
+
+@pytest.mark.asyncio
+async def test_workflow_with_mcp_node_injects_tool_source() -> None:
+    """A workflow counts as tool-using when any node is an MCP node."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(
+            WizardState,
+            {
+                "module_name": "workflow",
+                "workflow": {"nodes": [{"id": "a", "kind": "mcp"}]},
+                "react_config": {"mcpUrl": "https://mcp.example/mcp"},
+            },
+        ),
+    )
+    await tool.func._async_body()
+    assert seen["tool_source"] == {"kind": "live_mcp", "mcp_url": "https://mcp.example/mcp"}
+
+
+@pytest.mark.asyncio
+async def test_sample_staging_keeps_an_existing_job_name() -> None:
+    """A staged sample names an unnamed run but never renames a named one."""
+    loop = asyncio.get_running_loop()
+    staged = '{"sample_id": "s", "wizard_state": {"job_name": "Sample", "dataset_ready": true}}'
+
+    async def emitted_patch(state: dict[str, Any], *, name_first: bool) -> dict[str, Any]:
+        """Stage a sample and return the ``wizard_state`` patch the panel receives.
+
+        Args:
+            state: The turn-start wizard snapshot.
+            name_first: Whether the agent names the run earlier in the same turn.
+
+        Returns:
+            The patch carried by the staging tool's ``tool_end`` event.
+        """
+        events: list[dict[str, Any]] = []
+        flag = _TurnAuthoringFlag()
+
+        def wrap(tool: dspy.Tool) -> dspy.Tool:
+            """Wrap a tool on the shared turn flag.
+
+            Args:
+                tool: The tool to wrap.
+
+            Returns:
+                The wrapped tool.
+            """
+            return _wrap_tool_with_approval(
+                tool,
+                trust_mode="yolo",
+                registry=ApprovalRegistry(),
+                emit=events.append,
+                outer_loop=loop,
+                authoring_flag=flag,
+                wizard_state=cast(WizardState, state),
+            )
+
+        if name_first:
+            await wrap(_make_fake_tool("update_wizard_state")).func._async_body(job_name="Mine")
+        await wrap(_make_fake_tool("stage_sample_dataset_datasets_samples", return_value=staged)).func._async_body(
+            sample_id="s"
+        )
+        return events[-1]["data"]["result"]["wizard_state"]
+
+    assert await emitted_patch({}, name_first=False) == {"job_name": "Sample", "dataset_ready": True}
+    assert await emitted_patch({"job_name": "Mine"}, name_first=False) == {"dataset_ready": True}
+    assert await emitted_patch({}, name_first=True) == {"dataset_ready": True}
+
+
+def test_system_prompt_covers_new_capabilities() -> None:
+    """The prompt names the modules and tools the agent now supports."""
+    prompt = GENERALIST_SYSTEM_PROMPT
+    for needle in ("react", "flex", "target_score", "validate_datasets", "restart"):
+        assert needle in prompt
+    assert "blackbox" not in prompt.lower()
+
+
+def test_split_check_is_reachable_once_a_dataset_is_ready() -> None:
+    """The dataset split check unlocks with the rest of the dataset diagnostics."""
+    assert "validate_datasets_validate_post" not in tools_for(cast(WizardState, {}))
+    assert "validate_datasets_validate_post" in tools_for(
+        cast(WizardState, {"job_name": "x", "dataset_ready": True})
+    )
+
+
+class _ScriptedLM(dspy.BaseLM):
+    """An LM that records every request and answers with scripted native tool calls."""
+
+    def __init__(self, script: list[tuple[str, dict[str, Any]]]) -> None:
+        """Store the script.
+
+        Args:
+            script: One ``(tool name, arguments)`` pair per expected LM call.
+        """
+        super().__init__(model="scripted")
+        self._script = list(script)
+        self.requests: list[dict[str, Any]] = []
+
+    @property
+    def supports_function_calling(self) -> bool:
+        """Report native tool-call support."""
+        return True
+
+    @property
+    def supports_reasoning(self) -> bool:
+        """Report native reasoning support."""
+        return True
+
+    def forward(self, prompt=None, messages=None, **kwargs):
+        """Record the request and return the next scripted tool call.
+
+        Args:
+            prompt: Unused legacy prompt.
+            messages: The rendered chat messages.
+            **kwargs: Provider kwargs, including ``tools``.
+
+        Returns:
+            An OpenAI-shaped response carrying one tool call.
+        """
+        self.requests.append({"messages": messages, **kwargs})
+        name, args = self._script.pop(0)
+        call = {
+            "id": f"call_{len(self.requests)}",
+            "type": "function",
+            "function": {"name": name, "arguments": json.dumps(args)},
+        }
+        message = {"role": "assistant", "content": None, "tool_calls": [call]}
+        return litellm.ModelResponse(
+            model="scripted",
+            choices=[{"index": 0, "finish_reason": "tool_calls", "message": message}],
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        )
+
+
+class _Spec:
+    """A minimal MCP tool listing entry."""
+
+    def __init__(self, name: str) -> None:
+        """Name the tool.
+
+        Args:
+            name: The tool's MCP name.
+        """
+        self.name = name
+        self.description = "test tool"
+        self.inputSchema = {"type": "object", "properties": {}}
+
+
+class _Listing:
+    """What a fake MCP session's ``list_tools`` returns."""
+
+    def __init__(self, names: list[str]) -> None:
+        """Wrap the tool specs.
+
+        Args:
+            names: The listed tool names.
+        """
+        self.tools = [_Spec(name) for name in names]
+
+
+class _FakeSession:
+    """An MCP session that only lists tools."""
+
+    def __init__(self, names: list[str]) -> None:
+        """Remember which tools to list.
+
+        Args:
+            names: The listed tool names.
+        """
+        self._names = names
+
+    async def list_tools(self) -> _Listing:
+        """List the configured tools."""
+        return _Listing(self._names)
+
+
+async def test_turn_replays_history_natively_and_streams_the_submit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A turn runs on the conversation loop: earlier turns and their tool trace precede the new one as messages.
+
+    Also covers the native-tool-call gap the CLI bridge used to close: a
+    ``null`` optional never reaches the gated tool.
+    """
+    tool, seen = _make_recording_tool("list_models_for_agent")
+    seen["untouched"] = True
+
+    @asynccontextmanager
+    async def fake_session(mcp_url: str, *, auth_header: str | None = None) -> AsyncIterator[_FakeSession]:
+        """Yield the fake session in place of a Streamable-HTTP client.
+
+        Args:
+            mcp_url: Ignored.
+            auth_header: Ignored.
+        """
+        yield _FakeSession(["list_models_for_agent", "submit_job_run_post"])
+
+    monkeypatch.setattr(generalist_module, "_mcp_session", fake_session)
+    monkeypatch.setattr(dspy.Tool, "from_mcp_tool", staticmethod(lambda session, spec: tool))
+    lm = _ScriptedLM([("list_models_for_agent", {"limit": None}), ("submit", {"assistant_message": "הנה המודלים"})])
+    events: list[dict] = []
+
+    reply = await generalist_module._drive_generalist_agent(
+        mcp_url="http://unused/mcp/",
+        wizard_state=WizardState(),
+        memory_context="",
+        chat_history=[
+            {"role": "user", "content": "hi"},
+            {
+                "role": "assistant",
+                "content": "hello",
+                "tools": [{"tool": "get_registry_snapshot", "status": "done", "result": "{}"}],
+            },
+        ],
+        user_message="which models?",
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=events.append,
+        lm=lm,
+        reply_language="Hebrew",
+    )
+
+    assert reply == "הנה המודלים"
+    assert seen == {"untouched": True}
+    first = lm.requests[0]["messages"]
+    assert [m["role"] for m in first] == ["system", "user", "assistant", "tool", "assistant", "tool", "user"]
+    assert first[2]["tool_calls"][0]["function"]["name"] == "get_registry_snapshot"
+    assert first[4]["tool_calls"][0]["function"]["name"] == "submit"
+    assert "which models?" in first[-1]["content"]
+    assert "hello" not in first[1]["content"]
+    assert [t["function"]["name"] for t in lm.requests[0]["tools"]] == ["list_models_for_agent", "submit"]
+    # The second request only appends to the first: the cacheable prefix holds.
+    assert lm.requests[1]["messages"][: len(first)] == first
+    assert events[0]["event"] == "turn_metadata"
+    assert events[0]["data"]["allowed_tools"] == ["list_models_for_agent"]
+    assert [e["event"] for e in events if e["event"] in ("tool_start", "tool_end")] == ["tool_start", "tool_end"]
+
+
+async def test_turn_lm_reports_native_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The loop's LM always claims native tool calls, so tools never fall back to the text protocol."""
+    lm = MeteredLM(model="openai/onprem-gateway-alias", cache=False)
+    monkeypatch.setattr(generalist_module, "_build_generalist_lm", lambda: lm)
+    seen: dict[str, bool] = {}
+
+    async def fake_drive(**kwargs: Any) -> str:
+        """Record the LM's capability as the loop would see it.
+
+        Args:
+            **kwargs: The loop's arguments; only ``lm`` is read.
+
+        Returns:
+            A fixed reply.
+        """
+        seen["native"] = kwargs["lm"].supports_function_calling
+        return "ok"
+
+    monkeypatch.setattr(generalist_module, "_drive_generalist_agent", fake_drive)
+
+    events = [
+        event
+        async for event in generalist_module.run_generalist_agent(
+            wizard_state=WizardState(), chat_history=[], user_message="hi", mcp_url="http://unused"
+        )
+    ]
+
+    assert seen == {"native": True}
+    assert events[-1] == {"event": "done", "data": {"assistant_message": "ok"}}

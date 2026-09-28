@@ -1,18 +1,20 @@
-"""Tests for the version-agnostic ReAct reply streamer.
+"""Tests for the ReActV2 reply streamer.
 
-``ReactReplyStream`` bridges the two ways a ReAct program surfaces its reply:
-ReActV2 (DSPy 3.3+) carries it as a ``submit`` tool-call argument on the inner
-``react`` predictor's ``tool_calls`` field, while classic ReAct (DSPy 3.2.x)
-streams it straight off a separate ``extract`` predictor. These tests exercise
-both branches regardless of which DSPy line is installed, by toggling the
-presence of an ``extract`` attribute on a stand-in program.
+``ReactReplyStream`` decodes the reply out of the ``submit`` tool-call argument
+on the inner ``react`` predictor's ``tool_calls`` field, whether it arrives as
+provider tool-call deltas or through DSPy's text protocol. These tests exercise
+both extractors on a stand-in program.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 from types import SimpleNamespace
+from typing import Any
 
 import dspy
+import litellm
 import pytest
 
 from core.service_gateway.agents import code as code_module
@@ -22,7 +24,7 @@ from core.service_gateway.agents.code import (
     _NativeSubmitArgExtractor,
     _SubmitArgExtractor,
 )
-from core.service_gateway.react_compat import REACT_CLASS, react_uses_submit
+from core.service_gateway.language_models import MeteredLM
 
 
 class _Sig(dspy.Signature):
@@ -64,7 +66,7 @@ def _response(field: str, chunk: str, *, last: bool = False) -> dspy.streaming.S
 
 
 class _SubmitProgram:
-    """A stand-in ReActV2 program: an inner ``react`` predictor and no ``extract``."""
+    """A stand-in ReActV2 program: just the inner ``react`` predictor."""
 
     def __init__(self, react: dspy.Predict) -> None:
         """Store the inner predictor that drives the loop.
@@ -75,37 +77,21 @@ class _SubmitProgram:
         self.react = react
 
 
-def test_native_program_matches_capability_probe() -> None:
-    """The streamer's submit/extract choice tracks ``react_uses_submit``."""
-    program = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+def test_program_streams_through_two_listeners() -> None:
+    """The streamer binds a reply listener and a reasoning listener to the loop predictor."""
+    program = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
     stream = ReactReplyStream(program, "reply")
 
-    assert stream._uses_submit is react_uses_submit(program)
     listeners = stream.listeners()
     assert len(listeners) == 2
     assert dspy.streamify(program, stream_listeners=listeners, async_streaming=True) is not None
 
 
-def test_extract_program_streams_reply_field_directly() -> None:
-    """Classic ReAct: the reply field's chunks pass through verbatim."""
-    program = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
-    if react_uses_submit(program):
-        program.extract = program.react  # force the classic branch on a 3.3 install
-
-    stream = ReactReplyStream(program, "reply")
-
-    assert stream._uses_submit is False
-    assert stream.reply_delta(_response("reply", "Hel")) == "Hel"
-    assert stream.reply_delta(_response("reply", "lo", last=True)) == "lo"
-    assert stream.reply_delta(_response("next_thought", "ignored")) is None
-
-
 def test_submit_program_decodes_partial_tool_call_json() -> None:
-    """ReActV2: partial ``submit`` JSON yields the growing reply argument."""
-    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    """Partial ``submit`` JSON yields the growing reply argument."""
+    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
     stream = ReactReplyStream(_SubmitProgram(base.react), "reply")
 
-    assert stream._uses_submit is True
     assert stream.reply_delta(_response("reply", "anything")) is None  # not the tool_calls field
     first = stream.reply_delta(_response("tool_calls", '{"tool_calls":[{"name":"submit","args":{"reply":"Hi'))
     second = stream.reply_delta(_response("tool_calls", ' there"}}]}', last=True))
@@ -114,7 +100,7 @@ def test_submit_program_decodes_partial_tool_call_json() -> None:
 
 def test_serial_submit_stream_suppresses_reply_that_races_a_tool() -> None:
     """A mixed tool turn never leaks its premature submit text to the user."""
-    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
     base.react._serial_tool_calls = True
     stream = ReactReplyStream(_SubmitProgram(base.react), "reply")
 
@@ -191,13 +177,76 @@ def _drain_native(listener: NativeToolCallStreamListener, stream: ReactReplyStre
 def test_submit_program_defaults_to_text_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
     """With native calling inactive, ReActV2 keeps the text tool-call extractor."""
     monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: False)
-    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
     stream = ReactReplyStream(_SubmitProgram(base.react), "reply")
 
-    assert stream._uses_submit is True
     assert stream._native is False
     assert isinstance(stream._extractor, _SubmitArgExtractor)
     assert not isinstance(stream.listeners()[0], NativeToolCallStreamListener)
+
+
+class _ScriptedGatewayLM(MeteredLM):
+    """An on-prem gateway alias LiteLLM does not know, answering with a scripted ``submit``."""
+
+    def __init__(self) -> None:
+        """Build the LM under a model name absent from LiteLLM's catalogue."""
+        super().__init__(model="openai/onprem-gateway-alias", cache=False)
+        self.requests: list[dict[str, Any]] = []
+
+    def forward(self, prompt=None, messages=None, **kwargs):
+        """Record the request and submit a fixed reply as a native tool call.
+
+        Args:
+            prompt: Unused legacy prompt.
+            messages: The rendered chat messages.
+            **kwargs: Provider kwargs, including ``tools``.
+
+        Returns:
+            An OpenAI-shaped response carrying one ``submit`` tool call.
+        """
+        self.requests.append({"messages": messages, **kwargs})
+        call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "submit", "arguments": json.dumps({"reply": "done"})},
+        }
+        message = {
+            "role": "assistant",
+            "content": "[[ ## next_thought ## ]]\nthinking\n\n[[ ## completed ## ]]",
+            "tool_calls": [call],
+        }
+        return litellm.ModelResponse(
+            model="onprem-gateway-alias",
+            choices=[{"index": 0, "finish_reason": "tool_calls", "message": message}],
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        )
+
+
+async def test_code_agent_sends_native_tools_to_an_unknown_gateway_alias() -> None:
+    """The code agent always rides the native tool channel, even for a model LiteLLM has never heard of."""
+    lm = _ScriptedGatewayLM()
+    queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+    result = await code_module._run_agent(
+        lm=lm,
+        dataset_columns=["q", "a"],
+        column_roles_json="{}",
+        column_kinds_json="{}",
+        sample_rows_json="[]",
+        user_message="hi",
+        chat_history_json="[]",
+        prior_signature="",
+        prior_metric="",
+        prior_signature_validation="",
+        prior_metric_validation="",
+        initial_signature="",
+        initial_metric="",
+        reply_language="English",
+        queue=queue,
+    )
+
+    assert "submit" in [tool["function"]["name"] for tool in lm.requests[0]["tools"]]
+    assert result["assistant_message"] == "done"
 
 
 def test_native_submit_program_decodes_provider_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -207,7 +256,7 @@ def test_native_submit_program_decodes_provider_tool_calls(monkeypatch: pytest.M
     submit call on index 1 carries the user-visible reply.
     """
     monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: True)
-    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
     stream = ReactReplyStream(_SubmitProgram(base.react), "reply")
 
     assert stream._native is True
@@ -253,7 +302,7 @@ def test_native_listener_buffers_args_arriving_before_submit_name() -> None:
 def test_native_listener_resets_between_turns(monkeypatch: pytest.MonkeyPatch) -> None:
     """The reused listener + extractor decode a second turn cleanly after finish_reason."""
     monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: True)
-    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
     stream = ReactReplyStream(_SubmitProgram(base.react), "reply")
     listener = stream.listeners()[0]
 

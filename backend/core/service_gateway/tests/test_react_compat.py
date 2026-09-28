@@ -1,8 +1,7 @@
-"""Tests for the ReAct compatibility + native-function-calling helpers.
+"""Tests for the ReActV2 native-function-calling helpers.
 
-``react_compat`` hides the DSPy 3.2-vs-3.3 ReAct split behind ``REACT_CLASS``
-and gates the optional provider-native function-calling path behind the
-``REACT_NATIVE_TOOL_CALLING`` flag. These tests exercise the native-calling
+``react_compat`` gates the optional provider-native function-calling path
+behind the ``REACT_NATIVE_TOOL_CALLING`` flag. These tests exercise the native-calling
 helpers without mutating the process-wide adapter, so they stay isolated from
 the rest of the suite: the flag-on install path is intentionally left to the
 serve-loop smoke path rather than asserted here.

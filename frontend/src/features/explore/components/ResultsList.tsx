@@ -1,12 +1,12 @@
 "use client";
 
+import { ScorePill } from "@/shared/ui/outcome-chip";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUp, ArrowDown } from "@/shared/ui/icons";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import type { SearchResult } from "@/shared/lib/api";
 import type { SearchType } from "../hooks/use-semantic-search";
-import { formatGain, formatMetric, formatRelativeDate } from "../lib/format";
+import { formatExactDate } from "../lib/format";
 
 interface ResultsListProps {
   results: SearchResult[];
@@ -22,9 +22,9 @@ interface ResultsListProps {
 
 /**
  * Vertically-rhythmic list of search hits. Each row is a single-tap card:
- * title with an inline score+delta tag, two-line summary, and a thin meta
- * strip carrying a relative timestamp at the end — plus a relevance badge at
- * the start on semantic searches.
+ * title, two-line summary, and a thin meta strip carrying the run's exact
+ * creation date at the end — plus a relevance badge at the start on
+ * semantic searches.
  *
  * Hover lifts the title to full-opacity; the row itself is the open affordance.
  */
@@ -70,8 +70,7 @@ function ResultRow({
   onOpen: () => void;
 }) {
   const title = row.task_name?.trim() || msg("explore.row.no_summary");
-  const gain = formatGain(row.baseline_metric, row.optimized_metric);
-  const dateText = formatRelativeDate(row.created_at);
+  const dateText = formatExactDate(row.created_at);
   const summary = row.summary_text?.trim();
   const ref = React.useRef<HTMLAnchorElement | null>(null);
 
@@ -95,9 +94,6 @@ function ResultRow({
         <h3 className="min-w-0 flex-1 text-start text-[15.5px] font-medium leading-snug tracking-tight text-foreground/90 transition-colors group-hover:text-foreground">
           <Highlighted text={title} tokens={tokens} />
         </h3>
-        {row.optimized_metric != null && (
-          <ScoreTag score={row.optimized_metric} gain={gain} />
-        )}
       </div>
 
       {summary && (
@@ -129,54 +125,11 @@ function RelevanceBadge({ relevance }: { relevance: number }) {
   const pct = Math.max(0, Math.min(1, relevance)) * 100;
   const label = formatMsg("explore.row.relevance", { pct: pct.toFixed(0) });
   return (
-    <span
-      dir="ltr"
-      className="inline-flex items-baseline gap-1 rounded-full bg-[oklch(0.94_0.03_82)] px-2 py-0.5 font-mono text-[10.5px] font-medium leading-none text-[oklch(0.42_0.10_82)] tabular-nums"
-      title={msg("explore.row.relevance.title")}
-    >
+    <ScorePill tone="neutral" title={msg("explore.row.relevance.title")}>
       <span>{label}</span>
-    </span>
+    </ScorePill>
   );
 }
-
-function ScoreTag({
-  score,
-  gain,
-}: {
-  score: number | null | undefined;
-  gain: { text: string; kind: "positive" | "negative" | "neutral" } | null;
-}) {
-  // A zero-change run carries no direction, so the neutral badge drops the
-  // ± arrow and recedes to muted text — only real movement earns an icon. A
-  // run without a baseline has no gain at all; the score still stands alone.
-  const Icon =
-    gain?.kind === "positive" ? ArrowUp : gain?.kind === "negative" ? ArrowDown : null;
-  return (
-    <span
-      dir="ltr"
-      className="inline-flex shrink-0 items-baseline gap-2 font-mono text-[12.5px] tabular-nums"
-    >
-      <span className="font-semibold text-foreground">{formatMetric(score)}</span>
-      {gain && (
-        <span
-          className={`inline-flex items-baseline gap-0.5 text-[11px] ${GAIN_TONE[gain.kind]}`}
-        >
-          {Icon && <Icon className="size-2.5 self-center" aria-hidden="true" />}
-          <span>{gain.text}</span>
-        </span>
-      )}
-    </span>
-  );
-}
-
-// A no-change gain recedes to bare muted text while ±gains stay filled
-// pills, so colour is reserved for runs that actually moved the metric —
-// the neutral case is the least interesting outcome and shouldn't compete.
-const GAIN_TONE: Record<"positive" | "negative" | "neutral", string> = {
-  positive: "rounded-full px-1.5 py-0.5 bg-[var(--success-dim)] text-[var(--success)]",
-  negative: "rounded-full px-1.5 py-0.5 bg-[var(--danger-dim)] text-[var(--danger)]",
-  neutral: "text-muted-foreground",
-};
 
 function tokenize(query: string): string[] {
   return query

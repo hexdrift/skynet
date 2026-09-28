@@ -229,3 +229,58 @@ def test_profile_inline_dataset_ignores_staged_id(
 
     assert resp.status_code == 200
     assert resp.json()["profile"]["row_count"] == 40
+
+
+def test_stage_sample_stages_rows_and_returns_a_preview(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """A staged sample is referenced by id, with a short preview instead of every row."""
+    client, store = staged_client
+    sample_id = client.get("/datasets/samples").json()["samples"][0]["sample_id"]
+
+    resp = client.post(f"/datasets/samples/{sample_id}/stage")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    staged_id = body["wizard_state"]["staged_dataset_id"]
+    staged_rows = store.get_staged_dataset(staged_id, "alice")
+    assert staged_rows
+    assert body["row_count"] == len(staged_rows)
+    assert body["preview"] == staged_rows[:3]
+    assert "dataset" not in body
+    assert body["wizard_state"]["dataset_ready"] is True
+    assert store._staged[staged_id]["sample"] is True
+
+
+def test_stage_sample_unknown_id_returns_404(
+    staged_client: tuple[TestClient, FakeJobStore],
+) -> None:
+    """An unknown sample id is a 404, and nothing is staged."""
+    client, store = staged_client
+
+    resp = client.post("/datasets/samples/not-a-sample/stage")
+
+    assert resp.status_code == 404
+    assert store._staged == {}
+
+
+def test_validate_counts_held_out_rows_like_a_run_splits_them(datasets_client: TestClient) -> None:
+    """Five rows at 80/10/10 keep one val and one test row, as the run's allocator does."""
+    resp = datasets_client.post(
+        "/datasets/validate",
+        json={"row_count": 5, "fractions": {"train": 0.8, "val": 0.1, "test": 0.1}},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is True
+
+
+def test_validate_rejects_a_split_with_no_held_out_fraction(datasets_client: TestClient) -> None:
+    """A split that sends every row to train has nothing to evaluate on."""
+    resp = datasets_client.post(
+        "/datasets/validate",
+        json={"row_count": 50, "fractions": {"train": 1.0, "val": 0.0, "test": 0.0}},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is False

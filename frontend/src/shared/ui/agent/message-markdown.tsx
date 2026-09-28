@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Check, Clipboard, Play } from "@/shared/ui/icons";
+import { Play } from "@/shared/ui/icons";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
+import { CopyButton } from "@/shared/ui/copy-button";
 
 interface RunCodeContextValue {
   onRunCode?: (code: string, language: string) => void;
@@ -34,12 +35,6 @@ interface CodeBlockProps {
 
 function CodeBlock({ language, rawCode, children }: CodeBlockProps) {
   const { onRunCode } = React.useContext(RunCodeContext);
-  const [copied, setCopied] = React.useState(false);
-  const handleCopy = React.useCallback(() => {
-    void navigator.clipboard.writeText(rawCode);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  }, [rawCode]);
   const langLabel = language || "code";
   return (
     <div
@@ -65,14 +60,7 @@ function CodeBlock({ language, rawCode, children }: CodeBlockProps) {
             </TooltipButton>
           )}
           <TooltipButton tooltip={msg("shared.agent.copy_code")} side="top">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1 rounded-md p-1 text-foreground/50 hover:text-foreground/80 hover:bg-black/[0.04] transition-colors cursor-pointer"
-              aria-label={msg("shared.agent.copy_code")}
-            >
-              {copied ? <Check className="size-3" /> : <Clipboard className="size-3" />}
-            </button>
+            <CopyButton text={rawCode} ariaLabel={msg("shared.agent.copy_code")} />
           </TooltipButton>
         </div>
       </div>

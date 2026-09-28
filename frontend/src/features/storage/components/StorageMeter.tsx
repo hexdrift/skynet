@@ -1,5 +1,6 @@
 "use client";
 
+import { StorageUsageBar } from "@/shared/ui/progress-bar";
 import * as React from "react";
 import Link from "next/link";
 import { HardDrive } from "@/shared/ui/icons";
@@ -84,12 +85,7 @@ export function StorageMeter({ collapsed = false }: { collapsed?: boolean }) {
       aria-label={msg("storage.page.title")}
       className="block min-h-[44px] px-3 pt-3 pb-1 transition-colors duration-150 hover:bg-sidebar-accent/40 lg:min-h-0"
     >
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#E5DDD4]">
-        <div
-          className="h-full rounded-full bg-[#3D2E22]/70 transition-[width] duration-500 ease-out"
-          style={{ width: `${usagePct}%` }}
-        />
-      </div>
+      <StorageUsageBar value={usagePct} over={usage.used_bytes > usage.quota_bytes} />
       <p className="mt-1.5 text-start text-[0.6875rem] text-muted-foreground tabular-nums">
         {usageLabel}
       </p>

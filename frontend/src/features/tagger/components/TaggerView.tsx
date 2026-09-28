@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { registerTutorialHook } from "@/features/tutorial";
 import type { TaggerSessionDetail } from "@/shared/lib/api";
 import { DataHubTabs } from "@/shared/ui/data-hub-tabs";
@@ -54,10 +54,26 @@ export function TaggerView({ initialSession }: { initialSession?: TaggerSessionD
     if (new URLSearchParams(window.location.search).has("dataset")) setStartingNew(true);
   }, []);
 
+  // Remember that the guide (not the user) opened setup, so it can hand the
+  // page back to the chooser when the guide ends.
+  const tourOpenedSetupRef = useRef(false);
   useEffect(
-    () => registerTutorialHook("setTaggerStartingNew", setStartingNew),
+    () =>
+      registerTutorialHook("setTaggerStartingNew", (value) => {
+        tourOpenedSetupRef.current = value;
+        setStartingNew(value);
+      }),
     [],
   );
+  useEffect(() => {
+    const onExit = () => {
+      if (!tourOpenedSetupRef.current) return;
+      tourOpenedSetupRef.current = false;
+      setStartingNew(false);
+    };
+    window.addEventListener("tutorial-exited", onExit);
+    return () => window.removeEventListener("tutorial-exited", onExit);
+  }, []);
 
   if (!initialSession && !startingNew) {
     // The shell leaves /tagger unwrapped for the annotation surfaces; the
@@ -167,6 +183,8 @@ export function TaggerView({ initialSession }: { initialSession?: TaggerSessionD
           rowCount={tagger.data.length}
           estimate={tagger.estimate}
           onFetchEstimate={() => void tagger.fetchEstimate()}
+          generating={tagger.generating}
+          onGenerateDataset={tagger.generateDataset}
           onSend={(content) => void tagger.sendInterviewMessage(content)}
           onEditResend={(index, content) => void tagger.sendInterviewMessage(content, index)}
           onStop={tagger.stopInterview}

@@ -8,6 +8,7 @@ import { deviceClassFromRequest } from "@/shared/lib/device-class";
 import { TooltipProvider } from "@/shared/ui/primitives/tooltip";
 import {
   LocaleProvider,
+  MessagesShim,
   SessionProvider,
   TelemetryProvider,
   ThemeProvider,
@@ -32,11 +33,7 @@ import {
   type Locale,
 } from "@/shared/lib/locale";
 import { serializeLocale, setServerLocale } from "@/shared/lib/runtime-locale";
-import {
-  serializeMessages,
-  setServerMessages,
-  type UiCatalog,
-} from "@/shared/lib/runtime-messages";
+import { setServerMessages, type UiCatalog } from "@/shared/lib/runtime-messages";
 import { buildActiveCatalog } from "@/shared/lib/messages.server";
 import { getSiteUrl } from "@/shared/lib/site-config";
 import { auth } from "@/shared/lib/auth";
@@ -95,7 +92,7 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await resolveRequestLocale();
   setServerLocale(locale);
-  setServerMessages(await resolveActiveCatalog());
+  setServerMessages(await resolveActiveCatalog(), locale);
   const siteDescription = msg("app.meta.description");
   return {
     title: {
@@ -144,8 +141,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await auth();
   const locale = await resolveRequestLocale();
   setServerLocale(locale);
-  const messages = await resolveActiveCatalog();
-  setServerMessages(messages);
+  setServerMessages(await resolveActiveCatalog(), locale);
   // Preload the above-the-fold variable subsets so the fallback→webfont swap
   // window (and its RTL line-box shift) is bounded. react-dom's preload()
   // dedupes to a single hoisted <link> per resource — a raw <link rel=preload> in
@@ -198,10 +194,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             the shims need — and the serializers escape `<` so a value can never
             close the tag. */}
         <script id="skynet-locale" dangerouslySetInnerHTML={{ __html: serializeLocale(locale) }} />
-        <script
-          id="skynet-messages"
-          dangerouslySetInnerHTML={{ __html: serializeMessages(messages) }}
-        />
+        {/* The catalog shim is a client component so the ~300KB payload is not
+            serialized a second time into the RSC Flight data (see MessagesShim). */}
+        <MessagesShim locale={locale} />
         <script
           id="skynet-runtime-env"
           dangerouslySetInnerHTML={{ __html: serializeRuntimeEnv(runtimeEnv) }}

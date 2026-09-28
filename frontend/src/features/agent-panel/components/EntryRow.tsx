@@ -1,5 +1,6 @@
 "use client";
 
+import { OutcomeChip } from "@/shared/ui/outcome-chip";
 import { msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
@@ -15,23 +16,15 @@ import {
 
 function BooleanChip({ value }: { value: boolean }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.625rem] font-medium",
-        value ? "bg-[#3D2E22]/10 text-[#3D2E22]" : "bg-[#9B2C1F]/10 text-[#9B2C1F]",
-      )}
-    >
+    <OutcomeChip tone={value ? "pass" : "neutral"}>
       <span
-        className={cn(
-          "inline-block size-1.5 rounded-full",
-          value ? "bg-[#3D2E22]/70" : "bg-[#9B2C1F]/70",
-        )}
+        className="inline-block size-1.5 rounded-full bg-current opacity-70"
         aria-hidden="true"
       />
       {value
         ? msg("auto.features.agent.panel.lib.entry.row.literal.52")
         : msg("auto.features.agent.panel.lib.entry.row.literal.53")}
-    </span>
+    </OutcomeChip>
   );
 }
 

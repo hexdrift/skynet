@@ -68,7 +68,6 @@ def test_build_returns_none_when_unconfigured(monkeypatch):
     """No LOG_SHIP_URL means no handler and no network."""
     monkeypatch.setattr(settings, "log_ship_url", "")
     assert log_shipping.build_log_ship_handler() is None
-    assert log_shipping.log_shipping_configured() is False
 
 
 def test_flush_ships_serialized_batch_with_token(handler, captured_posts):

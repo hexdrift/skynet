@@ -77,6 +77,7 @@ from ...models.workflow import WORKFLOW_MODULE_NAME
 from ...notifications import notify_job_started
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
+from ...service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION
 from ...service_gateway.safe_exec import validate_signature_code
 from ...storage.dataset_library import DatasetLibraryStore, PostgresDatasetBlobStore
 from ...storage.usage import json_byte_size
@@ -530,6 +531,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
             DomainError: 400 (validation), 409 (quota), 422 (malformed body).
         """
         payload.username = current_user.username
+        payload.split_version = CURRENT_SPLIT_VERSION
 
         normalized_key = (idempotency_key or "").strip() or None
         if normalized_key:
@@ -698,6 +700,7 @@ def create_submissions_router(*, service, job_store) -> APIRouter:
                 (malformed).
         """
         payload.username = current_user.username
+        payload.split_version = CURRENT_SPLIT_VERSION
         _expand_catalog_grid_payload(payload)
 
         normalized_key = (idempotency_key or "").strip() or None

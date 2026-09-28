@@ -34,6 +34,7 @@ from ..optimization.tool_overlay import (
     _apply_tool_name_overrides,
     _assert_tool_set_matches,
 )
+from ..react_compat import native_react_adapter
 from .code import ReactReplyStream, ReasoningStreamListener, _format_agent_error
 from .constants import REASONING_FIELD
 from .generalist import (
@@ -121,6 +122,7 @@ async def _drive_react_chat(
     lm: Any,
     mcp_url: str,
     auth_header: str | None,
+    approval_owner: str | None = None,
 ) -> str:
     """Build a fresh live ReActV2 for this turn, run it, and return the reply.
 
@@ -144,6 +146,8 @@ async def _drive_react_chat(
         mcp_url: Live MCP endpoint to bind the roster to.
         auth_header: Verbatim ``Authorization`` header forwarded to the MCP
             session so tool calls authenticate as the chatting owner.
+        approval_owner: Username pending approvals are bound to, so only the
+            account that opened the stream can confirm them.
 
     Returns:
         The assistant reply assembled from the program's output fields.
@@ -180,6 +184,7 @@ async def _drive_react_chat(
                 emit=emit,
                 outer_loop=outer_loop,
                 needs_approval=_react_needs_approval,
+                approval_owner=approval_owner,
             )
             for tool in tools
         ]
@@ -194,7 +199,10 @@ async def _drive_react_chat(
         input_fields = list(signature_cls.input_fields)
         primary_out = output_fields[0] if output_fields else None
 
-        reply_stream = ReactReplyStream(program, primary_out) if primary_out else None
+        # Served agents always run on the provider's native tool-call channel,
+        # so the stream is built under the adapter the turn will run with.
+        with dspy.context(adapter=native_react_adapter()):
+            reply_stream = ReactReplyStream(program, primary_out) if primary_out else None
         listeners = (
             reply_stream.listeners()
             if reply_stream is not None
@@ -212,7 +220,7 @@ async def _drive_react_chat(
             inputs[input_fields[0]] = user_message
 
         reply_text = ""
-        with dspy.context(lm=lm):
+        with dspy.context(lm=lm, adapter=native_react_adapter()):
             async for chunk in stream_program(**inputs):
                 if isinstance(chunk, dspy.streaming.StreamResponse):
                     if chunk.signature_field_name == REASONING_FIELD:
@@ -241,6 +249,7 @@ async def run_react_chat(
     mcp_url: str,
     auth_header: str | None = None,
     approval_registry: ApprovalRegistry | None = None,
+    approval_owner: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream one chat turn against a served, optimized ReActV2 program.
 
@@ -262,6 +271,8 @@ async def run_react_chat(
             session.
         approval_registry: Registry used for tool-approval coordination;
             defaults to the process-wide singleton.
+        approval_owner: Username of the authenticated caller; pending
+            approvals are keyed to it so no other account can resolve them.
 
     Yields:
         SSE event dicts of shape ``{"event": str, "data": dict}``.
@@ -286,6 +297,7 @@ async def run_react_chat(
             lm=lm,
             mcp_url=mcp_url,
             auth_header=auth_header,
+            approval_owner=approval_owner,
         )
     )
     try:

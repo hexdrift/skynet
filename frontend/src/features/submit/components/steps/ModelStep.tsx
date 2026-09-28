@@ -1,7 +1,7 @@
 "use client";
 
+import { InlineWarningRow } from "@/shared/ui/inline-warning-row";
 import * as React from "react";
-import { Warning } from "@/shared/ui/icons";
 import {
   Card,
   CardContent,
@@ -14,7 +14,6 @@ import { Separator } from "@/shared/ui/primitives/separator";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip, AddModelButton } from "@/shared/ui/model-chip";
-import { useUserPrefs } from "@/features/settings";
 
 import { emptyModelConfig } from "../../constants";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -23,8 +22,6 @@ const MOBILE_MODEL_CHIP_CLASS =
   "min-h-[44px] max-lg:[&_button]:min-h-[44px] max-lg:[&_button]:min-w-[44px] max-lg:[&_button]:opacity-100";
 
 export function ModelStep({ w }: { w: SubmitWizardContext }) {
-  const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
   const {
     jobType,
     modelConfig,
@@ -57,7 +54,7 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5 px-4 sm:px-6">
-        {jobType === "run" || !advanced ? (
+        {jobType === "run" ? (
           <div className="space-y-3" data-tutorial="model-catalog">
             <Label className="text-sm font-semibold">
               {msg("auto.features.submit.components.steps.modelstep.13")}
@@ -100,10 +97,9 @@ export function ModelStep({ w }: { w: SubmitWizardContext }) {
         ) : (
           <div className="space-y-5">
             {catalogEmpty && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[0.75rem] text-amber-700 dark:text-amber-400">
-                <Warning className="mt-0.5 size-3.5 shrink-0" />
-                <span>{msg("auto.features.submit.components.steps.modelstep.14")}</span>
-              </div>
+              <InlineWarningRow
+                message={msg("auto.features.submit.components.steps.modelstep.14")}
+              />
             )}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">

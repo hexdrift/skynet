@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp } from "@/shared/ui/icons";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { Badge } from "@/shared/ui/primitives/badge";
+import { ScorePill } from "@/shared/ui/outcome-chip";
 
 /**
  * Small shared primitives for the agent's read-tool result cards. These render
@@ -112,16 +113,9 @@ export function GainPill({
   const positive = gain.kind === "positive";
   const Icon = positive ? ArrowUp : ArrowDown;
   return (
-    <span
-      dir="ltr"
-      className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-mono text-[0.6875rem] font-medium leading-none tabular-nums"
-      style={{
-        backgroundColor: positive ? "var(--success-dim)" : "var(--danger-dim)",
-        color: positive ? "var(--success)" : "var(--danger)",
-      }}
-    >
+    <ScorePill tone={positive ? "gain" : "loss"}>
       <Icon className="size-2.5" aria-hidden="true" />
       {gain.text}
-    </span>
+    </ScorePill>
   );
 }

@@ -27,6 +27,31 @@ test("progress events drive the running-job stage", () => {
   assert.equal(at("dataset_splits_ready"), "baseline");
 });
 
+test("the final evaluation reports as evaluating until its result lands", () => {
+  const running = (events: ProgressEvent[]) => job({ status: "running", progress_events: events });
+  assert.equal(
+    detectStage(running([ev("optimizer_progress"), ev("evaluation_started")])),
+    "evaluating",
+  );
+  assert.equal(detectStage(running([ev("evaluation_started"), ev("optimized_evaluated")])), "done");
+  const pair = [
+    ev("dataset_splits_ready"),
+    ev("grid_pair_started", { pair_index: 1 }),
+    ev("evaluation_started", { pair_index: 1 }),
+  ];
+  assert.equal(detectPairStage(running(pair), 1), "evaluating");
+  assert.equal(detectPairStage(running(pair), 0), "baseline");
+});
+
+test("a run without a test split goes straight from the split to optimizing", () => {
+  const split = (test_examples: number) =>
+    ev("dataset_splits_ready", { train_examples: 8, val_examples: 2, test_examples });
+  const at = (test_examples: number) =>
+    detectStage(job({ status: "running", progress_events: [split(test_examples)] }));
+  assert.equal(at(0), "optimizing");
+  assert.equal(at(3), "baseline");
+});
+
 test("a running job with no events falls back to tqdm hints, then to splitting", () => {
   assert.equal(detectStage(job({ status: "running", latest_metrics: { tqdm_percent: 40 } })), "optimizing");
   assert.equal(detectStage(job({ status: "running" })), "splitting");

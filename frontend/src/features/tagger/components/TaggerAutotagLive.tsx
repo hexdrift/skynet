@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { ProgressBar } from "@/shared/ui/progress-bar";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CaretLeft, CaretRight, CircleNotch } from "@/shared/ui/icons";
 import { AgentPillDock } from "@/features/agent-panel";
 import { Button } from "@/shared/ui/primitives/button";
@@ -8,6 +9,7 @@ import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
 import { cn } from "@/shared/lib/utils";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 import { FieldsView } from "./TaggerAnnotation";
 import type { Annotation, DataRow, TaggerConfig } from "../lib/types";
 import { isBinaryNo, isBinaryYes } from "../lib/types";
@@ -80,14 +82,31 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
     frontier = i;
   }
   const shown = Math.min(cursor ?? frontier, Math.max(0, data.length - 1));
+  const navigate = useCallback(
+    (dir: 1 | -1) => {
+      const next = Math.max(0, Math.min(shown + dir, frontier));
+      setCursor(next >= frontier ? null : next);
+    },
+    [shown, frontier],
+  );
+
+  // Arrows step rows from anywhere on this read-only surface, following the
+  // prev/next buttons' direction in either locale.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const step = arrowPageStep(event, rtl);
+      if (step === 0) return;
+      event.preventDefault();
+      navigate(step);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate, rtl]);
+
   const item = data[shown];
   if (!item) return null;
   const ann = annotations[String(item.id)];
   const labeled = hasLabel(ann, config.mode);
-  const navigate = (dir: 1 | -1) => {
-    const next = Math.max(0, Math.min(shown + dir, frontier));
-    setCursor(next >= frontier ? null : next);
-  };
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]">
@@ -99,12 +118,7 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
         <span className="hidden min-w-0 truncate text-xs text-muted-foreground xl:block">
           {msg("tagger.assist.autotag.running_subtitle")}
         </span>
-        <div className="h-1 min-w-16 flex-1 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${pct}%`, background: "var(--gradient-progress)" }}
-          />
-        </div>
+        <ProgressBar value={pct} tone="ai" size="sm" className="w-auto min-w-16 flex-1" />
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           <span className="font-semibold text-primary">{done}</span>/{total}
         </span>
@@ -151,7 +165,7 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
                     className={cn(
                       "flex flex-1 items-center justify-center rounded-xl border text-base font-medium",
                       isBinaryYes(ann)
-                        ? "border-emerald-600/40 bg-emerald-600/15 text-emerald-700"
+                        ? "border-[var(--success-border)] bg-[var(--success-dim)] text-[var(--success)]"
                         : "border-border/50 text-muted-foreground/50",
                     )}
                   >
@@ -161,7 +175,7 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
                     className={cn(
                       "flex flex-1 items-center justify-center rounded-xl border text-base font-medium",
                       isBinaryNo(ann)
-                        ? "border-red-500/40 bg-red-500/15 text-red-600"
+                        ? "border-[var(--danger-border)] bg-[var(--danger-dim)] text-[var(--danger)]"
                         : "border-border/50 text-muted-foreground/50",
                     )}
                   >
@@ -214,7 +228,7 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
             variant="outline"
             onClick={() => navigate(-1)}
             disabled={shown === 0}
-            className="min-h-[44px] w-full gap-2 sm:w-auto max-lg:landscape:w-auto lg:min-h-0"
+            className="w-full gap-2 sm:w-auto max-lg:landscape:w-auto"
           >
             <PrevIcon className="size-4" />
             {msg("auto.features.tagger.components.taggerannotation.8")}
@@ -247,7 +261,7 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
             variant="outline"
             onClick={() => navigate(1)}
             disabled={shown >= frontier}
-            className="col-start-2 row-start-1 min-h-[44px] w-full gap-2 sm:col-auto sm:row-auto sm:w-auto max-lg:landscape:w-auto lg:min-h-0"
+            className="col-start-2 row-start-1 w-full gap-2 sm:col-auto sm:row-auto sm:w-auto max-lg:landscape:w-auto"
           >
             {msg("auto.features.tagger.components.taggerannotation.13")}
             <NextIcon className="size-4" />

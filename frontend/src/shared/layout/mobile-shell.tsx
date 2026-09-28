@@ -7,12 +7,10 @@ import { Compass, House, UserCircle, type Icon } from "@/shared/ui/icons";
 import { GlobalSearch } from "@/shared/layout/global-search";
 import { AccountMenu } from "@/shared/layout/account-menu";
 import { PageContainer } from "@/shared/layout/page-container";
-import { DesktopOnlyNotice } from "@/shared/layout/desktop-only-notice";
 import { useLocale } from "@/shared/providers";
 import { dirForLocale } from "@/shared/lib/locale";
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
-import { isDesktopOnlyPath } from "@/shared/lib/device-class";
 import { JobsStreamProvider } from "@/shared/hooks/use-jobs-stream";
 import {
   AgentPillDock,
@@ -54,8 +52,8 @@ function TabLink({
 /**
  * The phone shell (viewport ≤767px): a slim top bar (wordmark + search), the
  * page, and a three-tab bottom bar — Home, Explore, Account. No sidebar, no
- * ambient orbs, no tutorial chrome: phones are for checking on runs, not for
- * authoring them, so desktop-only routes render the notice in place of the page.
+ * ambient orbs, no tutorial chrome. Every route remains accessible; authoring
+ * surfaces share the desktop web implementation.
  * Providers mirror the desktop shell so streams and the agent panel behave the
  * same on both.
  */
@@ -91,9 +89,7 @@ export function MobileShell({ children }: { children: React.ReactNode }) {
         className="min-w-0 flex-1 pt-[var(--header-height)] pb-[var(--tabbar-height)]"
         dir={dir}
       >
-        <PageContainer>
-          {isDesktopOnlyPath(pathname) ? <DesktopOnlyNotice /> : children}
-        </PageContainer>
+        <PageContainer>{children}</PageContainer>
       </main>
 
       {/* The agent's floating pill defaults to the viewport corner, which the tab

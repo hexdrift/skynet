@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import type { ReactNode } from "react";
 import { ChatText, Pulse, Timer } from "@/shared/ui/icons";
 import { FadeIn } from "@/shared/ui/motion";
@@ -124,7 +125,7 @@ function StageRow({
   hasReflection: boolean;
 }) {
   return (
-    <tr className="border-t border-border/40 transition-colors hover:bg-muted/30">
+    <tr className="border-t border-border/60 transition-colors duration-150 hover:bg-muted/50">
       <th
         scope="row"
         className="px-3 py-2.5 text-start text-sm font-medium text-foreground whitespace-nowrap"
@@ -198,7 +199,7 @@ function SubHeader({
   return (
     <th
       scope="col"
-      className={`px-3 pb-2 pt-1 text-end text-[11px] font-medium uppercase tracking-wide text-muted-foreground whitespace-nowrap ${
+      className={`px-3 pb-2 pt-1 text-end text-[0.75rem] font-semibold text-muted-foreground whitespace-nowrap ${
         groupStart ? "border-s border-border/50" : ""
       }`}
     >
@@ -311,18 +312,19 @@ export function LMActivityTab({ lmActivity }: { lmActivity: LMActivity | null | 
         </header>
         <div className="px-6 pb-5">
           {!hasAnyCalls ? (
-            <p className="text-sm text-muted-foreground">
-              {msg("auto.features.optimizations.components.lmactivitytab.no_data")}
-            </p>
+            <EmptyState
+              variant="list"
+              title={msg("auto.features.optimizations.components.lmactivitytab.no_data")}
+            />
           ) : (
             <div className="overflow-x-auto -mx-2 px-2">
               <table className="guide-table w-full text-sm">
                 <thead>
-                  <tr className="bg-muted/20">
+                  <tr className="bg-muted/40">
                     <th
                       scope="col"
                       rowSpan={2}
-                      className="px-3 py-2 text-start text-[11px] font-semibold uppercase tracking-wide text-muted-foreground align-bottom whitespace-nowrap"
+                      className="px-3 py-2 text-start text-[0.75rem] font-semibold text-muted-foreground align-bottom whitespace-nowrap"
                     >
                       <span className="sr-only">{stageLabel}</span>
                     </th>
@@ -343,7 +345,7 @@ export function LMActivityTab({ lmActivity }: { lmActivity: LMActivity | null | 
                       </th>
                     )}
                   </tr>
-                  <tr className="bg-muted/20">
+                  <tr className="bg-muted/40">
                     <SubHeader
                       tipKey="lm_activity.cell.calls"
                       icon={callsIcon}

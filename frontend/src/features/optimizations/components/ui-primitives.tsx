@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain, CaretDown, Check, Clipboard } from "@/shared/ui/icons";
-import { formatMsg, msg } from "@/shared/lib/messages";
-import { perLocale } from "@/shared/lib/per-locale";
+import { Brain, CaretDown, Check } from "@/shared/ui/icons";
+import { formatMsg } from "@/shared/lib/messages";
+import { effortLabel } from "@/shared/lib/model-efforts";
 
 export function InfoCard({
   label,
@@ -30,11 +30,11 @@ export function InfoCard({
             {icon}
           </span>
         )}
-        <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680] truncate">
+        <p className="truncate text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
           {label}
         </p>
       </div>
-      <p className="text-sm font-semibold text-[#1C1612] truncate">
+      <p className="text-sm font-semibold text-foreground truncate">
         {value ?? <span className="text-[#BFB3A3] font-normal">—</span>}
       </p>
     </motion.div>
@@ -116,18 +116,9 @@ export function LangPicker<T extends string>({
   );
 }
 
-const REASONING_EFFORT_LABELS = perLocale(
-  (): Record<string, string> => ({
-    minimal: msg("optimizations.reasoning_effort.minimal"),
-    low: msg("optimizations.reasoning_effort.low"),
-    medium: msg("optimizations.reasoning_effort.medium"),
-    high: msg("optimizations.reasoning_effort.high"),
-  }),
-);
-
 function reasoningEffortLabel(value: string | null | undefined): string | null {
   if (!value) return null;
-  return REASONING_EFFORT_LABELS[value.toLowerCase()] ?? value;
+  return effortLabel(value.toLowerCase());
 }
 
 export function ReasoningPill({
@@ -150,28 +141,5 @@ export function ReasoningPill({
       <Brain className={iconSize} />
       {label}
     </span>
-  );
-}
-
-export function CopyButton({ text, className = "" }: { text: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className={`inline-flex size-[44px] items-center justify-center cursor-pointer transition-opacity duration-200 outline-none border-none shadow-none ring-0 bg-transparent hover:opacity-100 sm:size-auto sm:p-1.5 [@media(hover:none)_and_(pointer:coarse)]:size-[44px] [@media(hover:none)_and_(pointer:coarse)]:p-0 ${className}`}
-      title={msg("auto.features.optimizations.components.ui.primitives.literal.1")}
-      aria-label={msg("auto.features.optimizations.components.ui.primitives.literal.2")}
-    >
-      {copied ? (
-        <Check className="size-3.5 text-foreground/70" />
-      ) : (
-        <Clipboard className="size-3.5 text-foreground/40 hover:text-foreground/70" />
-      )}
-    </button>
   );
 }

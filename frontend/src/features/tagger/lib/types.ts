@@ -22,6 +22,19 @@ export interface TaggerConfig {
   assistMode?: TaggerAssistMode;
   /** Display name of the dataset the session was created from. */
   sourceName?: string;
+  /**
+   * The session was created without data: the interview specifies the
+   * dataset and the rows are generated from that specification before
+   * labeling starts. ``inputColumns`` stays empty until then.
+   */
+  synthetic?: boolean;
+}
+
+/** What the interview decided the synthetic dataset should be. */
+export interface DatasetSpec {
+  brief: string;
+  columns: string[];
+  rows: number;
 }
 
 export interface DataField {
@@ -124,4 +137,6 @@ export interface AssistState {
    * provisional-mode sessions this also carries the inferred answer style.
    */
   taskOverride?: Partial<Pick<TaggerConfig, "mode" | "question" | "categories" | "prompt">>;
+  /** The interview's dataset specification on synthetic sessions. */
+  datasetSpec?: DatasetSpec;
 }

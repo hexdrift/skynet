@@ -17,7 +17,6 @@ BYOK_PROVIDER_SLUGS: tuple[tuple[str, str], ...] = (
     ("deepseek", "deepseek"),
     ("xai", "xai"),
     ("together", "together_ai"),
-    ("openrouter", "openrouter"),
     ("cerebras", "cerebras"),
     ("fireworks", "fireworks_ai"),
     ("cohere", "cohere_chat"),

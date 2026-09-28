@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import * as React from "react";
 import Link from "next/link";
 import { CheckCircle, PushPin } from "@/shared/ui/icons";
@@ -49,7 +50,9 @@ function buildSummary(data: TaggingListResult | null, isRunning: boolean): strin
   if (isRunning || !data) return null;
   const total = data.total ?? data.items?.length ?? 0;
   if (total === 0) return msg("auto.features.agent.panel.components.taggingsessionscard.empty");
-  return formatMsg("auto.features.agent.panel.components.taggingsessionscard.summary", { p1: total });
+  return formatMsg("auto.features.agent.panel.components.taggingsessionscard.summary", {
+    p1: total,
+  });
 }
 
 /**
@@ -70,9 +73,11 @@ export function TaggingSessionsCard({ call }: TaggingSessionsCardProps) {
 
   const customBody =
     items.length === 0 ? (
-      <div className="text-[0.75rem] italic text-muted-foreground/70">
-        {msg("auto.features.agent.panel.components.taggingsessionscard.empty")}
-      </div>
+      <EmptyState
+        variant="compact"
+        title={msg("auto.features.agent.panel.components.taggingsessionscard.empty")}
+        className="gap-1 px-3 py-3"
+      />
     ) : (
       <div className="space-y-2">
         <ul className="divide-y divide-border/40">
@@ -81,7 +86,10 @@ export function TaggingSessionsCard({ call }: TaggingSessionsCardProps) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   {s.pinned && (
-                    <PushPin className="size-2.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+                    <PushPin
+                      className="size-2.5 shrink-0 text-muted-foreground/50"
+                      aria-hidden="true"
+                    />
                   )}
                   {s.id ? (
                     <Link
@@ -92,7 +100,10 @@ export function TaggingSessionsCard({ call }: TaggingSessionsCardProps) {
                       {s.name?.trim() || s.id.slice(0, 8)}
                     </Link>
                   ) : (
-                    <span dir="auto" className="min-w-0 truncate text-[0.75rem] font-medium text-foreground/90">
+                    <span
+                      dir="auto"
+                      className="min-w-0 truncate text-[0.75rem] font-medium text-foreground/90"
+                    >
                       {s.name?.trim() || "—"}
                     </span>
                   )}

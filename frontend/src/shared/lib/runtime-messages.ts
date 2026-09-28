@@ -25,6 +25,13 @@
  *   whole catalog through a `LocaleProvider` prop, which duplicated it in the
  *   serialized Flight payload.
  *
+ * The window shim itself is rendered by `MessagesShim` (a client component that
+ * takes only the locale as a prop) rather than by the layout: a `<script>` in
+ * Server Component output is serialized into the Flight payload as well as the
+ * HTML, which shipped the whole catalog twice per page. During SSR the shim
+ * looks its catalog up by locale in `__SKYNET_PUBLISHED_CATALOGS__`, so a
+ * concurrent request in another language can never swap it.
+ *
  * The merge across the fallback chain happens once, server-side (see
  * `messages.server.ts`); the value here is already a flat, complete map.
  */
@@ -39,6 +46,8 @@ declare global {
   }
   // Request-scoped catalog for SSR of client components (see module docstring).
   var __SKYNET_REQUEST_MESSAGES__: UiCatalog | undefined;
+  // Every catalog the layout has pinned, keyed by locale, for `MessagesShim`.
+  var __SKYNET_PUBLISHED_CATALOGS__: Record<string, UiCatalog> | undefined;
 }
 
 let clientMessages: UiCatalog | null = null;
@@ -58,11 +67,21 @@ function getServerSlot(): { current: UiCatalog | null } {
  * Pin the active catalog for the current server request. Call once at the top of
  * the root layout (and `generateMetadata`) before any descendant resolves a
  * message. Sets both the RSC-graph `cache()` slot (read by Server Components,
- * race-free) and the `globalThis` value SSR of client components reads.
+ * race-free) and the `globalThis` value SSR of client components reads, and
+ * publishes the catalog under its locale for `MessagesShim`.
  */
-export function setServerMessages(catalog: UiCatalog): void {
+export function setServerMessages(catalog: UiCatalog, locale: string): void {
   getServerSlot().current = catalog;
   globalThis.__SKYNET_REQUEST_MESSAGES__ = catalog;
+  (globalThis.__SKYNET_PUBLISHED_CATALOGS__ ??= {})[locale] = catalog;
+}
+
+/**
+ * Catalog the layout pinned for `locale`, for SSR of the window shim. Empty
+ * until the root layout of a request in that locale has run.
+ */
+export function getPublishedCatalog(locale: string): UiCatalog {
+  return globalThis.__SKYNET_PUBLISHED_CATALOGS__?.[locale] ?? {};
 }
 
 /**

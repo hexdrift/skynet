@@ -19,6 +19,7 @@ import type {
 import type {
   DashboardAnalytics,
   DashboardAnalyticsJob,
+  DatasetSummary,
   PublicDashboardPoint,
 } from "@/shared/lib/api";
 import { layoutTrajectory, type CandidateMetrics } from "@/features/trajectory";
@@ -328,7 +329,7 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
     {
       timestamp: ts(start, 4200),
       event: "baseline_evaluated",
-      metrics: { baseline_test_metric: 0.62 },
+      metrics: { baseline_test_metric: 62 },
     },
   ];
   if (trialsDone > 0) {
@@ -422,7 +423,7 @@ function buildOptimizing(start: Date, trialsDone: number): OptimizationStatusRes
     status: "running",
     elapsed_seconds: elapsed,
     elapsed: fmtElapsed(elapsed),
-    baseline_test_metric: 0.62,
+    baseline_test_metric: 62,
     progress_events: events,
     logs,
     latest_metrics: {
@@ -449,13 +450,13 @@ function buildDone(start: Date): OptimizationStatusResponse {
     {
       timestamp: ts(start, 4200),
       event: "baseline_evaluated",
-      metrics: { baseline_test_metric: 0.62 },
+      metrics: { baseline_test_metric: 62 },
     },
     { timestamp: ts(start, 5000), event: "optimizer_progress", metrics: {} },
     {
       timestamp: ts(start, 9500),
       event: "optimized_evaluated",
-      metrics: { optimized_test_metric: 0.84 },
+      metrics: { optimized_test_metric: 84 },
     },
   ];
 
@@ -579,9 +580,9 @@ function buildDone(start: Date): OptimizationStatusResponse {
     elapsed_seconds: elapsed,
     elapsed: fmtElapsed(elapsed),
     completed_at: new Date().toISOString(),
-    baseline_test_metric: 0.62,
-    optimized_test_metric: 0.84,
-    metric_improvement: 0.22,
+    baseline_test_metric: 62,
+    optimized_test_metric: 84,
+    metric_improvement: 22,
     progress_events: events,
     logs,
     latest_metrics: {
@@ -595,9 +596,9 @@ function buildDone(start: Date): OptimizationStatusResponse {
     result: {
       module_name: "Predict",
       optimizer_name: "GEPA",
-      baseline_test_metric: 0.62,
-      optimized_test_metric: 0.84,
-      metric_improvement: 0.22,
+      baseline_test_metric: 62,
+      optimized_test_metric: 84,
+      metric_improvement: 22,
       runtime_seconds: elapsed,
       num_lm_calls: 156,
       split_counts: { train: 120, val: 40, test: 40 },
@@ -630,7 +631,7 @@ function buildDone(start: Date): OptimizationStatusResponse {
             },
           ],
           formatted_prompt:
-            "Classify each email as spam, important, or promotional.\n\nInput: {email_text}\nOutput: {category}",
+            "Classify each email as spam, important, or promotional. Use the message's intent, urgency, and requested action; do not classify from isolated keywords alone.\n\nInput: {email_text}\nOutput: {category}",
         },
       },
     },
@@ -668,6 +669,13 @@ let _simulationCompleted = false;
 /** Reset the completed flag so the next visit re-runs the simulation. */
 export function resetDemoSimulation() {
   _simulationCompleted = false;
+}
+
+/** Mark the demo run finished; returns false when it already was. */
+export function finishDemoSimulation(): boolean {
+  if (_simulationCompleted) return false;
+  _simulationCompleted = true;
+  return true;
 }
 
 export interface StartDemoSimulationOptions {
@@ -765,6 +773,27 @@ function daysAgo(n: number): string {
   return d.toISOString();
 }
 
+export const DEMO_DATASET_ID = "tutorial-dataset-001";
+
+/** One owned dataset for the data guide, so the library has a card to select. */
+export function getDemoDatasets(): DatasetSummary[] {
+  return [
+    {
+      id: DEMO_DATASET_ID,
+      name: "customer_reviews",
+      source: "upload",
+      row_count: 1200,
+      column_count: 3,
+      byte_size: 184_320,
+      content_hash: "tutorial-demo",
+      owner_username: "you",
+      role: "owner",
+      created_at: daysAgo(6),
+      updated_at: daysAgo(1),
+    },
+  ];
+}
+
 const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
   {
     optimization_id: "demo-001",
@@ -780,9 +809,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "GEPA",
     model_name: "gpt-4o-mini",
     dataset_rows: 200,
-    baseline_test_metric: 0.62,
-    optimized_test_metric: 0.84,
-    metric_improvement: 0.22,
+    baseline_test_metric: 62,
+    optimized_test_metric: 84,
+    metric_improvement: 22,
     username: "demo",
   },
   {
@@ -799,9 +828,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "GEPA",
     model_name: "gpt-4o",
     dataset_rows: 350,
-    baseline_test_metric: 0.71,
-    optimized_test_metric: 0.89,
-    metric_improvement: 0.18,
+    baseline_test_metric: 71,
+    optimized_test_metric: 89,
+    metric_improvement: 18,
     username: "demo",
   },
   {
@@ -824,9 +853,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "GEPA",
     model_name: "gpt-4o-mini",
     dataset_rows: 150,
-    baseline_test_metric: 0.48,
-    optimized_test_metric: 0.86,
-    metric_improvement: 0.38,
+    baseline_test_metric: 48,
+    optimized_test_metric: 86,
+    metric_improvement: 38,
     username: "demo",
     total_pairs: 4,
     completed_pairs: 4,
@@ -860,7 +889,7 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "GEPA",
     model_name: "gpt-4o-mini",
     dataset_rows: 120,
-    baseline_test_metric: 0.48,
+    baseline_test_metric: 48,
     username: "demo",
     latest_metrics: { tqdm_percent: 45, tqdm_n: 4, tqdm_total: 9 },
   },
@@ -878,9 +907,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "MIPROv2",
     model_name: "claude-sonnet-4",
     dataset_rows: 280,
-    baseline_test_metric: 0.66,
-    optimized_test_metric: 0.83,
-    metric_improvement: 0.17,
+    baseline_test_metric: 66,
+    optimized_test_metric: 83,
+    metric_improvement: 17,
     username: "demo",
   },
   {
@@ -897,9 +926,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "BootstrapFewShot",
     model_name: "claude-haiku-4",
     dataset_rows: 180,
-    baseline_test_metric: 0.51,
-    optimized_test_metric: 0.74,
-    metric_improvement: 0.23,
+    baseline_test_metric: 51,
+    optimized_test_metric: 74,
+    metric_improvement: 23,
     username: "demo",
   },
   {
@@ -916,9 +945,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "MIPROv2",
     model_name: "gemini-2.0-pro",
     dataset_rows: 220,
-    baseline_test_metric: 0.58,
-    optimized_test_metric: 0.79,
-    metric_improvement: 0.21,
+    baseline_test_metric: 58,
+    optimized_test_metric: 79,
+    metric_improvement: 21,
     username: "demo",
   },
   {
@@ -935,9 +964,9 @@ const DEMO_JOBS: OptimizationSummaryResponse[] = perLocale(() => [
     optimizer_name: "BootstrapFewShot",
     model_name: "claude-sonnet-4",
     dataset_rows: 250,
-    baseline_test_metric: 0.6,
-    optimized_test_metric: 0.78,
-    metric_improvement: 0.18,
+    baseline_test_metric: 60,
+    optimized_test_metric: 78,
+    metric_improvement: 18,
     username: "demo",
   },
 ]);
@@ -959,67 +988,103 @@ function toAnalyticsJob(j: OptimizationSummaryResponse): DashboardAnalyticsJob {
   };
 }
 
-export const DEMO_DASHBOARD_JOBS: PaginatedJobsResponse = perLocale(() => ({
+const DEMO_DASHBOARD_JOBS: PaginatedJobsResponse = perLocale(() => ({
   items: DEMO_JOBS,
   total: DEMO_JOBS.length,
   limit: 20,
   offset: 0,
 }));
 
-export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = perLocale(() => ({
+const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = perLocale(() => ({
   filtered_total: DEMO_JOBS.length,
   status_counts: { success: 7, failed: 1, running: 1 },
   optimizer_counts: { GEPA: 5, MIPROv2: 2, BootstrapFewShot: 2 },
   job_type_counts: { run: 8, grid_search: 1 },
-  model_usage: [
-    { name: "gpt-4o-mini", value: 3 },
-    { name: "gpt-4o", value: 2 },
-    { name: "claude-sonnet-4", value: 2 },
-    { name: "claude-haiku-4", value: 1 },
-    { name: "gemini-2.0-pro", value: 1 },
-  ],
   owner_usage: [],
   access_usage: [],
+  module_counts: { Predict: 5, ChainOfThought: 3, ReAct: 1 },
   success_count: 7,
   failed_count: 1,
   running_count: 1,
   terminal_count: 8,
-  success_rate: 87.5,
-  avg_improvement: 0.22,
+  success_rate: 0.875,
+  avg_improvement: 22,
+  median_improvement: 21,
+  best_improvement: 38,
   avg_runtime_seconds: 222,
   total_dataset_rows: 1830,
   total_pairs_run: 4,
   grid_search_count: 1,
   single_run_count: 8,
-  best_improvement: 0.38,
-  improvement_by_optimizer: [
-    { name: "GEPA", average: 0.26, count: 3 },
-    { name: "MIPROv2", average: 0.19, count: 2 },
-    { name: "BootstrapFewShot", average: 0.205, count: 2 },
+  improvement_histogram: [
+    { lower: null, upper: 0, count: 0, avg_improvement: null },
+    { lower: 0, upper: 5, count: 0, avg_improvement: null },
+    { lower: 5, upper: 10, count: 1, avg_improvement: null },
+    { lower: 10, upper: 20, count: 2, avg_improvement: null },
+    { lower: 20, upper: 30, count: 3, avg_improvement: null },
+    { lower: 30, upper: null, count: 1, avg_improvement: null },
   ],
-  runtime_minutes_by_optimizer: [
-    { name: "GEPA", average: 3.45, count: 5 },
-    { name: "MIPROv2", average: 4.03, count: 2 },
-    { name: "BootstrapFewShot", average: 3.98, count: 2 },
+  runtime_histogram: [
+    { lower: null, upper: 1, count: 0, avg_improvement: null },
+    { lower: 1, upper: 3, count: 3, avg_improvement: null },
+    { lower: 3, upper: 5, count: 4, avg_improvement: null },
+    { lower: 5, upper: 10, count: 1, avg_improvement: null },
+    { lower: 10, upper: null, count: 0, avg_improvement: null },
   ],
-  top_improvement: DEMO_JOBS.filter((j) => j.metric_improvement).map(toAnalyticsJob),
-  runtime_distribution: DEMO_JOBS.filter((j) => j.elapsed_seconds).map(toAnalyticsJob),
-  dataset_vs_improvement: DEMO_JOBS.filter((j) => j.metric_improvement).map(toAnalyticsJob),
-  efficiency: DEMO_JOBS.filter((j) => j.metric_improvement).map(toAnalyticsJob),
+  dataset_size_buckets: [
+    { lower: null, upper: 100, count: 2, avg_improvement: 14 },
+    { lower: 100, upper: 250, count: 4, avg_improvement: 23 },
+    { lower: 250, upper: 500, count: 2, avg_improvement: 29 },
+    { lower: 500, upper: null, count: 1, avg_improvement: 31 },
+  ],
+  optimizer_stats: [
+    {
+      name: "GEPA",
+      count: 5,
+      success_count: 4,
+      success_rate: 0.8,
+      avg_improvement: 26,
+      avg_runtime_minutes: 3.45,
+    },
+    {
+      name: "MIPROv2",
+      count: 2,
+      success_count: 2,
+      success_rate: 1,
+      avg_improvement: 19,
+      avg_runtime_minutes: 4.03,
+    },
+    {
+      name: "BootstrapFewShot",
+      count: 2,
+      success_count: 1,
+      success_rate: 0.5,
+      avg_improvement: 20.5,
+      avg_runtime_minutes: 3.98,
+    },
+  ],
+  model_stats: [
+    { name: "gpt-4o-mini", count: 3, success_count: 3, success_rate: 1, avg_improvement: 24 },
+    { name: "gpt-4o", count: 2, success_count: 2, success_rate: 1, avg_improvement: 27 },
+    { name: "claude-sonnet-4", count: 2, success_count: 1, success_rate: 0.5, avg_improvement: 18 },
+    { name: "claude-haiku-4", count: 1, success_count: 1, success_rate: 1, avg_improvement: 12 },
+    { name: "gemini-2.0-pro", count: 1, success_count: 0, success_rate: 0, avg_improvement: null },
+  ],
   top_jobs_by_improvement: DEMO_JOBS.filter((j) => j.metric_improvement)
     .sort((a, b) => (b.metric_improvement ?? 0) - (a.metric_improvement ?? 0))
     .map(toAnalyticsJob),
   timeline: [
-    { date: daysAgo(15).slice(0, 10), count: 1 },
-    { date: daysAgo(12).slice(0, 10), count: 1 },
-    { date: daysAgo(9).slice(0, 10), count: 1 },
-    { date: daysAgo(7).slice(0, 10), count: 1 },
-    { date: daysAgo(5).slice(0, 10), count: 1 },
-    { date: daysAgo(3).slice(0, 10), count: 1 },
-    { date: daysAgo(2).slice(0, 10), count: 1 },
-    { date: daysAgo(1).slice(0, 10), count: 1 },
-    { date: daysAgo(0).slice(0, 10), count: 1 },
+    { date: daysAgo(15).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(12).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(9).slice(0, 10), count: 1, success_count: 0, failed_count: 1 },
+    { date: daysAgo(7).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(5).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(3).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(2).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(1).slice(0, 10), count: 1, success_count: 1, failed_count: 0 },
+    { date: daysAgo(0).slice(0, 10), count: 1, success_count: 0, failed_count: 0 },
   ],
+  timeline_granularity: "day",
   available_optimizers: ["GEPA", "MIPROv2", "BootstrapFewShot"],
   available_models: [
     "gpt-4o-mini",
@@ -1028,6 +1093,7 @@ export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = perLocale(() => ({
     "claude-haiku-4",
     "gemini-2.0-pro",
   ],
+  truncated: false,
 }));
 
 const gridTaskName = () => msg("auto.features.tutorial.lib.demo.data.literal.17");
@@ -1163,8 +1229,8 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
     gridPair(0, {
       genModel: "openai/gpt-4o-mini",
       refModel: "openai/gpt-4o-mini",
-      baseline: 0.48,
-      optimized: 0.74,
+      baseline: 48,
+      optimized: 74,
       runtime: 180,
       numLmCalls: 82,
       avgMs: 260,
@@ -1172,8 +1238,8 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
     gridPair(1, {
       genModel: "openai/gpt-4o-mini",
       refModel: "openai/gpt-4o",
-      baseline: 0.48,
-      optimized: 0.82,
+      baseline: 48,
+      optimized: 82,
       runtime: 245,
       numLmCalls: 96,
       avgMs: 320,
@@ -1181,8 +1247,8 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
     gridPair(2, {
       genModel: "openai/gpt-4o",
       refModel: "openai/gpt-4o-mini",
-      baseline: 0.48,
-      optimized: 0.77,
+      baseline: 48,
+      optimized: 77,
       runtime: 230,
       numLmCalls: 94,
       avgMs: 420,
@@ -1190,8 +1256,8 @@ export function buildGridDemoJob(): OptimizationStatusResponse {
     gridPair(3, {
       genModel: "openai/gpt-4o",
       refModel: "openai/gpt-4o",
-      baseline: 0.48,
-      optimized: 0.86,
+      baseline: 48,
+      optimized: 86,
       runtime: 380,
       numLmCalls: 118,
       avgMs: 650,
@@ -1336,7 +1402,7 @@ function buildExploreDemoPoints(): PublicDashboardPoint[] {
   return points;
 }
 
-export const DEMO_EXPLORE_POINTS: PublicDashboardPoint[] = perLocale(buildExploreDemoPoints);
+const DEMO_EXPLORE_POINTS: PublicDashboardPoint[] = perLocale(buildExploreDemoPoints);
 
 /**
  * Cached “real” data layer.
@@ -1422,14 +1488,4 @@ export function getCachedDemoExplorePoints(): PublicDashboardPoint[] {
   const cached = readTutorialCache<PublicDashboardPoint[]>("explore-points");
   if (cached && Array.isArray(cached)) return cached;
   return plain;
-}
-
-export function primeTutorialCacheFromLiveData(opts?: {
-  jobs?: PaginatedJobsResponse;
-  analytics?: DashboardAnalytics;
-  explorePoints?: PublicDashboardPoint[];
-}): void {
-  if (opts?.jobs) writeTutorialCache("dashboard-jobs", opts.jobs);
-  if (opts?.analytics) writeTutorialCache("dashboard-analytics", opts.analytics);
-  if (opts?.explorePoints) writeTutorialCache("explore-points", opts.explorePoints);
 }

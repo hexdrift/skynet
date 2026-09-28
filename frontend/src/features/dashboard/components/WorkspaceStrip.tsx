@@ -1,5 +1,6 @@
 "use client";
 
+import { StorageUsageBar } from "@/shared/ui/progress-bar";
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import Link from "next/link";
 import { CaretRight, Database, Tag } from "@/shared/ui/icons";
@@ -207,9 +208,12 @@ export function WorkspaceStrip() {
           ))
         )}
         <div className="mt-1 flex items-center gap-2">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary/50" style={{ width: `${usagePct}%` }} />
-          </div>
+          <StorageUsageBar
+            value={usagePct}
+            over={datasets.usage.used_bytes > datasets.usage.quota_bytes}
+            size="sm"
+            className="w-auto flex-1"
+          />
           <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" dir="ltr">
             {formatBytes(datasets.usage.used_bytes)} / {formatBytes(datasets.usage.quota_bytes)}
           </span>

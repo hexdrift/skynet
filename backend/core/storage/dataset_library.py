@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -246,23 +246,6 @@ class DatasetLibraryStore:
         """
         self._engine = engine
         self._blobs = blob_store
-
-    def used_bytes(self, owner_username: str) -> int:
-        """Return the owner's total compressed library size for quota checks.
-
-        Args:
-            owner_username: Lowercased dataset owner.
-
-        Returns:
-            The sum of ``stored_bytes`` across the owner's datasets (0 when none).
-        """
-        with Session(self._engine) as session:
-            total = session.scalar(
-                select(func.coalesce(func.sum(DatasetModel.stored_bytes), 0)).where(
-                    DatasetModel.owner_username == owner_username
-                )
-            )
-        return int(total or 0)
 
     def find_by_hash(self, owner_username: str, digest: str) -> DatasetRecord | None:
         """Return the owner's dataset with this content hash, if one exists.

@@ -1,46 +1,47 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
+import { InlineWarningRow } from "@/shared/ui/inline-warning-row";
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import type { KeyboardEvent, ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { AnimatedNumber, StaggerContainer, StaggerItem } from "@/shared/ui/motion";
+import { Segmented } from "@/shared/ui/segmented";
+import { PanelHeading } from "@/shared/ui/panel-heading";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { formatElapsed, modelDisplayName } from "@/shared/lib";
 import type { DashboardAnalytics } from "@/shared/lib/api";
-import { msg } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
+import { cn } from "@/shared/lib/utils";
+import { ACCENT_DOT, ACCENT_TEXT, STATUS_COLORS, type StatAccent } from "../constants";
 import { AnalyticsEmpty } from "./AnalyticsEmpty";
 import { AnalyticsFilterChips } from "./AnalyticsFilterChips";
 import { AnalyticsSection } from "./AnalyticsSection";
 import { AnalyticsTabSkeleton } from "./AnalyticsTabSkeleton";
-import type { ChartData } from "../lib/transform-chart-data";
-import type { UseAnalyticsFiltersReturn } from "../hooks/use-analytics-filters";
+import { Leaderboard, OptimizerTable } from "./AnalyticsTables";
+import type { ChartData, HistogramBar, ShareBar } from "../lib/transform-chart-data";
+import type {
+  AnalyticsBucket,
+  AnalyticsRange,
+  UseAnalyticsFiltersReturn,
+} from "../hooks/use-analytics-filters";
 
-const ScoresChart = dynamic(() => import("@/shared/charts").then((m) => m.ScoresChart), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[300px] flex items-center justify-center">
-      <span className="text-sm text-muted-foreground">
-        {msg("auto.features.dashboard.components.analyticstab.1")}
-      </span>
-    </div>
-  ),
-});
-const RuntimeDistributionChart = dynamic(
-  () => import("@/shared/charts").then((m) => m.RuntimeDistributionChart),
-  { ssr: false, loading: () => <div className="h-[250px]" /> },
+const chartFallback = (height: number) => (
+  <div className="flex items-center justify-center" style={{ height }}>
+    <span className="text-sm text-muted-foreground">
+      {msg("auto.features.dashboard.components.analyticstab.1")}
+    </span>
+  </div>
 );
-const DatasetVsImprovementChart = dynamic(
-  () => import("@/shared/charts").then((m) => m.DatasetVsImprovementChart),
-  { ssr: false, loading: () => <div className="h-[250px]" /> },
-);
-const EfficiencyChart = dynamic(() => import("@/shared/charts").then((m) => m.EfficiencyChart), {
+
+const RangeHistogram = dynamic(() => import("./AnalyticsCharts").then((m) => m.RangeHistogram), {
   ssr: false,
-  loading: () => <div className="h-[250px]" />,
+  loading: () => chartFallback(240),
 });
-const TimelineChart = dynamic(() => import("@/shared/charts").then((m) => m.TimelineChart), {
+const StackedTimeline = dynamic(() => import("./AnalyticsCharts").then((m) => m.StackedTimeline), {
   ssr: false,
-  loading: () => <div className="h-[160px]" />,
+  loading: () => chartFallback(220),
 });
 const SharingBreakdown = dynamic(() => import("./UsageCharts"), {
   ssr: false,
@@ -53,49 +54,41 @@ type AnalyticsTabProps = {
   chartData: ChartData;
   filters: UseAnalyticsFiltersReturn;
   sessionUser: string;
+  onOpenJob: (optimizationId: string) => void;
 };
 
-type KpiAccent = "default" | "success" | "warning" | "danger";
-
-const KPI_DOT: Record<KpiAccent, string> = {
-  default: "bg-foreground/25",
-  success: "bg-emerald-500",
-  warning: "bg-[var(--warning)]",
-  danger: "bg-red-500",
-};
-
-const KPI_TEXT: Record<KpiAccent, string> = {
-  default: "text-foreground",
-  success: "text-emerald-600",
-  warning: "text-[var(--warning)]",
-  danger: "text-red-600",
-};
+const RANGE_OPTIONS: readonly AnalyticsRange[] = ["7d", "30d", "90d", "all"];
 
 function KpiCard({
   label,
   value,
+  detail,
   accent,
   valueDir,
 }: {
   label: string;
   value: ReactNode;
-  accent: KpiAccent;
+  detail?: ReactNode;
+  accent: StatAccent;
   valueDir?: "ltr" | "rtl";
 }) {
   return (
-    <div className="flex h-full min-w-0 flex-[1_1_13rem] flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7 xl:flex-[1_1_9rem]">
+    <div className="flex h-full min-h-[9.5rem] min-w-0 flex-col gap-4 rounded-2xl border border-border/40 bg-card/60 p-5 transition-colors duration-300 hover:border-border/70 sm:p-6">
       <div className="flex items-center gap-2">
-        <span className={`size-1.5 rounded-full ${KPI_DOT[accent]}`} aria-hidden />
+        <span className={`size-1.5 rounded-full ${ACCENT_DOT[accent]}`} aria-hidden />
         <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
           {label}
         </p>
       </div>
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2">
         <p
           dir={valueDir}
-          className={`text-center text-[2.75rem] sm:text-[3.25rem] font-bold leading-[0.9] tracking-tight tabular-nums ${KPI_TEXT[accent]}`}
+          className={`text-center text-[2.5rem] font-bold leading-[0.9] tracking-tight tabular-nums sm:text-[3rem] ${ACCENT_TEXT[accent]}`}
         >
           {value}
+        </p>
+        <p className="min-h-[1rem] text-center text-[0.6875rem] tabular-nums text-muted-foreground">
+          {detail}
         </p>
       </div>
     </div>
@@ -109,9 +102,105 @@ function activateOnKey(e: KeyboardEvent, action: () => void) {
   }
 }
 
-// Rank-shaded ramp for the model-usage bars: the most-used model is darkest
-// (--chart-1) and lighter steps follow, so the list reads as a ranking rather
-// than a flat repeat of the other breakdowns. Clamps past the 5th rank.
+function pointsValue(value: number | null): ReactNode {
+  if (value == null) return "—";
+  return (
+    <AnimatedNumber
+      value={parseFloat(value.toFixed(1))}
+      decimals={1}
+      prefix={value > 0 ? "+" : ""}
+      suffix="%"
+    />
+  );
+}
+
+function pointsText(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function pointsAccent(value: number | null): StatAccent {
+  if (value == null || value === 0) return "default";
+  return value > 0 ? "success" : "danger";
+}
+
+/** Sliding segmented control for the date range, matching the wallet usage tab. */
+function RangeControl({
+  value,
+  onChange,
+}: {
+  value: AnalyticsRange;
+  onChange: (next: AnalyticsRange) => void;
+}) {
+  return (
+    <Segmented
+      size="sm"
+      label={msg("usage.range.label")}
+      value={value}
+      onChange={onChange}
+      options={RANGE_OPTIONS.map((option) => ({
+        value: option,
+        label: msg(`usage.range.${option}`),
+      }))}
+    />
+  );
+}
+
+/** Horizontal share bars (status, type, module); the bar is a share of all runs. */
+function ShareBars({
+  bars,
+  color,
+  onSelect,
+}: {
+  bars: ShareBar[];
+  color?: (bar: ShareBar) => string;
+  onSelect?: (key: string) => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      {bars.map((bar) => {
+        const fill = color?.(bar) ?? "var(--color-chart-3)";
+        const interactive = onSelect != null;
+        return (
+          <div
+            key={bar.key}
+            role={interactive ? "button" : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            className={cn(
+              "space-y-1.5 rounded-md py-1",
+              interactive &&
+                "min-h-[44px] cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:min-h-0",
+            )}
+            onClick={interactive ? () => onSelect(bar.key) : undefined}
+            onKeyDown={interactive ? (e) => activateOnKey(e, () => onSelect(bar.key)) : undefined}
+          >
+            <div className="flex items-center justify-between gap-3 text-[0.8125rem]">
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className="size-2.5 shrink-0 rounded-full ring-1 ring-black/5"
+                  style={{ backgroundColor: fill }}
+                />
+                <span className="truncate" title={bar.name}>
+                  {bar.name}
+                </span>
+              </span>
+              <span className="shrink-0 tabular-nums font-semibold">
+                {bar.value}
+                <span className="ms-1.5 text-[0.6875rem] font-normal text-muted-foreground">
+                  {Math.round(bar.pct)}%
+                </span>
+              </span>
+            </div>
+            <ProgressBar value={bar.pct} color={fill} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Rank-shaded ramp for the model list: the most-used model is darkest and
+// lighter steps follow, so the list reads as a ranking. Clamps past rank 5.
 const MODEL_RAMP = [
   "var(--color-chart-1)",
   "var(--color-chart-2)",
@@ -126,46 +215,31 @@ function AnalyticsTabImpl({
   chartData,
   filters,
   sessionUser,
+  onOpenJob,
 }: AnalyticsTabProps) {
   const {
-    model,
-    status,
-    jobId,
-    date,
+    range,
     owner,
     access,
-    leaderboardLimit,
+    setRange,
+    setOptimizer,
     setModel,
     setStatus,
-    setJobId,
-    setDate,
+    setDateRange,
     setOwner,
     setAccess,
+    setJobType,
+    setModule,
+    setImprovement,
+    setRuntime,
+    setDataset,
+    hasFilters,
+    clearAll,
+    key: filterKey,
   } = filters;
 
-  const statusBars = useMemo(() => {
-    const total = chartData.status.reduce((a, b) => a + b.value, 0);
-    return chartData.status.map((s) => ({
-      ...s,
-      pct: total > 0 ? (s.value / total) * 100 : 0,
-    }));
-  }, [chartData.status]);
-
-  const jobTypeBars = useMemo(() => {
-    const total = chartData.jobTypeData.reduce((a, b) => a + b.value, 0);
-    return chartData.jobTypeData.map((d) => ({
-      ...d,
-      pct: total > 0 ? (d.value / total) * 100 : 0,
-    }));
-  }, [chartData.jobTypeData]);
-
-  const modelUsageBars = useMemo(() => {
-    const maxCount = chartData.modelUsage[0]?.count ?? 1;
-    return chartData.modelUsage.map((m) => ({
-      ...m,
-      pct: maxCount > 0 ? (m.count / maxCount) * 100 : 0,
-    }));
-  }, [chartData.modelUsage]);
+  const bucketFilter = (setter: (bucket: AnalyticsBucket | null) => void) => (bar: HistogramBar) =>
+    setter({ lower: bar.lower, upper: bar.upper, label: bar.label });
 
   const showOwners = chartData.ownerUsage.length > 1 || Boolean(owner);
   const showAccess = chartData.accessUsage.length > 1 || Boolean(access);
@@ -174,84 +248,95 @@ function AnalyticsTabImpl({
     return <AnalyticsTabSkeleton />;
   }
 
+  const toolbar = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <RangeControl value={range} onChange={setRange} />
+      <AnalyticsFilterChips filters={filters} sessionUser={sessionUser} />
+    </div>
+  );
+
   if ((analyticsData?.filtered_total ?? 0) === 0) {
-    const hasFilters = Boolean(
-      jobId || date || owner || access || model !== "all" || status !== "all",
-    );
     if (hasFilters) {
       return (
-        <AnalyticsEmpty
-          variant="no-results"
-          onClearFilters={() => {
-            setModel("all");
-            setStatus("all");
-            setOwner(null);
-            setAccess(null);
-          }}
-        />
+        <div data-tutorial="analytics-content" className="space-y-6">
+          {toolbar}
+          <AnalyticsEmpty variant="no-results" onClearFilters={clearAll} />
+        </div>
       );
     }
     return <AnalyticsEmpty variant="no-data" />;
   }
 
+  const kpis = chartData.kpis;
+  const granularityLabel = msg(`dashboard.analytics.timeline_by_${chartData.timelineGranularity}`);
+  const noSuccessMessage = msg("dashboard.analytics.no_successful_runs");
+
   return (
     <div data-tutorial="analytics-content" className="space-y-6">
-      <AnalyticsFilterChips filters={filters} sessionUser={sessionUser} />
+      {toolbar}
+
+      {chartData.truncated && <InlineWarningRow message={msg("dashboard.analytics.truncated")} />}
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${jobId ?? "all"}-${date ?? "all"}-${model}-${status}-${owner ?? "all"}-${access ?? "all"}`}
+          key={filterKey}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
         >
           <StaggerContainer className="space-y-6" staggerDelay={0.03}>
-            {chartData.kpis && (
+            {kpis && (
               <StaggerItem>
-                <div data-tutorial="dashboard-stats" className="flex flex-wrap gap-3 sm:gap-4">
+                <div
+                  data-tutorial="dashboard-stats"
+                  className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5"
+                >
                   <KpiCard
-                    label={msg("auto.features.dashboard.components.analyticstab.4")}
+                    label={msg("dashboard.analytics.kpi_total")}
                     accent="default"
-                    value={
-                      <AnimatedNumber value={Math.round(chartData.kpis.successRate)} suffix="%" />
+                    value={<AnimatedNumber value={kpis.total} />}
+                    detail={
+                      kpis.runningCount > 0
+                        ? formatMsg("dashboard.analytics.kpi_running_detail", {
+                            p1: kpis.runningCount,
+                          })
+                        : undefined
                     }
                   />
                   <KpiCard
+                    label={msg("auto.features.dashboard.components.analyticstab.4")}
+                    accent="default"
+                    value={<AnimatedNumber value={Math.round(kpis.successRate)} suffix="%" />}
+                    detail={formatMsg("dashboard.analytics.kpi_success_detail", {
+                      p1: kpis.successCount,
+                      p2: kpis.terminalCount,
+                    })}
+                  />
+                  <KpiCard
                     label={msg("auto.features.dashboard.components.analyticstab.8")}
-                    accent={
-                      chartData.kpis.avgImprovement > 0
-                        ? "success"
-                        : chartData.kpis.avgImprovement < 0
-                          ? "danger"
-                          : "default"
-                    }
-                    value={
-                      <AnimatedNumber
-                        value={parseFloat(chartData.kpis.avgImprovement.toFixed(1))}
-                        decimals={1}
-                        prefix={chartData.kpis.avgImprovement >= 0 ? "+" : ""}
-                        suffix="%"
-                      />
+                    accent={pointsAccent(kpis.avgImprovement)}
+                    value={pointsValue(kpis.avgImprovement)}
+                    detail={
+                      kpis.medianImprovement != null
+                        ? formatMsg("dashboard.analytics.kpi_median_detail", {
+                            p1: pointsText(kpis.medianImprovement),
+                          })
+                        : undefined
                     }
                   />
                   <KpiCard
                     label={msg("auto.features.dashboard.components.analyticstab.11")}
                     accent="default"
                     valueDir="ltr"
-                    value={formatElapsed(chartData.kpis.avgRuntime)}
+                    value={
+                      kpis.avgRuntimeSeconds == null ? "—" : formatElapsed(kpis.avgRuntimeSeconds)
+                    }
                   />
                   <KpiCard
                     label={msg("auto.features.dashboard.components.analyticstab.15")}
-                    accent="warning"
-                    value={
-                      <AnimatedNumber
-                        value={parseFloat(chartData.kpis.bestImprovement.toFixed(1))}
-                        decimals={1}
-                        prefix="+"
-                        suffix="%"
-                      />
-                    }
+                    accent={kpis.bestImprovement == null ? "default" : "warning"}
+                    value={pointsValue(kpis.bestImprovement)}
                   />
                 </div>
               </StaggerItem>
@@ -260,187 +345,134 @@ function AnalyticsTabImpl({
             <StaggerItem>
               <AnalyticsSection
                 title={
-                  <HelpTip text={tip("analytics.score_comparison")}>
-                    {msg("auto.features.dashboard.components.analyticstab.20")}
+                  <HelpTip text={tip("analytics.improvement_histogram")}>
+                    {msg("dashboard.analytics.section_distributions")}
                   </HelpTip>
                 }
                 defaultOpen={true}
                 className="border-border/60"
               >
-                <div className="grid gap-5 lg:grid-cols-7">
-                  <div className="min-w-0 lg:col-span-4">
-                    <div className="mb-3">
-                      <h4 className="text-sm font-semibold">
-                        {msg("auto.features.dashboard.components.analyticstab.21")}
-                        {TERMS.optimization}
-                      </h4>
-                    </div>
-                    <ScoresChart
-                      data={chartData.improvement}
-                      optimizationIds={chartData.improvementJobIds}
-                      onBarClick={(optimizationId) => setJobId(optimizationId)}
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="min-w-0">
+                    <PanelHeading>{msg("dashboard.analytics.improvement_histogram")}</PanelHeading>
+                    <RangeHistogram
+                      data={chartData.improvementHistogram}
+                      unitLabel={msg("dashboard.analytics.axis_points")}
+                      emptyMessage={noSuccessMessage}
+                      onBucketClick={bucketFilter(setImprovement)}
                     />
                   </div>
+                  <div className="min-w-0">
+                    <PanelHeading>
+                      <HelpTip text={tip("analytics.runtime_histogram")}>
+                        {msg("auto.features.dashboard.components.analyticstab.26")}
+                      </HelpTip>
+                    </PanelHeading>
+                    <RangeHistogram
+                      data={chartData.runtimeHistogram}
+                      unitLabel={msg("dashboard.analytics.axis_minutes")}
+                      onBucketClick={bucketFilter(setRuntime)}
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 min-w-0">
+                  <PanelHeading>
+                    <HelpTip text={tip("analytics.dataset_buckets")}>
+                      {msg("auto.features.dashboard.components.analyticstab.28")}
+                      {TERMS.dataset}
+                      {msg("auto.features.dashboard.components.analyticstab.29")}
+                    </HelpTip>
+                  </PanelHeading>
+                  <RangeHistogram
+                    data={chartData.datasetBuckets}
+                    unitLabel={TERMS.rowPlural}
+                    withAverage
+                    onBucketClick={bucketFilter(setDataset)}
+                  />
+                </div>
+              </AnalyticsSection>
+            </StaggerItem>
 
-                  <div className="min-w-0 lg:col-span-3 space-y-6">
-                    <div className="space-y-3">
-                      <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase tracking-widest">
-                        {msg("auto.features.dashboard.components.analyticstab.22")}
+            <StaggerItem>
+              <AnalyticsSection
+                title={
+                  <HelpTip text={tip("analytics.submissions_per_day")}>
+                    {msg("auto.features.dashboard.components.analyticstab.30")}
+                    <span className="ms-2 text-xs font-normal text-muted-foreground">
+                      {granularityLabel}
+                    </span>
+                  </HelpTip>
+                }
+                defaultOpen={true}
+                className="border-border/60"
+              >
+                <StackedTimeline
+                  data={chartData.timeline}
+                  granularity={chartData.timelineGranularity}
+                  onSelect={setDateRange}
+                />
+              </AnalyticsSection>
+            </StaggerItem>
+
+            {chartData.optimizerStats.length > 0 && (
+              <StaggerItem>
+                <AnalyticsSection
+                  title={
+                    <HelpTip text={tip("analytics.optimizer_comparison")}>
+                      {msg("dashboard.analytics.optimizer_comparison")}
+                    </HelpTip>
+                  }
+                  defaultOpen={true}
+                  className="border-border/60"
+                >
+                  <OptimizerTable rows={chartData.optimizerStats} onSelect={setOptimizer} />
+                </AnalyticsSection>
+              </StaggerItem>
+            )}
+
+            <StaggerItem>
+              <AnalyticsSection
+                title={msg("dashboard.analytics.section_breakdown")}
+                defaultOpen={true}
+                className="border-border/60"
+              >
+                <div className="grid gap-6 md:grid-cols-3">
+                  <div className="min-w-0">
+                    <PanelHeading>
+                      {msg("auto.features.dashboard.components.analyticstab.22")}
+                    </PanelHeading>
+                    <ShareBars
+                      bars={chartData.status}
+                      color={(bar) => STATUS_COLORS[bar.key] ?? "var(--color-chart-5)"}
+                      onSelect={setStatus}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <PanelHeading>
+                      {msg("auto.features.dashboard.components.analyticstab.24")}
+                      {TERMS.optimization}
+                    </PanelHeading>
+                    <ShareBars bars={chartData.jobTypes} onSelect={setJobType} />
+                  </div>
+                  <div className="min-w-0">
+                    <PanelHeading>{msg("dashboard.analytics.by_module")}</PanelHeading>
+                    {chartData.modules.length > 0 ? (
+                      <ShareBars
+                        bars={chartData.modules}
+                        color={() => "var(--color-chart-4)"}
+                        onSelect={setModule}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {msg("auto.shared.charts.chart.utils.literal.1")}
                       </p>
-                      {statusBars.map((s) => (
-                        <div
-                          key={s.key}
-                          role="button"
-                          tabIndex={0}
-                          className="min-h-[44px] cursor-pointer space-y-1.5 rounded-md py-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                          onClick={() => setStatus(s.key)}
-                          onKeyDown={(e) => activateOnKey(e, () => setStatus(s.key))}
-                        >
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="flex items-center gap-2">
-                              <span
-                                className=" size-2.5 rounded-full shrink-0 ring-1 ring-black/5"
-                                style={{ backgroundColor: s.fill }}
-                              />
-                              <span className="text-[0.8125rem]">{s.name}</span>
-                            </span>
-                            <span className="tabular-nums font-semibold text-[0.8125rem]">
-                              {s.value}
-                            </span>
-                          </div>
-                          <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{
-                                width: `${s.pct}%`,
-                                backgroundColor: s.fill,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {chartData.jobTypeData.length > 0 && (
-                      <>
-                        <div className="border-t border-border" />
-                        <div className="space-y-3">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                            {msg("auto.features.dashboard.components.analyticstab.24")}
-                            {TERMS.optimization}
-                          </p>
-                          {jobTypeBars.map((d) => (
-                            <div key={d.name} className="space-y-1">
-                              <div className="flex items-center justify-between text-sm">
-                                <span>{d.name}</span>
-                                <span className="tabular-nums font-medium">{d.value}</span>
-                              </div>
-                              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-primary/70 transition-all"
-                                  style={{
-                                    width: `${d.pct}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
                     )}
                   </div>
                 </div>
               </AnalyticsSection>
             </StaggerItem>
 
-            {(chartData.runtimeDistribution.length > 0 || chartData.efficiencyData.length > 0) && (
-              <StaggerItem>
-                <AnalyticsSection
-                  title={
-                    <HelpTip text={tip("analytics.runtime_vs_gain")}>
-                      {msg("auto.features.dashboard.components.analyticstab.25")}
-                    </HelpTip>
-                  }
-                  defaultOpen={true}
-                  className="border-border/60"
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    {chartData.runtimeDistribution.length > 0 && (
-                      <div className="min-w-0">
-                        <div className="mb-3">
-                          <h4 className="text-sm font-semibold">
-                            <HelpTip text={tip("analytics.runtime_minutes")}>
-                              {msg("auto.features.dashboard.components.analyticstab.26")}
-                            </HelpTip>
-                          </h4>
-                        </div>
-                        <RuntimeDistributionChart
-                          data={chartData.runtimeDistribution}
-                          optimizationIds={chartData.runtimeDistributionJobIds}
-                          onBarClick={(optimizationId) => setJobId(optimizationId)}
-                        />
-                      </div>
-                    )}
-                    {chartData.efficiencyData.length > 0 && (
-                      <div className="min-w-0">
-                        <div className="mb-3">
-                          <h4 className="text-sm font-semibold">
-                            <HelpTip text={tip("analytics.improvement_per_minute")}>
-                              {msg("auto.features.dashboard.components.analyticstab.27")}
-                            </HelpTip>
-                          </h4>
-                        </div>
-                        <EfficiencyChart
-                          data={chartData.efficiencyData}
-                          optimizationIds={chartData.efficiencyJobIds}
-                          onBarClick={(optimizationId) => setJobId(optimizationId)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  {chartData.datasetVsImprovement.length > 0 && (
-                    <div className="mt-5">
-                      <div className="mb-3">
-                        <h4 className="text-sm font-semibold">
-                          <HelpTip text={tip("analytics.dataset_size_vs_improvement")}>
-                            {msg("auto.features.dashboard.components.analyticstab.28")}
-                            {TERMS.dataset}
-                            {msg("auto.features.dashboard.components.analyticstab.29")}
-                          </HelpTip>
-                        </h4>
-                      </div>
-                      <DatasetVsImprovementChart
-                        data={chartData.datasetVsImprovement}
-                        optimizationIds={chartData.datasetVsImprovementIds}
-                        onDotClick={(id) => setJobId(id)}
-                      />
-                    </div>
-                  )}
-                </AnalyticsSection>
-              </StaggerItem>
-            )}
-
-            {chartData.timelineData.length > 0 && (
-              <StaggerItem>
-                <AnalyticsSection
-                  title={
-                    <HelpTip text={tip("analytics.submissions_per_day")}>
-                      {msg("auto.features.dashboard.components.analyticstab.30")}
-                    </HelpTip>
-                  }
-                  defaultOpen={true}
-                  className="border-border/60"
-                >
-                  <TimelineChart
-                    data={chartData.timelineData}
-                    dates={chartData.timelineDates}
-                    onBarClick={(d) => setDate(d)}
-                  />
-                </AnalyticsSection>
-              </StaggerItem>
-            )}
-
-            {chartData.modelUsage.length > 0 && (
+            {chartData.modelStats.length > 0 && (
               <StaggerItem>
                 <AnalyticsSection
                   title={msg("auto.features.dashboard.components.analyticstab.33")}
@@ -448,12 +480,12 @@ function AnalyticsTabImpl({
                   className="border-border/60"
                 >
                   <div className="space-y-3">
-                    {modelUsageBars.map((m, i) => (
+                    {chartData.modelStats.map((m, i) => (
                       <div
                         key={m.name}
                         role="button"
                         tabIndex={0}
-                        className="min-h-[44px] cursor-pointer space-y-1.5 rounded-md py-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        className="min-h-[44px] cursor-pointer space-y-1.5 rounded-md py-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:min-h-0"
                         onClick={() => setModel(m.name)}
                         onKeyDown={(e) => activateOnKey(e, () => setModel(m.name))}
                       >
@@ -461,25 +493,51 @@ function AnalyticsTabImpl({
                           <span className="w-4 shrink-0 text-end tabular-nums text-[0.6875rem] text-muted-foreground/70">
                             {i + 1}
                           </span>
-                          <span className="font-mono truncate min-w-0" title={m.name}>
+                          <span className="min-w-0 truncate font-mono" title={m.name}>
                             {modelDisplayName(m.name)}
                           </span>
-                          <span className="ms-auto tabular-nums font-medium shrink-0">
-                            {m.count}
+                          <span className="ms-auto flex shrink-0 items-center gap-3 tabular-nums">
+                            <span className="hidden text-[0.6875rem] text-muted-foreground sm:inline">
+                              {Math.round(m.successRate)}%
+                            </span>
+                            <span
+                              className={cn(
+                                "hidden text-[0.6875rem] sm:inline",
+                                m.avgImprovement != null && m.avgImprovement > 0
+                                  ? "text-[var(--success)]"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              {pointsText(m.avgImprovement)}
+                            </span>
+                            <span className="font-medium">{m.count}</span>
                           </span>
                         </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden ms-6" dir="ltr">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${m.pct}%`,
-                              backgroundColor: MODEL_RAMP[Math.min(i, MODEL_RAMP.length - 1)],
-                            }}
-                          />
-                        </div>
+                        <ProgressBar
+                          dir="ltr"
+                          value={m.share}
+                          color={MODEL_RAMP[Math.min(i, MODEL_RAMP.length - 1)]}
+                          className="ms-6 w-auto"
+                        />
                       </div>
                     ))}
                   </div>
+                </AnalyticsSection>
+              </StaggerItem>
+            )}
+
+            {chartData.topJobs.length > 0 && (
+              <StaggerItem>
+                <AnalyticsSection
+                  title={
+                    <HelpTip text={tip("analytics.leaderboard")}>
+                      {msg("dashboard.analytics.leaderboard")}
+                    </HelpTip>
+                  }
+                  defaultOpen={true}
+                  className="border-border/60"
+                >
+                  <Leaderboard jobs={chartData.topJobs} onOpenJob={onOpenJob} />
                 </AnalyticsSection>
               </StaggerItem>
             )}

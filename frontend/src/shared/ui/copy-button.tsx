@@ -101,7 +101,7 @@ export function CopyButton({
   onCopied,
   onCopyError,
   variant = "ghost",
-  size = "icon-sm",
+  size = "icon-xs",
   iconClassName = "size-3.5",
   stopPropagation,
   ...rest

@@ -46,6 +46,11 @@ _PAYLOAD_MODEL_CONFIG_FIELDS = (
     "model_settings",
     "reflection_model_settings",
     "task_model_settings",
+    # Submissions persist ``model_dump(by_alias=True)``, so the stored job row
+    # carries the wire aliases rather than the field names above.
+    "model_config",
+    "reflection_model_config",
+    "task_model_config",
 )
 _PAYLOAD_MODEL_CONFIG_LISTS = (
     "generation_models",

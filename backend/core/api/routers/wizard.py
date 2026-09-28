@@ -39,6 +39,23 @@ _METRIC_DEF_RE = re.compile(r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 _VALID_COLUMN_ROLES = frozenset({"input", "output", "ignore"})
 
 
+# MCP server for a react/flex program, in the camelCase shape the submit
+# wizard already keeps in its shared ``react_config`` state. The auth header is
+# deliberately not accepted: a secret must never travel through the agent. No
+# tool filter either: the wizard has no filter control and would drop it on its
+# next sync, so extra keys are rejected rather than silently ignored.
+class ReactConfigPatch(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    mcp_url: str = Field(
+        alias="mcpUrl",
+        min_length=1,
+        max_length=2000,
+        pattern=r"^https?://",
+        description="MCP server URL.",
+    )
+
+
 class WizardUpdateRequest(BaseModel):
     """Partial update for any subset of editable wizard fields.
 
@@ -59,11 +76,18 @@ class WizardUpdateRequest(BaseModel):
     module_name: str | None = Field(
         default=None,
         max_length=80,
-        description="DSPy module to optimize. Supported values: 'predict', 'cot'.",
+        description=(
+            "DSPy module to optimize. Supported values: 'predict', 'cot', 'react', 'flex', "
+            "'workflow'. 'react' and 'flex' call MCP tools and need ``react_config``."
+        ),
     )
     job_type: Literal["run", "grid_search"] | None = Field(
         default=None,
         description="'run' for a single-pair run, 'grid_search' for a model-pair sweep.",
+    )
+    react_config: ReactConfigPatch | None = Field(
+        default=None,
+        description="MCP tool source for a 'react' or 'flex' module: {mcpUrl}.",
     )
     is_private: bool | None = Field(
         default=None,
@@ -320,6 +344,9 @@ def create_wizard_router() -> APIRouter:
 
         if "job_type" in supplied and supplied["job_type"] is not None:
             patch["job_type"] = supplied["job_type"]
+
+        if req.react_config is not None:
+            patch["react_config"] = req.react_config.model_dump(by_alias=True)
 
         if "column_roles" in supplied and supplied["column_roles"] is not None:
             roles = supplied["column_roles"]

@@ -23,9 +23,6 @@ export const LOCALE_REGISTRY = {
 
 export type Locale = keyof typeof LOCALE_REGISTRY;
 
-/** All supported locale tags, in registry (switcher) order. */
-export const LOCALES = Object.keys(LOCALE_REGISTRY) as Locale[];
-
 /** Hebrew is the deployment's only locale. */
 export const DEFAULT_LOCALE: Locale = "he";
 
@@ -81,23 +78,4 @@ export function fallbackChain(locale: Locale): Locale[] {
     cur = LOCALE_REGISTRY[cur].fallback;
   }
   return chain;
-}
-
-/**
- * Pick the best supported locale from an `Accept-Language` header.
- *
- * Parses the comma-separated, q-weighted list, sorts by descending quality, and
- * for each requested tag tries an exact registry match first (so `en-GB` and
- * `pt-BR` are honored), then a primary-language match (so `en-AU` resolves to
- * `en` and a bare `zh` resolves to the first `zh-*` we ship).
- *
- * Args:
- *   header: Raw `Accept-Language` value, or null/undefined when absent.
- *
- * Returns:
- *   The matched `Locale`, or null when nothing supported is requested (the
- *   caller then falls back to `DEFAULT_LOCALE`).
- */
-export function localeFromAcceptLanguage(header: string | null | undefined): Locale | null {
-  return header == null ? null : DEFAULT_LOCALE;
 }

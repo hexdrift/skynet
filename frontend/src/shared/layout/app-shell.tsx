@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { List, GraduationCap, Lightbulb, Feather } from "@/shared/ui/icons";
 import { ConceptsGuide, registerTutorialHook, TutorialMenu } from "@/features/tutorial";
+import { Button } from "@/shared/ui/primitives/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
 import { GlobalSearch } from "@/shared/layout/global-search";
@@ -183,13 +184,15 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <PopoverPrimitive.Trigger asChild>
-                  <button
+                  <Button
                     type="button"
-                    className="inline-flex size-[44px] cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent/80 hover:text-foreground active:scale-95 lg:size-8"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
                     aria-label={msg("app.shell.tour_aria")}
                   >
                     <GraduationCap className="size-4" />
-                  </button>
+                  </Button>
                 </PopoverPrimitive.Trigger>
               </TooltipTrigger>
               <TooltipContent side="bottom" dir={dir}>
@@ -200,29 +203,33 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
           </PopoverPrimitive.Root>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={() => setConceptsOpen(true)}
-                className="inline-flex size-[44px] cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent/80 hover:text-foreground active:scale-95 lg:size-8"
+                className="text-muted-foreground hover:text-foreground"
                 aria-label={msg("app.shell.concepts_aria")}
               >
                 <Lightbulb className="size-4" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" dir={dir}>
               {msg("app.shell.concepts_tooltip")}
             </TooltipContent>
           </Tooltip>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setSidebarOpen(true)}
-            className="inline-flex size-[44px] items-center justify-center rounded-lg transition-all duration-200 hover:bg-accent/80 active:scale-95 md:hidden"
+            className="md:hidden"
             aria-label={msg("app.shell.menu")}
             aria-expanded={sidebarOpen}
             aria-controls={SIDEBAR_ID}
           >
             <List className="size-5" />
-          </button>
+          </Button>
         </div>
       </motion.header>
 
@@ -234,7 +241,7 @@ function ShellChrome({ children }: { children: React.ReactNode }) {
           type="button"
           aria-label={msg("app.shell.menu_close")}
           onClick={() => setSidebarOpen(false)}
-          className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden transition-all duration-300 ease-out ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`fixed inset-0 z-40 bg-black/50 md:hidden transition-all duration-300 ease-out ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
           tabIndex={sidebarOpen ? 0 : -1}
           aria-hidden={!sidebarOpen}
         />

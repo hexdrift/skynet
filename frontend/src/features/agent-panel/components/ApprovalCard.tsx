@@ -167,7 +167,7 @@ export function ApprovalCard({ payload, onResolve, className }: ApprovalCardProp
           className="flex-1 justify-center"
         >
           {busy === "deny" ? (
-            <CircleNotch className="size-4 animate-spin" />
+            <CircleNotch className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
           ) : (
             msg("auto.features.agent.panel.components.approvalcard.literal.3")
           )}
@@ -178,7 +178,11 @@ export function ApprovalCard({ payload, onResolve, className }: ApprovalCardProp
           disabled={busy !== null}
           className="flex-1 justify-center"
         >
-          {busy === "approve" ? <CircleNotch className="size-4 animate-spin" /> : meta.confirmLabel}
+          {busy === "approve" ? (
+            <CircleNotch className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          ) : (
+            meta.confirmLabel
+          )}
         </Button>
       </div>
     </div>

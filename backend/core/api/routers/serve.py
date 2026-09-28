@@ -24,6 +24,7 @@ from starlette.responses import StreamingResponse
 from ...byok import ProviderKeyVault, resolve_byok_model_config
 from ...config import settings
 from ...constants import (
+    PAYLOAD_OVERVIEW_COLUMN_MAPPING,
     PAYLOAD_OVERVIEW_GENERATION_MODELS,
     PAYLOAD_OVERVIEW_MODEL_NAME,
     PAYLOAD_OVERVIEW_MODEL_SETTINGS,
@@ -33,7 +34,7 @@ from ...constants import (
     TOKEN_SOURCE_MANAGED,
 )
 from ...models import ModelConfig, ServeInfoResponse, ServeRequest, ServeResponse
-from ...service_gateway.agents.generalist import TrustMode, get_approval_registry
+from ...service_gateway.agents.generalist import TrustMode, approval_key, get_approval_registry
 from ...service_gateway.agents.react_serve import run_react_chat
 from ...service_gateway.language_models import build_language_model
 from ...service_gateway.optimization.workflow import capture_node_traces
@@ -215,6 +216,38 @@ def _artifact_prompt_fields(artifact: Any) -> tuple[list[str], list[str], str | 
         prompt.instructions,
         len(prompt.demos),
     )
+
+
+def _column_mapping_fields(overview: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Read signature field names from the submission's persisted column mapping.
+
+    Flex programs run optimizer-authored code in an interpreter and expose no
+    named predictor, so their artifact carries no ``optimized_prompt``. The
+    column mapping still names every signature input and output field.
+
+    Args:
+        overview: Persisted payload overview.
+
+    Returns:
+        ``(input_fields, output_fields)``, both empty when no mapping exists.
+    """
+    mapping = overview.get(PAYLOAD_OVERVIEW_COLUMN_MAPPING)
+    if not isinstance(mapping, dict):
+        return [], []
+
+    def _names(kind: str) -> list[str]:
+        """Return the signature field names mapped under ``kind``.
+
+        Args:
+            kind: Mapping side, either ``inputs`` or ``outputs``.
+
+        Returns:
+            Field names in their persisted order.
+        """
+        raw = mapping.get(kind)
+        return [name for name in raw if isinstance(name, str)] if isinstance(raw, dict) else []
+
+    return _names("inputs"), _names("outputs")
 
 
 # Long or multi-line example values make the usage snippet unwieldy and can
@@ -457,6 +490,8 @@ def create_serve_router(*, job_store) -> APIRouter:
             # servable surface is its anchor fields.
             input_fields = workflow_spec.input_field_names()
             output_fields = workflow_spec.output_field_names()
+        if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
 
         return ServeInfoResponse(
             optimization_id=optimization_id,
@@ -607,6 +642,8 @@ def create_serve_router(*, job_store) -> APIRouter:
             output_fields = workflow_spec.output_field_names()
 
         if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
+        if not input_fields:
             raise DomainError("serve.no_declared_inputs", status=400)
         missing = [f for f in input_fields if f not in req.inputs]
         if missing:
@@ -708,6 +745,8 @@ def create_serve_router(*, job_store) -> APIRouter:
             output_fields = workflow_spec.output_field_names()
 
         if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
+        if not input_fields:
             raise DomainError("serve.no_declared_inputs", status=400)
         missing = [f for f in input_fields if f not in req.inputs]
         if missing:
@@ -778,6 +817,8 @@ def create_serve_router(*, job_store) -> APIRouter:
         _program, pair, overview = load_pair_program(job_store, optimization_id, pair_index, current_user)
         artifact = pair.program_artifact
         input_fields, output_fields, instructions, demo_count = _artifact_prompt_fields(artifact)
+        if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
 
         return ServeInfoResponse(
             optimization_id=optimization_id,
@@ -827,6 +868,8 @@ def create_serve_router(*, job_store) -> APIRouter:
         model_config = _pair_model_config(pair.generation_model, overview, req.model_config_override)
 
         input_fields, output_fields, _instructions, _demo_count = _artifact_prompt_fields(artifact)
+        if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
 
         if not input_fields:
             raise DomainError("serve.no_declared_inputs", status=400)
@@ -908,6 +951,8 @@ def create_serve_router(*, job_store) -> APIRouter:
         model_config = _pair_model_config(pair.generation_model, overview, req.model_config_override)
 
         input_fields, output_fields, _instructions, _demo_count = _artifact_prompt_fields(artifact)
+        if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
 
         if not input_fields:
             raise DomainError("serve.no_declared_inputs", status=400)
@@ -1020,6 +1065,7 @@ def create_serve_router(*, job_store) -> APIRouter:
             model_name=model_config.normalized_identifier(),
             mcp_url=mcp_url,
             auth_header=authorization,
+            approval_owner=current_user.username,
         )
         metered = stream_with_llm_observation(
             source,
@@ -1055,6 +1101,8 @@ def create_serve_router(*, job_store) -> APIRouter:
         registry the generalist agent uses; ``optimization_id`` scopes the
         route and enforces the caller holds editor-tier access (chat spends the
         owner's key, so it is editor+ like the rest of the serve surface).
+        Pending calls are keyed to the account that opened the chat stream, so
+        another editor of the same run cannot resolve them.
 
         Args:
             optimization_id: The react run the pending call belongs to.
@@ -1066,11 +1114,11 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         Raises:
             DomainError: 404 when the run is unknown/inaccessible; 403 when the
-                caller's role is below editor; 404 when the call id is unknown
-                or already resolved.
+                caller's role is below editor; 404 when the call id is unknown,
+                already resolved, or belongs to another account's stream.
         """
         require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
-        resolved = get_approval_registry().resolve(req.call_id, req.approved)
+        resolved = get_approval_registry().resolve(approval_key(req.call_id, current_user.username), req.approved)
         if not resolved:
             raise DomainError("agent.approval.unknown_call_id", status=404)
         return ServeChatConfirmResponse(resolved=True)

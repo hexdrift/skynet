@@ -35,6 +35,7 @@ from ...constants import (
     OPTIMIZER_NAME_GEPA,
     PROGRESS_BASELINE,
     PROGRESS_CANDIDATE,
+    PROGRESS_EVALUATION_STARTED,
     PROGRESS_GRID_PAIR_COMPLETED,
     PROGRESS_GRID_PAIR_FAILED,
     PROGRESS_GRID_PAIR_STARTED,
@@ -72,7 +73,6 @@ from ..language_models import (
     total_tokens_from_history,
     usage_by_model_from_history,
 )
-from ..react_compat import REACT_CLASS
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .artifacts import persist_program
 from .data import (
@@ -524,6 +524,8 @@ def _run_grid_pair(
             optimized = None
             optimized_test_results: list[dict] = []
             if ctx.splits.test:
+                if ctx.progress_callback:
+                    ctx.progress_callback(PROGRESS_EVALUATION_STARTED, {"pair_index": i})
                 with track_stage(STAGE_EVALUATION, *timing_callbacks):
                     optimized, optimized_test_results = evaluate_on_test(
                         compiled,
@@ -810,6 +812,7 @@ class DspyService:
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            split_version=payload.split_version,
         )
         logger.info(
             "Split dataset -> train=%d val=%d test=%d",
@@ -905,6 +908,8 @@ class DspyService:
                 optimized_test_metric = None
                 optimized_test_results: list[dict] = []
                 if splits.test:
+                    if progress_callback:
+                        progress_callback(PROGRESS_EVALUATION_STARTED, {})
                     with track_stage(STAGE_EVALUATION, *timing_callbacks):
                         optimized_test_metric, optimized_test_results = evaluate_on_test(
                             compiled_program,
@@ -1069,6 +1074,7 @@ class DspyService:
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            split_version=payload.split_version,
         )
         if progress_callback:
             progress_callback(
@@ -1294,7 +1300,7 @@ class DspyService:
             The persisted :class:`ProgramArtifact` with ``react_overlay`` set,
             or ``None`` when persistence produced no artifact.
         """
-        program = REACT_CLASS(signature_cls, tools=tools, max_iters=overlay["max_iters"])
+        program = dspy.ReActV2(signature_cls, tools=tools, max_iters=overlay["max_iters"])
         program.load_state(program_state)
         artifact = persist_program(program, artifact_id)
         if artifact is None:
@@ -1401,6 +1407,7 @@ class DspyService:
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            split_version=payload.split_version,
         )
         split_counts = SplitCounts(
             train=len(splits.train),

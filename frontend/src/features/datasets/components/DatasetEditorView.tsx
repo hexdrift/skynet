@@ -1,5 +1,9 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { RolePill } from "@/shared/ui/role-pill";
+import { BackLink } from "@/shared/ui/back-link";
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -8,7 +12,6 @@ import {
   ArrowClockwise,
   ArrowCounterClockwise,
   ArrowDown,
-  ArrowLeft,
   ArrowUp,
   CaretLeft,
   CaretRight,
@@ -24,7 +27,6 @@ import {
 import { Button } from "@/shared/ui/primitives/button";
 import { RetryIconButton } from "@/shared/ui/retry-icon-button";
 import { Input } from "@/shared/ui/primitives/input";
-import { Badge } from "@/shared/ui/primitives/badge";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -342,11 +344,7 @@ export function DatasetEditorView() {
   }, [id]);
 
   if (state.mode === "loading") {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <CircleNotch className="size-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingState fullPage />;
   }
   if (state.mode === "notfound") {
     return (
@@ -819,15 +817,16 @@ export function DatasetEditorView() {
   const blocked = saveState !== "saved" && rows.length === 0;
 
   return (
-    <div className="flex flex-col gap-4 pb-8">
-      <div className="flex flex-wrap items-center gap-2 max-lg:[&_button]:size-[44px] lg:gap-3">
-        <Button asChild variant="ghost" size="icon-sm" aria-label={msg("datasets.editor.back")}>
-          <Link href="/datasets">
-            <ArrowLeft className="size-4 rtl:rotate-180" />
-          </Link>
-        </Button>
+    <div className="flex flex-col gap-4 pb-12">
+      <div className="self-start">
+        <BackLink href="/datasets" label={msg("datasets.editor.back")} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 lg:gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold text-foreground" dir="auto">
+          <h2
+            className="truncate text-lg sm:text-xl font-bold tracking-tight text-foreground"
+            dir="auto"
+          >
             {name || msg("datasets.editor.title_fallback")}
           </h2>
           <p className="text-xs text-muted-foreground tabular-nums">
@@ -952,12 +951,12 @@ export function DatasetEditorView() {
             });
           }
         }}
-        className="overflow-x-auto rounded-xl border border-border/60 bg-card outline-none focus-visible:border-ring/60"
+        className="overflow-x-auto rounded-2xl border border-border/40 bg-card/60 outline-none focus-visible:border-ring/60"
       >
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border/60 bg-muted/40">
-              <th className="w-12 px-2 py-2 text-start text-xs font-medium text-muted-foreground">
+              <th className="w-12 px-2 py-2 text-start text-[0.75rem] font-semibold text-muted-foreground">
                 #
               </th>
               {columns.map((column, colIdx) => (
@@ -981,9 +980,7 @@ export function DatasetEditorView() {
                       aria-label={msg("datasets.editor.rename_column")}
                     />
                     {roles[column] === "output" && (
-                      <Badge variant="ghost" size="sm" className="shrink-0 opacity-60">
-                        {msg("datasets.editor.output_badge")}
-                      </Badge>
+                      <RolePill role="output">{msg("datasets.editor.output_badge")}</RolePill>
                     )}
                     <Button
                       variant="ghost"
@@ -991,7 +988,7 @@ export function DatasetEditorView() {
                       onClick={() => deleteColumn(colIdx)}
                       disabled={columns.length <= 1}
                       aria-label={msg("datasets.editor.delete_column")}
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     >
                       <X className="size-3.5" />
                     </Button>
@@ -1010,7 +1007,7 @@ export function DatasetEditorView() {
                     {msg("datasets.editor.add_column")}
                   </Button>
                 ) : (
-                  <input
+                  <Input
                     value={newColumn}
                     onChange={(e) => setNewColumn(e.target.value)}
                     onBlur={addColumn}
@@ -1021,7 +1018,7 @@ export function DatasetEditorView() {
                     placeholder={msg("datasets.editor.column_placeholder")}
                     dir="ltr"
                     autoFocus
-                    className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:border-ring"
+                    className="h-8 px-2 font-mono text-xs"
                   />
                 )}
               </th>
@@ -1047,7 +1044,7 @@ export function DatasetEditorView() {
                           size="icon-xs"
                           onClick={() => deleteRow(rowIdx)}
                           aria-label={msg("datasets.editor.delete_row")}
-                          className="absolute inset-y-0 start-1 my-auto text-muted-foreground opacity-100 transition-opacity focus-visible:bg-accent focus-visible:opacity-100 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+                          className="absolute inset-y-0 start-1 my-auto text-muted-foreground opacity-100 transition-opacity focus-visible:bg-accent focus-visible:opacity-100 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
                         >
                           <Trash className="size-3.5" />
                         </Button>
@@ -1129,17 +1126,17 @@ export function DatasetEditorView() {
                       })}
                     </tr>
                   </ContextMenuTrigger>
-                  <ContextMenuContent className="min-w-44 py-1">
+                  <ContextMenuContent className="min-w-44">
                     <ContextMenuItem onSelect={() => insertRow(rowIdx)}>
-                      <ArrowUp className="size-3.5 text-muted-foreground" />
+                      <ArrowUp className="size-4 shrink-0 text-muted-foreground" />
                       {msg("datasets.editor.insert_row_above")}
                     </ContextMenuItem>
                     <ContextMenuItem onSelect={() => insertRow(rowIdx + 1)}>
-                      <ArrowDown className="size-3.5 text-muted-foreground" />
+                      <ArrowDown className="size-4 shrink-0 text-muted-foreground" />
                       {msg("datasets.editor.insert_row_below")}
                     </ContextMenuItem>
                     <ContextMenuItem onSelect={() => duplicateRow(rowIdx)}>
-                      <Copy className="size-3.5 text-muted-foreground" />
+                      <Copy className="size-4 shrink-0 text-muted-foreground" />
                       {msg("datasets.editor.duplicate_row")}
                     </ContextMenuItem>
                     <ContextMenuSeparator />
@@ -1147,7 +1144,7 @@ export function DatasetEditorView() {
                       onSelect={() => deleteRow(rowIdx)}
                       className="text-destructive data-[highlighted]:bg-destructive/10"
                     >
-                      <Trash className="size-3.5" />
+                      <Trash className="size-4 shrink-0" />
                       {msg("datasets.editor.delete_row")}
                     </ContextMenuItem>
                   </ContextMenuContent>
@@ -1156,11 +1153,8 @@ export function DatasetEditorView() {
             })}
             {rows.length === 0 && (
               <tr>
-                <td
-                  colSpan={columns.length + 2}
-                  className="px-4 py-10 text-center text-sm text-muted-foreground"
-                >
-                  {msg("datasets.editor.empty")}
+                <td colSpan={columns.length + 2}>
+                  <EmptyState variant="list" title={msg("datasets.editor.empty")} />
                 </td>
               </tr>
             )}
@@ -1186,7 +1180,7 @@ export function DatasetEditorView() {
       {pageCount > 1 && (
         <div className="flex items-center justify-end gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon-sm"
             onClick={() => setPage(Math.max(0, safePage - 1))}
             disabled={safePage === 0}
@@ -1198,7 +1192,7 @@ export function DatasetEditorView() {
             {formatMsg("datasets.editor.rows_range", { from, to, total: rows.length })}
           </span>
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon-sm"
             onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
             disabled={safePage >= pageCount - 1}

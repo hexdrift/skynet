@@ -7,9 +7,11 @@ import { Label } from "@/shared/ui/primitives/label";
 import { Input } from "@/shared/ui/primitives/input";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { RetryIconButton } from "@/shared/ui/retry-icon-button";
+import { TOUCH_FIELD } from "@/shared/ui/touch";
 import { cn } from "@/shared/lib/utils";
 import { tip } from "@/shared/lib/tooltips";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 import { probeMcp, type McpProbeTool } from "@/shared/lib/api";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -84,19 +86,19 @@ export function ReactConfigSection({ w }: { w: SubmitWizardContext }) {
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">
+            <Label>
               <HelpTip text={tip("react.mcp_url")}>{msg("submit.react.mcp_url_label")}</HelpTip>
             </Label>
             <Input
               value={reactConfig.mcpUrl}
               dir="ltr"
               placeholder="http://localhost:8000/mcp/"
-              className="h-[44px] font-mono text-base lg:h-9 lg:text-xs"
+              className={cn(TOUCH_FIELD, "font-mono lg:text-xs")}
               onChange={(e) => updateReactConfig({ mcpUrl: e.target.value })}
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">
+            <Label>
               <HelpTip text={tip("react.auth")}>{msg("submit.react.auth_label")}</HelpTip>
             </Label>
             <Input
@@ -105,7 +107,7 @@ export function ReactConfigSection({ w }: { w: SubmitWizardContext }) {
               dir="ltr"
               autoComplete="off"
               placeholder="Bearer …"
-              className="h-[44px] font-mono text-base lg:h-9 lg:text-xs"
+              className={cn(TOUCH_FIELD, "font-mono lg:text-xs")}
               onChange={(e) => updateReactConfig({ mcpAuthHeader: e.target.value })}
             />
           </div>
@@ -146,11 +148,20 @@ export function ReactConfigSection({ w }: { w: SubmitWizardContext }) {
                 <RetryIconButton
                   label={msg("submit.react.mcp_retry")}
                   onClick={() => runProbe(reactConfig.mcpUrl.trim(), reactConfig.mcpAuthHeader)}
-                  className="size-[44px] lg:size-8"
                 />
               )}
               {tools.length > 1 && (
-                <div className="flex shrink-0 items-center gap-1.5" dir="ltr">
+                <div
+                  className="flex shrink-0 items-center gap-1.5"
+                  dir="ltr"
+                  // Pinned LTR like its carets: ← previous, → next in every locale.
+                  onKeyDown={(event) => {
+                    const step = arrowPageStep(event, false);
+                    if (step === 0) return;
+                    event.preventDefault();
+                    setToolIndex((i) => Math.max(0, Math.min(tools.length - 1, i + step)));
+                  }}
+                >
                   <button
                     type="button"
                     aria-label={msg("submit.react.tools_prev")}

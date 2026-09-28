@@ -1,57 +1,65 @@
-import * as React from "react";
-import { X } from "@/shared/ui/icons";
+import { FunnelX, X } from "@/shared/ui/icons";
+import { Button } from "@/shared/ui/primitives/button";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { getStatusLabel } from "@/shared/constants/job-status";
-import { modelDisplayName } from "@/shared/lib/formatters";
+import { modelDisplayName, moduleLabel } from "@/shared/lib/formatters";
 import { msg } from "@/shared/lib/messages";
 import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
+import { TERMS } from "@/shared/lib/terms";
+import { jobTypeLabel } from "../lib/transform-chart-data";
 import type { UseAnalyticsFiltersReturn } from "../hooks/use-analytics-filters";
 
 export function AnalyticsFilterChips({
   filters,
   sessionUser,
 }: {
-  filters: Pick<
-    UseAnalyticsFiltersReturn,
-    | "model"
-    | "status"
-    | "jobId"
-    | "date"
-    | "owner"
-    | "access"
-    | "setModel"
-    | "setStatus"
-    | "setJobId"
-    | "setDate"
-    | "setOwner"
-    | "setAccess"
-  >;
+  filters: UseAnalyticsFiltersReturn;
   sessionUser: string;
 }) {
   const {
+    range,
+    optimizer,
     model,
     status,
-    jobId,
     date,
+    dateTo,
     owner,
     access,
+    jobType,
+    module,
+    improvement,
+    runtime,
+    dataset,
+    setRange,
+    setOptimizer,
     setModel,
     setStatus,
-    setJobId,
     setDate,
     setOwner,
     setAccess,
+    setJobType,
+    setModule,
+    setImprovement,
+    setRuntime,
+    setDataset,
+    hasFilters,
+    clearAll,
   } = filters;
-  const hasFilters = jobId || date || owner || access || model !== "all" || status !== "all";
   if (!hasFilters) return null;
 
-  const clearAllFilters = () => {
-    setJobId(null);
-    setDate(null);
-    setOwner(null);
-    setAccess(null);
-    setModel("all");
-    setStatus("all");
+  const locale = getActiveIntlLocale();
+  const dateFormat: Intl.DateTimeFormatOptions = {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   };
+  const dateLabel = date
+    ? dateTo && dateTo !== date
+      ? new Intl.DateTimeFormat(locale, dateFormat).formatRange(new Date(date), new Date(dateTo))
+      : new Date(date).toLocaleDateString(locale, dateFormat)
+    : "";
+  const bucketClearLabel = msg("auto.features.dashboard.components.analyticstab.literal.2");
+  const clearAllLabel = msg("auto.features.dashboard.components.analyticstab.3");
 
   const ownerIsMe = Boolean(owner) && owner!.toLowerCase() === sessionUser.toLowerCase();
   const accessLabels: Record<string, string> = {
@@ -80,23 +88,62 @@ export function AnalyticsFilterChips({
           onClear={() => setOwner(null)}
         />
       )}
-      {jobId && (
+      {range !== "all" && (
+        <FilterChip
+          label={msg(`usage.range.${range}`)}
+          ariaLabel={msg("dashboard.analytics.range_filter_clear")}
+          onClear={() => setRange("all")}
+        />
+      )}
+      {optimizer !== "all" && (
         <FilterChip
           dir="ltr"
-          label={`${jobId.slice(0, 8)}...`}
-          ariaLabel={msg("auto.features.dashboard.components.analyticstab.literal.1")}
-          onClear={() => setJobId(null)}
+          label={optimizer}
+          ariaLabel={msg("dashboard.analytics.optimizer_filter_clear")}
+          onClear={() => setOptimizer("all")}
         />
       )}
       {date && (
+        <FilterChip label={dateLabel} ariaLabel={bucketClearLabel} onClear={() => setDate(null)} />
+      )}
+      {jobType && (
         <FilterChip
-          label={new Date(date).toLocaleDateString(getActiveIntlLocale(), {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}
-          ariaLabel={msg("auto.features.dashboard.components.analyticstab.literal.2")}
-          onClear={() => setDate(null)}
+          label={jobTypeLabel(jobType)}
+          ariaLabel={bucketClearLabel}
+          onClear={() => setJobType(null)}
+        />
+      )}
+      {module && (
+        <FilterChip
+          label={moduleLabel(module)}
+          title={module}
+          truncate
+          ariaLabel={bucketClearLabel}
+          onClear={() => setModule(null)}
+        />
+      )}
+      {improvement && (
+        <FilterChip
+          dir="ltr"
+          label={`${improvement.label} ${msg("dashboard.analytics.axis_points")}`}
+          ariaLabel={bucketClearLabel}
+          onClear={() => setImprovement(null)}
+        />
+      )}
+      {runtime && (
+        <FilterChip
+          dir="ltr"
+          label={`${runtime.label} ${msg("dashboard.analytics.axis_minutes")}`}
+          ariaLabel={bucketClearLabel}
+          onClear={() => setRuntime(null)}
+        />
+      )}
+      {dataset && (
+        <FilterChip
+          dir="ltr"
+          label={`${dataset.label} ${TERMS.rowPlural}`}
+          ariaLabel={bucketClearLabel}
+          onClear={() => setDataset(null)}
         />
       )}
       {model !== "all" && (
@@ -116,12 +163,18 @@ export function AnalyticsFilterChips({
           onClear={() => setStatus("all")}
         />
       )}
-      <button
-        onClick={clearAllFilters}
-        className="ms-0.5 min-h-[44px] cursor-pointer text-[0.625rem] text-[#3D2E22]/40 transition-colors hover:text-[#3D2E22]/70 lg:min-h-0"
-      >
-        {msg("auto.features.dashboard.components.analyticstab.3")}
-      </button>
+      <TooltipButton tooltip={clearAllLabel}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          type="button"
+          onClick={clearAll}
+          className="ms-0.5"
+          aria-label={clearAllLabel}
+        >
+          <FunnelX className="size-4" aria-hidden="true" />
+        </Button>
+      </TooltipButton>
     </div>
   );
 }
@@ -142,7 +195,7 @@ function FilterChip({
   truncate?: boolean;
 }) {
   return (
-    <span className="group inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-[#3D2E22]/10 bg-[#3D2E22]/[0.06] pe-1 ps-2.5 py-1 transition-all duration-150 hover:border-[#3D2E22]/20 hover:bg-[#3D2E22]/[0.1] lg:min-h-0">
+    <span className="group inline-flex items-center gap-1.5 rounded-lg border border-[#3D2E22]/10 bg-[#3D2E22]/[0.06] pe-1 ps-2.5 py-1 transition-all duration-150 hover:border-[#3D2E22]/20 hover:bg-[#3D2E22]/[0.1]">
       <span
         className={`text-[0.6875rem] font-medium text-[#3D2E22]/80 ${truncate ? "font-mono truncate max-w-[140px]" : ""}`}
         dir={dir}
@@ -151,14 +204,9 @@ function FilterChip({
         {label}
       </span>
       <button
+        type="button"
         onClick={onClear}
-        className="close-button [--close-btn-size:44px] lg:[--close-btn-size:32px]"
-        style={
-          {
-            "--close-btn-radius": "6px",
-            "--close-btn-icon": "12px",
-          } as React.CSSProperties
-        }
+        className="close-button [--close-btn-size:20px] [--close-btn-radius:6px] [--close-btn-icon:12px]"
         aria-label={ariaLabel}
       >
         <X />

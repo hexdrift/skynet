@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyCopied } from "@/shared/lib/notify";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -22,20 +23,18 @@ import {
   Play,
   Pause,
   HardDrive,
-  RocketLaunch,
   GridFour,
   Package,
 } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 
 import { Button } from "@/shared/ui/primitives/button";
-import { Badge } from "@/shared/ui/primitives/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { PingDot } from "@/shared/ui/ping-dot";
 import { markRecentSession } from "@/shared/lib/recent-session";
 import { FadeIn } from "@/shared/ui/motion";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
-import { CopyGlyph, useCopyToClipboard } from "@/shared/ui/copy-button";
+import { CopyButton } from "@/shared/ui/copy-button";
 import {
   getJob,
   cancelJob,
@@ -65,6 +64,7 @@ import {
   DEMO_TRAJECTORY_PREVIEW_LAYOUT,
   buildDemoOptimizationPayload,
   buildGridDemoJob,
+  finishDemoSimulation,
   resetDemoSimulation,
   startDemoSimulation,
 } from "@/features/tutorial/lib/demo-data";
@@ -79,7 +79,6 @@ import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-statu
 import { registerTutorialHook } from "@/features/tutorial";
 import type { OptimizationStatusResponse, OptimizationPayloadResponse } from "@/shared/types/api";
 import type { SharedOptimizationData } from "@/shared/lib/api";
-import type { PipelineStage } from "../constants";
 import { extractScoresFromLogs } from "../lib/extract-scores";
 import { isReactModuleName } from "../lib/is-react-module";
 import { reconstructGridResult } from "../lib/reconstruct-grid";
@@ -91,7 +90,6 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { ConfigTab } from "./ConfigTab";
 import { CodeTab } from "./CodeTab";
 import { ArtifactTab } from "./ArtifactTab";
-import { StageInfoModal } from "./StageInfoModal";
 import { PairSelectionStrip } from "./PairSelectionStrip";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
@@ -218,24 +216,16 @@ function LiveElapsedBadge({
   );
 }
 
-// Copy control for the failure card. Mirrors the app-wide animated copy
-// pattern (Copy morphs into a check, tooltip flips to "copied"), tinted to
-// the warm error palette so it reads as part of the card rather than a
-// generic action.
+// The app-standard copy button, tinted to the failure card's warm error
+// palette so it reads as part of the card rather than a generic action.
 function FailureCopyButton({ text }: { text: string }) {
-  const { copied, copy } = useCopyToClipboard();
-  const label = msg(copied ? "shared.code_editor.copied" : "shared.code_editor.copy");
   return (
-    <TooltipButton tooltip={label}>
-      <button
-        type="button"
-        aria-label={label}
-        onClick={() => void copy(text)}
-        className="-me-1 flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-[#B04030]/70 transition-colors hover:bg-[#B04030]/10 hover:text-[#B04030] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B04030]/30 sm:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-      >
-        <CopyGlyph copied={copied} className="size-3.5" checkClassName="text-[#B04030]" />
-      </button>
-    </TooltipButton>
+    <CopyButton
+      text={text}
+      ariaLabel={msg("shared.code_editor.copy")}
+      copiedAriaLabel={msg("shared.code_editor.copied")}
+      className="-me-1 shrink-0 text-[#B04030]/70 hover:bg-[#B04030]/10 hover:text-[#B04030]"
+    />
   );
 }
 
@@ -320,6 +310,15 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
       }),
     [],
   );
+  // Re-running the simulation effect clears the pending replay timers, and a
+  // completed simulation starts straight at the finished run.
+  useEffect(
+    () =>
+      registerTutorialHook("finishDemoSimulation", () => {
+        if (finishDemoSimulation()) setDemoReplayKey((k) => k + 1);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!isDemoMode) return;
@@ -366,7 +365,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const [serveError, setServeError] = useState<string | null>(null);
-  const [stageModal, setStageModal] = useState<PipelineStage | null>(null);
 
   const activePairIndex =
     searchParams.get("pair") != null ? parseInt(searchParams.get("pair")!, 10) : null;
@@ -1060,45 +1058,26 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   {job.description}
                 </p>
               )}
-              <code
-                className="inline-flex min-h-[44px] items-center rounded-md text-xs font-mono text-muted-foreground/60 cursor-pointer hover:text-primary transition-colors break-all sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-                title={msg("auto.app.optimizations.id.page.literal.1")}
-                aria-label={formatMsg("auto.app.optimizations.id.page.template.3", {
-                  p1: TERMS.optimization,
-                })}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  void navigator.clipboard.writeText(job.optimization_id);
-                  toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    void navigator.clipboard.writeText(job.optimization_id);
-                    toast.success(msg("clipboard.copied_short"), { autoClose: 1000 });
-                  }
-                }}
-              >
-                {job.optimization_id}
-              </code>
+              <span className="inline-flex items-center gap-1">
+                <code className="break-all font-mono text-xs text-muted-foreground/60" dir="ltr">
+                  {job.optimization_id}
+                </code>
+                <CopyButton
+                  text={job.optimization_id}
+                  ariaLabel={formatMsg("auto.app.optimizations.id.page.template.3", {
+                    p1: TERMS.optimization,
+                  })}
+                  title={msg("auto.app.optimizations.id.page.literal.1")}
+                  onCopied={notifyCopied}
+                />
+              </span>
               <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
-                <Badge
-                  variant="outline"
-                  className="gap-1.5 border-[#C8A882]/45 bg-[#C8A882]/15 font-semibold text-[0.6875rem] text-[#3D2E22] [&>svg]:text-[#8a6d44]"
-                >
-                  {job.optimization_type === "grid_search" ? (
-                    <>
-                      <GridFour />
-                      {msg("auto.app.optimizations.id.page.literal.2")}
-                    </>
-                  ) : (
-                    <>
-                      <RocketLaunch />
-                      {msg("auto.app.optimizations.id.page.literal.3")}
-                    </>
-                  )}
-                </Badge>
+                {job.optimization_type === "grid_search" && (
+                  <span className="flex items-center gap-1.5">
+                    <GridFour className="size-3.5" />
+                    {msg("auto.app.optimizations.id.page.literal.2")}
+                  </span>
+                )}
                 <LiveElapsedBadge
                   isActive={isActive}
                   startedAt={startedAt}
@@ -1136,8 +1115,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   <TooltipButton tooltip={msg("auto.app.optimizations.id.page.4")}>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                      size="icon-sm"
                       onClick={() => router.push(`/submit?clone=${job.optimization_id}`)}
                       aria-label={msg("auto.app.optimizations.id.page.literal.4")}
                     >
@@ -1154,8 +1132,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                     <TooltipButton tooltip={msg("optimization.resume_tooltip")}>
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                        size="icon-sm"
                         onClick={handleResume}
                         disabled={resuming}
                         aria-label={msg("optimization.resume")}
@@ -1172,8 +1149,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                     <TooltipButton tooltip={msg("optimization.rerun_tooltip")}>
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                        size="icon-sm"
                         onClick={handleRetry}
                         disabled={retrying}
                         aria-label={msg("optimization.rerun")}
@@ -1188,8 +1164,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   <TooltipButton tooltip={msg("optimization.pause_tooltip")}>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                      size="icon-sm"
                       onClick={handlePause}
                       disabled={pausing}
                       aria-label={msg("optimization.pause")}
@@ -1202,8 +1177,8 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                   <TooltipButton tooltip={msg("auto.app.optimizations.id.page.5")}>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="size-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-0 focus-visible:border-0 sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                      size="icon-sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={handleCancel}
                       aria-label={msg("auto.app.optimizations.id.page.literal.5")}
                     >
@@ -1224,8 +1199,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 <TooltipButton tooltip={msg("share.clone_tooltip")}>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                    size="icon-sm"
                     onClick={() =>
                       router.push(
                         shareToken
@@ -1451,7 +1425,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 scorePoints={isPairContext ? pairScorePoints : scorePoints}
                 activePairIndex={activePairIndex}
                 activePair={activePair}
-                onStageClick={setStageModal}
                 onPairSelect={handlePairSelect}
                 onPairDeleted={handlePairDeleted}
                 trajectoryPreviewLayout={
@@ -1551,8 +1524,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
           </Tabs>
         );
       })()}
-
-      <StageInfoModal stage={stageModal} job={job} onClose={() => setStageModal(null)} />
     </div>
   );
 }

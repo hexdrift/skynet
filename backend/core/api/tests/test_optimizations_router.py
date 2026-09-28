@@ -27,6 +27,7 @@ from ...config import settings
 from ...models.artifacts import ProgramArtifact
 from ...models.common import SplitCounts
 from ...models.results import GridSearchResponse, PairResult, RunResponse
+from ...service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION, SPLIT_VERSION_LEGACY
 from ...storage.models import Base
 from ..errors import DomainError
 from ..routers.optimizations import create_optimizations_router
@@ -1035,6 +1036,26 @@ def test_dataset_split_counts_match_stored_fractions(opt_client: TestClient, sto
     assert sc["test"] == 3
 
 
+@pytest.mark.parametrize(
+    ("split_version", "expected"),
+    [
+        (None, {"train": 7, "val": 1, "test": 2}),
+        (CURRENT_SPLIT_VERSION, {"train": 7, "val": 2, "test": 1}),
+    ],
+)
+def test_dataset_split_counts_follow_the_payload_split_version(
+    opt_client: TestClient, store: _ExtendedFakeJobStore, split_version: int | None, expected: dict[str, int]
+) -> None:
+    """An unstamped payload shows its legacy split and a stamped one the largest-remainder split."""
+    extra = {} if split_version is None else {"split_version": split_version}
+    _seed_job_with_dataset(store, "versioned", num_rows=10, shuffle=False, **extra)
+
+    body = opt_client.get("/optimizations/versioned/dataset").json()
+
+    assert body["split_counts"] == expected
+    assert [len(body["splits"][name]) for name in ("train", "val", "test")] == list(expected.values())
+
+
 def test_evaluate_examples_404_when_payload_missing(opt_client: TestClient, store: _ExtendedFakeJobStore) -> None:
     """Evaluating examples on a job with no payload returns 404."""
     store.seed_job("nopayload_eval", status="success", payload=None)
@@ -1579,3 +1600,27 @@ def test_clone_payload_raises_409_when_saved_payload_no_longer_validates() -> No
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.code == "optimization.cannot_resubmit_payload"
+
+
+_CLONE_SOURCE = {
+    "username": "alice",
+    "module_name": "predict",
+    "signature_code": "class S(dspy.Signature):\n    q: str = dspy.InputField()\n    a: str = dspy.OutputField()\n",
+    "metric_code": "def metric(example, pred, trace=None):\n    return 1.0\n",
+    "optimizer_name": "gepa",
+    "dataset": [{"q": "x", "a": "y"}],
+    "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
+    "model_config": {"name": "openai/gpt-4o-mini"},
+}
+
+
+@pytest.mark.parametrize("split_version", [None, SPLIT_VERSION_LEGACY, CURRENT_SPLIT_VERSION])
+def test_clone_payload_keeps_the_source_split_version(split_version: int | None) -> None:
+    """A clone or retry reproduces the source run's split, legacy or current."""
+    source = dict(_CLONE_SOURCE)
+    if split_version is not None:
+        source["split_version"] = split_version
+
+    _new_id, cloned = clone_payload(source, optimization_type="run", new_name="retry")
+
+    assert cloned.split_version == split_version

@@ -377,7 +377,7 @@
 <header class="doc-header">
   <p class="eyebrow">Skynet · Frontend Feature</p>
   <h1>Tutorial System</h1>
-  <p class="lede">Four focused, replayable product guides cover a first optimization, data preparation, results, and workspace settings. Every guide has seven steps or fewer.</p>
+  <p class="lede">Four focused, replayable product guides cover a first optimization, data preparation, results, and workspace settings. Every guide has eight steps or fewer; steps that need a wide table or code view are skipped on phones.</p>
   <div class="meta-row">
     <span class="pill">React · TypeScript</span>
     <span class="pill">RTL · Hebrew</span>
@@ -454,9 +454,9 @@
 
   <div class="tracks">
     <div class="track"><div class="head"><span class="name">Quick start</span><span class="count">7 steps</span></div><p>Prepare a dataset, define the Signature and metric, choose models, review the run, inspect the score, test the result, and export the artifact.</p></div>
-    <div class="track"><div class="head"><span class="name">Prepare data</span><span class="count">3 steps</span></div><p>Organize reusable datasets, set up a labeling session, and choose manual, co-pilot, or autopilot labeling.</p></div>
-    <div class="track"><div class="head"><span class="name">Use the result</span><span class="count">7 steps</span></div><p>Review result actions, pipeline state, trajectory, source code, the optimized artifact, evaluation data, and logs.</p></div>
-    <div class="track"><div class="head"><span class="name">Workspace and settings</span><span class="count">6 steps</span></div><p>Read dashboard metrics and runs, open analytics and semantic search, use the general agent, and manage provider connections.</p></div>
+    <div class="track"><div class="head"><span class="name">Prepare data</span><span class="count">4 steps</span></div><p>Add a dataset, act on a selected dataset (tag, edit, share, rename), pick the rows to label, and choose manual, co-pilot, or autopilot labeling.</p></div>
+    <div class="track"><div class="head"><span class="name">Use the result</span><span class="count">8 steps</span></div><p>Read the scores, follow the trajectory, test the result, inspect source code, the optimized artifact, evaluation data and logs, then share or clone the run.</p></div>
+    <div class="track"><div class="head"><span class="name">Workspace and settings</span><span class="count">6 steps</span></div><p>Find your way with the sidebar and the Ctrl/Cmd+K search, read the runs table and analytics, search runs, use the general agent, and manage provider connections.</p></div>
   </div>
 </section>
 
@@ -478,6 +478,7 @@
       <tr><td><code>dashboard-kpis</code></td><td>Stats cards</td></tr>
       <tr><td><code>dashboard-table</code></td><td>Job table</td></tr>
       <tr><td><code>dashboard-stats</code></td><td>Analytics tab</td></tr>
+      <tr><td><code>analytics-content</code></td><td>Analytics charts and tables</td></tr>
       <tr><td><code>new-optimization</code></td><td>New optimization button</td></tr>
       <tr><td><code>job-link</code></td><td>Job table row (for navigation)</td></tr>
     </tbody>
@@ -487,7 +488,8 @@
   <table>
     <tbody>
       <tr><td><code>wizard-stepper</code></td><td>Wizard progress and composition</td></tr>
-      <tr><td><code>wizard-step-1</code> … <code>wizard-step-6</code></td><td>Current wizard sections</td></tr>
+      <tr><td><code>wizard-stage-goal</code>, <code>wizard-stage-code</code>, <code>wizard-stage-optimization</code>, <code>wizard-stage-review</code></td><td>Goal, Evaluation code, Optimization and Review stage sections</td></tr>
+      <tr><td><code>wizard-step-1</code>, <code>wizard-step-2</code>, <code>wizard-step-3</code></td><td>Name, dataset and model cards inside those stages</td></tr>
       <tr><td><code>workflow-canvas</code></td><td>Visual multi-module builder</td></tr>
       <tr><td><code>react-config</code></td><td>ReAct tools and iteration settings</td></tr>
       <tr><td><code>model-source</code></td><td>Organization or BYOK connection controls</td></tr>
@@ -497,7 +499,6 @@
   <h3>Job Detail</h3>
   <table>
     <tbody>
-      <tr><td><code>pipeline-stages</code></td><td>Pipeline tracker</td></tr>
       <tr><td><code>score-chart</code></td><td>Score progression</td></tr>
       <tr><td><code>live-logs</code></td><td>Logs tab</td></tr>
       <tr><td><code>serve-playground</code></td><td>Playground tab content</td></tr>
@@ -512,6 +513,10 @@
   <table>
     <tbody>
       <tr><td><code>datasets-library</code></td><td>Reusable datasets</td></tr>
+      <tr><td><code>datasets-add</code></td><td>Dataset search and upload controls</td></tr>
+      <tr><td><code>datasets-selection</code></td><td>Selection bar with dataset actions</td></tr>
+      <tr><td><code>tagger-data</code></td><td>Tagger data source card</td></tr>
+      <tr><td><code>code-editors</code></td><td>Signature and metric editors in the wizard</td></tr>
       <tr><td><code>tagger-setup</code></td><td>Dataset tagging workflow</td></tr>
       <tr><td><code>settings-navigation</code></td><td>Settings rail</td></tr>
       <tr><td><code>settings-providers</code></td><td>Verified BYOK providers</td></tr>

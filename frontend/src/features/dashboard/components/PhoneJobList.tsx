@@ -1,12 +1,19 @@
 "use client";
 
 import { CaretRight } from "@/shared/ui/icons";
+import {
+  LIST_ROW_CLASS,
+  LIST_ROW_META_CLASS,
+  LIST_ROW_META_DOT_CLASS,
+  LIST_ROW_TITLE_CLASS,
+} from "@/shared/ui/list-row";
 import { PingDot } from "@/shared/ui/ping-dot";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { formatId, formatRelativeTime, moduleLabel } from "@/shared/lib";
 import { ACTIVE_STATUSES, getJobTypeLabel } from "@/shared/constants/job-status";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
+import { cn } from "@/shared/lib/utils";
 import type { OptimizationSummaryResponse } from "@/shared/types/api";
 import { LiveElapsed } from "./LiveElapsed";
 import { formatScore } from "../lib/status-badges";
@@ -43,15 +50,12 @@ export function PhoneJobList({ items, showOwner, sessionUser, onOpenJob }: Phone
               aria-label={formatMsg("auto.features.dashboard.components.jobstab.template.3", {
                 p1: TERMS.optimization,
               })}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border/40 bg-card/60 px-3.5 py-3 text-start transition-colors active:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className={cn(LIST_ROW_CLASS, "w-full flex-nowrap")}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <div className="flex items-center gap-2">
                   {active && <PingDot className="shrink-0" />}
-                  <span
-                    className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
-                    dir="auto"
-                  >
+                  <span className={cn(LIST_ROW_TITLE_CLASS, "min-w-0 flex-1")} dir="auto">
                     {job.name || (
                       <span className="font-mono text-primary" dir="ltr">
                         {formatId(job.optimization_id)}
@@ -60,21 +64,27 @@ export function PhoneJobList({ items, showOwner, sessionUser, onOpenJob }: Phone
                   </span>
                   <StatusBadge status={job.status} compact className="shrink-0" />
                 </div>
-                <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <div className={cn(LIST_ROW_META_CLASS, "mt-0")}>
                   {job.name && (
                     <>
                       <span className="font-mono text-primary/80" dir="ltr">
                         {formatId(job.optimization_id)}
                       </span>
-                      <span aria-hidden="true">·</span>
+                      <span aria-hidden="true" className={LIST_ROW_META_DOT_CLASS}>
+                        ·
+                      </span>
                     </>
                   )}
                   <span className="truncate">{getJobTypeLabel(job.optimization_type)}</span>
-                  <span aria-hidden="true">·</span>
+                  <span aria-hidden="true" className={LIST_ROW_META_DOT_CLASS}>
+                    ·
+                  </span>
                   <span className="truncate">{moduleLabel(job.module_name)}</span>
                   {owner && (
                     <>
-                      <span aria-hidden="true">·</span>
+                      <span aria-hidden="true" className={LIST_ROW_META_DOT_CLASS}>
+                        ·
+                      </span>
                       <span className="truncate font-semibold text-foreground/80" dir="auto">
                         {owner}
                       </span>
@@ -83,7 +93,9 @@ export function PhoneJobList({ items, showOwner, sessionUser, onOpenJob }: Phone
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
                   <span>{formatRelativeTime(job.created_at)}</span>
-                  <span aria-hidden="true">·</span>
+                  <span aria-hidden="true" className={LIST_ROW_META_DOT_CLASS}>
+                    ·
+                  </span>
                   <LiveElapsed
                     startedAt={job.started_at}
                     createdAt={job.created_at}

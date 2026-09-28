@@ -51,14 +51,10 @@ export function TutorialPopover({
 
   return (
     <motion.div
-      initial={
-        prefersReduced ? false : { opacity: 0, scale: 0.985, x: horizontalDirection * 12 }
-      }
+      initial={prefersReduced ? false : { opacity: 0, scale: 0.985, x: horizontalDirection * 12 }}
       animate={{ opacity: 1, scale: 1, x: 0 }}
       exit={
-        prefersReduced
-          ? { opacity: 0 }
-          : { opacity: 0, scale: 0.985, x: horizontalDirection * -8 }
+        prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.985, x: horizontalDirection * -8 }
       }
       transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
       className="fixed z-[9999] pointer-events-auto"
@@ -78,7 +74,7 @@ export function TutorialPopover({
                 variant="ghost"
                 size="icon-xs"
                 onClick={onToggleAutoPlay}
-                className="size-[44px] text-[#8C7A6B] hover:bg-[#E5DDD4]/60 hover:text-[#3D2E22] md:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                className="text-[#8C7A6B] hover:bg-[#E5DDD4]/60 hover:text-[#3D2E22]"
                 aria-label={
                   isAutoPlaying
                     ? msg("auto.features.tutorial.components.tutorial.popover.literal.1")
@@ -89,15 +85,14 @@ export function TutorialPopover({
               </Button>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
+          <button
+            type="button"
             onClick={onExit}
-            className="size-[44px] md:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+            className="close-button shrink-0"
             aria-label={msg("auto.features.tutorial.components.tutorial.popover.literal.5")}
           >
-            <X className="size-4" />
-          </Button>
+            <X />
+          </button>
         </div>
 
         <div className="px-4 pb-3 sm:px-5">
@@ -105,9 +100,9 @@ export function TutorialPopover({
         </div>
 
         <div className="px-4 pb-3 sm:px-5">
-          <div className="h-1 bg-[#E5DDD4]/50 rounded-full overflow-hidden">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
             <motion.div
-              className="h-full bg-[#3D2E22] rounded-full"
+              className="h-full rounded-full bg-primary"
               style={{ originX: rtl ? 1 : 0 }}
               initial={prefersReduced ? false : { scaleX: previousProgress }}
               animate={{ scaleX: currentProgress }}
@@ -123,23 +118,13 @@ export function TutorialPopover({
           )}
         >
           {!isFirst && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onPrev}
-              className="min-h-[44px] text-xs md:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-            >
+            <Button variant="outline" size="sm" onClick={onPrev} className="text-xs">
               <BackArrow className="size-3" />
               {msg("auto.features.tutorial.components.tutorial.popover.2")}
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onNext}
-            className="min-h-[44px] text-xs md:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-          >
+          <Button variant="outline" size="sm" onClick={onNext} className="text-xs">
             {isLast
               ? msg("auto.features.tutorial.components.tutorial.popover.literal.6")
               : msg("auto.features.tutorial.components.tutorial.popover.literal.7")}

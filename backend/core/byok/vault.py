@@ -4,8 +4,8 @@ When an account runs in ``byok`` token source, jobs use the user's own provider
 connection. This module is the only place that holds those
 secrets: it encrypts them with Fernet (symmetric AES) under
 ``settings.byok_vault_key`` before they touch the database, decrypts them only
-to run a verify probe or hand them to a run, and never returns plaintext to the
-API surface. The stored row keeps only the ciphertext, a masked tail (``last4``)
+in memory (to re-run a verify probe, hand them to a run, or list the models a
+custom endpoint serves), and never returns plaintext to the API surface. The stored row keeps only the ciphertext, a masked tail (``last4``)
 for display, and a verification ``status`` — so a database dump never leaks a
 usable key.
 
@@ -17,8 +17,9 @@ error leaves it ``unverified`` (the probe couldn't reach a verdict, not a bad
 key).
 
 Reads of the masked metadata work whether or not the vault is configured;
-saving a key requires ``settings.is_byok_vault_configured`` and raises a
-configuration error otherwise — never a 500.
+anything that encrypts or decrypts (saving, re-verifying, resolving a key for a
+run) needs ``settings.byok_vault_key`` and raises a 503 ``byok.not_configured``
+``DomainError`` when it is unset — never a 500.
 """
 
 from __future__ import annotations
@@ -43,19 +44,6 @@ from ..storage.models import ByokProviderKeyModel
 STATUS_UNVERIFIED = "unverified"
 STATUS_VERIFIED = "verified"
 STATUS_INVALID = "invalid"
-
-# Providers a user may bring a key for. Mirrors the frontend ``BYOK_PROVIDERS``
-# catalog; the value is how the verify probe reaches each provider — the models
-# (or equivalent) endpoint plus the auth header shape that lists it. A bare
-# authenticated GET is enough to tell a working key from a rejected one without
-# spending tokens. ``header`` is templated with the secret at probe time.
-_PROVIDER_PROBES: dict[str, dict[str, str]] = {
-    "openrouter": {
-        "url": "https://openrouter.ai/api/v1/models",
-        "header_name": "Authorization",
-        "header_value": "Bearer {secret}",
-    },
-}
 
 # How long a verify probe waits for the provider before giving up. A timeout is
 # treated as "couldn't reach a verdict" (status stays ``unverified``), never as
@@ -266,28 +254,6 @@ class ProviderKeyVault:
                 .filter(
                     ByokProviderKeyModel.username == username,
                     ByokProviderKeyModel.provider == provider,
-                )
-                .first()
-                is not None
-            )
-
-    def has_verified_connection(self, username: str, provider: str) -> bool:
-        """Return whether the account has a verified connection for a provider.
-
-        Args:
-            username: Account to check.
-            provider: Provider slug to look for.
-
-        Returns:
-            True when at least one verified connection is stored.
-        """
-        with Session(self._engine) as session:
-            return (
-                session.query(ByokProviderKeyModel.id)
-                .filter(
-                    ByokProviderKeyModel.username == username,
-                    ByokProviderKeyModel.provider == provider,
-                    ByokProviderKeyModel.status == STATUS_VERIFIED,
                 )
                 .first()
                 is not None
@@ -507,32 +473,23 @@ class ProviderKeyVault:
         Any other status, a timeout, or a network error means the probe couldn't
         reach a verdict, so the status stays :data:`STATUS_UNVERIFIED` — the key
         is not condemned for an outage on the provider's side. A custom
-        ``api_base`` is probed at ``{api_base}/models``: with the provider's own
-        auth header shape when the provider is known, or OpenAI-compatible Bearer
-        auth for an unknown provider.
+        ``api_base`` is probed at ``{api_base}/models`` with OpenAI-compatible
+        Bearer auth; a connection without one is never probed (the deployment
+        is air-gapped, so there is no public provider endpoint to reach).
 
         Args:
             provider: Provider slug.
             secret: The plaintext key to authenticate the probe with.
-            api_base: Optional custom endpoint to probe instead of the provider's
-                default; required when ``provider`` is unknown.
+            api_base: Optional custom endpoint to probe.
 
         Returns:
             One of :data:`STATUS_VERIFIED`, :data:`STATUS_INVALID`, or
             :data:`STATUS_UNVERIFIED`.
         """
-        probe = _PROVIDER_PROBES.get(provider)
-        if probe is not None:
-            urls = self._model_probe_urls(api_base) if api_base else [probe["url"]]
-            headers = {probe["header_name"]: probe["header_value"].format(secret=secret)}
-            extra_name = probe.get("extra_header_name")
-            if extra_name:
-                headers[extra_name] = probe["extra_header_value"]
-        elif api_base:
-            urls = self._model_probe_urls(api_base)
-            headers = {"Authorization": f"Bearer {secret}"}
-        else:
+        if not api_base:
             return STATUS_UNVERIFIED
+        urls = self._model_probe_urls(api_base)
+        headers = {"Authorization": f"Bearer {secret}"}
         for url in urls:
             try:
                 response = httpx.get(url, headers=headers, timeout=_PROBE_TIMEOUT_SECONDS)

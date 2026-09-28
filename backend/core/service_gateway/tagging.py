@@ -2,9 +2,10 @@
 
 Powers the tagger's assist modes: the dataset interview that distills a
 labeling rubric, silent per-row predictions during calibration, batched
-review/auto-tagging, and the pre-run token estimate. Pure functions over the
-session payload — persistence stays in the router; nothing here touches the
-database.
+review/auto-tagging, the pre-run token estimate, and — for sessions created
+without data — writing the synthetic rows the interview specified. Pure
+functions over the session payload — persistence stays in the router;
+nothing here touches the database.
 
 All structured LLM outputs are JSON-in-a-string fields (the repo-wide dspy
 convention) parsed defensively, with a per-row fallback when a batch reply
@@ -39,11 +40,18 @@ from .language_models import (
 logger = logging.getLogger(__name__)
 
 MAX_INTERVIEW_QUESTIONS = 5
+# A synthetic session's interview defines the dataset before the task, so it
+# gets room for both.
+MAX_SYNTHETIC_INTERVIEW_QUESTIONS = 8
 BATCH_SIZE = 10
 BATCH_CONCURRENCY = 4
 MAX_EXAMPLES = 40
 SAMPLE_ROWS = 8
 MAX_ROW_CHARS = 1200
+SYNTH_BATCH_SIZE = 25
+MAX_SYNTH_ROWS = 200
+MAX_SYNTH_COLUMNS = 6
+MAX_COLUMN_CHARS = 60
 # chars-per-token heuristic for the pre-run estimate; JSON label output per row.
 CHARS_PER_TOKEN = 4
 OUTPUT_TOKENS_PER_ROW = 30
@@ -115,8 +123,12 @@ class InterviewTurnSig(dspy.Signature):
     Y when ..."), not process. Whenever the question has a small set of likely
     answers, offer 2-4 of them in ``options_json`` — each a short pickable
     answer with a one-line description of what choosing it means — so the user
-    can answer in one click. Every option must be a concrete, self-contained
-    answer. The composer under the options is always the free-text path, so
+    can answer in one click. When the task description says no dataset exists
+    yet, the dataset is yours to specify from the interview alone: pin down
+    the data first (domain, what kind of text each row holds, the variety and
+    edge cases to include, the language, how many rows), then the task, and
+    when done describe that data in ``dataset_json``; otherwise leave it {}.
+    Every option must be a concrete, self-contained answer. The composer under the options is always the free-text path, so
     never spend an option on an escape hatch — no "other", "something else",
     "none of these", "I use my own ...", or any rewording whose real meaning
     is "I'll type it below"; when only escape hatches would fill the list,
@@ -157,6 +169,17 @@ class InterviewTurnSig(dspy.Signature):
             '"mode": "binary" | "multiclass" | "freetext" next to its definition.'
         )
     )
+    dataset_json: str = dspy.OutputField(
+        desc=(
+            "Only when the task description says no dataset exists yet, and only "
+            'once done: {"brief": <2-5 sentences describing the data to write — '
+            "domain, what each row holds, the variety, tone and edge cases to "
+            "cover, and the language the rows are written in>, "
+            '"columns": [<1-3 snake_case column names, the main text column '
+            'first>], "rows": <row count the user asked for, default 30>}. '
+            "{} otherwise."
+        )
+    )
     session_title: str = dspy.OutputField(
         desc=(
             "Once done, a short session name (2-5 words) describing the labeling "
@@ -195,6 +218,30 @@ class TagOneSig(dspy.Signature):
     task_instructions: str = dspy.InputField(desc="Task, rubric and labeled examples.")
     row_text: str = dspy.InputField(desc="The row to label.")
     label_json: str = dspy.OutputField(desc='JSON object: {"label": <label>, "confidence": <0..1>, "reason": "..."}.')
+
+
+class SynthesizeRowsSig(dspy.Signature):
+    """Write realistic synthetic dataset rows for a labeling task.
+
+    Produce exactly the requested number of rows as a JSON array of flat
+    objects. Every object must carry every listed column with a string
+    value; when no columns are given, choose one to three sensible
+    snake_case column names yourself (the main text column first) and use
+    them in every row. Rows must be varied — different people, situations,
+    lengths, tones, edge cases and a few genuinely ambiguous items — never
+    numbered, never templated, never obviously machine-made. Write in the
+    language the brief is written in unless the brief asks for another. A
+    dataset is written in several parts by separate calls, so lean this part
+    towards its own slice of scenarios instead of covering everything.
+    """
+
+    brief: str = dspy.InputField(desc="What the dataset is about and what its rows look like.")
+    columns_json: str = dspy.InputField(
+        desc='JSON array of column names to fill, e.g. ["text", "channel"]; "[]" means choose them.'
+    )
+    count: int = dspy.InputField(desc="Exactly how many rows to write.")
+    part: str = dspy.InputField(desc='Which slice of the dataset this call writes, e.g. "part 2 of 4".')
+    rows_json: str = dspy.OutputField(desc="JSON array of row objects and nothing else.")
 
 
 def _parse_json(raw: str, fallback: Any) -> Any:
@@ -285,6 +332,26 @@ def task_description(config: dict[str, Any]) -> str:
         A compact English framing of the task; user-authored parts (question,
         category names, prompt) are passed through verbatim in their language.
     """
+    # A synthetic session has no rows until the interview has specified them:
+    # the data and the task are both derived from the conversation alone.
+    if config.get("_synthetic_pending"):
+        return (
+            "No dataset exists yet: the user chose to label synthetic data, and the "
+            "rows will be generated from a specification you derive from this "
+            "interview. Your first job is to pin down the data: open by asking what "
+            "domain the rows come from and what kind of text each row holds (for "
+            "example support chats, product reviews, headlines); then cover the "
+            "variety and edge cases the data should include, the language the rows "
+            "are written in, and how many rows the user wants (offer 30 / 50 / 100 "
+            "as options). Then define the labeling task: what the user wants to learn "
+            "or decide about each row and what the labels will be used for. You decide "
+            "the answer style — binary (one yes/no question per row), multiclass (a "
+            "fixed set of categories), or freetext (text extracted or written per "
+            "row) — from the user's goal; ask about it only when the goal genuinely "
+            "fits more than one style. When done, return the data specification in "
+            '"dataset_json" and the chosen style in the task config as "mode" '
+            "together with its matching definition."
+        )
     # A provisional-mode session (assisted setup, no interface picked) leaves
     # the answer style itself to the interview. Autopilot autonomy covers the
     # tagging phase only — the task itself is always defined with the user.
@@ -362,6 +429,17 @@ def summarize_dataset(config: dict[str, Any], columns: list[str], data: list[dic
         A compact text profile: row count, input columns, and sample rows
         spread across the dataset.
     """
+    if config.get("_synthetic_pending"):
+        return json.dumps(
+            {
+                "row_count": 0,
+                "note": (
+                    "No rows exist yet. The dataset is generated after the interview "
+                    "from the specification you return in dataset_json."
+                ),
+            },
+            ensure_ascii=False,
+        )
     input_cols = [str(c) for c in config.get("inputColumns") or []]
     step = max(1, len(data) // SAMPLE_ROWS)
     sample = [_row_text(row) for row in data[::step][:SAMPLE_ROWS]]
@@ -532,7 +610,7 @@ def _interview_inputs(
     return {
         "task_description": task_description(config)
         + (
-            f"\nQuestions asked so far: {asked} of at most {MAX_INTERVIEW_QUESTIONS}."
+            f"\nQuestions asked so far: {asked} of at most {_question_cap(config)}."
             " If the limit is reached you MUST finish now."
             if asked
             else ""
@@ -540,6 +618,46 @@ def _interview_inputs(
         "dataset_summary": summarize_dataset(config, columns, data),
         "transcript_json": json.dumps(turns, ensure_ascii=False),
         "reply_language": _reply_language(locale),
+    }
+
+
+def _question_cap(config: dict[str, Any]) -> int:
+    """Return how many questions the interviewer may ask on this session.
+
+    Args:
+        config: The session's interview configuration.
+
+    Returns:
+        The synthetic cap when the dataset is still to be specified, else the
+        regular one.
+    """
+    return MAX_SYNTHETIC_INTERVIEW_QUESTIONS if config.get("_synthetic_pending") else MAX_INTERVIEW_QUESTIONS
+
+
+def normalize_dataset_spec(raw: Any) -> dict[str, Any]:
+    """Normalize a model-produced synthetic dataset specification.
+
+    Args:
+        raw: Parsed ``dataset_json`` output.
+
+    Returns:
+        ``{brief, columns, rows}`` with the brief non-empty, the column names
+        cleaned and the row count clamped to ``1..MAX_SYNTH_ROWS``; an empty
+        mapping when there is no usable brief.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    brief = str(raw.get("brief") or "").strip()[:2000]
+    if not brief:
+        return {}
+    try:
+        rows = int(raw.get("rows") or 0)
+    except (TypeError, ValueError):
+        rows = 0
+    return {
+        "brief": brief,
+        "columns": _clean_column_names(raw.get("columns")),
+        "rows": max(1, min(rows or 30, MAX_SYNTH_ROWS)),
     }
 
 
@@ -626,7 +744,7 @@ def _parse_interview_prediction(pred: Any, asked: int, config: dict[str, Any]) -
     done = str(getattr(pred, "done", "")).strip().lower() in {"true", "yes", "1"}
     rubric = _parse_json(getattr(pred, "rubric_json", "[]"), [])
     rubric = [str(r).strip() for r in rubric if str(r).strip()] if isinstance(rubric, list) else []
-    if asked >= MAX_INTERVIEW_QUESTIONS and not done:
+    if asked >= _question_cap(config) and not done:
         done = True
     options = normalize_options(_parse_json(getattr(pred, "options_json", "[]"), []))
     task_override = _normalize_task_override(
@@ -638,11 +756,17 @@ def _parse_interview_prediction(pred: Any, asked: int, config: dict[str, Any]) -
     # reaches the session card. The DB name column caps at 200; 80 keeps
     # session cards to one line.
     title = strip_adapter_debris(str(getattr(pred, "session_title", ""))).strip().strip("\"'")[:80]
+    dataset_spec = (
+        normalize_dataset_spec(_parse_json(getattr(pred, "dataset_json", "{}"), {}))
+        if config.get("_synthetic_pending")
+        else {}
+    )
     return {
         "message": str(getattr(pred, "message", "")).strip(),
         "options": [] if done else options,
         "rubric": rubric if done else [],
         "task_override": task_override if done else {},
+        "dataset_spec": dataset_spec if done else {},
         "title": title if done else "",
         "done": done,
     }
@@ -652,7 +776,14 @@ def _parse_interview_prediction(pred: Any, asked: int, config: dict[str, Any]) -
 # structure, not prose; these markers are the transition points where a stream
 # that began as prose drifts into the payload's remaining fields.
 _LEAK_PREFIXES = ("{", "[", "`")
-_LEAK_MARKERS = ("[[ ##", '"options_json"', '"rubric_json"', '"task_config_json"', '"session_title"')
+_LEAK_MARKERS = (
+    "[[ ##",
+    '"options_json"',
+    '"rubric_json"',
+    '"task_config_json"',
+    '"dataset_json"',
+    '"session_title"',
+)
 
 
 class _MessageLeakGuard:
@@ -720,8 +851,7 @@ def interview_turn(
         model: LiteLLM id conducting the interview; ``None`` runs the default.
         reasoning_effort: Explicit effort level for ``model``; ``None`` keeps
             the model's default.
-        lm_extra_body: Extra request-body fields for the LM call (the auto
-            router's plugin dial when the composer picked an Auto tier).
+        lm_extra_body: Extra request-body fields for the LM call.
         usage_sink: Optional list the built LM is appended to, so the caller
             can meter the turn's token usage on any exit path.
 
@@ -877,8 +1007,7 @@ async def interview_turn_stream(
         model: LiteLLM id conducting the interview; ``None`` runs the default.
         reasoning_effort: Explicit effort level for ``model``; ``None`` keeps
             the model's default.
-        lm_extra_body: Extra request-body fields for the LM call (the auto
-            router's plugin dial when the composer picked an Auto tier).
+        lm_extra_body: Extra request-body fields for the LM call.
         usage_sink: Optional list the built LM is appended to, so the caller
             can meter the turn's token usage on any exit path.
     """
@@ -1278,3 +1407,191 @@ def estimate_tokens_for_rows(instructions: str, rows: list[dict[str, Any]]) -> d
         "estimated_input_tokens": input_tokens,
         "estimated_output_tokens": output_tokens,
     }
+
+
+def _clean_column_names(raw: Any) -> list[str]:
+    """Reduce a caller- or model-supplied column list to distinct usable names.
+
+    Args:
+        raw: Anything the model or the request put where column names go.
+
+    Returns:
+        Non-empty, length-capped, de-duplicated names in their original order.
+    """
+    if not isinstance(raw, (list, tuple)):
+        return []
+    names: list[str] = []
+    for item in raw:
+        name = str(item or "").strip()[:MAX_COLUMN_CHARS]
+        if name and name not in names:
+            names.append(name)
+    return names[:MAX_SYNTH_COLUMNS]
+
+
+def _cell_text(value: Any) -> str:
+    """Flatten one generated cell to the plain string the tagger stores.
+
+    Args:
+        value: A parsed JSON value produced by the model.
+
+    Returns:
+        The stripped, length-capped text; nested values are JSON-encoded.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)[:MAX_ROW_CHARS]
+    return str(value).strip()[:MAX_ROW_CHARS]
+
+
+def _normalize_synthetic_rows(parsed: Any, columns: list[str]) -> tuple[list[str], list[dict[str, str]]]:
+    """Validate a model-produced row array against the dataset's columns.
+
+    Args:
+        parsed: The parsed ``rows_json`` value (expected: list of objects).
+        columns: The columns every row must carry; empty lets the first
+            usable object decide them.
+
+    Returns:
+        ``(columns, rows)`` — the settled column list and every object that
+        had at least one non-empty cell, projected onto exactly those columns.
+    """
+    if not isinstance(parsed, list):
+        return columns, []
+    settled = list(columns)
+    rows: list[dict[str, str]] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        if not settled:
+            settled = _clean_column_names(list(item.keys()))
+            if not settled:
+                continue
+        row = {col: _cell_text(item.get(col)) for col in settled}
+        if any(row.values()):
+            rows.append(row)
+    return settled, rows
+
+
+def _synthesize_batch(
+    lm: dspy.LM, brief: str, columns: list[str], count: int, part: int, parts: int
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Write one slice of a synthetic dataset.
+
+    Args:
+        lm: The assist LM (bound inside the calling thread).
+        brief: The user's description of the data.
+        columns: Columns to fill; empty lets the model choose them.
+        count: How many rows this slice should contain.
+        part: 1-based index of this slice.
+        parts: Total number of slices the dataset is written in.
+
+    Returns:
+        ``(columns, rows)`` as :func:`_normalize_synthetic_rows` settles
+        them; both empty when the call failed or nothing parsed.
+    """
+    try:
+        with dspy.context(lm=lm):
+            pred = dspy.Predict(SynthesizeRowsSig)(
+                brief=brief,
+                columns_json=json.dumps(columns, ensure_ascii=False),
+                count=count,
+                part=f"part {part} of {parts}",
+            )
+        parsed = _parse_json(getattr(pred, "rows_json", ""), None)
+    except Exception:
+        logger.warning("synthetic dataset part %s/%s failed", part, parts, exc_info=True)
+        return columns, []
+    return _normalize_synthetic_rows(parsed, columns)
+
+
+def synthesize_rows(
+    brief: str,
+    columns: list[str],
+    count: int,
+    usage_sink: list | None = None,
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Generate a fully synthetic dataset to label from a plain-language brief.
+
+    Runs on the operator-configured tagging model like every other assist
+    surface. The first slice runs alone so that, when the caller left the
+    columns to the model, every later slice fills the same ones; the
+    remaining slices then run concurrently like prediction batches. Exact
+    duplicate rows across slices are dropped.
+
+    Args:
+        brief: What the dataset is about and what its rows look like.
+        columns: Column names to fill; empty lets the model choose them.
+        count: Number of rows wanted (capped at ``MAX_SYNTH_ROWS``).
+        usage_sink: Optional list the built LM is appended to for
+            observability, so the caller can record usage on any exit path.
+
+    Returns:
+        ``(columns, rows)`` — the settled columns and at most ``count`` rows
+        keyed by them.
+
+    Raises:
+        RuntimeError: When no slice produced a usable row.
+    """
+    lm = _build_assist_lm()
+    if usage_sink is not None:
+        usage_sink.append(lm)
+    count = max(1, min(int(count), MAX_SYNTH_ROWS))
+    sizes = [SYNTH_BATCH_SIZE] * (count // SYNTH_BATCH_SIZE)
+    if count % SYNTH_BATCH_SIZE:
+        sizes.append(count % SYNTH_BATCH_SIZE)
+    parts = len(sizes)
+    settled = _clean_column_names(columns)
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def absorb(batch: list[dict[str, str]]) -> None:
+        """Append the slice's rows, skipping exact repeats of earlier ones."""
+        for row in batch:
+            key = tuple(row.get(col, "") for col in settled)
+            if key not in seen:
+                seen.add(key)
+                rows.append(row)
+
+    first_columns, first_rows = _synthesize_batch(lm, brief, settled, sizes[0], 1, parts)
+    settled = settled or first_columns
+    if not settled:
+        raise RuntimeError("synthetic dataset generation produced no rows")
+    absorb(first_rows)
+    if parts > 1:
+
+        def work(slice_index: int) -> list[dict[str, str]]:
+            """Write one of the remaining slices on the settled columns."""
+            return _synthesize_batch(lm, brief, settled, sizes[slice_index], slice_index + 1, parts)[1]
+
+        with ThreadPoolExecutor(max_workers=BATCH_CONCURRENCY) as pool:
+            for batch in pool.map(work, range(1, parts)):
+                absorb(batch)
+    if not rows:
+        raise RuntimeError("synthetic dataset generation produced no rows")
+    return settled, rows[:count]
+
+
+def build_data_rows(columns: list[str], rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Turn generated rows into the tagger's stored ``DataRow`` payloads.
+
+    Mirrors the setup wizard's mapping of a parsed file: ``text`` is the flat
+    string the export, search and single-column fallbacks read, prefixed
+    per column when a row spans several; ``fields`` is what the annotation
+    UI renders.
+
+    Args:
+        columns: The dataset's (input) columns, in display order.
+        rows: Generated rows keyed by those columns.
+
+    Returns:
+        Rows carrying ``id``, ``text`` and ``fields`` next to their cells.
+    """
+    built: list[dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        fields = [{"column": col, "value": row.get(col, "")} for col in columns]
+        text = "\n".join(
+            f"{field['column']}: {field['value']}" if len(columns) > 1 else str(field["value"]) for field in fields
+        )
+        built.append({**row, "id": index, "text": text, "fields": fields})
+    return built

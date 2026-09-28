@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import {
   EditorView,
@@ -15,14 +15,14 @@ import type { Extension } from "@codemirror/state";
 import { type Range } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { highlightSelectionMatches } from "@codemirror/search";
+import { highlightSelectionMatches, openSearchPanel } from "@codemirror/search";
 import type { CompletionContext } from "@codemirror/autocomplete";
 import { autocompletion, acceptCompletion, type CompletionResult } from "@codemirror/autocomplete";
 import { indentWithTab } from "@codemirror/commands";
 import { Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { linkifyMessage } from "@/shared/lib/linkify";
-import { CopyGlyph, useCopyToClipboard } from "@/shared/ui/copy-button";
+import { CopyButton, CopyGlyph, useCopyToClipboard } from "@/shared/ui/copy-button";
 import {
   CaretUp,
   CaretDown,
@@ -30,10 +30,12 @@ import {
   CircleNotch,
   X,
   Eraser,
+  MagnifyingGlass,
 } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
+import { FIND_SHORTCUT, useEditorFind } from "@/shared/ui/code-editor-find";
 import { useLiteMode } from "@/features/settings";
 
 const beigeEditorTheme = EditorView.theme(
@@ -98,6 +100,23 @@ const beigeEditorTheme = EditorView.theme(
     ".cm-matchingBracket": {
       backgroundColor: "#E8DDD4",
       outline: "1px solid #C8B8A4",
+    },
+    /* ── Find panel & search matches ── */
+    ".cm-panels": {
+      backgroundColor: "#F3ECE3",
+      color: "#3D2E22",
+    },
+    ".cm-panels.cm-panels-top": {
+      borderBottom: "1px solid #E5DDD4",
+    },
+    ".cm-searchMatch": {
+      backgroundColor: "rgba(160, 120, 70, 0.22)",
+      borderRadius: "2px",
+      outline: "1px solid rgba(160, 120, 70, 0.45)",
+    },
+    ".cm-searchMatch.cm-searchMatch-selected": {
+      backgroundColor: "rgba(139, 94, 60, 0.42)",
+      outline: "1px solid #8B5E3C",
     },
     /* ── Autocomplete tooltip ── */
     ".cm-tooltip": {
@@ -321,16 +340,19 @@ export function CodeEditor({
   streaming = false,
   flashLines,
 }: CodeEditorProps) {
+  const find = useEditorFind();
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
   const extensions = useMemo(() => {
-    const base = streaming ? [...pyExtensions, streamingLineFadeExtension()] : pyExtensions;
+    const base = streaming
+      ? [...pyExtensions, find.extension, streamingLineFadeExtension()]
+      : [...pyExtensions, find.extension];
     if (flashLines && flashLines.length > 0) {
       return [...base, flashLinesExtension(flashLines)];
     }
     return base;
-  }, [streaming, flashLines]);
+  }, [streaming, flashLines, find.extension]);
   const [collapsed, setCollapsed] = useState(false);
   const { copied, copy: copyToClipboard } = useCopyToClipboard();
-  const { copied: consoleCopied, copy: copyConsoleToClipboard } = useCopyToClipboard();
   const [running, setRunning] = useState(false);
   const [formatting, setFormatting] = useState(false);
   const [result, setResult] = useState<ValidationResult | null>(null);
@@ -346,14 +368,18 @@ export function CodeEditor({
     await copyToClipboard(value);
   }, [copyToClipboard, value]);
 
-  const handleCopyConsole = useCallback(async () => {
-    if (!result) return;
+  const handleFind = useCallback(() => {
+    const view = editorRef.current?.view;
+    if (view) openSearchPanel(view);
+  }, []);
+
+  const consoleText = useMemo(() => {
+    if (!result) return "";
     const lines: string[] = [];
     for (const err of result.errors) lines.push(`[error] ${err}`);
     for (const w of result.warnings) lines.push(`[warn]  ${w}`);
-    if (lines.length === 0) return;
-    await copyConsoleToClipboard(lines.join("\n"));
-  }, [copyConsoleToClipboard, result]);
+    return lines.join("\n");
+  }, [result]);
 
   const handleRun = useCallback(async () => {
     if (!onRun || running) return;
@@ -413,6 +439,21 @@ export function CodeEditor({
           {label}
         </span>
 
+        {!lite && !collapsed && (
+          <TooltipButton
+            tooltip={formatMsg("shared.code_editor.find.open_tip", { shortcut: FIND_SHORTCUT })}
+          >
+            <button
+              type="button"
+              onClick={handleFind}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer"
+            >
+              <MagnifyingGlass className="size-3" />
+              {msg("shared.code_editor.find.open")}
+            </button>
+          </TooltipButton>
+        )}
+
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
@@ -431,7 +472,14 @@ export function CodeEditor({
             disabled={running || !value.trim()}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {running ? <CircleNotch className="size-3 animate-spin" /> : <Play className="size-3" />}
+            {running ? (
+              <CircleNotch
+                className="size-3 animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+            ) : (
+              <Play className="size-3" />
+            )}
             {running ? runningLabel : runLabel}
           </button>
         )}
@@ -442,7 +490,14 @@ export function CodeEditor({
           disabled={formatting || !value.trim()}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {formatting ? <CircleNotch className="size-3 animate-spin" /> : <Eraser className="size-3" />}
+          {formatting ? (
+            <CircleNotch
+              className="size-3 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+          ) : (
+            <Eraser className="size-3" />
+          )}
           {msg("shared.code_editor.format")}
         </button>
 
@@ -490,26 +545,31 @@ export function CodeEditor({
                   />
                 )
               ) : (
-                <CodeMirror
-                  value={value}
-                  height={height}
-                  theme={beigeTheme}
-                  extensions={extensions}
-                  onChange={handleChange}
-                  readOnly={readOnly}
-                  basicSetup={{
-                    lineNumbers: true,
-                    foldGutter: true,
-                    bracketMatching: true,
-                    autocompletion: true,
-                    completionKeymap: true,
-                    searchKeymap: false,
-                    highlightActiveLine: true,
-                    highlightSelectionMatches: false,
-                    indentOnInput: true,
-                    tabSize: 4,
-                  }}
-                />
+                <>
+                  <CodeMirror
+                    ref={editorRef}
+                    value={value}
+                    height={height}
+                    theme={beigeTheme}
+                    extensions={extensions}
+                    onChange={handleChange}
+                    readOnly={readOnly}
+                    basicSetup={{
+                      lineNumbers: true,
+                      foldGutter: true,
+                      bracketMatching: true,
+                      autocompletion: true,
+                      completionKeymap: true,
+                      // The find panel extension binds its own search keys.
+                      searchKeymap: false,
+                      highlightActiveLine: true,
+                      highlightSelectionMatches: false,
+                      indentOnInput: true,
+                      tabSize: 4,
+                    }}
+                  />
+                  {find.panel}
+                </>
               )}
             </div>
           </motion.div>
@@ -555,16 +615,7 @@ export function CodeEditor({
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
                 {(result.errors.length > 0 || result.warnings.length > 0) && (
-                  <TooltipButton tooltip={consoleCopied ? "Copied" : "Copy output"} side="top">
-                    <button
-                      type="button"
-                      onClick={handleCopyConsole}
-                      className="close-button"
-                      aria-label="Copy output"
-                    >
-                      <CopyGlyph copied={consoleCopied} checkClassName="text-[#3D2E22]" />
-                    </button>
-                  </TooltipButton>
+                  <CopyButton text={consoleText} ariaLabel="Copy output" copiedAriaLabel="Copied" />
                 )}
                 <TooltipButton tooltip="Clear" side="top">
                   <button
@@ -594,7 +645,10 @@ export function CodeEditor({
                   role="alert"
                 >
                   <div className="flex-1 min-w-0 pl-3 pr-4 py-1.5 text-xs font-mono leading-relaxed text-[#3D2E22] break-words">
-                    {linkifyMessage(err, "underline decoration-[#6B4226]/40 underline-offset-2 hover:decoration-[#6B4226] transition-colors")}
+                    {linkifyMessage(
+                      err,
+                      "underline decoration-[#6B4226]/40 underline-offset-2 hover:decoration-[#6B4226] transition-colors",
+                    )}
                   </div>
                 </div>
               ))}

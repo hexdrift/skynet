@@ -17,8 +17,10 @@ function Switch({ className, checked = false, onCheckedChange, ...props }: Switc
       data-state={checked ? "checked" : "unchecked"}
       onClick={() => onCheckedChange?.(!checked)}
       className={cn(
-        "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "peer relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors",
+        // The ::after grows the pill to a 44px hit area without changing its look.
+        "after:absolute after:-inset-3 after:content-['']",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45",
         "disabled:cursor-not-allowed disabled:opacity-50",
         checked ? "bg-primary" : "bg-input",
         className,

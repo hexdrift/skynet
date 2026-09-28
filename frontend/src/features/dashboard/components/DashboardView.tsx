@@ -1,18 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChartBar, Table } from "@/shared/ui/icons";
 import { DashboardSkeleton } from "./DashboardSkeleton";
 import { Card } from "@/shared/ui/primitives/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
+import {
+  SLIDING_PILL_TABS_LIST_CLASS,
+  SLIDING_PILL_TABS_TRIGGER_CLASS,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/shared/ui/primitives/tabs";
 import { FadeIn } from "@/shared/ui/motion";
 import { msg } from "@/shared/lib/messages";
 import { sessionIdentity } from "@/shared/lib/session-identity";
 import { TERMS } from "@/shared/lib/terms";
-import { useColumnFilters, useColumnResize, type SortDir } from "@/shared/ui/excel-filter";
+import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
+import { useColumnFilters, useColumnResize } from "@/shared/ui/excel-filter";
 import { getJobTypeLabel, getStatusLabel } from "@/shared/constants/job-status";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
 import type { DashboardAnalytics } from "@/shared/lib/api";
@@ -33,12 +42,6 @@ import { DeleteDialogs } from "./DeleteDialogs";
 import { JobsTab } from "./JobsTab";
 import { AnalyticsTab } from "./AnalyticsTab";
 
-// The active-tab background is a single shared pill that slides between
-// triggers via Framer's layoutId (see DashboardView). The button itself stays
-// transparent and only fades text color + reacts to the press transform.
-const DASHBOARD_TAB_CLASS =
-  "relative z-10 min-h-[44px] rounded-full px-3 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,transform] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:px-4 lg:min-h-10";
-
 function getJobField(job: OptimizationSummaryResponse, key: string): unknown {
   return (job as unknown as Record<string, unknown>)[key];
 }
@@ -50,7 +53,7 @@ function compareJobValues(av: unknown, bv: unknown): number {
   if (aMissing) return -1;
   if (bMissing) return 1;
   if (typeof av === "number" && typeof bv === "number") return av - bv;
-  return String(av).localeCompare(String(bv), "he", { numeric: true });
+  return String(av).localeCompare(String(bv), getActiveIntlLocale(), { numeric: true });
 }
 
 export function DashboardView() {
@@ -108,10 +111,17 @@ export function DashboardView() {
     activeTab,
     model: analyticsFilters.model,
     status: analyticsFilters.status,
-    jobId: analyticsFilters.jobId,
+    range: analyticsFilters.range,
+    optimizer: analyticsFilters.optimizer,
     date: analyticsFilters.date,
+    dateTo: analyticsFilters.dateTo,
     owner: analyticsFilters.owner,
     access: analyticsFilters.access,
+    jobType: analyticsFilters.jobType,
+    module: analyticsFilters.module,
+    improvement: analyticsFilters.improvement,
+    runtime: analyticsFilters.runtime,
+    dataset: analyticsFilters.dataset,
   });
 
   // Demo overlay state — tutorial injects fake data here so background
@@ -158,18 +168,7 @@ export function DashboardView() {
   const { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount } =
     useColumnFilters();
   const colResize = useColumnResize();
-  const [sortKey, setSortKey] = useState<string>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const toggleSort = useCallback(
-    (key: string) => {
-      if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      else {
-        setSortKey(key);
-        setSortDir("asc");
-      }
-    },
-    [sortKey],
-  );
+  const { sortKey, sortDir, toggleSort } = useTableSort<string>("created_at", "desc");
 
   const {
     selectedIds,
@@ -282,17 +281,19 @@ export function DashboardView() {
       getDashboardStats({
         data: effectiveData,
         filteredItems,
-        counts,
+        // Demo jobs come without server counts; the real ones would show a
+        // new user zeros above a table full of demo runs.
+        counts: demoJobs ? null : counts,
         analyticsData: effectiveAnalytics,
         activeTab,
       }),
-    [effectiveData, filteredItems, counts, effectiveAnalytics, activeTab],
+    [effectiveData, filteredItems, counts, demoJobs, effectiveAnalytics, activeTab],
   );
 
   // Owner/Role columns and the shared stat card only appear once the caller
   // actually collaborates — a solo user's control panel stays unchanged.
   const hasShared =
-    (counts?.shared ?? 0) > 0 ||
+    (!demoJobs && (counts?.shared ?? 0) > 0) ||
     (Array.isArray(effectiveData?.items) && effectiveData.items.some((j) => Boolean(j.role))) ||
     false;
 
@@ -306,7 +307,7 @@ export function DashboardView() {
 
   return (
     <>
-      <div className="flex flex-col gap-6 -mt-2 md:-mt-4">
+      <div className="flex flex-col gap-6 -mt-2 md:-mt-4 pb-16">
         <Card className="gap-0 p-0">
           <DashboardHeader stats={stats} />
           <WorkspaceStrip />
@@ -316,8 +317,8 @@ export function DashboardView() {
         <FadeIn delay={0.2}>
           {mounted && (
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="inline-flex h-auto w-full gap-1 rounded-full border border-border/60 bg-muted/50 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                <TabsTrigger value="jobs" className={DASHBOARD_TAB_CLASS}>
+              <TabsList className={SLIDING_PILL_TABS_LIST_CLASS}>
+                <TabsTrigger value="jobs" className={SLIDING_PILL_TABS_TRIGGER_CLASS}>
                   {activeTab === "jobs" && (
                     <motion.span
                       layoutId="dashboardTabPill"
@@ -334,7 +335,7 @@ export function DashboardView() {
                 <TabsTrigger
                   value="analytics"
                   data-tutorial="analytics-tab"
-                  className={DASHBOARD_TAB_CLASS}
+                  className={SLIDING_PILL_TABS_TRIGGER_CLASS}
                 >
                   {activeTab === "analytics" && (
                     <motion.span
@@ -389,6 +390,7 @@ export function DashboardView() {
                   chartData={chartData}
                   filters={analyticsFilters}
                   sessionUser={sessionUser}
+                  onOpenJob={(id) => router.push(`/optimizations/${id}`)}
                 />
               </TabsContent>
             </Tabs>

@@ -210,13 +210,14 @@ class _BaseFakeJobStore:
         self._checkpoints: dict[str, dict[int, dict]] = {}
         self._grid_pair_results: dict[str, dict[int, dict]] = {}
 
-    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict]) -> str:
+    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict], *, sample: bool = False) -> str:
         """Persist staged rows in memory and return their opaque id.
 
         Args:
             username: Owner of the staged copy.
             dataset_filename: Original filename (kept for parity with prod).
             rows: Non-empty parsed rows.
+            sample: Whether the rows are a bundled sample (recorded for assertions).
 
         Returns:
             The staged-dataset id.
@@ -231,6 +232,7 @@ class _BaseFakeJobStore:
             "username": username,
             "dataset_filename": dataset_filename,
             "rows": list(rows),
+            "sample": sample,
         }
         return staged_id
 

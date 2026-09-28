@@ -1,14 +1,10 @@
-"""Version-agnostic handle on DSPy's ReAct program.
+"""Native tool-calling configuration for DSPy's ``ReActV2`` program.
 
-DSPy 3.3 reworked the agentic loop as ``ReActV2``: a single inner ``react``
-predictor whose final answer is an argument of an internal ``submit`` tool call.
-DSPy 3.2.x ships the classic ``ReAct``: the same ``react`` loop predictor plus a
-separate ``extract`` predictor that emits the signature's output fields directly.
-
-Both expose the same constructor (``signature, tools, max_iters``), an inner
-``self.react`` predictor, and a ``self.tools`` dict, so the agent layer binds to
-whichever class the installed DSPy provides and forks only where the two
-genuinely differ — final-answer streaming (see ``react_reply_stream``).
+``ReActV2`` runs a single inner ``react`` predictor whose final answer is an
+argument of an internal ``submit`` tool call. This module owns the process-wide
+switch that routes those tool calls through the provider's native function
+calling API instead of DSPy's text protocol, plus the probe the reply streamer
+uses to tell which of the two is in force.
 """
 
 from __future__ import annotations
@@ -22,28 +18,6 @@ from dspy.adapters.chat_adapter import ChatAdapter
 from ..config import settings
 
 logger = logging.getLogger(__name__)
-
-REACT_CLASS: type[dspy.Module] = getattr(dspy, "ReActV2", None) or dspy.ReAct
-"""The ReAct program class of the installed DSPy: ``ReActV2`` on 3.3+, else ``ReAct``."""
-
-
-def react_uses_submit(program: dspy.Module) -> bool:
-    """Report whether ``program`` carries its reply in a ``submit`` tool call.
-
-    ReActV2 streams the final answer as a ``submit`` argument on the inner
-    ``react`` predictor; classic ReAct streams it straight off a separate
-    ``extract`` predictor. The presence of ``extract`` is the load-bearing
-    distinction, so it is checked per-instance rather than inferred from the
-    DSPy version.
-
-    Args:
-        program: A constructed ReAct/ReActV2 program (or subclass).
-
-    Returns:
-        ``True`` when the reply rides a ``submit`` tool call (ReActV2),
-        ``False`` when a dedicated ``extract`` predictor emits it (classic).
-    """
-    return not hasattr(program, "extract")
 
 
 def native_react_adapter() -> ChatAdapter:
@@ -71,7 +45,7 @@ def configure_native_tool_calling() -> None:
     Reads ``settings.react_native_tool_calling``; when on, sets a global
     ``ChatAdapter`` via ``dspy.configure`` so every ReAct run — optimization
     rollouts and all serve paths, including those built from the plain
-    ``REACT_CLASS`` — resolves it through the ``main_thread_config`` fallback.
+    ``dspy.ReActV2`` — resolves it through the ``main_thread_config`` fallback.
     A no-op when the flag is off. Failures are swallowed so a DSPy build that
     rejects the adapter kwargs can never abort process startup.
     """
@@ -97,9 +71,7 @@ def native_tool_calling_active() -> bool:
 
 
 __all__ = [
-    "REACT_CLASS",
     "configure_native_tool_calling",
     "native_react_adapter",
     "native_tool_calling_active",
-    "react_uses_submit",
 ]

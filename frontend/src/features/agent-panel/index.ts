@@ -6,7 +6,7 @@ export { ToolsCarousel } from "./components/ToolsCarousel";
 export { Carousel } from "./components/Carousel";
 export { ToolHeader } from "./components/ToolHeader";
 export { TrustToggle } from "./components/TrustToggle";
-export { GeneralistPanelProvider } from "./hooks/use-panel-state";
+export { GeneralistPanelProvider, useGeneralistPanelStateOptional } from "./hooks/use-panel-state";
 export { useTrustMode } from "./hooks/use-trust-mode";
 export {
   WizardStateProvider,

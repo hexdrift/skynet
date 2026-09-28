@@ -103,7 +103,7 @@ export function track(
 }
 
 /** Send everything queued now, clearing the pending flush timer. */
-export function flush(): void {
+function flush(): void {
   if (_flushTimer !== null) {
     clearTimeout(_flushTimer);
     _flushTimer = null;

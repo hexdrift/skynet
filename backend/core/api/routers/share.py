@@ -63,6 +63,7 @@ from ...notifications import (
     notify_share_invite,
 )
 from ...service_gateway.dashboard import invalidate_public_dashboard_cache
+from ...service_gateway.datasets.split_counts import split_counts_for_version
 from ...service_gateway.embedding_pipeline import set_embedding_privacy
 from ...service_gateway.language_models import build_language_model
 from ...storage.models import (
@@ -104,6 +105,7 @@ from ._helpers import (
 )
 from .constants import TERMINAL_STATUSES
 from .optimizations._local import remap_test_indices
+from .serve import _column_mapping_fields
 
 logger = logging.getLogger(__name__)
 
@@ -266,8 +268,9 @@ def _test_split_indices(payload: dict[str, Any], optimization_id: str, total: in
     ordered = list(range(total))
     if shuffle:
         random.Random(effective_seed).shuffle(ordered)
-    train_end = int(total * fractions.train)
-    val_end = train_end + int(total * fractions.val)
+    counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+    train_end = counts.train
+    val_end = train_end + counts.val
     return ordered[val_end:]
 
 
@@ -307,8 +310,9 @@ def _full_dataset(job_data: dict[str, Any], optimization_id: str) -> dict[str, A
     indices = list(range(total))
     if shuffle:
         random.Random(effective_seed).shuffle(indices)
-    train_end = int(total * fractions.train)
-    val_end = train_end + int(total * fractions.val)
+    counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+    train_end = counts.train
+    val_end = train_end + counts.val
     train_idx = indices[:train_end]
     val_idx = indices[train_end:val_end]
     test_idx = indices[val_end:]
@@ -483,6 +487,8 @@ def _serve_info(job_store, optimization_id: str, owner: str) -> ServeInfoRespons
         output_fields = list(prompt.output_fields)
         instructions = prompt.instructions
         demo_count = len(prompt.demos)
+    if not input_fields:
+        input_fields, output_fields = _column_mapping_fields(overview)
     return ServeInfoResponse(
         optimization_id=optimization_id,
         module_name=overview.get("module_name", ""),
@@ -1228,6 +1234,8 @@ def create_share_router(*, job_store) -> APIRouter:
         prompt = artifact.optimized_prompt
         input_fields = list(prompt.input_fields) if prompt is not None else []
         output_fields = list(prompt.output_fields) if prompt is not None else []
+        if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
         if not input_fields:
             raise DomainError("serve.no_declared_inputs", status=400)
         missing = [f for f in input_fields if f not in req.inputs]

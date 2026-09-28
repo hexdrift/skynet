@@ -37,8 +37,11 @@ from ...models import (
 )
 from ...service_gateway.datasets.planner import recommend_split
 from ...service_gateway.datasets.profiler import profile_dataset
+from ...service_gateway.datasets.split_counts import split_counts
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
+
+_SAMPLE_PREVIEW_ROWS = 3
 
 
 class SampleDatasetSummary(BaseModel):
@@ -64,7 +67,8 @@ class SampleDatasetStageResponse(BaseModel):
     sample_id: str
     name: str
     description: str
-    dataset: list[dict[str, Any]]
+    row_count: int
+    preview: list[dict[str, Any]]
     dataset_filename: str
     wizard_state: dict[str, Any]
 
@@ -212,6 +216,7 @@ def create_datasets_router(*, job_store) -> APIRouter:
         dataset step. A split with ``val=0`` and ``test=0`` produces no
         held-out data for evaluation, so the optimization can't measure
         improvement and must be rejected here rather than failing later.
+        Counts come from the same allocator a submitted run splits with.
 
         Args:
             payload: Request containing the dataset row count and the
@@ -227,9 +232,8 @@ def create_datasets_router(*, job_store) -> APIRouter:
         if total <= 0:
             errors.append("Dataset is empty.")
         else:
-            val_count = int(total * payload.fractions.val)
-            test_count = int(total * payload.fractions.test)
-            if val_count + test_count == 0:
+            counts = split_counts(total, payload.fractions)
+            if counts.val + counts.test == 0:
                 errors.append(
                     "Dataset is too small to run optimization: chosen split has 0 validation and 0 test rows."
                 )
@@ -270,19 +274,26 @@ def create_datasets_router(*, job_store) -> APIRouter:
         summary="Stage a sample dataset into the submit wizard",
         tags=["agent"],
     )
-    def stage_sample_dataset(sample_id: str) -> SampleDatasetStageResponse:
-        """Return the sample rows plus a ``wizard_state`` patch ready to submit.
+    def stage_sample_dataset(sample_id: str, current_user: AuthenticatedUserDep) -> SampleDatasetStageResponse:
+        """Stage a sample's rows for the caller and return a ``wizard_state`` patch.
 
-        Populates dataset_ready, columns_configured, dataset_columns,
-        column_roles, signature_code, metric_code, and a default job_name
-        so a non-technical user can hit "run" without writing code.
+        Populates staged_dataset_id, dataset_ready, columns_configured,
+        dataset_columns, column_roles, signature_code, metric_code, and a
+        default job_name so a non-technical user can hit "run" without
+        writing code. The rows are staged server-side and referenced by id:
+        returning them inline would push the whole dataset through the
+        agent's context, and the wizard rehydrates from the id anyway.
+        The staged copy is marked as a sample, so it is neither gated by nor
+        counted toward the storage quota: it is ephemeral and the
+        staged-dataset TTL sweep reclaims it.
 
         Args:
             sample_id: Identifier of the bundled sample dataset.
+            current_user: Authenticated caller; owns the staged rows.
 
         Returns:
-            A :class:`SampleDatasetStageResponse` with rows, filename, and
-            wizard-state patch.
+            A :class:`SampleDatasetStageResponse` with a short row preview,
+            the filename, and the wizard-state patch.
 
         Raises:
             DomainError: 404 when ``sample_id`` is unknown.
@@ -302,7 +313,14 @@ def create_datasets_router(*, job_store) -> APIRouter:
         for col in sample["output_columns"]:
             column_roles[col] = "output"
 
+        staged_id = job_store.stage_dataset(
+            username=current_user.username,
+            dataset_filename=sample["dataset_filename"],
+            rows=sample["rows"],
+            sample=True,
+        )
         wizard_state: dict[str, Any] = {
+            "staged_dataset_id": staged_id,
             "dataset_ready": True,
             "columns_configured": True,
             "dataset_columns": columns,
@@ -316,7 +334,8 @@ def create_datasets_router(*, job_store) -> APIRouter:
             sample_id=sample_id,
             name=sample["name"],
             description=sample["description"],
-            dataset=sample["rows"],
+            row_count=len(sample["rows"]),
+            preview=sample["rows"][:_SAMPLE_PREVIEW_ROWS],
             dataset_filename=sample["dataset_filename"],
             wizard_state=wizard_state,
         )

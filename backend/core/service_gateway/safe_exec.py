@@ -25,9 +25,11 @@ from __future__ import annotations
 import inspect
 import multiprocessing as mp
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from queue import Empty as QueueEmpty
 from typing import Any
 
 import dspy
@@ -46,6 +48,8 @@ _DEFAULT_PARSE_TIMEOUT_SECONDS = 30.0
 _DEFAULT_PROBE_TIMEOUT_SECONDS = 45.0
 _TERMINATE_GRACE_SECONDS = 2.0
 _QUEUE_READ_SECONDS = 5.0
+_QUEUE_POLL_SECONDS = 0.25
+_NO_RESULT = object()
 
 # Dogpile-safe per-process caches: identical user code is validated once per
 # replica, and concurrent submissions of the same code share that one
@@ -152,6 +156,19 @@ class MetricProbeResult:
     logged_metrics: dict[str, float] = field(default_factory=dict)
 
 
+def _stop_process(proc: Any) -> None:
+    """Terminate a child process, escalating to kill if it ignores SIGTERM.
+
+    Args:
+        proc: The started ``multiprocessing`` process to stop.
+    """
+    proc.terminate()
+    proc.join(_TERMINATE_GRACE_SECONDS)
+    if proc.is_alive():
+        proc.kill()
+        proc.join(_TERMINATE_GRACE_SECONDS)
+
+
 def _run_in_subprocess(
     target: Callable[..., None],
     args: tuple[Any, ...],
@@ -181,20 +198,34 @@ def _run_in_subprocess(
     queue: Any = ctx.Queue()
     proc = ctx.Process(target=target, args=(*args, queue))
     proc.start()
-    proc.join(timeout_seconds)
 
+    # Read while waiting rather than join-then-read: a child cannot exit until
+    # its result has left the pipe, so a result larger than the pipe buffer
+    # would otherwise hang the join until the timeout.
+    deadline = time.monotonic() + timeout_seconds
+    result: Any = _NO_RESULT
+    while result is _NO_RESULT:
+        try:
+            result = queue.get(timeout=_QUEUE_POLL_SECONDS)
+        except QueueEmpty:
+            if not proc.is_alive():
+                break
+            if time.monotonic() >= deadline:
+                _stop_process(proc)
+                raise ServiceError(
+                    f"user code exceeded the {timeout_seconds:.0f}s validation timeout and was terminated."
+                ) from None
+    proc.join(_TERMINATE_GRACE_SECONDS)
+    # User code can leave a non-daemon thread running after the result is
+    # sent, which keeps the child from exiting; reap it instead of leaking it.
     if proc.is_alive():
-        proc.terminate()
-        proc.join(_TERMINATE_GRACE_SECONDS)
-        if proc.is_alive():
-            proc.kill()
-            proc.join(_TERMINATE_GRACE_SECONDS)
-        raise ServiceError(f"user code exceeded the {timeout_seconds:.0f}s validation timeout and was terminated.")
+        _stop_process(proc)
 
-    try:
-        result = queue.get(timeout=_QUEUE_READ_SECONDS)
-    except Exception as exc:  # queue.Empty or manager teardown: child died before emitting
-        raise ServiceError("validation subprocess exited without returning a result.") from exc
+    if result is _NO_RESULT:
+        try:
+            result = queue.get(timeout=_QUEUE_READ_SECONDS)
+        except Exception as exc:  # queue.Empty or manager teardown: child died before emitting
+            raise ServiceError("validation subprocess exited without returning a result.") from exc
     if not isinstance(result, dict):
         raise ServiceError("validation subprocess returned an unexpected value.")
     return result

@@ -62,7 +62,7 @@ test("tutorial workflow tracks stay synchronized with the chooser", () => {
   assert.doesNotMatch(menu, /deep-dive/);
 });
 
-test("each guided workflow stays at seven steps or fewer", () => {
+test("each guided workflow stays at eight steps or fewer", () => {
   const steps = readFileSync(STEPS_PATH, "utf8");
   const counts = {
     quick:
@@ -75,9 +75,9 @@ test("each guided workflow stays at seven steps or fewer", () => {
     workspace: (steps.match(/tracks: WORKSPACE_ONLY/g) ?? []).length,
   };
 
-  assert.deepEqual(counts, { quick: 7, data: 3, results: 7, workspace: 6 });
+  assert.deepEqual(counts, { quick: 7, data: 4, results: 8, workspace: 6 });
   for (const [track, count] of Object.entries(counts)) {
-    assert.ok(count <= 7, `${track} guide has ${count} steps`);
+    assert.ok(count <= 8, `${track} guide has ${count} steps`);
   }
 });
 

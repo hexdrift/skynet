@@ -1,5 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
+import { ScorePill } from "@/shared/ui/outcome-chip";
+import { Badge } from "@/shared/ui/primitives/badge";
 import * as React from "react";
 import { Sparkle, TextT } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -68,9 +71,11 @@ export function SearchResultsCard({ call }: SearchResultsCardProps) {
     <div className="space-y-2">
       {searchType && <SearchTypeChip kind={searchType} />}
       {results.length === 0 ? (
-        <div className="text-[0.75rem] italic text-muted-foreground/70">
-          {msg("auto.features.agent.panel.components.searchresultscard.empty")}
-        </div>
+        <EmptyState
+          variant="compact"
+          title={msg("auto.features.agent.panel.components.searchresultscard.empty")}
+          className="gap-1 px-3 py-3"
+        />
       ) : (
         <ul className="divide-y divide-border/40">
           {results.map((row, idx) => (
@@ -93,13 +98,10 @@ function SearchTypeChip({ kind }: { kind: "semantic" | "lexical" }) {
     ? msg("auto.features.agent.panel.components.searchresultscard.type_semantic")
     : msg("auto.features.agent.panel.components.searchresultscard.type_lexical");
   return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full border border-foreground/12 bg-foreground/[0.04] px-2 py-0.5 text-[10.5px] font-medium leading-none text-foreground/65"
-      title={label}
-    >
-      <Icon className="size-2.5" aria-hidden="true" />
+    <Badge variant="outline" size="sm" title={label}>
+      <Icon aria-hidden="true" />
       <span>{label}</span>
-    </span>
+    </Badge>
   );
 }
 
@@ -135,12 +137,8 @@ function SearchResultRow({
 function RelevanceBadge({ relevance }: { relevance: number }) {
   const pct = Math.max(0, Math.min(1, relevance)) * 100;
   return (
-    <span
-      dir="ltr"
-      className="inline-flex shrink-0 items-baseline gap-1 rounded-full bg-[oklch(0.94_0.03_82)] px-2 py-0.5 font-mono text-[10.5px] font-medium leading-none text-[oklch(0.42_0.10_82)] tabular-nums"
-      title={msg("explore.row.relevance.title")}
-    >
+    <ScorePill tone="neutral" className="shrink-0" title={msg("explore.row.relevance.title")}>
       <span>{formatMsg("explore.row.relevance", { pct: pct.toFixed(0) })}</span>
-    </span>
+    </ScorePill>
   );
 }

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { ServeInfoResponse } from "@/shared/types/api";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import { LangPicker } from "./ui-primitives";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
@@ -196,7 +197,7 @@ export function ServeCodeSnippets({
     <CodeEditor
       value={snippet}
       onChange={() => {}}
-      height={`${(snippet.split("\n").length + 1) * 19.6 + 8}px`}
+      height={readOnlyEditorHeight(snippet)}
       readOnly
       label={<LangPicker value={codeTab} onChange={setCodeTab} labels={labels} />}
     />

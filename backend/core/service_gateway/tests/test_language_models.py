@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -13,14 +12,11 @@ from core.config import settings
 from core.exceptions import ServiceError
 from core.models import ModelConfig
 from core.service_gateway.language_models import (
-    CustomStreamWrapper,
     MeteredLM,
     _apply_managed_gateway,
-    _translate_gateway_reasoning,
     apply_model_reasoning_config,
     apply_reasoning_effort,
     build_language_model,
-    install_openrouter_served_model_patch,
     served_model_from,
     total_tokens_from_history,
     usage_by_model_from_history,
@@ -338,23 +334,9 @@ def test_managed_gateway_routes_managed_call(monkeypatch: pytest.MonkeyPatch) ->
     _apply_managed_gateway(kwargs)
     assert kwargs["base_url"] == "https://proxy.internal/v1"
     assert kwargs["api_key"] == "sk-proxy"
-    # Addressed via the litellm_proxy provider so the OpenRouter slug reaches the
-    # proxy intact — a bare ``openai/`` prefix would otherwise be stripped to a
-    # slug the proxy's ``*`` -> ``openrouter/*`` wildcard can't reconstruct.
+    # Addressed via the litellm_proxy provider so the full id reaches the proxy
+    # intact — litellm would otherwise strip a bare ``openai/`` prefix itself.
     assert kwargs["model"] == "litellm_proxy/openai/gpt-4o"
-
-
-def test_managed_gateway_strips_openrouter_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An openrouter-prefixed id is reduced to its slug before the proxy prefix.
-
-    The proxy's ``*`` -> ``openrouter/*`` wildcard re-adds ``openrouter/``, so
-    passing the id through verbatim would double-prefix the model upstream.
-    """
-    monkeypatch.setattr(settings, "litellm_proxy_url", "https://proxy.internal/v1")
-    monkeypatch.setattr(settings, "litellm_proxy_api_key", SecretStr("sk-proxy"))
-    kwargs: dict[str, object] = {"model": "openrouter/minimax/minimax-m3"}
-    _apply_managed_gateway(kwargs)
-    assert kwargs["model"] == "litellm_proxy/minimax/minimax-m3"
 
 
 def test_managed_gateway_skips_byok_call(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -388,74 +370,12 @@ def test_managed_gateway_noop_without_proxy(monkeypatch: pytest.MonkeyPatch) -> 
     assert kwargs["model"] == "openai/gpt-4o"  # untouched without a proxy
 
 
-def test_gateway_reasoning_translates_effort_to_native_param() -> None:
-    """On a gateway-bound call ``reasoning_effort`` is mirrored into ``reasoning``.
-
-    The kwarg must survive (not be popped): dspy's ``Reasoning`` field injects
-    ``reasoning_effort="low"`` at call time when the LM carries none, and
-    OpenRouter rejects requests where the two forms disagree.
-    """
-    kwargs: dict[str, object] = {
-        "model": "litellm_proxy/google/gemini-3.6-flash",
-        "reasoning_effort": "low",
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "low"
-    assert kwargs["extra_body"] == {"reasoning": {"effort": "low"}}
-
-
-def test_gateway_reasoning_maps_max_to_openrouter_ceiling() -> None:
-    """Anthropic's ``max`` maps to ``xhigh`` on both wire forms, kept in agreement."""
-    kwargs: dict[str, object] = {
-        "model": "openrouter/anthropic/claude-fable-5",
-        "reasoning_effort": "max",
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "xhigh"
-    assert kwargs["extra_body"] == {"reasoning": {"effort": "xhigh"}}
-
-
-def test_gateway_reasoning_leaves_direct_provider_calls_alone() -> None:
-    """A direct (non-gateway) call keeps the LiteLLM-native ``reasoning_effort``."""
-    kwargs: dict[str, object] = {"model": "openai/gpt-5.6-sol", "reasoning_effort": "low"}
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "low"
-    assert "extra_body" not in kwargs
-
-
-def test_gateway_reasoning_preserves_existing_extra_body() -> None:
-    """Translation merges into an existing ``extra_body`` without clobbering it."""
-    kwargs: dict[str, object] = {
-        "model": "litellm_proxy/openrouter/auto-beta",
-        "reasoning_effort": "high",
-        "extra_body": {"plugins": [{"id": "auto-router"}]},
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["extra_body"] == {
-        "plugins": [{"id": "auto-router"}],
-        "reasoning": {"effort": "high"},
-    }
-
-
-def test_gateway_reasoning_aligns_kwarg_to_caller_supplied_body() -> None:
-    """A caller-set ``extra_body.reasoning`` wins and the kwarg is aligned to it."""
-    kwargs: dict[str, object] = {
-        "model": "openrouter/deepseek/deepseek-v4-pro",
-        "reasoning_effort": "max",
-        "extra_body": {"reasoning": {"effort": "high"}},
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["extra_body"] == {"reasoning": {"effort": "high"}}
-
-
 def test_disable_cache_sends_proxy_no_cache_directive(monkeypatch: pytest.MonkeyPatch) -> None:
     """``disable_cache`` opts a proxied call out of the proxy's server-side cache too."""
     monkeypatch.setattr(settings, "litellm_proxy_url", "https://proxy.internal/v1")
     monkeypatch.setattr(settings, "litellm_proxy_api_key", SecretStr("sk-proxy"))
     with patch("core.service_gateway.language_models.MeteredLM") as mock_cls:
-        build_language_model(_cfg(name="openrouter/minimax/minimax-m3"), disable_cache=True)
+        build_language_model(_cfg(name="openai/on-prem-default"), disable_cache=True)
 
     call_kwargs = mock_cls.call_args[1]
     assert call_kwargs["cache"] is False
@@ -490,7 +410,7 @@ def test_served_model_from_reveals_auto_routed_pick() -> None:
     lm = _FakeLm(
         [
             {
-                "model": "openrouter/openrouter/auto-beta",
+                "model": "together_ai/auto-router",
                 "response_model": "google/gemini-3.6-flash",
             }
         ]
@@ -501,12 +421,12 @@ def test_served_model_from_reveals_auto_routed_pick() -> None:
 def test_served_model_from_reads_metered_lm_attributes() -> None:
     """MeteredLM drops history, so the reveal reads the stashed model ids."""
     lm = MagicMock(spec=[])
-    lm.last_request_model = "openrouter/openrouter/auto-beta"
+    lm.last_request_model = "together_ai/auto-router"
     lm.last_response_model = "deepseek/deepseek-v4-flash"
     assert served_model_from(lm) == "deepseek/deepseek-v4-flash"
 
     echo = MagicMock(spec=[])
-    echo.last_request_model = "openrouter/openai/gpt-5.6-terra"
+    echo.last_request_model = "together_ai/openai/gpt-5.6-terra"
     echo.last_response_model = "openai/gpt-5.6-terra"
     assert served_model_from(echo) is None
 
@@ -519,12 +439,12 @@ def test_metered_lm_update_history_stashes_model_ids() -> None:
     MeteredLM.update_history(
         lm,
         {
-            "model": "openrouter/openrouter/auto-beta",
+            "model": "together_ai/auto-router",
             "response_model": "google/gemini-3.6-flash",
             "usage": {},
         },
     )
-    assert lm.last_request_model == "openrouter/openrouter/auto-beta"
+    assert lm.last_request_model == "together_ai/auto-router"
     assert lm.last_response_model == "google/gemini-3.6-flash"
 
 
@@ -535,37 +455,8 @@ def test_served_model_from_suppresses_non_news() -> None:
     same = {"model": "openai/gpt-4o-mini", "response_model": "openai/gpt-4o-mini"}
     assert served_model_from(_FakeLm([same])) is None
     stripped = {
-        "model": "openrouter/openai/gpt-5.6-terra",
+        "model": "together_ai/openai/gpt-5.6-terra",
         "response_model": "openai/gpt-5.6-terra",
     }
     assert served_model_from(_FakeLm([stripped])) is None
     assert served_model_from(_FakeLm([{"model": "x", "response_model": None}])) is None
-
-
-def test_openrouter_patch_adopts_provider_chunk_model() -> None:
-    """The patched chunk handler adopts the reported model for openrouter-addressed calls only."""
-    assert CustomStreamWrapper is not None, "litellm streaming internals moved"
-    install_openrouter_served_model_patch()
-    install_openrouter_served_model_patch()
-    handler = CustomStreamWrapper.handle_openai_chat_completion_chunk
-    assert getattr(handler, "_skynet_served_model_patch", False)
-
-    # Stub self/chunk exercise only the adoption prologue; litellm's real
-    # parsing then fails on the stub, which is irrelevant to this assertion.
-    target = MagicMock(custom_llm_provider="openrouter", model="openrouter/auto-beta")
-    chunk = MagicMock(model="google/gemini-3.6-flash")
-    with contextlib.suppress(Exception):
-        handler(target, chunk)
-    assert target.model == "google/gemini-3.6-flash"
-
-    # The managed proxy path surfaces as an openai-compatible passthrough but
-    # keeps the "openrouter/" marker in the requested model.
-    proxied = MagicMock(custom_llm_provider="openai", model="openrouter/auto-beta")
-    with contextlib.suppress(Exception):
-        handler(proxied, chunk)
-    assert proxied.model == "google/gemini-3.6-flash"
-
-    other = MagicMock(custom_llm_provider="openai", model="openai/gpt-4o-mini")
-    with contextlib.suppress(Exception):
-        handler(other, chunk)
-    assert other.model == "openai/gpt-4o-mini"

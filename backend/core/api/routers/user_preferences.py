@@ -21,10 +21,6 @@ AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_us
 class UserPreferencesUpdate(BaseModel):
     """Partial set of browser preferences the generalist may change."""
 
-    advanced_mode: bool | None = Field(
-        default=None,
-        description="Show expert optimization controls in the app.",
-    )
     expand_advanced: bool | None = Field(
         default=None,
         description="Start advanced sections expanded in forms.",

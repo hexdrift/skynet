@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { CaretDown } from "@/shared/ui/icons";
 import {
   Card,
@@ -9,21 +11,23 @@ import {
   CardDescription,
 } from "@/shared/ui/primitives/card";
 import { Input } from "@/shared/ui/primitives/input";
+import { Textarea } from "@/shared/ui/primitives/textarea";
 import { Label } from "@/shared/ui/primitives/label";
 import { Separator } from "@/shared/ui/primitives/separator";
+import { Segmented } from "@/shared/ui/segmented";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { useUserPrefs } from "@/features/settings";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
+import { Disclosure } from "../Disclosure";
+import { TOUCH_FIELD } from "@/shared/ui/touch";
 
 export function BasicsStep({ w }: { w: SubmitWizardContext }) {
-  const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
   const {
     jobName,
     setJobName,
+    suggestedName,
     jobDescription,
     setJobDescription,
     jobType,
@@ -33,6 +37,12 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
     optimizationTypeOpen,
     setOptimizationTypeOpen,
   } = w;
+  // The description is optional, so it folds away until someone asks for it;
+  // one that already has text (restored draft, clone, agent) stays visible.
+  const [descriptionOpen, setDescriptionOpen] = useState(() => jobDescription.trim() !== "");
+  useEffect(() => {
+    if (jobDescription.trim() !== "") setDescriptionOpen(true);
+  }, [jobDescription]);
 
   return (
     <Card
@@ -50,20 +60,26 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
       </CardHeader>
       <CardContent className="space-y-4 px-4 sm:px-6">
         <div className="space-y-2">
-          <Label>
+          <Label htmlFor="job-name">
             {msg("auto.features.submit.components.steps.basicsstep.3")}
             {TERMS.optimization}
           </Label>
           <Input
-            placeholder={msg("auto.features.submit.components.steps.basicsstep.literal.1")}
+            id="job-name"
+            placeholder={
+              suggestedName || msg("auto.features.submit.components.steps.basicsstep.literal.1")
+            }
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
-            className="min-h-[44px] text-base lg:min-h-0 lg:text-sm"
+            className={TOUCH_FIELD}
           />
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>{msg("auto.features.submit.components.steps.basicsstep.4")}</Label>
+        <Disclosure
+          id="job-description-panel"
+          label={msg("auto.features.submit.components.steps.basicsstep.4")}
+          open={descriptionOpen}
+          onOpenChange={setDescriptionOpen}
+          trailing={
             <span
               className={cn(
                 "text-[0.625rem] tabular-nums transition-colors",
@@ -75,9 +91,11 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
               {jobDescription.length}
               {msg("auto.features.submit.components.steps.basicsstep.5")}
             </span>
-          </div>
-          <textarea
+          }
+        >
+          <Textarea
             data-tutorial="job-description"
+            aria-label={msg("auto.features.submit.components.steps.basicsstep.4")}
             value={jobDescription}
             onChange={(e) => {
               if (e.target.value.length <= 280) setJobDescription(e.target.value);
@@ -86,126 +104,82 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
               p1: TERMS.optimization,
             })}
             rows={4}
-            className="flex min-h-[44px] w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:text-sm"
           />
-        </div>
+        </Disclosure>
         <div className="space-y-3">
           <Label>{msg("submit.basics.privacy.label")}</Label>
-          <div className="relative inline-flex w-full gap-1 rounded-lg bg-muted p-1">
-            <div
-              className="absolute inset-y-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
-              style={{ insetInlineStart: isPrivate ? 4 : "calc(50% + 2px)" }}
-            />
-            {(
-              [
-                [true, msg("submit.basics.privacy.private"), msg("submit.basics.privacy.private_desc")],
-                [false, msg("submit.basics.privacy.public"), msg("submit.basics.privacy.public_desc")],
-              ] as const
-            ).map(([value, label, description]) => (
-              <button
-                key={String(value)}
-                type="button"
-                onClick={() => setIsPrivate(value)}
-                className={cn(
-                  "relative z-10 flex-1 cursor-pointer rounded-md px-2 py-2.5 text-center transition-colors duration-200 sm:px-4",
-                  isPrivate === value
-                    ? "text-foreground"
-                    : "text-foreground/60 hover:text-foreground",
-                )}
-              >
-                <span className="text-sm font-medium">{label}</span>
-                <span
-                  className={cn(
-                    "mt-0.5 block text-[0.6875rem] transition-colors duration-200",
-                    isPrivate === value ? "text-muted-foreground" : "text-foreground/40",
-                  )}
-                >
-                  {description}
-                </span>
-              </button>
-            ))}
-          </div>
+          <Segmented<"private" | "public">
+            label={msg("submit.basics.privacy.label")}
+            segmentClassName="sm:px-4"
+            value={isPrivate ? "private" : "public"}
+            onChange={(v) => setIsPrivate(v === "private")}
+            options={[
+              {
+                value: "private",
+                label: msg("submit.basics.privacy.private"),
+                desc: msg("submit.basics.privacy.private_desc"),
+              },
+              {
+                value: "public",
+                label: msg("submit.basics.privacy.public"),
+                desc: msg("submit.basics.privacy.public_desc"),
+              },
+            ]}
+          />
         </div>
-        {advanced && <Separator />}
-        {advanced && (
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setOptimizationTypeOpen(!optimizationTypeOpen)}
-              aria-expanded={optimizationTypeOpen}
-              className="flex min-h-[44px] w-full cursor-pointer items-center justify-between gap-2 lg:min-h-0"
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="text-sm leading-none font-medium">
-                  {msg("auto.features.submit.components.steps.basicsstep.6")}
-                  {TERMS.optimization}
-                </span>
-                {!optimizationTypeOpen && (
-                  <span className="text-xs text-muted-foreground">
-                    {jobType === "run" ? TERMS.optimizationTypeRun : TERMS.optimizationTypeGrid}
-                  </span>
-                )}
+        <Separator />
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setOptimizationTypeOpen(!optimizationTypeOpen)}
+            aria-expanded={optimizationTypeOpen}
+            className="flex w-full cursor-pointer items-center justify-between gap-2"
+          >
+            <span className="flex items-baseline gap-2">
+              <span className="text-sm leading-none font-medium">
+                {msg("auto.features.submit.components.steps.basicsstep.6")}
+                {TERMS.optimization}
               </span>
-              <CaretDown
-                className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
-                  optimizationTypeOpen && "rotate-180",
-                )}
+              {!optimizationTypeOpen && (
+                <span className="text-xs text-muted-foreground">
+                  {jobType === "run" ? TERMS.optimizationTypeRun : TERMS.optimizationTypeGrid}
+                </span>
+              )}
+            </span>
+            <CaretDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+                optimizationTypeOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {optimizationTypeOpen && (
+            <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+              <Segmented<"run" | "grid_search">
+                segmentClassName="sm:px-4"
+                value={jobType}
+                onChange={setOptimizationType}
+                options={[
+                  {
+                    value: "run",
+                    label: TERMS.optimizationTypeRun,
+                    desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.2", {
+                      p1: TERMS.optimization,
+                      p2: TERMS.model,
+                    }),
+                  },
+                  {
+                    value: "grid_search",
+                    label: TERMS.optimizationTypeGrid,
+                    desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.3", {
+                      p1: TERMS.optimizationTypeGrid,
+                    }),
+                  },
+                ]}
               />
-            </button>
-            {optimizationTypeOpen && (
-              <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
-                <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
-                  <div
-                    className="absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out"
-                    style={{ insetInlineStart: jobType === "run" ? 4 : "calc(50% + 2px)" }}
-                  />
-                  {(
-                    [
-                      [
-                        "run",
-                        TERMS.optimizationTypeRun,
-                        formatMsg("auto.features.submit.components.steps.basicsstep.template.2", {
-                          p1: TERMS.optimization,
-                          p2: TERMS.model,
-                        }),
-                      ],
-                      [
-                        "grid_search",
-                        TERMS.optimizationTypeGrid,
-                        formatMsg("auto.features.submit.components.steps.basicsstep.template.3", {
-                          p1: TERMS.optimizationTypeGrid,
-                        }),
-                      ],
-                    ] as const
-                  ).map(([val, label, desc]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setOptimizationType(val)}
-                      className={cn(
-                        "relative z-10 flex-1 cursor-pointer rounded-md px-2 py-2.5 text-center transition-colors duration-200 sm:px-4",
-                        jobType === val
-                          ? "text-foreground"
-                          : "text-foreground/60 hover:text-foreground",
-                      )}
-                    >
-                      <span className="text-sm font-medium">{label}</span>
-                      <span
-                        className={cn(
-                          "block text-[0.6875rem] mt-0.5 transition-colors duration-200",
-                          jobType === val ? "text-muted-foreground" : "text-foreground/40",
-                        )}
-                      >
-                        {desc}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -1,19 +1,14 @@
 "use client";
 
+import { InlineWarningRow } from "@/shared/ui/inline-warning-row";
 import * as React from "react";
 import Link from "next/link";
 import { CircleNotch, Copy, Database, PencilSimple, Table, Tag, Trash } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
-import { Input } from "@/shared/ui/primitives/input";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
@@ -21,12 +16,12 @@ import {
   deleteDataset,
   isStorageQuotaError,
   listDatasetOptimizations,
-  renameDataset,
   type DatasetSummary,
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatBytes, formatRelativeTime } from "@/shared/lib/formatters";
 import { cn } from "@/shared/lib/utils";
+import { DatasetRenameDialog } from "./DatasetRenameDialog";
 import { DatasetShareDialog } from "./DatasetShareDialog";
 
 /**
@@ -52,8 +47,6 @@ export function DatasetCard({
   const isOwner = dataset.role === "owner";
   const canEdit = isOwner || dataset.role === "editor";
   const [renameOpen, setRenameOpen] = React.useState(false);
-  const [renameValue, setRenameValue] = React.useState(dataset.name);
-  const [renaming, setRenaming] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [cloning, setCloning] = React.useState(false);
@@ -76,22 +69,6 @@ export function DatasetCard({
       cancelled = true;
     };
   }, [deleteOpen, isOwner, dataset.id]);
-
-  const handleRename = async () => {
-    const name = renameValue.trim();
-    if (!name || renaming) return;
-    setRenaming(true);
-    try {
-      await renameDataset(dataset.id, name);
-      toast.success(msg("datasets.toast.renamed"));
-      setRenameOpen(false);
-      onChanged();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("datasets.toast.rename_failed"));
-    } finally {
-      setRenaming(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (deleting) return;
@@ -190,7 +167,7 @@ export function DatasetCard({
               asChild
               variant="ghost"
               size="icon-sm"
-              className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+              className="text-muted-foreground hover:text-foreground"
               aria-label={msg("datasets.action.tag")}
             >
               <Link href={`/tagger?dataset=${dataset.id}&name=${encodeURIComponent(dataset.name)}`}>
@@ -204,7 +181,7 @@ export function DatasetCard({
                 asChild
                 variant="ghost"
                 size="icon-sm"
-                className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+                className="text-muted-foreground hover:text-foreground"
                 aria-label={msg("datasets.action.edit")}
               >
                 <Link
@@ -222,11 +199,8 @@ export function DatasetCard({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
-                  onClick={() => {
-                    setRenameValue(dataset.name);
-                    setRenameOpen(true);
-                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => setRenameOpen(true)}
                   aria-label={msg("datasets.action.rename")}
                 >
                   <PencilSimple className="size-4" />
@@ -236,7 +210,7 @@ export function DatasetCard({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-[44px] text-muted-foreground hover:text-destructive lg:size-8"
+                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   onClick={() => setDeleteOpen(true)}
                   aria-label={msg("datasets.action.delete")}
                 >
@@ -249,13 +223,16 @@ export function DatasetCard({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={handleClone}
                 disabled={cloning}
                 aria-label={msg("datasets.action.clone")}
               >
                 {cloning ? (
-                  <CircleNotch className="size-4 animate-spin" />
+                  <CircleNotch
+                    className="animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <Copy className="size-4" />
                 )}
@@ -265,86 +242,49 @@ export function DatasetCard({
         </div>
       </div>
 
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] max-lg:[&_[data-slot=dialog-close]]:!size-[44px] sm:max-w-md">
-          <DialogHeader className="text-start">
-            <DialogTitle>{msg("datasets.rename.title")}</DialogTitle>
-          </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void handleRename();
-              }
-            }}
-            aria-label={msg("datasets.rename.label")}
-            autoFocus
-          />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenameOpen(false)}
-              disabled={renaming}
-              className="!min-h-[44px] w-full justify-center lg:!min-h-0"
-            >
-              {msg("datasets.rename.cancel")}
-            </Button>
-            <Button
-              onClick={handleRename}
-              disabled={renaming || renameValue.trim().length === 0}
-              className="!min-h-[44px] w-full justify-center shadow-xs lg:!min-h-0"
-            >
-              {renaming ? (
-                <CircleNotch className="size-4 animate-spin" />
-              ) : (
-                msg("datasets.rename.save")
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DatasetRenameDialog
+        dataset={dataset}
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        onRenamed={onChanged}
+      />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] max-lg:[&_[data-slot=dialog-close]]:!size-[44px] sm:max-w-md">
-          <DialogHeader className="text-start">
-            <DialogTitle>{msg("datasets.delete.title")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">{msg("datasets.delete.body")}</p>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("datasets.delete.title")}
+            description={msg("datasets.delete.body")}
+          />
           {usedCount !== null &&
             usedCount > 0 &&
             (() => {
               // Bold the affected-run count to match how every other delete dialog
-              // emphasizes its key value; keep the amber colour (no text-foreground).
+              // emphasizes its key value.
               const [warnBefore, warnAfter = ""] = msg("datasets.delete.used_warning").split(
                 "{count}",
               );
               return (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  {warnBefore}
-                  <span className="font-semibold">{usedCount}</span>
-                  {warnAfter}
-                </p>
+                <InlineWarningRow
+                  message={
+                    <>
+                      {warnBefore}
+                      <span className="font-semibold">{usedCount}</span>
+                      {warnAfter}
+                    </>
+                  }
+                />
               );
             })()}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-              className="!min-h-[44px] w-full justify-center lg:!min-h-0"
-            >
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               {msg("datasets.delete.cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="!min-h-[44px] w-full justify-center shadow-xs lg:!min-h-0"
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.delete.confirm")
               )}

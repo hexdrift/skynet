@@ -45,7 +45,7 @@ function TrajectoryOutlineImpl({
       <div className="space-y-3">
         {generations.map(([gen, items]) => (
           <div key={gen} className="space-y-1">
-            <p className="px-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="px-1 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
               {formatMsg("trajectory.scrubber.generation_value", { gen })}
             </p>
             <ul className="space-y-1">
@@ -97,7 +97,7 @@ function TrajectoryOutlineImpl({
 
       {rejected.length > 0 && (
         <details className="rounded-lg border border-border bg-card">
-          <summary className="cursor-pointer px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+          <summary className="cursor-pointer px-3 py-2 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
             {msg("trajectory.ghost.legend")} ({rejected.length})
           </summary>
           <ul className="space-y-1 px-2 pb-2">
@@ -111,10 +111,7 @@ function TrajectoryOutlineImpl({
                   <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                     {formatMsg("trajectory.outline.rejected_row", { id: r.rejection_id })}
                   </span>
-                  <span
-                    className="font-mono text-sm tabular-nums text-muted-foreground"
-                    dir="ltr"
-                  >
+                  <span className="font-mono text-sm tabular-nums text-muted-foreground" dir="ltr">
                     {r.proposal_score.toFixed(2)}
                   </span>
                 </button>

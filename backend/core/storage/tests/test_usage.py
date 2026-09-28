@@ -21,6 +21,7 @@ from sqlalchemy.pool import StaticPool
 from core.config import settings
 from core.storage.models import (
     EMBEDDING_DIM,
+    SAMPLE_STAGED_ID_PREFIX,
     AgentStagedDatasetModel,
     Base,
     DatasetModel,
@@ -322,6 +323,24 @@ def test_category_items_lists_staged_uploads(store: _SQLiteJobStore) -> None:
     assert items[0].type == "staged_upload"
     assert items[0].name == "data.csv"
     assert items[0].bytes > 0
+
+
+def test_sample_staged_rows_stay_out_of_storage_usage(store: _SQLiteJobStore) -> None:
+    """Agent-staged bundled samples are ephemeral: they never count toward usage or the quota."""
+    upload_id = store.stage_dataset(username="alice", dataset_filename="data.csv", rows=[{"q": "1"}])
+    before = compute_user_storage(store.engine, "alice")
+    sample_id = store.stage_dataset(
+        username="alice", dataset_filename="sample.json", rows=[{"q": "x" * 500}], sample=True
+    )
+
+    assert sample_id.startswith(SAMPLE_STAGED_ID_PREFIX)
+    assert len(sample_id) <= 36
+    assert store.get_staged_dataset(sample_id, "alice") == [{"q": "x" * 500}]
+    after = compute_user_storage(store.engine, "alice")
+    assert before.breakdown["staged_uploads"] > 0
+    assert after.total == before.total
+    items = compute_user_storage_category_items(store.engine, "alice", "staged_uploads")
+    assert [item.id for item in items] == [upload_id]
 
 
 def test_category_items_are_owner_scoped(store: _SQLiteJobStore) -> None:

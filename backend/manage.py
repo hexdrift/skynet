@@ -5,6 +5,7 @@ Usage:
     python manage.py setup    — First-time database setup
     python manage.py check    — Verify database connection
     python manage.py shell    — Open a Python shell with app context
+    python manage.py reembed  — Recompute every job's explore search embedding
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from sqlalchemy import create_engine, text
 from alembic import command
 from core.config import settings
 from core.registry import ServiceRegistry
+from core.service_gateway.embedding_pipeline import reembed_all_embeddings
 from core.storage.models import Base
 from core.storage.remote import RemoteDBJobStore
 
@@ -108,17 +110,41 @@ def cmd_shell() -> None:
     )
 
 
+def cmd_reembed() -> None:
+    """Recompute every successful job's explore summary embedding in place.
+
+    Run this after the summariser's inputs change so the existing corpus is
+    re-embedded from the new signal — the periodic repair scan won't, because
+    those rows still look fresh. Requires ``SEARCH_BACKEND=semantic`` plus a
+    reachable summariser model and embedder; it makes one LLM call per job, so
+    it is a deliberate, potentially slow and costly one-off, not part of setup.
+    """
+    url = _get_db_url()
+    store = RemoteDBJobStore(url)
+    try:
+        count = reembed_all_embeddings(store)
+        print(f"✓ Re-embedded {count} job(s)")
+    finally:
+        store.engine.dispose()
+
+
 def main() -> None:
     """Parse the command-line argument and dispatch to the chosen subcommand."""
     parser = argparse.ArgumentParser(
         description="Skynet management CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Commands:\n  setup   First-time database setup\n  check   Verify database connection\n  shell   Interactive Python shell with app context",
+        epilog=(
+            "Commands:\n"
+            "  setup     First-time database setup\n"
+            "  check     Verify database connection\n"
+            "  shell     Interactive Python shell with app context\n"
+            "  reembed   Recompute every job's explore search embedding"
+        ),
     )
-    parser.add_argument("command", choices=["setup", "check", "shell"], help="Command to run")
+    parser.add_argument("command", choices=["setup", "check", "shell", "reembed"], help="Command to run")
     args = parser.parse_args()
 
-    {"setup": cmd_setup, "check": cmd_check, "shell": cmd_shell}[args.command]()
+    {"setup": cmd_setup, "check": cmd_check, "shell": cmd_shell, "reembed": cmd_reembed}[args.command]()
 
 
 if __name__ == "__main__":

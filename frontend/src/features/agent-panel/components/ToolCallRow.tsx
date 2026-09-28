@@ -1,10 +1,11 @@
 "use client";
 
+import { PingDot } from "@/shared/ui/ping-dot";
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowsClockwise, CaretDown, Warning, type Icon } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
-import { CopyGlyph, useCopyToClipboard } from "@/shared/ui/copy-button";
+import { CopyButton } from "@/shared/ui/copy-button";
 
 import { cn } from "@/shared/lib/utils";
 import type { AgentToolCall } from "@/shared/ui/agent/types";
@@ -245,8 +246,7 @@ function StatusGlyph({
         )}
         aria-label={msg("auto.features.agent.panel.components.toolcallrow.literal.6")}
       >
-        <span className="absolute inset-0 rounded-full bg-[#3D2E22]/15 animate-ping motion-reduce:animate-none" />
-        <span className="relative size-2 rounded-full bg-[#3D2E22]" />
+        <PingDot tone="agent" />
       </span>
     );
   }
@@ -305,7 +305,13 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
         >
           {trimmed}
         </pre>
-        <CopyButton text={trimmed} />
+        <CopyButton
+          text={trimmed}
+          ariaLabel={msg("auto.features.agent.panel.components.toolcallrow.literal.10")}
+          copiedAriaLabel={msg("auto.features.agent.panel.components.toolcallrow.literal.9")}
+          stopPropagation
+          className="absolute end-1.5 top-1.5"
+        />
       </div>
     );
   }
@@ -352,31 +358,6 @@ function ResultBody({ result, isError }: { result: unknown; isError: boolean }) 
 
 function EmptyPlaceholder() {
   return <div className="text-[0.6875rem]/[1.55] text-muted-foreground/60">—</div>;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const { copied, copy } = useCopyToClipboard();
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        void copy(text);
-      }}
-      aria-label={
-        copied
-          ? msg("auto.features.agent.panel.components.toolcallrow.literal.9")
-          : msg("auto.features.agent.panel.components.toolcallrow.literal.10")
-      }
-      className={cn(
-        "absolute end-1.5 top-1.5 inline-flex size-6 items-center justify-center rounded-md",
-        "bg-background/85 text-muted-foreground/70 border border-border/40",
-        "hover:bg-background hover:text-foreground transition-colors cursor-pointer",
-      )}
-    >
-      <CopyGlyph copied={copied} className="size-3" />
-    </button>
-  );
 }
 
 function formatElapsed(ms: number): string {

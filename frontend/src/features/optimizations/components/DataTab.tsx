@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import { toast } from "react-toastify";
 import { CircleNotch, ClockCounterClockwise, MagicWand, Tray } from "@/shared/ui/icons";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
@@ -13,17 +14,16 @@ import {
   useColumnResize,
   ResetColumnsButton,
   ResetFiltersButton,
-  type SortDir,
 } from "@/shared/ui/excel-filter";
 import { DataTabSkeleton } from "./DataTabSkeleton";
 import { ExportTableMenu } from "@/shared/ui/export-table-menu";
 import { FadeIn } from "@/shared/ui/motion";
+import { Segmented } from "@/shared/ui/segmented";
 import { HelpTip } from "@/shared/ui/help-tip";
-import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { getOptimizationDataset, getTestResults, getPairTestResults } from "@/shared/lib/api";
-import { useUserPrefs } from "@/features/settings";
+import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 import type {
   OptimizationDatasetResponse,
   OptimizationStatusResponse,
@@ -89,14 +89,6 @@ export function DataTab({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [split, setSplit] = useState<Split>("test");
-  // Simple mode collapses the split machinery: only the scored (test) rows are
-  // shown and the four-way selector disappears — the val-vs-test distinction is
-  // an advanced-mode concept.
-  const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
-  useEffect(() => {
-    if (!advanced && split !== "test") setSplit("test");
-  }, [advanced, split]);
   const [programType, setProgramType] = useState<ProgramType>("optimized");
   const [testResults, setTestResults] = useState<Record<string, Record<number, EvalExampleResult>>>(
     { optimized: {}, baseline: {} },
@@ -104,15 +96,7 @@ export function DataTab({
   const [testResultsLoading, setTestResultsLoading] = useState(false);
 
   const colFilters = useColumnFilters();
-  const [sortKey, setSortKey] = useState<string>("");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const toggleSort = (key: string) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
+  const { sortKey, sortDir, toggleSort } = useTableSort<string>("");
   const colResize = useColumnResize();
 
   const isDemoMode = job.optimization_id === DEMO_OPTIMIZATION_ID;
@@ -294,10 +278,11 @@ export function DataTab({
       return true;
     });
     if (sortKey) {
+      const collLocale = getActiveIntlLocale();
       result = [...result].sort((a, b) => {
         const av = formatCellValue(a.row[sortKey]);
         const bv = formatCellValue(b.row[sortKey]);
-        const cmp = av.localeCompare(bv, "he", { numeric: true });
+        const cmp = av.localeCompare(bv, collLocale, { numeric: true });
         return sortDir === "asc" ? cmp : -cmp;
       });
     }
@@ -323,21 +308,15 @@ export function DataTab({
   if (loading) return <DataTabSkeleton />;
   if (error || !dataset)
     return (
-      <div className="text-sm text-destructive text-center py-16">
-        {error ?? msg("auto.features.optimizations.components.datatab.literal.2")}
-      </div>
+      <InlineErrorRow
+        message={error ?? msg("auto.features.optimizations.components.datatab.literal.2")}
+      />
     );
 
   return (
     <div className="space-y-4 mt-4">
       <FadeIn>
-        <p className="text-sm text-muted-foreground">
-          {msg(
-            advanced
-              ? "optimizations.datatab.description"
-              : "optimizations.datatab.description_simple",
-          )}
-        </p>
+        <p className="text-sm text-muted-foreground">{msg("optimizations.datatab.description")}</p>
       </FadeIn>
       {/* Test evaluation bar — shows cached results */}
       {split === "test" && (
@@ -354,60 +333,28 @@ export function DataTab({
                   </HelpTip>
                 </div>
               </div>
-              <div className="relative inline-flex shrink-0 gap-1 rounded-lg bg-[#F0EBE4] p-1">
-                <TooltipButton
-                  tooltip={msg("auto.features.optimizations.components.datatab.2")}
-                  side="top"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setProgramType("baseline")}
-                    aria-label={msg("auto.features.optimizations.components.datatab.2")}
-                    aria-pressed={programType === "baseline"}
-                    className={`relative inline-flex size-[44px] cursor-pointer items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px] ${programType === "baseline" ? "text-[#FAF8F5]" : "text-[#8C7A6B] hover:text-[#3D2E22]"}`}
-                  >
-                    {programType === "baseline" && (
-                      <motion.span
-                        layoutId="datatab-program-pill"
-                        className="absolute inset-0 rounded-md bg-[#3D2E22] shadow-sm"
-                        transition={{
-                          type: "tween",
-                          duration: 0.18,
-                          ease: [0.22, 1, 0.36, 1],
-                        }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    <ClockCounterClockwise className="relative z-10 size-4" aria-hidden="true" />
-                  </button>
-                </TooltipButton>
-                <TooltipButton
-                  tooltip={msg("auto.features.optimizations.components.datatab.3")}
-                  side="top"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setProgramType("optimized")}
-                    aria-label={msg("auto.features.optimizations.components.datatab.3")}
-                    aria-pressed={programType === "optimized"}
-                    className={`relative inline-flex size-[44px] cursor-pointer items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px] ${programType === "optimized" ? "text-[#FAF8F5]" : "text-[#8C7A6B] hover:text-[#3D2E22]"}`}
-                  >
-                    {programType === "optimized" && (
-                      <motion.span
-                        layoutId="datatab-program-pill"
-                        className="absolute inset-0 rounded-md bg-[#3D2E22] shadow-sm"
-                        transition={{
-                          type: "tween",
-                          duration: 0.18,
-                          ease: [0.22, 1, 0.36, 1],
-                        }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    <MagicWand className="relative z-10 size-4" aria-hidden="true" />
-                  </button>
-                </TooltipButton>
-              </div>
+              <Segmented<ProgramType>
+                size="sm"
+                iconOnly
+                className="shrink-0"
+                segmentClassName="min-w-[44px] px-0 lg:min-h-8 lg:min-w-8"
+                value={programType}
+                onChange={setProgramType}
+                options={[
+                  {
+                    value: "baseline",
+                    label: msg("auto.features.optimizations.components.datatab.2"),
+                    tip: msg("auto.features.optimizations.components.datatab.2"),
+                    icon: <ClockCounterClockwise className="size-3.5" aria-hidden="true" />,
+                  },
+                  {
+                    value: "optimized",
+                    label: msg("auto.features.optimizations.components.datatab.3"),
+                    tip: msg("auto.features.optimizations.components.datatab.3"),
+                    icon: <MagicWand className="size-3.5" aria-hidden="true" />,
+                  },
+                ]}
+              />
               {testResultsLoading && (
                 <CircleNotch className="size-4 animate-spin text-[#8C7A6B] shrink-0" />
               )}
@@ -418,40 +365,32 @@ export function DataTab({
 
       <FadeIn delay={0.3}>
         <div className="flex items-center gap-3 flex-wrap">
-          {advanced &&
-            (() => {
-              const splits: Array<[Split, string]> = [
-                ["all", msg("auto.features.optimizations.components.datatab.literal.4")],
-                ["train", msg("auto.features.optimizations.components.datatab.literal.5")],
-                ["val", msg("auto.features.optimizations.components.datatab.literal.6")],
-                ["test", msg("auto.features.optimizations.components.datatab.literal.7")],
-              ];
-              const idx = splits.findIndex(([s]) => s === split);
-              const count = splits.length;
-              return (
-                <div
-                  className="relative flex w-full rounded-lg bg-muted p-1 gap-1 text-[0.6875rem]"
-                  data-tutorial="split-selector"
-                >
-                  <div
-                    className="absolute top-1 bottom-1 rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-150 ease-out"
-                    style={{
-                      width: `calc(${100 / count}% - 6px)`,
-                      insetInlineStart: `calc(${(idx / count) * 100}% + 4px)`,
-                    }}
-                  />
-                  {splits.map(([s, label]) => (
-                    <button
-                      key={s}
-                      onClick={() => setSplit(s)}
-                      className={`relative z-10 flex-1 rounded-md px-3 py-1.5 cursor-pointer text-center transition-colors duration-150 ${split === s ? "text-foreground font-semibold" : "text-foreground/50 hover:text-foreground"}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              );
-            })()}
+          <div className="w-full" data-tutorial="split-selector">
+            <Segmented<Split>
+              size="sm"
+              className="w-full"
+              value={split}
+              onChange={setSplit}
+              options={[
+                {
+                  value: "all",
+                  label: msg("auto.features.optimizations.components.datatab.literal.4"),
+                },
+                {
+                  value: "train",
+                  label: msg("auto.features.optimizations.components.datatab.literal.5"),
+                },
+                {
+                  value: "val",
+                  label: msg("auto.features.optimizations.components.datatab.literal.6"),
+                },
+                {
+                  value: "test",
+                  label: msg("auto.features.optimizations.components.datatab.literal.7"),
+                },
+              ]}
+            />
+          </div>
           <ResetFiltersButton filters={colFilters} />
           <ResetColumnsButton resize={colResize} />
           <div className="text-[0.625rem] text-muted-foreground tabular-nums me-auto">

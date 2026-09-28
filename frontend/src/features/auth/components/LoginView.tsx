@@ -113,7 +113,10 @@ export function LoginView() {
           {(mode === "loading" || mode === "sso") && (
             <div className="mt-9 flex flex-col items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-2">
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="size-4 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
                 {msg("auth.login.sso_loading")}
               </span>
             </div>
@@ -183,7 +186,12 @@ export function LoginView() {
                     disabled={loading || !username.trim()}
                     className="h-11 w-full gap-2"
                   >
-                    {loading && <CircleNotch className="size-4 animate-spin" />}
+                    {loading && (
+                      <CircleNotch
+                        className="size-4 animate-spin motion-reduce:animate-none"
+                        aria-hidden="true"
+                      />
+                    )}
                     {msg("auth.login.submit")}
                   </Button>
                 </form>

@@ -1,5 +1,8 @@
 "use client";
 
+import { ProgressBar } from "@/shared/ui/progress-bar";
+import { FieldKey } from "@/shared/ui/field-key";
+import { Kbd } from "@/shared/ui/kbd";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   CaretRight,
@@ -14,9 +17,9 @@ import {
 } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { AgentPillDock } from "@/features/agent-panel";
+import { OutcomeChip } from "@/shared/ui/outcome-chip";
 import { Button } from "@/shared/ui/primitives/button";
 import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
-import { Badge } from "@/shared/ui/primitives/badge";
 import { Input } from "@/shared/ui/primitives/input";
 import { Label } from "@/shared/ui/primitives/label";
 import { Separator } from "@/shared/ui/primitives/separator";
@@ -31,6 +34,11 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { cn } from "@/shared/lib/utils";
+import {
+  COMPACT_POPOVER_ICON_CLASS,
+  COMPACT_POPOVER_ITEM_CLASS,
+  COMPACT_POPOVER_PANEL_CLASS,
+} from "@/shared/ui/compact-popover-menu";
 import { exportAnnotations, buildLibraryRows, type ExportFormat } from "../lib/export-csv";
 import type {
   AnnotationProvenance,
@@ -46,6 +54,7 @@ import { isStorageQuotaError, saveDataset } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { track, TelemetryEvent } from "@/shared/lib/telemetry";
+import { Textarea } from "@/shared/ui/primitives/textarea";
 
 interface Props {
   config: TaggerConfig;
@@ -302,15 +311,7 @@ export function TaggerAnnotation({
   return (
     <div className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]">
       <div className="flex items-center gap-2 px-3 pb-1.5 pt-3 sm:px-5">
-        <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{
-              width: `${pct}%`,
-              background: "var(--gradient-progress)",
-            }}
-          />
-        </div>
+        <ProgressBar value={pct} tone="ai" size="sm" className="w-auto flex-1" />
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
           <span className="font-semibold text-primary">{headerDone}</span>/{headerTotal}
         </span>
@@ -365,13 +366,13 @@ export function TaggerAnnotation({
                 className={cn(
                   "flex-1 text-base font-medium rounded-xl gap-2 focus-visible:ring-0 focus-visible:border-transparent",
                   isBinaryYes(currentAnn) &&
-                    "bg-emerald-600/15 hover:bg-emerald-600/20 border-emerald-600/40 text-emerald-700",
+                    "bg-[var(--success-dim)] hover:bg-[var(--success-dim)] border-[var(--success-border)] text-[var(--success)]",
                   isBinaryYes(aiPick) && "border-primary/45 bg-primary/5",
                 )}
               >
-                <Badge variant="ghost" size="sm" className="opacity-40 font-mono">
+                <Kbd className="font-mono">
                   {msg("auto.features.tagger.components.taggerannotation.4")}
-                </Badge>
+                </Kbd>
                 {msg("auto.features.tagger.components.taggerannotation.5")}
                 {isBinaryYes(aiPick) && (
                   <Sparkle
@@ -387,13 +388,13 @@ export function TaggerAnnotation({
                 className={cn(
                   "flex-1 text-base font-medium rounded-xl gap-2 focus-visible:ring-0 focus-visible:border-transparent",
                   isBinaryNo(currentAnn) &&
-                    "bg-red-500/15 hover:bg-red-500/20 border-red-500/40 text-red-600",
+                    "bg-[var(--danger-dim)] hover:bg-[var(--danger-dim)] border-[var(--danger-border)] text-[var(--danger)]",
                   isBinaryNo(aiPick) && "border-primary/45 bg-primary/5",
                 )}
               >
-                <Badge variant="ghost" size="sm" className="opacity-40 font-mono">
+                <Kbd className="font-mono">
                   {msg("auto.features.tagger.components.taggerannotation.6")}
-                </Badge>
+                </Kbd>
                 {msg("auto.features.tagger.components.taggerannotation.7")}
                 {isBinaryNo(aiPick) && (
                   <Sparkle
@@ -429,13 +430,9 @@ export function TaggerAnnotation({
                     )}
                   >
                     {i < 9 && (
-                      <Badge
-                        variant="ghost"
-                        size="sm"
-                        className={cn("font-mono", selected ? "opacity-70" : "opacity-40")}
-                      >
+                      <Kbd active={selected} className="font-mono">
                         {i + 1}
-                      </Badge>
+                      </Kbd>
                     )}
                     <span className="min-w-0 break-words">{cat.label}</span>
                     {aiPickedCats.has(cat.id) && (
@@ -451,11 +448,11 @@ export function TaggerAnnotation({
           )}
 
           {config.mode === "freetext" && (
-            <textarea
+            <Textarea
               value={typeof currentAnn === "string" ? currentAnn : ""}
               onChange={(e) => onSetFreetext(id, e.target.value)}
               readOnly={readOnly}
-              className="flex-1 min-h-0 resize-none rounded-xl border border-input/90 bg-background/75 px-4 py-3 text-sm leading-relaxed shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-sm transition-[color,box-shadow,border-color] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="min-h-0 flex-1 px-4 py-3 text-sm leading-relaxed"
               dir="auto"
             />
           )}
@@ -479,7 +476,6 @@ export function TaggerAnnotation({
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => onGoTo(0)}
-                  className="size-[44px] lg:size-8"
                   aria-label={msg("auto.features.tagger.components.taggerannotation.9")}
                 >
                   <SkipBack className="size-4" />
@@ -496,7 +492,6 @@ export function TaggerAnnotation({
                   size="icon-sm"
                   onClick={onJumpUntagged}
                   disabled={taggedCount === data.length}
-                  className="size-[44px] lg:size-8"
                   aria-label={msg("auto.features.tagger.components.taggerannotation.10")}
                 >
                   <MinusCircle className="size-4" />
@@ -513,7 +508,6 @@ export function TaggerAnnotation({
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => setShowShortcuts(true)}
-                  className="size-[44px] lg:size-8"
                   aria-label={msg("auto.features.tagger.components.taggerannotation.11")}
                 >
                   <Keyboard className="size-4" />
@@ -530,7 +524,6 @@ export function TaggerAnnotation({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      className="size-[44px] lg:size-8"
                       aria-label={msg("auto.features.tagger.components.taggerannotation.12")}
                     >
                       <DownloadSimple className="size-4" />
@@ -545,25 +538,25 @@ export function TaggerAnnotation({
                 <PopoverPrimitive.Content
                   side="bottom"
                   sideOffset={8}
-                  className="z-50 w-44 rounded-lg border bg-background p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
+                  className={COMPACT_POPOVER_PANEL_CLASS}
                 >
                   <PopoverPrimitive.Close asChild>
                     <button
                       type="button"
                       onClick={openNameDialog}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-accent"
+                      className={COMPACT_POPOVER_ITEM_CLASS}
                     >
-                      <Database className="size-3.5 shrink-0" />
+                      <Database className={COMPACT_POPOVER_ICON_CLASS} />
                       {msg("tagger.library.save")}
                     </button>
                   </PopoverPrimitive.Close>
-                  <div className="my-1 h-px bg-border" />
+                  <div role="separator" className="my-1 h-px bg-border/60" />
                   {(["csv", "json", "xlsx", "parquet", "feather"] as const).map((fmt) => (
                     <div key={fmt}>
                       {/* Set the columnar analytics formats apart with a small
                           labelled divider, matching the shared table menu. */}
                       {fmt === "parquet" && (
-                        <div className="mx-3 mt-1 mb-0.5 border-t border-border pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+                        <div className="mx-3.5 mt-1.5 mb-1 border-t border-border/40 pt-1.5 text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground/50">
                           {msg("export.table.columnar")}
                         </div>
                       )}
@@ -571,7 +564,7 @@ export function TaggerAnnotation({
                         <button
                           type="button"
                           onClick={() => handleExport(fmt)}
-                          className="flex w-full items-center rounded-md px-3 py-1.5 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-accent"
+                          className={COMPACT_POPOVER_ITEM_CLASS}
                         >
                           {fmt.toUpperCase()}
                         </button>
@@ -600,7 +593,7 @@ export function TaggerAnnotation({
       </div>
 
       <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.14")}</DialogTitle>
           </DialogHeader>
@@ -655,7 +648,7 @@ export function TaggerAnnotation({
           if (!open) setExportConfirm(null);
         }}
       >
-        <DialogContent className="max-w-md sm:max-w-md">
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{msg("auto.features.tagger.components.taggerannotation.15")}</DialogTitle>
             <DialogDescription>
@@ -667,11 +660,7 @@ export function TaggerAnnotation({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setExportConfirm(null)}
-              className="w-full justify-center"
-            >
+            <Button variant="outline" onClick={() => setExportConfirm(null)}>
               {msg("auto.features.tagger.components.taggerannotation.18")}
             </Button>
             <Button
@@ -679,7 +668,6 @@ export function TaggerAnnotation({
                 if (exportConfirm) doExport(exportConfirm);
                 setExportConfirm(null);
               }}
-              className="w-full justify-center"
             >
               {msg("auto.features.tagger.components.taggerannotation.19")}
             </Button>
@@ -693,7 +681,7 @@ export function TaggerAnnotation({
           if (!savingToLibrary) setNameDialogOpen(open);
         }}
       >
-        <DialogContent className="max-w-md sm:max-w-md">
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{msg("tagger.library.name_title")}</DialogTitle>
           </DialogHeader>
@@ -718,17 +706,18 @@ export function TaggerAnnotation({
               variant="outline"
               onClick={() => setNameDialogOpen(false)}
               disabled={savingToLibrary}
-              className="w-full justify-center"
             >
               {msg("tagger.library.name_cancel")}
             </Button>
             <Button
               onClick={() => void handleSaveToLibrary()}
               disabled={savingToLibrary || !datasetName.trim()}
-              className="w-full justify-center"
             >
               {savingToLibrary ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("tagger.library.name_save")
               )}
@@ -746,9 +735,7 @@ function ShortcutRow({ keys, label }: { keys: string; label: string }) {
   return (
     <div className="flex items-center justify-between py-0.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <Badge variant="outline" size="sm" className="font-mono">
-        {keys}
-      </Badge>
+      <Kbd className="font-mono">{keys}</Kbd>
     </div>
   );
 }
@@ -820,12 +807,7 @@ export function FieldsView({ fields }: { fields: DataField[] }) {
           )}
         >
           <dt>
-            <span
-              dir="ltr"
-              className="inline-flex items-center rounded-md bg-muted/55 px-2 py-0.5 text-[10.5px] font-mono uppercase tracking-[0.08em] text-muted-foreground"
-            >
-              {field.column}
-            </span>
+            <FieldKey>{field.column}</FieldKey>
           </dt>
           <dd className="text-foreground" dir="auto">
             <FieldValue value={field.value} />
@@ -884,12 +866,7 @@ function FieldValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
         {entries.map(([k, v]) => (
           <div key={k} className="grid gap-1">
             <dt>
-              <span
-                dir="ltr"
-                className="inline-flex items-center rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-[0.06em] text-muted-foreground"
-              >
-                {k}
-              </span>
+              <FieldKey>{k}</FieldKey>
             </dt>
             <dd className="min-w-0">
               <FieldValue value={v} depth={depth + 1} />
@@ -901,15 +878,9 @@ function FieldValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
   }
   if (typeof value === "boolean") {
     return (
-      <span
-        dir="ltr"
-        className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-mono",
-          value ? "bg-emerald-600/10 text-emerald-700" : "bg-muted text-muted-foreground",
-        )}
-      >
+      <OutcomeChip dir="ltr" tone={value ? "pass" : "neutral"} className="font-mono">
         {value ? "true" : "false"}
-      </span>
+      </OutcomeChip>
     );
   }
   if (typeof value === "number") {

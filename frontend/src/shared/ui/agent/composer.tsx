@@ -153,7 +153,7 @@ export function Composer({
           >
             {dictation.state.kind === "rec" && (
               <>
-                <span className="size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+                <span className="size-2 shrink-0 rounded-full bg-[var(--danger)] motion-safe:animate-pulse" />
                 <span className="tabular-nums text-muted-foreground" dir="ltr">
                   {formatRecSeconds(dictation.seconds)}
                 </span>
@@ -164,13 +164,9 @@ export function Composer({
                   type="button"
                   onClick={dictation.cancel}
                   aria-label={msg("agent.composer.record_cancel")}
-                  className={cn(
-                    "ms-auto inline-flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded-full sm:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]",
-                    "text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40",
-                  )}
+                  className="close-button ms-auto shrink-0"
                 >
-                  <X className="size-4" />
+                  <X />
                 </button>
               </>
             )}
@@ -206,7 +202,7 @@ export function Composer({
                     type="button"
                     size="icon"
                     onClick={dictation.finish}
-                    className="shrink-0 rounded-full !size-[44px] sm:!size-9 [@media(hover:none)_and_(pointer:coarse)]:!size-[44px]"
+                    className="shrink-0 rounded-full"
                     aria-label={msg("agent.composer.record_finish")}
                   >
                     <Check className="size-4" />
@@ -220,7 +216,7 @@ export function Composer({
                     variant="ghost"
                     onClick={() => void dictation.start()}
                     disabled={disabled || streaming || dictation.state.kind === "busy"}
-                    className="shrink-0 rounded-full !size-[44px] text-muted-foreground hover:text-foreground sm:!size-9 [@media(hover:none)_and_(pointer:coarse)]:!size-[44px]"
+                    className="shrink-0 rounded-full text-muted-foreground hover:text-foreground"
                     aria-label={msg("agent.composer.record")}
                   >
                     <Microphone className="size-4" />
@@ -233,7 +229,7 @@ export function Composer({
                   type="button"
                   size="icon"
                   onClick={onStop}
-                  className="shrink-0 rounded-full !size-[44px] sm:!size-9 [@media(hover:none)_and_(pointer:coarse)]:!size-[44px]"
+                  className="shrink-0 rounded-full"
                   aria-label={stopAriaLabel}
                 >
                   <Square className="size-3 fill-current" />
@@ -243,7 +239,7 @@ export function Composer({
               <Button
                 type="submit"
                 size="icon"
-                className="shrink-0 rounded-full !size-[44px] sm:!size-9 [@media(hover:none)_and_(pointer:coarse)]:!size-[44px]"
+                className="shrink-0 rounded-full"
                 disabled={disabled || dictating || !value.trim()}
                 aria-label={sendAriaLabel}
               >

@@ -122,6 +122,14 @@ def test_copy_shares_usage_totals():
     assert total_tokens_from_history(lm) == 10
 
 
+def test_unknown_gateway_alias_still_reports_native_tool_calls():
+    """A gateway alias LiteLLM does not know still gets tools on the native channel."""
+    lm = MeteredLM(model="openai/onprem-gateway-alias", cache=False)
+
+    assert lm.supports_function_calling is True
+    assert lm.copy().supports_function_calling is True
+
+
 def test_job_lm_budget_serializes_concurrent_forward_calls(monkeypatch):
     """With a budget of 1, a second ``forward`` waits for the first's permit."""
     state = {"active": 0, "max": 0}

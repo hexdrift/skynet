@@ -216,6 +216,8 @@ def clone_payload(
     # stable_seed(...) stays byte-stable across workers.
     fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
     payload.seed = stable_seed(fingerprint)
+    # split_version is carried over from the source, so a clone or retry
+    # reproduces the source's split; an unstamped legacy run stays legacy.
     return new_id, payload
 
 

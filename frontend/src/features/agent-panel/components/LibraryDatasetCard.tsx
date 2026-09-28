@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Button } from "@/shared/ui/primitives/button";
 import { CheckCircle, Database, CircleNotch, XCircle } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -111,11 +112,12 @@ export function LibraryDatasetCard({ call, alreadyConfirmed, onConfirm }: Librar
           </div>
         )}
 
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => setOpen(true)}
           disabled={phase === "loading"}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[#C8A882]/50 bg-white/70 px-3 py-1.5 text-[0.75rem] font-medium text-[#3D2E22] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {phase === "loading" ? (
             <CircleNotch className="size-3.5 animate-spin" aria-hidden="true" />
@@ -123,7 +125,7 @@ export function LibraryDatasetCard({ call, alreadyConfirmed, onConfirm }: Librar
             <Database className="size-3.5" aria-hidden="true" />
           )}
           {msg("auto.features.agent.panel.components.librarydatasetcard.pick")}
-        </button>
+        </Button>
       </div>
 
       <DatasetPickerDialog open={open} onOpenChange={setOpen} onPick={handlePick} />

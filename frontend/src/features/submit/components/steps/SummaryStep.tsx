@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { RolePill } from "@/shared/ui/role-pill";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   SLIDING_PILL_TABS_INDICATOR_CLASS,
@@ -34,7 +35,7 @@ import { moduleLabel } from "@/shared/lib/formatters";
 import { TERMS } from "@/shared/lib/terms";
 import { ModelChip } from "@/shared/ui/model-chip";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { useUserPrefs } from "@/features/settings";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
@@ -63,8 +64,6 @@ const SUMMARY_TABS = perLocale(() => [
 ]);
 
 export function SummaryStep({ w }: { w: SubmitWizardContext }) {
-  const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
   const {
     summaryTab,
     setSummaryTab,
@@ -101,7 +100,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
   const displaySignatureCode = isWorkflow ? "" : signatureCode;
 
   return (
-    <div className="space-y-4" data-tutorial="wizard-step-6">
+    <div className="space-y-4" data-tutorial="wizard-stage-review">
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -232,82 +231,63 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                                 : msg(
                                     "auto.features.submit.components.steps.summarystep.literal.8",
                                   );
-                          const roleColor =
-                            role === "input"
-                              ? "text-[#3D2E22] bg-[#3D2E22]/10"
-                              : role === "output"
-                                ? "text-primary bg-primary/10"
-                                : "text-muted-foreground bg-muted";
                           return (
                             <div key={col} className="flex items-center justify-between gap-2 py-1">
                               <span className="text-xs font-mono truncate" dir="ltr">
                                 {col}
                               </span>
-                              <span
-                                className={cn(
-                                  "text-[0.625rem] font-semibold px-2 py-0.5 rounded-full",
-                                  roleColor,
-                                )}
+                              <RolePill
+                                role={role === "input" || role === "output" ? role : "ignore"}
                               >
                                 {roleLabel}
-                              </span>
+                              </RolePill>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   )}
-                  {/* Split breakdown is advanced-mode machinery. */}
-                  {advanced && (
-                    <>
-                      <Separator />
-                      <div className="space-y-3">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Stack className="size-3.5" />
-                          {msg("auto.features.submit.components.steps.summarystep.12")}
-                          {TERMS.dataset}
-                        </span>
-                        <div className="flex h-3 rounded-full overflow-hidden">
-                          <div
-                            className="bg-[#3D2E22]"
-                            style={{ width: `${split.train * 100}%` }}
-                          />
-                          <div className="bg-[#C8A882]" style={{ width: `${split.val * 100}%` }} />
-                          <div className="bg-[#8C7A6B]" style={{ width: `${split.test * 100}%` }} />
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]" />
-                            {msg("auto.features.submit.components.steps.summarystep.13")}
-                            {split.train}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]" />
-                            {msg("auto.features.submit.components.steps.summarystep.14")}
-                            {split.val}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]" />
-                            {msg("auto.features.submit.components.steps.summarystep.15")}
-                            {split.test}
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  {advanced && (
-                    <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Shuffle className="size-3.5" />
-                        {msg("auto.features.submit.components.steps.summarystep.16")}
-                      </span>
-                      <span className="text-sm font-medium">
-                        {shuffle
-                          ? msg("auto.features.submit.components.steps.summarystep.literal.9")
-                          : msg("auto.features.submit.components.steps.summarystep.literal.10")}
-                      </span>
+                  <Separator />
+                  <div className="space-y-3">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Stack className="size-3.5" />
+                      {msg("auto.features.submit.components.steps.summarystep.12")}
+                      {TERMS.dataset}
+                    </span>
+                    <div className="flex h-3 rounded-full overflow-hidden">
+                      <div className="bg-[#3D2E22]" style={{ width: `${split.train * 100}%` }} />
+                      <div className="bg-[#C8A882]" style={{ width: `${split.val * 100}%` }} />
+                      <div className="bg-[#8C7A6B]" style={{ width: `${split.test * 100}%` }} />
                     </div>
-                  )}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#3D2E22]" />
+                        {msg("auto.features.submit.components.steps.summarystep.13")}
+                        {split.train}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#C8A882]" />
+                        {msg("auto.features.submit.components.steps.summarystep.14")}
+                        {split.val}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#8C7A6B]" />
+                        {msg("auto.features.submit.components.steps.summarystep.15")}
+                        {split.test}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Shuffle className="size-3.5" />
+                      {msg("auto.features.submit.components.steps.summarystep.16")}
+                    </span>
+                    <span className="text-sm font-medium">
+                      {shuffle
+                        ? msg("auto.features.submit.components.steps.summarystep.literal.9")
+                        : msg("auto.features.submit.components.steps.summarystep.literal.10")}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -398,58 +378,54 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                         ? msg("auto.features.submit.components.steps.summarystep.literal.11")
                         : autoLevel === "medium"
                           ? msg("auto.features.submit.components.steps.summarystep.literal.12")
-                          : msg("auto.features.submit.components.steps.summarystep.literal.13")}
+                          : autoLevel === "heavy"
+                            ? msg("auto.features.submit.components.steps.summarystep.literal.13")
+                            : msg("submit.depth.custom")}
                     </span>
                   </div>
-                  {advanced && (
-                    <>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Target className="size-3.5" />
-                          {msg("auto.features.submit.components.steps.summarystep.25")}
-                        </span>
-                        <span className="text-sm font-medium font-mono" dir="ltr">
-                          {targetScore ? `${targetScore}%` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Database className="size-3.5" />
-                          {msg("auto.features.submit.components.steps.summarystep.20")}
-                        </span>
-                        <span className="text-sm font-medium font-mono">
-                          {reflectionMinibatchSize || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Stack className="size-3.5" />
-                          {msg("auto.features.submit.components.steps.summarystep.21")}
-                        </span>
-                        <span className="text-sm font-medium font-mono">{maxFullEvals || "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Gauge className="size-3.5" />
-                          {msg("submit.metric_calls")}
-                        </span>
-                        <span className="text-sm font-medium font-mono">
-                          {maxMetricCalls || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Shuffle className="size-3.5" />
-                          {msg("auto.features.submit.components.steps.summarystep.22")}
-                        </span>
-                        <span className="text-sm font-medium">
-                          {useMerge
-                            ? msg("auto.features.submit.components.steps.summarystep.literal.14")
-                            : msg("auto.features.submit.components.steps.summarystep.literal.15")}
-                        </span>
-                      </div>
-                    </>
-                  )}
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Target className="size-3.5" />
+                      {msg("auto.features.submit.components.steps.summarystep.25")}
+                    </span>
+                    <span className="text-sm font-medium font-mono" dir="ltr">
+                      {targetScore ? `${targetScore}%` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Database className="size-3.5" />
+                      {msg("auto.features.submit.components.steps.summarystep.20")}
+                    </span>
+                    <span className="text-sm font-medium font-mono">
+                      {reflectionMinibatchSize || "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Stack className="size-3.5" />
+                      {msg("auto.features.submit.components.steps.summarystep.21")}
+                    </span>
+                    <span className="text-sm font-medium font-mono">{maxFullEvals || "—"}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Gauge className="size-3.5" />
+                      {msg("submit.metric_calls")}
+                    </span>
+                    <span className="text-sm font-medium font-mono">{maxMetricCalls || "—"}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Shuffle className="size-3.5" />
+                      {msg("auto.features.submit.components.steps.summarystep.22")}
+                    </span>
+                    <span className="text-sm font-medium">
+                      {useMerge
+                        ? msg("auto.features.submit.components.steps.summarystep.literal.14")
+                        : msg("auto.features.submit.components.steps.summarystep.literal.15")}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -493,7 +469,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                       <CodeEditor
                         value={displaySignatureCode}
                         onChange={() => {}}
-                        height={`${Math.min(displaySignatureCode.split("\n").length + 1, 10) * 19.6 + 8}px`}
+                        height={readOnlyEditorHeight(displaySignatureCode, { maxLines: 10 })}
                         readOnly
                       />
                     </TabsContent>
@@ -503,7 +479,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                       <CodeEditor
                         value={metricCode}
                         onChange={() => {}}
-                        height={`${Math.min(metricCode.split("\n").length + 1, 10) * 19.6 + 8}px`}
+                        height={readOnlyEditorHeight(metricCode, { maxLines: 10 })}
                         readOnly
                       />
                     </TabsContent>

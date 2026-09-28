@@ -7,9 +7,14 @@ import { EmptyState } from "@/shared/ui/empty-state";
 import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import type { ServeInfoResponse, WorkflowNodeTrace } from "@/shared/types/api";
 import { autoResizeTextarea, Composer, MessageActions } from "@/shared/ui/agent";
+import {
+  USER_BUBBLE_EDIT_CANCEL_CLASS,
+  USER_BUBBLE_EDIT_SEND_CLASS,
+} from "@/shared/ui/agent/user-bubble";
 import { formatOutput } from "@/shared/lib";
 import { msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { Textarea } from "@/shared/ui/primitives/textarea";
 
 export interface ServeChatProps {
   serveInfo: ServeInfoResponse;
@@ -92,7 +97,7 @@ export function ServeChat({
                             {field}
                           </label>
                         )}
-                        <textarea
+                        <Textarea
                           ref={(el) => {
                             editTextareaRefs.current[field] = el;
                             autoResizeTextarea(el);
@@ -102,7 +107,7 @@ export function ServeChat({
                           onChange={(e) => {
                             autoResizeTextarea(e.target);
                           }}
-                          className="min-h-[44px] w-full resize-none rounded-xl border border-[#DDD4C8] bg-white px-3 py-2 text-sm font-mono outline-none transition-colors focus:border-[#C8A882] sm:min-h-[40px] max-h-[120px] [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
+                          className="max-h-[120px] font-mono sm:min-h-[40px] [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
                           rows={1}
                           autoFocus={serveInfo.input_fields[0] === field}
                         />
@@ -110,14 +115,16 @@ export function ServeChat({
                     ))}
                     <div className="flex flex-wrap justify-start gap-1.5">
                       <button
+                        type="button"
                         onClick={() => setEditingRunTs(null)}
-                        className="min-h-[44px] rounded-lg px-3 py-1 text-[0.6875rem] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
+                        className={USER_BUBBLE_EDIT_CANCEL_CLASS}
                       >
                         {msg("auto.features.optimizations.components.servechat.4")}
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleEditAndResend(run.ts)}
-                        className="min-h-[44px] rounded-lg bg-[#3D2E22] px-3 py-1 text-[0.6875rem] text-white transition-colors hover:bg-[#3D2E22]/90 disabled:opacity-40 sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
+                        className={USER_BUBBLE_EDIT_SEND_CLASS}
                       >
                         {msg("auto.features.optimizations.components.servechat.5")}
                       </button>
@@ -146,14 +153,16 @@ export function ServeChat({
                     ))}
                   </div>
                   {!serveLoading && (
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
                       onClick={() => setEditingRunTs(run.ts)}
-                      className="ms-1.5 inline-flex size-[44px] shrink-0 self-center items-center justify-center rounded-lg opacity-100 transition-opacity hover:bg-muted/60 sm:size-auto sm:p-1.5 sm:opacity-0 sm:group-hover/user:opacity-100 [@media(hover:none)_and_(pointer:coarse)]:size-[44px] [@media(hover:none)_and_(pointer:coarse)]:p-0 [@media(hover:none)_and_(pointer:coarse)]:opacity-100"
+                      className="ms-1.5 self-center text-muted-foreground opacity-100 transition-opacity hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover/user:opacity-100 [@media(hover:none)_and_(pointer:coarse)]:opacity-100"
                       aria-label={msg("auto.features.optimizations.components.servechat.literal.1")}
-                      title={msg("auto.features.optimizations.components.servechat.literal.1")}
                     >
-                      <PencilSimple className="size-3 text-muted-foreground" />
-                    </button>
+                      <PencilSimple className="size-3.5" />
+                    </Button>
                   )}
                 </div>
               )}
@@ -310,7 +319,7 @@ export function ServeChat({
                 type={serveLoading ? "button" : "submit"}
                 onClick={serveLoading ? handleStopServe : undefined}
                 size="icon"
-                className="shrink-0 rounded-full !size-[44px]"
+                className="shrink-0 rounded-full"
                 aria-label={
                   serveLoading
                     ? msg("auto.shared.ui.agent.composer.literal.2")

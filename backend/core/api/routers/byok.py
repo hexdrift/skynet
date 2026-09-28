@@ -106,8 +106,6 @@ def _catalog_for_user(vault: ProviderKeyVault, username: str) -> ModelCatalogRes
             if not bare:
                 continue
             value = f"openai/{bare.removeprefix('openai/')}"
-            if view.provider == "openrouter":
-                value = f"openrouter/{bare.removeprefix('openrouter/')}"
             key = (view.provider, value)
             if key in model_keys:
                 continue

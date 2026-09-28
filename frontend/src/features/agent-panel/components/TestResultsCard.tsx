@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import * as React from "react";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
@@ -8,6 +9,7 @@ import { TERMS } from "@/shared/lib/terms";
 import type { AgentToolCall } from "@/shared/ui/agent/types";
 
 import { ToolCallRow } from "./ToolCallRow";
+import { OutcomeChip } from "@/shared/ui/outcome-chip";
 import { PassDot } from "./result-card-atoms";
 
 interface TestResultsCardProps {
@@ -109,9 +111,11 @@ export function TestResultsCard({ call }: TestResultsCardProps) {
         call={call}
         summary={summary}
         customBody={
-          <div className="text-[0.75rem] italic text-muted-foreground/70">
-            {msg("auto.features.agent.panel.components.testresultscard.empty")}
-          </div>
+          <EmptyState
+            variant="compact"
+            title={msg("auto.features.agent.panel.components.testresultscard.empty")}
+            className="gap-1 px-3 py-3"
+          />
         }
       />
     );
@@ -147,7 +151,10 @@ export function TestResultsCard({ call }: TestResultsCardProps) {
           return (
             <li key={row.index} className="flex items-center gap-2 py-1">
               {row.index >= 0 && (
-                <span dir="ltr" className="w-8 shrink-0 font-mono text-[0.625rem] text-muted-foreground/50">
+                <span
+                  dir="ltr"
+                  className="w-8 shrink-0 font-mono text-[0.625rem] text-muted-foreground/50"
+                >
                   #{row.index}
                 </span>
               )}
@@ -157,19 +164,20 @@ export function TestResultsCard({ call }: TestResultsCardProps) {
                 <Dot item={row.opt} />
               </span>
               {fixed && (
-                <OutcomeTag
-                  label={msg("auto.features.agent.panel.components.testresultscard.fixed")}
-                  tone="var(--success)"
-                />
+                <OutcomeChip tone="pass">
+                  {msg("auto.features.agent.panel.components.testresultscard.fixed")}
+                </OutcomeChip>
               )}
               {regressed && (
-                <OutcomeTag
-                  label={msg("auto.features.agent.panel.components.testresultscard.regressed")}
-                  tone="var(--danger)"
-                />
+                <OutcomeChip tone="fail">
+                  {msg("auto.features.agent.panel.components.testresultscard.regressed")}
+                </OutcomeChip>
               )}
               {preview && (
-                <span dir="auto" className="min-w-0 flex-1 truncate text-[0.625rem] text-foreground/55">
+                <span
+                  dir="auto"
+                  className="min-w-0 flex-1 truncate text-[0.625rem] text-foreground/55"
+                >
                   {preview}
                 </span>
               )}
@@ -202,15 +210,4 @@ export function TestResultsCard({ call }: TestResultsCardProps) {
 function Dot({ item }: { item: TestItem | undefined }) {
   if (!item) return <span className="inline-block size-2 rounded-full bg-muted-foreground/20" />;
   return <PassDot pass={Boolean(item.pass)} />;
-}
-
-function OutcomeTag({ label, tone }: { label: string; tone: string }) {
-  return (
-    <span
-      className="inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[0.5625rem] font-medium leading-none"
-      style={{ backgroundColor: `color-mix(in oklab, ${tone} 14%, transparent)`, color: tone }}
-    >
-      {label}
-    </span>
-  );
 }

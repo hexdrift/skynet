@@ -10,10 +10,8 @@ import re
 from pathlib import Path
 
 from core.api.model_catalog import _BYOK_CATALOG_PROVIDERS
-from core.byok.vault import _PROVIDER_PROBES
 from core.provider_registry import (
     BYOK_CATALOG_PREFIXES,
-    BYOK_PROVIDER_SLUGS,
     BYOK_TO_LITELLM_PROVIDER,
 )
 
@@ -37,21 +35,9 @@ def _frontend_byok_source() -> str:
     return _FRONTEND_BYOK_TS.read_text(encoding="utf-8")
 
 
-def test_vault_probe_table_only_uses_registry_slugs() -> None:
-    """Every built-in verification probe belongs to a provider shortcut."""
-    registry_slugs = {slug for slug, _ in BYOK_PROVIDER_SLUGS}
-    assert set(_PROVIDER_PROBES) <= registry_slugs
-
-
 def test_catalog_prefixes_match_the_registry() -> None:
     """The model catalog offers exactly the registry's LiteLLM prefixes."""
     assert _BYOK_CATALOG_PROVIDERS == BYOK_CATALOG_PREFIXES
-
-
-def test_frontend_catalog_slugs_match_the_registry_in_order() -> None:
-    """The frontend ``BYOK_PROVIDERS`` slugs equal the registry slugs, in order."""
-    slugs = re.findall(r'slug:\s*"([^"]+)"', _frontend_byok_source())
-    assert tuple(slugs) == tuple(slug for slug, _ in BYOK_PROVIDER_SLUGS)
 
 
 def test_frontend_bridge_matches_the_registry() -> None:

@@ -35,7 +35,7 @@ export function AnalyticsSection({
           }
         }}
       >
-        <CardTitle className="text-base font-semibold flex items-center justify-between">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
           <span className="min-w-0">{title}</span>
           <motion.div
             className="shrink-0"

@@ -1,9 +1,10 @@
 "use client";
 
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { CircleNotch, XCircle } from "@/shared/ui/icons";
+import { XCircle } from "@/shared/ui/icons";
 
 import {
   getTaggerSession,
@@ -104,9 +105,7 @@ export function TaggerSessionGate() {
   if (state.mode === "loading") {
     return (
       <PageContainer full>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <CircleNotch className="size-8 animate-spin text-primary" />
-        </div>
+        <LoadingState fullPage />
       </PageContainer>
     );
   }

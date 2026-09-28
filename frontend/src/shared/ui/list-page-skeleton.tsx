@@ -19,7 +19,7 @@ export function ListPageSkeleton() {
 
       <div className="mt-5 flex flex-col gap-2.5 p-0.5">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} height={70} borderRadius={12} />
+          <Skeleton key={i} height={66} borderRadius={16} />
         ))}
       </div>
     </AppSkeletonTheme>

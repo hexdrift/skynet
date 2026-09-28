@@ -27,10 +27,10 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className,
       )}
-      style={{ zIndex: 50, position: "fixed", inset: 0, backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+      style={{ zIndex: 50 }}
       {...props}
     />
   );
@@ -41,14 +41,18 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  showOverlay = true,
+  style,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
+  /** The dimming scrim behind the sheet; drop it for a non-modal sheet that leaves the page live. */
+  showOverlay?: boolean;
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {showOverlay && <SheetOverlay />}
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
@@ -70,6 +74,7 @@ function SheetContent({
           ...(side === "left" && { top: 0, bottom: 0, left: 0, height: "100%" }),
           ...(side === "top" && { top: 0, left: 0, right: 0 }),
           ...(side === "bottom" && { bottom: 0, left: 0, right: 0 }),
+          ...style,
         }}
         {...props}
       >
@@ -77,7 +82,7 @@ function SheetContent({
         {showCloseButton && (
           <SheetPrimitive.Close
             data-slot="sheet-close"
-            className="close-button absolute top-4 end-4"
+            className="close-button absolute top-2 end-2 [--close-btn-size:44px] lg:top-4 lg:end-4 lg:[--close-btn-size:26px]"
           >
             <X />
             <span className="sr-only">{msg("shared.dialog.close")}</span>

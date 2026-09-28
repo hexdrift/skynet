@@ -1,15 +1,14 @@
 "use client";
 
+import { CountBadge } from "@/shared/ui/count-badge";
 import * as React from "react";
-import { motion } from "framer-motion";
 import { CircleNotch, FadersHorizontal, FunnelX, Globe, User, Users, X } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
+import { Segmented } from "@/shared/ui/segmented";
 import type { ExploreCorpus } from "../hooks/use-semantic-search";
 import { SearchSuggestions } from "./SearchSuggestions";
-
-const PILL_TRANSITION = { type: "tween", duration: 0.18, ease: [0.22, 1, 0.36, 1] } as const;
 
 interface SearchBarProps {
   /** The committed query — what's actually being searched (mirrors the URL). */
@@ -21,6 +20,10 @@ interface SearchBarProps {
   /** Disables the session-scoped tabs (Mine, Shared) when no logged-in user. */
   signedIn: boolean;
   filtersCount: number;
+  /** Whether the filter panel is open; the button toggles it. */
+  filtersOpen: boolean;
+  /** The filter button, so the panel can hand focus back when it closes. */
+  filtersButtonRef?: React.Ref<HTMLButtonElement>;
   onOpenFilters: () => void;
   /** Quick-clears the metadata filters (preserving the text query). */
   onClearFilters: () => void;
@@ -67,6 +70,8 @@ export function SearchBar({
   onCorpusChange,
   signedIn,
   filtersCount,
+  filtersOpen,
+  filtersButtonRef,
   onOpenFilters,
   onClearFilters,
   loading,
@@ -147,7 +152,7 @@ export function SearchBar({
         <CorpusToggle value={corpus} onChange={onCorpusChange} signedIn={signedIn} />
       </div>
       <div
-        className={`group relative flex min-h-[44px] items-center gap-1 rounded-2xl border border-border bg-background ps-4 pe-1 py-0 transition-[border-color,box-shadow] duration-150 ease-out focus-within:border-foreground/40 focus-within:shadow-[0_2px_24px_-12px_oklch(0.25_0.04_45/.18)] lg:py-1.5 ${
+        className={`group relative flex h-11 items-center gap-1 rounded-2xl border border-border bg-background ps-4 pe-1 transition-[border-color,box-shadow] duration-150 ease-out focus-within:border-foreground/40 focus-within:shadow-[0_2px_24px_-12px_oklch(0.25_0.04_45/.18)] ${
           isActive ? "border-foreground/25" : ""
         }`}
       >
@@ -178,7 +183,7 @@ export function SearchBar({
           aria-controls="explore-results"
           aria-activedescendant={activeResultId}
           style={{ textAlign: inputDir === "rtl" ? "right" : "left" }}
-          className="h-[44px] min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[15px] tracking-tight text-foreground placeholder:text-foreground/40 focus:outline-none lg:h-auto"
+          className="h-full min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[15px] tracking-tight text-foreground placeholder:text-foreground/40 focus:outline-none"
         />
         {loading && (
           <span
@@ -193,7 +198,7 @@ export function SearchBar({
             type="button"
             onClick={clearAll}
             aria-label={msg("explore.search.clear")}
-            className="inline-flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:size-8"
+            className="size-9 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -204,27 +209,22 @@ export function SearchBar({
               type="button"
               onClick={onClearFilters}
               aria-label={msg("explore.filters.reset")}
-              className="inline-flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:size-9"
+              className="size-9 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
             >
               <FunnelX className="size-[1.05rem]" aria-hidden="true" />
             </button>
           </TooltipButton>
         )}
         <button
+          ref={filtersButtonRef}
           type="button"
           onClick={onOpenFilters}
           aria-label={msg("explore.filters.button")}
-          className="inline-flex h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] text-foreground/70 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:h-9 lg:min-w-0"
+          aria-expanded={filtersOpen}
+          className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] text-foreground/70 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
         >
           <FadersHorizontal className="size-[1.125rem]" aria-hidden="true" />
-          {filtersCount > 0 && (
-            <span
-              dir="ltr"
-              className="inline-flex min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-tight text-background tabular-nums"
-            >
-              {filtersCount}
-            </span>
-          )}
+          {filtersCount > 0 && <CountBadge dir="ltr">{filtersCount}</CountBadge>}
         </button>
         {suggestOpen && (
           <SearchSuggestions
@@ -311,51 +311,25 @@ function CorpusToggle({
   ];
 
   return (
-    <div
-      role="radiogroup"
-      aria-label={msg("explore.corpus.aria")}
-      className="relative flex w-full items-center rounded-full border border-border/80 bg-muted/40 p-0.5 sm:w-auto"
-    >
-      {segments.map((seg) => {
-        const active = seg.value === value;
+    <Segmented<ExploreCorpus>
+      size="sm"
+      label={msg("explore.corpus.aria")}
+      className="w-full sm:w-auto"
+      value={value}
+      onChange={(next) => {
+        if (next !== value) onChange(next);
+      }}
+      options={segments.map((seg) => {
         const Icon = seg.icon;
-        const disabled = seg.disabled === true;
-        return (
-          <TooltipButton key={seg.value} tooltip={seg.aria} side="bottom">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={active}
-              aria-label={seg.aria}
-              disabled={disabled}
-              onClick={() => {
-                if (disabled) return;
-                if (!active) onChange(seg.value);
-              }}
-              className={`relative inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[11.5px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:flex-none sm:gap-1.5 sm:px-3.5 sm:text-[12.5px] lg:min-h-0 ${
-                active
-                  ? "text-foreground"
-                  : disabled
-                    ? "cursor-not-allowed text-foreground/30"
-                    : "cursor-pointer text-foreground/60 hover:text-foreground"
-              }`}
-            >
-              {active && (
-                <motion.span
-                  layoutId="explore-corpus-pill"
-                  className="absolute inset-0 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
-                  transition={PILL_TRANSITION}
-                  aria-hidden="true"
-                />
-              )}
-              <span className="relative z-10 inline-flex items-center gap-1.5">
-                <Icon className="size-3.5" aria-hidden="true" />
-                <span className="truncate">{seg.label}</span>
-              </span>
-            </button>
-          </TooltipButton>
-        );
+        return {
+          value: seg.value,
+          label: seg.label,
+          ariaLabel: seg.aria,
+          tip: seg.aria,
+          disabled: seg.disabled,
+          icon: <Icon className="size-3.5" aria-hidden="true" />,
+        };
       })}
-    </div>
+    />
   );
 }

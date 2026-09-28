@@ -101,6 +101,14 @@ class _OptimizationRequestBase(BaseModel):
     split_fractions: SplitFractions = Field(default_factory=SplitFractions)
     shuffle: bool = True
     seed: int | None = None
+    split_version: int | None = Field(
+        default=None,
+        description=(
+            "Version of the train/val/test allocator the run is split with. Optional on the wire — the API "
+            "always stamps the current version on a new submission; a stored payload without it keeps the "
+            "legacy split when it is resumed or read back."
+        ),
+    )
     dataset_filename: str | None = Field(default=None, description="Original dataset file name.")
     is_private: bool = Field(
         default=True,

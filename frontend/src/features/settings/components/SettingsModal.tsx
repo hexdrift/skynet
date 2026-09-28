@@ -1,31 +1,31 @@
 "use client";
 
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
+import { cn } from "@/shared/lib/utils";
+import { TOUCH_FIELD_SM } from "@/shared/ui/touch";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { StorageUsageBar } from "@/shared/ui/progress-bar";
+import { ExpandToggleButton } from "@/shared/ui/expand-toggle-button";
 import * as React from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import { useSession } from "next-auth/react";
 import { toast } from "react-toastify";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  ChatText,
   BookOpen,
   CircleNotch,
-  Robot,
   Brain,
   Columns,
   Key,
   ArrowSquareOut,
   Feather,
-  HardDrive,
-  Keyboard,
-  type Icon,
   Microphone,
   PencilSimple,
   PencilSimpleLine,
-  Plug,
   Plus,
   ArrowCounterClockwise,
   HardDrives,
   Shield,
-  FadersHorizontal,
   ShieldCheck,
   Sparkle,
   Table as TableIcon,
@@ -34,12 +34,10 @@ import {
   Trash,
   User,
   Info,
-  X,
 } from "@/shared/ui/icons";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/primitives/dialog";
@@ -77,7 +75,6 @@ import {
   ColumnHeader,
   ResetColumnsButton,
   ResetFiltersButton,
-  type SortDir,
   useColumnFilters,
   useColumnResize,
 } from "@/shared/ui/excel-filter";
@@ -110,8 +107,7 @@ import {
 import { useUserPrefs } from "../hooks/use-user-prefs";
 import { useSettingsModal } from "../hooks/use-settings-modal";
 import { useIsPhone } from "@/shared/hooks/use-device-class";
-import { isPhoneSettingsTab } from "@/shared/lib/device-class";
-import { ShortcutRecorder } from "./ShortcutRecorder";
+import { SETTINGS_TABS, visibleSettingsTabs, type SettingsTab } from "../lib/tabs";
 import { SettingsRow } from "@/shared/ui/settings-row";
 
 function WizardTab() {
@@ -124,7 +120,10 @@ function WizardTab() {
           value={prefs.wizardCodeAssist}
           onValueChange={(v) => setPref("wizardCodeAssist", v as typeof prefs.wizardCodeAssist)}
         >
-          <SelectTrigger className="h-[44px] w-full min-w-0 sm:h-8 sm:w-auto sm:min-w-[160px] [@media(hover:none)_and_(pointer:coarse)]:h-[44px]">
+          <SelectTrigger
+            size="sm"
+            className={cn(TOUCH_FIELD_SM, "w-full min-w-0 sm:w-auto sm:min-w-[160px]")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -139,7 +138,10 @@ function WizardTab() {
           value={prefs.wizardSplitMode}
           onValueChange={(v) => setPref("wizardSplitMode", v as typeof prefs.wizardSplitMode)}
         >
-          <SelectTrigger className="h-[44px] w-full min-w-0 sm:h-8 sm:w-auto sm:min-w-[160px] [@media(hover:none)_and_(pointer:coarse)]:h-[44px]">
+          <SelectTrigger
+            size="sm"
+            className={cn(TOUCH_FIELD_SM, "w-full min-w-0 sm:w-auto sm:min-w-[160px]")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -285,7 +287,10 @@ function AgentTab() {
           value={prefs.agentTrustMode}
           onValueChange={(v) => setPref("agentTrustMode", v as typeof prefs.agentTrustMode)}
         >
-          <SelectTrigger className="h-[44px] w-full min-w-0 sm:h-8 sm:w-auto sm:min-w-[160px] [@media(hover:none)_and_(pointer:coarse)]:h-[44px]">
+          <SelectTrigger
+            size="sm"
+            className={cn(TOUCH_FIELD_SM, "w-full min-w-0 sm:w-auto sm:min-w-[160px]")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -294,14 +299,6 @@ function AgentTab() {
             <SelectItem value="yolo">{msg("settings.agent.trust.yolo")}</SelectItem>
           </SelectContent>
         </Select>
-      </SettingsRow>
-
-      <SettingsRow
-        icon={Keyboard}
-        label={msg("settings.agent.shortcut.label")}
-        description={msg("settings.agent.shortcut.description")}
-      >
-        <ShortcutRecorder />
       </SettingsRow>
 
       {memory && (
@@ -373,17 +370,6 @@ function AccountTab() {
 
       {!isPhone && (
         <>
-          <SettingsRow
-            icon={FadersHorizontal}
-            label={msg("settings.account.advanced_mode.label")}
-            description={msg("settings.account.advanced_mode.description")}
-          >
-            <Switch
-              checked={prefs.advancedMode}
-              onCheckedChange={(v) => setPref("advancedMode", v)}
-            />
-          </SettingsRow>
-
           <SettingsRow
             icon={Sparkle}
             label={msg("settings.account.expand_advanced.label")}
@@ -520,14 +506,7 @@ function UsageMeter({ used, budget }: { used: number; budget: number }) {
       >
         {formatStorageSize(used)}
       </span>
-      <div className="h-1 w-16 overflow-hidden rounded-full bg-[#E5DDD4]">
-        <div
-          className={`h-full rounded-full transition-[width] duration-300 ease-out ${
-            over ? "bg-destructive" : "bg-[#3D2E22]/70"
-          }`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <StorageUsageBar value={pct} over={over} size="sm" className="w-16" />
     </div>
   );
 }
@@ -545,15 +524,7 @@ function AdminTab() {
   const [newBudgetMb, setNewBudgetMb] = React.useState<number | "">("");
   const colFilters = useColumnFilters();
   const colResize = useColumnResize();
-  const [sortKey, setSortKey] = React.useState<string>("username");
-  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
-
-  const toggleSort = React.useCallback((key: string) => {
-    setSortKey((prevKey) => {
-      setSortDir((prevDir) => (prevKey === key ? (prevDir === "asc" ? "desc" : "asc") : "asc"));
-      return key;
-    });
-  }, []);
+  const { sortKey, sortDir, toggleSort } = useTableSort<string>("username");
 
   const filterOptions = React.useMemo(() => {
     const unique = (key: keyof ManagedAccount) => {
@@ -574,6 +545,7 @@ function AdminTab() {
       }
       return true;
     });
+    const collLocale = getActiveIntlLocale();
     items.sort((a, b) => {
       const av = (a as unknown as Record<string, unknown>)[sortKey];
       const bv = (b as unknown as Record<string, unknown>)[sortKey];
@@ -584,7 +556,7 @@ function AdminTab() {
       else if (aMissing) cmp = -1;
       else if (bMissing) cmp = 1;
       else if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
-      else cmp = String(av).localeCompare(String(bv), "he", { numeric: true });
+      else cmp = String(av).localeCompare(String(bv), collLocale, { numeric: true });
       return sortDir === "asc" ? cmp : -cmp;
     });
     return items;
@@ -801,9 +773,7 @@ function AdminTab() {
       </div>
 
       {!session?.backendAccessToken && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          {msg("settings.admin.storage.auth_missing")}
-        </div>
+        <InlineErrorRow message={msg("settings.admin.storage.auth_missing")} />
       )}
 
       <Sheet open={tableOpen} onOpenChange={setTableOpen}>
@@ -959,7 +929,8 @@ function AdminTab() {
                           value={newBudgetMb === "" ? (defaultMb ?? "") : newBudgetMb}
                           onChange={setNewBudgetMb}
                           min={1}
-                          className="h-8 w-36"
+                          size="sm"
+                          className="w-36"
                         />
                         <span className="text-[0.6875rem] text-muted-foreground">MB</span>
                       </span>
@@ -990,20 +961,22 @@ function AdminTab() {
                   </TableRow>
                   {filteredAccounts.length === 0 ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="px-6 py-10 text-center text-sm text-muted-foreground"
-                      >
-                        {accounts.length === 0
-                          ? msg("settings.admin.accounts.empty")
-                          : msg("settings.admin.storage.no_results")}
+                      <TableCell colSpan={6}>
+                        <EmptyState
+                          variant="list"
+                          title={
+                            accounts.length === 0
+                              ? msg("settings.admin.accounts.empty")
+                              : msg("settings.admin.storage.no_results")
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredAccounts.map((account) => (
                       <TableRow
                         key={account.username}
-                        className="border-border/40 hover:bg-accent/30"
+                        className="border-border/40 transition-colors duration-150 hover:bg-muted/50"
                       >
                         <TableCell
                           className="max-w-[200px] truncate text-center font-semibold text-xs text-foreground"
@@ -1205,20 +1178,12 @@ function ApiTab() {
   const docsUrl = `${getRuntimeEnv().apiUrl}/scalar`;
 
   if (!hasAuth) {
-    return (
-      <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-        {msg("settings.api.auth_missing")}
-      </div>
-    );
+    return <InlineErrorRow message={msg("settings.api.auth_missing")} />;
   }
 
   return (
     <div className="space-y-4">
-      {loadError && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          {loadError}
-        </div>
-      )}
+      {loadError && <InlineErrorRow message={loadError} />}
 
       <SettingsRow icon={Key} label={msg("settings.api.title")}>
         {loaded &&
@@ -1264,11 +1229,8 @@ function ApiTab() {
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>{msg("settings.api.reveal_warning")}</span>
           </div>
-          <div
-            dir="ltr"
-            className="flex items-center justify-between gap-2 rounded bg-[#3D2E22]/5 px-2 py-1.5"
-          >
-            <code className="min-w-0 flex-1 break-all font-mono text-xs text-[#3D2E22]">
+          <div dir="ltr" className="flex items-center gap-2 rounded-lg bg-muted/40 py-1 ps-3 pe-1">
+            <code className="min-w-0 flex-1 break-all font-mono text-xs text-foreground">
               {revealed}
             </code>
             <Tooltip>
@@ -1343,69 +1305,6 @@ function ApiTab() {
   );
 }
 
-const SETTINGS_TAB_ORDER = [
-  "wizard",
-  "tagging",
-  "agent",
-  "account",
-  "providers",
-  "api",
-  "admin",
-  "about",
-] as const;
-type SettingsTab = (typeof SETTINGS_TAB_ORDER)[number];
-type SettingsMessageKey = Parameters<typeof msg>[0];
-
-const SETTINGS_TAB_META: Record<
-  SettingsTab,
-  {
-    icon: Icon;
-    labelKey: SettingsMessageKey;
-    group: "workflows" | "assistants" | "preferences" | "access" | "system";
-  }
-> = {
-  wizard: {
-    icon: Sparkle,
-    labelKey: "settings.tab.wizard",
-    group: "workflows",
-  },
-  tagging: {
-    icon: Tag,
-    labelKey: "settings.tab.tagging",
-    group: "workflows",
-  },
-  agent: {
-    icon: Robot,
-    labelKey: "settings.tab.agent",
-    group: "assistants",
-  },
-  account: {
-    icon: User,
-    labelKey: "settings.tab.account",
-    group: "preferences",
-  },
-  providers: {
-    icon: Plug,
-    labelKey: "settings.tab.providers",
-    group: "access",
-  },
-  api: {
-    icon: Key,
-    labelKey: "settings.tab.api",
-    group: "access",
-  },
-  admin: {
-    icon: HardDrive,
-    labelKey: "settings.tab.admin",
-    group: "system",
-  },
-  about: {
-    icon: Info,
-    labelKey: "settings.tab.about",
-    group: "system",
-  },
-};
-
 const SETTINGS_GROUPS = [
   { key: "workflows", labelKey: "settings.group.workflows" },
   { key: "assistants", labelKey: "settings.group.assistants" },
@@ -1420,14 +1319,21 @@ const SETTINGS_GROUPS = [
 const SETTINGS_RAIL_ITEM_CLASS =
   "min-h-[44px] w-full flex-none justify-start gap-2.5 rounded-lg px-3 py-2 font-medium text-sidebar-foreground/60 data-[state=inactive]:hover:bg-sidebar-accent/40 data-[state=inactive]:hover:text-sidebar-foreground data-[state=active]:bg-transparent data-[state=active]:border-transparent data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:hover:text-primary max-md:w-auto! md:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]";
 
-function SettingsPanelHeader({ tab }: { tab: SettingsTab }) {
-  const { icon: Icon, labelKey } = SETTINGS_TAB_META[tab];
+// Tabs dense enough (admin tables) to earn a toggle that grows the modal to
+// fill the screen.
+const EXPANDABLE_SETTINGS_TABS: ReadonlySet<SettingsTab> = new Set(["admin"]);
+
+function SettingsPanelHeader({ tab, action }: { tab: SettingsTab; action?: React.ReactNode }) {
+  const { icon: Icon, labelKey } = SETTINGS_TABS[tab];
   return (
     <div className="mb-4 flex items-center gap-3 border-b border-border/50 pb-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/[0.08] text-primary">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
         <Icon className="size-4" aria-hidden="true" />
       </span>
-      <h2 className="text-base font-semibold tracking-tight text-foreground">{msg(labelKey)}</h2>
+      <h2 className="flex-1 text-base font-semibold tracking-tight text-foreground">
+        {msg(labelKey)}
+      </h2>
+      {action}
     </div>
   );
 }
@@ -1440,17 +1346,16 @@ export function SettingsModal() {
   const isPhone = useIsPhone();
   const prefersReduced = useReducedMotion();
   const [activeTab, setActiveTab] = React.useState<SettingsTab>(isPhone ? "account" : "wizard");
+  const [expandedState, setExpanded] = React.useState(false);
+  const expandButton = React.useRef<HTMLButtonElement>(null);
+  const canExpand = !isPhone && EXPANDABLE_SETTINGS_TABS.has(activeTab);
+  const expanded = canExpand && expandedState;
+  const settingsTabsId = React.useId();
   const selectTab = React.useCallback((tab: SettingsTab) => {
     setActiveTab(tab);
     track(TelemetryEvent.SettingsTabChanged, { tab });
   }, []);
-  const tabs = React.useMemo(
-    () =>
-      SETTINGS_TAB_ORDER.filter(
-        (tab) => (isAdmin || tab !== "admin") && (!isPhone || isPhoneSettingsTab(tab)),
-      ),
-    [isAdmin, isPhone],
-  );
+  const tabs = React.useMemo(() => visibleSettingsTabs(isAdmin), [isAdmin]);
   React.useEffect(() => {
     if (!tabs.includes(activeTab)) setActiveTab(isPhone ? "account" : "wizard");
   }, [activeTab, tabs, isPhone]);
@@ -1475,14 +1380,24 @@ export function SettingsModal() {
     <Dialog open={open} onOpenChange={setOpen} modal={!tutorialState.isVisible}>
       <DialogContent
         data-settings-text-buttons
-        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0 sm:max-w-4xl [&_[data-slot=button]]:min-h-[44px] [&_[data-slot=button]]:min-w-[44px] [&_[data-slot=select-trigger]]:min-h-[44px] sm:[&_[data-slot=button]]:min-h-0 sm:[&_[data-slot=button]]:min-w-0 sm:[&_[data-slot=select-trigger]]:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:[&_[data-slot=button]]:min-h-[44px] [@media(hover:none)_and_(pointer:coarse)]:[&_[data-slot=button]]:min-w-[44px] [@media(hover:none)_and_(pointer:coarse)]:[&_[data-slot=select-trigger]]:min-h-[44px]"
+        aria-describedby={undefined}
+        onEscapeKeyDown={(e) => {
+          // Escape leaves full screen before it closes settings.
+          if (expanded) {
+            e.preventDefault();
+            setExpanded(false);
+            expandButton.current?.focus();
+          }
+        }}
+        className={cn(
+          "max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0 transition-[max-width] duration-200 ease-out motion-reduce:transition-none",
+          expanded ? "sm:max-w-[96vw]" : "sm:max-w-4xl",
+          "[&_[data-slot=button]]:min-h-[44px] [&_[data-slot=button]]:min-w-[44px] [&_[data-slot=select-trigger]]:min-h-[44px] sm:[&_[data-slot=button]]:min-h-0 sm:[&_[data-slot=button]]:min-w-0 sm:[&_[data-slot=select-trigger]]:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:[&_[data-slot=button]]:min-h-[44px] [@media(hover:none)_and_(pointer:coarse)]:[&_[data-slot=button]]:min-w-[44px] [@media(hover:none)_and_(pointer:coarse)]:[&_[data-slot=select-trigger]]:min-h-[44px]",
+        )}
       >
-        <DialogHeader className="border-b border-border/40 px-4 py-3 pe-12 text-start sm:px-5 sm:py-4">
+        <DialogHeader className="border-b border-border/40 px-4 py-3 pe-12 sm:px-5 sm:py-4">
           <div className="min-w-0">
             <DialogTitle>{msg("settings.title")}</DialogTitle>
-            <DialogDescription className="mt-1 text-xs">
-              {msg("settings.subtitle")}
-            </DialogDescription>
           </div>
         </DialogHeader>
 
@@ -1490,7 +1405,11 @@ export function SettingsModal() {
           orientation="vertical"
           value={activeTab}
           onValueChange={(v) => selectTab(v as SettingsTab)}
-          className="flex h-[calc(100dvh-5.75rem)] max-h-[680px] min-h-0 flex-col gap-0 sm:h-[min(72vh,680px)] md:flex-row"
+          id={settingsTabsId}
+          className={cn(
+            "flex h-[calc(100dvh-5.75rem)] min-h-0 flex-col gap-0 transition-[height] duration-200 ease-out motion-reduce:transition-none md:flex-row",
+            expanded ? "sm:h-[calc(94dvh-5.75rem)]" : "max-h-[680px] sm:h-[min(72vh,680px)]",
+          )}
         >
           <TabsList
             aria-label={msg("settings.title")}
@@ -1503,15 +1422,16 @@ export function SettingsModal() {
                   {msg(group.labelKey)}
                 </p>
                 {tabs
-                  .filter((tab) => SETTINGS_TAB_META[tab].group === group.key)
+                  .filter((tab) => SETTINGS_TABS[tab].group === group.key)
                   .map((tab) => {
-                    const { icon: Icon, labelKey } = SETTINGS_TAB_META[tab];
+                    const { icon: Icon, labelKey } = SETTINGS_TABS[tab];
                     return (
                       <TabsTrigger key={tab} value={tab} className={SETTINGS_RAIL_ITEM_CLASS}>
                         {tab === activeTab && (
                           <motion.div
                             layoutId="settings-rail-active"
                             className="absolute inset-0 rounded-lg bg-primary/[0.08] ring-1 ring-primary/10"
+                            style={{ borderInlineStart: "3px solid var(--primary)" }}
                             transition={
                               prefersReduced
                                 ? { duration: 0 }
@@ -1540,7 +1460,19 @@ export function SettingsModal() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.2, 0.8, 0.2, 1] }}
             >
-              <SettingsPanelHeader tab={activeTab} />
+              <SettingsPanelHeader
+                tab={activeTab}
+                action={
+                  canExpand && (
+                    <ExpandToggleButton
+                      ref={expandButton}
+                      expanded={expanded}
+                      controls={settingsTabsId}
+                      onToggle={() => setExpanded(!expanded)}
+                    />
+                  )
+                }
+              />
               <TabsContent value="wizard">
                 <WizardTab />
               </TabsContent>

@@ -1,13 +1,10 @@
 "use client";
 
-import * as React from "react";
 import { Sparkle } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
-import { formatShortcut, useUserPrefs } from "@/features/settings";
 
 import { cn } from "@/shared/lib/utils";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
-import { useIsPhone } from "@/shared/hooks/use-device-class";
 
 interface MinimizedPillProps {
   onOpen: () => void;
@@ -27,13 +24,7 @@ export function MinimizedPill({
   inline = false,
   className,
 }: MinimizedPillProps) {
-  const { prefs } = useUserPrefs();
-  // No keyboard on a phone, so the shortcut hint would only be noise.
-  const isPhone = useIsPhone();
-  const shortcutLabel = formatShortcut(prefs.agentShortcut);
-  const ariaLabel = isPhone
-    ? msg("auto.features.agent.panel.components.minimizedpill.literal.1")
-    : `${msg("auto.features.agent.panel.components.minimizedpill.literal.1")} (${shortcutLabel})`;
+  const ariaLabel = msg("auto.features.agent.panel.components.minimizedpill.literal.1");
   const showLabel = active && Boolean(statusLabel);
 
   return (
@@ -52,7 +43,7 @@ export function MinimizedPill({
         "inline-flex min-h-[44px] items-center gap-2 rounded-full",
         "border border-border/60 bg-background/90 backdrop-blur-md",
         "px-3.5 py-2 text-[0.75rem] text-foreground shadow-[0_6px_18px_rgba(61,46,34,0.08)]",
-        "transition-all duration-200 hover:bg-background hover:shadow-[0_10px_24px_rgba(61,46,34,0.12)]",
+        "transition-all duration-200 hover:bg-background",
         "active:scale-[0.98] cursor-pointer",
         className,
       )}
@@ -76,11 +67,6 @@ export function MinimizedPill({
           ? statusLabel
           : msg("auto.features.agent.panel.components.minimizedpill.literal.3")}
       </span>
-      {!isPhone && (
-        <span className="text-muted-foreground/70 font-mono text-[0.625rem] tracking-tight">
-          {shortcutLabel}
-        </span>
-      )}
     </button>
   );
 }

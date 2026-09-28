@@ -3,35 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deviceClassFromRequest, isDesktopOnlyPath, isPhoneSettingsTab } from "./device-class.ts";
-
-test("isDesktopOnlyPath blocks authoring routes and their descendants", () => {
-  for (const p of [
-    "/submit",
-    "/datasets",
-    "/datasets/abc/edit",
-    "/datasets/share/tok",
-    "/tagger",
-    "/tagger/123",
-    "/storage",
-  ]) {
-    assert.equal(isDesktopOnlyPath(p), true, p);
-  }
-});
-
-test("isDesktopOnlyPath lets view routes and lookalike prefixes through", () => {
-  for (const p of [
-    "/",
-    "/explore",
-    "/optimizations/1",
-    "/share/tok",
-    "/submitted",
-    "/storages",
-    "/login",
-  ]) {
-    assert.equal(isDesktopOnlyPath(p), false, p);
-  }
-});
+import { deviceClassFromRequest } from "./device-class.ts";
 
 test("deviceClassFromRequest prefers the client hint", () => {
   assert.equal(deviceClassFromRequest("Mozilla/5.0 (Windows NT 10.0)", "?1"), "phone");
@@ -58,19 +30,4 @@ test("deviceClassFromRequest falls back to the UA mobile token", () => {
   assert.equal(deviceClassFromRequest(ipad, null), "desktop");
   assert.equal(deviceClassFromRequest(mac, null), "desktop");
   assert.equal(deviceClassFromRequest(null, null), "desktop");
-});
-
-test("isPhoneSettingsTab keeps only the view-first settings tabs", () => {
-  for (const t of ["account", "providers", "about"]) {
-    assert.equal(isPhoneSettingsTab(t), true, t);
-  }
-  for (const t of [
-    "wizard",
-    "tagging",
-    "agent",
-    "api",
-    "admin",
-  ]) {
-    assert.equal(isPhoneSettingsTab(t), false, t);
-  }
 });

@@ -11,51 +11,34 @@ export type MessageKey =
   | "agent.composer.transcribe_failed"
   | "agent.composer.transcribing"
   | "agent.error.context_too_long"
-  | "agent.model_menu.auto"
-  | "agent.model_menu.auto_hint"
-  | "agent.model_menu.auto_intelligent"
-  | "agent.model_menu.auto_intelligent_hint"
-  | "agent.model_menu.desc_claude_fable_5"
-  | "agent.model_menu.desc_claude_haiku_4_5"
-  | "agent.model_menu.desc_claude_opus_4_8"
-  | "agent.model_menu.desc_claude_sonnet_5"
-  | "agent.model_menu.desc_deepseek_v4_pro"
-  | "agent.model_menu.desc_gemini_3_1_pro"
-  | "agent.model_menu.desc_gemini_3_6_flash"
-  | "agent.model_menu.desc_gpt_5_6_luna"
-  | "agent.model_menu.desc_gpt_5_6_sol"
-  | "agent.model_menu.desc_gpt_5_6_terra"
-  | "agent.model_menu.desc_grok_4_5"
-  | "agent.model_menu.desc_kimi_k3"
-  | "agent.model_menu.desc_minimax_m3"
-  | "agent.model_menu.desc_muse_spark_1_1"
-  | "agent.model_menu.effort_default"
-  | "agent.model_menu.effort_default_hint"
   | "agent.model_menu.effort_high"
-  | "agent.model_menu.effort_high_hint"
-  | "agent.model_menu.effort_label"
   | "agent.model_menu.effort_low"
-  | "agent.model_menu.effort_low_hint"
   | "agent.model_menu.effort_max"
-  | "agent.model_menu.effort_max_hint"
   | "agent.model_menu.effort_medium"
-  | "agent.model_menu.effort_medium_hint"
   | "agent.model_menu.effort_minimal"
-  | "agent.model_menu.effort_minimal_hint"
   | "agent.model_menu.effort_none"
-  | "agent.model_menu.effort_none_hint"
   | "agent.model_menu.effort_xhigh"
-  | "agent.model_menu.effort_xhigh_hint"
-  | "agent.model_menu.label"
-  | "agent.model_menu.model"
   | "agent.parallel.background_count"
   | "agent.parallel.busy_indicator"
   | "agent.parallel.queued"
+  | "agent.tool.list_samples.title"
+  | "agent.tool.pause_job.confirm"
+  | "agent.tool.pause_job.description"
+  | "agent.tool.pause_job.title"
+  | "agent.tool.restart_job.confirm"
+  | "agent.tool.restart_job.description"
+  | "agent.tool.restart_job.title"
+  | "agent.tool.resume_job.confirm"
+  | "agent.tool.resume_job.description"
+  | "agent.tool.resume_job.title"
+  | "agent.tool.stage_sample.confirm"
+  | "agent.tool.stage_sample.description"
+  | "agent.tool.stage_sample.title"
+  | "agent.tool.validate_datasets.title"
   | "agent.validation.failed"
   | "app.meta.description"
   | "app.shell.account.aria"
   | "app.shell.account.settings"
-  | "app.shell.account.upgrade"
   | "app.shell.concepts_aria"
   | "app.shell.concepts_tooltip"
   | "app.shell.lite.badge"
@@ -67,25 +50,29 @@ export type MessageKey =
   | "app.shell.logout"
   | "app.shell.menu"
   | "app.shell.menu_close"
+  | "app.shell.search.action.tour"
+  | "app.shell.search.actions"
   | "app.shell.search.button_aria"
   | "app.shell.search.command_key"
-  | "app.shell.search.dashboard"
   | "app.shell.search.description"
   | "app.shell.search.k_key"
   | "app.shell.search.kw.about"
   | "app.shell.search.kw.account"
   | "app.shell.search.kw.admin"
   | "app.shell.search.kw.agent"
+  | "app.shell.search.kw.analytics"
   | "app.shell.search.kw.api"
   | "app.shell.search.kw.dashboard"
   | "app.shell.search.kw.data"
   | "app.shell.search.kw.explore"
   | "app.shell.search.kw.new_optimization"
-  | "app.shell.search.kw.privacy"
+  | "app.shell.search.kw.open_agent"
   | "app.shell.search.kw.providers"
+  | "app.shell.search.kw.sessions"
+  | "app.shell.search.kw.sign_out"
   | "app.shell.search.kw.storage"
   | "app.shell.search.kw.tagging"
-  | "app.shell.search.kw.usage"
+  | "app.shell.search.kw.tour"
   | "app.shell.search.kw.wizard"
   | "app.shell.search.label"
   | "app.shell.search.navigate"
@@ -182,7 +169,6 @@ export type MessageKey =
   | "auto.app.optimizations.id.page.9"
   | "auto.app.optimizations.id.page.literal.1"
   | "auto.app.optimizations.id.page.literal.2"
-  | "auto.app.optimizations.id.page.literal.3"
   | "auto.app.optimizations.id.page.literal.4"
   | "auto.app.optimizations.id.page.literal.5"
   | "auto.app.optimizations.id.page.literal.6"
@@ -317,11 +303,6 @@ export type MessageKey =
   | "auto.features.agent.panel.components.toolscarousel.template.8"
   | "auto.features.agent.panel.components.trusttoggle.1"
   | "auto.features.agent.panel.components.trusttoggle.template.1"
-  | "auto.features.agent.panel.components.walletcard.free_grant"
-  | "auto.features.agent.panel.components.walletcard.paid_balance"
-  | "auto.features.agent.panel.components.walletcard.recent"
-  | "auto.features.agent.panel.components.walletcard.summary"
-  | "auto.features.agent.panel.components.walletcard.title"
   | "auto.features.agent.panel.hooks.use.generalist.agent.literal.1"
   | "auto.features.agent.panel.hooks.use.generalist.agent.literal.2"
   | "auto.features.agent.panel.hooks.use.generalist.agent.literal.3"
@@ -455,7 +436,6 @@ export type MessageKey =
   | "auto.features.agent.panel.lib.tool.meta.literal.78"
   | "auto.features.agent.panel.lib.tool.meta.literal.79"
   | "auto.features.agent.panel.lib.tool.meta.literal.8"
-  | "auto.features.agent.panel.lib.tool.meta.literal.80"
   | "auto.features.agent.panel.lib.tool.meta.literal.81"
   | "auto.features.agent.panel.lib.tool.meta.literal.82"
   | "auto.features.agent.panel.lib.tool.meta.literal.83"
@@ -568,13 +548,9 @@ export type MessageKey =
   | "auto.features.dashboard.components.analyticstab.1"
   | "auto.features.dashboard.components.analyticstab.11"
   | "auto.features.dashboard.components.analyticstab.15"
-  | "auto.features.dashboard.components.analyticstab.20"
-  | "auto.features.dashboard.components.analyticstab.21"
   | "auto.features.dashboard.components.analyticstab.22"
   | "auto.features.dashboard.components.analyticstab.24"
-  | "auto.features.dashboard.components.analyticstab.25"
   | "auto.features.dashboard.components.analyticstab.26"
-  | "auto.features.dashboard.components.analyticstab.27"
   | "auto.features.dashboard.components.analyticstab.28"
   | "auto.features.dashboard.components.analyticstab.29"
   | "auto.features.dashboard.components.analyticstab.3"
@@ -582,7 +558,6 @@ export type MessageKey =
   | "auto.features.dashboard.components.analyticstab.33"
   | "auto.features.dashboard.components.analyticstab.4"
   | "auto.features.dashboard.components.analyticstab.8"
-  | "auto.features.dashboard.components.analyticstab.literal.1"
   | "auto.features.dashboard.components.analyticstab.literal.2"
   | "auto.features.dashboard.components.analyticstab.literal.4"
   | "auto.features.dashboard.components.analyticstab.literal.5"
@@ -609,7 +584,6 @@ export type MessageKey =
   | "auto.features.dashboard.components.jobstab.1"
   | "auto.features.dashboard.components.jobstab.11"
   | "auto.features.dashboard.components.jobstab.12"
-  | "auto.features.dashboard.components.jobstab.2"
   | "auto.features.dashboard.components.jobstab.3"
   | "auto.features.dashboard.components.jobstab.4"
   | "auto.features.dashboard.components.jobstab.5"
@@ -643,7 +617,6 @@ export type MessageKey =
   | "auto.features.optimizations.components.codetab.3"
   | "auto.features.optimizations.components.codetab.4"
   | "auto.features.optimizations.components.codetab.5"
-  | "auto.features.optimizations.components.codetab.6"
   | "auto.features.optimizations.components.configtab.1"
   | "auto.features.optimizations.components.configtab.10"
   | "auto.features.optimizations.components.configtab.11"
@@ -827,37 +800,15 @@ export type MessageKey =
   | "auto.features.optimizations.components.pairdetailview.literal.3"
   | "auto.features.optimizations.components.servechat.1"
   | "auto.features.optimizations.components.servechat.2"
-  | "auto.features.optimizations.components.servechat.3"
   | "auto.features.optimizations.components.servechat.4"
   | "auto.features.optimizations.components.servechat.5"
   | "auto.features.optimizations.components.servechat.6"
   | "auto.features.optimizations.components.servechat.7"
   | "auto.features.optimizations.components.servechat.literal.1"
   | "auto.features.optimizations.components.servechat.literal.2"
-  | "auto.features.optimizations.components.stageinfomodal.1"
-  | "auto.features.optimizations.components.stageinfomodal.2"
-  | "auto.features.optimizations.components.stageinfomodal.3"
-  | "auto.features.optimizations.components.stageinfomodal.4"
-  | "auto.features.optimizations.components.stageinfomodal.5"
-  | "auto.features.optimizations.components.ui.primitives.literal.1"
-  | "auto.features.optimizations.components.ui.primitives.literal.2"
   | "auto.features.optimizations.constants.literal.1"
   | "auto.features.optimizations.constants.literal.2"
   | "auto.features.optimizations.constants.literal.3"
-  | "auto.features.optimizations.constants.literal.4"
-  | "auto.features.optimizations.constants.literal.5"
-  | "auto.features.optimizations.constants.literal.6"
-  | "auto.features.optimizations.constants.template.1"
-  | "auto.features.optimizations.constants.template.10"
-  | "auto.features.optimizations.constants.template.11"
-  | "auto.features.optimizations.constants.template.2"
-  | "auto.features.optimizations.constants.template.3"
-  | "auto.features.optimizations.constants.template.4"
-  | "auto.features.optimizations.constants.template.5"
-  | "auto.features.optimizations.constants.template.6"
-  | "auto.features.optimizations.constants.template.7"
-  | "auto.features.optimizations.constants.template.8"
-  | "auto.features.optimizations.constants.template.9"
   | "auto.features.sidebar.components.sidebar.10"
   | "auto.features.sidebar.components.sidebar.3"
   | "auto.features.sidebar.components.sidebar.4"
@@ -879,7 +830,6 @@ export type MessageKey =
   | "auto.features.sidebar.lib.group.jobs.literal.1"
   | "auto.features.sidebar.lib.group.jobs.literal.2"
   | "auto.features.sidebar.lib.group.jobs.literal.6"
-  | "auto.features.submit.components.modelconfigmodal.1"
   | "auto.features.submit.components.modelconfigmodal.10"
   | "auto.features.submit.components.modelconfigmodal.11"
   | "auto.features.submit.components.modelconfigmodal.2"
@@ -889,20 +839,12 @@ export type MessageKey =
   | "auto.features.submit.components.modelconfigmodal.8"
   | "auto.features.submit.components.modelconfigmodal.9"
   | "auto.features.submit.components.modelconfigmodal.literal.1"
-  | "auto.features.submit.components.modelconfigmodal.literal.2"
   | "auto.features.submit.components.modelconfigmodal.literal.3"
   | "auto.features.submit.components.modelconfigmodal.recent.remove"
-  | "auto.features.submit.components.modelconfigmodal.section.connection"
   | "auto.features.submit.components.modelconfigmodal.section.parameters"
-  | "auto.features.submit.components.modelconfigmodal.template.1"
-  | "auto.features.submit.components.modelpicker.1"
-  | "auto.features.submit.components.modelpicker.2"
   | "auto.features.submit.components.modelpicker.3"
   | "auto.features.submit.components.modelpicker.literal.1"
-  | "auto.features.submit.components.modelpicker.literal.2"
-  | "auto.features.submit.components.modelpicker.literal.3"
   | "auto.features.submit.components.modelpicker.literal.4"
-  | "auto.features.submit.components.modelpicker.template.1"
   | "auto.features.submit.components.modelpicker.template.2"
   | "auto.features.submit.components.steps.basicsstep.1"
   | "auto.features.submit.components.steps.basicsstep.2"
@@ -952,20 +894,11 @@ export type MessageKey =
   | "auto.features.submit.components.steps.datasetstep.literal.2"
   | "auto.features.submit.components.steps.datasetstep.literal.3"
   | "auto.features.submit.components.steps.datasetstep.literal.4"
-  | "auto.features.submit.components.steps.modelstep.1"
-  | "auto.features.submit.components.steps.modelstep.10"
-  | "auto.features.submit.components.steps.modelstep.12"
   | "auto.features.submit.components.steps.modelstep.13"
   | "auto.features.submit.components.steps.modelstep.14"
   | "auto.features.submit.components.steps.modelstep.15"
-  | "auto.features.submit.components.steps.modelstep.2"
-  | "auto.features.submit.components.steps.modelstep.3"
-  | "auto.features.submit.components.steps.modelstep.4"
-  | "auto.features.submit.components.steps.modelstep.5"
   | "auto.features.submit.components.steps.modelstep.6"
   | "auto.features.submit.components.steps.modelstep.7"
-  | "auto.features.submit.components.steps.modelstep.8"
-  | "auto.features.submit.components.steps.modelstep.literal.1"
   | "auto.features.submit.components.steps.modelstep.literal.7"
   | "auto.features.submit.components.steps.modelstep.literal.8"
   | "auto.features.submit.components.steps.modelstep.template.2"
@@ -983,11 +916,9 @@ export type MessageKey =
   | "auto.features.submit.components.steps.paramsstep.6"
   | "auto.features.submit.components.steps.paramsstep.7"
   | "auto.features.submit.components.steps.paramsstep.8"
-  | "auto.features.submit.components.steps.paramsstep.9"
   | "auto.features.submit.components.steps.paramsstep.literal.1"
   | "auto.features.submit.components.steps.paramsstep.literal.2"
   | "auto.features.submit.components.steps.paramsstep.literal.3"
-  | "auto.features.submit.components.steps.summarystep.1"
   | "auto.features.submit.components.steps.summarystep.10"
   | "auto.features.submit.components.steps.summarystep.11"
   | "auto.features.submit.components.steps.summarystep.12"
@@ -998,7 +929,6 @@ export type MessageKey =
   | "auto.features.submit.components.steps.summarystep.17"
   | "auto.features.submit.components.steps.summarystep.18"
   | "auto.features.submit.components.steps.summarystep.19"
-  | "auto.features.submit.components.steps.summarystep.2"
   | "auto.features.submit.components.steps.summarystep.20"
   | "auto.features.submit.components.steps.summarystep.21"
   | "auto.features.submit.components.steps.summarystep.22"
@@ -1031,10 +961,6 @@ export type MessageKey =
   | "auto.features.submit.components.submitnav.2"
   | "auto.features.submit.components.submitnav.3"
   | "auto.features.submit.components.submitnav.4"
-  | "auto.features.submit.constants.literal.1"
-  | "auto.features.submit.constants.literal.2"
-  | "auto.features.submit.constants.literal.3"
-  | "auto.features.submit.constants.literal.4"
   | "auto.features.submit.hooks.use.code.agent.literal.1"
   | "auto.features.submit.hooks.use.code.agent.literal.2"
   | "auto.features.submit.hooks.use.code.agent.literal.3"
@@ -1107,15 +1033,7 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.101"
   | "auto.features.tutorial.components.concepts.guide.literal.102"
   | "auto.features.tutorial.components.concepts.guide.literal.103"
-  | "auto.features.tutorial.components.concepts.guide.literal.104"
-  | "auto.features.tutorial.components.concepts.guide.literal.105"
-  | "auto.features.tutorial.components.concepts.guide.literal.106"
-  | "auto.features.tutorial.components.concepts.guide.literal.107"
-  | "auto.features.tutorial.components.concepts.guide.literal.108"
-  | "auto.features.tutorial.components.concepts.guide.literal.109"
   | "auto.features.tutorial.components.concepts.guide.literal.11"
-  | "auto.features.tutorial.components.concepts.guide.literal.110"
-  | "auto.features.tutorial.components.concepts.guide.literal.111"
   | "auto.features.tutorial.components.concepts.guide.literal.112"
   | "auto.features.tutorial.components.concepts.guide.literal.113"
   | "auto.features.tutorial.components.concepts.guide.literal.114"
@@ -1123,22 +1041,16 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.116"
   | "auto.features.tutorial.components.concepts.guide.literal.117"
   | "auto.features.tutorial.components.concepts.guide.literal.118"
-  | "auto.features.tutorial.components.concepts.guide.literal.120"
   | "auto.features.tutorial.components.concepts.guide.literal.121"
   | "auto.features.tutorial.components.concepts.guide.literal.122"
-  | "auto.features.tutorial.components.concepts.guide.literal.123"
   | "auto.features.tutorial.components.concepts.guide.literal.124"
-  | "auto.features.tutorial.components.concepts.guide.literal.126"
   | "auto.features.tutorial.components.concepts.guide.literal.127"
   | "auto.features.tutorial.components.concepts.guide.literal.128"
   | "auto.features.tutorial.components.concepts.guide.literal.129"
   | "auto.features.tutorial.components.concepts.guide.literal.130"
   | "auto.features.tutorial.components.concepts.guide.literal.131"
-  | "auto.features.tutorial.components.concepts.guide.literal.132"
   | "auto.features.tutorial.components.concepts.guide.literal.133"
-  | "auto.features.tutorial.components.concepts.guide.literal.134"
   | "auto.features.tutorial.components.concepts.guide.literal.135"
-  | "auto.features.tutorial.components.concepts.guide.literal.136"
   | "auto.features.tutorial.components.concepts.guide.literal.137"
   | "auto.features.tutorial.components.concepts.guide.literal.138"
   | "auto.features.tutorial.components.concepts.guide.literal.139"
@@ -1156,16 +1068,9 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.15"
   | "auto.features.tutorial.components.concepts.guide.literal.150"
   | "auto.features.tutorial.components.concepts.guide.literal.151"
-  | "auto.features.tutorial.components.concepts.guide.literal.152"
-  | "auto.features.tutorial.components.concepts.guide.literal.153"
   | "auto.features.tutorial.components.concepts.guide.literal.154"
   | "auto.features.tutorial.components.concepts.guide.literal.155"
-  | "auto.features.tutorial.components.concepts.guide.literal.156"
-  | "auto.features.tutorial.components.concepts.guide.literal.157"
-  | "auto.features.tutorial.components.concepts.guide.literal.158"
-  | "auto.features.tutorial.components.concepts.guide.literal.159"
   | "auto.features.tutorial.components.concepts.guide.literal.16"
-  | "auto.features.tutorial.components.concepts.guide.literal.160"
   | "auto.features.tutorial.components.concepts.guide.literal.161"
   | "auto.features.tutorial.components.concepts.guide.literal.162"
   | "auto.features.tutorial.components.concepts.guide.literal.163"
@@ -1181,27 +1086,16 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.172"
   | "auto.features.tutorial.components.concepts.guide.literal.173"
   | "auto.features.tutorial.components.concepts.guide.literal.174"
-  | "auto.features.tutorial.components.concepts.guide.literal.175"
-  | "auto.features.tutorial.components.concepts.guide.literal.176"
-  | "auto.features.tutorial.components.concepts.guide.literal.177"
-  | "auto.features.tutorial.components.concepts.guide.literal.178"
-  | "auto.features.tutorial.components.concepts.guide.literal.179"
   | "auto.features.tutorial.components.concepts.guide.literal.18"
   | "auto.features.tutorial.components.concepts.guide.literal.180"
   | "auto.features.tutorial.components.concepts.guide.literal.181"
   | "auto.features.tutorial.components.concepts.guide.literal.182"
   | "auto.features.tutorial.components.concepts.guide.literal.183"
-  | "auto.features.tutorial.components.concepts.guide.literal.184"
   | "auto.features.tutorial.components.concepts.guide.literal.185"
   | "auto.features.tutorial.components.concepts.guide.literal.186"
-  | "auto.features.tutorial.components.concepts.guide.literal.187"
   | "auto.features.tutorial.components.concepts.guide.literal.188"
-  | "auto.features.tutorial.components.concepts.guide.literal.189"
   | "auto.features.tutorial.components.concepts.guide.literal.19"
   | "auto.features.tutorial.components.concepts.guide.literal.190"
-  | "auto.features.tutorial.components.concepts.guide.literal.191"
-  | "auto.features.tutorial.components.concepts.guide.literal.192"
-  | "auto.features.tutorial.components.concepts.guide.literal.193"
   | "auto.features.tutorial.components.concepts.guide.literal.194"
   | "auto.features.tutorial.components.concepts.guide.literal.195"
   | "auto.features.tutorial.components.concepts.guide.literal.196"
@@ -1212,18 +1106,11 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.20"
   | "auto.features.tutorial.components.concepts.guide.literal.200"
   | "auto.features.tutorial.components.concepts.guide.literal.201"
-  | "auto.features.tutorial.components.concepts.guide.literal.202"
   | "auto.features.tutorial.components.concepts.guide.literal.203"
   | "auto.features.tutorial.components.concepts.guide.literal.204"
-  | "auto.features.tutorial.components.concepts.guide.literal.205"
-  | "auto.features.tutorial.components.concepts.guide.literal.206"
-  | "auto.features.tutorial.components.concepts.guide.literal.207"
-  | "auto.features.tutorial.components.concepts.guide.literal.208"
   | "auto.features.tutorial.components.concepts.guide.literal.209"
   | "auto.features.tutorial.components.concepts.guide.literal.21"
   | "auto.features.tutorial.components.concepts.guide.literal.210"
-  | "auto.features.tutorial.components.concepts.guide.literal.211"
-  | "auto.features.tutorial.components.concepts.guide.literal.212"
   | "auto.features.tutorial.components.concepts.guide.literal.213"
   | "auto.features.tutorial.components.concepts.guide.literal.214"
   | "auto.features.tutorial.components.concepts.guide.literal.215"
@@ -1234,21 +1121,13 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.22"
   | "auto.features.tutorial.components.concepts.guide.literal.220"
   | "auto.features.tutorial.components.concepts.guide.literal.221"
-  | "auto.features.tutorial.components.concepts.guide.literal.222"
   | "auto.features.tutorial.components.concepts.guide.literal.223"
-  | "auto.features.tutorial.components.concepts.guide.literal.224"
   | "auto.features.tutorial.components.concepts.guide.literal.225"
-  | "auto.features.tutorial.components.concepts.guide.literal.226"
   | "auto.features.tutorial.components.concepts.guide.literal.227"
-  | "auto.features.tutorial.components.concepts.guide.literal.228"
   | "auto.features.tutorial.components.concepts.guide.literal.229"
-  | "auto.features.tutorial.components.concepts.guide.literal.23"
   | "auto.features.tutorial.components.concepts.guide.literal.230"
-  | "auto.features.tutorial.components.concepts.guide.literal.231"
   | "auto.features.tutorial.components.concepts.guide.literal.232"
-  | "auto.features.tutorial.components.concepts.guide.literal.233"
   | "auto.features.tutorial.components.concepts.guide.literal.234"
-  | "auto.features.tutorial.components.concepts.guide.literal.235"
   | "auto.features.tutorial.components.concepts.guide.literal.236"
   | "auto.features.tutorial.components.concepts.guide.literal.237"
   | "auto.features.tutorial.components.concepts.guide.literal.238"
@@ -1261,10 +1140,8 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.244"
   | "auto.features.tutorial.components.concepts.guide.literal.245"
   | "auto.features.tutorial.components.concepts.guide.literal.246"
-  | "auto.features.tutorial.components.concepts.guide.literal.247"
   | "auto.features.tutorial.components.concepts.guide.literal.248"
   | "auto.features.tutorial.components.concepts.guide.literal.249"
-  | "auto.features.tutorial.components.concepts.guide.literal.25"
   | "auto.features.tutorial.components.concepts.guide.literal.252"
   | "auto.features.tutorial.components.concepts.guide.literal.253"
   | "auto.features.tutorial.components.concepts.guide.literal.254"
@@ -1273,7 +1150,6 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.257"
   | "auto.features.tutorial.components.concepts.guide.literal.258"
   | "auto.features.tutorial.components.concepts.guide.literal.259"
-  | "auto.features.tutorial.components.concepts.guide.literal.26"
   | "auto.features.tutorial.components.concepts.guide.literal.260"
   | "auto.features.tutorial.components.concepts.guide.literal.261"
   | "auto.features.tutorial.components.concepts.guide.literal.262"
@@ -1284,25 +1160,11 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.267"
   | "auto.features.tutorial.components.concepts.guide.literal.268"
   | "auto.features.tutorial.components.concepts.guide.literal.269"
-  | "auto.features.tutorial.components.concepts.guide.literal.27"
   | "auto.features.tutorial.components.concepts.guide.literal.270"
-  | "auto.features.tutorial.components.concepts.guide.literal.271"
-  | "auto.features.tutorial.components.concepts.guide.literal.272"
   | "auto.features.tutorial.components.concepts.guide.literal.274"
-  | "auto.features.tutorial.components.concepts.guide.literal.275"
-  | "auto.features.tutorial.components.concepts.guide.literal.276"
-  | "auto.features.tutorial.components.concepts.guide.literal.277"
-  | "auto.features.tutorial.components.concepts.guide.literal.28"
   | "auto.features.tutorial.components.concepts.guide.literal.281"
   | "auto.features.tutorial.components.concepts.guide.literal.282"
   | "auto.features.tutorial.components.concepts.guide.literal.283"
-  | "auto.features.tutorial.components.concepts.guide.literal.284"
-  | "auto.features.tutorial.components.concepts.guide.literal.285"
-  | "auto.features.tutorial.components.concepts.guide.literal.286"
-  | "auto.features.tutorial.components.concepts.guide.literal.287"
-  | "auto.features.tutorial.components.concepts.guide.literal.288"
-  | "auto.features.tutorial.components.concepts.guide.literal.289"
-  | "auto.features.tutorial.components.concepts.guide.literal.29"
   | "auto.features.tutorial.components.concepts.guide.literal.290"
   | "auto.features.tutorial.components.concepts.guide.literal.291"
   | "auto.features.tutorial.components.concepts.guide.literal.292"
@@ -1311,21 +1173,15 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.295"
   | "auto.features.tutorial.components.concepts.guide.literal.296"
   | "auto.features.tutorial.components.concepts.guide.literal.297"
-  | "auto.features.tutorial.components.concepts.guide.literal.298"
-  | "auto.features.tutorial.components.concepts.guide.literal.299"
   | "auto.features.tutorial.components.concepts.guide.literal.3"
   | "auto.features.tutorial.components.concepts.guide.literal.30"
   | "auto.features.tutorial.components.concepts.guide.literal.300"
   | "auto.features.tutorial.components.concepts.guide.literal.301"
   | "auto.features.tutorial.components.concepts.guide.literal.302"
-  | "auto.features.tutorial.components.concepts.guide.literal.303"
-  | "auto.features.tutorial.components.concepts.guide.literal.304"
-  | "auto.features.tutorial.components.concepts.guide.literal.305"
   | "auto.features.tutorial.components.concepts.guide.literal.306"
   | "auto.features.tutorial.components.concepts.guide.literal.307"
   | "auto.features.tutorial.components.concepts.guide.literal.308"
   | "auto.features.tutorial.components.concepts.guide.literal.309"
-  | "auto.features.tutorial.components.concepts.guide.literal.31"
   | "auto.features.tutorial.components.concepts.guide.literal.310"
   | "auto.features.tutorial.components.concepts.guide.literal.311"
   | "auto.features.tutorial.components.concepts.guide.literal.312"
@@ -1336,7 +1192,6 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.318"
   | "auto.features.tutorial.components.concepts.guide.literal.319"
   | "auto.features.tutorial.components.concepts.guide.literal.32"
-  | "auto.features.tutorial.components.concepts.guide.literal.320"
   | "auto.features.tutorial.components.concepts.guide.literal.321"
   | "auto.features.tutorial.components.concepts.guide.literal.322"
   | "auto.features.tutorial.components.concepts.guide.literal.323"
@@ -1345,9 +1200,6 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.326"
   | "auto.features.tutorial.components.concepts.guide.literal.327"
   | "auto.features.tutorial.components.concepts.guide.literal.328"
-  | "auto.features.tutorial.components.concepts.guide.literal.329"
-  | "auto.features.tutorial.components.concepts.guide.literal.33"
-  | "auto.features.tutorial.components.concepts.guide.literal.330"
   | "auto.features.tutorial.components.concepts.guide.literal.331"
   | "auto.features.tutorial.components.concepts.guide.literal.332"
   | "auto.features.tutorial.components.concepts.guide.literal.333"
@@ -1364,24 +1216,30 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.343"
   | "auto.features.tutorial.components.concepts.guide.literal.344"
   | "auto.features.tutorial.components.concepts.guide.literal.345"
-  | "auto.features.tutorial.components.concepts.guide.literal.346"
   | "auto.features.tutorial.components.concepts.guide.literal.347"
   | "auto.features.tutorial.components.concepts.guide.literal.348"
   | "auto.features.tutorial.components.concepts.guide.literal.349"
-  | "auto.features.tutorial.components.concepts.guide.literal.35"
-  | "auto.features.tutorial.components.concepts.guide.literal.36"
-  | "auto.features.tutorial.components.concepts.guide.literal.37"
-  | "auto.features.tutorial.components.concepts.guide.literal.38"
+  | "auto.features.tutorial.components.concepts.guide.literal.350"
+  | "auto.features.tutorial.components.concepts.guide.literal.351"
+  | "auto.features.tutorial.components.concepts.guide.literal.352"
+  | "auto.features.tutorial.components.concepts.guide.literal.353"
+  | "auto.features.tutorial.components.concepts.guide.literal.354"
+  | "auto.features.tutorial.components.concepts.guide.literal.355"
+  | "auto.features.tutorial.components.concepts.guide.literal.356"
+  | "auto.features.tutorial.components.concepts.guide.literal.357"
+  | "auto.features.tutorial.components.concepts.guide.literal.358"
+  | "auto.features.tutorial.components.concepts.guide.literal.359"
+  | "auto.features.tutorial.components.concepts.guide.literal.360"
+  | "auto.features.tutorial.components.concepts.guide.literal.361"
+  | "auto.features.tutorial.components.concepts.guide.literal.362"
+  | "auto.features.tutorial.components.concepts.guide.literal.363"
+  | "auto.features.tutorial.components.concepts.guide.literal.364"
+  | "auto.features.tutorial.components.concepts.guide.literal.365"
   | "auto.features.tutorial.components.concepts.guide.literal.39"
   | "auto.features.tutorial.components.concepts.guide.literal.4"
-  | "auto.features.tutorial.components.concepts.guide.literal.40"
-  | "auto.features.tutorial.components.concepts.guide.literal.41"
   | "auto.features.tutorial.components.concepts.guide.literal.42"
-  | "auto.features.tutorial.components.concepts.guide.literal.43"
   | "auto.features.tutorial.components.concepts.guide.literal.44"
-  | "auto.features.tutorial.components.concepts.guide.literal.45"
   | "auto.features.tutorial.components.concepts.guide.literal.46"
-  | "auto.features.tutorial.components.concepts.guide.literal.47"
   | "auto.features.tutorial.components.concepts.guide.literal.48"
   | "auto.features.tutorial.components.concepts.guide.literal.49"
   | "auto.features.tutorial.components.concepts.guide.literal.5"
@@ -1390,8 +1248,6 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.52"
   | "auto.features.tutorial.components.concepts.guide.literal.53"
   | "auto.features.tutorial.components.concepts.guide.literal.54"
-  | "auto.features.tutorial.components.concepts.guide.literal.55"
-  | "auto.features.tutorial.components.concepts.guide.literal.56"
   | "auto.features.tutorial.components.concepts.guide.literal.57"
   | "auto.features.tutorial.components.concepts.guide.literal.58"
   | "auto.features.tutorial.components.concepts.guide.literal.59"
@@ -1402,50 +1258,26 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.63"
   | "auto.features.tutorial.components.concepts.guide.literal.64"
   | "auto.features.tutorial.components.concepts.guide.literal.65"
-  | "auto.features.tutorial.components.concepts.guide.literal.66"
   | "auto.features.tutorial.components.concepts.guide.literal.67"
   | "auto.features.tutorial.components.concepts.guide.literal.7"
   | "auto.features.tutorial.components.concepts.guide.literal.70"
-  | "auto.features.tutorial.components.concepts.guide.literal.71"
   | "auto.features.tutorial.components.concepts.guide.literal.72"
-  | "auto.features.tutorial.components.concepts.guide.literal.73"
   | "auto.features.tutorial.components.concepts.guide.literal.74"
-  | "auto.features.tutorial.components.concepts.guide.literal.75"
-  | "auto.features.tutorial.components.concepts.guide.literal.76"
   | "auto.features.tutorial.components.concepts.guide.literal.77"
-  | "auto.features.tutorial.components.concepts.guide.literal.78"
   | "auto.features.tutorial.components.concepts.guide.literal.79"
-  | "auto.features.tutorial.components.concepts.guide.literal.8"
-  | "auto.features.tutorial.components.concepts.guide.literal.80"
-  | "auto.features.tutorial.components.concepts.guide.literal.81"
-  | "auto.features.tutorial.components.concepts.guide.literal.82"
-  | "auto.features.tutorial.components.concepts.guide.literal.83"
   | "auto.features.tutorial.components.concepts.guide.literal.84"
   | "auto.features.tutorial.components.concepts.guide.literal.85"
   | "auto.features.tutorial.components.concepts.guide.literal.86"
   | "auto.features.tutorial.components.concepts.guide.literal.87"
   | "auto.features.tutorial.components.concepts.guide.literal.88"
-  | "auto.features.tutorial.components.concepts.guide.literal.89"
   | "auto.features.tutorial.components.concepts.guide.literal.9"
   | "auto.features.tutorial.components.concepts.guide.literal.90"
-  | "auto.features.tutorial.components.concepts.guide.literal.91"
   | "auto.features.tutorial.components.concepts.guide.literal.92"
-  | "auto.features.tutorial.components.concepts.guide.literal.93"
-  | "auto.features.tutorial.components.concepts.guide.literal.94"
-  | "auto.features.tutorial.components.concepts.guide.literal.95"
-  | "auto.features.tutorial.components.concepts.guide.literal.96"
-  | "auto.features.tutorial.components.concepts.guide.literal.97"
-  | "auto.features.tutorial.components.concepts.guide.literal.98"
-  | "auto.features.tutorial.components.concepts.guide.literal.99"
   | "auto.features.tutorial.components.concepts.guide.template.1"
-  | "auto.features.tutorial.components.tutorial.menu.1"
-  | "auto.features.tutorial.components.tutorial.menu.literal.1"
   | "auto.features.tutorial.components.tutorial.popover.1"
   | "auto.features.tutorial.components.tutorial.popover.2"
   | "auto.features.tutorial.components.tutorial.popover.literal.1"
   | "auto.features.tutorial.components.tutorial.popover.literal.2"
-  | "auto.features.tutorial.components.tutorial.popover.literal.3"
-  | "auto.features.tutorial.components.tutorial.popover.literal.4"
   | "auto.features.tutorial.components.tutorial.popover.literal.5"
   | "auto.features.tutorial.components.tutorial.popover.literal.6"
   | "auto.features.tutorial.components.tutorial.popover.literal.7"
@@ -1485,98 +1317,44 @@ export type MessageKey =
   | "auto.features.tutorial.lib.demo.data.template.2"
   | "auto.features.tutorial.lib.demo.data.template.3"
   | "auto.features.tutorial.lib.steps.literal.1"
-  | "auto.features.tutorial.lib.steps.literal.13"
-  | "auto.features.tutorial.lib.steps.literal.14"
-  | "auto.features.tutorial.lib.steps.literal.15"
-  | "auto.features.tutorial.lib.steps.literal.16"
-  | "auto.features.tutorial.lib.steps.literal.17"
-  | "auto.features.tutorial.lib.steps.literal.18"
-  | "auto.features.tutorial.lib.steps.literal.19"
   | "auto.features.tutorial.lib.steps.literal.2"
   | "auto.features.tutorial.lib.steps.literal.20"
-  | "auto.features.tutorial.lib.steps.literal.21"
-  | "auto.features.tutorial.lib.steps.literal.22"
-  | "auto.features.tutorial.lib.steps.literal.23"
   | "auto.features.tutorial.lib.steps.literal.24"
   | "auto.features.tutorial.lib.steps.literal.25"
   | "auto.features.tutorial.lib.steps.literal.26"
-  | "auto.features.tutorial.lib.steps.literal.27"
-  | "auto.features.tutorial.lib.steps.literal.28"
   | "auto.features.tutorial.lib.steps.literal.29"
   | "auto.features.tutorial.lib.steps.literal.3"
   | "auto.features.tutorial.lib.steps.literal.30"
   | "auto.features.tutorial.lib.steps.literal.31"
   | "auto.features.tutorial.lib.steps.literal.32"
-  | "auto.features.tutorial.lib.steps.literal.33"
   | "auto.features.tutorial.lib.steps.literal.38"
   | "auto.features.tutorial.lib.steps.literal.4"
   | "auto.features.tutorial.lib.steps.literal.41"
-  | "auto.features.tutorial.lib.steps.literal.42"
-  | "auto.features.tutorial.lib.steps.literal.43"
   | "auto.features.tutorial.lib.steps.literal.44"
   | "auto.features.tutorial.lib.steps.literal.46"
   | "auto.features.tutorial.lib.steps.literal.48"
   | "auto.features.tutorial.lib.steps.literal.49"
   | "auto.features.tutorial.lib.steps.literal.5"
   | "auto.features.tutorial.lib.steps.literal.50"
-  | "auto.features.tutorial.lib.steps.literal.52"
-  | "auto.features.tutorial.lib.steps.literal.53"
-  | "auto.features.tutorial.lib.steps.literal.6"
-  | "auto.features.tutorial.lib.steps.literal.7"
-  | "auto.features.tutorial.lib.steps.literal.8"
   | "auto.features.tutorial.lib.steps.literal.9"
   | "auto.features.tutorial.lib.steps.template.1"
-  | "auto.features.tutorial.lib.steps.template.14"
-  | "auto.features.tutorial.lib.steps.template.15"
   | "auto.features.tutorial.lib.steps.template.16"
   | "auto.features.tutorial.lib.steps.template.17"
   | "auto.features.tutorial.lib.steps.template.18"
   | "auto.features.tutorial.lib.steps.template.2"
-  | "auto.features.tutorial.lib.steps.template.20"
-  | "auto.features.tutorial.lib.steps.template.21"
   | "auto.features.tutorial.lib.steps.template.22"
   | "auto.features.tutorial.lib.steps.template.23"
   | "auto.features.tutorial.lib.steps.template.24"
   | "auto.features.tutorial.lib.steps.template.25"
   | "auto.features.tutorial.lib.steps.template.26"
   | "auto.features.tutorial.lib.steps.template.27"
-  | "auto.features.tutorial.lib.steps.template.28"
-  | "auto.features.tutorial.lib.steps.template.29"
-  | "auto.features.tutorial.lib.steps.template.3"
-  | "auto.features.tutorial.lib.steps.template.30"
   | "auto.features.tutorial.lib.steps.template.31"
   | "auto.features.tutorial.lib.steps.template.32"
-  | "auto.features.tutorial.lib.steps.template.33"
-  | "auto.features.tutorial.lib.steps.template.34"
   | "auto.features.tutorial.lib.steps.template.35"
   | "auto.features.tutorial.lib.steps.template.36"
   | "auto.features.tutorial.lib.steps.template.37"
-  | "auto.features.tutorial.lib.steps.template.38"
-  | "auto.features.tutorial.lib.steps.template.39"
-  | "auto.features.tutorial.lib.steps.template.40"
-  | "auto.features.tutorial.lib.steps.template.41"
-  | "auto.features.tutorial.lib.steps.template.42"
-  | "auto.features.tutorial.lib.steps.template.43"
-  | "auto.features.tutorial.lib.steps.template.44"
-  | "auto.features.tutorial.lib.steps.template.45"
-  | "auto.features.tutorial.lib.steps.template.46"
   | "auto.features.tutorial.lib.steps.template.47"
-  | "auto.features.tutorial.lib.steps.template.8"
   | "auto.shared.charts.chart.utils.literal.1"
-  | "auto.shared.charts.dataset.vs.improvement.chart.1"
-  | "auto.shared.charts.dataset.vs.improvement.chart.2"
-  | "auto.shared.charts.dataset.vs.improvement.chart.literal.1"
-  | "auto.shared.charts.dataset.vs.improvement.chart.template.1"
-  | "auto.shared.charts.efficiency.chart.literal.1"
-  | "auto.shared.charts.efficiency.chart.literal.2"
-  | "auto.shared.charts.efficiency.chart.template.1"
-  | "auto.shared.charts.runtime.distribution.chart.literal.1"
-  | "auto.shared.charts.runtime.distribution.chart.literal.2"
-  | "auto.shared.charts.runtime.distribution.chart.template.1"
-  | "auto.shared.charts.scores.chart.literal.1"
-  | "auto.shared.charts.scores.chart.template.1"
-  | "auto.shared.charts.timeline.chart.literal.1"
-  | "auto.shared.charts.timeline.chart.template.1"
   | "auto.shared.lib.api.literal.1"
   | "auto.shared.lib.api.literal.10"
   | "auto.shared.lib.api.literal.11"
@@ -1598,16 +1376,40 @@ export type MessageKey =
   | "auto.shared.ui.agent.composer.literal.1"
   | "auto.shared.ui.agent.composer.literal.2"
   | "clipboard.copied"
-  | "clipboard.copied_short"
   | "clipboard.copy_failed"
-  | "common.aria.missing_result"
   | "common.empty"
   | "dashboard.analytics.access_filter_clear"
+  | "dashboard.analytics.axis_minutes"
+  | "dashboard.analytics.axis_points"
   | "dashboard.analytics.by_access"
+  | "dashboard.analytics.by_module"
   | "dashboard.analytics.by_owner"
+  | "dashboard.analytics.col_date"
+  | "dashboard.analytics.col_name"
+  | "dashboard.analytics.col_range"
+  | "dashboard.analytics.col_share"
+  | "dashboard.analytics.improvement_histogram"
+  | "dashboard.analytics.kpi_median_detail"
+  | "dashboard.analytics.kpi_running_detail"
+  | "dashboard.analytics.kpi_success_detail"
+  | "dashboard.analytics.kpi_total"
+  | "dashboard.analytics.leaderboard"
+  | "dashboard.analytics.legend_other"
+  | "dashboard.analytics.no_successful_runs"
+  | "dashboard.analytics.open_job"
+  | "dashboard.analytics.optimizer_comparison"
+  | "dashboard.analytics.optimizer_filter_clear"
   | "dashboard.analytics.owner_filter_clear"
+  | "dashboard.analytics.range_filter_clear"
   | "dashboard.analytics.runs"
+  | "dashboard.analytics.section_breakdown"
+  | "dashboard.analytics.section_distributions"
   | "dashboard.analytics.sharing_breakdown"
+  | "dashboard.analytics.timeline_by_day"
+  | "dashboard.analytics.timeline_by_month"
+  | "dashboard.analytics.timeline_by_week"
+  | "dashboard.analytics.truncated"
+  | "dashboard.analytics.type_workflow"
   | "dashboard.col.owner"
   | "dashboard.col.role"
   | "dashboard.delete_failed"
@@ -1658,7 +1460,6 @@ export type MessageKey =
   | "datasets.editor.add_row"
   | "datasets.editor.autosave_empty"
   | "datasets.editor.autosave_error"
-  | "datasets.editor.autosave_saved"
   | "datasets.editor.autosave_saving"
   | "datasets.editor.back"
   | "datasets.editor.column_placeholder"
@@ -1741,31 +1542,48 @@ export type MessageKey =
   | "explore.empty.title"
   | "explore.filter.grid"
   | "explore.filter.run"
-  | "explore.filters.apply"
   | "explore.filters.button"
   | "explore.filters.clear"
   | "explore.filters.close"
+  | "explore.filters.date.custom"
   | "explore.filters.date.from"
+  | "explore.filters.date.preset.30d"
+  | "explore.filters.date.preset.7d"
+  | "explore.filters.date.preset.90d"
+  | "explore.filters.date.range"
   | "explore.filters.date.to"
   | "explore.filters.empty_section"
+  | "explore.filters.field.any"
+  | "explore.filters.group.matches"
+  | "explore.filters.group.top"
+  | "explore.filters.picker.clear"
+  | "explore.filters.picker.placeholder.models"
+  | "explore.filters.picker.placeholder.modules"
+  | "explore.filters.picker.placeholder.optimizers"
   | "explore.filters.reset"
+  | "explore.filters.search.clear"
   | "explore.filters.section.date"
   | "explore.filters.section.models"
   | "explore.filters.section.modules"
   | "explore.filters.section.no_search_match"
+  | "explore.filters.section.none_in_selection"
   | "explore.filters.section.optimizers"
   | "explore.filters.section.search"
-  | "explore.filters.section.selected"
-  | "explore.filters.section.selected_many"
   | "explore.filters.section.types"
-  | "explore.filters.subtitle"
+  | "explore.filters.show_more"
+  | "explore.filters.show_results"
+  | "explore.filters.show_results_one"
   | "explore.filters.title"
+  | "explore.filters.trigger.date"
+  | "explore.filters.trigger.models"
+  | "explore.filters.trigger.modules"
+  | "explore.filters.trigger.optimizers"
+  | "explore.filters.trigger.types"
   | "explore.page.indicator"
   | "explore.page.jump"
   | "explore.page.next"
   | "explore.page.prev"
   | "explore.page.title"
-  | "explore.relative.now"
   | "explore.results.count.many"
   | "explore.results.count.one"
   | "explore.results.empty.clear_filters"
@@ -1781,8 +1599,8 @@ export type MessageKey =
   | "explore.search.clear"
   | "explore.search.placeholder"
   | "explore.sort.aria"
-  | "explore.sort.gain"
-  | "explore.sort.gain.tip"
+  | "explore.sort.oldest"
+  | "explore.sort.oldest.tip"
   | "explore.sort.recent"
   | "explore.sort.recent.tip"
   | "explore.sort.relevance"
@@ -1796,11 +1614,6 @@ export type MessageKey =
   | "export.table.done"
   | "export.table.empty"
   | "export.table.failed"
-  | "legal.privacy_link"
-  | "legal.terms_link"
-  | "mobile.desktop_only.body"
-  | "mobile.desktop_only.home_cta"
-  | "mobile.desktop_only.title"
   | "mobile.nav.account"
   | "mobile.nav.aria"
   | "mobile.nav.home"
@@ -1813,6 +1626,7 @@ export type MessageKey =
   | "model_source.byok"
   | "model_source.byok_hint"
   | "model_source.manage_keys"
+  | "model_source.managed"
   | "not_found.back_dashboard"
   | "not_found.description"
   | "not_found.title"
@@ -1826,6 +1640,20 @@ export type MessageKey =
   | "optimization.code.tab_program"
   | "optimization.code.tab_workflow"
   | "optimization.code.workflow_intro"
+  | "optimization.config.all_generation_models"
+  | "optimization.config.all_reflection_models"
+  | "optimization.config.description"
+  | "optimization.config.expand"
+  | "optimization.config.model_endpoint"
+  | "optimization.config.model_pairs"
+  | "optimization.config.rows"
+  | "optimization.config.slide_general"
+  | "optimization.config.task_model"
+  | "optimization.config.token_source"
+  | "optimization.config.tool_source.dataset_snapshot"
+  | "optimization.config.tool_source.live_mcp"
+  | "optimization.config.workflow"
+  | "optimization.config.workflow_graph"
   | "optimization.delete.failed"
   | "optimization.file.parse_error"
   | "optimization.logged_metrics.baseline_col"
@@ -1858,11 +1686,9 @@ export type MessageKey =
   | "optimization.storage_label"
   | "optimization.workflow.hint"
   | "optimizations.datatab.description"
-  | "optimizations.datatab.description_simple"
   | "optimizations.detail.title"
   | "optimizations.duration.lt_0_1s"
   | "optimizations.duration.seconds"
-  | "optimizations.flex.download_py"
   | "optimizations.flex.optimized_code"
   | "optimizations.flex.py_ext"
   | "optimizations.grid.format.percent"
@@ -1883,30 +1709,25 @@ export type MessageKey =
   | "optimizations.react.chat_send_aria"
   | "optimizations.react.chat_stop_aria"
   | "optimizations.react.optimized_tools"
-  | "optimizations.reasoning_effort.high"
-  | "optimizations.reasoning_effort.low"
-  | "optimizations.reasoning_effort.medium"
-  | "optimizations.reasoning_effort.minimal"
   | "optimizations.reasoning_effort.short.med"
   | "optimizations.reasoning_effort.short.min"
   | "optimizations.reasoning_effort.tooltip"
   | "optimizations.serve.field_separator"
-  | "optimizations.servechat.demo_label"
   | "optimizations.source_dataset.label"
   | "optimizations.source_dataset.view"
+  | "pipeline.stage.compile"
+  | "pipeline.stage.elapsed"
+  | "pipeline.stage.failed"
+  | "pipeline.stage.reflectiveSearch"
+  | "pipeline.stage.running"
+  | "pipeline.stage.skipped"
   | "search.clear"
   | "settings.about.api_url.label"
-  | "settings.about.feedback.action"
-  | "settings.about.feedback.description"
-  | "settings.about.feedback.label"
-  | "settings.about.feedback.subject"
   | "settings.about.reset_all.action"
   | "settings.about.reset_all.description"
   | "settings.about.reset_all.label"
   | "settings.about.reset_all.success"
   | "settings.about.version.label"
-  | "settings.account.advanced_mode.description"
-  | "settings.account.advanced_mode.label"
   | "settings.account.expand_advanced.description"
   | "settings.account.expand_advanced.label"
   | "settings.account.lite.description"
@@ -1930,7 +1751,6 @@ export type MessageKey =
   | "settings.admin.storage.auth_missing"
   | "settings.admin.storage.budget"
   | "settings.admin.storage.budget_invalid"
-  | "settings.admin.storage.clear_filters"
   | "settings.admin.storage.default"
   | "settings.admin.storage.default_budget"
   | "settings.admin.storage.deleted"
@@ -1943,8 +1763,6 @@ export type MessageKey =
   | "settings.admin.storage.used"
   | "settings.admin.storage.username"
   | "settings.admin.storage.view_list"
-  | "settings.agent.default_model.description"
-  | "settings.agent.default_model.label"
   | "settings.agent.dictation.description"
   | "settings.agent.dictation.label"
   | "settings.agent.memory.entry.description"
@@ -1961,12 +1779,6 @@ export type MessageKey =
   | "settings.agent.settings_tool.update_failed"
   | "settings.agent.settings_tool.updated"
   | "settings.agent.settings_tool.updating"
-  | "settings.agent.shortcut.change"
-  | "settings.agent.shortcut.description"
-  | "settings.agent.shortcut.hint"
-  | "settings.agent.shortcut.label"
-  | "settings.agent.shortcut.recording"
-  | "settings.agent.shortcut.reserved_warning"
   | "settings.agent.trust.ask"
   | "settings.agent.trust.auto_safe"
   | "settings.agent.trust.description"
@@ -1998,7 +1810,6 @@ export type MessageKey =
   | "settings.group.preferences"
   | "settings.group.system"
   | "settings.group.workflows"
-  | "settings.keys.add"
   | "settings.keys.add_provider"
   | "settings.keys.added"
   | "settings.keys.base_url_hint"
@@ -2022,11 +1833,9 @@ export type MessageKey =
   | "settings.keys.json_col_label"
   | "settings.keys.json_col_provider"
   | "settings.keys.json_err_base"
-  | "settings.keys.json_err_custom_base"
   | "settings.keys.json_err_missing"
   | "settings.keys.json_err_not_object"
   | "settings.keys.json_err_parse"
-  | "settings.keys.json_err_provider"
   | "settings.keys.json_errors_heading"
   | "settings.keys.json_example_label"
   | "settings.keys.json_format"
@@ -2064,7 +1873,6 @@ export type MessageKey =
   | "settings.keys.verify_failed_toast"
   | "settings.keys.verifying"
   | "settings.saved"
-  | "settings.subtitle"
   | "settings.tab.about"
   | "settings.tab.account"
   | "settings.tab.admin"
@@ -2082,23 +1890,16 @@ export type MessageKey =
   | "settings.wizard.split_mode.auto"
   | "settings.wizard.split_mode.label"
   | "settings.wizard.split_mode.manual"
-  | "share.access_updated"
   | "share.button"
   | "share.cannot_grant_self"
   | "share.clone"
   | "share.clone_tooltip"
-  | "share.copy_link"
   | "share.dialog_title"
   | "share.error"
-  | "share.general_access"
-  | "share.general_access.anyone"
-  | "share.general_access.restricted"
-  | "share.general_access.restricted_desc"
   | "share.inference_failed"
   | "share.invite"
   | "share.invite_label"
   | "share.invite_placeholder"
-  | "share.link_copied"
   | "share.loading"
   | "share.member_added"
   | "share.member_removed"
@@ -2137,6 +1938,13 @@ export type MessageKey =
   | "shared.agent.copy"
   | "shared.agent.copy_code"
   | "shared.agent.edit_and_resend"
+  | "shared.agent.info.first_token"
+  | "shared.agent.info.input_tokens"
+  | "shared.agent.info.label"
+  | "shared.agent.info.output_tokens"
+  | "shared.agent.info.speed"
+  | "shared.agent.info.tokens_per_second"
+  | "shared.agent.info.total_time"
   | "shared.agent.regenerate"
   | "shared.agent.run_code"
   | "shared.agent.run_code_prompt"
@@ -2147,6 +1955,23 @@ export type MessageKey =
   | "shared.code_editor.collapse"
   | "shared.code_editor.copied"
   | "shared.code_editor.copy"
+  | "shared.code_editor.find.close"
+  | "shared.code_editor.find.count"
+  | "shared.code_editor.find.invalid_regex"
+  | "shared.code_editor.find.match_case"
+  | "shared.code_editor.find.next"
+  | "shared.code_editor.find.no_results"
+  | "shared.code_editor.find.open"
+  | "shared.code_editor.find.open_tip"
+  | "shared.code_editor.find.placeholder"
+  | "shared.code_editor.find.previous"
+  | "shared.code_editor.find.regex"
+  | "shared.code_editor.find.replace"
+  | "shared.code_editor.find.replace_all"
+  | "shared.code_editor.find.replace_placeholder"
+  | "shared.code_editor.find.toggle_replace"
+  | "shared.code_editor.find.total"
+  | "shared.code_editor.find.whole_word"
   | "shared.code_editor.format"
   | "shared.code_editor.lines_count"
   | "shared.code_editor.lines_hidden"
@@ -2165,11 +1990,8 @@ export type MessageKey =
   | "shared.excel_filter.search_placeholder"
   | "shared.excel_filter.select_all"
   | "shared.excel_filter.sort_by"
-  | "shared.inline_error.dismiss"
-  | "shared.language.auto_detect"
-  | "shared.language.no_results"
-  | "shared.language.search_placeholder"
-  | "shared.language.switch_aria"
+  | "shared.expand_toggle.collapse"
+  | "shared.expand_toggle.expand"
   | "shared.model_chip.add_model"
   | "shared.model_chip.choose_model"
   | "shared.model_chip.clone"
@@ -2206,6 +2028,7 @@ export type MessageKey =
   | "sidebar.resume"
   | "sidebar.resume.failed"
   | "sidebar.resume.success"
+  | "sidebar.row_menu"
   | "sidebar.shared.empty"
   | "sidebar.shared.empty.hint"
   | "sidebar.tab.aria"
@@ -2267,7 +2090,6 @@ export type MessageKey =
   | "submit.basics.privacy.public"
   | "submit.basics.privacy.public_desc"
   | "submit.clone.failed"
-  | "submit.clone.success"
   | "submit.code.agent.tool.metric.title"
   | "submit.code.agent.tool.signature.title"
   | "submit.code.interview.brief.add"
@@ -2292,12 +2114,6 @@ export type MessageKey =
   | "submit.composition.single_label"
   | "submit.composition.title"
   | "submit.composition.workflow_desc"
-  | "submit.cost_ceiling.bracket"
-  | "submit.cost_ceiling.bracket_byok"
-  | "submit.cost_ceiling.cap_label"
-  | "submit.cost_ceiling.cap_unit"
-  | "submit.cost_ceiling.enable"
-  | "submit.cost_ceiling.label"
   | "submit.dataset.column_kind.image"
   | "submit.dataset.column_kind.image_auto_hint"
   | "submit.dataset.column_kind.text"
@@ -2308,13 +2124,19 @@ export type MessageKey =
   | "submit.dataset.library_loaded"
   | "submit.dataset.library_or"
   | "submit.dataset.library_pick"
-  | "submit.dataset.library_picker_subtitle"
   | "submit.dataset.library_picker_title"
   | "submit.dataset.library_search"
   | "submit.dataset.library_search_empty"
+  | "submit.depth.custom"
+  | "submit.draft.reset_failed"
+  | "submit.draft.restore.continue"
+  | "submit.draft.restore.failed"
+  | "submit.draft.restore.gone"
+  | "submit.draft.restore.retry"
+  | "submit.draft.restore.start_new"
+  | "submit.draft.restore.summary"
+  | "submit.draft.restore.title"
   | "submit.metric_calls"
-  | "submit.metric_calls.clear"
-  | "submit.metric_calls.hint"
   | "submit.modelpicker.purpose.all"
   | "submit.modelpicker.purpose.aria"
   | "submit.modelpicker.purpose.multilingual"
@@ -2329,8 +2151,9 @@ export type MessageKey =
   | "submit.module.tagline.flex"
   | "submit.module.tagline.predict"
   | "submit.module.tagline.react"
-  | "submit.module.tagline.workflow"
   | "submit.nav.validating"
+  | "submit.optimizer_settings.customized"
+  | "submit.optimizer_settings.defaults"
   | "submit.pxn.batch_hint"
   | "submit.pxn.parents"
   | "submit.pxn.proposals"
@@ -2343,14 +2166,19 @@ export type MessageKey =
   | "submit.react.section_title"
   | "submit.react.tool_no_description"
   | "submit.react.tool_source_label"
+  | "submit.react.tools_access"
+  | "submit.react.tools_all"
+  | "submit.react.tools_count"
   | "submit.react.tools_list_label"
   | "submit.react.tools_next"
   | "submit.react.tools_prev"
+  | "submit.split.adjust_hint"
+  | "submit.split.adjust_toggle"
+  | "submit.split.empty"
+  | "submit.split.example_count"
   | "submit.split.label_test"
   | "submit.split.label_train"
   | "submit.split.label_val"
-  | "submit.split.mode_auto"
-  | "submit.split.mode_manual"
   | "submit.split.rationale.large"
   | "submit.split.rationale.medium"
   | "submit.split.rationale.small"
@@ -2358,16 +2186,16 @@ export type MessageKey =
   | "submit.split.rationale_aria"
   | "submit.split.rationale_title"
   | "submit.split.recommended_title"
+  | "submit.split.step_desc"
+  | "submit.stage.evaluation"
+  | "submit.stage.goal"
+  | "submit.stage.optimization"
+  | "submit.stage.review"
   | "submit.submit_failed"
-  | "submit.summary.estimate_capped"
-  | "submit.summary.estimate_cost"
-  | "submit.summary.estimate_fee"
-  | "submit.summary.estimate_range"
   | "submit.validation.api_key_required"
   | "submit.validation.code_has_errors"
   | "submit.validation.dataset_before_code"
   | "submit.validation.dataset_required"
-  | "submit.validation.dataset_required_short"
   | "submit.validation.generation_model_required"
   | "submit.validation.input_column_required"
   | "submit.validation.mcp_url_required"
@@ -2377,7 +2205,6 @@ export type MessageKey =
   | "submit.validation.model_required"
   | "submit.validation.module_required"
   | "submit.validation.name_required"
-  | "submit.validation.no_models_available"
   | "submit.validation.output_column_required"
   | "submit.validation.reflection_model_required"
   | "submit.validation.reflection_models_required"
@@ -2387,6 +2214,10 @@ export type MessageKey =
   | "submit.validation.split_too_small"
   | "submit.validation.target_score_invalid"
   | "submit.validation.target_score_requires_val"
+  | "submit.validation.toast.checking_code"
+  | "submit.validation.toast.checking_split"
+  | "submit.validation.toast.passed"
+  | "submit.validation.toast.running"
   | "submit.validation.username_required"
   | "submit.validation.vision_required"
   | "submit.validation.workflow_invalid"
@@ -2416,7 +2247,6 @@ export type MessageKey =
   | "tagger.assist.gate.first_round"
   | "tagger.assist.gate.next_round"
   | "tagger.assist.gate.preparing"
-  | "tagger.assist.gate.round_chip"
   | "tagger.assist.gate.round_subtitle"
   | "tagger.assist.gate.round_title"
   | "tagger.assist.gate.tag_rest"
@@ -2449,6 +2279,10 @@ export type MessageKey =
   | "tagger.assist.retry"
   | "tagger.assist.review.predicting"
   | "tagger.assist.rubric.answer_style"
+  | "tagger.assist.rubric.dataset_hint"
+  | "tagger.assist.rubric.dataset_rows"
+  | "tagger.assist.rubric.dataset_title"
+  | "tagger.assist.rubric.generating"
   | "tagger.assist.rubric.guide_hint"
   | "tagger.assist.rubric.guide_title"
   | "tagger.assist.rubric.rule_add"
@@ -2469,6 +2303,7 @@ export type MessageKey =
   | "tagger.assist.setup.recommended"
   | "tagger.assist.setup.step_label"
   | "tagger.assist.setup.title"
+  | "tagger.assist.synthesize_error"
   | "tagger.library.name_cancel"
   | "tagger.library.name_label"
   | "tagger.library.name_save"
@@ -2476,12 +2311,10 @@ export type MessageKey =
   | "tagger.library.save"
   | "tagger.library.save_failed"
   | "tagger.library.saved"
-  | "tagger.move.confirm_body"
   | "tagger.move.confirm_title"
   | "tagger.move.cta"
   | "tagger.move.failed"
   | "tagger.move.moved"
-  | "tagger.move.subtitle"
   | "tagger.move.title"
   | "tagger.page.title"
   | "tagger.results.back"
@@ -2495,7 +2328,6 @@ export type MessageKey =
   | "tagger.results.recap.ai_auto"
   | "tagger.results.recap.ai_confirmed"
   | "tagger.results.recap.human"
-  | "tagger.results.recap.subtitle"
   | "tagger.results.recap.title"
   | "tagger.results.recap.tokens"
   | "tagger.results.recap.tokens_hint"
@@ -2529,21 +2361,37 @@ export type MessageKey =
   | "tagger.setup.library_loading"
   | "tagger.setup.library_or"
   | "tagger.setup.library_pick"
+  | "tagger.setup.synthetic_hint"
+  | "tagger.setup.synthetic_manual_hint"
+  | "tagger.setup.synthetic_pick"
+  | "tagger.setup.synthetic_source_name"
   | "tagger.upload.parse_failed"
-  | "tooltip.analytics.dataset_size_vs_improvement"
-  | "tooltip.analytics.improvement_per_minute"
-  | "tooltip.analytics.runtime_minutes"
-  | "tooltip.analytics.runtime_vs_gain"
-  | "tooltip.analytics.score_comparison"
+  | "tooltip.analytics.dataset_buckets"
+  | "tooltip.analytics.improvement_histogram"
+  | "tooltip.analytics.leaderboard"
+  | "tooltip.analytics.optimizer_comparison"
+  | "tooltip.analytics.runtime_histogram"
   | "tooltip.analytics.submissions_per_day"
   | "tooltip.code.metric"
   | "tooltip.code.predictions_table"
   | "tooltip.code.signature"
   | "tooltip.code.signature_metric"
   | "tooltip.code.workflow"
+  | "tooltip.config.all_generation_models"
+  | "tooltip.config.all_reflection_models"
+  | "tooltip.config.compile_kwarg"
+  | "tooltip.config.description"
+  | "tooltip.config.model_pairs"
+  | "tooltip.config.module_kwarg"
+  | "tooltip.config.optimizer_kwarg"
   | "tooltip.config.section.data"
+  | "tooltip.config.section.general"
   | "tooltip.config.section.models"
   | "tooltip.config.section.summary"
+  | "tooltip.config.task_model"
+  | "tooltip.config.token_source"
+  | "tooltip.config.tool_access"
+  | "tooltip.config.workflow"
   | "tooltip.data.seed"
   | "tooltip.data.shuffle_explanation"
   | "tooltip.data.split.test"
@@ -2600,10 +2448,16 @@ export type MessageKey =
   | "tooltip.serve.integration_code"
   | "tooltip.serve.section_pair"
   | "tooltip.serve.section_run"
+  | "tooltip.submit.column_roles"
+  | "tooltip.submit.dataset_file"
+  | "tooltip.submit.dataset_size"
   | "tooltip.submit.depth"
   | "tooltip.submit.eval_rounds"
   | "tooltip.submit.merge"
   | "tooltip.submit.metric_calls"
+  | "tooltip.submit.name"
+  | "tooltip.submit.optimization_type"
+  | "tooltip.submit.privacy"
   | "tooltip.submit.pxn_parents"
   | "tooltip.submit.pxn_proposals"
   | "tooltip.submit.reflection_minibatch"
@@ -2613,6 +2467,7 @@ export type MessageKey =
   | "tooltip.tagger.multiclass_categories"
   | "tooltip.tagger.text_column"
   | "tooltip.tagger.upload_file"
+  | "trajectory.a11y.ghost_label"
   | "trajectory.a11y.node_label"
   | "trajectory.a11y.tree_label"
   | "trajectory.chat.recorded_count"
@@ -2697,21 +2552,23 @@ export type MessageKey =
   | "trajectory.scrubber.label"
   | "trajectory.scrubber.live"
   | "tutorial.menu.meta"
-  | "tutorial.menu.subtitle"
   | "tutorial.step.artifact.body"
   | "tutorial.step.artifact.title"
   | "tutorial.step.code.body"
   | "tutorial.step.code.title"
-  | "tutorial.step.dataset_library.body"
-  | "tutorial.step.dataset_library.title"
-  | "tutorial.step.react_tools.body"
-  | "tutorial.step.react_tools.title"
+  | "tutorial.step.dataset_actions.body"
+  | "tutorial.step.dataset_actions.title"
+  | "tutorial.step.dataset_add.body"
+  | "tutorial.step.dataset_add.title"
   | "tutorial.step.result_actions.body"
   | "tutorial.step.result_actions.title"
   | "tutorial.step.settings_providers.body"
   | "tutorial.step.settings_providers.title"
-  | "tutorial.step.workflow_canvas.body"
-  | "tutorial.step.workflow_canvas.title"
+  | "tutorial.step.sidebar_nav.body"
+  | "tutorial.step.sidebar_nav.title"
+  | "tutorial.step.tagger_data.body"
+  | "tutorial.step.tagger_task.body"
+  | "tutorial.step.tagger_task.title"
   | "tutorial.track.data.desc"
   | "tutorial.track.data.name"
   | "tutorial.track.quick.desc"
@@ -2720,24 +2577,6 @@ export type MessageKey =
   | "tutorial.track.results.name"
   | "tutorial.track.workspace.desc"
   | "tutorial.track.workspace.name"
-  | "usage.action.export"
-  | "usage.action.refresh"
-  | "usage.col.day"
-  | "usage.col.model"
-  | "usage.col.runs"
-  | "usage.col.tokens"
-  | "usage.empty.desc"
-  | "usage.empty.title"
-  | "usage.export.done"
-  | "usage.export.empty"
-  | "usage.group.day"
-  | "usage.group.label"
-  | "usage.group.week"
-  | "usage.model.unknown"
-  | "usage.panel.by_model"
-  | "usage.panel.by_run"
-  | "usage.panel.over_time"
-  | "usage.panel.recent"
   | "usage.range.30d"
   | "usage.range.7d"
   | "usage.range.90d"
@@ -2746,12 +2585,6 @@ export type MessageKey =
   | "usage.range.from"
   | "usage.range.label"
   | "usage.range.to"
-  | "usage.series.billed"
-  | "usage.stat.per_run"
-  | "usage.stat.runs"
-  | "usage.stat.spent"
-  | "usage.tokens.count"
-  | "usage.tokens.split"
   | "workflow.agent.editing_graph"
   | "workflow.agent.tool.add_node"
   | "workflow.agent.tool.connect"
@@ -2841,51 +2674,34 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "agent.composer.transcribe_failed": "התמלול נכשל — אפשר לנסות שוב",
   "agent.composer.transcribing": "מתמלל...",
   "agent.error.context_too_long": "השיחה ארוכה מדי עבור חלון ההקשר של המודל — התחילו שיחה חדשה או קצרו את ההודעה",
-  "agent.model_menu.auto": "אוטומטי",
-  "agent.model_menu.auto_hint": "מודל ברירת המחדל המומלץ (GPT-5.6 Terra)",
-  "agent.model_menu.auto_intelligent": "אוטומטי · אינטליגנטי",
-  "agent.model_menu.auto_intelligent_hint": "מודל מהשורה הראשונה בכל תור",
-  "agent.model_menu.desc_claude_fable_5": "המודל החזק ביותר של Anthropic",
-  "agent.model_menu.desc_claude_haiku_4_5": "קרוב לצמרת, מהיר וזול",
-  "agent.model_menu.desc_claude_opus_4_8": "קוד סוכני אמין ומדויק",
-  "agent.model_menu.desc_claude_sonnet_5": "כמעט Opus, במחיר נמוך",
-  "agent.model_menu.desc_deepseek_v4_pro": "מודל פתוח מוביל לסוכני קוד",
-  "agent.model_menu.desc_gemini_3_1_pro": "מולטימודאלי, הקשר של מיליון",
-  "agent.model_menu.desc_gemini_3_6_flash": "כמעט Pro, במהירות פלאש",
-  "agent.model_menu.desc_gpt_5_6_luna": "המהיר והזול במשפחת GPT-5.6",
-  "agent.model_menu.desc_gpt_5_6_sol": "ספינת הדגל של OpenAI לקוד",
-  "agent.model_menu.desc_gpt_5_6_terra": "מאוזן ומשתלם ממשפחת GPT-5.6",
-  "agent.model_menu.desc_grok_4_5": "המודל החכם של SpaceXAI",
-  "agent.model_menu.desc_kimi_k3": "ענק פתוח עם חשיבה תמידית",
-  "agent.model_menu.desc_minimax_m3": "פתוח, מולטימודאלי, הקשר מיליון",
-  "agent.model_menu.desc_muse_spark_1_1": "חשיבה סוכנית מבית Meta",
-  "agent.model_menu.effort_default": "ברירת מחדל",
-  "agent.model_menu.effort_default_hint": "רמת ברירת המחדל של המודל",
   "agent.model_menu.effort_high": "גבוהה",
-  "agent.model_menu.effort_high_hint": "חשיבה מעמיקה יותר למשימות מורכבות",
-  "agent.model_menu.effort_label": "מאמץ",
   "agent.model_menu.effort_low": "נמוכה",
-  "agent.model_menu.effort_low_hint": "התגובות המהירות ביותר",
   "agent.model_menu.effort_max": "מקסימלית",
-  "agent.model_menu.effort_max_hint": "החשיבה העמוקה ביותר שהמודל מציע",
   "agent.model_menu.effort_medium": "בינונית",
-  "agent.model_menu.effort_medium_hint": "איזון בין מהירות לעומק",
   "agent.model_menu.effort_minimal": "מזערית",
-  "agent.model_menu.effort_minimal_hint": "כמעט מיידית, חשיבה מזערית",
   "agent.model_menu.effort_none": "ללא",
-  "agent.model_menu.effort_none_hint": "ללא חשיבה — התגובות המהירות ביותר",
   "agent.model_menu.effort_xhigh": "גבוהה במיוחד",
-  "agent.model_menu.effort_xhigh_hint": "חשיבה מורחבת לבעיות קשות במיוחד",
-  "agent.model_menu.label": "בחירת מודל",
-  "agent.model_menu.model": "מודל",
   "agent.parallel.background_count": "שיחות רצות ברקע: {p1}",
   "agent.parallel.busy_indicator": "השיחה רצה ברקע",
   "agent.parallel.queued": "ממתין בתור…",
+  "agent.tool.list_samples.title": "דאטאסטים לדוגמה",
+  "agent.tool.pause_job.confirm": "השהה/השהי",
+  "agent.tool.pause_job.description": "ההרצה תישמר בנקודת ביקורת והעובד שלה יתפנה. אפשר להמשיך אותה מאותה נקודה.",
+  "agent.tool.pause_job.title": "השהיית {p1}",
+  "agent.tool.restart_job.confirm": "הרץ/הריצי מההתחלה",
+  "agent.tool.restart_job.description": "ההרצה תתחיל מחדש מאפס באותו מזהה, וההתקדמות הקודמת תימחק. הפעולה תופסת משאבי חישוב מחדש.",
+  "agent.tool.restart_job.title": "הרצת {p1} מההתחלה",
+  "agent.tool.resume_job.confirm": "המשך/המשיכי",
+  "agent.tool.resume_job.description": "ההרצה תמשיך מנקודת הביקורת האחרונה ותחזור לתפוס משאבי חישוב.",
+  "agent.tool.resume_job.title": "המשך {p1} מושהית",
+  "agent.tool.stage_sample.confirm": "טען/טעני",
+  "agent.tool.stage_sample.description": "טוען דאטאסט מוכן מהדוגמאות המובנות אל אשף ההגשה.",
+  "agent.tool.stage_sample.title": "טעינת דאטאסט לדוגמה",
+  "agent.tool.validate_datasets.title": "בדיקת חלוקת הדאטאסט",
   "agent.validation.failed": "האימות נכשל",
   "app.meta.description": "מערכת לאופטימיזציית פרומפטים עם DSPy — שיפור ביצועים של מודלי שפה באופן אוטומטי",
   "app.shell.account.aria": "תפריט חשבון",
   "app.shell.account.settings": "הגדרות",
-  "app.shell.account.upgrade": "הוספת קרדיטים",
   "app.shell.concepts_aria": "מדריך מושגים",
   "app.shell.concepts_tooltip": "מה זה Skynet ואיך המערכת משפרת פרומפטים",
   "app.shell.lite.badge": "lite",
@@ -2897,25 +2713,29 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "app.shell.logout": "התנתק/י",
   "app.shell.menu": "תפריט",
   "app.shell.menu_close": "סגור/סגרי את התפריט",
+  "app.shell.search.action.tour": "סיור מודרך",
+  "app.shell.search.actions": "פעולות",
   "app.shell.search.button_aria": "חיפוש בכל המערכת",
   "app.shell.search.command_key": "⌘",
-  "app.shell.search.dashboard": "לוח הבקרה",
   "app.shell.search.description": "חיפוש מהיר בין עמודים, פעולות והגדרות",
   "app.shell.search.k_key": "K",
   "app.shell.search.kw.about": "אודות גרסה version defaults",
   "app.shell.search.kw.account": "חשבון שפה שפות שפת הגדרות העדפות lite language preferences",
   "app.shell.search.kw.admin": "ניהול אחסון storage quota users",
   "app.shell.search.kw.agent": "סוכן פאנל assistant trust memory",
+  "app.shell.search.kw.analytics": "אנליטיקה גרפים סטטיסטיקה מגמות ביצועים analytics charts stats",
   "app.shell.search.kw.api": "אסימון טוקן מפתח api token developer integration",
   "app.shell.search.kw.dashboard": "ריצות, משימות, בית",
   "app.shell.search.kw.data": "דאטאסטים, תיוג, סשנים",
   "app.shell.search.kw.explore": "חיפוש, ציבורי, ריצות",
   "app.shell.search.kw.new_optimization": "הפעלה, פרומפט, מודל, אופטימיזציה",
-  "app.shell.search.kw.privacy": "פרטיות נתונים data analytics cache",
+  "app.shell.search.kw.open_agent": "סוכן עוזר צ'אט שאלה עזרה agent assistant chat",
   "app.shell.search.kw.providers": "ספקים מפתחות מפתח keys openai anthropic",
+  "app.shell.search.kw.sessions": "סשנים תיוג תוויות סימון תיוג אוטומטי טייס אוטומטי רובריקה כיול labeling sessions autotag autopilot rubric",
+  "app.shell.search.kw.sign_out": "יציאה התנתקות sign out logout",
   "app.shell.search.kw.storage": "קבצים, אחסון, מכסה",
   "app.shell.search.kw.tagging": "תיוג תוויות labels copilot autopilot",
-  "app.shell.search.kw.usage": "שימוש עלות טוקנים spend cost tokens",
+  "app.shell.search.kw.tour": "סיור הדרכה מדריך התחלה עזרה tour tutorial guide onboarding",
   "app.shell.search.kw.wizard": "אופטימיזציה מודלים optimization models",
   "app.shell.search.label": "חיפוש בכל המערכת…",
   "app.shell.search.navigate": "ניווט",
@@ -3012,7 +2832,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.app.optimizations.id.page.9": "ייצוא תוצאות",
   "auto.app.optimizations.id.page.literal.1": "לחץ/י להעתקה",
   "auto.app.optimizations.id.page.literal.2": "סריקה",
-  "auto.app.optimizations.id.page.literal.3": "ריצה",
   "auto.app.optimizations.id.page.literal.4": "שכפול",
   "auto.app.optimizations.id.page.literal.5": "בטל/י",
   "auto.app.optimizations.id.page.literal.6": "נקה/נקי היסטוריה",
@@ -3147,11 +2966,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.agent.panel.components.toolscarousel.template.8": "מנתח {p1} כדי לזהות עמודות, סוגים ודוגמאות.",
   "auto.features.agent.panel.components.trusttoggle.1": "מצב אמון · לחץ/י כדי להחליף",
   "auto.features.agent.panel.components.trusttoggle.template.1": "מצב אמון: {p1}. לחץ/י כדי להחליף",
-  "auto.features.agent.panel.components.walletcard.free_grant": "מענק חינם",
-  "auto.features.agent.panel.components.walletcard.paid_balance": "יתרה בתשלום",
-  "auto.features.agent.panel.components.walletcard.recent": "פעילות אחרונה",
-  "auto.features.agent.panel.components.walletcard.summary": "{p1} קרדיטים",
-  "auto.features.agent.panel.components.walletcard.title": "קרדיטים",
   "auto.features.agent.panel.hooks.use.generalist.agent.literal.1": "חושב…",
   "auto.features.agent.panel.hooks.use.generalist.agent.literal.2": "ממתין לאישור…",
   "auto.features.agent.panel.hooks.use.generalist.agent.literal.3": "ממשיך…",
@@ -3285,7 +3099,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.agent.panel.lib.tool.meta.literal.78": "בדיקת זוג",
   "auto.features.agent.panel.lib.tool.meta.literal.79": "ספריית דאטאסטים",
   "auto.features.agent.panel.lib.tool.meta.literal.8": "הרץ/הריצי",
-  "auto.features.agent.panel.lib.tool.meta.literal.80": "מציג את יתרת הקרדיטים שלך, המסלול הנוכחי והשימוש האחרון.",
   "auto.features.agent.panel.lib.tool.meta.literal.81": "מציג את סשני התיוג שלך וכמה דוגמאות תויגו בכל אחד.",
   "auto.features.agent.panel.lib.tool.meta.literal.82": "מדפדף בדאטאסטים השמורים בספרייה שלך כדי לעשות שימוש חוזר באחד מהם.",
   "auto.features.agent.panel.lib.tool.meta.literal.83": "פותח בורר בצ׳אט לשימוש חוזר בדאטאסט ששמרת — בלי להעלות מחדש.",
@@ -3398,13 +3211,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.analyticstab.1": "גרפים בטעינה…",
   "auto.features.dashboard.components.analyticstab.11": "זמן ריצה ממוצע",
   "auto.features.dashboard.components.analyticstab.15": "שיפור מקסימלי",
-  "auto.features.dashboard.components.analyticstab.20": "סקירת ביצועים",
-  "auto.features.dashboard.components.analyticstab.21": "ציונים לפי ",
   "auto.features.dashboard.components.analyticstab.22": "סטטוסים",
   "auto.features.dashboard.components.analyticstab.24": "סוג ",
-  "auto.features.dashboard.components.analyticstab.25": "יעילות וזמני ריצה",
   "auto.features.dashboard.components.analyticstab.26": "התפלגות זמני ריצה",
-  "auto.features.dashboard.components.analyticstab.27": "יעילות: שיפור לדקה",
   "auto.features.dashboard.components.analyticstab.28": "גודל ",
   "auto.features.dashboard.components.analyticstab.29": " מול שיפור",
   "auto.features.dashboard.components.analyticstab.3": "נקה/נקי הכול",
@@ -3412,7 +3221,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.analyticstab.33": "מודלים פופולריים",
   "auto.features.dashboard.components.analyticstab.4": "אחוז הצלחה",
   "auto.features.dashboard.components.analyticstab.8": "שיפור ממוצע",
-  "auto.features.dashboard.components.analyticstab.literal.1": "הסר/הסירי את הסינון",
   "auto.features.dashboard.components.analyticstab.literal.2": "הסר/הסירי את הסינון",
   "auto.features.dashboard.components.analyticstab.literal.4": "הסר/הסירי את הסינון",
   "auto.features.dashboard.components.analyticstab.literal.5": "הסר/הסירי את הסינון",
@@ -3427,7 +3235,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.dashboardheader.4": "פעילות",
   "auto.features.dashboard.components.dashboardheader.6": "הצליחו",
   "auto.features.dashboard.components.dashboardheader.7": "נכשלו",
-  "auto.features.dashboard.components.dashboardview.1": "סטטיסטיקות",
+  "auto.features.dashboard.components.dashboardview.1": "לוח שימוש",
   "auto.features.dashboard.components.deletedialogs.1": "למחוק ",
   "auto.features.dashboard.components.deletedialogs.2": " אחת? לא ניתן לבטל פעולה זו.",
   "auto.features.dashboard.components.deletedialogs.3": "למחוק ",
@@ -3439,7 +3247,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.jobstab.1": " סינונים פעילים",
   "auto.features.dashboard.components.jobstab.11": "הקודם",
   "auto.features.dashboard.components.jobstab.12": "הבא",
-  "auto.features.dashboard.components.jobstab.2": "נקה/נקי הכול",
   "auto.features.dashboard.components.jobstab.3": " תוצאות",
   "auto.features.dashboard.components.jobstab.4": "עדיין אין ",
   "auto.features.dashboard.components.jobstab.5": "הריצה הראשונה שלכם תופיע כאן",
@@ -3473,7 +3280,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.optimizations.components.codetab.3": "פרומפט התחלתי",
   "auto.features.optimizations.components.codetab.4": "פונקציית מדידה",
   "auto.features.optimizations.components.codetab.5": "פרומפט משופר",
-  "auto.features.optimizations.components.codetab.6": "דוגמאות שהוטמעו בפרומפט",
   "auto.features.optimizations.components.configtab.1": "מודול",
   "auto.features.optimizations.components.configtab.10": "אימון",
   "auto.features.optimizations.components.configtab.11": "אימות",
@@ -3657,37 +3463,15 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.optimizations.components.pairdetailview.literal.3": "נקה/נקי היסטוריה",
   "auto.features.optimizations.components.servechat.1": "הרצת התוכנית המשופרת",
   "auto.features.optimizations.components.servechat.2": "מלא/י את שדות הקלט למטה ולחץ/י על שליחה.",
-  "auto.features.optimizations.components.servechat.3": "דוגמה ",
   "auto.features.optimizations.components.servechat.4": "בטל/י",
   "auto.features.optimizations.components.servechat.5": "שלח/שלחי",
   "auto.features.optimizations.components.servechat.6": "חושב",
   "auto.features.optimizations.components.servechat.7": "סגור/סגרי",
   "auto.features.optimizations.components.servechat.literal.1": "ערוך/ערכי ושלח/שלחי שוב",
   "auto.features.optimizations.components.servechat.literal.2": "שלח/שלחי",
-  "auto.features.optimizations.components.stageinfomodal.1": "תוצאה",
-  "auto.features.optimizations.components.stageinfomodal.2": " על סט הבדיקה",
-  "auto.features.optimizations.components.stageinfomodal.3": "תוצאה סופית",
-  "auto.features.optimizations.components.stageinfomodal.4": "משופרת",
-  "auto.features.optimizations.components.stageinfomodal.5": "מ-",
-  "auto.features.optimizations.components.ui.primitives.literal.1": "העתק/העתיקי",
-  "auto.features.optimizations.components.ui.primitives.literal.2": "העתק/העתיקי",
   "auto.features.optimizations.constants.literal.1": "אימות",
   "auto.features.optimizations.constants.literal.2": "חלוקת דאטאסט",
   "auto.features.optimizations.constants.literal.3": "הערכה",
-  "auto.features.optimizations.constants.literal.4": "אימות הקלט",
-  "auto.features.optimizations.constants.literal.5": "חלוקת הדאטאסט",
-  "auto.features.optimizations.constants.literal.6": "הערכה סופית",
-  "auto.features.optimizations.constants.template.1": "בדיקה שכל הרכיבים תקינים לפני תחילת ה{p1}.",
-  "auto.features.optimizations.constants.template.10": "הרצת ה{p1} המשופרת על סט הבדיקה.",
-  "auto.features.optimizations.constants.template.11": "ה{p1} המשופרת רצה על סט הבדיקה — אותן דוגמאות שנמדדו בשלב ה{p2}. ההשוואה בין הציונים מראה את ה{p3} בפועל. אם ה{p4} המשופרת גרועה יותר מהמקורית, המערכת שומרת את ה{p5} המקורית.",
-  "auto.features.optimizations.constants.template.2": "ה{p1} של הקלט והפלט נבדקת מול מיפוי העמודות ב{p2}. {p3} נטענת ומאומתת. ה{p4} וה{p5} נבדקים לתאימות. אם נמצאת שגיאה, ה{p6} נעצרת כאן.",
-  "auto.features.optimizations.constants.template.3": "ה{p1} מחולק לשלושה סטים: {p2}, {p3} ו{p4}.",
-  "auto.features.optimizations.constants.template.4": "השורות מעורבבות באקראי עם זרע קבוע כדי להבטיח תוצאות זהות בכל {p1}. אחר כך הן מחולקות לפי היחסים שהוגדרו. סט הבדיקה נשמר בצד ולא משתתף בתהליך ה{p2}.",
-  "auto.features.optimizations.constants.template.5": "מדידת {p1}",
-  "auto.features.optimizations.constants.template.6": "הרצת ה{p1} ללא {p2} על סט הבדיקה.",
-  "auto.features.optimizations.constants.template.7": "ה{p1} רצה כפי שהיא — ללא הנדסת פרומפטים או דוגמאות — על כל {p2} בסט הבדיקה. {p3} מחשבת {p4} לכל {p5}, והממוצע הוא {p6}. ציון זה משמש כנקודת השוואה ל{p7} שה{p8} מביאה.",
-  "auto.features.optimizations.constants.template.8": "ה{p1} משפר את ה{p2} באמצעות סט האימון.",
-  "auto.features.optimizations.constants.template.9": "ה{p1} מנסה שילובים שונים של ניסוחי פרומפט, דוגמאות נבחרות וכללי מענה כדי למקסם את ציון המדידה על סט האימות. כל ניסיון מריץ את ה{p2} עם הגדרה שונה ומודד את התוצאה. בסיום נבחרת הגרסה הטובה ביותר.",
   "auto.features.sidebar.components.sidebar.10": "מחק/י",
   "auto.features.sidebar.components.sidebar.3": "מחיקת ",
   "auto.features.sidebar.components.sidebar.4": "האם למחוק את ה",
@@ -3709,7 +3493,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.sidebar.lib.group.jobs.literal.1": "מוצמדות",
   "auto.features.sidebar.lib.group.jobs.literal.2": "פעילות",
   "auto.features.sidebar.lib.group.jobs.literal.6": "ללא תאריך",
-  "auto.features.submit.components.modelconfigmodal.1": "כל המודלים הזמינים",
   "auto.features.submit.components.modelconfigmodal.10": "ביטול",
   "auto.features.submit.components.modelconfigmodal.11": "שמור/שמרי",
   "auto.features.submit.components.modelconfigmodal.2": "הגדרות אחרונות",
@@ -3719,20 +3502,12 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.modelconfigmodal.8": "Thinking",
   "auto.features.submit.components.modelconfigmodal.9": "רמת חשיבה",
   "auto.features.submit.components.modelconfigmodal.literal.1": "הגדרות מודל",
-  "auto.features.submit.components.modelconfigmodal.literal.2": "אין מודלים זמינים — הוסף/הוסיפי מפתח API",
   "auto.features.submit.components.modelconfigmodal.literal.3": "בחר/י מודל…",
   "auto.features.submit.components.modelconfigmodal.recent.remove": "הסרת {model} מההגדרות האחרונות",
-  "auto.features.submit.components.modelconfigmodal.section.connection": "חיבור מותאם אישית (אופציונלי)",
   "auto.features.submit.components.modelconfigmodal.section.parameters": "פרמטרים",
-  "auto.features.submit.components.modelconfigmodal.template.1": "ירוץ {p1} לכל {p2} בקטלוג · {p3} כרגע",
-  "auto.features.submit.components.modelpicker.1": "רענן/י",
-  "auto.features.submit.components.modelpicker.2": "לא ניתן לאתר מודלים מ-",
   "auto.features.submit.components.modelpicker.3": "לא נמצאו מודלים",
   "auto.features.submit.components.modelpicker.literal.1": "בחר/י מודל…",
-  "auto.features.submit.components.modelpicker.literal.2": "שגיאה באיתור מודלים",
-  "auto.features.submit.components.modelpicker.literal.3": "רענן/י מודלים מהשרת",
   "auto.features.submit.components.modelpicker.literal.4": "חיפוש מודלים…",
-  "auto.features.submit.components.modelpicker.template.1": "מודלים שהתגלו בשרת שלך",
   "auto.features.submit.components.modelpicker.template.2": "{p1} · {p2}",
   "auto.features.submit.components.steps.basicsstep.1": "פרטים בסיסיים",
   "auto.features.submit.components.steps.basicsstep.2": "שם וסוג ",
@@ -3782,20 +3557,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.steps.datasetstep.literal.2": "קלט",
   "auto.features.submit.components.steps.datasetstep.literal.3": "פלט",
   "auto.features.submit.components.steps.datasetstep.literal.4": "התעלם",
-  "auto.features.submit.components.steps.modelstep.1": "כל המודלים הזמינים",
-  "auto.features.submit.components.steps.modelstep.10": "API key",
-  "auto.features.submit.components.steps.modelstep.12": "חיבור לא מוצפן — API key יישלח ללא הצפנה. השתמש/י ב-HTTPS בסביבת ייצור.",
   "auto.features.submit.components.steps.modelstep.13": "מודלים",
   "auto.features.submit.components.steps.modelstep.14": "אין מודלים זמינים בקטלוג — הוסף/הוסיפי מפתח API של ספק כדי להפעיל סריקה.",
   "auto.features.submit.components.steps.modelstep.15": "מודלי משוב",
-  "auto.features.submit.components.steps.modelstep.2": "ירוץ ",
-  "auto.features.submit.components.steps.modelstep.3": " לכל ",
-  "auto.features.submit.components.steps.modelstep.4": " בקטלוג · ",
-  "auto.features.submit.components.steps.modelstep.5": " כרגע",
   "auto.features.submit.components.steps.modelstep.6": "מודלי שפה",
   "auto.features.submit.components.steps.modelstep.7": "בחר/י אילו מודלים יריצו את ה",
-  "auto.features.submit.components.steps.modelstep.8": "Base URL",
-  "auto.features.submit.components.steps.modelstep.literal.1": "הסר/הסירי",
   "auto.features.submit.components.steps.modelstep.literal.7": "הוסף/הוסיפי",
   "auto.features.submit.components.steps.modelstep.literal.8": "הוסף/הוסיפי",
   "auto.features.submit.components.steps.modelstep.template.2": "{p1} חדש",
@@ -3807,17 +3573,15 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.steps.paramsstep.14": "מקסימום סבבי הערכה",
   "auto.features.submit.components.steps.paramsstep.15": "מיזוג מועמדים",
   "auto.features.submit.components.steps.paramsstep.16": "עצירה כשהציון באימות מגיע ל־",
-  "auto.features.submit.components.steps.paramsstep.2": "חלוקת הדאטאסט והגדרות החיפוש",
+  "auto.features.submit.components.steps.paramsstep.2": "הגדרות החיפוש",
   "auto.features.submit.components.steps.paramsstep.4": "חלוקת ",
   "auto.features.submit.components.steps.paramsstep.5": "סכום: ",
   "auto.features.submit.components.steps.paramsstep.6": "אימון",
   "auto.features.submit.components.steps.paramsstep.7": "אימות",
   "auto.features.submit.components.steps.paramsstep.8": "בדיקה",
-  "auto.features.submit.components.steps.paramsstep.9": "הגדרות נוספות",
   "auto.features.submit.components.steps.paramsstep.literal.1": "קל",
   "auto.features.submit.components.steps.paramsstep.literal.2": "בינוני",
   "auto.features.submit.components.steps.paramsstep.literal.3": "מעמיק",
-  "auto.features.submit.components.steps.summarystep.1": "כל המודלים הזמינים",
   "auto.features.submit.components.steps.summarystep.10": " עמודות",
   "auto.features.submit.components.steps.summarystep.11": "מיפוי עמודות",
   "auto.features.submit.components.steps.summarystep.12": "חלוקת ",
@@ -3828,7 +3592,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.steps.summarystep.17": "סה״כ זוגות",
   "auto.features.submit.components.steps.summarystep.18": "מודלי משוב",
   "auto.features.submit.components.steps.summarystep.19": "רמת החיפוש",
-  "auto.features.submit.components.steps.summarystep.2": " מודלים בקטלוג",
   "auto.features.submit.components.steps.summarystep.20": "גודל מדגם למשוב",
   "auto.features.submit.components.steps.summarystep.21": "מקסימום סבבי הערכה",
   "auto.features.submit.components.steps.summarystep.22": "מיזוג מועמדים",
@@ -3861,10 +3624,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.submitnav.2": "המשך/המשיכי",
   "auto.features.submit.components.submitnav.3": "נשלח…",
   "auto.features.submit.components.submitnav.4": "שלח/י ",
-  "auto.features.submit.constants.literal.1": "פרטים בסיסיים",
-  "auto.features.submit.constants.literal.2": "פרמטרים",
-  "auto.features.submit.constants.literal.3": "קוד",
-  "auto.features.submit.constants.literal.4": "סיכום ושליחה",
   "auto.features.submit.hooks.use.code.agent.literal.1": "חושב…",
   "auto.features.submit.hooks.use.code.agent.literal.2": "כותב פרומפט (Signature)…",
   "auto.features.submit.hooks.use.code.agent.literal.3": "כותב פונקציית מדידה…",
@@ -3937,15 +3696,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.101": "תקציב חיפוש",
   "auto.features.tutorial.components.concepts.guide.literal.102": "בחרו שיטת תקציב אחת בלבד ל-GEPA. ההגדרות auto=\"light\", auto=\"medium\" ו-auto=\"heavy\" קובעות תקציבי חיפוש הולכים וגדלים; max_full_evals ו-max_metric_calls קובעים מגבלות מפורשות. התחילו עם auto=\"light\" עד שהמשימה, הנתונים והמדד יעברו אימות.",
   "auto.features.tutorial.components.concepts.guide.literal.103": "השתמשו ב-auto=\"light\" לבדיקה מהירה של ההגדרות, ב-auto=\"medium\" לחיפוש רחב יותר, וב-auto=\"heavy\" רק כאשר קריאות המודל והעלות הנוספת מצדיקות זאת.",
-  "auto.features.tutorial.components.concepts.guide.literal.104": "\"light\"",
-  "auto.features.tutorial.components.concepts.guide.literal.105": " להרצה ראשונה מהירה ולבדיקת ההגדרה; ",
-  "auto.features.tutorial.components.concepts.guide.literal.106": "\"medium\"",
-  "auto.features.tutorial.components.concepts.guide.literal.107": " אחרי שהדאטאסט והמשוב יציבים ורוצים איזון בין איכות לעלות; ",
-  "auto.features.tutorial.components.concepts.guide.literal.108": "\"heavy\"",
-  "auto.features.tutorial.components.concepts.guide.literal.109": " כשיש סיבה עסקית לחיפוש רחב יותר ותקציב זמן וקריאות מתאים ",
   "auto.features.tutorial.components.concepts.guide.literal.11": "תוכן עניינים",
-  "auto.features.tutorial.components.concepts.guide.literal.110": "(מומלץ רק אחרי ריצה קטנה שהצליחה)",
-  "auto.features.tutorial.components.concepts.guide.literal.111": "חלופה ל-",
   "auto.features.tutorial.components.concepts.guide.literal.112": "הגדר את max_full_evals למגבלה על הערכות שלמות או את max_metric_calls למגבלה על שיחות מדדיות. מצבים ידניים אלה מקלים על ההשוואה בין ריצות חוזרות ונשנות תחת אותו תקציב.",
   "auto.features.tutorial.components.concepts.guide.literal.113": "חיפוש מועמדים",
   "auto.features.tutorial.components.concepts.guide.literal.114": "use_merge מאפשר ל-GEPA לשלב רכיבי הנחיות שימושיים משני מועמדים. Skynet מאפשר זאת כברירת מחדל.",
@@ -3953,22 +3704,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.116": "בקרות עצירה ומשאבים",
   "auto.features.tutorial.components.concepts.guide.literal.117": "pxn_parents ו-pxn_proposals מרחיבים את דגימת המועמדים. ערכים מעל 1 מגדילים את העבודה ונשלחים רק כאשר דגימת PxN מופעלת.",
   "auto.features.tutorial.components.concepts.guide.literal.118": "target_score מפסיק את GEPA כאשר ציון האימות מגיע לאחוז שנבחר. ברירת המחדל של Skynet היא 100%.",
-  "auto.features.tutorial.components.concepts.guide.literal.120": " (משמש גם לזיהוי דוגמאות מושלמות שאפשר לדלג עליהן בשלב המשוב).",
   "auto.features.tutorial.components.concepts.guide.literal.121": "temperature ו-max_tokens מאוחסנים עבור כל דגם. ברירת המחדל של Skynet היא temperature 0.7 ו-max_tokens 1024 אלא אם תשנה אותם.",
   "auto.features.tutorial.components.concepts.guide.literal.122": "דגמים וחיבורים",
-  "auto.features.tutorial.components.concepts.guide.literal.123": "חשוב לדעת",
   "auto.features.tutorial.components.concepts.guide.literal.124": "token_source מוגדר תמיד כ-BYOK, וההרצה משתמשת במפתח הספק השמור של המשתמש.",
-  "auto.features.tutorial.components.concepts.guide.literal.126": ".",
   "auto.features.tutorial.components.concepts.guide.literal.127": "reflection_model_config נדרש עבור GEPA. מודל המשוב קורא מסלולי הרצה ומשוב ומציע הנחיות מתוקנות.",
   "auto.features.tutorial.components.concepts.guide.literal.128": "מודול, נתונים והערכה",
   "auto.features.tutorial.components.concepts.guide.literal.129": "מודול בודד או זרימת עבודה",
   "auto.features.tutorial.components.concepts.guide.literal.130": "בחר מודול בודד עבור שלב DSPy אחד או זרימת עבודה עבור גרף מכוון של מודולים, טרנספורמציות, כניסות, פלטים וכלים MCP.",
   "auto.features.tutorial.components.concepts.guide.literal.131": "Predict הוא הנתיב הקצר ביותר מכניסות החתימה ליציאות שלה.",
-  "auto.features.tutorial.components.concepts.guide.literal.132": " מה המודל מקבל בכל דוגמה, למשל שאלה, אימייל, ביקורת או צילום.",
   "auto.features.tutorial.components.concepts.guide.literal.133": "Chain of Thought מוסיף שדה חשיבה לפני הפלט הסופי.",
-  "auto.features.tutorial.components.concepts.guide.literal.134": " מה המודל צריך להחזיר, למשל קטגוריה, תשובה קצרה, הסבר או אובייקט JSON.",
   "auto.features.tutorial.components.concepts.guide.literal.135": "ReAct משתמש בכלים משרת MCP חי ומחזיר את השדות המוצהרים על ידי החתימה.",
-  "auto.features.tutorial.components.concepts.guide.literal.136": " תיאור קצר ומדויק של העבודה שהמודל צריך לבצע, כולל מגבלות פורמט חשובות.",
   "auto.features.tutorial.components.concepts.guide.literal.137": "Flex משתמש ביישום המודול הגמיש של DSPy כאשר הוא זמין בזמן הריצה שנבחר.",
   "auto.features.tutorial.components.concepts.guide.literal.138": "זרימת עבודה מקצה חתימה והגדרות מודל לכל צומת מודול. חיפוש רשת זמין עבור מודולים בודדים, לא עבור זרימות עבודה.",
   "auto.features.tutorial.components.concepts.guide.literal.139": "חתימה ומיפוי עמודות",
@@ -3986,16 +3731,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.15": "תיאור",
   "auto.features.tutorial.components.concepts.guide.literal.150": "ריצה יכולה להשתמש בשורות שנשלחו עם הבקשה, העלאה מדורגת או מערך נתונים שמור מהספרייה. כל שורה חייבת לספק את התשומות הממופות ואת הפלטים הצפויים.",
   "auto.features.tutorial.components.concepts.guide.literal.151": "במערך נתונים עם פחות מ-30 דוגמאות, החלוקה המומלצת מקצה את כל השורות לאימון. בין 30 ל-79 דוגמאות היא מקצה 80% לאימון ו-20% לאימות. מ-80 דוגמאות ואילך היא מקצה 60% לאימון, 20% לאימות ו-20% לבדיקה. ב-300 דוגמאות ומעלה, האימות מוגבל ל-200 שורות והבדיקה ל-500 שורות. במצב ידני אפשר לערבב את סדר השורות ולהשתמש שוב ב-seed קבוע.",
-  "auto.features.tutorial.components.concepts.guide.literal.152": " עם ",
-  "auto.features.tutorial.components.concepts.guide.literal.153": " וגם ",
   "auto.features.tutorial.components.concepts.guide.literal.154": "מדד ו-preflight",
   "auto.features.tutorial.components.concepts.guide.literal.155": "מדד GEPA מקבל את gold, pred, trace, pred_name ו-pred_trace. הוא יכול להחזיר ציון מספרי, אך dspy.Prediction עם score ו-feedback מספק למודל המשוב מידע נוסף.",
-  "auto.features.tutorial.components.concepts.guide.literal.156": " ציון ",
-  "auto.features.tutorial.components.concepts.guide.literal.157": ", עם משוב שמסביר שהפלט תואם לפלט הרצוי.",
-  "auto.features.tutorial.components.concepts.guide.literal.158": "תשובה חלקית:",
-  "auto.features.tutorial.components.concepts.guide.literal.159": ", עם משוב שמפרט מה נכון, מה חסר, ואיזה כלל היה עוזר.",
   "auto.features.tutorial.components.concepts.guide.literal.16": "מהגדרת משימה לתוכנית הניתנת להרצה",
-  "auto.features.tutorial.components.concepts.guide.literal.160": "תשובה שגויה:",
   "auto.features.tutorial.components.concepts.guide.literal.161": "לפני הוצאת תקציב האופטימיזציה, Skynet בודק את המדד מול חיזוי מושלם. מדד כשל או לא תואם עוצר את הריצה במהלך האימות.",
   "auto.features.tutorial.components.concepts.guide.literal.162": "אמת את החתימה או זרימת העבודה, מיפוי העמודות, עמודות הנתונים, המדדים, המודלים וציון היעד",
   "auto.features.tutorial.components.concepts.guide.literal.163": "טען את מערך הנתונים המוטבע, המבוים או השמור וצור דוגמאות של DSPy",
@@ -4011,27 +3749,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.172": "שדות בקשה",
   "auto.features.tutorial.components.concepts.guide.literal.173": "הדפדפן בונה את אותה בקשה המקובלת על ידי API. שדות אלה קובעים את התוכנית, הנתונים, המודלים, ההערכה ומגבלות החיפוש.",
   "auto.features.tutorial.components.concepts.guide.literal.174": "השתמש ב-module_name עבור Predict, Chain of Thought, ReAct או Flex. הגשת זרימת עבודה שולחת במקום זאת את workflow_definition ומאומתת כגרף מכוון.",
-  "auto.features.tutorial.components.concepts.guide.literal.175": "\"dspy.ChainOfThought\"",
-  "auto.features.tutorial.components.concepts.guide.literal.176": " (מוסיף שדה ",
-  "auto.features.tutorial.components.concepts.guide.literal.177": " לפני הפלט; למשימות פשוטות, קצרות ומהירות אפשר להשתמש ב-dspy.Predict).",
-  "auto.features.tutorial.components.concepts.guide.literal.178": "שם האופטימיזר (",
-  "auto.features.tutorial.components.concepts.guide.literal.179": "\"dspy.GEPA\"",
   "auto.features.tutorial.components.concepts.guide.literal.18": "Skynet מייעל תוכנית DSPy: חתימה, מודול או זרימת עבודה, וההוראות וההדגמות המשמשות את קריאות מודל השפה שלה.",
   "auto.features.tutorial.components.concepts.guide.literal.180": "מודול בודד שולח signature_code. זרימת עבודה שומרת חתימות בצמתי המודול שלו.",
   "auto.features.tutorial.components.concepts.guide.literal.181": "metric_code נדרש עבור כל אופטימיזציה, כולל ReAct וזרימות עבודה.",
   "auto.features.tutorial.components.concepts.guide.literal.182": "ספק מקור נתונים אחד בדיוק: שורות מוטבעות, מזהה מערך נתונים מבוים או מזהה מקור ספרייה שמור.",
   "auto.features.tutorial.components.concepts.guide.literal.183": "column_mapping מחבר שדות חתימה לעמודות מערך נתונים ונבדק לפני שהעבודה מועברת בתור.",
-  "auto.features.tutorial.components.concepts.guide.literal.184": " ובדאטאסט העמודה נקראת ",
   "auto.features.tutorial.components.concepts.guide.literal.185": "model_config בוחר את מודל היצירה ושומר את temperature, את מגבלת הטוקנים, את הספק ואת מקור החיוב שלו.",
   "auto.features.tutorial.components.concepts.guide.literal.186": "reflection_model_config בוחר את מודל המשוב שסוקר את מסלולי ההרצה של GEPA ומציע שינויים.",
-  "auto.features.tutorial.components.concepts.guide.literal.187": "חובה ב-GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.188": "optimizer_kwargs מכיל מצב תקציב אחד ואת בקרות המיזוג האופציונליות, מיני-אצט, PxN, ציון יעד ותקרת עלות.",
-  "auto.features.tutorial.components.concepts.guide.literal.189": "auto=\"heavy\"",
   "auto.features.tutorial.components.concepts.guide.literal.19": "משקלי הדגם נשארים ללא שינוי. GEPA מחפש את רכיבי הטקסט של התוכנית ומעריך כל מועמד עם המדד שלך.",
   "auto.features.tutorial.components.concepts.guide.literal.190": "split_fractions, shuffle ו-seed שולטים ברכבת, באימות ובפיצול הבדיקה כאשר אינך משתמש בפיצול המומלץ.",
-  "auto.features.tutorial.components.concepts.guide.literal.191": "[0.6, 0.2, 0.2]",
-  "auto.features.tutorial.components.concepts.guide.literal.192": "(אופציונלי) האם לערבב את הדוגמאות לפני החלוקה. הפעל/הפעילי כשקובץ המקור מסודר לפי זמן, לקוח או קטגוריה.",
-  "auto.features.tutorial.components.concepts.guide.literal.193": "(אופציונלי) seed קבוע שמאפשר לשחזר את אותה חלוקה ואותו ערבוב בין ריצות.",
   "auto.features.tutorial.components.concepts.guide.literal.194": "נקודות קצה מפתח API",
   "auto.features.tutorial.components.concepts.guide.literal.195": "הדפדפן והלקוחות החיצוניים משתמשים באותן נקודות קצה של שירות:",
   "auto.features.tutorial.components.concepts.guide.literal.196": "כתובת",
@@ -4042,18 +3769,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.20": "בחר את צורת התוכנית",
   "auto.features.tutorial.components.concepts.guide.literal.200": "קרא את התצורה המלאה, הסטטוס, הציונים, השלבים והמטא נתונים של התוכנית השמורה עבור ריצה אחת.",
   "auto.features.tutorial.components.concepts.guide.literal.201": "בצע בדיקה אחת של זרימת עבודה מחויבת ללא אופטימיזציה כדי שתוכל לבחון את פלטי הצומת ואת התנהגות הכלים.",
-  "auto.features.tutorial.components.concepts.guide.literal.202": "לוגים של הריצה, כולל סינון לפי רמה ומקור.",
   "auto.features.tutorial.components.concepts.guide.literal.203": "שידור חי של התקדמות ואירועי יומן דרך server-sent events.",
   "auto.features.tutorial.components.concepts.guide.literal.204": "הורד את תוכנית ההפעלה DSPy המתמשכת.",
-  "auto.features.tutorial.components.concepts.guide.literal.205": "תוצאות סריקת המודלים כאשר ההרצה היא Grid Search.",
-  "auto.features.tutorial.components.concepts.guide.literal.206": "ביטול הרצה פעילה.",
-  "auto.features.tutorial.components.concepts.guide.literal.207": "שכפול הגדרות הרצה כבסיס להרצה חדשה, למשל כדי להחליף מודל או תקציב.",
-  "auto.features.tutorial.components.concepts.guide.literal.208": "ניסיון חוזר להרצה שנכשלה בלי לבנות את הבקשה מחדש.",
   "auto.features.tutorial.components.concepts.guide.literal.209": "קרא את שדות הקלט הצפויים על ידי התוכנית השמורה.",
   "auto.features.tutorial.components.concepts.guide.literal.21": "ריצה של מודול בודד משתמשת בחתימה אחת ובאחד מארבעה סוגי מודול:",
   "auto.features.tutorial.components.concepts.guide.literal.210": "הפעל את התוכנית השמורה על קלט חדש.",
-  "auto.features.tutorial.components.concepts.guide.literal.211": "בדיקת תקינות השרת.",
-  "auto.features.tutorial.components.concepts.guide.literal.212": "מצב התור הכללי.",
   "auto.features.tutorial.components.concepts.guide.literal.213": "הפעל סטטוסים",
   "auto.features.tutorial.components.concepts.guide.literal.214": "כל סטטוס מזהה את השלב הנוכחי או את הפעולה הנדרשת:",
   "auto.features.tutorial.components.concepts.guide.literal.215": "מחכה לעובד פנוי.",
@@ -4064,21 +3784,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.22": "Predict שולח את שדות החתימה לדגם ומחזיר את הפלטים המוצהרים.",
   "auto.features.tutorial.components.concepts.guide.literal.220": "בדוק את ההגדרה לפני הגדלת התקציב",
   "auto.features.tutorial.components.concepts.guide.literal.221": "בדיקות מערכי נתונים",
-  "auto.features.tutorial.components.concepts.guide.literal.222": "איכות מעל כמות:",
   "auto.features.tutorial.components.concepts.guide.literal.223": "השתמש בדוגמאות עקביות ונבדקות שהתפוקות הצפויות שלהן תואמות את ההתנהגות שאתה רוצה בייצור.",
-  "auto.features.tutorial.components.concepts.guide.literal.224": "גיוון:",
   "auto.features.tutorial.components.concepts.guide.literal.225": "כלול מקרים נפוצים, מקרים קצה, כניסות ארוכות, כניסות קצרות, תוויות דומות ופורמטים לא מושלמים.",
-  "auto.features.tutorial.components.concepts.guide.literal.226": "ניקיון:",
   "auto.features.tutorial.components.concepts.guide.literal.227": "הסר כפילויות, תוויות סותרות ושורות שהפלט הצפוי שלהן אינו ברור.",
-  "auto.features.tutorial.components.concepts.guide.literal.228": "ייצוגיות:",
   "auto.features.tutorial.components.concepts.guide.literal.229": "שמור את הפורמטים של מערך הנתונים ואת חלוקת המקרים קרובים לתעבורה שהתוכנית השמורה תקבל.",
-  "auto.features.tutorial.components.concepts.guide.literal.23": "\"סכם את הכתבה הבאה.\"",
   "auto.features.tutorial.components.concepts.guide.literal.230": "בדיקות מדד, ספק ועלויות",
-  "auto.features.tutorial.components.concepts.guide.literal.231": "משוב מפורט:",
   "auto.features.tutorial.components.concepts.guide.literal.232": "הפעל את המדד מול מספר תחזיות ידועות ואשר שציונים גבוהים יותר תואמים תוצאות טובות יותר של משימה.",
-  "auto.features.tutorial.components.concepts.guide.literal.233": "משוב שימושי:",
   "auto.features.tutorial.components.concepts.guide.literal.234": "החזר משוב ספציפי שממנה את המצב הכושל או את ההוראה שתשפר את התשובה.",
-  "auto.features.tutorial.components.concepts.guide.literal.235": "ציון מדורג:",
   "auto.features.tutorial.components.concepts.guide.literal.236": "התחל עם auto=\"light\", ואז העלה את תקציב ה-GEPA רק לאחר אימות והרצה קטנה מצליחה.",
   "auto.features.tutorial.components.concepts.guide.literal.237": "ודא שכל מודל מנוהל או BYOK זמין, בעל מכסת ספקים מספקת ומשתמש במגבלה המיועדת של temperature, P העליון והאסימון.",
   "auto.features.tutorial.components.concepts.guide.literal.238": "כשלים נפוצים",
@@ -4091,10 +3803,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.244": "הפעל את המדד כנגד חיזוי מושלם ואשר שהוא מקבל את חמשת הארגומנטים GEPA ומחזיר ציון חוקי.",
   "auto.features.tutorial.components.concepts.guide.literal.245": "הספק דוחה שיחות דגם",
   "auto.features.tutorial.components.concepts.guide.literal.246": "בדוק את מזהה הדגם, מפתח הספק, כתובת האתר הבסיסית, מגבלת התעריף ומכסת הספקים הנותרת.",
-  "auto.features.tutorial.components.concepts.guide.literal.247": " לניסוי ראשון; אם ספק המודל מגביל מקביליות או מחזיר שגיאות rate limit, הורד/הורידי את ",
   "auto.features.tutorial.components.concepts.guide.literal.248": "ריצת ReAct לא יכולה לטעון כלים",
   "auto.features.tutorial.components.concepts.guide.literal.249": "ודא שכתובת ה-URL MCP נגישה מהקצה העורפי ושכותרת ההרשאה האופציונלית שלה חוקית.",
-  "auto.features.tutorial.components.concepts.guide.literal.25": "\"קראו את הכתבה והחזירו JSON תקין עם שלושה שדות: summary עד 80 מילים, key_points כרשימה של שלוש נקודות, ו-confidence בערכים low, medium או high לפי מידת התמיכה בטקסט המקורי.\"",
   "auto.features.tutorial.components.concepts.guide.literal.252": "עזר מהיר",
   "auto.features.tutorial.components.concepts.guide.literal.253": "מונח",
   "auto.features.tutorial.components.concepts.guide.literal.254": "הסבר",
@@ -4103,7 +3813,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.257": "ספריית Python לבניית תוכניות שמפעילות מודלי שפה ומשפרות אותן לפי דוגמאות ופונקציות מדידה.",
   "auto.features.tutorial.components.concepts.guide.literal.258": "גרף מכוון של מודולי DSPy, טרנספורמציות, עוגני קלט ופלט וצמתי כלים MCP.",
   "auto.features.tutorial.components.concepts.guide.literal.259": "אופטימיזר רפלקטיבי שמשפר הוראות בעזרת מסלולי הרצה, משוב, מיני-באצ׳ים ובחירת Pareto.",
-  "auto.features.tutorial.components.concepts.guide.literal.26": "1.3 הבעיה: קשה לכתוב פרומפט טוב",
   "auto.features.tutorial.components.concepts.guide.literal.260": "הרצה של כל שילוב נבחר בין מודל יצירה למודל משוב. Skynet מחזיר את השילוב המוצלח עם ציון הבדיקה הגבוה ביותר לאחר האופטימיזציה.",
   "auto.features.tutorial.components.concepts.guide.literal.261": "קוד הפרומפט (Signature) שמגדיר ל-DSPy את שדות הקלט, שדות הפלט והוראת המשימה.",
   "auto.features.tutorial.components.concepts.guide.literal.262": "פונקציה שבודקת תשובה ומחזירה ציון. ב-GEPA מומלץ להחזיר גם משוב טקסטואלי שמסביר את הציון.",
@@ -4114,25 +3823,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.267": "הרצה של מועמד על סט דוגמאות רחב מספיק כדי לחשב ציון השוואתי.",
   "auto.features.tutorial.components.concepts.guide.literal.268": "תיעוד של הקלט, שלבי הביצוע, התשובה, הציון והמשוב עבור ניסיון מסוים.",
   "auto.features.tutorial.components.concepts.guide.literal.269": "מודול DSPy שמוסיף שדה reasoning לפני הפלט, ולכן מתאים למשימות שדורשות בדיקת תנאים, הסבר או פתרון בכמה צעדים.",
-  "auto.features.tutorial.components.concepts.guide.literal.27": "פרומפט שנראה טוב בדוגמה אחת עלול להיכשל בשקט כשמחברים אותו לדאטאסט אמיתי. בדרך כלל הבעיה אינה חוסר יצירתיות בניסוח, אלא היעדר תהליך מסודר שמראה מה עובד, איפה זה נכשל, ולמה. ארבעה אתגרים חוזרים כמעט בכל פרויקט:",
   "auto.features.tutorial.components.concepts.guide.literal.270": "מודל המשוב שקורא את מסלולי ההרצה והמשוב של GEPA ומציע הנחיות מתוקנות.",
-  "auto.features.tutorial.components.concepts.guide.literal.271": "DSPy",
-  "auto.features.tutorial.components.concepts.guide.literal.272": "GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.274": "token_source",
-  "auto.features.tutorial.components.concepts.guide.literal.275": "merge",
-  "auto.features.tutorial.components.concepts.guide.literal.276": "auto",
-  "auto.features.tutorial.components.concepts.guide.literal.277": "True",
-  "auto.features.tutorial.components.concepts.guide.literal.28": "זמן:",
   "auto.features.tutorial.components.concepts.guide.literal.281": "Train",
   "auto.features.tutorial.components.concepts.guide.literal.282": "Validation",
   "auto.features.tutorial.components.concepts.guide.literal.283": "Test",
-  "auto.features.tutorial.components.concepts.guide.literal.284": "dspy.Prediction",
-  "auto.features.tutorial.components.concepts.guide.literal.285": "score",
-  "auto.features.tutorial.components.concepts.guide.literal.286": "feedback",
-  "auto.features.tutorial.components.concepts.guide.literal.287": "reasoning",
-  "auto.features.tutorial.components.concepts.guide.literal.288": "question",
-  "auto.features.tutorial.components.concepts.guide.literal.289": "q",
-  "auto.features.tutorial.components.concepts.guide.literal.29": "בדיקה ידנית של עשרות ניסוחים מול דוגמאות אמיתיות גוזלת זמן, וקשה לשחזר למה גרסה אחת נבחרה על פני אחרת.",
   "auto.features.tutorial.components.concepts.guide.literal.290": "pending",
   "auto.features.tutorial.components.concepts.guide.literal.291": "running",
   "auto.features.tutorial.components.concepts.guide.literal.292": "success",
@@ -4141,21 +3836,15 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.295": "paused",
   "auto.features.tutorial.components.concepts.guide.literal.296": "מושהה לפני ההשלמה ומחכה להמשך.",
   "auto.features.tutorial.components.concepts.guide.literal.297": "Skynet הופך הגדרת משימה, דוגמאות ומדד לאופטימיזציה מדודה של DSPy. GEPA מחפש את ההוראות וההדגמות של התוכנית, בעוד Skynet מטפל באימות, ביצוע, בקרות עלויות, תוצאות, ייצוא והגשה.",
-  "auto.features.tutorial.components.concepts.guide.literal.298": " ובאופטימיזר ",
-  "auto.features.tutorial.components.concepts.guide.literal.299": ".",
   "auto.features.tutorial.components.concepts.guide.literal.3": "בקרות, דגמים ועלות",
   "auto.features.tutorial.components.concepts.guide.literal.30": "ReAct יכול לקרוא לכלים משרת MCP חי, לבדוק את התוצאות שלהם ולהמשיך עד שהוא יכול להחזיר את הפלט המוצהר.",
   "auto.features.tutorial.components.concepts.guide.literal.300": "import dspy\n\ndef score_answer(gold, pred, trace, pred_name, pred_trace):\n    \"\"\"Return a score and constructive feedback for the feedback model.\"\"\"\n    expected = gold.answer.strip().lower()\n    actual = (pred.answer or \"\").strip().lower()\n\n    if expected == actual:\n        return dspy.Prediction(score=1.0, feedback=\"The answer matches the desired output.\")\n    if expected in actual:\n        return dspy.Prediction(\n            score=0.5,\n            feedback=f\"Partial answer. The desired output is {expected}, and we got {actual}.\",\n        )\n    return dspy.Prediction(\n        score=0.0,\n        feedback=f\"The answer does not match. The desired output is {expected}, and we got {actual}.\",\n    )\n",
   "auto.features.tutorial.components.concepts.guide.literal.301": "validating",
   "auto.features.tutorial.components.concepts.guide.literal.302": "בדיקת הקוד שנשלח, המיפוי, מערך הנתונים, המודלים וההגבלות.",
-  "auto.features.tutorial.components.concepts.guide.literal.303": "ציון 0.30 בלבד, בלי הסבר למה המועמד נכשל.",
-  "auto.features.tutorial.components.concepts.guide.literal.304": "ציון 0.50 בלבד, בלי מידע על ההוראה שעזרה.",
-  "auto.features.tutorial.components.concepts.guide.literal.305": "ציון 0.40 בלבד, בלי דרך להבין אם הוא טוב למקרי קצה.",
   "auto.features.tutorial.components.concepts.guide.literal.306": "אימות",
   "auto.features.tutorial.components.concepts.guide.literal.307": "דחה קוד לא חוקי, מיפויים, נתונים, הגדרות מודל ומגבלות לפני תחילת האופטימיזציה.",
   "auto.features.tutorial.components.concepts.guide.literal.308": "בצע אופטימיזציה",
   "auto.features.tutorial.components.concepts.guide.literal.309": "מדוד את קו הבסיס, הידור עם GEPA ובדוק את התוכנית שנבחרה.",
-  "auto.features.tutorial.components.concepts.guide.literal.31": "צריך להבין מתי להוסיף מבנה, מתי לבקש חשיבה בשלבים, מתי לדרוש JSON, ומתי הוראה ארוכה רק מוסיפה רעש.",
   "auto.features.tutorial.components.concepts.guide.literal.310": "השתמש בתוצאה",
   "auto.features.tutorial.components.concepts.guide.literal.311": "שמור על תוכנית שמורה הניתנת להרצה עם מספיק פרטים כדי לבדוק, להגיש או לייצא אותה.",
   "auto.features.tutorial.components.concepts.guide.literal.312": "max_full_evals / max_metric_calls",
@@ -4166,7 +3855,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.318": "temperature / max_tokens",
   "auto.features.tutorial.components.concepts.guide.literal.319": "module_name / workflow_definition",
   "auto.features.tutorial.components.concepts.guide.literal.32": "Flex תומך בתוכנית DSPy הניתנת להתאמה יותר כאשר זמן הריצה DSPy המותקן מספק זאת.",
-  "auto.features.tutorial.components.concepts.guide.literal.320": "optimizer_name",
   "auto.features.tutorial.components.concepts.guide.literal.321": "signature_code",
   "auto.features.tutorial.components.concepts.guide.literal.322": "metric_code",
   "auto.features.tutorial.components.concepts.guide.literal.323": "dataset",
@@ -4175,9 +3863,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.326": "reflection_model_config",
   "auto.features.tutorial.components.concepts.guide.literal.327": "optimizer_kwargs",
   "auto.features.tutorial.components.concepts.guide.literal.328": "split_fractions",
-  "auto.features.tutorial.components.concepts.guide.literal.329": "shuffle",
-  "auto.features.tutorial.components.concepts.guide.literal.33": "אותו פרומפט יכול להתנהג אחרת בין מודלים, גרסאות, שפות, אורך קלט וסוגי מסמכים.",
-  "auto.features.tutorial.components.concepts.guide.literal.330": "seed",
   "auto.features.tutorial.components.concepts.guide.literal.331": "Predict",
   "auto.features.tutorial.components.concepts.guide.literal.332": "Flex",
   "auto.features.tutorial.components.concepts.guide.literal.333": "זרימת עבודה",
@@ -4194,24 +3879,30 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.343": "חשיבה בשלבים",
   "auto.features.tutorial.components.concepts.guide.literal.344": "ReAct (agent with tools)",
   "auto.features.tutorial.components.concepts.guide.literal.345": "מודול DSPy שמסביר, קורא לכלים משרת MCP חי, קורא את התוצאות שלהם וממשיך עד שהוא יכול להחזיר את הפלט המוצהר.",
-  "auto.features.tutorial.components.concepts.guide.literal.346": " למשימות שדורשות שימוש בכלים חיצוניים אפשר לבחור גם dspy.ReAct: הסוכן מחליף בין חשיבה לקריאות כלים בלולאה. בריצת ReAct מגדירים מקור כלים — שרת MCP חי או תמונת מצב של כלים מהדאטאסט — ואפשר לסנן את רשימת הכלים. עמודות הדאטאסט ממפות גם מסלולי הרצה מוקלטים: הצעדים שבוצעו, הכלים המותרים, חתימות הסכימה ומצב הטופס לפני ואחרי, וכל אלה מזינים את חישוב הציון לפי השחזור.",
   "auto.features.tutorial.components.concepts.guide.literal.347": "תוצאות, הגשה ושיתוף",
   "auto.features.tutorial.components.concepts.guide.literal.348": "הריצה שהושלמה מתעדת את ציוני הבסיס והתוכנית שנבחרה, את גדלי החלוקות, תוצאות לכל דוגמה, לוגים, שימוש בטוקנים, פעילות מודלים, זמן ריצה ועלות. אפשר לבדוק או לייצא את התוכנית השמורה, או להריץ אותה דרך ממשק ה-API להגשה.",
   "auto.features.tutorial.components.concepts.guide.literal.349": "לשונית השימוש מתאימה את עצמה לתוכנית השמורה: טפסים עבור מודולים וזרימות עבודה סטנדרטיות, וצ'אט אינטראקטיבי עם שיחות כלים, כרטיסי אישור ומצב אמון עבור ReAct. פקדי שיתוף יכולים להעניק גישה לצופה או לעורך מבלי לשנות את התוכנית.",
-  "auto.features.tutorial.components.concepts.guide.literal.35": "שיפור שנראה טוב על חמש דוגמאות לא בהכרח יחזיק על מאות דוגמאות, מקרי קצה ונתונים חדשים.",
-  "auto.features.tutorial.components.concepts.guide.literal.36": "הפתרון של Skynet:",
-  "auto.features.tutorial.components.concepts.guide.literal.37": "מגדירים משימה, דאטאסט ופונקציית מדידה, ונותנים לאופטימיזר לחפש פרומפט טוב יותר בתהליך מדיד, מתועד וחוזר על עצמו",
-  "auto.features.tutorial.components.concepts.guide.literal.38": ".",
+  "auto.features.tutorial.components.concepts.guide.literal.350": "הכלים שסביב הריצה",
+  "auto.features.tutorial.components.concepts.guide.literal.351": "סוכן, נתונים, מעקב וסביבת העבודה",
+  "auto.features.tutorial.components.concepts.guide.literal.352": "האופטימיזציה עצמה היא רק חלק מהעבודה. אלה הכלים שעוזרים להכין נתונים, להגדיר ריצה, לעקוב אחריה ולהשתמש בתוצאה.",
+  "auto.features.tutorial.components.concepts.guide.literal.353": "הסוכן",
+  "auto.features.tutorial.components.concepts.guide.literal.354": "חלון הסוכן זמין בכל דף. אפשר לבקש ממנו לטעון דאטאסט, למלא את האשף, לבדוק את חלוקת הנתונים, ולהשהות, להמשיך או להריץ מחדש אופטימיזציה. כל פעולה שלו מופיעה בשיחה, כך שקל לעקוב אחרי מה שעשה.",
+  "auto.features.tutorial.components.concepts.guide.literal.355": "האשף",
+  "auto.features.tutorial.components.concepts.guide.literal.356": "הגדרת ריצה עוברת ארבעה שלבים: מטרה, הערכה, אופטימיזציה וסקירה. ההתקדמות נשמרת אוטומטית כטיוטה, וכשחוזרים לאשף אפשר להמשיך מאותו שלב או להתחיל מחדש.",
+  "auto.features.tutorial.components.concepts.guide.literal.357": "נתונים ותיוג",
+  "auto.features.tutorial.components.concepts.guide.literal.358": "ספריית הדאטאסטים שומרת קובצי CSV, ‏JSON ו-Excel לשימוש חוזר, עם עריכה בגיליון ושיתוף הרשאות. בדף התיוג מתייגים שורות ידנית, עם קו-פיילוט או באוטופיילוט. כשסיוע ה-AI פעיל אפשר גם ליצור דאטאסט סינתטי מתוך ראיון קצר על המשימה.",
+  "auto.features.tutorial.components.concepts.guide.literal.359": "מעקב אחרי ריצות",
+  "auto.features.tutorial.components.concepts.guide.literal.360": "בדף הריצה הלשוניות מפרידות בין הציונים והמסלול (סקירה), הרצה על קלט חדש (שימוש), הנתונים, הקוד, התוצר, הלוגים ופעילות המודלים. אפשר להשהות ריצה פעילה: היא נשמרת בנקודת ביקורת ועוברת לסטטוס",
+  "auto.features.tutorial.components.concepts.guide.literal.361": ". כשממשיכים אותה היא חוזרת לעבוד מאותה נקודה, ואפשר גם להריץ אותה מחדש מההתחלה.",
+  "auto.features.tutorial.components.concepts.guide.literal.362": "חיפוש ולוח הבקרה",
+  "auto.features.tutorial.components.concepts.guide.literal.363": "דף החיפוש מוצא ריצות לפי משימה, מודל או אופטימייזר, גם לפי משמעות ולא רק לפי מילים מדויקות, ופאנל המסננים מצמצם לפי תאריך, סוג ריצה, מודול, מודל ואופטימייזר. בלוח הבקרה לחיצה על עמודה או פלח בגרף מסננת לפיהם את שאר הנתונים.",
+  "auto.features.tutorial.components.concepts.guide.literal.364": "אחסון",
+  "auto.features.tutorial.components.concepts.guide.literal.365": "דף האחסון מראה כמה מהמכסה בשימוש ומה תופס מקום: דאטאסטים, אופטימיזציות, שיחות עם הסוכן וקבצים זמניים. משם מוחקים פריטים שכבר לא צריך. כשעוברים את המכסה השמירה נחסמת עד שמפנים מקום.",
   "auto.features.tutorial.components.concepts.guide.literal.39": "החלקים של תוכנית DSPy",
   "auto.features.tutorial.components.concepts.guide.literal.4": "בנה את המשימה",
-  "auto.features.tutorial.components.concepts.guide.literal.40": " (",
-  "auto.features.tutorial.components.concepts.guide.literal.41": "Declarative Self-improving Python",
   "auto.features.tutorial.components.concepts.guide.literal.42": "DSPy מפריד את חוזה המשימה מהקוד שמפעיל אותו והמדד שמודד אותו.",
-  "auto.features.tutorial.components.concepts.guide.literal.43": "קלט",
   "auto.features.tutorial.components.concepts.guide.literal.44": "החתימה מצהירה על שדות הקלט, שדות הפלט והוראת המשימה.",
-  "auto.features.tutorial.components.concepts.guide.literal.45": "פלט",
   "auto.features.tutorial.components.concepts.guide.literal.46": "המודול או זרימת העבודה קובעים כיצד שיחות מודל, טרנספורמציות וכלים מחוברים.",
-  "auto.features.tutorial.components.concepts.guide.literal.47": "בדיקה",
   "auto.features.tutorial.components.concepts.guide.literal.48": "המדד מקצה ציון ויכול להחזיר משוב כתוב עבור GEPA.",
   "auto.features.tutorial.components.concepts.guide.literal.49": "GEPA משתמש במערך הנתונים, במדד ובמודל המשוב כדי להציע שינויים בתוכנית ולהעריך אותם.",
   "auto.features.tutorial.components.concepts.guide.literal.5": "מהגשה ועד להגשה",
@@ -4220,8 +3911,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.52": "התוצאות מציגות את הציון הבסיסי, הציון האופטימלי, שינוי מערך המבחן, גדלים מפוצלים, שימוש באסימונים, עלות ותזמון כאשר ערכים אלו זמינים.",
   "auto.features.tutorial.components.concepts.guide.literal.53": "הכרטיסייה Usage מפעילה את התוכנית השמורה. הוא מעבד טופס עבור מודולים סטנדרטיים וצ'אט אינטראקטיבי לשיחות כלים עבור סוכני ReAct.",
   "auto.features.tutorial.components.concepts.guide.literal.54": "הייצוא מכיל תוכנית הניתנת להרצה עבור Predict, Chain of Thought, ReAct, Flex, זרימות עבודה והזוג שנבחר מחיפוש רשת מודל.",
-  "auto.features.tutorial.components.concepts.guide.literal.55": "משתמש בהצלחות, בכישלונות ובמשוב כדי להציע שינויים ממוקדים בפרומפט.",
-  "auto.features.tutorial.components.concepts.guide.literal.56": "מחזיר תוכנית משופרת שאפשר להריץ דרך Skynet או לשלב דרך API.",
   "auto.features.tutorial.components.concepts.guide.literal.57": "אתחול",
   "auto.features.tutorial.components.concepts.guide.literal.58": "הערכה",
   "auto.features.tutorial.components.concepts.guide.literal.59": "משוב",
@@ -4232,50 +3921,26 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.63": "אופטימיזציה מהירה ללא הכשרת מודלים",
   "auto.features.tutorial.components.concepts.guide.literal.64": "מה GEPA משנה",
   "auto.features.tutorial.components.concepts.guide.literal.65": "GEPA משנה הוראות והדגמות בתוך התוכנית DSPy. זה לא מכוון את הדגמים הנבחרים.",
-  "auto.features.tutorial.components.concepts.guide.literal.66": "מסלולי הרצה",
   "auto.features.tutorial.components.concepts.guide.literal.67": "לכל מועמד, Skynet מתעד מסלול הרצה שכולל את הקלט, שלבי הביצוע, החיזוי, הציון והמשוב. מודל המשוב קורא את הרשומות האלה ומציע שינוי ממוקד.",
   "auto.features.tutorial.components.concepts.guide.literal.7": "מילון מונחים",
   "auto.features.tutorial.components.concepts.guide.literal.70": "לולאת החיפוש GEPA",
-  "auto.features.tutorial.components.concepts.guide.literal.71": "אתחול:",
   "auto.features.tutorial.components.concepts.guide.literal.72": "Skynet מאמת את המשימה ומעריך את תוכנית ההתחלה כדי לקבוע קו בסיס.",
-  "auto.features.tutorial.components.concepts.guide.literal.73": "הערכה:",
   "auto.features.tutorial.components.concepts.guide.literal.74": "GEPA מריץ מועמדים בדוגמאות הכשרה ומבקיע אותם בדוגמאות אימות.",
-  "auto.features.tutorial.components.concepts.guide.literal.75": "משוב:",
-  "auto.features.tutorial.components.concepts.guide.literal.76": " זה החלק שמבדיל את GEPA מחיפוש עיוור. מודל המשוב (",
   "auto.features.tutorial.components.concepts.guide.literal.77": "מודל המשוב סוקר מסלולי הרצה, ציונים ומשוב כתוב כדי לזהות שינוי שימושי.",
-  "auto.features.tutorial.components.concepts.guide.literal.78": "שיפור:",
   "auto.features.tutorial.components.concepts.guide.literal.79": "GEPA מציע מועמד מתוקן ויכול למזג חלקים שימושיים של שני מועמדים כאשר המיזוג מופעל.",
-  "auto.features.tutorial.components.concepts.guide.literal.8": "Skynet מדריך DSPy",
-  "auto.features.tutorial.components.concepts.guide.literal.80": ") של וריאציות מוצלחות.",
-  "auto.features.tutorial.components.concepts.guide.literal.81": "עדכון Pareto:",
-  "auto.features.tutorial.components.concepts.guide.literal.82": " מעדכנים את מאגר המועמדים ואת חזית ",
-  "auto.features.tutorial.components.concepts.guide.literal.83": "Pareto",
   "auto.features.tutorial.components.concepts.guide.literal.84": "GEPA מעדכנת את מאגר המועמדים שלה ובוחרת את התוכנית עם ציון האימות המצטבר החזק ביותר.",
   "auto.features.tutorial.components.concepts.guide.literal.85": "לאחר אופטימיזציה, Skynet מעריך את המועמד הנבחר בחלוקת המבחן. אם ציון המבחן שלו מתחת לקו הבסיס, Skynet שומר את תוכנית הבסיס במקום זאת.",
   "auto.features.tutorial.components.concepts.guide.literal.86": "למה משוב חשוב",
   "auto.features.tutorial.components.concepts.guide.literal.87": "ציונים מדרגים את המועמדים",
   "auto.features.tutorial.components.concepts.guide.literal.88": "משוב מכוון את השינוי הבא",
-  "auto.features.tutorial.components.concepts.guide.literal.89": "מועמד א׳",
   "auto.features.tutorial.components.concepts.guide.literal.9": "כיצד Skynet מייעל תוכניות DSPy עם GEPA",
   "auto.features.tutorial.components.concepts.guide.literal.90": "ציון מספרי מראה איזה מועמד הציג ביצועים טובים יותר במערך דוגמאות.",
-  "auto.features.tutorial.components.concepts.guide.literal.91": "מועמד ב׳",
   "auto.features.tutorial.components.concepts.guide.literal.92": "משוב כתוב אמור לזהות את המצב הכושל, ההוראה החסרה או ההתנהגות השימושית ש-GEPA יכול לפעול לפיו.",
-  "auto.features.tutorial.components.concepts.guide.literal.93": "מועמד ג׳",
-  "auto.features.tutorial.components.concepts.guide.literal.94": "מה לומדים מזה?",
-  "auto.features.tutorial.components.concepts.guide.literal.95": "הבעיה אינה רק ״ניסוח חלש״. חסרה הוראה שמכריחה את המודל לבדוק תנאים לפני הפלט, ולכן השיפור הבא צריך להיות ממוקד ולא אקראי.",
-  "auto.features.tutorial.components.concepts.guide.literal.96": "הדור הבא:",
-  "auto.features.tutorial.components.concepts.guide.literal.97": "פרומפט חדש שמשלב את התובנה ומגדיר סדר עבודה ברור יותר.",
-  "auto.features.tutorial.components.concepts.guide.literal.98": "מה חסר בלי משוב?",
-  "auto.features.tutorial.components.concepts.guide.literal.99": "הציון אומר מי הצליח יותר, אבל לא מסביר למה. בלי משוב ומסלולי הרצה, השינוי הבא הוא כמעט ניחוש.",
   "auto.features.tutorial.components.concepts.guide.template.1": "חלק {p1}",
-  "auto.features.tutorial.components.tutorial.menu.1": "מדריך Skynet",
-  "auto.features.tutorial.components.tutorial.menu.literal.1": "סגור/סגרי",
   "auto.features.tutorial.components.tutorial.popover.1": " מתוך ",
   "auto.features.tutorial.components.tutorial.popover.2": "הקודם",
   "auto.features.tutorial.components.tutorial.popover.literal.1": "השהיה",
   "auto.features.tutorial.components.tutorial.popover.literal.2": "הפעלה אוטומטית",
-  "auto.features.tutorial.components.tutorial.popover.literal.3": "השהיה",
-  "auto.features.tutorial.components.tutorial.popover.literal.4": "הפעלה אוטומטית",
   "auto.features.tutorial.components.tutorial.popover.literal.5": "סגור/סגרי את המדריך",
   "auto.features.tutorial.components.tutorial.popover.literal.6": "סיים/סיימי",
   "auto.features.tutorial.components.tutorial.popover.literal.7": "הבא",
@@ -4315,98 +3980,44 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.demo.data.template.2": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.demo.data.template.3": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.steps.literal.1": "השירות היה מעולה, ממליץ בחום!",
-  "auto.features.tutorial.lib.steps.literal.13": "טופס הגשה",
-  "auto.features.tutorial.lib.steps.literal.14": "פרטים בסיסיים",
-  "auto.features.tutorial.lib.steps.literal.15": "מיפוי עמודות",
-  "auto.features.tutorial.lib.steps.literal.16": "חלוקת דאטאסט",
-  "auto.features.tutorial.lib.steps.literal.17": "רמת החיפוש",
-  "auto.features.tutorial.lib.steps.literal.18": "קל רץ מהר עם מעט ניסיונות. בינוני מאזן בין מהירות לאיכות. מעמיק בודק יותר אפשרויות ולכן לוקח יותר זמן, אבל מגדיל את הסיכוי לשיפור משמעותי.",
-  "auto.features.tutorial.lib.steps.literal.19": "פרמטרי GEPA",
   "auto.features.tutorial.lib.steps.literal.2": "המוצר הגיע שבור, מאוד מאכזב",
   "auto.features.tutorial.lib.steps.literal.20": "פרומפט (Signature)",
-  "auto.features.tutorial.lib.steps.literal.21": "סקירה",
-  "auto.features.tutorial.lib.steps.literal.22": "דף תוצאות",
-  "auto.features.tutorial.lib.steps.literal.23": "שלבי התהליך",
   "auto.features.tutorial.lib.steps.literal.24": "לשונית נתונים",
   "auto.features.tutorial.lib.steps.literal.25": "שימוש",
   "auto.features.tutorial.lib.steps.literal.26": "לוגים",
-  "auto.features.tutorial.lib.steps.literal.27": "הגדרות הריצה",
-  "auto.features.tutorial.lib.steps.literal.28": "נתונים ותיוג",
   "auto.features.tutorial.lib.steps.literal.29": "טופס הגדרת תיוג",
   "auto.features.tutorial.lib.steps.literal.3": "משלוח מהיר, אריזה טובה",
-  "auto.features.tutorial.lib.steps.literal.30": "אפשר להתחיל מקובץ CSV, ‏JSON או Excel, או להשתמש בדאטאסט שמור. בוחרים עמודת טקסט אחת או יותר, מצב תיוג ידני, קו-פיילוט או אוטופיילוט, ומתארים את המשימה כשצריך. מפגשי התיוג נשמרים, ניתנים לשיתוף לצפייה או לעריכה, ואת התיוג המוגמר אפשר להעביר ישירות לספריית הדאטאסטים.",
+  "auto.features.tutorial.lib.steps.literal.30": "אפשר להתחיל מקובץ CSV, ‏JSON או Excel, להשתמש בדאטאסט שמור, או לבחור «יצירת דאטאסט סינתטי» כדי לבנות שורות מתוך ראיון קצר. בוחרים עמודת טקסט אחת או יותר, מצב תיוג ידני, קו-פיילוט או אוטופיילוט, ומתארים את המשימה כשצריך. מפגשי התיוג נשמרים, ניתנים לשיתוף לצפייה או לעריכה, ואת התיוג המוגמר אפשר להעביר ישירות לספריית הדאטאסטים.",
   "auto.features.tutorial.lib.steps.literal.31": "דרכים לתייג",
   "auto.features.tutorial.lib.steps.literal.32": "במצב ידני כל החלטה נשארת אצלך. קו-פיילוט מראיין אותך, בונה רובריקה ועובד לצדך עד שהוא מגיע לסף הבדיקה. אוטופיילוט מתייג את השורות שנותרו ומסמן מקרים לא ודאיים לבדיקה. מפגשי תיוג בסיוע AI מציגים הערכת עלות מראש, שומרים מקור ורמת ביטחון, ומסתיימים בסבב בדיקה לפני ייצוא או שמירה בספרייה.",
-  "auto.features.tutorial.lib.steps.literal.33": "זהו!",
   "auto.features.tutorial.lib.steps.literal.38": "חיפוש סמנטי",
   "auto.features.tutorial.lib.steps.literal.4": "לא שווה את המחיר, איכות נמוכה",
   "auto.features.tutorial.lib.steps.literal.41": "אותה תוכנית משופרת זמינה גם דרך REST API. אפשר להעתיק את נקודת הקצה או להשתמש בקטעי Python, ‏JavaScript ו-cURL המוכנים כשרוצים לשלב אותה במוצר.",
-  "auto.features.tutorial.lib.steps.literal.42": "סוכן AI",
-  "auto.features.tutorial.lib.steps.literal.43": "הכפתור הצף בפינה פותח את סוכן ה-AI. הסוכן מכיר את המערכת ויכול לעזור למלא את טופס ההגשה, להסביר תוצאות ולענות על שאלות.",
   "auto.features.tutorial.lib.steps.literal.44": "צ'אט עם הסוכן",
   "auto.features.tutorial.lib.steps.literal.46": "עץ המועמדים",
   "auto.features.tutorial.lib.steps.literal.48": "GEPA יוצר מועמדים חדשים לפרומפט, ומכל מועמד יכולים להיווצר מועמדים בדור הבא. בעץ רואים את הציון של כל מועמד ואת הקשר בין הורה לילד, וגם הצעות שנדחו מופיעות כצמתים מקווקווים. הסליידר שמעל הגרף מדפדף בין הדורות, ולחיצה על צומת פותחת מגירה עם הפרומפט המלא, ציונים לכל דוגמה והמשוב שהוביל לשיפור או לדחייה.",
   "auto.features.tutorial.lib.steps.literal.49": "חיפוש חופשי בכל הריצות במערכת — שלך או של משתמשים אחרים. הקלד/הקלידי תיאור באנגלית או בעברית, ו-Skynet ימצא ריצות עם משמעות דומה, ולא רק התאמות מילים. כשהשדה ריק מוצעות חיפושים אחרונים שלך וחיפושים נפוצים, ואפשר למקד את השדה מכל מקום במקלדת. אפשר לסנן לפי מודלים, אופטימייזרים, סטטוס וטווח תאריכים, ולעיין ברשימת תוצאות מדורגת.",
   "auto.features.tutorial.lib.steps.literal.5": "חוויית קנייה נעימה, אחזור שוב",
   "auto.features.tutorial.lib.steps.literal.50": "אפשר לבקש מהסוכן הכללי להסביר את המוצר, למצוא מידע או לעבוד עם טופס ההגשה הנוכחי. שיחות יכולות לרוץ במקביל ונשמרות בהיסטוריה. אפשר לבחור מודל, להכתיב במיקרופון, לבדוק פעילות כלים ולהגדיר במצב האמון אילו פעולות דורשות אישור. הזיכרון וברירות המחדל של הסוכן נמצאים בהגדרות.",
-  "auto.features.tutorial.lib.steps.literal.52": "פעילות מודל",
-  "auto.features.tutorial.lib.steps.literal.53": "לשונית פעילות מודל מפרטת את עבודת מודלי השפה בריצה: לכל שלב — מדידת בסיס, אופטימיזציה ומדידה סופית — רואים כמה קריאות בוצעו וכמה זמן ארכה כל קריאה בממוצע, בנפרד למודל היצירה ולמודל המשוב. כך אפשר לראות לאן הלכו רוב הקריאות והזמן, ולזהות שלב או מודל שמאט את הריצה.",
-  "auto.features.tutorial.lib.steps.literal.6": "נתונים מרכזיים",
-  "auto.features.tutorial.lib.steps.literal.7": "ארבעה כרטיסים מסכמים את הפעילות: כל הריצות, ריצות פעילות, ריצות שהצליחו וריצות שנכשלו, לצד שיעורי הצלחה וכישלון.",
-  "auto.features.tutorial.lib.steps.literal.8": "סרגל צד",
-  "auto.features.tutorial.lib.steps.literal.9": "סטטיסטיקות",
+  "auto.features.tutorial.lib.steps.literal.9": "לוח שימוש",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
-  "auto.features.tutorial.lib.steps.template.14": "אלה שלבי ההגשה: פרטים בסיסיים, {p1}, פרמטרים, קוד, {p2}, סיכום ושליחה.",
-  "auto.features.tutorial.lib.steps.template.15": "בשלב הראשון נותנים ל{p1} שם והקשר, בוחרים את רמת הפרטיות, ובמצב מתקדם בוחרים {p2} יחיד או {p3} אחת שבודקת כמה זוגות מודלים על אותה משימה.",
   "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
   "auto.features.tutorial.lib.steps.template.17": "אפשר להעלות CSV, ‏JSON או Excel, להדביק JSON או לבחור דאטאסט שמור מהספרייה. כל שורה היא דוגמה שהמערכת יכולה ללמוד ממנה. קבוצה קטנה, נקייה ומייצגת של {p1} בדרך כלל מועילה יותר ל{p2} מקבוצה גדולה ורועשת.",
   "auto.features.tutorial.lib.steps.template.18": "סמן/סמני כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר אוטומטית את הפרומפט (Signature).",
   "auto.features.tutorial.lib.steps.template.2": "כאן מופיעות כל הריצות. אפשר למיין לפי כותרות העמודות, לסנן דרך המסננים, לשנות רוחב עמודות ולפתוח את הפרטים של כל {p1}.",
-  "auto.features.tutorial.lib.steps.template.20": "{p1}: דוגמאות שה{p2} משתמש בהן כדי לבנות מועמדים. {p4}: דוגמאות שמדרגות את המועמדים בזמן הריצה. {p6}: מדידה סופית על {p7} שלא שימשו לבחירת הפרומפט.",
-  "auto.features.tutorial.lib.steps.template.21": "גודל מדגם למשוב: כמה {p1} ה{p2} מנתח בכל סבב כדי לזהות שגיאות. מספר סבבי הערכה מרבי: בדרך כלל נקבע לפי רמת החיפוש, אבל אפשר להגדיר אותו ידנית. מיזוג מועמדים: שילוב רעיונות מכמה מועמדים טובים לפרומפט אחד.",
   "auto.features.tutorial.lib.steps.template.22": "הפרומפט (Signature) מגדיר מה ה{p1} מקבל ומה הוא צריך להחזיר. הוא נוצר אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותו ולהוסיף תיאורים מדויקים לכל שדה כדי שיהיה איכותי.",
   "auto.features.tutorial.lib.steps.template.23": "פונקציה שמחזירה {p1} בין 0 ל-1 לכל תשובה. היא מגדירה מה נחשב ״תשובה טובה״, וה{p2} מנסה לשפר את ה{p3} הזה לאורך הריצה.",
   "auto.features.tutorial.lib.steps.template.24": "בחירת מודלים",
   "auto.features.tutorial.lib.steps.template.25": "{p1} מייצר תשובות ו{p2} מנתח שגיאות ומציע שיפורים. כל תפקיד מוגדר בנפרד, כולל מודל, מאמץ חשיבה, temperature ומספר טוקני פלט מרבי.",
-  "auto.features.tutorial.lib.steps.template.26": "הסיכום מרכז את המשימה, ה{p1}, ה{p2} לפי תפקיד, ה{p3}, טווח הקרדיטים המשוער ותקרת עלות קשיחה אם הוגדרה. כדאי לבדוק את הכרטיסים לפני השליחה; עריכה מחזירה ישירות לכל חלק.",
+  "auto.features.tutorial.lib.steps.template.26": "הסיכום מרכז את המשימה, ה{p1} ומיפוי העמודות, חלוקת הנתונים, ה{p2} לפי תפקיד, הגדרות ה{p3} והקוד. כדאי לבדוק את הכרטיסים לפני השליחה; עריכה מחזירה ישירות לכל חלק.",
   "auto.features.tutorial.lib.steps.template.27": "שליחת אופטימיזציה",
-  "auto.features.tutorial.lib.steps.template.28": "זה הכפתור שמפעיל את הריצה. אחרי הלחיצה המערכת מאמתת את הקלט, מחלקת את הנתונים, מריצה {p1}, ואז מפעילה את ה{p2}. אפשר לעקוב אחרי ההתקדמות בזמן אמת בדף התוצאות.",
-  "auto.features.tutorial.lib.steps.template.29": "אחרי שליחת {p1} מגיעים לדף התוצאות. בראש הדף מופיעים שם ה{p2}, התיאור, סטטוס הריצה והזמן שעבר. כפתור שכפול יוצר {p3} חדשה עם אותן הגדרות. בזמן ריצה פעילה מופיע כפתור ביטול, ולאחר סיום או כישלון מופיע כפתור מחיקה.",
-  "auto.features.tutorial.lib.steps.template.3": "בחלק העליון יש ניווט ללוח הבקרה, לתיוג טקסטים, להגשת {p1} חדשה ולחיפוש סמנטי בריצות הקיימות. בחלק התחתון מופיעה היסטוריית הריצות מקובצת לפי תאריך. דרך ⋯ ליד {p2} אפשר לשתף, לשנות שם, לשכפל, להצמיד או למחוק.",
-  "auto.features.tutorial.lib.steps.template.30": "כל {p1} עוברת חמישה שלבים: אימות הקלט, חלוקת הדאטאסט, ריצת {p2} לפני {p3}, ה{p4} עצמה והערכה סופית. כל שלב מתעדכן בזמן אמת.",
   "auto.features.tutorial.lib.steps.template.31": "כרטיסי {p1}",
   "auto.features.tutorial.lib.steps.template.32": "שלושה כרטיסים: {p1} (לפני {p2}), {p3} (אחרי), ואחוז השיפור ביניהם.",
-  "auto.features.tutorial.lib.steps.template.33": "גרף {p1}",
-  "auto.features.tutorial.lib.steps.template.34": "עוקב אחרי ה{p1} לאורך הניסיונות של ה{p2}. כך רואים מתי נמצא שילוב טוב יותר ואיך ה{p3} השתנה לאורך הריצה.",
   "auto.features.tutorial.lib.steps.template.35": "כל דוגמה מה{p1} מוצגת עם {p2} בצבע (ירוק = גבוה, אדום = נמוך), תחזית ה{p3}, והחלוקה ל{p4}, {p5} ו{p6}. אפשר למיין לפי {p7} כדי לזהות דפוסים.",
   "auto.features.tutorial.lib.steps.template.36": "אחרי שהריצה מסתיימת, בודקים את התוכנית המשופרת בממשק צ׳אט אינטראקטיבי. בוחרים מודל, מקלידים או מכתיבים קלט ומקבלים תשובה בזמן אמת. בריצות ReAct גם החשיבה וקריאות הכלים מוצגות כפעילות מובנית ולא כטקסט שטוח.",
   "auto.features.tutorial.lib.steps.template.37": "לוגים בזמן אמת מה{p1}. הם מתעדכנים אוטומטית בזמן שהריצה פעילה. אפשר לסנן לפי רמה (info, warning, error ועוד), לפי מקור הלוג או לפי זוג בסריקה, לחפש בטקסט חופשי ולמיין לפי זמן.",
-  "auto.features.tutorial.lib.steps.template.38": "הגדרת הריצה המדויקת בקרוסלה חזותית אחת: מודול או workflow, ‏{p1} והגדרות temperature ומגבלות הטוקנים של כל מודל, פרמטרי האופטימייזר וחלוקת הדאטאסט.",
-  "auto.features.tutorial.lib.steps.template.39": "סריקת {p1} (Grid Search)",
-  "auto.features.tutorial.lib.steps.template.40": "Grid Search מריץ כמה {p2} של {p3} × {p4} בתוך {p5} אחת. כל {p6} מציג {p7} איכות, זמן תגובה ופעילות מודלים; הזוג עם הציון הגבוה ביותר מסומן בכתר וניתן לפתוח אותו כתוצאה עצמאית.",
-  "auto.features.tutorial.lib.steps.template.41": "פרטי {p1} {p2}",
-  "auto.features.tutorial.lib.steps.template.42": "לחיצה על {p1} פותחת תצוגה מפורטת: {p2} לפני ואחרי, ה{p3} ב{p4}, משך הריצה, מספר הקריאות ל{p5} וגרף ההתקדמות.",
-  "auto.features.tutorial.lib.steps.template.43": "מרכז הנתונים כולל ספריית {p1}ים לשימוש חוזר וסשני תיוג שמורים. מעלים או עורכים נתונים פעם אחת, משתפים לצפייה או לעריכה, מתייגים ידנית או בסיוע AI, ואז בוחרים את אותו דאטאסט שמור כשיוצרים אופטימיזציה.",
-  "auto.features.tutorial.lib.steps.template.44": "עכשיו המסלול הקצר ב-Skynet מוכר: מכינים נתונים, מריצים {p1}, קוראים את ה{p2}, בודקים את התוצאה ומייצאים את התוכנית המשופרת. אפשר להפעיל מחדש כל מדריך ממוקד מתפריט כובע הבוגר כשרוצים להעמיק בתהליך מסוים.",
-  "auto.features.tutorial.lib.steps.template.45": "Predict ממפה קלטים ישירות לפלטים. Chain of Thought מוסיף שדה חשיבה מפורש. ReAct משלב חשיבה וכלים מאושרים בלולאה. Flex מאפשר ל-GEPA לשפר גם את הפרומפט וגם את קוד מודול ה-Python. ‏Workflow מחבר כמה מודולים לגרף כשצעד יחיד לא מספיק.",
-  "auto.features.tutorial.lib.steps.template.46": "גרף ביצועים שמציג לכל ריצה את {p1} כאיכות מנורמלת, ולצדו מהירות יחסית כשיש נתוני זמן. מתחתיו טבלה שמשווה את {p2} מול ה{p3} לכל ריצה.",
-  "auto.features.tutorial.lib.steps.template.47": "גרפים אינטראקטיביים שמציגים {p1}, פילוח לפי סטטוס וסוג, התפלגות זמני ריצה מול שיפור, ציר זמן יומי ודירוג שימוש ב{p2}. לחיצה על עמודה בגרף מסננת את הרשימה ל{p3} הרלוונטית.",
-  "auto.features.tutorial.lib.steps.template.8": "השוואת {p1}",
+  "auto.features.tutorial.lib.steps.template.47": "מדדים מרכזיים לצד גרפים של התפלגות השיפור וזמני הריצה, ציר זמן, השוואת אופטימייזרים, פילוח לפי סטטוס, סוג ו{p1}, מודלים פופולריים וה{p2} המובילות. לחיצה על עמודה או שורה מסננת את כל הגרפים, והסינון נשאר כתגית שאפשר להסיר.",
   "auto.shared.charts.chart.utils.literal.1": "אין עדיין נתונים",
-  "auto.shared.charts.dataset.vs.improvement.chart.1": "שורות:",
-  "auto.shared.charts.dataset.vs.improvement.chart.2": "שיפור:",
-  "auto.shared.charts.dataset.vs.improvement.chart.literal.1": "שיפור באחוזים",
-  "auto.shared.charts.dataset.vs.improvement.chart.template.1": "שורות ב{p1}",
-  "auto.shared.charts.efficiency.chart.literal.1": "שיפור לדקה",
-  "auto.shared.charts.efficiency.chart.literal.2": "שיפור לדקה",
-  "auto.shared.charts.efficiency.chart.template.1": "מזהה {p1}",
-  "auto.shared.charts.runtime.distribution.chart.literal.1": "זמן בדקות",
-  "auto.shared.charts.runtime.distribution.chart.literal.2": "זמן בדקות",
-  "auto.shared.charts.runtime.distribution.chart.template.1": "מזהה {p1}",
-  "auto.shared.charts.scores.chart.literal.1": "ציון באחוזים",
-  "auto.shared.charts.scores.chart.template.1": "אין עדיין {p1} שהושלמו",
-  "auto.shared.charts.timeline.chart.literal.1": "תאריך",
-  "auto.shared.charts.timeline.chart.template.1": "מספר {p1}",
   "auto.shared.lib.api.literal.1": "לא ניתן להתחבר לשרת. ודא/ודאי שהשרת פועל.",
   "auto.shared.lib.api.literal.10": "שגיאה בהפקת הקוד",
   "auto.shared.lib.api.literal.11": "לא ניתן להתחבר לשרת. ודא/ודאי שהשרת פועל.",
@@ -4428,16 +4039,40 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.shared.ui.agent.composer.literal.1": "שלח/שלחי",
   "auto.shared.ui.agent.composer.literal.2": "עצור/עצרי",
   "clipboard.copied": "הועתק בהצלחה",
-  "clipboard.copied_short": "הועתק",
   "clipboard.copy_failed": "ההעתקה נכשלה",
-  "common.aria.missing_result": "אין תוצאה",
   "common.empty": "—",
   "dashboard.analytics.access_filter_clear": "הסר/הסירי את הסינון לפי רמת גישה",
+  "dashboard.analytics.axis_minutes": "דקות",
+  "dashboard.analytics.axis_points": "נקודות אחוז",
   "dashboard.analytics.by_access": "לפי רמת גישה",
+  "dashboard.analytics.by_module": "לפי {term.module}",
   "dashboard.analytics.by_owner": "לפי בעלים",
+  "dashboard.analytics.col_date": "תאריך",
+  "dashboard.analytics.col_name": "שם",
+  "dashboard.analytics.col_range": "טווח",
+  "dashboard.analytics.col_share": "נתח",
+  "dashboard.analytics.improvement_histogram": "התפלגות השיפור",
+  "dashboard.analytics.kpi_median_detail": "חציון {p1}",
+  "dashboard.analytics.kpi_running_detail": "{p1} פעילות כרגע",
+  "dashboard.analytics.kpi_success_detail": "{p1} מתוך {p2} שהסתיימו",
+  "dashboard.analytics.kpi_total": "סה״כ {term.optimizationPlural}",
+  "dashboard.analytics.leaderboard": "ה{term.optimizationPlural} המובילות",
+  "dashboard.analytics.legend_other": "אחר",
+  "dashboard.analytics.no_successful_runs": "אין עדיין {term.optimizationPlural} שהצליחו",
+  "dashboard.analytics.open_job": "פתיחת ה{term.optimization}",
+  "dashboard.analytics.optimizer_comparison": "השוואת אופטימייזרים",
+  "dashboard.analytics.optimizer_filter_clear": "הסר/הסירי את הסינון לפי {term.optimizer}",
   "dashboard.analytics.owner_filter_clear": "הסר/הסירי את הסינון לפי בעלים",
+  "dashboard.analytics.range_filter_clear": "הסר/הסירי את סינון טווח התאריכים",
   "dashboard.analytics.runs": "ריצות",
+  "dashboard.analytics.section_breakdown": "סטטוסים וסוגים",
+  "dashboard.analytics.section_distributions": "התפלגויות",
   "dashboard.analytics.sharing_breakdown": "בעלים ורמות גישה",
+  "dashboard.analytics.timeline_by_day": "לפי יום",
+  "dashboard.analytics.timeline_by_month": "לפי חודש",
+  "dashboard.analytics.timeline_by_week": "לפי שבוע",
+  "dashboard.analytics.truncated": "נתונים חלקיים: הסריקה הגיעה למגבלת הבקשה, ולכן {term.optimizationPlural} ישנות יותר לא נספרו.",
+  "dashboard.analytics.type_workflow": "זרימת עבודה",
   "dashboard.col.owner": "בעלים",
   "dashboard.col.role": "תפקיד",
   "dashboard.delete_failed": "מחיקה נכשלה",
@@ -4488,7 +4123,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "datasets.editor.add_row": "הוספת שורה",
   "datasets.editor.autosave_empty": "הוסיפו שורה כדי לשמור את השינויים",
   "datasets.editor.autosave_error": "השמירה נכשלה",
-  "datasets.editor.autosave_saved": "כל השינויים נשמרו",
   "datasets.editor.autosave_saving": "שומר…",
   "datasets.editor.back": "חזרה לספרייה",
   "datasets.editor.column_placeholder": "column_name",
@@ -4571,31 +4205,48 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.empty.title": "עדיין אין ריצות",
   "explore.filter.grid": "{term.optimizationTypeGrid}",
   "explore.filter.run": "{term.optimizationTypeRun}",
-  "explore.filters.apply": "סיים/סיימי",
   "explore.filters.button": "מסננים",
   "explore.filters.clear": "נקה/נקי הכול",
   "explore.filters.close": "סגור/סגרי את המסננים",
+  "explore.filters.date.custom": "טווח מותאם אישית",
   "explore.filters.date.from": "מתאריך",
+  "explore.filters.date.preset.30d": "30 הימים האחרונים",
+  "explore.filters.date.preset.7d": "7 הימים האחרונים",
+  "explore.filters.date.preset.90d": "90 הימים האחרונים",
+  "explore.filters.date.range": "{from} – {to}",
   "explore.filters.date.to": "עד תאריך",
   "explore.filters.empty_section": "אין ערכים זמינים.",
+  "explore.filters.field.any": "הכל",
+  "explore.filters.group.matches": "{shown} מתוך {total} התאמות",
+  "explore.filters.group.top": "{shown} המובילים מתוך {total}",
+  "explore.filters.picker.clear": "ניקוי הבחירה",
+  "explore.filters.picker.placeholder.models": "חיפוש מודלים…",
+  "explore.filters.picker.placeholder.modules": "חיפוש מודולים…",
+  "explore.filters.picker.placeholder.optimizers": "חיפוש אופטימייזרים…",
   "explore.filters.reset": "אפס/י את המסננים",
+  "explore.filters.search.clear": "ניקוי החיפוש",
   "explore.filters.section.date": "טווח תאריכים",
   "explore.filters.section.models": "מודלים",
   "explore.filters.section.modules": "מודולים",
   "explore.filters.section.no_search_match": "אין התאמות לחיפוש.",
+  "explore.filters.section.none_in_selection": "אין ריצות בשילוב עם שאר המסננים.",
   "explore.filters.section.optimizers": "אופטימייזרים",
   "explore.filters.section.search": "חפש/חפשי בתוך {section}",
-  "explore.filters.section.selected": "{n} פעיל",
-  "explore.filters.section.selected_many": "{n} פעילים",
   "explore.filters.section.types": "סוג ריצה",
-  "explore.filters.subtitle": "שלב/שלבי מסננים כדי לדייק את החיפוש החופשי.",
+  "explore.filters.show_more": "הצגת עוד",
+  "explore.filters.show_results": "הצגת {n} ריצות",
+  "explore.filters.show_results_one": "הצגת ריצה אחת",
   "explore.filters.title": "מסננים",
+  "explore.filters.trigger.date": "תאריך",
+  "explore.filters.trigger.models": "מודל",
+  "explore.filters.trigger.modules": "מודול",
+  "explore.filters.trigger.optimizers": "אופטימייזר",
+  "explore.filters.trigger.types": "סוג",
   "explore.page.indicator": "עמוד {page} מתוך {total}",
   "explore.page.jump": "עבור/עברי לעמוד {page}",
   "explore.page.next": "הבא",
   "explore.page.prev": "הקודם",
   "explore.page.title": "חיפוש",
-  "explore.relative.now": "עכשיו",
   "explore.results.count.many": "{n} תוצאות",
   "explore.results.count.one": "תוצאה אחת",
   "explore.results.empty.clear_filters": "נקה/נקי את המסננים",
@@ -4611,9 +4262,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.search.clear": "נקה/נקי את החיפוש",
   "explore.search.placeholder": "חפש/חפשי אופטימיזציות לפי משימה, מודל או אופטימייזר",
   "explore.sort.aria": "מיון התוצאות",
-  "explore.sort.gain": "שיפור",
-  "explore.sort.gain.tip": "מיון לפי {term.scoreImprovement} — הפער בין {term.optimizedScore} ל{term.baselineScore}, מהגבוה לנמוך",
-  "explore.sort.recent": "אחרונות",
+  "explore.sort.oldest": "הישנות ביותר",
+  "explore.sort.oldest.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} הישנות ביותר מופיעות ראשונות",
+  "explore.sort.recent": "החדשות ביותר",
   "explore.sort.recent.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} החדשות ביותר מופיעות ראשונות",
   "explore.sort.relevance": "התאמה",
   "explore.sort.relevance.tip": "מיון לפי התאמה לכוונת החיפוש — התוצאות המתאימות ביותר מופיעות ראשונות",
@@ -4626,11 +4277,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "export.table.done": "יוצאו {count} שורות",
   "export.table.empty": "אין נתונים לייצוא",
   "export.table.failed": "הייצוא נכשל",
-  "legal.privacy_link": "מדיניות פרטיות",
-  "legal.terms_link": "תנאי שימוש",
-  "mobile.desktop_only.body": "יצירת אופטימיזציות, העלאת דאטאסטים ותיוג הן עבודת שולחן — פתחו את Skynet במחשב נייד או שולחני כדי להמשיך. הריצות והתוצאות שלכם זמינות כאן בטלפון.",
-  "mobile.desktop_only.home_cta": "חזרה לדף הבית",
-  "mobile.desktop_only.title": "זה עובד הכי טוב במחשב",
   "mobile.nav.account": "חשבון",
   "mobile.nav.aria": "ניווט ראשי",
   "mobile.nav.home": "בית",
@@ -4643,6 +4289,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "model_source.byok": "המפתח שלך",
   "model_source.byok_hint": "ההרצות משתמשות במפתח הספק ששמרת, בלי מגבלת שימוש נוספת מצד Skynet.",
   "model_source.manage_keys": "ניהול מפתחות",
+  "model_source.managed": "חיבור מנוהל",
   "not_found.back_dashboard": "חזור/חזרי ללוח הבקרה",
   "not_found.description": "הכתובת שחיפשת לא קיימת או שהועברה למיקום אחר",
   "not_found.title": "הדף לא נמצא",
@@ -4656,6 +4303,20 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimization.code.tab_program": "תוכנית",
   "optimization.code.tab_workflow": "תהליך עבודה",
   "optimization.code.workflow_intro": "תהליך העבודה מקומפל לקוד DSPy, פונקציית המדידה, והגרף עצמו.",
+  "optimization.config.all_generation_models": "כל {term.generationModelPlural}",
+  "optimization.config.all_reflection_models": "כל מודלי המשוב",
+  "optimization.config.description": "תיאור",
+  "optimization.config.expand": "הצגת הטקסט המלא",
+  "optimization.config.model_endpoint": "נקודת קצה מותאמת",
+  "optimization.config.model_pairs": "זוגות מודלים",
+  "optimization.config.rows": "שורות",
+  "optimization.config.slide_general": "כללי",
+  "optimization.config.task_model": "מודל המשימה",
+  "optimization.config.token_source": "מקור המפתחות",
+  "optimization.config.tool_source.dataset_snapshot": "תמונת מצב מתוך ה{term.dataset}",
+  "optimization.config.tool_source.live_mcp": "שרת MCP חי",
+  "optimization.config.workflow": "זרימת עבודה",
+  "optimization.config.workflow_graph": "{nodes} צמתים · {edges} קשרים",
   "optimization.delete.failed": "מחיקה נכשלה",
   "optimization.file.parse_error": "שגיאה בפענוח הקובץ",
   "optimization.logged_metrics.baseline_col": "בסיס",
@@ -4688,11 +4349,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimization.storage_label": "נפח האחסון של הריצה — לחצו לניהול",
   "optimization.workflow.hint": "גלילה לזום · גרירה להזזה · לחיצה על צומת לפרטים",
   "optimizations.datatab.description": "הנתונים ששימשו ב{term.optimization} — מחולקים ל{term.splitTrain}, {term.splitVal} ו{term.splitTest}, עם התוצאות לכל דוגמה.",
-  "optimizations.datatab.description_simple": "הדוגמאות שנמדדו — כל דוגמה עם התוצאה שלה, לפני ואחרי ה{term.optimization}.",
   "optimizations.detail.title": "פרטי אופטימיזציה",
   "optimizations.duration.lt_0_1s": "<0.1ש׳",
   "optimizations.duration.seconds": "{value}ש׳",
-  "optimizations.flex.download_py": "הורדת קובץ Python",
   "optimizations.flex.optimized_code": "קוד מותאם",
   "optimizations.flex.py_ext": ".py",
   "optimizations.grid.format.percent": "{value}%",
@@ -4713,30 +4372,25 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimizations.react.chat_send_aria": "שלח/שלחי הודעה",
   "optimizations.react.chat_stop_aria": "עצור/עצרי את השיחה",
   "optimizations.react.optimized_tools": "כלים מותאמים (ReAct)",
-  "optimizations.reasoning_effort.high": "גבוהה",
-  "optimizations.reasoning_effort.low": "נמוכה",
-  "optimizations.reasoning_effort.medium": "בינונית",
-  "optimizations.reasoning_effort.minimal": "מזערית",
   "optimizations.reasoning_effort.short.med": "בינ",
   "optimizations.reasoning_effort.short.min": "מזער",
   "optimizations.reasoning_effort.tooltip": "רמת מאמץ חשיבה: {label}",
   "optimizations.serve.field_separator": ": ",
-  "optimizations.servechat.demo_label": "{label} {index}",
   "optimizations.source_dataset.label": "מקור הנתונים: {term.dataset} מהספרייה",
   "optimizations.source_dataset.view": "מעבר ל{term.dataset}",
+  "pipeline.stage.compile": "קומפילציה",
+  "pipeline.stage.elapsed": "זמן מתחילת הריצה",
+  "pipeline.stage.failed": "נכשל",
+  "pipeline.stage.reflectiveSearch": "חיפוש רפלקטיבי",
+  "pipeline.stage.running": "בתהליך",
+  "pipeline.stage.skipped": "דולג",
   "search.clear": "נקה/נקי את החיפוש",
   "settings.about.api_url.label": "API URL",
-  "settings.about.feedback.action": "שליחת משוב",
-  "settings.about.feedback.description": "ספרו לנו מה עבד, מה היה לא ברור או מה חסר לכם.",
-  "settings.about.feedback.label": "משוב על הבטא הפרטית",
-  "settings.about.feedback.subject": "משוב על הבטא הפרטית של Skynet",
   "settings.about.reset_all.action": "אפס/י הכול",
   "settings.about.reset_all.description": "מחיקת כל ההגדרות וחזרה לברירות המחדל במכשיר זה",
   "settings.about.reset_all.label": "איפוס כל ההעדפות",
   "settings.about.reset_all.success": "ההעדפות אופסו",
   "settings.about.version.label": "גרסה",
-  "settings.account.advanced_mode.description": "מציג בקרות אופטימיזציה למתקדמים — סריקות מודלים, כוונון האופטימייזר ופרטי אימון/אימות/בדיקה",
-  "settings.account.advanced_mode.label": "מצב מתקדם",
   "settings.account.expand_advanced.description": "אפשרויות מתקדמות ייפתחו כברירת מחדל באשף האופטימיזציה במקום להישאר מקופלות",
   "settings.account.expand_advanced.label": "הצגת אפשרויות מתקדמות",
   "settings.account.lite.description": "מכבה אנימציות ומחליף תצוגות כבדות בגרסאות פשוטות — לחוויה חלקה במחשבים חלשים",
@@ -4760,7 +4414,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.admin.storage.auth_missing": "ניהול מכסות דורש BACKEND_AUTH_SECRET משותף ב-frontend ובשרת.",
   "settings.admin.storage.budget": "מכסה",
   "settings.admin.storage.budget_invalid": "המכסה חייבת להיות מספר חיובי (MB)",
-  "settings.admin.storage.clear_filters": "נקה/נקי מסננים",
   "settings.admin.storage.default": "ברירת מחדל",
   "settings.admin.storage.default_budget": "ברירת מחדל: {value}",
   "settings.admin.storage.deleted": "מכסת האחסון נמחקה",
@@ -4773,8 +4426,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.admin.storage.used": "בשימוש",
   "settings.admin.storage.username": "שם משתמש",
   "settings.admin.storage.view_list": "פתח/י את הרשימה",
-  "settings.agent.default_model.description": "שיחות וראיונות חדשים נפתחים עם המודל ורמת החשיבה האלה",
-  "settings.agent.default_model.label": "מודל ברירת מחדל",
   "settings.agent.dictation.description": "הצגת כפתור המיקרופון בתיבת הכתיבה",
   "settings.agent.dictation.label": "הכתבה קולית",
   "settings.agent.memory.entry.description": "האורך המרבי של זיכרון בודד, בתווים",
@@ -4791,12 +4442,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.agent.settings_tool.update_failed": "שינוי ההגדרות נכשל",
   "settings.agent.settings_tool.updated": "ההגדרות עודכנו",
   "settings.agent.settings_tool.updating": "מעדכן הגדרות",
-  "settings.agent.shortcut.change": "שנה/שני",
-  "settings.agent.shortcut.description": "קיצור לפתיחה וסגירה של פאנל הסוכן",
-  "settings.agent.shortcut.hint": "חלק מהקיצורים לא יעבדו כי הם שמורים לדפדפן.",
-  "settings.agent.shortcut.label": "קיצור מקלדת",
-  "settings.agent.shortcut.recording": "הקש/הקישי שילוב חדש…",
-  "settings.agent.shortcut.reserved_warning": "השילוב שנבחר שמור לדפדפן ולא נקלט. נסה/נסי Alt+ או Ctrl+Shift+",
   "settings.agent.trust.ask": "באישור בלבד",
   "settings.agent.trust.auto_safe": "אוטומטי רק בפעולות בטוחות",
   "settings.agent.trust.description": "אילו פעולות הסוכן יכול לבצע בלי לבקש אישור בכל פעם",
@@ -4828,7 +4473,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.group.preferences": "העדפות",
   "settings.group.system": "מערכת",
   "settings.group.workflows": "תהליכי עבודה",
-  "settings.keys.add": "הוספת מפתח",
   "settings.keys.add_provider": "הוספת חיבור BYOK",
   "settings.keys.added": "נוסף ב-{date}",
   "settings.keys.base_url_hint": "אפשר להפנות את החיבור לכל כתובת API תואמת. השאירו ריק כאשר המתאם משתמש בכתובת ברירת המחדל שלו.",
@@ -4852,11 +4496,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.keys.json_col_label": "תווית",
   "settings.keys.json_col_provider": "מזהה חיבור",
   "settings.keys.json_err_base": "פריט {n}: api_base חייב להיות כתובת URL תקינה.",
-  "settings.keys.json_err_custom_base": "פריט {n}: ספק custom מחייב api_base.",
   "settings.keys.json_err_missing": "פריט {n}: חסר שדה חובה \"{field}\".",
   "settings.keys.json_err_not_object": "פריט {n}: כל חיבור חייב להיות אובייקט JSON.",
   "settings.keys.json_err_parse": "JSON לא תקין — בדקו פסיק או סוגר חסרים.",
-  "settings.keys.json_err_provider": "פריט {n}: provider חייב להיות אחד מ-{providers} (או \"custom\" עם api_base).",
   "settings.keys.json_errors_heading": "תקנו {count} בעיות לפני הייבוא",
   "settings.keys.json_example_label": "שער המודלים הארגוני",
   "settings.keys.json_format": "סידור",
@@ -4894,7 +4536,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.keys.verify_failed_toast": "לא ניתן היה לאמת את המפתח. נסה/י שוב.",
   "settings.keys.verifying": "באימות…",
   "settings.saved": "ההגדרה נשמרה",
-  "settings.subtitle": "התאם/התאימי את ההעדפות וברירות המחדל",
   "settings.tab.about": "אודות",
   "settings.tab.account": "חשבון",
   "settings.tab.admin": "ניהול",
@@ -4912,23 +4553,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.wizard.split_mode.auto": "לפי המלצה",
   "settings.wizard.split_mode.label": "{term.split} של {term.dataset} ב{term.optimization} חדשה",
   "settings.wizard.split_mode.manual": "ידנית",
-  "share.access_updated": "הגישה הכללית עודכנה",
   "share.button": "שיתוף ופרטיות",
   "share.cannot_grant_self": "אי אפשר להזמין את הבעלים.",
   "share.clone": "שכפול",
   "share.clone_tooltip": "שכפול",
-  "share.copy_link": "העתק/העתיקי קישור",
   "share.dialog_title": "שיתוף ופרטיות",
   "share.error": "פעולת השיתוף נכשלה",
-  "share.general_access": "גישה דרך קישור",
-  "share.general_access.anyone": "כל מי שיש לו את הקישור",
-  "share.general_access.restricted": "מוגבל",
-  "share.general_access.restricted_desc": "רק הבעלים והאנשים שהוזמנו יכולים לגשת.",
   "share.inference_failed": "הרצת המודל נכשלה",
   "share.invite": "הזמן/הזמיני",
   "share.invite_label": "הזמנת אנשים",
   "share.invite_placeholder": "הוסף/הוסיפי אנשים לפי שם משתמש",
-  "share.link_copied": "הקישור הועתק",
   "share.loading": "טוען…",
   "share.member_added": "המשתמש נוסף",
   "share.member_removed": "המשתמש הוסר",
@@ -4967,16 +4601,40 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.agent.copy": "העתק/העתיקי",
   "shared.agent.copy_code": "העתק/העתיקי את הקוד",
   "shared.agent.edit_and_resend": "ערוך/ערכי ושלח/שלחי מחדש",
+  "shared.agent.info.first_token": "זמן עד הטוקן הראשון",
+  "shared.agent.info.input_tokens": "טוקנים בקלט",
+  "shared.agent.info.label": "פרטי התשובה",
+  "shared.agent.info.output_tokens": "טוקנים בפלט",
+  "shared.agent.info.speed": "מהירות",
+  "shared.agent.info.tokens_per_second": "{value} טוקנים/שנ׳",
+  "shared.agent.info.total_time": "זמן כולל",
   "shared.agent.regenerate": "נסה/נסי שוב",
   "shared.agent.run_code": "בדוק/בדקי את הקוד",
   "shared.agent.run_code_prompt": "בדוק/בדקי את קטע הקוד הבא ({language}) והחזר/החזירי את התוצאות:\n\n```{language}\n{code}\n```",
-  "shared.agent.seconds_short": "s",
+  "shared.agent.seconds_short": "שנ׳",
   "shared.agent.send": "שלח/שלחי",
   "shared.agent.thinking": "חושב",
   "shared.agent.thought_seconds": "חשב במשך {seconds} שניות",
   "shared.code_editor.collapse": "כווץ/י",
   "shared.code_editor.copied": "הועתק",
   "shared.code_editor.copy": "העתק/העתיקי",
+  "shared.code_editor.find.close": "סגירה (Esc)",
+  "shared.code_editor.find.count": "{current} מתוך {total}",
+  "shared.code_editor.find.invalid_regex": "תבנית לא תקינה",
+  "shared.code_editor.find.match_case": "התאמת אותיות גדולות/קטנות",
+  "shared.code_editor.find.next": "ההתאמה הבאה (Enter)",
+  "shared.code_editor.find.no_results": "אין תוצאות",
+  "shared.code_editor.find.open": "חיפוש",
+  "shared.code_editor.find.open_tip": "חיפוש בקוד ({shortcut})",
+  "shared.code_editor.find.placeholder": "חיפוש",
+  "shared.code_editor.find.previous": "ההתאמה הקודמת (Shift+Enter)",
+  "shared.code_editor.find.regex": "ביטוי רגולרי",
+  "shared.code_editor.find.replace": "החלפה",
+  "shared.code_editor.find.replace_all": "החלפת הכול",
+  "shared.code_editor.find.replace_placeholder": "החלפה ב־",
+  "shared.code_editor.find.toggle_replace": "הצגת/הסתרת החלפה ({shortcut})",
+  "shared.code_editor.find.total": "{total, plural, one {התאמה אחת} two {שתי התאמות} other {# התאמות}}",
+  "shared.code_editor.find.whole_word": "מילים שלמות בלבד",
   "shared.code_editor.format": "פרמט/י",
   "shared.code_editor.lines_count": "{count, plural, one {שורה אחת} two {שתי שורות} other {# שורות}}",
   "shared.code_editor.lines_hidden": "{count, plural, one {שורה אחת מוסתרת} two {שתי שורות מוסתרות} other {# שורות מוסתרות}}",
@@ -4995,11 +4653,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.excel_filter.search_placeholder": "חיפוש…",
   "shared.excel_filter.select_all": "בחר/י הכל",
   "shared.excel_filter.sort_by": "מיון לפי {label}",
-  "shared.inline_error.dismiss": "סגירה",
-  "shared.language.auto_detect": "זיהוי אוטומטי",
-  "shared.language.no_results": "לא נמצאו שפות",
-  "shared.language.search_placeholder": "חיפוש שפה…",
-  "shared.language.switch_aria": "בחירת שפת הממשק",
+  "shared.expand_toggle.collapse": "חזרה לגודל רגיל",
+  "shared.expand_toggle.expand": "הרחבה למסך מלא",
   "shared.model_chip.add_model": "הוסף/הוסיפי {term.model}",
   "shared.model_chip.choose_model": "בחר/י {term.model}…",
   "shared.model_chip.clone": "שכפול",
@@ -5036,6 +4691,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "sidebar.resume": "המשך/המשיכי",
   "sidebar.resume.failed": "לא ניתן להמשיך את ההרצה",
   "sidebar.resume.success": "ההרצה ממשיכה",
+  "sidebar.row_menu": "פעולות נוספות",
   "sidebar.shared.empty": "עדיין אין כאן ריצות משותפות",
   "sidebar.shared.empty.hint": "עמיתים יכולים לשתף איתכם ריצה מעמוד הפרטים שלה.",
   "sidebar.tab.aria": "סינון ריצות",
@@ -5097,7 +4753,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.basics.privacy.public": "ציבורי",
   "submit.basics.privacy.public_desc": "מופיע ב{term.exploreTitle}",
   "submit.clone.failed": "שגיאה בטעינת הגדרות לשכפול",
-  "submit.clone.success": "הגדרות שוכפלו בהצלחה",
   "submit.code.agent.tool.metric.title": "עריכת {term.metric}",
   "submit.code.agent.tool.signature.title": "עריכת {term.signature}",
   "submit.code.interview.brief.add": "הוספת הנחיה",
@@ -5122,12 +4777,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.composition.single_label": "מודול יחיד",
   "submit.composition.title": "בחירת אופן הבנייה",
   "submit.composition.workflow_desc": "חיבור כמה מודולים לגרף אחד.",
-  "submit.cost_ceiling.bracket": "טווח צפוי: {low}–{high} קרדיטים",
-  "submit.cost_ceiling.bracket_byok": "עמלת פלטפורמה: {low}–{high} קרדיטים — מפתח הספק שלך משלם על המודל",
-  "submit.cost_ceiling.cap_label": "תקרה",
-  "submit.cost_ceiling.cap_unit": "קרדיטים",
-  "submit.cost_ceiling.enable": "הגבלת עלות הריצה",
-  "submit.cost_ceiling.label": "תקרת עלות",
   "submit.dataset.column_kind.image": "תמונה",
   "submit.dataset.column_kind.image_auto_hint": "זוהתה אוטומטית כעמודת תמונה",
   "submit.dataset.column_kind.text": "טקסט",
@@ -5138,13 +4787,19 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.dataset.library_loaded": "נטען «{name}» ({count} שורות)",
   "submit.dataset.library_or": "או",
   "submit.dataset.library_pick": "בחר/י מהספרייה",
-  "submit.dataset.library_picker_subtitle": "טען/טעני {term.dataset} שמור עם מיפוי העמודות שלו",
   "submit.dataset.library_picker_title": "בחירת {term.dataset} מהספרייה",
   "submit.dataset.library_search": "חיפוש {term.dataset}…",
   "submit.dataset.library_search_empty": "לא נמצאו דאטאסטים תואמים",
+  "submit.depth.custom": "מותאם אישית",
+  "submit.draft.reset_failed": "לא ניתן היה לנקות את ההגדרה השמורה. הטיוטה הקודמת עדיין זמינה.",
+  "submit.draft.restore.continue": "להמשיך בטיוטה",
+  "submit.draft.restore.failed": "לא ניתן היה לשחזר את ההגדרה השמורה. אפשר לנסות שוב או להתחיל מחדש.",
+  "submit.draft.restore.gone": "ההגדרה השמורה כבר אינה זמינה בדפדפן הזה.",
+  "submit.draft.restore.retry": "לנסות שוב",
+  "submit.draft.restore.start_new": "להתחיל מחדש",
+  "submit.draft.restore.summary": "עצרתם בשלב {stage}",
+  "submit.draft.restore.title": "להמשיך מההגדרה הקודמת?",
   "submit.metric_calls": "תקציב קריאות מדד",
-  "submit.metric_calls.clear": "ניקוי",
-  "submit.metric_calls.hint": "עוקף את סבבי ההערכה — הריצה נעצרת אחרי מספר זה של קריאות מדד",
   "submit.modelpicker.purpose.all": "הכל",
   "submit.modelpicker.purpose.aria": "סינון מודלים לפי ייעוד",
   "submit.modelpicker.purpose.multilingual": "רב-לשוני",
@@ -5159,8 +4814,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.module.tagline.flex": "כותב ומריץ קוד Python משלו",
   "submit.module.tagline.predict": "קריאה אחת למודל, תשובה אחת",
   "submit.module.tagline.react": "קורא לכלים בלולאה עד לתשובה",
-  "submit.module.tagline.workflow": "כמה צעדים מחוברים על קנבס אחד",
   "submit.nav.validating": "מאמת…",
+  "submit.optimizer_settings.customized": "מותאם",
+  "submit.optimizer_settings.defaults": "ברירות מחדל",
   "submit.pxn.batch_hint": "{total} מועמדים נבדקים בכל סבב",
   "submit.pxn.parents": "מועמדים לשיפור (p)",
   "submit.pxn.proposals": "הצעות לכל מועמד (n)",
@@ -5173,14 +4829,19 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.react.section_title": "הגדרות סוכן ReAct",
   "submit.react.tool_no_description": "ללא תיאור",
   "submit.react.tool_source_label": "מקור הכלים",
+  "submit.react.tools_access": "גישה לכלים",
+  "submit.react.tools_all": "כל הכלים שהשרת מציע",
+  "submit.react.tools_count": "{p1} כלים מאושרים",
   "submit.react.tools_list_label": "כלים מחוברים",
   "submit.react.tools_next": "כלים הבאים",
   "submit.react.tools_prev": "כלים קודמים",
+  "submit.split.adjust_hint": "סגירה מחזירה לחלוקה המומלצת.",
+  "submit.split.adjust_toggle": "התאמת החלוקה",
+  "submit.split.empty": "אין עדיין מה לחלק. אחרי שתעלו {term.dataset} ותסמנו עמודות קלט ופלט, החלוקה המומלצת תופיע כאן.",
+  "submit.split.example_count": "{term.examplePlural}: {count}",
   "submit.split.label_test": "{term.splitTest}",
   "submit.split.label_train": "{term.splitTrain}",
   "submit.split.label_val": "{term.splitVal}",
-  "submit.split.mode_auto": "לפי ההמלצה",
-  "submit.split.mode_manual": "בחירה ידנית",
   "submit.split.rationale.large": "הדאטאסט גדול ({total} {term.examplePlural}). הוקצו {val_count} {term.examplePlural} ל{term.splitVal} ו-{test_count} ל{term.splitTest}; כשהדאטאסט מגיע למכסות האלה, הן שומרות על זמן {term.optimization} סביר בלי להריץ הערכה על יותר {term.examplePlural} מהנדרש.",
   "submit.split.rationale.medium": "הדאטאסט בגודל בינוני ({total} {term.examplePlural}). חלוקת 60/20/20 משאירה מספיק {term.examplePlural} לכל שלושת הסטים.",
   "submit.split.rationale.small": "הדאטאסט קטן ({total} {term.examplePlural}). הוקצו 80% ל{term.splitTrain} ו-20% ל{term.splitVal} כדי לתת ל-GEPA בסיס הערכה נפרד; אין מספיק {term.examplePlural} גם ל{term.splitTest}.",
@@ -5188,16 +4849,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.split.rationale_aria": "הסבר לבחירת החלוקה המומלצת",
   "submit.split.rationale_title": "למה נבחרה החלוקה הזו",
   "submit.split.recommended_title": "החלוקה המומלצת",
+  "submit.split.step_desc": "איך ה{term.examplePlural} מתחלקות בין {term.splitTrain}, {term.splitVal} ו{term.splitTest}.",
+  "submit.stage.evaluation": "הערכה",
+  "submit.stage.goal": "מטרה",
+  "submit.stage.optimization": "אופטימיזציה",
+  "submit.stage.review": "סקירה",
   "submit.submit_failed": "שגיאה בשליחת ה{term.optimization}",
-  "submit.summary.estimate_capped": "תקרה קשיחה {cap} קרדיטים",
-  "submit.summary.estimate_cost": "עלות משוערת",
-  "submit.summary.estimate_fee": "עמלת פלטפורמה משוערת",
-  "submit.summary.estimate_range": "{low}–{high} קרדיטים",
   "submit.validation.api_key_required": "הזן/הזיני {term.apiKey} — הוא לא מוגדר ב-env ולא הוזן ידנית",
   "submit.validation.code_has_errors": "יש שגיאות בקוד — בדוק/בדקי את הפירוט למטה",
   "submit.validation.dataset_before_code": "עליך להעלות דאטאסט לפני אימות הקוד",
   "submit.validation.dataset_required": "העלה/העלי קובץ {term.dataset}",
-  "submit.validation.dataset_required_short": "העלה/העלי {term.dataset}",
   "submit.validation.generation_model_required": "הוסף/הוסיפי לפחות {term.generationModel} אחד",
   "submit.validation.input_column_required": "סמן/סמני לפחות {term.inputColumn} אחת",
   "submit.validation.mcp_url_required": "הזן/הזיני כתובת MCP למקור הכלים",
@@ -5207,7 +4868,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.validation.model_required": "בחר/י {term.model}",
   "submit.validation.module_required": "בחר/י {term.module} כדי להמשיך",
   "submit.validation.name_required": "הזן/הזיני שם ל{term.optimization}",
-  "submit.validation.no_models_available": "אין מודלים זמינים ב{term.modelCatalog} — הגדר/הגדירי {term.apiKey} של {term.provider}",
   "submit.validation.output_column_required": "סמן/סמני לפחות {term.outputColumn} אחת",
   "submit.validation.reflection_model_required": "בחר/י {term.reflectionModel}",
   "submit.validation.reflection_models_required": "הוסף/הוסיפי לפחות {term.reflectionModel} אחד",
@@ -5217,9 +4877,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.validation.split_too_small": "ה{term.dataset} קטן מדי כדי להריץ {term.optimization} — נדרשות לפחות דוגמאות ל{term.splitVal} או ל{term.splitTest}",
   "submit.validation.target_score_invalid": "הזינו יעד אימות בין 1 ל־100",
   "submit.validation.target_score_requires_val": "יש להגדיר חלוקת אימות לפני שימוש ביעד ציון",
+  "submit.validation.toast.checking_code": "מאמתים את הקוד",
+  "submit.validation.toast.checking_split": "בודקים את חלוקת ה{term.dataset}",
+  "submit.validation.toast.passed": "ההגדרות אומתו",
+  "submit.validation.toast.running": "בודקים את ההגדרות…",
   "submit.validation.username_required": "הזן/הזיני שם משתמש",
   "submit.validation.vision_required": "העמודות {fields} מוגדרות כתמונה, אבל ה{term.model} '{model}' לא תומך בקלט תמונות",
-  "submit.validation.workflow_invalid": "יש בעיות בגרף תהליך העבודה — פתחו את שלב הקוד לפרטים",
+  "submit.validation.workflow_invalid": "יש בעיות בגרף תהליך העבודה — פתחו את שלב ההערכה לפרטים",
   "tagger.assist.autotag.browse": "מעבר לשורות",
   "tagger.assist.autotag.cancel": "ביטול — לשמור את מה שתויג",
   "tagger.assist.autotag.canceled_title": "התיוג בוטל",
@@ -5246,7 +4910,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.gate.first_round": "התחלת סבב הבדיקה הראשון",
   "tagger.assist.gate.next_round": "סבב הבדיקה הבא",
   "tagger.assist.gate.preparing": "מכין את הסבב הבא…",
-  "tagger.assist.gate.round_chip": "סבב {n}: {pct}%",
   "tagger.assist.gate.round_subtitle": "הסכמתם עם ה-AI על {agreement}% מהסבב — השער נפתח ב-{gate}%.",
   "tagger.assist.gate.round_title": "הסבב הסתיים",
   "tagger.assist.gate.tag_rest": "תיוג {rows} השורות שנותרו",
@@ -5279,6 +4942,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.retry": "נסו שוב",
   "tagger.assist.review.predicting": "ה-AI מתייג את השורה הזו…",
   "tagger.assist.rubric.answer_style": "סגנון מענה",
+  "tagger.assist.rubric.dataset_hint": "כך העוזר הבין את הנתונים שאתם צריכים. השורות נכתבות כשמתחילים.",
+  "tagger.assist.rubric.dataset_rows": "{count} שורות",
+  "tagger.assist.rubric.dataset_title": "הדאטאסט שייווצר",
+  "tagger.assist.rubric.generating": "יוצר את הדאטאסט…",
   "tagger.assist.rubric.guide_hint": "זוקק מהתשובות שלכם — אפשר לערוך הכול; הוא מנחה כל תיוג של ה-AI.",
   "tagger.assist.rubric.guide_title": "מדריך התיוג",
   "tagger.assist.rubric.rule_add": "הוספת כלל",
@@ -5299,6 +4966,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.setup.recommended": "מומלץ",
   "tagger.assist.setup.step_label": "גישה",
   "tagger.assist.setup.title": "איך תרצו לתייג?",
+  "tagger.assist.synthesize_error": "לא הצלחנו ליצור את הדאטאסט. נסו שוב.",
   "tagger.library.name_cancel": "ביטול",
   "tagger.library.name_label": "שם הדאטאסט",
   "tagger.library.name_save": "שמירה",
@@ -5306,12 +4974,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.library.save": "שמירה לספרייה",
   "tagger.library.save_failed": "שגיאה בשמירת הדאטאסט לספרייה",
   "tagger.library.saved": "«{name}» נשמר לספרייה",
-  "tagger.move.confirm_body": "הדאטה יישמר כדאטאסט חדש בספרייה, וסשן התיוג יימחק. לא ניתן לבטל את הפעולה.",
   "tagger.move.confirm_title": "להעביר לדאטאסטים?",
   "tagger.move.cta": "העברה לדאטאסטים",
   "tagger.move.failed": "שגיאה בהעברת הדאטה לדאטאסטים",
   "tagger.move.moved": "«{name}» הועבר לדאטאסטים",
-  "tagger.move.subtitle": "התיוג הושלם. העבירו את הדאטה לדאטאסטים לשימוש חוזר — סשן התיוג יימחק, והגדרות השיתוף יעברו יחד איתו.",
   "tagger.move.title": "העברה לספריית הדאטאסטים",
   "tagger.page.title": "תיוג טקסט",
   "tagger.results.back": "חזרה לתצוגה הכללית",
@@ -5325,7 +4991,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.results.recap.ai_auto": "תויגו אוטומטית",
   "tagger.results.recap.ai_confirmed": "תיוגי AI שאישרתם",
   "tagger.results.recap.human": "תויגו על ידיכם",
-  "tagger.results.recap.subtitle": "כל {total} השורות מתויגות. הנה מי עשה מה.",
   "tagger.results.recap.title": "הדאטה תויג",
   "tagger.results.recap.tokens": "אסימונים",
   "tagger.results.recap.tokens_hint": "צריכת התיוג האוטומטי",
@@ -5359,21 +5024,37 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.setup.library_loading": "טוען את הדאטאסט מהספרייה…",
   "tagger.setup.library_or": "או",
   "tagger.setup.library_pick": "בחירה מהספרייה שלכם",
+  "tagger.setup.synthetic_hint": "עדיין אין דאטאסט? בחרו כאן והעוזר ישאל אילו נתונים אתם צריכים, ואז יכתוב אותם לפני שהתיוג מתחיל.",
+  "tagger.setup.synthetic_manual_hint": "דאטאסט סינתטי נבנה בראיון, אז הוא דורש את העוזר.",
+  "tagger.setup.synthetic_pick": "יצירת דאטאסט סינתטי",
+  "tagger.setup.synthetic_source_name": "דאטאסט סינתטי",
   "tagger.upload.parse_failed": "טעינת הקובץ נכשלה",
-  "tooltip.analytics.dataset_size_vs_improvement": "האם יותר נתונים מובילים ל{term.scoreImprovement} טוב יותר — כל נקודה היא {term.optimization} אחת",
-  "tooltip.analytics.improvement_per_minute": "אחוזי {term.scoreImprovement} לכל דקת {term.optimizationTypeRun} — ערך גבוה משמעו {term.optimization} יעילה יותר",
-  "tooltip.analytics.runtime_minutes": "משך ה{term.optimizationTypeRun} בדקות לכל {term.optimization} שהושלמה",
-  "tooltip.analytics.runtime_vs_gain": "ניתוח זמני {term.optimizationTypeRun} ויעילות — כמה שיפור מתקבל ביחס לזמן",
-  "tooltip.analytics.score_comparison": "השוואת {term.baselineScore} מול ה{term.optimizedScore} לכל {term.optimization} שהושלמה",
-  "tooltip.analytics.submissions_per_day": "מספר ה{term.optimizationPlural} שהוגשו לפי יום",
+  "tooltip.analytics.dataset_buckets": "עמודות לכל טווח גודל {term.dataset}, והקו מציג את ה{term.scoreImprovement} הממוצע באותו טווח",
+  "tooltip.analytics.improvement_histogram": "כמה {term.optimizationPlural} הגיעו לכל טווח {term.scoreImprovement} (בנקודות אחוז)",
+  "tooltip.analytics.leaderboard": "ה{term.optimizationPlural} עם ה{term.scoreImprovement} הגבוה ביותר — לחיצה פותחת את הדף שלה",
+  "tooltip.analytics.optimizer_comparison": "אחוז הצלחה, שיפור ממוצע וזמן ריצה ממוצע לכל {term.optimizer} — לחיצה על שורה מסננת לפיו",
+  "tooltip.analytics.runtime_histogram": "כמה {term.optimizationPlural} הסתיימו בכל טווח זמן ריצה",
+  "tooltip.analytics.submissions_per_day": "מספר ה{term.optimizationPlural} שהוגשו בכל יום, שבוע או חודש — הרזולוציה נבחרת לפי טווח הזמן — בפילוח לפי הצלחה וכישלון",
   "tooltip.code.metric": "פונקציה שמודדת את איכות ה{term.prediction} — מחזירה {term.score} מספרי לכל {term.example}",
   "tooltip.code.predictions_table": "תוצאות הרצת ה{term.program} על דוגמאות הבדיקה — {term.score} לכל {term.example} וסיכום כולל",
   "tooltip.code.signature": "הגדרת שדות הקלט והפלט של ה{term.task} — מה ה{term.model} מקבל ומה הוא צריך להחזיר",
   "tooltip.code.signature_metric": "קוד המקור של ה{term.signature} ו{term.metric} שהוגדרו ל{term.optimization} זו",
   "tooltip.code.workflow": "תהליך העבודה כפי שקומפל ל{term.program} של DSPy — ה{term.signature} של כל צומת עם הפרומפט ההתחלתי שלו — לצד קוד ה{term.metric} והגרף עצמו",
+  "tooltip.config.all_generation_models": "האם ה{term.optimizationTypeGrid} השתמשה בכל {term.generationModelPlural} שהיו זמינים בעת השליחה, במקום ברשימה שנבחרה ידנית",
+  "tooltip.config.all_reflection_models": "האם ה{term.optimizationTypeGrid} השתמשה בכל מודלי המשוב שהיו זמינים בעת השליחה, במקום ברשימה שנבחרה ידנית",
+  "tooltip.config.compile_kwarg": "ארגומנט שהועבר לקריאת compile של ה{term.optimizer}",
+  "tooltip.config.description": "התיאור החופשי שהוזן בעת שליחת ה{term.optimization}",
+  "tooltip.config.model_pairs": "כמה צירופים של {term.generationModel} ו{term.reflectionModel} ה{term.optimizationTypeGrid} הריצה",
+  "tooltip.config.module_kwarg": "ארגומנט שהועבר לבנאי של ה{term.module}",
+  "tooltip.config.optimizer_kwarg": "ארגומנט שהועבר לבנאי של ה{term.optimizer}",
   "tooltip.config.section.data": "חלוקת ה{term.dataset} ל{term.splitTrain}, {term.splitVal} ו{term.splitTest}, והגדרות ערבוב",
+  "tooltip.config.section.general": "שם, סוג, נראות ומקור המפתחות, כפי שהוגדרו בעת שליחת ה{term.optimization}",
   "tooltip.config.section.models": "מודלי השפה שהוגדרו — {term.generationModelShort} לייצור תשובות, מודל משוב לניתוח שגיאות",
   "tooltip.config.section.summary": "ה{term.module}, ה{term.optimizer}, והפרמטרים שנבחרו ל{term.optimizationTypeRun} זו",
+  "tooltip.config.task_model": "מודל נוסף שנשמר בהגדרות הריצה, בנפרד מ{term.generationModel} ומ{term.reflectionModel}",
+  "tooltip.config.token_source": "פרטי הגישה שבהם רצו קריאות המודל: חיבור מנוהל שהגדיר מפעיל המערכת, או מפתח הספק המוצפן שלך",
+  "tooltip.config.tool_access": "אילו מהכלים שמקור הכלים מציע הסוכן הורשה להפעיל",
+  "tooltip.config.workflow": "גרף זרימת העבודה שה{term.optimization} שיפרה, לפי מספר הצמתים והקשרים",
   "tooltip.data.seed": "מספר התחלתי קבוע ששומר על אותה חלוקה ואותו ערבוב בכל הרצה חוזרת",
   "tooltip.data.shuffle_explanation": "מערבב את סדר השורות לפני ה{term.split}, כדי שסדר הקובץ לא ישפיע בטעות על התוצאות",
   "tooltip.data.split.test": "דוגמאות שמורות למדידה הסופית, אחרי שהפרומפט כבר נבחר",
@@ -5430,10 +5111,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tooltip.serve.integration_code": "דוגמאות קוד מוכנות להעתקה",
   "tooltip.serve.section_pair": "כתובת API וקטעי קוד לשילוב הזוג הנבחר באפליקציה שלך",
   "tooltip.serve.section_run": "כתובת API וקטעי קוד לשילוב ה{term.program} המשופרת באפליקציה שלך",
+  "tooltip.submit.column_roles": "קלט: מה שה{term.program} מקבלת בכל {term.example}. פלט: התשובה הנכונה שה{term.metric} משווה אליה. התעלמות: העמודה לא נכנסת לריצה",
+  "tooltip.submit.dataset_file": "הקובץ שהועלה. כל שורה בו היא {term.example} אחת שהריצה לומדת ממנה או נמדדת עליה",
+  "tooltip.submit.dataset_size": "כמה שורות ועמודות זוהו בקובץ. השורות מתחלקות בין {term.splitTrain}, {term.splitVal} ו{term.splitTest}",
   "tooltip.submit.depth": "כמה רחב החיפוש של GEPA: קל רץ מהר עם פחות ניסיונות; מעמיק בודק יותר אפשרויות ולוקח יותר זמן",
   "tooltip.submit.eval_rounds": "כמה פעמים להריץ הערכה מלאה כדי לבדוק מועמדים לפרומפט",
   "tooltip.submit.merge": "כשפעיל, GEPA יכול לבצע merge ולשלב רעיונות מכמה מועמדים טובים לפרומפט אחד",
   "tooltip.submit.metric_calls": "סך קריאות המדד (rollouts) שהריצה כולה רשאית לצרוך — יחידת התקציב מהמאמר של GEPA. הגדרה כאן עוקפת את סבבי ההערכה; בחירת עומק חיפוש עוקפת את שניהם",
+  "tooltip.submit.name": "שם קצר שמזהה את ה{term.optimization} ברשימת הריצות ובהשוואות. כדאי לציין מה מנסים לשפר",
+  "tooltip.submit.optimization_type": "{term.optimizationTypeRun} מבצעת {term.optimization} אחת עם זוג מודלים; {term.optimizationTypeGrid} חוזרת עליה לכל צירוף של {term.generationModel} ו{term.reflectionModel} ומשווה ביניהם",
+  "tooltip.submit.privacy": "פרטי: ה{term.optimization} לא מופיעה ב{term.exploreTitle}. ציבורי: היא מופיעה שם, וכל משתמש יכול למצוא אותה ולעיין בתוצאות",
   "tooltip.submit.pxn_parents": "כמה מועמדים שונים לשפר בכל סבב. ערך גבוה יותר בודק כיוונים מגוונים יותר, בעלות גבוהה יותר",
   "tooltip.submit.pxn_proposals": "כמה הצעות לייצר מכל מועמד. סך הכול נבדקים p×n מועמדים בכל סבב, במקביל",
   "tooltip.submit.reflection_minibatch": "כמה דוגמאות ה{term.model} בודק בכל סבב משוב כדי למצוא דפוסי שגיאה",
@@ -5443,6 +5130,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tooltip.tagger.multiclass_categories": "הגדר/הגדירי את הקטגוריות הזמינות לבחירה בזמן התיוג — לפחות שתיים",
   "tooltip.tagger.text_column": "בחר/י את העמודה שמכילה את הטקסט לתיוג. שאר העמודות יישמרו בייצוא",
   "tooltip.tagger.upload_file": "העלה/העלי קובץ CSV, JSON או Excel. כל שורה תהפוך לפריט לתיוג",
+  "trajectory.a11y.ghost_label": "הצעה שנדחתה ממועמד {parent}, ציון {score}",
   "trajectory.a11y.node_label": "מועמד {id}, דור {gen}, ציון {score}",
   "trajectory.a11y.tree_label": "עץ המועמדים של האופטימיזציה",
   "trajectory.chat.recorded_count": "{n} הודעות",
@@ -5527,47 +5215,31 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "trajectory.scrubber.label": "סינון לפי דור",
   "trajectory.scrubber.live": "חי",
   "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
-  "tutorial.menu.subtitle": "בחרו תהליך שתרצו להכיר. כל מדריך קצר וניתן להפעלה חוזרת.",
   "tutorial.step.artifact.body": "לשונית Artifact היא הפלט המשופר. אפשר לבדוק את הפרומפט הסופי, כלי ReAct שכווננו, קוד Flex שנכתב מחדש או צמתי workflow משופרים. מתפריט הייצוא מורידים תוכנית DSPy מוכנה להרצה, pickle כשזמין, JSON של הפרומפט, קוד Python משופר או CSV של הלוגים.",
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",
   "tutorial.step.code.title": "קוד מקור ו-workflow",
-  "tutorial.step.dataset_library.body": "מעלים CSV, ‏JSON או Excel פעם אחת ומשתמשים בו בכל מקום. אפשר לחפש בספרייה, לבדוק שורות ואופטימיזציות מקושרות, לערוך בגיליון עם שמירה אוטומטית וביטול, לשתף הרשאת צפייה או עריכה, או לשכפל לספרייה האישית דאטאסט ששיתפו איתך.",
-  "tutorial.step.dataset_library.title": "ספריית דאטאסטים לשימוש חוזר",
-  "tutorial.step.react_tools.body": "ReAct מתאים למשימות שדורשות כלים. כאן בוחרים מקורות כלים מורשים ומגבלת איטרציות; כללי האישור עדיין חלים בזמן הריצה. בלשונית Usage ‏Skynet מציג חשיבה, פעולות, תצפיות ותשובה סופית כפעילות מובנית.",
-  "tutorial.step.react_tools.title": "הגדרת סוכן ReAct",
+  "tutorial.step.dataset_actions.body": "מסמנים את התיבה של דאטאסט כדי לפעול עליו. סמל התגית שולח אותו לתיוג, סמל הטבלה עורך את השורות שלו, סמל האנשים קובע מי יכול לראות אותו, והעיפרון משנה את שמו. אפשר לסמן כמה דאטאסטים יחד ולמחוק אותם בבת אחת.",
+  "tutorial.step.dataset_actions.title": "עבודה עם דאטאסט",
+  "tutorial.step.dataset_add.body": "מוסיפים נתונים פעם אחת ומשתמשים בהם בכל ריצה: לוחצים על «העלאת דאטאסט» כדי להעלות קובץ CSV, ‏JSON או Excel, או גוררים את הקובץ לרשימה. שדה החיפוש מסנן את הספרייה לפי שם.",
+  "tutorial.step.dataset_add.title": "הוספת דאטאסט",
   "tutorial.step.result_actions.body": "אפשר לשתף ריצה בהרשאת צפייה או עריכה עם משתמשים מזוהים, או לפרסם אותה במפורש ל-Explorer של הארגון. שכפול פותח הגשה חדשה עם אותה הגדרה. בתפריט המקביל בסרגל הצד נמצאות גם פעולות שינוי שם, הצמדה ומחיקה.",
   "tutorial.step.result_actions.title": "שיתוף או שימוש חוזר בריצה",
   "tutorial.step.settings_providers.body": "שומרים ומאמתים מפתח ספק פעם אחת; המפתח הסודי מוצפן, ורק גרסה מוסווית שלו נשלחת בחזרה לדפדפן. לאחר האימות אפשר להעביר כל בורר מודל למצב BYOK ולבחור מודלים הזמינים דרך החיבור הזה.",
   "tutorial.step.settings_providers.title": "ניהול ספקי BYOK",
-  "tutorial.step.workflow_canvas.body": "בוחרים Workflow כשהמשימה דורשת כמה צעדים מחוברים. אפשר לבנות את הגרף ידנית או לבקש מסוכן הקוד ליצור ולעדכן אותו, להגדיר כל צומת, לחבר כלים לפי הצורך ולהריץ קלט לדוגמה לפני השליחה.",
-  "tutorial.step.workflow_canvas.title": "בניית workflow רב-שלבי",
+  "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
+  "tutorial.step.sidebar_nav.title": "התמצאות באפליקציה",
+  "tutorial.step.tagger_data.body": "בוחרים את השורות לתיוג: מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה. אחר כך מסמנים את עמודות הטקסט לתיוג.",
+  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך, או תשובה כתובה.",
+  "tutorial.step.tagger_task.title": "הגדרת המשימה",
   "tutorial.track.data.desc": "העלאה, עריכה, תיוג, שיתוף ושימוש חוזר בדאטאסטים.",
   "tutorial.track.data.name": "הכנת נתונים",
   "tutorial.track.quick.desc": "הכנת נתונים, הרצת אופטימיזציה, בדיקה וייצוא התוצאה.",
   "tutorial.track.quick.name": "התחלה מהירה",
   "tutorial.track.results.desc": "קריאת ציונים, מסלולים, לוגים, קוד, תוצרים וייצוא.",
   "tutorial.track.results.name": "שימוש בתוצאה",
-  "tutorial.track.workspace.desc": "ניווט, חיפוש, שיתוף פעולה, ניהול עלויות והגדרת החשבון.",
+  "tutorial.track.workspace.desc": "ניווט, חיפוש, מעקב אחרי ריצות, עבודה עם הסוכן והגדרת החשבון.",
   "tutorial.track.workspace.name": "סביבת עבודה והגדרות",
-  "usage.action.export": "ייצוא",
-  "usage.action.refresh": "רענון",
-  "usage.col.day": "תאריך",
-  "usage.col.model": "מודל",
-  "usage.col.runs": "ריצות",
-  "usage.col.tokens": "טוקנים",
-  "usage.empty.desc": "ריצות מנוהלות יופיעו כאן עם פירוט עלויות.",
-  "usage.empty.title": "אין ניצול עדיין",
-  "usage.export.done": "יוצאו {p1} שורות",
-  "usage.export.empty": "אין מה לייצא",
-  "usage.group.day": "יומי",
-  "usage.group.label": "קיבוץ",
-  "usage.group.week": "שבועי",
-  "usage.model.unknown": "ללא מודל",
-  "usage.panel.by_model": "לפי מודל",
-  "usage.panel.by_run": "לפי ריצה",
-  "usage.panel.over_time": "ניצול לאורך זמן",
-  "usage.panel.recent": "פעילות אחרונה",
   "usage.range.30d": "30 יום",
   "usage.range.7d": "7 ימים",
   "usage.range.90d": "90 יום",
@@ -5576,12 +5248,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "usage.range.from": "מתאריך",
   "usage.range.label": "טווח תאריכים",
   "usage.range.to": "עד תאריך",
-  "usage.series.billed": "חיוב",
-  "usage.stat.per_run": "{p1} לריצה",
-  "usage.stat.runs": "ריצות",
-  "usage.stat.spent": "קרדיטים שנוצלו",
-  "usage.tokens.count": "{count} טוקנים",
-  "usage.tokens.split": "קלט {input} · פלט {output}",
   "workflow.agent.editing_graph": "עורך את הגרף…",
   "workflow.agent.tool.add_node": "הוספת צומת",
   "workflow.agent.tool.connect": "חיבור צמתים",

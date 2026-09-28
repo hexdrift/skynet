@@ -7,7 +7,7 @@ import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 
-import { STEPS } from "../constants";
+import { LAST_WIZARD_STAGE } from "../lib/wizard-steps";
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";
 
 export function SubmitNav({ w }: { w: SubmitWizardContext }) {
@@ -19,7 +19,7 @@ export function SubmitNav({ w }: { w: SubmitWizardContext }) {
   const BackChevron = rtl ? CaretRight : CaretLeft;
   const NextChevron = rtl ? CaretLeft : CaretRight;
 
-  if (step < STEPS.length - 1) {
+  if (step < LAST_WIZARD_STAGE) {
     return (
       <div className="flex items-stretch justify-between gap-3">
         <Button
@@ -35,12 +35,12 @@ export function SubmitNav({ w }: { w: SubmitWizardContext }) {
           disabled={advancing}
           aria-busy={advancing || undefined}
           aria-live="polite"
-          className="min-h-[44px] min-w-0 flex-1 justify-center gap-2 whitespace-normal sm:min-w-[88px] sm:flex-none sm:whitespace-nowrap"
+          className="min-h-[44px] lg:min-h-0 min-w-0 flex-1 justify-center gap-2 whitespace-normal sm:min-w-[88px] sm:flex-none sm:whitespace-nowrap"
           data-tutorial="wizard-next"
         >
           {advancing ? (
             <>
-              <CircleNotch className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <CircleNotch className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
               <span>{msg("submit.nav.validating")}</span>
             </>
           ) : (
@@ -63,7 +63,7 @@ export function SubmitNav({ w }: { w: SubmitWizardContext }) {
       data-telemetry="submit-run"
       animate={{ scale: [1, 1.01, 1] }}
       transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-      className="group relative w-full rounded-2xl bg-primary text-primary-foreground font-semibold text-base pt-5 pb-7 cursor-pointer transition-all duration-300 hover:shadow-[0_0_30px_rgba(61,46,34,0.35)] hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+      className="group relative w-full rounded-2xl bg-primary text-primary-foreground font-semibold text-base pt-5 pb-7 cursor-pointer transition-all duration-300 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {submitting ? (
         <span className="flex items-center justify-center gap-2">

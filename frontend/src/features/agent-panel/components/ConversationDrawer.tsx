@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
+import { PingDot } from "@/shared/ui/ping-dot";
 import * as React from "react";
 import {
   ClockCounterClockwise,
@@ -7,7 +9,6 @@ import {
   PencilSimple,
   PushPin,
   PushPinSlash,
-  MagnifyingGlass,
   Trash,
 } from "@/shared/ui/icons";
 
@@ -15,12 +16,18 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/ui/primit
 import { Input } from "@/shared/ui/primitives/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/primitives/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
+import {
+  COMPACT_POPOVER_ICON_CLASS,
+  COMPACT_POPOVER_ITEM_CLASS,
+} from "@/shared/ui/compact-popover-menu";
 import { cn } from "@/shared/lib/utils";
+import { Button } from "@/shared/ui/primitives/button";
 import { msg } from "@/shared/lib/messages";
 import { getActiveDir, getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 import { ConversationDrawerSkeleton } from "./ConversationDrawerSkeleton";
 
 import type { ConversationSummary } from "../lib/conversation-api";
+import { SearchInput } from "@/shared/ui/search-input";
 
 interface ConversationDrawerProps {
   open: boolean;
@@ -115,22 +122,19 @@ export function ConversationDrawer(props: ConversationDrawerProps) {
         className="flex w-full flex-col p-0 sm:w-[min(420px,90vw)] sm:max-w-none"
       >
         <SheetHeader className="border-b border-border/40 p-3">
-          <SheetTitle className="text-[0.875rem] flex items-center gap-2">
-            <ClockCounterClockwise className="size-4" aria-hidden="true" />
+          <SheetTitle className="flex items-center gap-2">
+            <ClockCounterClockwise className="size-4 text-muted-foreground" aria-hidden="true" />
             {msg("auto.features.agent.panel.components.conversationdrawer.title")}
           </SheetTitle>
-          <div className="relative mt-2">
-            <MagnifyingGlass
-              className="absolute top-1/2 -translate-y-1/2 end-2 size-3.5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
+          <div className="mt-2">
+            <SearchInput
+              size="sm"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={msg(
                 "auto.features.agent.panel.components.conversationdrawer.search_placeholder",
               )}
-              className="h-[44px] text-[0.8125rem] pe-7 md:h-8 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
+              className="text-[0.8125rem]"
             />
           </div>
         </SheetHeader>
@@ -139,11 +143,14 @@ export function ConversationDrawer(props: ConversationDrawerProps) {
           {loading && conversations.length === 0 ? (
             <ConversationDrawerSkeleton />
           ) : conversations.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[0.75rem] text-muted-foreground">
-              {query.trim()
-                ? msg("auto.features.agent.panel.components.conversationdrawer.no_results")
-                : msg("auto.features.agent.panel.components.conversationdrawer.empty")}
-            </p>
+            <EmptyState
+              variant="list"
+              title={
+                query.trim()
+                  ? msg("auto.features.agent.panel.components.conversationdrawer.no_results")
+                  : msg("auto.features.agent.panel.components.conversationdrawer.empty")
+              }
+            />
           ) : (
             <>
               {groups.map((group) => (
@@ -194,7 +201,7 @@ function Section({
   if (rows.length === 0) return null;
   return (
     <div className="mt-3">
-      <div className="px-2 pb-1 text-[0.6875rem] uppercase tracking-wide text-muted-foreground/80">
+      <div className="px-2 pb-1 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
         {label}
       </div>
       <ul className="space-y-0.5">
@@ -287,10 +294,9 @@ function ConversationRow({
         onClick={() => onPick(row.id)}
       >
         {busy ? (
-          <span
-            aria-label={msg("agent.parallel.busy_indicator")}
-            className="size-1.5 rounded-full bg-primary shrink-0 animate-pulse"
-          />
+          <span aria-label={msg("agent.parallel.busy_indicator")} className="shrink-0">
+            <PingDot size="sm" tone="agent" />
+          </span>
         ) : (
           unread &&
           !active && (
@@ -317,13 +323,15 @@ function ConversationRow({
           <Tooltip>
             <TooltipTrigger asChild>
               <PopoverTrigger asChild>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={(e) => {
                     e.stopPropagation();
                   }}
                   className={cn(
-                    "inline-flex size-[44px] items-center justify-center rounded-md text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors cursor-pointer md:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]",
+                    "text-muted-foreground hover:text-foreground",
                     "opacity-100 md:opacity-0 md:group-hover:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)_and_(pointer:coarse)]:opacity-100",
                   )}
                   aria-label={msg(
@@ -337,7 +345,7 @@ function ConversationRow({
                     )}
                     aria-hidden="true"
                   />
-                </button>
+                </Button>
               </PopoverTrigger>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -348,7 +356,7 @@ function ConversationRow({
             side="bottom"
             align="end"
             sideOffset={4}
-            className="w-48 p-1"
+            className="w-48 py-1.5"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -357,9 +365,9 @@ function ConversationRow({
                 setEditing(true);
                 setMenuOpen(false);
               }}
-              className="flex min-h-[44px] w-full items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] hover:bg-accent cursor-pointer"
+              className={COMPACT_POPOVER_ITEM_CLASS}
             >
-              <PencilSimple className="size-3.5" />
+              <PencilSimple className={COMPACT_POPOVER_ICON_CLASS} />
               {msg("auto.features.agent.panel.components.conversationdrawer.rename")}
             </button>
             <button
@@ -368,12 +376,12 @@ function ConversationRow({
                 onTogglePin(row.id, !row.pinned);
                 setMenuOpen(false);
               }}
-              className="flex min-h-[44px] w-full items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] hover:bg-accent cursor-pointer"
+              className={COMPACT_POPOVER_ITEM_CLASS}
             >
               {row.pinned ? (
-                <PushPinSlash className="size-3.5" />
+                <PushPinSlash className={COMPACT_POPOVER_ICON_CLASS} />
               ) : (
-                <PushPin className="size-3.5" />
+                <PushPin className={COMPACT_POPOVER_ICON_CLASS} />
               )}
               {row.pinned
                 ? msg("auto.features.agent.panel.components.conversationdrawer.unpin")
@@ -385,9 +393,12 @@ function ConversationRow({
                 onDelete(row.id);
                 setMenuOpen(false);
               }}
-              className="flex min-h-[44px] w-full items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] text-destructive hover:bg-destructive/10 cursor-pointer"
+              className={cn(
+                COMPACT_POPOVER_ITEM_CLASS,
+                "text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10",
+              )}
             >
-              <Trash className="size-3.5" />
+              <Trash className={cn(COMPACT_POPOVER_ICON_CLASS, "text-destructive")} />
               {msg("auto.features.agent.panel.components.conversationdrawer.delete")}
             </button>
           </PopoverContent>

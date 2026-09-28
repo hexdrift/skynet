@@ -36,7 +36,7 @@ const FEATURED_TOOLS: readonly string[] = [
   "profile_datasets_profile_post",
   "list_datasets_for_agent",
   "request_user_dataset_from_library",
-  "edit_code_optimizations_edit_code_post",
+  "request_code_authoring",
   "validate_code_validate_code_post",
   "discover_models_models_discover_post",
   "submit_job_run_post",
@@ -76,7 +76,7 @@ const TOUR_DESCRIPTIONS: Record<string, string> = perLocale(() => ({
     "auto.features.agent.panel.components.toolscarousel.template.6",
     { p1: TERMS.optimizationPlural },
   ),
-  edit_code_optimizations_edit_code_post: formatMsg(
+  request_code_authoring: formatMsg(
     "auto.features.agent.panel.components.toolscarousel.template.7",
     { p1: TERMS.signature, p2: TERMS.metric },
   ),

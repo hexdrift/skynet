@@ -13,6 +13,7 @@ import pytest
 
 from core.exceptions import ServiceError
 from core.models import ColumnMapping, SplitFractions
+from core.service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION, SPLIT_VERSION_LEGACY
 from core.service_gateway.optimization.data import (
     _coerce_image,
     _is_signature_field,
@@ -38,20 +39,34 @@ def _items(n: int) -> list[int]:
 @pytest.mark.parametrize(
     ("n", "train_f", "val_f", "test_f", "exp_train", "exp_val", "exp_test"),
     [
-        (10, 0.7, 0.15, 0.15, 7, 1, 2),
+        (10, 0.7, 0.15, 0.15, 7, 2, 1),
         (100, 0.7, 0.15, 0.15, 70, 15, 15),
         (1, 1.0, 0.0, 0.0, 1, 0, 0),
         (10, 0.8, 0.1, 0.1, 8, 1, 1),
         (10, 0.5, 0.5, 0.0, 5, 5, 0),
+        (4, 0.85, 0.15, 0.0, 3, 1, 0),
+        (101, 0.8, 0.2, 0.0, 81, 20, 0),
+        (4, 0.9, 0.05, 0.05, 2, 1, 1),
+        (2, 0.7, 0.15, 0.15, 1, 1, 0),
     ],
-    ids=["10-std", "100-std", "1-all-train", "10-80-10-10", "10-50-50-0"],
+    ids=[
+        "10-std",
+        "100-std",
+        "1-all-train",
+        "10-80-10-10",
+        "10-50-50-0",
+        "4-val-keeps-one",
+        "101-no-test",
+        "4-one-each",
+        "2-too-few",
+    ],
 )
 def test_split_examples_counts(n, train_f, val_f, test_f, exp_train, exp_val, exp_test) -> None:
-    """Split counts match expectations across multiple dataset sizes."""
+    """Every example lands in a split; a non-zero fraction gets at least one and a zero fraction none."""
     items = _items(n)
     fractions = _fractions(train_f, val_f, test_f)
 
-    result = split_examples(items, fractions, shuffle=False, seed=None)
+    result = split_examples(items, fractions, shuffle=False, seed=None, split_version=CURRENT_SPLIT_VERSION)
 
     assert len(result.train) == exp_train
     assert len(result.val) == exp_val
@@ -59,17 +74,45 @@ def test_split_examples_counts(n, train_f, val_f, test_f, exp_train, exp_val, ex
 
 
 def test_split_examples_too_small_for_nonzero_val_raises() -> None:
-    """Datasets too small to allocate a non-empty val split raise ``ServiceError``."""
-    items = _items(3)
+    """A single example goes to train, so a non-zero val fraction raises ``ServiceError``."""
+    items = _items(1)
     fractions = _fractions(0.7, 0.15, 0.15)
 
     with pytest.raises(ServiceError, match="too small for a val split"):
-        split_examples(items, fractions, shuffle=False, seed=None)
+        split_examples(items, fractions, shuffle=False, seed=None, split_version=CURRENT_SPLIT_VERSION)
+
+
+@pytest.mark.parametrize("split_version", [None, SPLIT_VERSION_LEGACY], ids=["unstamped", "legacy"])
+@pytest.mark.parametrize(
+    ("n", "train_f", "val_f", "test_f", "exp_train", "exp_val", "exp_test"),
+    [
+        (10, 0.7, 0.15, 0.15, 7, 1, 2),
+        (101, 0.8, 0.2, 0.0, 80, 20, 1),
+    ],
+    ids=["10-std", "101-no-test"],
+)
+def test_split_examples_legacy_payloads_keep_the_truncating_split(
+    split_version, n, train_f, val_f, test_f, exp_train, exp_val, exp_test
+) -> None:
+    """A payload stored before ``split_version`` resumes on the partition it was built with."""
+    result = split_examples(
+        _items(n), _fractions(train_f, val_f, test_f), shuffle=False, seed=None, split_version=split_version
+    )
+
+    assert (len(result.train), len(result.val), len(result.test)) == (exp_train, exp_val, exp_test)
+
+
+def test_split_examples_legacy_payload_still_rejects_an_empty_val() -> None:
+    """The legacy split keeps its empty-val failure, so a resumed legacy run fails the same way."""
+    with pytest.raises(ServiceError, match="too small for a val split"):
+        split_examples(_items(4), _fractions(0.85, 0.15, 0.0), shuffle=False, seed=None, split_version=None)
 
 
 def test_split_examples_empty_dataset_returns_empty_splits() -> None:
     """An empty input yields three empty splits."""
-    result = split_examples([], _fractions(0.7, 0.15, 0.15), shuffle=False, seed=None)
+    result = split_examples(
+        [], _fractions(0.7, 0.15, 0.15), shuffle=False, seed=None, split_version=CURRENT_SPLIT_VERSION
+    )
 
     assert result.train == []
     assert result.val == []
@@ -81,7 +124,7 @@ def test_split_examples_all_items_accounted_for() -> None:
     items = _items(20)
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    result = split_examples(items, fractions, shuffle=False, seed=None)
+    result = split_examples(items, fractions, shuffle=False, seed=None, split_version=CURRENT_SPLIT_VERSION)
 
     assert len(result.train) + len(result.val) + len(result.test) == len(items)
 
@@ -91,7 +134,7 @@ def test_split_examples_no_shuffle_preserves_order() -> None:
     items = _items(10)
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    result = split_examples(items, fractions, shuffle=False, seed=None)
+    result = split_examples(items, fractions, shuffle=False, seed=None, split_version=CURRENT_SPLIT_VERSION)
 
     combined = result.train + result.val + result.test
     assert combined == items
@@ -102,7 +145,7 @@ def test_split_examples_shuffle_changes_order() -> None:
     items = _items(20)
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    result = split_examples(items, fractions, shuffle=True, seed=42)
+    result = split_examples(items, fractions, shuffle=True, seed=42, split_version=CURRENT_SPLIT_VERSION)
     combined = result.train + result.val + result.test
 
     assert sorted(combined) == items
@@ -114,8 +157,8 @@ def test_split_examples_same_seed_is_deterministic() -> None:
     items = _items(30)
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    r1 = split_examples(items, fractions, shuffle=True, seed=99)
-    r2 = split_examples(items, fractions, shuffle=True, seed=99)
+    r1 = split_examples(items, fractions, shuffle=True, seed=99, split_version=CURRENT_SPLIT_VERSION)
+    r2 = split_examples(items, fractions, shuffle=True, seed=99, split_version=CURRENT_SPLIT_VERSION)
 
     assert r1.train == r2.train
     assert r1.val == r2.val
@@ -127,8 +170,8 @@ def test_split_examples_different_seeds_differ() -> None:
     items = _items(30)
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    r1 = split_examples(items, fractions, shuffle=True, seed=1)
-    r2 = split_examples(items, fractions, shuffle=True, seed=2)
+    r1 = split_examples(items, fractions, shuffle=True, seed=1, split_version=CURRENT_SPLIT_VERSION)
+    r2 = split_examples(items, fractions, shuffle=True, seed=2, split_version=CURRENT_SPLIT_VERSION)
 
     # It would be astronomically unlikely for both orderings to match.
     assert r1.train != r2.train
@@ -140,7 +183,7 @@ def test_split_examples_shuffle_does_not_mutate_input() -> None:
     original = list(items)
     fractions = _fractions(0.7, 0.15, 0.15)
 
-    split_examples(items, fractions, shuffle=True, seed=7)
+    split_examples(items, fractions, shuffle=True, seed=7, split_version=CURRENT_SPLIT_VERSION)
 
     assert items == original
 

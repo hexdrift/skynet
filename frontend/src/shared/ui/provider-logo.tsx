@@ -13,7 +13,6 @@ import {
   Mistral,
   Moonshot,
   OpenAI,
-  OpenRouter,
   Together,
   XAI,
 } from "@lobehub/icons";
@@ -77,8 +76,6 @@ function renderBrand(slug: string, size: number): React.ReactNode {
       return <Fireworks.Avatar size={size} />;
     case "cohere":
       return <Cohere.Avatar size={size} />;
-    case "openrouter":
-      return <OpenRouter.Avatar size={size} />;
     default:
       return null;
   }

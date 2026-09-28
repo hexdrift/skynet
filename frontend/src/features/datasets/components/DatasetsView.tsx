@@ -1,22 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
-import { CircleNotch, Database, MagnifyingGlass, UploadSimple } from "@/shared/ui/icons";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  CircleNotch,
+  Database,
+  MagnifyingGlass,
+  PencilSimple,
+  Table,
+  Tag,
+  UploadSimple,
+  Users,
+} from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { DataHubTabs } from "@/shared/ui/data-hub-tabs";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { SearchField } from "@/shared/ui/search-field";
-import { SelectionBar } from "@/shared/ui/selection-bar";
+import { SelectionAction, SelectionBar } from "@/shared/ui/selection-bar";
 import {
   bulkDeleteDatasets,
   isStorageQuotaError,
@@ -24,15 +27,16 @@ import {
   type DatasetSummary,
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { parseDatasetFile } from "@/shared/lib/parse-dataset";
+import { DATASET_UPLOAD_ACCEPT, parseDatasetFile } from "@/shared/lib/parse-dataset";
 import { track, TelemetryEvent } from "@/shared/lib/telemetry";
 import { cn } from "@/shared/lib/utils";
 import { ListPageSkeleton } from "@/shared/ui/list-page-skeleton";
+import { registerTutorialHook } from "@/features/tutorial";
 import { useDatasets } from "../hooks/use-datasets";
 import { DatasetCard } from "./DatasetCard";
 import { DatasetDetailDialog } from "./DatasetDetailDialog";
-
-const UPLOAD_ACCEPT = ".csv,.json,.xlsx,.xls";
+import { DatasetRenameDialog } from "./DatasetRenameDialog";
+import { DatasetShareDialog } from "./DatasetShareDialog";
 
 /**
  * Top-level /datasets page: the personal dataset library. Lists owned and
@@ -42,8 +46,13 @@ const UPLOAD_ACCEPT = ".csv,.json,.xlsx,.xls";
  * preview and the reverse link to every optimization that used the dataset.
  */
 export function DatasetsView() {
-  const { datasets, loading, error, refetch } = useDatasets();
+  const { datasets: fetchedDatasets, loading, error, refetch } = useDatasets();
+  // Demo overlay the guided tour injects, so a new account still has a card to
+  // select; background refetches can never overwrite it.
+  const [demoDatasets, setDemoDatasets] = React.useState<DatasetSummary[] | null>(null);
+  const datasets = demoDatasets ?? fetchedDatasets;
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [selected, setSelected] = React.useState<DatasetSummary | null>(null);
   const [dragging, setDragging] = React.useState(false);
@@ -54,8 +63,25 @@ export function DatasetsView() {
   const [anchorId, setAnchorId] = React.useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [bulkDeleting, setBulkDeleting] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [renameOpen, setRenameOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deepLinkedRef = React.useRef(false);
+
+  React.useEffect(() => registerTutorialHook("setDemoDatasets", setDemoDatasets), []);
+  React.useEffect(
+    () => registerTutorialHook("setSelectedDatasetIds", (ids) => setSelectedIds(new Set(ids))),
+    [],
+  );
+  React.useEffect(() => {
+    const onExit = () => {
+      setDemoDatasets(null);
+      setSelectedIds(new Set());
+      setAnchorId(null);
+    };
+    window.addEventListener("tutorial-exited", onExit);
+    return () => window.removeEventListener("tutorial-exited", onExit);
+  }, []);
 
   // Drop selections that stopped resolving to an owned dataset (deleted in
   // another tab, or ownership changed), so the bar never counts ghosts.
@@ -77,7 +103,7 @@ export function DatasetsView() {
         toast.success(formatMsg("datasets.toast.bulk_deleted", { count: res.deleted.length }));
       }
       if (res.skipped.length > 0) {
-        toast.warn(formatMsg("shared.selection.delete_skipped", { count: res.skipped.length }));
+        toast.warning(formatMsg("shared.selection.delete_skipped", { count: res.skipped.length }));
       }
       setBulkOpen(false);
       setSelectedIds(new Set());
@@ -104,6 +130,11 @@ export function DatasetsView() {
     if (match) setSelected(match);
     else toast.info(msg("datasets.open.not_found"));
   }, [datasets, loading, error, searchParams]);
+
+  // Per-dataset actions only make sense with exactly one selected, as in the
+  // dashboard jobs bar; selection is owner-only, so every one of them applies.
+  const soleSelected =
+    selectedIds.size === 1 ? (datasets.find((d) => selectedIds.has(d.id)) ?? null) : null;
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -173,7 +204,7 @@ export function DatasetsView() {
     [uploading, refetch],
   );
 
-  if (loading) {
+  if (loading && !demoDatasets) {
     return (
       <div className="pb-16" data-tutorial="datasets-library">
         <DataHubTabs active="datasets" />
@@ -188,7 +219,7 @@ export function DatasetsView() {
       <input
         ref={fileInputRef}
         type="file"
-        accept={UPLOAD_ACCEPT}
+        accept={DATASET_UPLOAD_ACCEPT}
         className="hidden"
         onChange={(e) => {
           void handleFiles(e.target.files);
@@ -197,12 +228,15 @@ export function DatasetsView() {
       />
 
       {datasets.length > 0 && (
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div
+          className="flex flex-col gap-2.5 sm:flex-row sm:items-center"
+          data-tutorial="datasets-add"
+        >
           <SearchField
             value={search}
             onValueChange={setSearch}
             placeholder={msg("datasets.search.placeholder")}
-            className="flex-1 !h-[44px] [&_input]:h-full max-lg:[&_button]:!size-[44px] lg:!h-11"
+            className="flex-1"
           />
           <Button
             variant="outline"
@@ -236,7 +270,7 @@ export function DatasetsView() {
           dragging ? "border-[#3D2E22]/50 bg-[#3D2E22]/[0.03]" : "border-transparent",
         )}
       >
-        {error ? (
+        {error && !demoDatasets ? (
           <EmptyState icon={Database} title={msg("datasets.error")} />
         ) : datasets.length === 0 ? (
           <EmptyState
@@ -276,36 +310,77 @@ export function DatasetsView() {
           setAnchorId(null);
         }}
         onDelete={() => setBulkOpen(true)}
-      />
+        tutorialId="datasets-selection"
+      >
+        {soleSelected && (
+          <>
+            <SelectionAction
+              label={msg("datasets.action.tag")}
+              onClick={() =>
+                router.push(
+                  `/tagger?dataset=${soleSelected.id}&name=${encodeURIComponent(soleSelected.name)}`,
+                )
+              }
+            >
+              <Tag className="size-4" />
+            </SelectionAction>
+            <SelectionAction
+              label={msg("datasets.action.edit")}
+              onClick={() =>
+                router.push(
+                  `/datasets/${soleSelected.id}/edit?name=${encodeURIComponent(soleSelected.name)}`,
+                )
+              }
+            >
+              <Table className="size-4" />
+            </SelectionAction>
+            <SelectionAction label={msg("share.button")} onClick={() => setShareOpen(true)}>
+              <Users className="size-4" />
+            </SelectionAction>
+            <SelectionAction
+              label={msg("datasets.action.rename")}
+              onClick={() => setRenameOpen(true)}
+            >
+              <PencilSimple className="size-4" />
+            </SelectionAction>
+          </>
+        )}
+      </SelectionBar>
+
+      {soleSelected && (
+        <>
+          <DatasetShareDialog
+            key={soleSelected.id}
+            datasetId={soleSelected.id}
+            open={shareOpen}
+            onOpenChange={setShareOpen}
+            hideTrigger
+          />
+          <DatasetRenameDialog
+            dataset={soleSelected}
+            open={renameOpen}
+            onOpenChange={setRenameOpen}
+            onRenamed={refetch}
+          />
+        </>
+      )}
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent
-          className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md"
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>{msg("datasets.delete.selected_title")}</DialogTitle>
-            <DialogDescription>
-              {formatMsg("datasets.delete.selected_body", { count: selectedIds.size })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2 gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setBulkOpen(false)}
-              disabled={bulkDeleting}
-              className="!min-h-[44px] w-full justify-center lg:!min-h-0"
-            >
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("datasets.delete.selected_title")}
+            description={formatMsg("datasets.delete.selected_body", { count: selectedIds.size })}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulkDeleting}>
               {msg("datasets.delete.cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmBulkDelete}
-              disabled={bulkDeleting}
-              className="!min-h-[44px] w-full justify-center shadow-xs lg:!min-h-0"
-            >
+            <Button variant="destructive" onClick={confirmBulkDelete} disabled={bulkDeleting}>
               {bulkDeleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.delete.confirm")
               )}

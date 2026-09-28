@@ -7,7 +7,8 @@ background worker is a recording fake — the job loop itself is covered in
 ``core.worker.tests.test_tagging_job``. Covers the interview turn, prediction
 with exclusion semantics, bulk-job submission mechanics (job row + overview +
 payload + session mirror), status reconciliation against the job row, cancel,
-the autosave 409 while a job runs, and the ownership guard.
+the autosave 409 while a job runs, the ownership guard, and the
+synthetic-dataset route.
 """
 
 from __future__ import annotations
@@ -429,7 +430,7 @@ def _create_with_client_model(client: TestClient) -> str:
         "modelParams": {
             "temperature": 0.1,
             "token_source": "byok",
-            "byok_provider": "openrouter",
+            "byok_provider": "together",
         },
     }
     resp = client.post("/tagging-sessions", json=body)
@@ -632,3 +633,115 @@ def test_ownership_enforced_on_assist_routes() -> None:
     assert resp.status_code == 404
     resp = bob_client.get(f"/tagging-sessions/{session_id}/assist/autotag")
     assert resp.status_code == 404
+
+
+_SYNTHETIC_BODY = {
+    **_SESSION_BODY,
+    "config": {"mode": "freetext", "modeProvisional": True, "inputColumns": [], "synthetic": True},
+    "columns": [],
+    "data": [],
+    "annotations": {},
+    "assist": {**_SESSION_BODY["assist"], "provenance": {}},
+}
+
+
+def test_synthesize_persists_rows_on_the_session(monkeypatch) -> None:
+    """The route writes the rows and stores every generated column as an input column."""
+    seen: dict = {}
+
+    def fake_synthesize(brief, columns, count, usage_sink=None):
+        """Capture the request and return a tiny dataset."""
+        seen.update({"brief": brief, "columns": columns, "count": count})
+        return ["text", "channel"], [{"text": "Card declined", "channel": "chat"}]
+
+    monkeypatch.setattr(tagging, "synthesize_rows", fake_synthesize)
+    client, _ = _client(_ALICE)
+    resp = client.post("/tagging-sessions", json=_SYNTHETIC_BODY)
+    assert resp.status_code == 201, resp.text
+    session_id = resp.json()["id"]
+    resp = client.post(
+        f"/tagging-sessions/{session_id}/assist/synthesize",
+        json={"brief": "Bank support chats", "rows": 1, "columns": ["text", "channel"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["columns"] == ["text", "channel"]
+    assert body["rows"] == [
+        {
+            "text": "text: Card declined\nchannel: chat",
+            "channel": "chat",
+            "id": 1,
+            "fields": [{"column": "text", "value": "Card declined"}, {"column": "channel", "value": "chat"}],
+        }
+    ]
+    # On-prem the client never learns which model wrote the rows.
+    assert set(body) == {"columns", "rows"}
+    assert seen == {"brief": "Bank support chats", "columns": ["text", "channel"], "count": 1}
+    detail = client.get(f"/tagging-sessions/{session_id}").json()
+    assert detail["row_count"] == 1
+    assert detail["columns"] == ["text", "channel"]
+    assert detail["config"]["inputColumns"] == ["text", "channel"]
+    assert detail["data"] == body["rows"]
+    # A second run would overwrite generated rows, so it is refused.
+    resp = client.post(
+        f"/tagging-sessions/{session_id}/assist/synthesize", json={"brief": "Bank support chats", "rows": 1}
+    )
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "tagger.assist.not_synthetic"
+
+
+def test_synthesize_refuses_sessions_with_data_or_oversized_requests(monkeypatch) -> None:
+    """Only data-less synthetic sessions generate, and the row cap is enforced before any call."""
+    called = []
+    monkeypatch.setattr(tagging, "synthesize_rows", lambda *a, **k: called.append(1))
+    client, _ = _client(_ALICE)
+    uploaded = _create(client)
+    resp = client.post(f"/tagging-sessions/{uploaded}/assist/synthesize", json={"brief": "Reviews", "rows": 5})
+    assert resp.status_code == 409
+    session_id = client.post("/tagging-sessions", json=_SYNTHETIC_BODY).json()["id"]
+    too_many = tagging.MAX_SYNTH_ROWS + 1
+    resp = client.post(f"/tagging-sessions/{session_id}/assist/synthesize", json={"brief": "Reviews", "rows": too_many})
+    assert resp.status_code == 422
+    too_wide = [f"col{i}" for i in range(tagging.MAX_SYNTH_COLUMNS + 1)]
+    resp = client.post(
+        f"/tagging-sessions/{session_id}/assist/synthesize",
+        json={"brief": "Reviews", "rows": 5, "columns": too_wide},
+    )
+    assert resp.status_code == 422
+    assert called == []
+
+
+def test_synthesize_maps_engine_failure_to_502(monkeypatch) -> None:
+    """A generator that produced nothing surfaces as the shared LLM-failure code."""
+
+    def boom(*args, **kwargs):
+        """Simulate a model that wrote no usable rows."""
+        raise RuntimeError("no rows")
+
+    monkeypatch.setattr(tagging, "synthesize_rows", boom)
+    client, _ = _client(_ALICE)
+    session_id = client.post("/tagging-sessions", json=_SYNTHETIC_BODY).json()["id"]
+    resp = client.post(f"/tagging-sessions/{session_id}/assist/synthesize", json={"brief": "Reviews", "rows": 5})
+    assert resp.status_code == 502
+    assert resp.json()["code"] == "tagger.assist.llm_failed"
+
+
+def test_synthesize_never_overwrites_rows_that_landed_meanwhile(monkeypatch) -> None:
+    """A concurrent generate that stored rows first wins; the late one gets 409."""
+    client, store = _client(_ALICE)
+    session_id = client.post("/tagging-sessions", json=_SYNTHETIC_BODY).json()["id"]
+    first = [{"id": 1, "text": "First", "fields": [{"column": "text", "value": "First"}]}]
+
+    def racing_synthesize(brief, columns, count, usage_sink=None):
+        """Store another request's rows while this one is still generating."""
+        with Session(store.engine) as db:
+            row = db.get(TaggingSessionModel, session_id)
+            row.data = first
+            row.row_count = 1
+            db.commit()
+        return ["text"], [{"text": "Second"}]
+
+    monkeypatch.setattr(tagging, "synthesize_rows", racing_synthesize)
+    resp = client.post(f"/tagging-sessions/{session_id}/assist/synthesize", json={"brief": "Reviews", "rows": 1})
+    assert resp.status_code == 409
+    assert client.get(f"/tagging-sessions/{session_id}").json()["data"] == first

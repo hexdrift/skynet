@@ -126,11 +126,6 @@ class Settings(BaseSettings):
         alias="LITELLM_PROXY_API_KEY",
         description="Virtual key the backend presents to the LiteLLM proxy for managed runs. Only consulted when LITELLM_PROXY_URL is set.",
     )
-    openrouter_api_key: SecretStr | None = Field(
-        default=None,
-        alias="OPENROUTER_API_KEY",
-        description="Optional operator-managed OpenRouter key for centrally configured models.",
-    )
     worker_enabled: bool = Field(
         default=True,
         alias="WORKER_ENABLED",
@@ -352,7 +347,8 @@ class Settings(BaseSettings):
             "programs are affected. Off (default) keeps the text tool protocol "
             "that every model — including the flaky MiniMax student — parses "
             "reliably; only enable it for a deployment whose models all "
-            "support native function calling."
+            "support native function calling. The agents (generalist, code "
+            "agent, served ReAct chat) always use native calling regardless."
         ),
         alias="REACT_NATIVE_TOOL_CALLING",
     )
@@ -501,6 +497,25 @@ class Settings(BaseSettings):
             "alerting: records still reach the logs, they just aren't forwarded."
         ),
     )
+    alert_email: str = Field(
+        default="",
+        alias="ALERT_EMAIL",
+        description=(
+            "Operator address that receives every operational alert by email "
+            "through the internal SMTP relay (requires SMTP_HOST), alongside or "
+            "instead of ALERT_WEBHOOK_URL. Empty disables email alerts."
+        ),
+    )
+    alert_email_max_per_hour: int = Field(
+        default=20,
+        ge=0,
+        alias="ALERT_EMAIL_MAX_PER_HOUR",
+        description=(
+            "Per-process cap on alert emails in any rolling hour, so a burst of "
+            "distinct errors can't flood the inbox. Alerts past the cap still "
+            "reach the logs and the webhook."
+        ),
+    )
     alert_min_level: str = Field(
         default="ERROR",
         alias="ALERT_MIN_LEVEL",
@@ -550,6 +565,26 @@ class Settings(BaseSettings):
         ),
     )
 
+    @field_validator("code_agent_model", "generalist_agent_model", mode="before")
+    @classmethod
+    def _default_blank_agent_model(cls, value: object) -> object:
+        """Map a blank agent model id to the on-prem default alias.
+
+        The Helm chart and compose files export these keys as empty strings, and
+        an empty env var would otherwise override the field default and leave
+        the agent with no model at all.
+
+        Args:
+            value: Raw CODE_AGENT_MODEL / GENERALIST_AGENT_MODEL input.
+
+        Returns:
+            DEFAULT_AGENT_MODEL_ID when the value is a blank string, otherwise
+            the value unchanged.
+        """
+        if isinstance(value, str) and not value.strip():
+            return DEFAULT_AGENT_MODEL_ID
+        return value
+
     @field_validator("alert_min_level")
     @classmethod
     def _validate_alert_min_level(cls, v: str) -> str:
@@ -592,8 +627,8 @@ class Settings(BaseSettings):
     generalist_agent_model: str = Field(
         default=DEFAULT_AGENT_MODEL_ID,
         description=(
-            "LiteLLM model id used by the generalist agent (Cmd/Ctrl+J "
-            "panel). Defaults to the inert on-prem alias; override via "
+            "LiteLLM model id used by the generalist agent panel. "
+            "Defaults to the inert on-prem alias; override via "
             "GENERALIST_AGENT_MODEL."
         ),
     )
@@ -806,11 +841,6 @@ class Settings(BaseSettings):
         """Return admin IdP groups as a lowercase frozenset."""
         return _csv_lower_set(self.admin_groups)
 
-    @property
-    def is_byok_vault_configured(self) -> bool:
-        """Return whether a BYOK vault key is present (saving provider keys enabled)."""
-        return self.byok_vault_key is not None
-
     @cached_property
     def code_version(self) -> str:
         """Return the build version used for job-claim compatibility checks.
@@ -851,20 +881,3 @@ class Settings(BaseSettings):
         return "unknown"
 
 settings = Settings()
-
-
-def embeddings_schema_enabled() -> bool:
-    """Report whether migrations should manage the pgvector embedding schema.
-
-    True only for the semantic search backend. The lexical and bm25 backends run
-    on a vanilla Postgres with no pgvector extension, so the baseline and every
-    downstream embedding migration skip the ``job_embeddings`` table, its Vector
-    columns and the HNSW indexes — which is what keeps the migrate Job from
-    issuing ``CREATE EXTENSION vector`` on a database that doesn't have it. The
-    migrate Job inherits SEARCH_BACKEND from the backend ConfigMap, so this reads
-    the same value the application pods do.
-
-    Returns:
-        True when SEARCH_BACKEND selects semantic search, else False.
-    """
-    return settings.embeddings_enabled

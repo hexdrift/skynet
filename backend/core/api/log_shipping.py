@@ -50,11 +50,6 @@ _POD_NAME = os.environ.get("POD_NAME") or socket.gethostname()
 _SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME") or os.environ.get("SERVICE_NAME") or ""
 
 
-def log_shipping_configured() -> bool:
-    """Return whether an outbound log-shipping endpoint is configured."""
-    return bool(settings.log_ship_url)
-
-
 def _truncate(text_value: str, limit: int) -> str:
     """Return ``text_value`` shortened to ``limit`` characters with an elision marker.
 

@@ -20,7 +20,8 @@ import type {
 import { displayName, kindLabel } from "@/features/submit/workflow/nodes";
 import { tip } from "@/shared/lib/tooltips";
 import { msg } from "@/shared/lib/messages";
-import { CopyButton } from "./ui-primitives";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import { ExportMenu } from "./ExportMenu";
 import { useIsPhone } from "@/shared/hooks/use-device-class";
 
@@ -33,7 +34,7 @@ const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m
 // optimized workflow; heavy enough to load on demand like the code editor.
 const WorkflowGraphView = dynamic(
   () => import("./WorkflowGraphView").then((m) => m.WorkflowGraphView),
-  { ssr: false, loading: () => <Skeleton height={480} borderRadius={12} /> },
+  { ssr: false, loading: () => <Skeleton height={480} borderRadius={8} /> },
 );
 
 // What the run produced, gathered in one place: the export menu (runnable
@@ -176,14 +177,15 @@ function PromptBody({ predictor }: { predictor: OptimizedPredictor }) {
     <>
       <div className="relative group">
         <pre
-          className="text-sm font-mono bg-muted/50 rounded-lg p-4 pe-10 overflow-x-auto whitespace-pre-wrap leading-relaxed"
+          className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-border/50 bg-muted/30 p-4 pe-10 font-mono text-[0.8125rem] leading-relaxed text-foreground/90"
           dir="ltr"
         >
           {predictor.formatted_prompt}
         </pre>
         <CopyButton
           text={predictor.formatted_prompt}
-          className="absolute end-1.5 top-1.5 opacity-100 sm:end-2 sm:top-2 sm:opacity-0 sm:group-hover:opacity-100"
+          ariaLabel={msg("shared.agent.copy")}
+          className="absolute end-1.5 top-1.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
         />
       </div>
     </>
@@ -196,7 +198,7 @@ function CodeBody({ source }: { source: string }) {
     <CodeEditor
       value={source}
       onChange={() => {}}
-      height={`${Math.min((source.split("\n").length + 1) * 19.6 + 8, 600)}px`}
+      height={readOnlyEditorHeight(source, { maxPx: 600 })}
       readOnly
     />
   );

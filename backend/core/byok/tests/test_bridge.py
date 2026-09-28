@@ -55,7 +55,7 @@ def _ok_response() -> object:
     [
         ("openai/gpt-4o", "openai"),
         ("anthropic/claude-3-5-sonnet", "anthropic"),
-        ("openrouter/minimax/minimax-01", "openrouter"),
+        ("together_ai/minimax/minimax-01", "together_ai"),
         ("gpt-4o", None),
         ("", None),
         ("/openai/gpt-4o", "openai"),
@@ -69,14 +69,14 @@ def test_provider_slug_for_model(name: str, expected: str | None) -> None:
 def test_inject_stamps_run_model_configs(vault: ProviderKeyVault) -> None:
     """A run payload's student + reflection configs each get the user's key."""
     with patch("core.byok.vault.httpx.get", return_value=_ok_response()):
-        vault.save_key("u@x.com", "openrouter", "sk-or-1111")
+        vault.save_key("u@x.com", "together", "sk-tg-1111")
     payload = {
-        "model_config": {"name": "openrouter/openai/gpt-4o", "extra": {}},
-        "reflection_model_config": {"name": "openrouter/anthropic/claude-3-5-sonnet", "extra": {}},
+        "model_config": {"name": "together_ai/openai/gpt-4o", "extra": {}},
+        "reflection_model_config": {"name": "together_ai/anthropic/claude-3-5-sonnet", "extra": {}},
     }
     inject_byok_connections(payload, username="u@x.com", vault=vault)
-    assert payload["model_config"]["extra"]["api_key"] == "sk-or-1111"
-    assert payload["reflection_model_config"]["extra"]["api_key"] == "sk-or-1111"
+    assert payload["model_config"]["extra"]["api_key"] == "sk-tg-1111"
+    assert payload["reflection_model_config"]["extra"]["api_key"] == "sk-tg-1111"
 
 
 def test_inject_applies_custom_api_base_and_params(vault: ProviderKeyVault) -> None:
@@ -128,28 +128,28 @@ def test_inject_custom_provider_uses_explicit_connection_slug(vault: ProviderKey
 def test_inject_stamps_grid_model_lists(vault: ProviderKeyVault) -> None:
     """A grid payload's generation + reflection lists each get the user's key."""
     with patch("core.byok.vault.httpx.get", return_value=_ok_response()):
-        vault.save_key("u@x.com", "openrouter", "sk-or-4444")
+        vault.save_key("u@x.com", "together", "sk-tg-4444")
     payload = {
-        "generation_models": [{"name": "openrouter/openai/gpt-4o", "extra": {}}],
-        "reflection_models": [{"name": "openrouter/openai/gpt-4o-mini", "extra": {}}],
+        "generation_models": [{"name": "together_ai/openai/gpt-4o", "extra": {}}],
+        "reflection_models": [{"name": "together_ai/openai/gpt-4o-mini", "extra": {}}],
     }
     inject_byok_connections(payload, username="u@x.com", vault=vault)
-    assert payload["generation_models"][0]["extra"]["api_key"] == "sk-or-4444"
-    assert payload["reflection_models"][0]["extra"]["api_key"] == "sk-or-4444"
+    assert payload["generation_models"][0]["extra"]["api_key"] == "sk-tg-4444"
+    assert payload["reflection_models"][0]["extra"]["api_key"] == "sk-tg-4444"
 
 
 def test_inject_skips_managed_configs_in_mixed_payload(vault: ProviderKeyVault) -> None:
     """Only the BYOK side of a mixed payload receives a vault connection."""
     with patch("core.byok.vault.httpx.get", return_value=_ok_response()):
-        vault.save_key("u@x.com", "openrouter", "sk-or-4444")
+        vault.save_key("u@x.com", "together", "sk-tg-4444")
     payload = {
         "model_config": {
-            "name": "openrouter/openai/gpt-4o",
+            "name": "together_ai/openai/gpt-4o",
             "token_source": "byok",
             "extra": {},
         },
         "reflection_model_config": {
-            "name": "openrouter/anthropic/claude-3-5-sonnet",
+            "name": "together_ai/anthropic/claude-3-5-sonnet",
             "token_source": "managed",
             "extra": {},
         },
@@ -162,7 +162,7 @@ def test_inject_skips_managed_configs_in_mixed_payload(vault: ProviderKeyVault) 
         default_token_source="managed",
     )
 
-    assert payload["model_config"]["extra"]["api_key"] == "sk-or-4444"
+    assert payload["model_config"]["extra"]["api_key"] == "sk-tg-4444"
     assert "api_key" not in payload["reflection_model_config"]["extra"]
 
 
@@ -195,12 +195,12 @@ def test_enforce_byok_connections_blocks_missing(vault: ProviderKeyVault, engine
 def test_enforce_byok_connections_passes_when_present(vault: ProviderKeyVault, engine: object) -> None:
     """The submit gate lets a BYOK run through once the key is saved."""
     with patch("core.byok.vault.httpx.get", return_value=_ok_response()):
-        vault.save_key("u@x.com", "openrouter", "sk-or-5555")
+        vault.save_key("u@x.com", "together", "sk-tg-5555")
     job_store = SimpleNamespace(engine=engine)
     _enforce_byok_connections(
         job_store,
         "u@x.com",
-        [ModelConfig(name="openrouter/openai/gpt-4o", token_source="byok")],
+        [ModelConfig(name="together_ai/openai/gpt-4o", token_source="byok")],
     )
 
 

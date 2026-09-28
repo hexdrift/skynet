@@ -10,6 +10,7 @@ import { LOCALE_RELOAD_EVENT } from "@/shared/lib/locale";
 import { TERMS } from "@/shared/lib/terms";
 import type { ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidateCodeResponse, WorkflowSpec } from "@/shared/types/api";
+import type { TurnStats } from "@/shared/ui/agent/types";
 
 type AgentStatus = "idle" | "streaming" | "done" | "error";
 type AgentMode = "seed" | "chat";
@@ -99,6 +100,7 @@ interface AgentMessage {
   role: "assistant" | "user";
   content: string;
   toolCalls?: AgentToolCall[];
+  stats?: TurnStats | null;
 }
 
 interface ArtifactVersion {
@@ -751,6 +753,7 @@ export function useCodeAgent(args: UseCodeAgentArgs): CodeAgentState {
               next[next.length - 1] = {
                 ...last,
                 content: finalContent,
+                stats: result.stats,
               };
               return next;
             });

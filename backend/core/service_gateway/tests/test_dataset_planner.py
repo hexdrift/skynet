@@ -11,6 +11,8 @@ from core.service_gateway.datasets.planner import (
     VAL_CAP,
     recommend_split,
 )
+from core.service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION
+from core.service_gateway.optimization.data import split_examples
 
 
 def _profile(row_count: int) -> DatasetProfile:
@@ -102,3 +104,21 @@ def test_recommend_split_emits_single_rationale_bullet_per_tier() -> None:
         plan = recommend_split(_profile(total), seed=42)
         assert len(plan.rationale) == 1
         assert plan.rationale[0].strip()
+
+
+def test_recommend_split_counts_match_the_run_split() -> None:
+    """The plan's counts are the ones a newly submitted run will slice with."""
+    for total in (5, 29, 31, 79, 101, 299, 4_321):
+        plan = recommend_split(_profile(total), seed=3)
+        run = split_examples(
+            list(range(total)),
+            plan.fractions,
+            shuffle=False,
+            seed=None,
+            split_version=CURRENT_SPLIT_VERSION,
+        )
+        assert (plan.counts.train, plan.counts.val, plan.counts.test) == (
+            len(run.train),
+            len(run.val),
+            len(run.test),
+        )

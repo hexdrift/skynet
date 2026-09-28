@@ -5,15 +5,14 @@ import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Database, Tag } from "@/shared/ui/icons";
 
-import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
+import {
+  SLIDING_PILL_TABS_LIST_CLASS,
+  SLIDING_PILL_TABS_TRIGGER_CLASS,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/shared/ui/primitives/tabs";
 import { msg } from "@/shared/lib/messages";
-
-// Mirrors DASHBOARD_TAB_CLASS in DashboardView: the active background is a
-// single shared pill that slides between triggers via Framer's layoutId, so
-// the trigger itself stays transparent and only fades text color + reacts to
-// the press transform.
-const DATA_HUB_TAB_CLASS =
-  "relative z-10 min-h-[44px] rounded-full px-3 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,transform] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:px-4 lg:min-h-10";
 
 /**
  * Segmented navigation between the two halves of the Data hub: the dataset
@@ -51,12 +50,9 @@ export function DataHubTabs({ active }: { active: "datasets" | "sessions" }) {
       }}
       className="mb-5"
     >
-      <TabsList
-        aria-label={msg("sidebar.nav.data")}
-        className="inline-flex h-auto w-full gap-1 rounded-full border border-border/60 bg-muted/50 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]"
-      >
+      <TabsList aria-label={msg("sidebar.nav.data")} className={SLIDING_PILL_TABS_LIST_CLASS}>
         {tabs.map(({ key, label, Icon }) => (
-          <TabsTrigger key={key} value={key} className={DATA_HUB_TAB_CLASS}>
+          <TabsTrigger key={key} value={key} className={SLIDING_PILL_TABS_TRIGGER_CLASS}>
             {value === key && (
               <motion.span
                 layoutId="dataHubTabPill"

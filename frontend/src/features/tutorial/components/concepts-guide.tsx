@@ -11,10 +11,12 @@ import {
   TreeStructure,
   Lightbulb,
   Compass,
+  SquaresFour,
 } from "@/shared/ui/icons";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { isGeneralistAgentEnabled } from "@/features/agent-panel";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
@@ -65,14 +67,20 @@ const SECTIONS: readonly SectionMeta[] = perLocale(() => [
     Icon: TreeStructure,
   },
   {
-    id: "tips",
+    id: "app",
     num: "6",
+    title: msg("auto.features.tutorial.components.concepts.guide.literal.350"),
+    Icon: SquaresFour,
+  },
+  {
+    id: "tips",
+    num: "7",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.6"),
     Icon: Lightbulb,
   },
   {
     id: "glossary",
-    num: "7",
+    num: "8",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.7"),
     Icon: Compass,
   },
@@ -156,16 +164,12 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
       aria-modal="true"
       aria-labelledby={titleId}
     >
-      <div
-        className="absolute inset-0 bg-[#1C1612]/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
 
       <div
         ref={dialogRef}
         dir={getActiveDir()}
-        className="relative w-full max-w-5xl h-[min(88vh,920px)] rounded-2xl border border-[#E5DDD4] bg-[#FAF8F5] shadow-[0_24px_64px_rgba(28,22,18,0.22)] overflow-hidden flex flex-col"
+        className="relative w-full max-w-5xl h-[min(88vh,920px)] rounded-2xl border border-(--border-subtle) bg-background shadow-[0_24px_64px_rgba(28,22,18,0.22)] overflow-hidden flex flex-col"
       >
         <GuideHeader titleId={titleId} onClose={onClose} closeBtnRef={closeBtnRef} />
 
@@ -177,6 +181,7 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
             <SectionParameters />
             <SectionTaskDefinition />
             <SectionWorkflow />
+            <SectionApp />
             <SectionTips />
             <SectionGlossary />
           </div>
@@ -196,14 +201,11 @@ function GuideHeader({
   closeBtnRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   return (
-    <header className="flex items-start gap-3 px-5 sm:px-7 py-4 border-b border-[#E5DDD4] bg-gradient-to-b from-[#FAF8F5] to-[#F5F1EC]">
+    <header className="flex items-center gap-3 px-5 sm:px-7 py-4 border-b border-[#E5DDD4] bg-gradient-to-b from-[#FAF8F5] to-[#F5F1EC]">
       <div className="size-10 rounded-xl bg-[#3D2E22] flex items-center justify-center flex-shrink-0 shadow-[0_2px_6px_rgba(61,46,34,0.25)]">
         <Lightbulb className="size-5 text-[#FAF8F5]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7C6350]">
-          {msg("auto.features.tutorial.components.concepts.guide.literal.8")}
-        </p>
         <h2
           id={titleId}
           className="text-lg sm:text-xl font-bold text-[#3D2E22] leading-tight"
@@ -998,6 +1000,50 @@ function SectionWorkflow() {
   );
 }
 
+function SectionApp() {
+  return (
+    <GuideSection
+      id="app"
+      num="6"
+      title={msg("auto.features.tutorial.components.concepts.guide.literal.350")}
+      kicker={msg("auto.features.tutorial.components.concepts.guide.literal.351")}
+    >
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.352")}</p>
+
+      {/* Builds without the agent panel must not describe it. */}
+      {isGeneralistAgentEnabled() && (
+        <>
+          <SubHeading>
+            {msg("auto.features.tutorial.components.concepts.guide.literal.353")}
+          </SubHeading>
+          <p>{msg("auto.features.tutorial.components.concepts.guide.literal.354")}</p>
+        </>
+      )}
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.355")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.356")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.357")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.358")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.359")}</SubHeading>
+      <p>
+        {msg("auto.features.tutorial.components.concepts.guide.literal.360")}{" "}
+        <InlineCode>
+          {msg("auto.features.tutorial.components.concepts.guide.literal.295")}
+        </InlineCode>
+        {msg("auto.features.tutorial.components.concepts.guide.literal.361")}
+      </p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.362")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.363")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.364")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.365")}</p>
+    </GuideSection>
+  );
+}
+
 function SectionTips() {
   const problems: Array<[string, React.ReactNode]> = [
     [
@@ -1020,7 +1066,7 @@ function SectionTips() {
   return (
     <GuideSection
       id="tips"
-      num="6"
+      num="7"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.6")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.220")}
     >
@@ -1141,7 +1187,7 @@ function SectionGlossary() {
   return (
     <GuideSection
       id="glossary"
-      num="7"
+      num="8"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.7")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.252")}
     >

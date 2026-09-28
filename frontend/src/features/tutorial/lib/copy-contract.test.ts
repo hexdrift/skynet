@@ -33,8 +33,28 @@ test("tutorial title call sites do not compose grammar from placeholders", () =>
     "utf8",
   );
 
-  assert.match(source, new RegExp(`title: msg\\("${TITLE_KEYS[0].replaceAll(".", "\\.")}\"\\)`));
-  assert.doesNotMatch(source, new RegExp(`title: formatMsg\\("${TITLE_KEYS[0].replaceAll(".", "\\.")}`));
+  for (const key of TITLE_KEYS) {
+    assert.match(source, new RegExp(`title: msg\\("${key.replaceAll(".", "\\.")}\"\\)`));
+    assert.doesNotMatch(source, new RegExp(`title: formatMsg\\("${key.replaceAll(".", "\\.")}`));
+  }
+});
+
+test("tutorial step copy never mentions billing or credits", () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "src", "features", "tutorial", "lib", "steps.ts"),
+    "utf8",
+  );
+  const messages = readHebrewCatalog();
+  const keys = new Set(
+    [...source.matchAll(/(?:msg|formatMsg)\("((?:tutorial|auto\.features\.tutorial)\.[^"]+)"/g)].map(
+      (match) => match[1]!,
+    ),
+  );
+
+  assert.ok(keys.size > 0);
+  for (const key of keys) {
+    assert.doesNotMatch(messages[key] ?? "", /קרדיט|חיוב|תקרת עלות|credit/i, key);
+  }
 });
 
 test("the concepts guide matches the current optimization surface", () => {
@@ -66,6 +86,7 @@ test("the concepts guide matches the current optimization surface", () => {
     "temperature",
     "max_tokens",
     "paused",
+    'id="app"',
   ]) {
     assert.match(contract, new RegExp(currentTerm.replaceAll("/", "\\/")), currentTerm);
   }

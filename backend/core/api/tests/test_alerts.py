@@ -1,4 +1,4 @@
-"""Tests for the operational alert webhook sink (:mod:`core.api.alerts`).
+"""Tests for the operational alert sinks (:mod:`core.api.alerts`).
 
 Delivery runs on a daemon thread, so tests that assert on a POST join the
 thread returned by :func:`~core.api.alerts.send_alert` first. The network call
@@ -17,11 +17,33 @@ from core.config import settings
 
 
 @pytest.fixture(autouse=True)
-def _reset_throttle():
-    """Clear the shared throttle map around each test so state can't leak."""
+def _reset_throttle(monkeypatch):
+    """Clear shared throttle state and disable email so nothing leaks between tests."""
+    monkeypatch.setattr(settings, "alert_email", "")
     alerts._throttle._last_sent.clear()
+    alerts._email_sent_at.clear()
     yield
     alerts._throttle._last_sent.clear()
+    alerts._email_sent_at.clear()
+
+
+@pytest.fixture
+def captured_emails(monkeypatch):
+    """Record alert emails in-memory with SMTP reported as configured and no webhook.
+
+    Returns:
+        The list that each :func:`~core.api.alerts.send_email` call appends
+        ``(to, subject, body)`` to.
+    """
+    emails: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(alerts, "send_email", lambda to, subject, body: emails.append((to, subject, body)))
+    monkeypatch.setattr(alerts, "email_configured", lambda: True)
+    monkeypatch.setattr(settings, "alert_webhook_url", "")
+    monkeypatch.setattr(settings, "alert_email", "ops@example.com")
+    monkeypatch.setattr(settings, "alert_email_max_per_hour", 20)
+    monkeypatch.setattr(settings, "alert_environment", "test")
+    monkeypatch.setattr(settings, "alert_throttle_seconds", 300.0)
+    return emails
 
 
 @pytest.fixture
@@ -63,7 +85,6 @@ def test_send_alert_noop_when_webhook_unset(monkeypatch):
     monkeypatch.setattr(settings, "alert_webhook_url", "")
     assert alerts.send_alert("boom") is None
     assert calls == []
-    assert alerts.alerts_configured() is False
 
 
 def test_send_alert_posts_rendered_message(captured_posts):
@@ -211,3 +232,62 @@ def test_install_attaches_handler_at_configured_level(monkeypatch):
     assert handler.level == logging.WARNING
     assert handler in root.handlers
     root.handlers.clear()
+
+
+def test_send_alert_emails_when_only_email_configured(captured_emails):
+    """With no webhook, an alert is emailed with the header line as its subject."""
+    _join(alerts.send_alert("disk full", body="details", level="WARNING", now=1.0))
+    assert len(captured_emails) == 1
+    to, subject, body = captured_emails[0]
+    assert to == "ops@example.com"
+    assert subject == "[test] WARNING: disk full"
+    assert "details" in body
+
+
+def test_email_skipped_without_smtp(captured_emails, monkeypatch):
+    """ALERT_EMAIL alone does nothing when SMTP is not configured."""
+    monkeypatch.setattr(alerts, "email_configured", lambda: False)
+    assert alerts.send_alert("x", now=1.0) is None
+    assert captured_emails == []
+
+
+def test_email_hourly_cap(captured_emails, monkeypatch):
+    """Distinct alerts past the hourly cap are not emailed; the cap resets after an hour."""
+    monkeypatch.setattr(settings, "alert_email_max_per_hour", 2)
+    for i in range(2):
+        _join(alerts.send_alert(f"alert {i}", now=1.0))
+    assert alerts.send_alert("alert 2", now=2.0) is None
+    _join(alerts.send_alert("alert 3", now=1.0 + alerts._EMAIL_WINDOW_SECONDS))
+    assert [subject for _, subject, _ in captured_emails] == [
+        "[test] ERROR: alert 0",
+        "[test] ERROR: alert 1",
+        "[test] ERROR: alert 3",
+    ]
+
+
+def test_capped_email_still_posts_webhook(captured_emails, captured_posts, monkeypatch):
+    """Hitting the email cap drops only the email; the webhook still fires."""
+    monkeypatch.setattr(settings, "alert_email", "ops@example.com")
+    monkeypatch.setattr(settings, "alert_email_max_per_hour", 0)
+    _join(alerts.send_alert("both", now=1.0))
+    assert len(captured_posts) == 1
+    assert captured_emails == []
+
+
+def test_email_failure_is_swallowed(captured_emails, monkeypatch):
+    """A failing SMTP send is swallowed on the sender thread."""
+
+    def _boom(*args):
+        raise OSError("smtp down")
+
+    monkeypatch.setattr(alerts, "send_email", _boom)
+    _join(alerts.send_alert("will fail", now=1.0))
+
+
+def test_install_with_email_only(captured_emails):
+    """An email target alone is enough to attach the handler."""
+    root = logging.getLogger("test-alerts-email-only")
+    root.handlers.clear()
+    handler = alerts.install_alert_log_handler(root)
+    assert isinstance(handler, alerts.AlertLogHandler)
+    root.removeHandler(handler)

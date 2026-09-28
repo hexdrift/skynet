@@ -1,6 +1,15 @@
 import type { PairResult } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
+import {
+  CHART_TOOLTIP_CARD_CLASS,
+  CHART_TOOLTIP_ROW_CLASS,
+  CHART_TOOLTIP_SWATCH_CLASS,
+  CHART_TOOLTIP_TITLE_CLASS,
+  CHART_TOOLTIP_VALUE_CLASS,
+} from "@/shared/charts/chart-utils";
+import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { cn } from "@/shared/lib/utils";
 
 export interface ScatterPoint {
   pair_index: number;
@@ -72,17 +81,21 @@ export function ScoreTip({
     }),
   };
   return (
-    <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg">
-      {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-      {payload.map((p, i) => (
-        <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-          {p.color && (
-            <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-          )}
-          <span>{nameMap[String(p.dataKey)] ?? String(p.dataKey)}</span>
-          <span className="font-mono font-semibold text-foreground ms-auto">{p.value}%</span>
-        </div>
-      ))}
+    <div className={CHART_TOOLTIP_CARD_CLASS} dir={getActiveDir()}>
+      {label && <p className={CHART_TOOLTIP_TITLE_CLASS}>{label}</p>}
+      <div className="space-y-1">
+        {payload.map((p, i) => (
+          <div key={i} className={CHART_TOOLTIP_ROW_CLASS}>
+            {p.color && (
+              <span className={CHART_TOOLTIP_SWATCH_CLASS} style={{ backgroundColor: p.color }} />
+            )}
+            <span className="text-xs">{nameMap[String(p.dataKey)] ?? String(p.dataKey)}</span>
+            <span className={CHART_TOOLTIP_VALUE_CLASS} dir="ltr">
+              {p.value}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -98,17 +111,21 @@ export function CombinedTip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg">
-      {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-      {payload.map((p, i) => (
-        <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-          {p.color && (
-            <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-          )}
-          <span>{String(p.dataKey)}</span>
-          <span className="font-mono font-semibold text-foreground ms-auto">{p.value}%</span>
-        </div>
-      ))}
+    <div className={CHART_TOOLTIP_CARD_CLASS} dir={getActiveDir()}>
+      {label && <p className={CHART_TOOLTIP_TITLE_CLASS}>{label}</p>}
+      <div className="space-y-1">
+        {payload.map((p, i) => (
+          <div key={i} className={CHART_TOOLTIP_ROW_CLASS}>
+            {p.color && (
+              <span className={CHART_TOOLTIP_SWATCH_CLASS} style={{ backgroundColor: p.color }} />
+            )}
+            <span className="text-xs">{String(p.dataKey)}</span>
+            <span className={CHART_TOOLTIP_VALUE_CLASS} dir="ltr">
+              {p.value}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -125,8 +142,8 @@ export function ScatterTip({
   if (!first) return null;
   const p = first.payload;
   return (
-    <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-2.5 shadow-lg">
-      <p className="font-mono font-semibold text-xs text-foreground mb-1" dir="ltr">
+    <div className={CHART_TOOLTIP_CARD_CLASS} dir={getActiveDir()}>
+      <p className={cn(CHART_TOOLTIP_TITLE_CLASS, "font-mono")} dir="ltr">
         {p.name}
       </p>
       <div className="text-[0.6875rem] text-muted-foreground space-y-0.5">

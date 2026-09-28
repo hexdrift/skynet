@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { cn } from "@/shared/lib/utils";
+import { TOUCH_FIELD_SM } from "@/shared/ui/touch";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { CircleNotch, User, UserPlus, Users, X } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
@@ -37,6 +40,7 @@ import {
 import { msg } from "@/shared/lib/messages";
 import { track, TelemetryEvent } from "@/shared/lib/telemetry";
 import { sessionIdentity } from "@/shared/lib/session-identity";
+import { Label } from "@/shared/ui/primitives/label";
 
 const ROLE_OPTIONS: MemberRole[] = ["viewer", "editor"];
 
@@ -65,10 +69,28 @@ function roleDesc(role: ShareRole): string {
  * row — minus the optimization-only Explore visibility axis. The copy link points
  * at ``/datasets/share/{token}``, redeemed by :mod:`app/datasets/share/[token]`.
  */
-export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
+export function DatasetShareDialog({
+  datasetId,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+}: {
+  datasetId: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}) {
   const { data: session } = useSession();
   const me = sessionIdentity(session);
-  const [open, setOpen] = useState(false);
+  // Uncontrolled by default (the built-in trigger drives it); the library's
+  // selection bar drives it instead with ``hideTrigger``.
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [state, setState] = useState<DatasetSharingState | null>(null);
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const [transferring, setTransferring] = useState(false);
@@ -84,14 +106,16 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
 
   const accessCount = state ? (state.owner ? 1 : 0) + state.members.length : 0;
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next && state === null) {
-      getDatasetSharing(datasetId)
-        .then(setState)
-        .catch((err) => toast.error(err instanceof Error ? err.message : msg("share.error")));
-    }
-  };
+  // Fetch on open rather than in the trigger's handler so a parent-driven open
+  // loads the sharing state too.
+  useEffect(() => {
+    if (!open || state !== null) return;
+    getDatasetSharing(datasetId)
+      .then(setState)
+      .catch((err) => toast.error(err instanceof Error ? err.message : msg("share.error")));
+  }, [open, state, datasetId]);
+
+  const handleOpenChange = (next: boolean) => setOpen(next);
 
   const handleRoleChange = async (username: string, role: MemberRole) => {
     try {
@@ -146,21 +170,23 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
 
   return (
     <>
-      <TooltipButton tooltip={msg("share.button")}>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
-          onClick={() => handleOpenChange(true)}
-          aria-label={msg("share.button")}
-        >
-          <Users className="size-4" />
-        </Button>
-      </TooltipButton>
+      {!hideTrigger && (
+        <TooltipButton tooltip={msg("share.button")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => handleOpenChange(true)}
+            aria-label={msg("share.button")}
+          >
+            <Users className="size-4" />
+          </Button>
+        </TooltipButton>
+      )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          className="w-[min(32rem,92vw)] max-w-[min(32rem,92vw)] overflow-hidden p-0 max-lg:[&_[data-slot=dialog-close]]:!size-[44px] sm:max-w-lg"
+          className="w-[min(32rem,92vw)] max-w-[min(32rem,92vw)] overflow-hidden p-0 sm:max-w-lg"
           aria-describedby={undefined}
         >
           <div className="flex max-h-[85vh] flex-col">
@@ -208,7 +234,7 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
                       }
                       description={state.owner.toLowerCase() === me ? msg("share.you") : undefined}
                     >
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                         {msg("share.owner_label")}
                       </span>
                     </SettingsRow>
@@ -230,7 +256,7 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
                         }
                         description={msg("share.you")}
                       >
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                           {roleLabel(member.role)}
                         </span>
                       </SettingsRow>
@@ -260,7 +286,7 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
                         >
                           <SelectTrigger
                             size="sm"
-                            className="!h-[44px] min-w-[120px] lg:!h-8"
+                            className={cn(TOUCH_FIELD_SM, "min-w-[120px]")}
                             aria-label={msg("share.role.change_aria")}
                           >
                             <SelectValue />
@@ -282,7 +308,7 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            className="text-muted-foreground hover:text-destructive"
+                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => handleRemove(member.username)}
                             aria-label={msg("share.remove_member_aria")}
                           >
@@ -322,17 +348,15 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
               variant="outline"
               onClick={() => setTransferTarget(null)}
               disabled={transferring}
-              className="w-full justify-center"
             >
               {msg("share.transfer.cancel")}
             </Button>
-            <Button
-              onClick={handleTransfer}
-              disabled={transferring}
-              className="w-full justify-center shadow-xs"
-            >
+            <Button onClick={handleTransfer} disabled={transferring}>
               {transferring ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("share.transfer.confirm_cta")
               )}
@@ -356,6 +380,7 @@ function InvitePeople({
   canTransfer: boolean;
   onTransfer: (username: string) => void;
 }) {
+  const inviteId = useId();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
@@ -422,9 +447,9 @@ function InvitePeople({
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-foreground">{msg("share.invite_label")}</p>
+      <Label htmlFor={inviteId}>{msg("share.invite_label")}</Label>
       <div className="relative">
-        <div className="flex items-center gap-1 rounded-md border border-input bg-background ps-3 pe-1 transition-[color,box-shadow,border-color] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+        <div className="flex items-center gap-1 rounded-xl border border-input/90 bg-background/75 ps-3 pe-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm transition-[color,box-shadow,border-color] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
           <Input
             value={query}
             onChange={(e) => {
@@ -442,10 +467,14 @@ function InvitePeople({
               }
             }}
             placeholder={msg("share.invite_placeholder")}
+            id={inviteId}
             aria-label={msg("share.invite_label")}
             disabled={inviting}
             dir="ltr"
-            className="!h-[44px] flex-1 rounded-none border-0 bg-transparent px-0 text-xs shadow-none backdrop-blur-none focus-visible:border-transparent focus-visible:ring-0 lg:!h-8"
+            className={cn(
+              TOUCH_FIELD_SM,
+              "flex-1 rounded-none border-0 bg-transparent px-0 text-xs shadow-none backdrop-blur-none focus-visible:border-transparent focus-visible:ring-0",
+            )}
           />
           <div aria-hidden className="h-5 w-px shrink-0 bg-border/70" />
           <Select
@@ -454,7 +483,10 @@ function InvitePeople({
           >
             <SelectTrigger
               size="sm"
-              className="!h-[44px] gap-1 rounded-md border-0 bg-transparent px-2 text-xs shadow-none hover:border-transparent hover:bg-accent/55 hover:shadow-none focus-visible:border-transparent focus-visible:bg-accent/55 focus-visible:ring-0 data-[state=open]:border-transparent data-[state=open]:bg-accent/60 data-[state=open]:shadow-none lg:!h-7"
+              className={cn(
+                TOUCH_FIELD_SM,
+                "gap-1 rounded-md border-0 bg-transparent px-2 text-xs shadow-none hover:border-transparent hover:bg-accent/55 hover:shadow-none focus-visible:border-transparent focus-visible:bg-accent/55 focus-visible:ring-0 data-[state=open]:border-transparent data-[state=open]:bg-accent/60 data-[state=open]:shadow-none",
+              )}
               aria-label={msg("share.role.change_aria")}
             >
               <SelectValue />
@@ -473,14 +505,17 @@ function InvitePeople({
           <TooltipButton tooltip={msg("share.invite")}>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon-xs"
               onClick={() => void submit(query)}
               disabled={inviting || query.trim().length === 0}
               aria-label={msg("share.invite")}
-              className="!size-[44px] shrink-0 text-muted-foreground hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:ring-0 lg:!size-7"
+              className="shrink-0 text-muted-foreground hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:ring-0"
             >
               {inviting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 <UserPlus className="size-4" />
               )}
@@ -495,9 +530,11 @@ function InvitePeople({
                 {msg("share.searching")}
               </div>
             ) : results.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                {msg("share.no_results")}
-              </div>
+              <EmptyState
+                variant="compact"
+                title={msg("share.no_results")}
+                className="gap-1 px-3 py-3"
+              />
             ) : (
               <ul role="listbox" className="py-1">
                 {results.map((name) => (
@@ -509,7 +546,7 @@ function InvitePeople({
                         e.preventDefault();
                         void submit(name);
                       }}
-                      className="flex min-h-[44px] w-full items-center px-3 py-1.5 text-start font-mono text-xs hover:bg-accent/60 lg:min-h-0"
+                      className="flex w-full items-center px-3 py-1.5 text-start font-mono text-xs hover:bg-accent/60"
                     >
                       {name}
                     </button>

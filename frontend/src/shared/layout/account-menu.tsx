@@ -5,6 +5,15 @@ import { DotsThree, Gear, SignOut } from "@/shared/ui/icons";
 import { signOut, useSession } from "next-auth/react";
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
+// Leaf import on purpose: the submit barrel would pull the whole wizard into
+// the always-mounted shell for one sign-out helper.
+// eslint-disable-next-line no-restricted-imports -- deliberate leaf import; see above
+import { clearAllWizardDrafts } from "@/features/submit/lib/draft-store";
+import {
+  COMPACT_POPOVER_ICON_CLASS,
+  COMPACT_POPOVER_ITEM_CLASS,
+  COMPACT_POPOVER_PANEL_CLASS,
+} from "@/shared/ui/compact-popover-menu";
 import { useLocale } from "@/shared/providers";
 import { dirForLocale } from "@/shared/lib/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/primitives/popover";
@@ -48,9 +57,6 @@ function Avatar({ image, label, size }: { image?: string | null; label: string; 
     </span>
   );
 }
-
-const MENU_ITEM =
-  "flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors duration-150 cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:bg-accent lg:min-h-0";
 
 /**
  * Account menu — the profile button anchored at the foot of the sidebar.
@@ -100,7 +106,7 @@ export function AccountMenu({
     <button
       type="button"
       aria-label={msg("app.shell.account.aria")}
-      className="flex size-[44px] items-center justify-center rounded-full transition-transform duration-150 active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:size-auto"
+      className="flex items-center justify-center rounded-full transition-transform duration-150 active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
     >
       <Avatar image={session.user.image} label={name} size={28} />
     </button>
@@ -108,7 +114,7 @@ export function AccountMenu({
     <button
       type="button"
       aria-label={msg("app.shell.account.aria")}
-      className="group flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition-colors duration-200 hover:bg-sidebar-accent/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:min-h-0"
+      className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition-colors duration-200 hover:bg-sidebar-accent/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
     >
       <Avatar image={session.user.image} label={name} size={28} />
       {/* Physical edge from the UI dir, not logical `text-start`: the name keeps
@@ -152,14 +158,14 @@ export function AccountMenu({
         side="top"
         align={align}
         dir={dir}
-        className="w-64 p-1.5"
+        className={cn(COMPACT_POPOVER_PANEL_CLASS, "w-64 max-w-[90vw]")}
         collisionPadding={12}
       >
         {/* Identity header — who you're signed in as. Deliberately non-interactive:
             account and general settings both live in the items below, so a click
             target here would just duplicate the Settings row. Surfaces the email,
             the way ChatGPT's account menu does. */}
-        <div className="flex items-center gap-2.5 px-2.5 py-2">
+        <div className="flex items-center gap-2.5 px-3 py-2">
           <Avatar image={session.user.image} label={name} size={32} />
           {/* Physical edge from the UI dir — see the trigger above for why `text-start`
               can't be used while the name carries dir="auto". */}
@@ -183,9 +189,9 @@ export function AccountMenu({
             close();
             setSettingsOpen(true);
           }}
-          className={MENU_ITEM}
+          className={COMPACT_POPOVER_ITEM_CLASS}
         >
-          <Gear className="size-4 text-muted-foreground" aria-hidden="true" />
+          <Gear className={COMPACT_POPOVER_ICON_CLASS} aria-hidden="true" />
           {msg("app.shell.account.settings")}
         </button>
 
@@ -195,9 +201,11 @@ export function AccountMenu({
           type="button"
           onClick={() => {
             close();
-            void signOut({ callbackUrl: "/login" });
+            // Saved wizard drafts belong to this account; wipe them before the
+            // session ends so the next person on this browser finds none.
+            void clearAllWizardDrafts().then(() => signOut({ callbackUrl: "/login" }));
           }}
-          className={MENU_ITEM}
+          className={COMPACT_POPOVER_ITEM_CLASS}
         >
           {/* Point the arrow "outward" toward the sidebar's edge so it reads as
               leaving: the rail sits on the left in LTR (arrow ←, flipped from the
@@ -206,7 +214,7 @@ export function AccountMenu({
               menu is a portaled popover where the variant doesn't fire reliably, and
               the rest of the file drives direction the same way. */}
           <SignOut
-            className={cn("size-4 text-muted-foreground", !isRtl && "-scale-x-100")}
+            className={cn(COMPACT_POPOVER_ICON_CLASS, !isRtl && "-scale-x-100")}
             aria-hidden="true"
           />
           {msg("app.shell.logout")}

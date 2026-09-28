@@ -71,6 +71,30 @@ def test_get_job_payload_returns_when_present(client: TestClient, job_store: Fak
     assert body["payload"]["dataset"] == [{"q": 1}]
 
 
+def test_get_job_payload_redacts_api_keys_under_wire_aliases(client: TestClient, job_store: FakeJobStore) -> None:
+    """Payloads stored with ``by_alias=True`` still have every inline api_key scrubbed."""
+    secret_config = {"name": "openai/gpt-4o-mini", "extra": {"api_key": "sk-secret", "api_base": "http://gw"}}
+    job_store.seed_job(
+        "job-alias",
+        payload={
+            "model_config": secret_config,
+            "reflection_model_config": secret_config,
+            "task_model_config": secret_config,
+            "generation_models": [secret_config],
+            "reflection_models": [secret_config],
+        },
+        payload_overview={"job_type": "run"},
+    )
+    r = client.get("/optimizations/job-alias/payload")
+    assert r.status_code == 200
+    payload = r.json()["payload"]
+    assert "sk-secret" not in r.text
+    for field in ("model_config", "reflection_model_config", "task_model_config"):
+        assert payload[field]["extra"] == {"api_base": "http://gw"}
+    for field in ("generation_models", "reflection_models"):
+        assert payload[field][0]["extra"] == {"api_base": "http://gw"}
+
+
 def test_rename_job_validates_length(client: TestClient, job_store: FakeJobStore) -> None:
     """An empty rename payload is rejected by length validation (422)."""
     job_store.seed_job("rn1", payload_overview={})
@@ -373,3 +397,166 @@ def test_analytics_scopes_to_caller_when_username_omitted(nonadmin_client: TestC
     body = r.json()
     assert body["total_jobs"] == 1
     assert body["total_dataset_rows"] == 3
+
+
+def test_analytics_dashboard_days_filter_excludes_older_runs(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify ``days`` drops runs created before the cutoff."""
+    job_store.seed_job("old", created_at="2020-01-01T10:00:00+00:00")
+    job_store.seed_job("new")
+    resp = client.get("/analytics/dashboard?days=7")
+
+    assert resp.status_code == 200
+    assert resp.json()["filtered_total"] == 1
+
+
+def test_analytics_dashboard_histograms_cover_every_run(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify the improvement histogram is open-ended and sums to the successful runs."""
+    for i, improvement in enumerate([-0.1, 0.02, 0.5, 12.0, 45.0]):
+        job_store.seed_job(
+            f"job{i}",
+            status="success",
+            result={"baseline_test_metric": 50.0, "optimized_test_metric": 50.0 + improvement},
+        )
+    resp = client.get("/analytics/dashboard")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    histogram = body["improvement_histogram"]
+    assert histogram[0]["lower"] is None
+    assert histogram[-1]["upper"] is None
+    assert sum(b["count"] for b in histogram) == 5
+    assert histogram[0]["count"] == 1
+    assert histogram[-1]["count"] == 2
+    assert body["median_improvement"] == pytest.approx(12.0)
+    assert body["best_improvement"] == pytest.approx(50.0)
+
+
+def test_analytics_dashboard_optimizer_stats_roll_up_success_rate(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify per-optimizer stats count runs and compute success over terminal runs."""
+    job_store.seed_job("a", payload_overview={"optimizer_name": "gepa"})
+    job_store.seed_job("b", status="failed", payload_overview={"optimizer_name": "gepa"})
+    job_store.seed_job("c", status="running", payload_overview={"optimizer_name": "gepa"})
+    resp = client.get("/analytics/dashboard")
+
+    assert resp.status_code == 200
+    stats = resp.json()["optimizer_stats"]
+    assert [s["name"] for s in stats] == ["gepa"]
+    assert stats[0]["count"] == 3
+    assert stats[0]["success_count"] == 1
+    assert stats[0]["success_rate"] == pytest.approx(0.5)
+
+
+def test_analytics_dashboard_timeline_uses_days_for_short_spans(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify a short span buckets by day and fills the gap with zero buckets."""
+    job_store.seed_job("a", created_at="2024-03-01T10:00:00+00:00")
+    job_store.seed_job("b", status="failed", created_at="2024-03-03T10:00:00+00:00")
+    resp = client.get("/analytics/dashboard")
+
+    body = resp.json()
+    assert body["timeline_granularity"] == "day"
+    assert [b["date"] for b in body["timeline"]] == ["2024-03-01", "2024-03-02", "2024-03-03"]
+    assert body["timeline"][0]["success_count"] == 1
+    assert body["timeline"][1]["count"] == 0
+    assert body["timeline"][2]["failed_count"] == 1
+
+
+def test_analytics_dashboard_timeline_widens_to_weeks_for_medium_spans(
+    client: TestClient, job_store: FakeJobStore
+) -> None:
+    """Verify a multi-month span buckets by ISO week (Monday start)."""
+    job_store.seed_job("a", created_at="2024-01-03T10:00:00+00:00")
+    job_store.seed_job("b", created_at="2024-06-01T10:00:00+00:00")
+    body = client.get("/analytics/dashboard").json()
+
+    assert body["timeline_granularity"] == "week"
+    assert body["timeline"][0]["date"] == "2024-01-01"
+    assert body["timeline"][-1]["date"] == "2024-05-27"
+
+
+def test_analytics_dashboard_timeline_widens_to_months_for_long_spans(
+    client: TestClient, job_store: FakeJobStore
+) -> None:
+    """Verify a multi-year span buckets by calendar month."""
+    job_store.seed_job("a", created_at="2022-01-15T10:00:00+00:00")
+    job_store.seed_job("b", created_at="2024-06-01T10:00:00+00:00")
+    body = client.get("/analytics/dashboard").json()
+
+    assert body["timeline_granularity"] == "month"
+    assert body["timeline"][0]["date"] == "2022-01-01"
+    assert body["timeline"][-1]["date"] == "2024-06-01"
+    assert len(body["timeline"]) == 30
+
+
+def test_analytics_dashboard_date_to_widens_day_filter_to_a_range(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify ``date`` + ``date_to`` keep every run inside the inclusive range."""
+    job_store.seed_job("before", created_at="2024-03-03T10:00:00+00:00")
+    job_store.seed_job("start", created_at="2024-03-04T10:00:00+00:00")
+    job_store.seed_job("end", created_at="2024-03-10T23:00:00+00:00")
+    job_store.seed_job("after", created_at="2024-03-11T00:30:00+00:00")
+    body = client.get("/analytics/dashboard?date=2024-03-04&date_to=2024-03-10").json()
+
+    assert body["filtered_total"] == 2
+
+
+def test_analytics_dashboard_job_type_filter_matches_histogram_buckets(
+    client: TestClient, job_store: FakeJobStore
+) -> None:
+    """Verify ``job_type`` narrows to one bucket, including the derived workflow bucket."""
+    job_store.seed_job("single", payload_overview={"optimization_type": "run"})
+    job_store.seed_job("grid", payload_overview={"optimization_type": "grid_search"})
+    job_store.seed_job("flow", payload_overview={"optimization_type": "run", "composition": "workflow"})
+
+    assert client.get("/analytics/dashboard?job_type=grid_search").json()["filtered_total"] == 1
+    workflow = client.get("/analytics/dashboard?job_type=workflow").json()
+    assert workflow["filtered_total"] == 1
+    assert workflow["job_type_counts"] == {"workflow": 1}
+
+
+def test_analytics_dashboard_module_filter(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify ``module`` keeps only runs of that module."""
+    job_store.seed_job("cot", payload_overview={"module_name": "chain_of_thought"})
+    job_store.seed_job("predict", payload_overview={"module_name": "predict"})
+    body = client.get("/analytics/dashboard?module=predict").json()
+
+    assert body["filtered_total"] == 1
+    assert body["module_counts"] == {"predict": 1}
+
+
+def test_analytics_dashboard_improvement_range_echoes_histogram_edges(
+    client: TestClient, job_store: FakeJobStore
+) -> None:
+    """Verify an improvement bucket's ``[lower, upper)`` edges select exactly its runs."""
+    for i, improvement in enumerate([0.02, 0.05, 0.1, 0.3]):
+        job_store.seed_job(
+            f"job{i}",
+            result={"baseline_test_metric": 0.5, "optimized_test_metric": 0.5 + improvement},
+        )
+    job_store.seed_job("no-result", status="failed")
+    body = client.get("/analytics/dashboard?improvement_min=5&improvement_max=10").json()
+
+    assert body["filtered_total"] == 1
+    assert body["best_improvement"] == pytest.approx(5.0)
+    open_ended = client.get("/analytics/dashboard?improvement_min=10").json()
+    assert open_ended["filtered_total"] == 2
+
+
+def test_analytics_dashboard_runtime_and_dataset_ranges(client: TestClient, job_store: FakeJobStore) -> None:
+    """Verify run-time (minutes) and dataset-row ranges drop runs outside or without a value."""
+    job_store.seed_job(
+        "fast",
+        started_at="2024-03-01T10:00:00+00:00",
+        completed_at="2024-03-01T10:02:00+00:00",
+        payload_overview={"dataset_rows": 40},
+    )
+    job_store.seed_job(
+        "slow",
+        started_at="2024-03-01T10:00:00+00:00",
+        completed_at="2024-03-01T10:40:00+00:00",
+        payload_overview={"dataset_rows": 400},
+    )
+    job_store.seed_job("pending", status="pending", started_at=None, completed_at=None)
+
+    assert client.get("/analytics/dashboard?runtime_min=1&runtime_max=5").json()["filtered_total"] == 1
+    assert client.get("/analytics/dashboard?runtime_min=30").json()["filtered_total"] == 1
+    assert client.get("/analytics/dashboard?dataset_max=50").json()["filtered_total"] == 1
+    assert client.get("/analytics/dashboard?dataset_min=250&dataset_max=500").json()["filtered_total"] == 1

@@ -1,3 +1,8 @@
+/** File extensions `parseDatasetFile` understands; every upload picker
+ *  derives its `accept` list from this so none offers a format that fails. */
+const DATASET_UPLOAD_EXTENSIONS = ["csv", "json", "xlsx", "xls"] as const;
+export const DATASET_UPLOAD_ACCEPT = DATASET_UPLOAD_EXTENSIONS.map((e) => `.${e}`).join(",");
+
 export interface ParsedDataset {
   columns: string[];
   rows: Array<Record<string, unknown>>;
@@ -91,5 +96,7 @@ export async function parseDatasetFile(file: File): Promise<ParsedDataset> {
     return { columns, rows, rowCount: rows.length };
   }
 
-  throw new Error(`Unsupported file format: .${ext}. Use .json, .csv, .xlsx, or .xls`);
+  throw new Error(
+    `Unsupported file format: .${ext}. Use ${DATASET_UPLOAD_EXTENSIONS.map((e) => `.${e}`).join(", ")}`,
+  );
 }

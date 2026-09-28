@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CaretLeft, CaretRight } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -101,17 +102,10 @@ export function Carousel<T>({
 
   const onKey = React.useCallback(
     (e: React.KeyboardEvent) => {
-      // The arrow pointing toward the inline-end edge advances: ArrowLeft in RTL,
-      // ArrowRight in LTR.
-      const forwardKey = isRtl ? "ArrowLeft" : "ArrowRight";
-      const backKey = isRtl ? "ArrowRight" : "ArrowLeft";
-      if (e.key === forwardKey) {
-        e.preventDefault();
-        go(clampedIdx + 1);
-      } else if (e.key === backKey) {
-        e.preventDefault();
-        go(clampedIdx - 1);
-      }
+      const step = arrowPageStep(e, isRtl);
+      if (step === 0) return;
+      e.preventDefault();
+      go(clampedIdx + step);
     },
     [go, clampedIdx, isRtl],
   );

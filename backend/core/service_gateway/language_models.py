@@ -4,7 +4,6 @@ Builds ``dspy.LM`` instances from ``ModelConfig`` while filtering out
 ``None`` optional fields so LiteLLM does not reject the call.
 """
 
-import logging
 import threading
 from dataclasses import dataclass
 
@@ -13,13 +12,6 @@ import dspy
 from ..config import settings
 from ..exceptions import ServiceError
 from ..models import ModelConfig
-
-try:
-    from litellm.litellm_core_utils.streaming_handler import CustomStreamWrapper
-except ImportError:  # pragma: no cover - depends on litellm internals
-    CustomStreamWrapper = None
-
-logger = logging.getLogger("skynet.service_gateway.language_models")
 
 _DEFAULT_REASONING_MAX_TOKENS = 4000
 """Floor on ``max_tokens`` for chat-style replies. Below this a reasoning model
@@ -36,7 +28,7 @@ def _is_openai_reasoning_model(model_name: str) -> bool:
 
     These require ``temperature=1.0`` and ``max_tokens >= 16000`` at ``dspy.LM``
     init; they also emit thinking on the ``reasoning_content`` channel when
-    ``reasoning_effort`` is set. Fireworks/OpenRouter hosts of these models
+    ``reasoning_effort`` is set. Fireworks hosts of these models
     don't share the same constraints, so we scope to the ``openai/`` prefix.
 
     Args:
@@ -68,7 +60,7 @@ def apply_model_reasoning_config(config: ModelConfig) -> ModelConfig:
     - **OpenAI reasoning models** (``openai/gpt-5.*``, ``openai/o1|o3|o4*``):
       ``reasoning_effort="medium"``, ``temperature=1.0``, ``max_tokens`` floored
       at 16000.
-    - **Everything else** (incl. Fireworks/OpenRouter MiniMax): ``max_tokens``
+    - **Everything else** (incl. Fireworks MiniMax): ``max_tokens``
       floored at 4000, no reasoning knob.
 
     Caller-supplied values win: a larger ``max_tokens`` is never shrunk, an
@@ -87,7 +79,7 @@ def apply_model_reasoning_config(config: ModelConfig) -> ModelConfig:
     temperature = config.temperature
 
     is_native_minimax = lower.startswith("minimax/") or (
-        "minimax" in lower and "fireworks" not in lower and "openrouter" not in lower
+        "minimax" in lower and "fireworks" not in lower
     )
     if is_native_minimax:
         model_extra["extra_body"] = {"reasoning_split": True}
@@ -155,50 +147,13 @@ def _apply_managed_gateway(lm_kwargs: dict[str, object]) -> None:
     if settings.litellm_proxy_api_key is not None:
         lm_kwargs["api_key"] = settings.litellm_proxy_api_key.get_secret_value()
     # Address the proxy through litellm's dedicated ``litellm_proxy/`` provider so
-    # the OpenRouter slug reaches it intact. Without the prefix litellm resolves
+    # the full model id reaches it intact. Without the prefix litellm resolves
     # the bare provider segment itself (``openai/gpt-4o-mini`` -> openai provider,
-    # sending just ``gpt-4o-mini``), and the proxy's ``*`` -> ``openrouter/*``
-    # wildcard then can't reconstruct a real slug. A leading ``openrouter/`` is
-    # dropped first because that wildcard re-adds it — otherwise an already
-    # OpenRouter-prefixed id (``openrouter/minimax/...``) would double-prefix.
+    # sending just ``gpt-4o-mini``), and the proxy can no longer match the
+    # model name it was configured with.
     model = lm_kwargs.get("model")
     if isinstance(model, str):
-        lm_kwargs["model"] = f"litellm_proxy/{model.removeprefix('openrouter/')}"
-
-
-def _translate_gateway_reasoning(lm_kwargs: dict[str, object]) -> None:
-    """Mirror ``reasoning_effort`` into OpenRouter's native ``reasoning`` param.
-
-    Calls that reach OpenRouter (directly via an ``openrouter/`` id, or through
-    the LiteLLM proxy whose wildcard fronts OpenRouter) lose the OpenAI-style
-    ``reasoning_effort`` kwarg: LiteLLM doesn't map it onto OpenRouter's
-    ``reasoning`` request param — so a user-picked effort was a no-op and
-    opt-in thinking models (Anthropic, Gemini) never streamed reasoning.
-    OpenRouter's ceiling vocabulary is ``xhigh``, so Anthropic's ``max`` maps
-    down to it.
-
-    The kwarg is kept (aligned to the mapped value) rather than popped: dspy's
-    ``Reasoning`` signature field injects ``reasoning_effort="low"`` at call
-    time whenever the LM carries no effort of its own, and OpenRouter rejects
-    requests whose ``reasoning_effort`` and ``reasoning.effort`` disagree.
-
-    Args:
-        lm_kwargs: The ``dspy.LM`` kwargs assembled so far, mutated in place.
-    """
-    model = lm_kwargs.get("model")
-    if not isinstance(model, str) or not model.startswith(("litellm_proxy/", "openrouter/")):
-        return
-    effort = lm_kwargs.get("reasoning_effort")
-    if not isinstance(effort, str) or not effort:
-        return
-    mapped = "xhigh" if effort == "max" else effort
-    body = lm_kwargs.get("extra_body")
-    merged = dict(body) if isinstance(body, dict) else {}
-    native = merged.setdefault("reasoning", {"effort": mapped})
-    if isinstance(native, dict) and isinstance(native.get("effort"), str) and native["effort"]:
-        mapped = native["effort"]
-    lm_kwargs["reasoning_effort"] = mapped
-    lm_kwargs["extra_body"] = merged
+        lm_kwargs["model"] = f"litellm_proxy/{model}"
 
 
 # One lock for every MeteredLM: ``LM.copy()`` shallow-copies instances, so an
@@ -271,6 +226,21 @@ class MeteredLM(dspy.LM):
         self.usage_totals = LmUsageTotals()
         self.last_request_model: str | None = None
         self.last_response_model: str | None = None
+
+    @property
+    def supports_function_calling(self) -> bool:
+        """Always report native tool-call support.
+
+        LiteLLM answers from its model catalogue, which has no entry for an
+        operator's own gateway alias, and DSPy would then silently fall back
+        to the text protocol. The deployment contract is that the gateway
+        serves OpenAI-style ``tools`` (see AIRGAP.html), and the adapter only
+        consults this when native function calling is enabled.
+
+        Returns:
+            ``True``.
+        """
+        return True
 
     def forward(self, *args: object, **kwargs: object) -> object:
         """Run the LM call, honouring the job-child LM concurrency budget.
@@ -387,7 +357,6 @@ def build_language_model(config: ModelConfig, *, disable_cache: bool = False) ->
         lm_kwargs["max_tokens"] = config.max_tokens
     lm_kwargs.update(config.extra)
     _apply_managed_gateway(lm_kwargs)
-    _translate_gateway_reasoning(lm_kwargs)
     if disable_cache:
         lm_kwargs["cache"] = False
         # ``cache=False`` only disables the client-side cache — a configured
@@ -552,48 +521,6 @@ def usage_by_model_from_history(*language_models: object) -> dict[str, tuple[int
     if not found:
         return None
     return {model: (in_out[0], in_out[1]) for model, in_out in by_model.items()}
-
-
-_SERVED_MODEL_PATCH_FLAG = "_skynet_served_model_patch"
-
-
-def install_openrouter_served_model_patch() -> None:
-    """Make LiteLLM streams report the model OpenRouter actually served.
-
-    LiteLLM's ``CustomStreamWrapper`` overwrites every streamed chunk's
-    ``model`` with the request id, discarding the concrete model OpenRouter's
-    Auto Router names in its raw SSE chunks. Adopt the provider-reported
-    model for openrouter calls — the same special-case LiteLLM already ships
-    for Azure — so ``lm.history`` records the served model under
-    ``response_model`` instead of echoing the router's own id. Idempotent;
-    called once from ``create_app``.
-    """
-    if CustomStreamWrapper is None:
-        logger.warning("litellm streaming internals moved; served-model reveal disabled")
-        return
-    handler = CustomStreamWrapper.handle_openai_chat_completion_chunk
-    if getattr(handler, _SERVED_MODEL_PATCH_FLAG, False):
-        return
-
-    def _adopting_handler(self, chunk):
-        """Adopt the provider-reported model before normal chunk handling."""
-        served = getattr(chunk, "model", None)
-        # Every platform call is an OpenRouter slug — reached directly
-        # (provider "openrouter") or through the managed LiteLLM proxy, which
-        # surfaces as an openai-compatible passthrough whose requested model
-        # keeps the "openrouter/" marker. The proxy forwards the Auto Router's
-        # concrete pick via deploy/litellm/custom_callbacks.py.
-        provider = getattr(self, "custom_llm_provider", None)
-        requested = getattr(self, "model", None)
-        if served and (
-            provider in ("openrouter", "litellm_proxy")
-            or (isinstance(requested, str) and "openrouter/" in requested)
-        ):
-            self.model = served
-        return handler(self, chunk)
-
-    setattr(_adopting_handler, _SERVED_MODEL_PATCH_FLAG, True)
-    CustomStreamWrapper.handle_openai_chat_completion_chunk = _adopting_handler
 
 
 def served_model_from(language_model: object) -> str | None:

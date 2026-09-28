@@ -2,6 +2,7 @@
 
 import { CaretLeft, CaretRight } from "@/shared/ui/icons";
 import { cn } from "@/shared/lib/utils";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 
 interface IndexPagerProps {
@@ -37,13 +38,20 @@ export function IndexPager({
         "inline-flex items-center gap-0.5 rounded-full border border-border/50 bg-background/60 p-0.5 text-[0.75rem]",
         className,
       )}
+      // The pill is pinned LTR, so ← is always previous and → always next.
+      onKeyDown={(event) => {
+        const step = arrowPageStep(event, false);
+        if (step === 0) return;
+        event.preventDefault();
+        if (step > 0 ? !atLast : !atFirst) onChange(currentIndex + step);
+      }}
     >
       <TooltipButton tooltip={prevLabel} side="top">
         <button
           type="button"
           onClick={() => onChange(currentIndex - 1)}
           disabled={atFirst}
-          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          className="inline-flex size-[44px] lg:size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
           aria-label={prevLabel}
         >
           <CaretLeft className="size-4" />
@@ -57,7 +65,7 @@ export function IndexPager({
           type="button"
           onClick={() => onChange(currentIndex + 1)}
           disabled={atLast}
-          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          className="inline-flex size-[44px] lg:size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
           aria-label={nextLabel}
         >
           <CaretRight className="size-4" />

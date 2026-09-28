@@ -32,6 +32,7 @@ from ...constants import (
 from ...i18n_keys import I18nKey
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
+from ...service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION, SPLIT_VERSION_LEGACY
 from ...storage.models import Base, ByokProviderKeyModel
 from ...storage.usage import StorageUsage
 from ..model_catalog import CatalogModel, ModelCatalogResponse
@@ -210,13 +211,21 @@ class _FakeJobStore:
         """
         return list(self._jobs.keys())
 
-    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+    def stage_dataset(
+        self,
+        username: str,
+        dataset_filename: str,
+        rows: list[dict[str, Any]],
+        *,
+        sample: bool = False,
+    ) -> str:
         """Persist staged rows and return an opaque id.
 
         Args:
             username: Submitter owner.
             dataset_filename: Original filename (kept for diagnostics).
             rows: Non-empty dataset rows.
+            sample: Unused; accepted for signature parity with the real store.
 
         Returns:
             Newly minted staged dataset id.
@@ -455,6 +464,34 @@ def test_submit_persists_without_starting_worker_on_api_only_pods(
     row = store._jobs[resp.json()["optimization_id"]]
     assert row["payload"]["username"] == "alice"
     assert row["code_version"] == _sub_mod.settings.code_version
+
+
+@pytest.mark.parametrize(
+    ("path", "payload_factory"),
+    [("/run", _run_payload), ("/grid-search", _grid_payload)],
+)
+def test_submit_stamps_the_current_split_version(
+    path: str,
+    payload_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new submission is stored with the current split allocator, whatever the body claims.
+
+    Args:
+        path: Submission endpoint under test.
+        payload_factory: Callable producing a valid endpoint payload.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = payload_factory()
+    payload["split_version"] = SPLIT_VERSION_LEGACY
+
+    resp = client.post(path, json=payload)
+
+    assert resp.status_code == 201
+    row = store._jobs[resp.json()["optimization_id"]]
+    assert row["payload"]["split_version"] == CURRENT_SPLIT_VERSION
 
 
 def test_submit_run_echoes_name_and_authenticated_username(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1118,7 +1155,7 @@ def test_submit_run_supports_mixed_per_model_sources_and_strips_inline_connectio
             },
         },
         "reflection_model_settings": {
-            "name": "openrouter/anthropic/claude-3.5-haiku",
+            "name": "together_ai/anthropic/claude-3.5-haiku",
             "token_source": "managed",
         },
     }
@@ -1130,7 +1167,7 @@ def test_submit_run_supports_mixed_per_model_sources_and_strips_inline_connectio
     assert row["overview"]["token_source"] == "managed"
     assert row["overview"][PAYLOAD_OVERVIEW_TOKEN_SOURCES_BY_MODEL] == {
         "openai/private-chat": "byok",
-        "openrouter/anthropic/claude-3.5-haiku": "managed",
+        "together_ai/anthropic/claude-3.5-haiku": "managed",
     }
     stored = row["payload"]["model_config"]
     assert stored["token_source"] == "byok"

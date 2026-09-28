@@ -17,8 +17,16 @@ export interface AgentMessage {
   content: string;
   toolCalls?: AgentToolCall[];
   model?: string | null;
-  /** Concrete model the Auto Router picked for this turn, when resolved. */
-  servedModel?: string | null;
+  stats?: TurnStats | null;
+}
+
+/** Token usage and timing of one agent turn, as the backend measured it. */
+export interface TurnStats {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  durationMs: number | null;
+  /** Time to the first reply token. */
+  ttftMs: number | null;
 }
 
 export interface AgentThinking {

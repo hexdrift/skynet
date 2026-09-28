@@ -1,8 +1,9 @@
 "use client";
 
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Sparkle, XCircle } from "@/shared/ui/icons";
+import { Sparkle } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
@@ -123,14 +124,7 @@ export function CodeAuthoringCard({ agent }: CodeAuthoringCardProps) {
         />
       </div>
 
-      {agent.error && (
-        <div className="flex items-start gap-1.5 border-t border-[#9B2C1F]/20 bg-[#FCEFEB]/60 px-4 py-2 text-xs text-[#7A1E13]">
-          <XCircle className="mt-0.5 size-3 shrink-0 text-[#9B2C1F]" aria-hidden="true" />
-          <span className="min-w-0 flex-1 break-words" dir="auto">
-            {agent.error}
-          </span>
-        </div>
-      )}
+      {agent.error && <InlineErrorRow message={agent.error} className="m-3 py-2" />}
     </div>
   );
 }
@@ -152,7 +146,7 @@ function ArtifactBlock({
     <div className="space-y-1.5">
       <span
         className={cn(
-          "text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+          "text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground",
           streaming && "text-[#3D2E22]",
         )}
         dir={getActiveDir()}

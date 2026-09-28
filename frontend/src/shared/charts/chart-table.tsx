@@ -44,9 +44,9 @@ export function ChartTable<T>({
   }
   const clickable = onRowClick != null;
   return (
-    <div className="h-full max-h-full overflow-auto rounded-lg border border-border">
+    <div className="h-full max-h-full overflow-auto rounded-2xl border border-border/40 bg-card/60">
       <table className="w-full border-collapse text-sm" dir={getActiveDir()}>
-        <thead className="sticky top-0 bg-muted text-xs">
+        <thead className="sticky top-0 border-b border-border/60 bg-muted/40 text-xs backdrop-blur-sm">
           <tr>
             {columns.map((c) => (
               <th
@@ -68,7 +68,7 @@ export function ChartTable<T>({
               onClick={clickable ? () => onRowClick(row, i) : undefined}
               className={cn(
                 "border-t border-border/60",
-                clickable && "cursor-pointer hover:bg-accent/60",
+                clickable && "cursor-pointer transition-colors duration-150 hover:bg-muted/50",
               )}
             >
               {columns.map((c) => (

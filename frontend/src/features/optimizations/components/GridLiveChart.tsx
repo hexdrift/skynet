@@ -7,6 +7,14 @@ import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
 import { ChartTable } from "@/shared/charts/chart-table";
+import {
+  CHART_TOOLTIP_CARD_CLASS,
+  CHART_TOOLTIP_ROW_CLASS,
+  CHART_TOOLTIP_SWATCH_CLASS,
+  CHART_TOOLTIP_TITLE_CLASS,
+  CHART_TOOLTIP_VALUE_CLASS,
+} from "@/shared/charts/chart-utils";
+import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { useLiteMode } from "@/features/settings";
 import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -90,17 +98,21 @@ function LiveTip({
     }),
   };
   return (
-    <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur-sm p-3 shadow-lg">
-      {label && <p className="font-semibold mb-1.5 text-foreground text-xs">{label}</p>}
-      {payload.map((p, i) => (
-        <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-          {p.color && (
-            <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-          )}
-          <span>{nameMap[String(p.dataKey)] ?? String(p.dataKey)}</span>
-          <span className="font-mono font-semibold text-foreground ms-auto">{p.value}%</span>
-        </div>
-      ))}
+    <div className={CHART_TOOLTIP_CARD_CLASS} dir={getActiveDir()}>
+      {label && <p className={CHART_TOOLTIP_TITLE_CLASS}>{label}</p>}
+      <div className="space-y-1">
+        {payload.map((p, i) => (
+          <div key={i} className={CHART_TOOLTIP_ROW_CLASS}>
+            {p.color && (
+              <span className={CHART_TOOLTIP_SWATCH_CLASS} style={{ backgroundColor: p.color }} />
+            )}
+            <span className="text-xs">{nameMap[String(p.dataKey)] ?? String(p.dataKey)}</span>
+            <span className={CHART_TOOLTIP_VALUE_CLASS} dir="ltr">
+              {p.value}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -135,7 +147,7 @@ export function GridLiveChart({ job }: { job: OptimizationStatusResponse }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center justify-between gap-2">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
           <HelpTip text={tip("grid.score_comparison")}>
             {msg("auto.features.optimizations.components.gridlivechart.1")}
           </HelpTip>

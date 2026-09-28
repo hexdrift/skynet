@@ -38,8 +38,8 @@ export function DeleteJobDialog({
       <TooltipButton tooltip={msg("auto.features.optimizations.components.deletejobdialog.1")}>
         <Button
           variant="ghost"
-          size="icon"
-          className="size-[44px] text-muted-foreground hover:text-red-600 sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+          size="icon-sm"
+          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           onClick={() => setOpen(true)}
           aria-label={msg("auto.features.optimizations.components.deletejobdialog.literal.1")}
         >
@@ -68,22 +68,15 @@ export function DeleteJobDialog({
           />
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={loading}
-              className="w-full justify-center"
-            >
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
               {msg("auto.features.optimizations.components.deletejobdialog.4")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={loading}
-              className="w-full justify-center"
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={loading}>
               {loading ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("auto.features.optimizations.components.deletejobdialog.literal.2")
               )}

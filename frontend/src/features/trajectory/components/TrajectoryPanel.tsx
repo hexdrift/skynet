@@ -1,5 +1,6 @@
 "use client";
 
+import { PingDot } from "@/shared/ui/ping-dot";
 import { motion } from "framer-motion";
 import { GitBranch } from "@/shared/ui/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -8,9 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/primitives
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { TERMS } from "@/shared/lib/terms";
-import { cn } from "@/shared/lib/utils";
 import { useLiteMode } from "@/features/settings";
 import {
   extractCandidates,
@@ -20,6 +19,7 @@ import {
   extractValsetOutputs,
 } from "../lib/extract-events";
 import { layoutTrajectory } from "../lib/layout";
+import { TimelineScrubber } from "./TimelineScrubber";
 import { TrajectoryTree } from "./TrajectoryTree";
 import { TrajectoryOutline } from "./TrajectoryOutline";
 import { TrajectoryDrawer, type DrawerSelection } from "./TrajectoryDrawer";
@@ -85,6 +85,10 @@ export function TrajectoryPanel({
   const layout = useMemo(
     () => layoutTrajectory(visibleCandidates, visibleRejected),
     [visibleCandidates, visibleRejected],
+  );
+  const layoutWithoutRejected = useMemo(
+    () => layoutTrajectory(visibleCandidates),
+    [visibleCandidates],
   );
   const [selected, setSelected] = useState<Selected | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -184,9 +188,9 @@ export function TrajectoryPanel({
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <CardTitle className="text-base flex min-w-0 items-center gap-2">
-              <GitBranch className="size-4 text-[#7C6350]" aria-hidden="true" />
+              <GitBranch className="size-4" aria-hidden="true" />
               <HelpTip text={msg("trajectory.explainer.trajectory")}>
-                <span className="font-bold tracking-tight">{msg("trajectory.panel.title")}</span>
+                {msg("trajectory.panel.title")}
               </HelpTip>
             </CardTitle>
           </div>
@@ -194,16 +198,9 @@ export function TrajectoryPanel({
             <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/40 bg-background/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/50 bg-background/80 px-3 py-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/80 shadow-xs backdrop-blur"
             >
-              <span className="relative inline-flex size-2" aria-hidden="true">
-                <motion.span
-                  className="absolute inset-0 rounded-full bg-[var(--warning)]/40"
-                  animate={{ scale: [1, 2, 1], opacity: [0.6, 0, 0.6] }}
-                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
-                />
-                <span className="relative inline-block size-2 rounded-full bg-[var(--warning)]" />
-              </span>
+              <PingDot size="sm" />
               <span className="tabular-nums">{candidates.length}</span>
               <span>{TERMS.candidatePlural}</span>
             </motion.div>
@@ -215,11 +212,14 @@ export function TrajectoryPanel({
         </CardHeader>
         <CardContent className="space-y-3">
           {maxGeneration > 0 ? (
-            <GenerationTimeline
-              maxGeneration={maxGeneration}
+            <TimelineScrubber
+              max={maxGeneration}
               value={generationFilter}
               onChange={setGenerationFilter}
               isLive={live}
+              label={msg("trajectory.scrubber.label")}
+              stepText={(gen) => formatMsg("trajectory.scrubber.generation_value", { gen })}
+              liveText={msg("trajectory.scrubber.live")}
             />
           ) : null}
           {lite ? (
@@ -235,6 +235,7 @@ export function TrajectoryPanel({
           ) : (
             <TrajectoryTree
               layout={layout}
+              layoutWithoutRejected={layoutWithoutRejected}
               selectedId={selectedTreeId}
               newestId={newestId}
               onSelectCandidate={handleSelectCandidate}
@@ -260,186 +261,5 @@ export function TrajectoryPanel({
         </CardContent>
       </Card>
     </FadeIn>
-  );
-}
-
-function GenerationTimeline({
-  maxGeneration,
-  value,
-  onChange,
-  isLive,
-}: {
-  maxGeneration: number;
-  value: number | null;
-  onChange: (next: number | null) => void;
-  isLive: boolean;
-}) {
-  const current = value ?? maxGeneration;
-  const isAtLive = value === null;
-  const isRtl = getActiveDir() === "rtl";
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const [dragging, setDragging] = useState(false);
-
-  const genFromClientX = useCallback(
-    (clientX: number) => {
-      const el = trackRef.current;
-      if (el === null) return current;
-      const rect = el.getBoundingClientRect();
-      // Generation 0 sits at the inline-start edge — the track's right in RTL,
-      // its left in LTR — so measure the drag from that edge in either direction.
-      const offset = isRtl ? rect.right - clientX : clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, offset / rect.width));
-      return Math.round(pct * maxGeneration);
-    },
-    [current, maxGeneration, isRtl],
-  );
-
-  const applyValue = useCallback(
-    (next: number) => {
-      onChange(next >= maxGeneration ? null : next);
-    },
-    [onChange, maxGeneration],
-  );
-
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      setDragging(true);
-      applyValue(genFromClientX(e.clientX));
-    },
-    [applyValue, genFromClientX],
-  );
-
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragging) return;
-      applyValue(genFromClientX(e.clientX));
-    },
-    [dragging, applyValue, genFromClientX],
-  );
-
-  const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
-    setDragging(false);
-  }, []);
-
-  const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      // Later generations sit toward the inline-end edge — visually left in RTL,
-      // right in LTR — so the arrow pointing that way means "forward in time".
-      const forwardKey = isRtl ? "ArrowLeft" : "ArrowRight";
-      const backKey = isRtl ? "ArrowRight" : "ArrowLeft";
-      if (e.key === forwardKey) {
-        e.preventDefault();
-        applyValue(Math.min(maxGeneration, current + 1));
-      } else if (e.key === backKey) {
-        e.preventDefault();
-        applyValue(Math.max(0, current - 1));
-      } else if (e.key === "Home") {
-        e.preventDefault();
-        applyValue(0);
-      } else if (e.key === "End") {
-        e.preventDefault();
-        applyValue(maxGeneration);
-      }
-    },
-    [applyValue, current, maxGeneration, isRtl],
-  );
-
-  const filledPct = maxGeneration === 0 ? 100 : (current / maxGeneration) * 100;
-  const steps = useMemo(
-    () => Array.from({ length: maxGeneration + 1 }, (_, i) => i),
-    [maxGeneration],
-  );
-
-  return (
-    <div
-      className="rounded-xl border border-border/40 bg-background/70 px-4 pt-3 pb-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
-      dir={isRtl ? "rtl" : "ltr"}
-    >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {msg("trajectory.scrubber.label")}
-        </span>
-      </div>
-
-      <div
-        ref={trackRef}
-        role="slider"
-        tabIndex={0}
-        aria-label={msg("trajectory.scrubber.label")}
-        aria-valuemin={0}
-        aria-valuemax={maxGeneration}
-        aria-valuenow={current}
-        aria-valuetext={
-          isAtLive
-            ? msg("trajectory.scrubber.live")
-            : formatMsg("trajectory.scrubber.generation_value", { gen: current })
-        }
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onKeyDown={onKeyDown}
-        className="relative h-9 cursor-pointer touch-none select-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60"
-      >
-        <div
-          className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full"
-          style={{ background: "rgba(28, 22, 18, 0.10)" }}
-        />
-        <div
-          className="absolute top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-[#7C6350]"
-          style={{ ...(isRtl ? { right: 0 } : { left: 0 }), width: `${filledPct}%` }}
-        />
-
-        {steps.map((gen) => {
-          const pct = maxGeneration === 0 ? 0 : (gen / maxGeneration) * 100;
-          const isPast = gen <= current;
-          const isActive = gen === current;
-          if (isActive) return null;
-          return (
-            <span
-              key={`tick-${gen}`}
-              className="pointer-events-none absolute top-1/2 inline-flex items-center justify-center rounded-sm bg-background/95 px-1 text-[10px] tabular-nums font-semibold leading-none"
-              style={{
-                ...(isRtl ? { right: `${pct}%` } : { left: `${pct}%` }),
-                transform: isRtl ? "translate(50%, -50%)" : "translate(-50%, -50%)",
-                color: isPast ? "#7C6350" : "rgba(28, 22, 18, 0.42)",
-              }}
-              aria-hidden="true"
-            >
-              {gen}
-            </span>
-          );
-        })}
-
-        <div
-          className="pointer-events-none absolute top-1/2 z-10"
-          style={{
-            ...(isRtl ? { right: `${filledPct}%` } : { left: `${filledPct}%` }),
-            transform: isRtl ? "translate(50%, -50%)" : "translate(-50%, -50%)",
-          }}
-        >
-          {isAtLive && isLive ? (
-            <motion.span
-              className="absolute left-1/2 top-1/2 block h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#7C8B5A]/30"
-              animate={{ scale: [1, 1.7, 1], opacity: [0.55, 0, 0.55] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
-              aria-hidden="true"
-            />
-          ) : null}
-          <div
-            className={cn(
-              "relative block h-4 w-4 rounded-full border-[1.5px] shadow-[0_1px_2px_rgba(28,22,18,0.18)] transition-transform",
-              isAtLive
-                ? "border-[#1c1612] bg-[#1c1612]"
-                : "border-[#1c1612] bg-[#fbf8f3]",
-              dragging && "scale-110",
-            )}
-          />
-        </div>
-      </div>
-    </div>
   );
 }
