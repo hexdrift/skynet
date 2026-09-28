@@ -20,6 +20,11 @@ Both the optimization rollout (``gepa_adapter``) and the three serve builders
 synchronous ``Predict.forward`` — serve via ``dspy.streamify``'s asyncify path,
 which runs the sync loop in a worker thread — so overriding ``forward`` covers
 every site.
+
+The same override is where the loop's prompt layout is fixed: when no adapter
+is configured (the text tool protocol, the platform default) each turn runs
+under :class:`StableRosterChatAdapter`, which keeps the tool roster at the
+front of the conversation so a provider prompt cache covers it on every turn.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ import dspy
 from dspy.utils.exceptions import AdapterParseError
 
 from ..react_compat import REACT_CLASS
+from ..stable_roster_adapter import StableRosterChatAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,9 @@ the dominant failure is a transient tag leak that a single resample clears."""
 
 _RESAMPLE_STRIDE = 7919
 """Prime per-attempt offset so each retry lands on a distinct LM cache key."""
+
+_STABLE_ROSTER_ADAPTER = StableRosterChatAdapter()
+"""Cache-friendly stand-in for the default chat adapter; never replaces a configured one."""
 
 
 class RetryingPredict(dspy.Predict):
@@ -75,6 +84,24 @@ class RetryingPredict(dspy.Predict):
         Args:
             **kwargs: The per-call inputs ReActV2 passes to the predictor,
                 optionally carrying a ``config`` dict of LM kwargs.
+
+        Returns:
+            The ``dspy.Prediction`` from the first attempt that parses.
+
+        Raises:
+            AdapterParseError: When every attempt fails to parse.
+            ValueError: When every attempt raises a value error from the adapter.
+        """
+        if dspy.settings.adapter is None:
+            with dspy.context(adapter=_STABLE_ROSTER_ADAPTER):
+                return self._forward_with_retries(**kwargs)
+        return self._forward_with_retries(**kwargs)
+
+    def _forward_with_retries(self, **kwargs):
+        """Run the resampling loop under whichever adapter is active.
+
+        Args:
+            **kwargs: The per-call inputs, as for :meth:`forward`.
 
         Returns:
             The ``dspy.Prediction`` from the first attempt that parses.
