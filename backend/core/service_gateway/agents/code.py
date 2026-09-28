@@ -44,7 +44,7 @@ from ..language_models import (
     apply_reasoning_effort,
     build_language_model,
 )
-from ..react_compat import native_tool_calling_active
+from ..react_compat import native_react_adapter, native_tool_calling_active
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .constants import REASONING_FIELD
 from .parse_salvage import strip_adapter_debris
@@ -1422,22 +1422,17 @@ class ReactReplyStream:
     then feed every non-reasoning ``StreamResponse`` through ``reply_delta``.
     """
 
-    def __init__(self, program: dspy.Module, reply_field: str, lm: dspy.LM | None = None):
+    def __init__(self, program: dspy.Module, reply_field: str):
         """Bind to a constructed ReActV2 program and the signature's reply field.
 
         Args:
             program: The constructed ReActV2 program (or subclass).
             reply_field: Output field carrying the user-visible reply, a
                 ``submit`` argument.
-            lm: The LM the loop runs on; defaults to the active ``dspy.settings.lm``.
         """
         self._program = program
         self._reply_field = reply_field
-        lm = lm or getattr(dspy.settings, "lm", None)
-        # The adapter only sends native tools when the LM also claims support;
-        # otherwise it silently falls back to the text protocol, and a native
-        # listener would never see the reply.
-        self._native = native_tool_calling_active() and (lm is None or bool(lm.supports_function_calling))
+        self._native = native_tool_calling_active()
         self._stream_field = "tool_calls"
         if self._native:
             self._extractor: _NativeSubmitArgExtractor | _SubmitArgExtractor = _NativeSubmitArgExtractor(reply_field)
@@ -2567,7 +2562,11 @@ async def _run_agent(
     )
     # The user's ``reply`` rides a ``submit`` tool call; ``ReactReplyStream``
     # wires the listeners and decodes it into reply deltas.
-    reply_stream = ReactReplyStream(react, "reply", lm)
+    # Agents always run on the provider's native tool-call channel, whatever
+    # the process-wide adapter the optimizer uses; the stream must be built
+    # under that adapter so it decodes the native reply.
+    with dspy.context(adapter=native_react_adapter()):
+        reply_stream = ReactReplyStream(react, "reply")
     program = dspy.streamify(
         react,
         stream_listeners=reply_stream.listeners(),
@@ -2591,7 +2590,7 @@ async def _run_agent(
     }
 
     reply_text = ""
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, adapter=native_react_adapter()):
         async for chunk in program(**inputs):
             if isinstance(chunk, dspy.streaming.StreamResponse):
                 if chunk.signature_field_name == REASONING_FIELD:
@@ -2838,7 +2837,11 @@ async def _run_workflow_agent(
         ],
         max_iters=8,
     )
-    reply_stream = ReactReplyStream(react, "reply", lm)
+    # Agents always run on the provider's native tool-call channel, whatever
+    # the process-wide adapter the optimizer uses; the stream must be built
+    # under that adapter so it decodes the native reply.
+    with dspy.context(adapter=native_react_adapter()):
+        reply_stream = ReactReplyStream(react, "reply")
     program = dspy.streamify(
         react,
         stream_listeners=reply_stream.listeners(),
@@ -2859,7 +2862,7 @@ async def _run_workflow_agent(
     }
 
     reply_text = ""
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, adapter=native_react_adapter()):
         async for chunk in program(**inputs):
             if isinstance(chunk, dspy.streaming.StreamResponse):
                 if chunk.signature_field_name == REASONING_FIELD:

@@ -352,7 +352,8 @@ class Settings(BaseSettings):
             "programs are affected. Off (default) keeps the text tool protocol "
             "that every model — including the flaky MiniMax student — parses "
             "reliably; only enable it for a deployment whose models all "
-            "support native function calling."
+            "support native function calling. The agents (generalist, code "
+            "agent, served ReAct chat) always use native calling regardless."
         ),
         alias="REACT_NATIVE_TOOL_CALLING",
     )

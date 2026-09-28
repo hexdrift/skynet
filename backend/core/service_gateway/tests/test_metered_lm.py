@@ -122,12 +122,9 @@ def test_copy_shares_usage_totals():
     assert total_tokens_from_history(lm) == 10
 
 
-def test_declared_native_tool_calls_override_the_catalogue_lookup():
-    """A gateway alias LiteLLM does not know reports native tool calls only once declared."""
+def test_unknown_gateway_alias_still_reports_native_tool_calls():
+    """A gateway alias LiteLLM does not know still gets tools on the native channel."""
     lm = MeteredLM(model="openai/onprem-gateway-alias", cache=False)
-    assert lm.supports_function_calling is False
-
-    lm.native_tool_calls = True
 
     assert lm.supports_function_calling is True
     assert lm.copy().supports_function_calling is True

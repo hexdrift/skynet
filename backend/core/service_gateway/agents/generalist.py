@@ -1984,7 +1984,7 @@ async def _drive_generalist_agent(
         # it is built, and the loop only installs its native-tool-call adapter
         # inside ``forward``; without this it would decode the text protocol.
         with dspy.context(adapter=AppendOnlyChatAdapter()):
-            reply_stream = ReactReplyStream(react, "assistant_message", lm)
+            reply_stream = ReactReplyStream(react, "assistant_message")
         # ``is_async_program`` stays False so ``streamify`` wraps the sync
         # ``forward`` via ``asyncify``; ReActV2 defines no ``aforward``.
         program = dspy.streamify(
@@ -2104,12 +2104,6 @@ async def run_generalist_agent(
     except ServiceError as exc:
         yield {"event": "error", "data": {"error": _scrub_model_identity(str(exc))}}
         return
-    # The loop always runs on the provider's native tool-call channel. LiteLLM
-    # reports no function-calling support for model names it does not know
-    # (every on-prem gateway alias), and DSPy would then silently fall back to
-    # the text protocol, so the generalist declares the capability itself; the
-    # operator gateway must serve OpenAI-style ``tools`` (see AIRGAP.html).
-    lm.native_tool_calls = True
     if usage_sink is not None:
         usage_sink.append(lm)
 

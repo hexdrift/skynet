@@ -1365,7 +1365,7 @@ async def test_turn_replays_history_natively_and_streams_the_submit(monkeypatch:
     assert [e["event"] for e in events if e["event"] in ("tool_start", "tool_end")] == ["tool_start", "tool_end"]
 
 
-async def test_turn_declares_native_tool_calls_on_its_lm(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_turn_lm_reports_native_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """The loop's LM always claims native tool calls, so tools never fall back to the text protocol."""
     lm = MeteredLM(model="openai/onprem-gateway-alias", cache=False)
     monkeypatch.setattr(generalist_module, "_build_generalist_lm", lambda: lm)

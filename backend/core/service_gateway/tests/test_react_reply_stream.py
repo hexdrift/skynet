@@ -8,9 +8,13 @@ both extractors on a stand-in program.
 
 from __future__ import annotations
 
+import asyncio
+import json
 from types import SimpleNamespace
+from typing import Any
 
 import dspy
+import litellm
 import pytest
 
 from core.service_gateway.agents import code as code_module
@@ -20,6 +24,7 @@ from core.service_gateway.agents.code import (
     _NativeSubmitArgExtractor,
     _SubmitArgExtractor,
 )
+from core.service_gateway.language_models import MeteredLM
 
 
 class _Sig(dspy.Signature):
@@ -180,24 +185,68 @@ def test_submit_program_defaults_to_text_protocol(monkeypatch: pytest.MonkeyPatc
     assert not isinstance(stream.listeners()[0], NativeToolCallStreamListener)
 
 
-def test_native_adapter_falls_back_to_text_when_lm_lacks_tool_calling(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The adapter sends no native tools to an LM without tool-calling, so the text extractor must stream."""
-    monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: True)
-    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
-    stream = ReactReplyStream(_SubmitProgram(base.react), "reply", SimpleNamespace(supports_function_calling=False))
+class _ScriptedGatewayLM(MeteredLM):
+    """An on-prem gateway alias LiteLLM does not know, answering with a scripted ``submit``."""
 
-    assert stream._native is False
-    assert isinstance(stream._extractor, _SubmitArgExtractor)
+    def __init__(self) -> None:
+        """Build the LM under a model name absent from LiteLLM's catalogue."""
+        super().__init__(model="openai/onprem-gateway-alias", cache=False)
+        self.requests: list[dict[str, Any]] = []
+
+    def forward(self, prompt=None, messages=None, **kwargs):
+        """Record the request and submit a fixed reply as a native tool call.
+
+        Args:
+            prompt: Unused legacy prompt.
+            messages: The rendered chat messages.
+            **kwargs: Provider kwargs, including ``tools``.
+
+        Returns:
+            An OpenAI-shaped response carrying one ``submit`` tool call.
+        """
+        self.requests.append({"messages": messages, **kwargs})
+        call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "submit", "arguments": json.dumps({"reply": "done"})},
+        }
+        message = {
+            "role": "assistant",
+            "content": "[[ ## next_thought ## ]]\nthinking\n\n[[ ## completed ## ]]",
+            "tool_calls": [call],
+        }
+        return litellm.ModelResponse(
+            model="onprem-gateway-alias",
+            choices=[{"index": 0, "finish_reason": "tool_calls", "message": message}],
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        )
 
 
-def test_native_listener_kept_when_lm_supports_tool_calling(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An LM that claims tool-calling keeps the native listener."""
-    monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: True)
-    base = dspy.ReActV2(_Sig, tools=[_noop], max_iters=3)
-    stream = ReactReplyStream(_SubmitProgram(base.react), "reply", SimpleNamespace(supports_function_calling=True))
+async def test_code_agent_sends_native_tools_to_an_unknown_gateway_alias() -> None:
+    """The code agent always rides the native tool channel, even for a model LiteLLM has never heard of."""
+    lm = _ScriptedGatewayLM()
+    queue: asyncio.Queue[dict | None] = asyncio.Queue()
 
-    assert stream._native is True
-    assert isinstance(stream._extractor, _NativeSubmitArgExtractor)
+    result = await code_module._run_agent(
+        lm=lm,
+        dataset_columns=["q", "a"],
+        column_roles_json="{}",
+        column_kinds_json="{}",
+        sample_rows_json="[]",
+        user_message="hi",
+        chat_history_json="[]",
+        prior_signature="",
+        prior_metric="",
+        prior_signature_validation="",
+        prior_metric_validation="",
+        initial_signature="",
+        initial_metric="",
+        reply_language="English",
+        queue=queue,
+    )
+
+    assert "submit" in [tool["function"]["name"] for tool in lm.requests[0]["tools"]]
+    assert result["assistant_message"] == "done"
 
 
 def test_native_submit_program_decodes_provider_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:

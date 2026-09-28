@@ -34,6 +34,7 @@ from ..optimization.tool_overlay import (
     _apply_tool_name_overrides,
     _assert_tool_set_matches,
 )
+from ..react_compat import native_react_adapter
 from .code import ReactReplyStream, ReasoningStreamListener, _format_agent_error
 from .constants import REASONING_FIELD
 from .generalist import (
@@ -194,7 +195,10 @@ async def _drive_react_chat(
         input_fields = list(signature_cls.input_fields)
         primary_out = output_fields[0] if output_fields else None
 
-        reply_stream = ReactReplyStream(program, primary_out, lm) if primary_out else None
+        # Served agents always run on the provider's native tool-call channel,
+        # so the stream is built under the adapter the turn will run with.
+        with dspy.context(adapter=native_react_adapter()):
+            reply_stream = ReactReplyStream(program, primary_out) if primary_out else None
         listeners = (
             reply_stream.listeners()
             if reply_stream is not None
@@ -212,7 +216,7 @@ async def _drive_react_chat(
             inputs[input_fields[0]] = user_message
 
         reply_text = ""
-        with dspy.context(lm=lm):
+        with dspy.context(lm=lm, adapter=native_react_adapter()):
             async for chunk in stream_program(**inputs):
                 if isinstance(chunk, dspy.streaming.StreamResponse):
                     if chunk.signature_field_name == REASONING_FIELD:

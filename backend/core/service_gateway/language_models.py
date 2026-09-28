@@ -271,20 +271,21 @@ class MeteredLM(dspy.LM):
         self.usage_totals = LmUsageTotals()
         self.last_request_model: str | None = None
         self.last_response_model: str | None = None
-        self.native_tool_calls = False
 
     @property
     def supports_function_calling(self) -> bool:
-        """Report native tool-call support, honouring an explicit declaration.
+        """Always report native tool-call support.
 
         LiteLLM answers from its model catalogue, which has no entry for an
-        operator's own gateway alias, so a caller that requires the native
-        channel sets ``native_tool_calls`` instead of trusting the lookup.
+        operator's own gateway alias, and DSPy would then silently fall back
+        to the text protocol. The deployment contract is that the gateway
+        serves OpenAI-style ``tools`` (see AIRGAP.html), and the adapter only
+        consults this when native function calling is enabled.
 
         Returns:
-            Whether the adapter may send tools on the provider's native channel.
+            ``True``.
         """
-        return self.native_tool_calls or super().supports_function_calling
+        return True
 
     def forward(self, *args: object, **kwargs: object) -> object:
         """Run the LM call, honouring the job-child LM concurrency budget.

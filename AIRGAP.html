@@ -1741,7 +1741,7 @@ helm upgrade --install skynet deploy\helm\skynet ^
 
   <div class="callout">
     <span class="label">TODO · On-premise</span>
-    <p>The generalist agent always calls its tools through OpenAI-style native function calling (<code>tools</code> / <code>tool_choice</code> in the request, <code>tool_calls</code> in the reply); there is no text-protocol fallback. The gateway and the model behind <code>GENERALIST_AGENT_MODEL</code> must support it. On vLLM that means launching with <code>--enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</code> (the parser that matches the model family, e.g. <code>hermes</code> for Qwen); on a LiteLLM proxy the backing deployment must accept <code>tools</code>. Without it, agent turns fail instead of running tools.</p>
+    <p>Every agent — the generalist, the code/workflow agent, and the chat playground of a served ReAct run — always calls its tools through OpenAI-style native function calling (<code>tools</code> / <code>tool_choice</code> in the request, <code>tool_calls</code> in the reply); there is no text-protocol fallback, and Skynet does not ask LiteLLM whether an internal model name supports it. The gateway and the models behind <code>GENERALIST_AGENT_MODEL</code>, <code>CODE_AGENT_MODEL</code> and any model a ReAct run is served on must support it. On vLLM that means launching with <code>--enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</code> (the parser that matches the model family, e.g. <code>hermes</code> for Qwen); on a LiteLLM proxy the backing deployment must accept <code>tools</code>. Without it, agent turns fail instead of running tools.</p>
   </div>
 
   <h4>Gateway flavor: id prefix + base-URL suffix</h4>
@@ -1757,7 +1757,7 @@ OPENAI_API_KEY=<span class="s">&lt;proxy virtual/master key&gt;</span></pre>
   </div>
   <div data-gateway="vllm">
 <pre><span class="c"># vLLM — launch with --served-model-name; OpenAI-compatible /v1</span>
-<span class="c"># The generalist's model also needs --enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</span>
+<span class="c"># Agent models also need --enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</span>
 CODE_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
 CODE_AGENT_BASE_URL=<span class="s">http://vllm.corp.internal:8000/v1</span>
 GENERALIST_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
