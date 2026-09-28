@@ -27,7 +27,7 @@ from ...config import settings
 from ...models.artifacts import ProgramArtifact
 from ...models.common import SplitCounts
 from ...models.results import GridSearchResponse, PairResult, RunResponse
-from ...service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION
+from ...service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION, SPLIT_VERSION_LEGACY
 from ...storage.models import Base
 from ..errors import DomainError
 from ..routers.optimizations import create_optimizations_router
@@ -1602,19 +1602,25 @@ def test_clone_payload_raises_409_when_saved_payload_no_longer_validates() -> No
     assert exc_info.value.code == "optimization.cannot_resubmit_payload"
 
 
-def test_clone_payload_moves_a_legacy_run_onto_the_current_split_version() -> None:
-    """A retry of a run stored before split stamping is split with the current allocator."""
-    source = {
-        "username": "alice",
-        "module_name": "predict",
-        "signature_code": "class S(dspy.Signature):\n    q: str = dspy.InputField()\n    a: str = dspy.OutputField()\n",
-        "metric_code": "def metric(example, pred, trace=None):\n    return 1.0\n",
-        "optimizer_name": "gepa",
-        "dataset": [{"q": "x", "a": "y"}],
-        "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
-        "model_config": {"name": "openai/gpt-4o-mini"},
-    }
+_CLONE_SOURCE = {
+    "username": "alice",
+    "module_name": "predict",
+    "signature_code": "class S(dspy.Signature):\n    q: str = dspy.InputField()\n    a: str = dspy.OutputField()\n",
+    "metric_code": "def metric(example, pred, trace=None):\n    return 1.0\n",
+    "optimizer_name": "gepa",
+    "dataset": [{"q": "x", "a": "y"}],
+    "column_mapping": {"inputs": {"q": "q"}, "outputs": {"a": "a"}},
+    "model_config": {"name": "openai/gpt-4o-mini"},
+}
+
+
+@pytest.mark.parametrize("split_version", [None, SPLIT_VERSION_LEGACY, CURRENT_SPLIT_VERSION])
+def test_clone_payload_keeps_the_source_split_version(split_version: int | None) -> None:
+    """A clone or retry reproduces the source run's split, legacy or current."""
+    source = dict(_CLONE_SOURCE)
+    if split_version is not None:
+        source["split_version"] = split_version
 
     _new_id, cloned = clone_payload(source, optimization_type="run", new_name="retry")
 
-    assert cloned.split_version == CURRENT_SPLIT_VERSION
+    assert cloned.split_version == split_version

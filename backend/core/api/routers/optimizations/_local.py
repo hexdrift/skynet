@@ -31,7 +31,6 @@ from ....models import (
 )
 from ....models.common import OptimizationType
 from ....notifications import notify_job_started
-from ....service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION
 from ....worker.engine import get_worker
 from ...auth import AuthenticatedUser
 from ...converters import parse_overview
@@ -217,9 +216,8 @@ def clone_payload(
     # stable_seed(...) stays byte-stable across workers.
     fingerprint = compute_task_fingerprint(payload.signature_code, payload.metric_code, payload.dataset)
     payload.seed = stable_seed(fingerprint)
-    # A clone or retry is a new run, so it takes the current allocator even
-    # when the source was split the legacy way.
-    payload.split_version = CURRENT_SPLIT_VERSION
+    # split_version is carried over from the source, so a clone or retry
+    # reproduces the source's split; an unstamped legacy run stays legacy.
     return new_id, payload
 
 
