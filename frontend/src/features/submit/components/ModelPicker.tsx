@@ -41,7 +41,7 @@ interface ModelPickerProps {
 type ModelPurpose = "all" | "vision" | "reasoning" | "multilingual" | "onprem";
 
 // Model families with a first-class multilingual focus. The catalog is dynamic
-// (whatever OpenRouter serves) and carries no per-model purpose metadata, so
+// (whatever the configured gateways serve) and carries no per-model purpose metadata, so
 // this id heuristic is the categorization lever — extend the list as needed.
 const MULTILINGUAL_FAMILIES = ["qwen", "glm", "aya", "command", "gemma", "mistral"];
 
