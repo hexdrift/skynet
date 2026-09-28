@@ -659,9 +659,8 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     id: "dd-analytics",
     title: msg("auto.features.tutorial.lib.steps.literal.9"),
     description: formatMsg("auto.features.tutorial.lib.steps.template.47", {
-      p1: TERMS.scorePlural,
-      p2: TERMS.optimization,
-      p3: TERMS.optimization,
+      p1: TERMS.module,
+      p2: TERMS.optimizationPlural,
     }),
     target: "[data-tutorial='analytics-content']",
     placement: "bottom",
