@@ -12,6 +12,7 @@ import {
   ListChecks,
   MagicWand,
   MagnifyingGlass,
+  Pause,
   PencilSimple,
   Play,
   PushPin,
@@ -135,6 +136,18 @@ export const TOOL_META: Record<string, ToolMetaDef> = {
     icon: PushPin,
   },
   edit_code_optimizations_edit_code_post: {
+    title: () => msg("auto.features.agent.panel.lib.tool.meta.literal.18"),
+    description: () => formatMsg("auto.features.agent.panel.lib.tool.meta.template.14", {
+      p1: TERMS.signature,
+      p2: TERMS.metric,
+    }),
+    confirmLabel: () => msg("auto.features.agent.panel.lib.tool.meta.literal.19"),
+    severity: "info",
+    icon: Code,
+  },
+  // The generalist's only code-writing tool; the edit_code entry above stays
+  // for older transcripts that still carry it.
+  request_code_authoring: {
     title: () => msg("auto.features.agent.panel.lib.tool.meta.literal.18"),
     description: () => formatMsg("auto.features.agent.panel.lib.tool.meta.template.14", {
       p1: TERMS.signature,
@@ -275,6 +288,34 @@ export const TOOL_META: Record<string, ToolMetaDef> = {
     severity: "info",
     icon: Database,
   },
+  pause_job_optimizations: {
+    title: () => formatMsg("agent.tool.pause_job.title", { p1: TERMS.optimization }),
+    description: () => msg("agent.tool.pause_job.description"),
+    confirmLabel: () => msg("agent.tool.pause_job.confirm"),
+    severity: "warning",
+    icon: Pause,
+  },
+  resume_job_optimizations: {
+    title: () => formatMsg("agent.tool.resume_job.title", { p1: TERMS.optimization }),
+    description: () => msg("agent.tool.resume_job.description"),
+    confirmLabel: () => msg("agent.tool.resume_job.confirm"),
+    severity: "warning",
+    icon: Play,
+  },
+  restart_job_optimizations: {
+    title: () => formatMsg("agent.tool.restart_job.title", { p1: TERMS.optimization }),
+    description: () => msg("agent.tool.restart_job.description"),
+    confirmLabel: () => msg("agent.tool.restart_job.confirm"),
+    severity: "warning",
+    icon: ArrowsClockwise,
+  },
+  stage_sample_dataset_datasets_samples: {
+    title: () => msg("agent.tool.stage_sample.title"),
+    description: () => msg("agent.tool.stage_sample.description"),
+    confirmLabel: () => msg("agent.tool.stage_sample.confirm"),
+    severity: "info",
+    icon: Database,
+  },
   request_user_dataset_from_library: {
     title: () => msg("auto.features.agent.panel.components.librarydatasetcard.title"),
     description: () => msg("auto.features.agent.panel.lib.tool.meta.literal.83"),
@@ -323,6 +364,8 @@ const TOOL_TITLES: Record<string, LocaleString> = {
     "auto.features.agent.panel.lib.tool.meta.template.31",
     { p1: TERMS.modelPlural },
   ),
+  list_sample_datasets_datasets_samples_get: () => msg("agent.tool.list_samples.title"),
+  validate_datasets_validate_post: () => msg("agent.tool.validate_datasets.title"),
   serve_info_serve: () => msg("auto.features.agent.panel.lib.tool.meta.literal.74"),
   serve_pair_info_serve: () => msg("auto.features.agent.panel.lib.tool.meta.literal.75"),
   request_user_dataset_datasets_request_upload_post: () => msg(

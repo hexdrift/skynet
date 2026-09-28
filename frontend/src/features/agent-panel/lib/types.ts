@@ -7,6 +7,9 @@ export type TrustMode = "ask" | "auto_safe" | "yolo";
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  // Compact trace of the tools an assistant turn ran, so the next turn can
+  // reason about earlier results instead of only the prose reply.
+  tool_calls?: Array<{ tool: string; status: "done" | "error"; result?: string }>;
 }
 
 /**
