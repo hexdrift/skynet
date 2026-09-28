@@ -105,6 +105,7 @@ from ._helpers import (
 )
 from .constants import TERMINAL_STATUSES
 from .optimizations._local import remap_test_indices
+from .serve import _column_mapping_fields
 
 logger = logging.getLogger(__name__)
 
@@ -1231,6 +1232,8 @@ def create_share_router(*, job_store) -> APIRouter:
         prompt = artifact.optimized_prompt
         input_fields = list(prompt.input_fields) if prompt is not None else []
         output_fields = list(prompt.output_fields) if prompt is not None else []
+        if not input_fields:
+            input_fields, output_fields = _column_mapping_fields(overview)
         if not input_fields:
             raise DomainError("serve.no_declared_inputs", status=400)
         missing = [f for f in input_fields if f not in req.inputs]

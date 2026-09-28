@@ -96,6 +96,26 @@ def serve_client(serve_store: _FakeJobStore) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def test_serve_info_falls_back_to_column_mapping_fields(serve_client: TestClient, serve_store: _FakeJobStore) -> None:
+    """A Flex artifact carries no prompt; the column mapping still names its fields."""
+    _seed_run_job(
+        serve_store,
+        "flex-run",
+        artifact=ProgramArtifact(program_state_json={}, optimized_prompt=None),
+        overview_extra={
+            "module_name": "flex",
+            "column_mapping": {"inputs": {"review": "text"}, "outputs": {"score": "stars"}},
+        },
+    )
+
+    resp = serve_client.get("/serve/flex-run/info")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["input_fields"] == ["review"]
+    assert body["output_fields"] == ["score"]
+
+
 def test_serve_info_returns_404_for_unknown_id(serve_client: TestClient) -> None:
     """A serve-info request against an unknown id returns 404."""
     resp = serve_client.get("/serve/ghost/info")
@@ -321,6 +341,30 @@ def test_serve_program_returns_400_for_no_input_fields(serve_client: TestClient,
 
     assert resp.status_code == 400
     assert resp.json()["code"] == I18nKey.SERVE_NO_DECLARED_INPUTS.value
+
+
+def test_serve_program_serves_a_flex_run_from_its_column_mapping(
+    serve_client: TestClient, serve_store: _FakeJobStore
+) -> None:
+    """A Flex run with no optimized prompt is served on the fields its column mapping names."""
+    _seed_run_job(
+        serve_store,
+        "flex-serve",
+        artifact=ProgramArtifact(program_state_json={}, optimized_prompt=None),
+        overview_extra={
+            "module_name": "flex",
+            "column_mapping": {"inputs": {"question": "q"}, "outputs": {"answer": "a"}},
+        },
+    )
+
+    with _PATCH_LM, _PATCH_DSPY_CTX:
+        resp = serve_client.post("/serve/flex-serve", json={"inputs": {"question": "hi"}})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["input_fields"] == ["question"]
+    assert body["output_fields"] == ["answer"]
+    assert body["outputs"]["answer"] == "42"
 
 
 def test_serve_program_returns_400_for_missing_input_fields(
