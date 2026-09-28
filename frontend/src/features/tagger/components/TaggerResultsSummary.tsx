@@ -74,9 +74,6 @@ export function TaggerResultsSummary({ assist, annotations, onFlaggedPass }: Pro
           <p className="text-sm font-semibold text-foreground">
             {msg("tagger.results.recap.title")}
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {formatMsg("tagger.results.recap.subtitle", { total })}
-          </p>
         </div>
         {onFlaggedPass && flagged.length > 0 && (
           <Tooltip>

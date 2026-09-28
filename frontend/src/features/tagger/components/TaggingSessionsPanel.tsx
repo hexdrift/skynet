@@ -43,11 +43,11 @@ export function TaggingSessionsPanel({ onStartNew }: { onStartNew: () => void })
     setLoadingSessions(true);
     try {
       const res = await listTaggerSessions({ limit: 200 });
-      const items = res.items.filter((session) => session.phase !== "complete");
+      const { items } = res;
       setSessions(items);
       // Drop selections that no longer resolve to a listed owned session
-      // (deleted elsewhere, completed since, or shared-in and therefore not
-      // bulk-deletable), so the bar never counts ghosts.
+      // (deleted elsewhere, or shared-in and therefore not bulk-deletable),
+      // so the bar never counts ghosts.
       setSelectedIds((prev) => {
         const next = new Set(
           [...prev].filter((id) => items.some((s) => s.id === id && s.role === "owner")),

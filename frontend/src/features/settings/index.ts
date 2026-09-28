@@ -4,5 +4,5 @@ export { SettingsModalProvider, useSettingsModal } from "./hooks/use-settings-mo
 export { SettingsModal } from "./components/SettingsModal.lazy";
 export { LiteModeHint } from "./components/LiteModeHint";
 export { parseAgentPreferencePatch, readPref } from "./lib/prefs";
-export type { AgentPreferencePatch, AgentShortcut } from "./lib/prefs";
-export { formatShortcut } from "./lib/shortcuts";
+export type { AgentPreferencePatch } from "./lib/prefs";
+export { SETTINGS_TABS, visibleSettingsTabs, type SettingsTab } from "./lib/tabs";

@@ -1,7 +1,8 @@
 "use client";
 
 import { notifyCopied } from "@/shared/lib/notify";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import { Gauge, Scroll } from "@/shared/ui/icons";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { EmptyState } from "@/shared/ui/empty-state";
@@ -12,7 +13,6 @@ import {
   useColumnFilters,
   useColumnResize,
   ResetColumnsButton,
-  type SortDir,
 } from "@/shared/ui/excel-filter";
 import { ExportTableMenu } from "@/shared/ui/export-table-menu";
 import { FadeIn } from "@/shared/ui/motion";
@@ -20,6 +20,7 @@ import { Segmented } from "@/shared/ui/segmented";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
+import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 
 type Verbosity = "quiet" | "normal" | "verbose";
 
@@ -94,15 +95,7 @@ export function LogsTab({
       verbosity === "verbose" ? new Set() : new Set(VERBOSITY_LEVELS[verbosity]),
     );
   };
-  const [sortKey, setSortKey] = useState<string>("timestamp");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const toggleSort = (key: string) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
+  const { sortKey, sortDir, toggleSort } = useTableSort<string>("timestamp", "desc");
 
   const filtered = useMemo(() => {
     let result = logs.filter((l) => {
@@ -120,6 +113,7 @@ export function LogsTab({
       }
       return true;
     });
+    const collLocale = getActiveIntlLocale();
     result = [...result].sort((a, b) => {
       let cmp: number;
       if (sortKey === "pair_index") {
@@ -133,11 +127,11 @@ export function LogsTab({
         const bv = String(b.timestamp ?? "");
         cmp = av < bv ? -1 : av > bv ? 1 : 0;
       } else {
-        // Textual columns (level/logger/message) may hold Hebrew — locale-aware
-        // collation is reserved for these.
+        // Textual columns (level/logger/message) may hold non-Latin text —
+        // locale-aware collation is reserved for these.
         const av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
         const bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
-        cmp = av.localeCompare(bv, "he", { numeric: true });
+        cmp = av.localeCompare(bv, collLocale, { numeric: true });
       }
       return sortDir === "asc" ? cmp : -cmp;
     });

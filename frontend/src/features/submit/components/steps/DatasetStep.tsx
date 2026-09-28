@@ -16,6 +16,7 @@ import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
+import { DATASET_UPLOAD_ACCEPT } from "@/shared/lib/parse-dataset";
 import { DatasetPickerDialog } from "@/features/datasets";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
@@ -84,7 +85,7 @@ export function DatasetStep({ w }: { w: SubmitWizardContext }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.json,.xlsx,.xls"
+            accept={DATASET_UPLOAD_ACCEPT}
             className="hidden"
             onChange={handleFileUpload}
           />

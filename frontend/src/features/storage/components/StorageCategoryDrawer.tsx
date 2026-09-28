@@ -26,34 +26,11 @@ import {
 } from "@/shared/ui/primitives/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/ui/primitives/sheet";
 import { formatStorageSize } from "@/shared/lib/formatters";
-import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import { StorageItemRow } from "./StorageItemRow";
-
-/** Per-category label keys, mirroring the backend ``STORAGE_CATEGORIES``. */
-const CATEGORY_LABELS: Record<string, MessageKey> = {
-  optimizations: "storage.category.optimizations",
-  datasets: "storage.category.datasets",
-  agent_chats: "storage.category.agent_chats",
-  staged_uploads: "storage.category.staged_uploads",
-};
-
-/** One-line "what is this category" shown under the drawer title. */
-const CATEGORY_DESCRIPTIONS: Record<string, MessageKey> = {
-  optimizations: "storage.category.desc.optimizations",
-  datasets: "storage.category.desc.datasets",
-  agent_chats: "storage.category.desc.agent_chats",
-  staged_uploads: "storage.category.desc.staged_uploads",
-};
-
-/** Each category's homogeneous item type, used to route the bulk-delete batch. */
-const CATEGORY_ITEM_TYPE: Record<string, StorageItem["type"]> = {
-  optimizations: "optimization",
-  datasets: "dataset",
-  agent_chats: "chat",
-  staged_uploads: "staged_upload",
-};
+import { categoryMeta } from "../lib/categories";
 
 /** Ids per bulk-delete request. The progress dialog advances one chunk at a time,
  *  and batches no larger than this delete in a single request (no progress bar). */
@@ -189,7 +166,7 @@ export function StorageCategoryDrawer({
     setAnchorIndex(null);
   }, []);
 
-  const itemType = category ? CATEGORY_ITEM_TYPE[category] : undefined;
+  const itemType = categoryMeta(category)?.itemType;
 
   const runBulkDelete = React.useCallback(async () => {
     const targets = (items ?? []).filter((it) => selected.has(it.id));
@@ -229,9 +206,9 @@ export function StorageCategoryDrawer({
   const running = progress !== null;
   const busy = deleting || running;
 
-  const labelKey = category ? CATEGORY_LABELS[category] : undefined;
-  const descKey =
-    (category ? CATEGORY_DESCRIPTIONS[category] : undefined) ?? "storage.category.subtitle";
+  const meta = categoryMeta(category);
+  const labelKey = meta?.label;
+  const descKey = meta?.description ?? "storage.category.subtitle";
 
   // Bold the item name in the delete prompt, like the dashboard delete dialogs.
   // ``msg`` returns a plain string, so split the template on its placeholders and

@@ -58,9 +58,11 @@ export function TutorialMenu() {
   const { startTrack } = useTutorialContext();
   const prefersReducedMotion = useReducedMotion();
   const [sizes, setSizes] = React.useState<Partial<Record<TutorialTrack, TrackSize>>>({});
+  const trackChosenRef = React.useRef(false);
 
   const startAfterMenuCloses = React.useCallback(
     (track: TutorialTrack) => {
+      trackChosenRef.current = true;
       if (prefersReducedMotion) {
         startTrack(track);
         return;
@@ -100,12 +102,13 @@ export function TutorialMenu() {
         align="end"
         side="bottom"
         sideOffset={6}
+        onCloseAutoFocus={(e) => {
+          // Focus returning to the trigger opens its tooltip, which would then
+          // sit above the tour's dimmed overlay for the whole first step.
+          if (trackChosenRef.current) e.preventDefault();
+        }}
         className="z-50 w-[min(calc(100vw-24px),360px)] max-w-none origin-[var(--radix-popover-content-transform-origin)] rounded-2xl border border-border/40 bg-card py-1.5 shadow-[0_4px_24px_rgba(28,22,18,0.1)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none"
       >
-        <p className="px-4 pb-1.5 pt-1 text-[0.6875rem] leading-relaxed text-muted-foreground">
-          {msg("tutorial.menu.subtitle")}
-        </p>
-        <div role="separator" className="mx-3 mb-1 h-px bg-border/60" />
         {TRACKS.map(({ id, icon: Icon, nameKey, descKey }) => (
           <TrackItem
             key={id}

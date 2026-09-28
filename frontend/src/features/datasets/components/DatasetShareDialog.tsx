@@ -69,10 +69,28 @@ function roleDesc(role: ShareRole): string {
  * row — minus the optimization-only Explore visibility axis. The copy link points
  * at ``/datasets/share/{token}``, redeemed by :mod:`app/datasets/share/[token]`.
  */
-export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
+export function DatasetShareDialog({
+  datasetId,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+}: {
+  datasetId: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}) {
   const { data: session } = useSession();
   const me = sessionIdentity(session);
-  const [open, setOpen] = useState(false);
+  // Uncontrolled by default (the built-in trigger drives it); the library's
+  // selection bar drives it instead with ``hideTrigger``.
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [state, setState] = useState<DatasetSharingState | null>(null);
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const [transferring, setTransferring] = useState(false);
@@ -88,14 +106,16 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
 
   const accessCount = state ? (state.owner ? 1 : 0) + state.members.length : 0;
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next && state === null) {
-      getDatasetSharing(datasetId)
-        .then(setState)
-        .catch((err) => toast.error(err instanceof Error ? err.message : msg("share.error")));
-    }
-  };
+  // Fetch on open rather than in the trigger's handler so a parent-driven open
+  // loads the sharing state too.
+  useEffect(() => {
+    if (!open || state !== null) return;
+    getDatasetSharing(datasetId)
+      .then(setState)
+      .catch((err) => toast.error(err instanceof Error ? err.message : msg("share.error")));
+  }, [open, state, datasetId]);
+
+  const handleOpenChange = (next: boolean) => setOpen(next);
 
   const handleRoleChange = async (username: string, role: MemberRole) => {
     try {
@@ -150,17 +170,19 @@ export function DatasetShareDialog({ datasetId }: { datasetId: string }) {
 
   return (
     <>
-      <TooltipButton tooltip={msg("share.button")}>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => handleOpenChange(true)}
-          aria-label={msg("share.button")}
-        >
-          <Users className="size-4" />
-        </Button>
-      </TooltipButton>
+      {!hideTrigger && (
+        <TooltipButton tooltip={msg("share.button")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => handleOpenChange(true)}
+            aria-label={msg("share.button")}
+          >
+            <Users className="size-4" />
+          </Button>
+        </TooltipButton>
+      )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent

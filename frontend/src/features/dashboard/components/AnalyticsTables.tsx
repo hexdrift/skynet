@@ -1,7 +1,8 @@
 "use client";
 
 import { ProgressBar } from "@/shared/ui/progress-bar";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import type { ReactNode } from "react";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/primitives/table";
 import {
@@ -51,20 +52,6 @@ function compare(a: unknown, b: unknown): number {
   if (b == null) return -1;
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a).localeCompare(String(b));
-}
-
-function useTableSort<K extends string>(initial: K, initialDir: SortDir = "desc") {
-  const [sortKey, setSortKey] = useState<K>(initial);
-  const [sortDir, setSortDir] = useState<SortDir>(initialDir);
-  const toggleSort = (key: K) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-  return { sortKey, sortDir, toggleSort };
 }
 
 function sortRows<T>(rows: T[], key: keyof T, dir: SortDir): T[] {
@@ -139,7 +126,7 @@ export function OptimizerTable({
   rows: OptimizerRow[];
   onSelect: (name: string) => void;
 }) {
-  const { sortKey, sortDir, toggleSort } = useTableSort<OptimizerKey>("count");
+  const { sortKey, sortDir, toggleSort } = useTableSort<OptimizerKey>("count", "desc");
   const columnFilters = useColumnFilters();
   const resize = useColumnResize();
   const { filters, setColumnFilter, openFilter, setOpenFilter } = columnFilters;

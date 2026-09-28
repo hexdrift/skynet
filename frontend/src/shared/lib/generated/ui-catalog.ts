@@ -67,24 +67,30 @@ export type MessageKey =
   | "app.shell.logout"
   | "app.shell.menu"
   | "app.shell.menu_close"
+  | "app.shell.search.action.tour"
+  | "app.shell.search.actions"
   | "app.shell.search.button_aria"
   | "app.shell.search.command_key"
-  | "app.shell.search.dashboard"
   | "app.shell.search.description"
   | "app.shell.search.k_key"
   | "app.shell.search.kw.about"
   | "app.shell.search.kw.account"
   | "app.shell.search.kw.admin"
   | "app.shell.search.kw.agent"
+  | "app.shell.search.kw.analytics"
   | "app.shell.search.kw.api"
   | "app.shell.search.kw.dashboard"
   | "app.shell.search.kw.data"
   | "app.shell.search.kw.explore"
   | "app.shell.search.kw.new_optimization"
+  | "app.shell.search.kw.open_agent"
   | "app.shell.search.kw.privacy"
   | "app.shell.search.kw.providers"
+  | "app.shell.search.kw.sessions"
+  | "app.shell.search.kw.sign_out"
   | "app.shell.search.kw.storage"
   | "app.shell.search.kw.tagging"
+  | "app.shell.search.kw.tour"
   | "app.shell.search.kw.usage"
   | "app.shell.search.kw.wizard"
   | "app.shell.search.label"
@@ -1390,7 +1396,6 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.77"
   | "auto.features.tutorial.components.concepts.guide.literal.78"
   | "auto.features.tutorial.components.concepts.guide.literal.79"
-  | "auto.features.tutorial.components.concepts.guide.literal.8"
   | "auto.features.tutorial.components.concepts.guide.literal.80"
   | "auto.features.tutorial.components.concepts.guide.literal.81"
   | "auto.features.tutorial.components.concepts.guide.literal.82"
@@ -1802,9 +1807,6 @@ export type MessageKey =
   | "export.table.failed"
   | "legal.privacy_link"
   | "legal.terms_link"
-  | "mobile.desktop_only.body"
-  | "mobile.desktop_only.home_cta"
-  | "mobile.desktop_only.title"
   | "mobile.nav.account"
   | "mobile.nav.aria"
   | "mobile.nav.home"
@@ -1902,10 +1904,6 @@ export type MessageKey =
   | "optimizations.react.chat_send_aria"
   | "optimizations.react.chat_stop_aria"
   | "optimizations.react.optimized_tools"
-  | "optimizations.reasoning_effort.high"
-  | "optimizations.reasoning_effort.low"
-  | "optimizations.reasoning_effort.medium"
-  | "optimizations.reasoning_effort.minimal"
   | "optimizations.reasoning_effort.short.med"
   | "optimizations.reasoning_effort.short.min"
   | "optimizations.reasoning_effort.tooltip"
@@ -1986,12 +1984,6 @@ export type MessageKey =
   | "settings.agent.settings_tool.update_failed"
   | "settings.agent.settings_tool.updated"
   | "settings.agent.settings_tool.updating"
-  | "settings.agent.shortcut.change"
-  | "settings.agent.shortcut.description"
-  | "settings.agent.shortcut.hint"
-  | "settings.agent.shortcut.label"
-  | "settings.agent.shortcut.recording"
-  | "settings.agent.shortcut.reserved_warning"
   | "settings.agent.trust.ask"
   | "settings.agent.trust.auto_safe"
   | "settings.agent.trust.description"
@@ -2089,7 +2081,6 @@ export type MessageKey =
   | "settings.keys.verify_failed_toast"
   | "settings.keys.verifying"
   | "settings.saved"
-  | "settings.subtitle"
   | "settings.tab.about"
   | "settings.tab.account"
   | "settings.tab.admin"
@@ -2250,6 +2241,7 @@ export type MessageKey =
   | "sidebar.resume"
   | "sidebar.resume.failed"
   | "sidebar.resume.success"
+  | "sidebar.row_menu"
   | "sidebar.shared.empty"
   | "sidebar.shared.empty.hint"
   | "sidebar.tab.aria"
@@ -2352,7 +2344,6 @@ export type MessageKey =
   | "submit.dataset.library_loaded"
   | "submit.dataset.library_or"
   | "submit.dataset.library_pick"
-  | "submit.dataset.library_picker_subtitle"
   | "submit.dataset.library_picker_title"
   | "submit.dataset.library_search"
   | "submit.dataset.library_search_empty"
@@ -2523,12 +2514,10 @@ export type MessageKey =
   | "tagger.library.save"
   | "tagger.library.save_failed"
   | "tagger.library.saved"
-  | "tagger.move.confirm_body"
   | "tagger.move.confirm_title"
   | "tagger.move.cta"
   | "tagger.move.failed"
   | "tagger.move.moved"
-  | "tagger.move.subtitle"
   | "tagger.move.title"
   | "tagger.page.title"
   | "tagger.results.back"
@@ -2542,7 +2531,6 @@ export type MessageKey =
   | "tagger.results.recap.ai_auto"
   | "tagger.results.recap.ai_confirmed"
   | "tagger.results.recap.human"
-  | "tagger.results.recap.subtitle"
   | "tagger.results.recap.title"
   | "tagger.results.recap.tokens"
   | "tagger.results.recap.tokens_hint"
@@ -2763,7 +2751,6 @@ export type MessageKey =
   | "trajectory.scrubber.label"
   | "trajectory.scrubber.live"
   | "tutorial.menu.meta"
-  | "tutorial.menu.subtitle"
   | "tutorial.step.artifact.body"
   | "tutorial.step.artifact.title"
   | "tutorial.step.code.body"
@@ -2963,24 +2950,30 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "app.shell.logout": "התנתק/י",
   "app.shell.menu": "תפריט",
   "app.shell.menu_close": "סגור/סגרי את התפריט",
+  "app.shell.search.action.tour": "סיור מודרך",
+  "app.shell.search.actions": "פעולות",
   "app.shell.search.button_aria": "חיפוש בכל המערכת",
   "app.shell.search.command_key": "⌘",
-  "app.shell.search.dashboard": "לוח הבקרה",
   "app.shell.search.description": "חיפוש מהיר בין עמודים, פעולות והגדרות",
   "app.shell.search.k_key": "K",
   "app.shell.search.kw.about": "אודות גרסה version defaults",
   "app.shell.search.kw.account": "חשבון שפה שפות שפת הגדרות העדפות lite language preferences",
   "app.shell.search.kw.admin": "ניהול אחסון storage quota users",
   "app.shell.search.kw.agent": "סוכן פאנל assistant trust memory",
+  "app.shell.search.kw.analytics": "אנליטיקה גרפים סטטיסטיקה מגמות ביצועים analytics charts stats",
   "app.shell.search.kw.api": "אסימון טוקן מפתח api token developer integration",
   "app.shell.search.kw.dashboard": "ריצות, משימות, בית",
   "app.shell.search.kw.data": "דאטאסטים, תיוג, סשנים",
   "app.shell.search.kw.explore": "חיפוש, ציבורי, ריצות",
   "app.shell.search.kw.new_optimization": "הפעלה, פרומפט, מודל, אופטימיזציה",
+  "app.shell.search.kw.open_agent": "סוכן עוזר צ'אט שאלה עזרה agent assistant chat",
   "app.shell.search.kw.privacy": "פרטיות נתונים data analytics cache",
   "app.shell.search.kw.providers": "ספקים מפתחות מפתח keys openai anthropic",
+  "app.shell.search.kw.sessions": "סשנים תיוג תוויות סימון תיוג אוטומטי טייס אוטומטי רובריקה כיול labeling sessions autotag autopilot rubric",
+  "app.shell.search.kw.sign_out": "יציאה התנתקות sign out logout",
   "app.shell.search.kw.storage": "קבצים, אחסון, מכסה",
   "app.shell.search.kw.tagging": "תיוג תוויות labels copilot autopilot",
+  "app.shell.search.kw.tour": "סיור הדרכה מדריך התחלה עזרה tour tutorial guide onboarding",
   "app.shell.search.kw.usage": "שימוש עלות טוקנים spend cost tokens",
   "app.shell.search.kw.wizard": "אופטימיזציה מודלים optimization models",
   "app.shell.search.label": "חיפוש בכל המערכת…",
@@ -4286,7 +4279,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.77": "מודל המשוב סוקר מסלולי הרצה, ציונים ומשוב כתוב כדי לזהות שינוי שימושי.",
   "auto.features.tutorial.components.concepts.guide.literal.78": "שיפור:",
   "auto.features.tutorial.components.concepts.guide.literal.79": "GEPA מציע מועמד מתוקן ויכול למזג חלקים שימושיים של שני מועמדים כאשר המיזוג מופעל.",
-  "auto.features.tutorial.components.concepts.guide.literal.8": "Skynet מדריך DSPy",
   "auto.features.tutorial.components.concepts.guide.literal.80": ") של וריאציות מוצלחות.",
   "auto.features.tutorial.components.concepts.guide.literal.81": "עדכון Pareto:",
   "auto.features.tutorial.components.concepts.guide.literal.82": " מעדכנים את מאגר המועמדים ואת חזית ",
@@ -4698,9 +4690,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "export.table.failed": "הייצוא נכשל",
   "legal.privacy_link": "מדיניות פרטיות",
   "legal.terms_link": "תנאי שימוש",
-  "mobile.desktop_only.body": "יצירת אופטימיזציות, העלאת דאטאסטים ותיוג הן עבודת שולחן — פתחו את Skynet במחשב נייד או שולחני כדי להמשיך. הריצות והתוצאות שלכם זמינות כאן בטלפון.",
-  "mobile.desktop_only.home_cta": "חזרה לדף הבית",
-  "mobile.desktop_only.title": "זה עובד הכי טוב במחשב",
   "mobile.nav.account": "חשבון",
   "mobile.nav.aria": "ניווט ראשי",
   "mobile.nav.home": "בית",
@@ -4798,10 +4787,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimizations.react.chat_send_aria": "שלח/שלחי הודעה",
   "optimizations.react.chat_stop_aria": "עצור/עצרי את השיחה",
   "optimizations.react.optimized_tools": "כלים מותאמים (ReAct)",
-  "optimizations.reasoning_effort.high": "גבוהה",
-  "optimizations.reasoning_effort.low": "נמוכה",
-  "optimizations.reasoning_effort.medium": "בינונית",
-  "optimizations.reasoning_effort.minimal": "מזערית",
   "optimizations.reasoning_effort.short.med": "בינ",
   "optimizations.reasoning_effort.short.min": "מזער",
   "optimizations.reasoning_effort.tooltip": "רמת מאמץ חשיבה: {label}",
@@ -4882,12 +4867,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.agent.settings_tool.update_failed": "שינוי ההגדרות נכשל",
   "settings.agent.settings_tool.updated": "ההגדרות עודכנו",
   "settings.agent.settings_tool.updating": "מעדכן הגדרות",
-  "settings.agent.shortcut.change": "שנה/שני",
-  "settings.agent.shortcut.description": "קיצור לפתיחה וסגירה של פאנל הסוכן",
-  "settings.agent.shortcut.hint": "חלק מהקיצורים לא יעבדו כי הם שמורים לדפדפן.",
-  "settings.agent.shortcut.label": "קיצור מקלדת",
-  "settings.agent.shortcut.recording": "הקש/הקישי שילוב חדש…",
-  "settings.agent.shortcut.reserved_warning": "השילוב שנבחר שמור לדפדפן ולא נקלט. נסה/נסי Alt+ או Ctrl+Shift+",
   "settings.agent.trust.ask": "באישור בלבד",
   "settings.agent.trust.auto_safe": "אוטומטי רק בפעולות בטוחות",
   "settings.agent.trust.description": "אילו פעולות הסוכן יכול לבצע בלי לבקש אישור בכל פעם",
@@ -4985,7 +4964,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.keys.verify_failed_toast": "לא ניתן היה לאמת את המפתח. נסה/י שוב.",
   "settings.keys.verifying": "באימות…",
   "settings.saved": "ההגדרה נשמרה",
-  "settings.subtitle": "התאם/התאימי את ההעדפות וברירות המחדל",
   "settings.tab.about": "אודות",
   "settings.tab.account": "חשבון",
   "settings.tab.admin": "ניהול",
@@ -5146,6 +5124,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "sidebar.resume": "המשך/המשיכי",
   "sidebar.resume.failed": "לא ניתן להמשיך את ההרצה",
   "sidebar.resume.success": "ההרצה ממשיכה",
+  "sidebar.row_menu": "פעולות נוספות",
   "sidebar.shared.empty": "עדיין אין כאן ריצות משותפות",
   "sidebar.shared.empty.hint": "עמיתים יכולים לשתף איתכם ריצה מעמוד הפרטים שלה.",
   "sidebar.tab.aria": "סינון ריצות",
@@ -5248,7 +5227,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.dataset.library_loaded": "נטען «{name}» ({count} שורות)",
   "submit.dataset.library_or": "או",
   "submit.dataset.library_pick": "בחר/י מהספרייה",
-  "submit.dataset.library_picker_subtitle": "טען/טעני {term.dataset} שמור עם מיפוי העמודות שלו",
   "submit.dataset.library_picker_title": "בחירת {term.dataset} מהספרייה",
   "submit.dataset.library_search": "חיפוש {term.dataset}…",
   "submit.dataset.library_search_empty": "לא נמצאו דאטאסטים תואמים",
@@ -5419,12 +5397,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.library.save": "שמירה לספרייה",
   "tagger.library.save_failed": "שגיאה בשמירת הדאטאסט לספרייה",
   "tagger.library.saved": "«{name}» נשמר לספרייה",
-  "tagger.move.confirm_body": "הדאטה יישמר כדאטאסט חדש בספרייה, וסשן התיוג יימחק. לא ניתן לבטל את הפעולה.",
   "tagger.move.confirm_title": "להעביר לדאטאסטים?",
   "tagger.move.cta": "העברה לדאטאסטים",
   "tagger.move.failed": "שגיאה בהעברת הדאטה לדאטאסטים",
   "tagger.move.moved": "«{name}» הועבר לדאטאסטים",
-  "tagger.move.subtitle": "התיוג הושלם. העבירו את הדאטה לדאטאסטים לשימוש חוזר — סשן התיוג יימחק, והגדרות השיתוף יעברו יחד איתו.",
   "tagger.move.title": "העברה לספריית הדאטאסטים",
   "tagger.page.title": "תיוג טקסט",
   "tagger.results.back": "חזרה לתצוגה הכללית",
@@ -5438,7 +5414,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.results.recap.ai_auto": "תויגו אוטומטית",
   "tagger.results.recap.ai_confirmed": "תיוגי AI שאישרתם",
   "tagger.results.recap.human": "תויגו על ידיכם",
-  "tagger.results.recap.subtitle": "כל {total} השורות מתויגות. הנה מי עשה מה.",
   "tagger.results.recap.title": "הדאטה תויג",
   "tagger.results.recap.tokens": "אסימונים",
   "tagger.results.recap.tokens_hint": "צריכת התיוג האוטומטי",
@@ -5659,7 +5634,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "trajectory.scrubber.label": "סינון לפי דור",
   "trajectory.scrubber.live": "חי",
   "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
-  "tutorial.menu.subtitle": "בחרו תהליך שתרצו להכיר. כל מדריך קצר וניתן להפעלה חוזרת.",
   "tutorial.step.artifact.body": "לשונית Artifact היא הפלט המשופר. אפשר לבדוק את הפרומפט הסופי, כלי ReAct שכווננו, קוד Flex שנכתב מחדש או צמתי workflow משופרים. מתפריט הייצוא מורידים תוכנית DSPy מוכנה להרצה, pickle כשזמין, JSON של הפרומפט, קוד Python משופר או CSV של הלוגים.",
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",

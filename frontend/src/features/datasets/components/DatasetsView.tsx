@@ -1,8 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
-import { CircleNotch, Database, MagnifyingGlass, UploadSimple } from "@/shared/ui/icons";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  CircleNotch,
+  Database,
+  MagnifyingGlass,
+  PencilSimple,
+  Table,
+  Tag,
+  UploadSimple,
+  Users,
+} from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
 import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
@@ -10,7 +19,7 @@ import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { DataHubTabs } from "@/shared/ui/data-hub-tabs";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { SearchField } from "@/shared/ui/search-field";
-import { SelectionBar } from "@/shared/ui/selection-bar";
+import { SelectionAction, SelectionBar } from "@/shared/ui/selection-bar";
 import {
   bulkDeleteDatasets,
   isStorageQuotaError,
@@ -18,15 +27,15 @@ import {
   type DatasetSummary,
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { parseDatasetFile } from "@/shared/lib/parse-dataset";
+import { DATASET_UPLOAD_ACCEPT, parseDatasetFile } from "@/shared/lib/parse-dataset";
 import { track, TelemetryEvent } from "@/shared/lib/telemetry";
 import { cn } from "@/shared/lib/utils";
 import { ListPageSkeleton } from "@/shared/ui/list-page-skeleton";
 import { useDatasets } from "../hooks/use-datasets";
 import { DatasetCard } from "./DatasetCard";
 import { DatasetDetailDialog } from "./DatasetDetailDialog";
-
-const UPLOAD_ACCEPT = ".csv,.json,.xlsx,.xls";
+import { DatasetRenameDialog } from "./DatasetRenameDialog";
+import { DatasetShareDialog } from "./DatasetShareDialog";
 
 /**
  * Top-level /datasets page: the personal dataset library. Lists owned and
@@ -38,6 +47,7 @@ const UPLOAD_ACCEPT = ".csv,.json,.xlsx,.xls";
 export function DatasetsView() {
   const { datasets, loading, error, refetch } = useDatasets();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [selected, setSelected] = React.useState<DatasetSummary | null>(null);
   const [dragging, setDragging] = React.useState(false);
@@ -48,6 +58,8 @@ export function DatasetsView() {
   const [anchorId, setAnchorId] = React.useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [bulkDeleting, setBulkDeleting] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [renameOpen, setRenameOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deepLinkedRef = React.useRef(false);
 
@@ -98,6 +110,11 @@ export function DatasetsView() {
     if (match) setSelected(match);
     else toast.info(msg("datasets.open.not_found"));
   }, [datasets, loading, error, searchParams]);
+
+  // Per-dataset actions only make sense with exactly one selected, as in the
+  // dashboard jobs bar; selection is owner-only, so every one of them applies.
+  const soleSelected =
+    selectedIds.size === 1 ? (datasets.find((d) => selectedIds.has(d.id)) ?? null) : null;
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -182,7 +199,7 @@ export function DatasetsView() {
       <input
         ref={fileInputRef}
         type="file"
-        accept={UPLOAD_ACCEPT}
+        accept={DATASET_UPLOAD_ACCEPT}
         className="hidden"
         onChange={(e) => {
           void handleFiles(e.target.files);
@@ -270,7 +287,60 @@ export function DatasetsView() {
           setAnchorId(null);
         }}
         onDelete={() => setBulkOpen(true)}
-      />
+        tutorialId="datasets-selection"
+      >
+        {soleSelected && (
+          <>
+            <SelectionAction
+              label={msg("datasets.action.tag")}
+              onClick={() =>
+                router.push(
+                  `/tagger?dataset=${soleSelected.id}&name=${encodeURIComponent(soleSelected.name)}`,
+                )
+              }
+            >
+              <Tag className="size-4" />
+            </SelectionAction>
+            <SelectionAction
+              label={msg("datasets.action.edit")}
+              onClick={() =>
+                router.push(
+                  `/datasets/${soleSelected.id}/edit?name=${encodeURIComponent(soleSelected.name)}`,
+                )
+              }
+            >
+              <Table className="size-4" />
+            </SelectionAction>
+            <SelectionAction label={msg("share.button")} onClick={() => setShareOpen(true)}>
+              <Users className="size-4" />
+            </SelectionAction>
+            <SelectionAction
+              label={msg("datasets.action.rename")}
+              onClick={() => setRenameOpen(true)}
+            >
+              <PencilSimple className="size-4" />
+            </SelectionAction>
+          </>
+        )}
+      </SelectionBar>
+
+      {soleSelected && (
+        <>
+          <DatasetShareDialog
+            key={soleSelected.id}
+            datasetId={soleSelected.id}
+            open={shareOpen}
+            onOpenChange={setShareOpen}
+            hideTrigger
+          />
+          <DatasetRenameDialog
+            dataset={soleSelected}
+            open={renameOpen}
+            onOpenChange={setRenameOpen}
+            onRenamed={refetch}
+          />
+        </>
+      )}
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">

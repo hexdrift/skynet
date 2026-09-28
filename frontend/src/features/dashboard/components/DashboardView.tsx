@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -19,7 +20,8 @@ import { FadeIn } from "@/shared/ui/motion";
 import { msg } from "@/shared/lib/messages";
 import { sessionIdentity } from "@/shared/lib/session-identity";
 import { TERMS } from "@/shared/lib/terms";
-import { useColumnFilters, useColumnResize, type SortDir } from "@/shared/ui/excel-filter";
+import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
+import { useColumnFilters, useColumnResize } from "@/shared/ui/excel-filter";
 import { getJobTypeLabel, getStatusLabel } from "@/shared/constants/job-status";
 import type { OptimizationSummaryResponse, PaginatedJobsResponse } from "@/shared/types/api";
 import type { DashboardAnalytics } from "@/shared/lib/api";
@@ -51,7 +53,7 @@ function compareJobValues(av: unknown, bv: unknown): number {
   if (aMissing) return -1;
   if (bMissing) return 1;
   if (typeof av === "number" && typeof bv === "number") return av - bv;
-  return String(av).localeCompare(String(bv), "he", { numeric: true });
+  return String(av).localeCompare(String(bv), getActiveIntlLocale(), { numeric: true });
 }
 
 export function DashboardView() {
@@ -166,18 +168,7 @@ export function DashboardView() {
   const { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount } =
     useColumnFilters();
   const colResize = useColumnResize();
-  const [sortKey, setSortKey] = useState<string>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const toggleSort = useCallback(
-    (key: string) => {
-      if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      else {
-        setSortKey(key);
-        setSortDir("asc");
-      }
-    },
-    [sortKey],
-  );
+  const { sortKey, sortDir, toggleSort } = useTableSort<string>("created_at", "desc");
 
   const {
     selectedIds,

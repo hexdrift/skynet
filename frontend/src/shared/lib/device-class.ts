@@ -1,33 +1,7 @@
-/**
- * Device class for the phone shell.
- *
- * Phones (viewport at most 767px — the same edge below which the sidebar goes
- * off-canvas) get a view-first shell: dashboard, run details, explore, plus the
- * few interactions that make sense on a phone (chat with a finished run and
- * the agent panel). Authoring surfaces — new optimization, dataset
- * upload/edit, tagging, storage — are desktop-only and route to a notice.
- */
+/** Device detection selects navigation chrome, never route or settings access. */
 export type DeviceClass = "phone" | "desktop";
 
 export const PHONE_MEDIA_QUERY = "(max-width: 767px)";
-
-const DESKTOP_ONLY_PREFIXES = ["/submit", "/datasets", "/tagger", "/storage"] as const;
-
-/** Whether `pathname` is an authoring surface the phone shell replaces with a notice. */
-export function isDesktopOnlyPath(pathname: string): boolean {
-  return DESKTOP_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
-const PHONE_SETTINGS_TABS = new Set(["account", "providers", "about"]);
-
-/**
- * Whether a settings tab is offered on phones. Wizard/tagging/agent/API/admin
- * tabs configure desk work and stay desktop-only; phones keep account,
- * provider connections, and about.
- */
-export function isPhoneSettingsTab(tab: string): boolean {
-  return PHONE_SETTINGS_TABS.has(tab);
-}
 
 /**
  * First-paint device class from request headers.

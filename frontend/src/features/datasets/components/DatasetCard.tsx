@@ -8,7 +8,6 @@ import { toast } from "react-toastify";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Button } from "@/shared/ui/primitives/button";
 import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
-import { Input } from "@/shared/ui/primitives/input";
 import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
@@ -17,12 +16,12 @@ import {
   deleteDataset,
   isStorageQuotaError,
   listDatasetOptimizations,
-  renameDataset,
   type DatasetSummary,
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatBytes, formatRelativeTime } from "@/shared/lib/formatters";
 import { cn } from "@/shared/lib/utils";
+import { DatasetRenameDialog } from "./DatasetRenameDialog";
 import { DatasetShareDialog } from "./DatasetShareDialog";
 
 /**
@@ -48,8 +47,6 @@ export function DatasetCard({
   const isOwner = dataset.role === "owner";
   const canEdit = isOwner || dataset.role === "editor";
   const [renameOpen, setRenameOpen] = React.useState(false);
-  const [renameValue, setRenameValue] = React.useState(dataset.name);
-  const [renaming, setRenaming] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [cloning, setCloning] = React.useState(false);
@@ -72,22 +69,6 @@ export function DatasetCard({
       cancelled = true;
     };
   }, [deleteOpen, isOwner, dataset.id]);
-
-  const handleRename = async () => {
-    const name = renameValue.trim();
-    if (!name || renaming) return;
-    setRenaming(true);
-    try {
-      await renameDataset(dataset.id, name);
-      toast.success(msg("datasets.toast.renamed"));
-      setRenameOpen(false);
-      onChanged();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("datasets.toast.rename_failed"));
-    } finally {
-      setRenaming(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (deleting) return;
@@ -219,10 +200,7 @@ export function DatasetCard({
                   variant="ghost"
                   size="icon-sm"
                   className="text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setRenameValue(dataset.name);
-                    setRenameOpen(true);
-                  }}
+                  onClick={() => setRenameOpen(true)}
                   aria-label={msg("datasets.action.rename")}
                 >
                   <PencilSimple className="size-4" />
@@ -264,38 +242,12 @@ export function DatasetCard({
         </div>
       </div>
 
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
-          <DialogTitleRow title={msg("datasets.rename.title")} />
-          <Input
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void handleRename();
-              }
-            }}
-            aria-label={msg("datasets.rename.label")}
-            autoFocus
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)} disabled={renaming}>
-              {msg("datasets.rename.cancel")}
-            </Button>
-            <Button onClick={handleRename} disabled={renaming || renameValue.trim().length === 0}>
-              {renaming ? (
-                <CircleNotch
-                  className="animate-spin motion-reduce:animate-none"
-                  aria-hidden="true"
-                />
-              ) : (
-                msg("datasets.rename.save")
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DatasetRenameDialog
+        dataset={dataset}
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        onRenamed={onChanged}
+      />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
