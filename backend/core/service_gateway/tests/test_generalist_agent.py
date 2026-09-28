@@ -1093,15 +1093,11 @@ async def test_run_submit_injects_tool_source_for_react_module() -> None:
         outer_loop=asyncio.get_running_loop(),
         wizard_state=cast(
             WizardState,
-            {"module_name": "react", "react_config": {"mcpUrl": "https://mcp.example/mcp", "toolFilter": ["search"]}},
+            {"module_name": "react", "react_config": {"mcpUrl": "https://mcp.example/mcp"}},
         ),
     )
     await tool.func._async_body()
-    assert seen["tool_source"] == {
-        "kind": "live_mcp",
-        "mcp_url": "https://mcp.example/mcp",
-        "tool_filter": ["search"],
-    }
+    assert seen["tool_source"] == {"kind": "live_mcp", "mcp_url": "https://mcp.example/mcp"}
 
 
 @pytest.mark.asyncio

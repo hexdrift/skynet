@@ -766,10 +766,7 @@ class _ApprovalGatedTool:
         ):
             mcp_url = str(react_config.get("mcpUrl") or "").strip()
             if mcp_url:
-                tool_source: dict[str, Any] = {"kind": "live_mcp", "mcp_url": mcp_url}
-                if "toolFilter" in react_config:
-                    tool_source["tool_filter"] = react_config["toolFilter"]
-                kwargs["tool_source"] = tool_source
+                kwargs["tool_source"] = {"kind": "live_mcp", "mcp_url": mcp_url}
 
     def _keep_existing_job_name(self, serialized: Any) -> Any:
         """Drop a staged sample's default ``job_name`` when the run is already named.
@@ -898,7 +895,7 @@ class WizardState(TypedDict, total=False):
     shuffle: bool
     seed: int
     target_score: float
-    # MCP tool source for react / flex programs: ``{mcpUrl, toolFilter}``.
+    # MCP tool source for react / flex programs: ``{mcpUrl}``.
     react_config: dict[str, Any]
 
 
@@ -1488,10 +1485,9 @@ class GeneralistSig(dspy.Signature):
       tools), ``flex`` (dspy.Flex — a module whose source GEPA rewrites,
       tools optional) and ``workflow`` are the only supported modules.
       ``react`` / ``flex`` take their tools from an MCP server the USER
-      names: set ``react_config`` = ``{"mcpUrl": "https://…",
-      "toolFilter": ["tool_a", …] | null}`` via ``update_wizard_state``
-      (null exposes every tool on that server). Never invent an MCP URL
-      or tool names — ask. The runtime turns ``react_config`` into the
+      names: set ``react_config`` = ``{"mcpUrl": "https://…"}`` via
+      ``update_wizard_state``; the program sees every tool on that
+      server. Never invent an MCP URL — ask. The runtime turns ``react_config`` into the
       submit's ``tool_source`` for you; leave ``tool_source`` unset. An
       MCP server that needs an auth header cannot be submitted from chat
       (you never handle credentials): set everything else, then tell the

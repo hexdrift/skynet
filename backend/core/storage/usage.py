@@ -26,6 +26,7 @@ from ..config import settings
 from ..constants import PAYLOAD_OVERVIEW_NAME
 from .models import (
     EMBEDDING_DIM,
+    SAMPLE_STAGED_ID_PREFIX,
     AgentConversationModel,
     AgentMessageModel,
     AgentStagedDatasetModel,
@@ -194,7 +195,8 @@ def compute_user_storage(engine: Engine, username: str) -> StorageUsage:
         )
         staged_uploads = scalar(
             select(func.coalesce(func.sum(_byte_size(AgentStagedDatasetModel.rows, dialect)), 0)).where(
-                AgentStagedDatasetModel.username == normalized
+                AgentStagedDatasetModel.username == normalized,
+                AgentStagedDatasetModel.id.not_like(f"{SAMPLE_STAGED_ID_PREFIX}%"),
             )
         )
         # job_embeddings / conversation_embeddings only exist on the semantic
@@ -462,7 +464,10 @@ def compute_user_storage_category_items(
                     AgentStagedDatasetModel.dataset_filename,
                     staged_bytes.label("staged_size"),
                 )
-                .where(AgentStagedDatasetModel.username == normalized)
+                .where(
+                    AgentStagedDatasetModel.username == normalized,
+                    AgentStagedDatasetModel.id.not_like(f"{SAMPLE_STAGED_ID_PREFIX}%"),
+                )
                 .order_by(staged_bytes.desc())
                 .limit(limit)
             ).all()

@@ -34,6 +34,7 @@ from .checkpoint_store import GepaCheckpoint, PostgresCheckpointBlobStore, Postg
 from .migrate import sync_migration_head
 from .models import (
     EMBEDDING_DIM,
+    SAMPLE_STAGED_ID_PREFIX,
     AgentStagedDatasetModel,
     Base,
     ConversationEmbeddingModel,
@@ -2798,13 +2799,22 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+    def stage_dataset(
+        self,
+        username: str,
+        dataset_filename: str,
+        rows: list[dict[str, Any]],
+        *,
+        sample: bool = False,
+    ) -> str:
         """Persist wizard-parsed dataset rows for an agent-driven submit.
 
         Args:
             username: Submitter who owns the staged copy.
             dataset_filename: Original filename for diagnostics.
             rows: Parsed dataset rows; must be non-empty.
+            sample: ``True`` for a bundled sample dataset; its id carries
+                ``SAMPLE_STAGED_ID_PREFIX`` so it stays out of storage usage.
 
         Returns:
             The opaque staged-dataset id used by ``/run``.
@@ -2814,7 +2824,8 @@ class RemoteDBJobStore:
         """
         if not rows:
             raise ValueError("staged dataset rows must be non-empty")
-        staged_id = uuid4().hex
+        # String(36) id column: the 7-char prefix leaves room for 29 hex chars.
+        staged_id = f"{SAMPLE_STAGED_ID_PREFIX}{uuid4().hex[:29]}" if sample else uuid4().hex
         session = self._get_session()
         try:
             session.add(

@@ -130,18 +130,26 @@ def test_metric_code_rejected(wizard_client: TestClient) -> None:
 @pytest.mark.parametrize(
     "react_config",
     [
-        {"mcpUrl": "https://mcp.example/mcp", "toolFilter": ["search"]},
-        {"mcp_url": "https://mcp.example/mcp", "tool_filter": ["search"]},
+        {"mcpUrl": "https://mcp.example/mcp"},
+        {"mcp_url": "https://mcp.example/mcp"},
     ],
 )
 def test_react_config_accepts_both_spellings(wizard_client: TestClient, react_config: dict) -> None:
-    """Either spelling lands in the patch under the wizard's camelCase keys."""
+    """Either spelling lands in the patch under the wizard's camelCase key."""
     resp = wizard_client.post("/wizard/update", json={"react_config": react_config})
 
     assert resp.status_code == 200
-    echoed = resp.json()["wizard_state"]["react_config"]
-    assert echoed["mcpUrl"] == "https://mcp.example/mcp"
-    assert echoed["toolFilter"] == ["search"]
+    assert resp.json()["wizard_state"]["react_config"] == {"mcpUrl": "https://mcp.example/mcp"}
+
+
+def test_react_config_rejects_a_tool_filter(wizard_client: TestClient) -> None:
+    """The wizard has no tool filter, so one is refused instead of silently dropped."""
+    resp = wizard_client.post(
+        "/wizard/update",
+        json={"react_config": {"mcpUrl": "https://mcp.example/mcp", "toolFilter": ["search"]}},
+    )
+
+    assert resp.status_code == 422
 
 
 def test_react_config_rejects_non_http_url(wizard_client: TestClient) -> None:

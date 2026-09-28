@@ -413,7 +413,14 @@ class JobStore(Protocol):
         """
         ...
 
-    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+    def stage_dataset(
+        self,
+        username: str,
+        dataset_filename: str,
+        rows: list[dict[str, Any]],
+        *,
+        sample: bool = False,
+    ) -> str:
         """Persist wizard-parsed dataset rows for an agent-driven submit.
 
         The frontend stages each parsed dataset right after upload so the
@@ -425,6 +432,8 @@ class JobStore(Protocol):
             username: Submitter who owns the staged copy.
             dataset_filename: Original filename for diagnostics.
             rows: Parsed dataset rows; must be non-empty.
+            sample: ``True`` for a bundled sample dataset; its id carries
+                ``SAMPLE_STAGED_ID_PREFIX`` so it stays out of storage usage.
 
         Returns:
             The opaque staged-dataset id used by ``/run``.

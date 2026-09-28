@@ -623,6 +623,13 @@ class ConversationEmbeddingModel(Base):
     )
 
 
+# Staged copies of bundled sample datasets carry this id prefix so storage
+# usage can skip them (decision 8: agent-staged samples are ephemeral, reclaimed
+# by the TTL sweep, and never count toward the quota). The dash keeps the id
+# outside the uuid4-hex space, so a prefixed id can never collide with an upload.
+SAMPLE_STAGED_ID_PREFIX = "sample-"
+
+
 # Holds rows the wizard parsed in the browser so the generalist agent can
 # submit ``/run`` without re-shipping the dataset through its context. Rows
 # live here only between upload and submit; the frontend stages on upload,

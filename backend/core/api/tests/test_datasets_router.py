@@ -249,6 +249,7 @@ def test_stage_sample_stages_rows_and_returns_a_preview(
     assert body["preview"] == staged_rows[:3]
     assert "dataset" not in body
     assert body["wizard_state"]["dataset_ready"] is True
+    assert store._staged[staged_id]["sample"] is True
 
 
 def test_stage_sample_unknown_id_returns_404(

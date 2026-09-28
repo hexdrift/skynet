@@ -39,11 +39,13 @@ _METRIC_DEF_RE = re.compile(r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 _VALID_COLUMN_ROLES = frozenset({"input", "output", "ignore"})
 
 
-# Tool roster for a react/flex program, in the camelCase shape the submit
+# MCP server for a react/flex program, in the camelCase shape the submit
 # wizard already keeps in its shared ``react_config`` state. The auth header is
-# deliberately not accepted: a secret must never travel through the agent.
+# deliberately not accepted: a secret must never travel through the agent. No
+# tool filter either: the wizard has no filter control and would drop it on its
+# next sync, so extra keys are rejected rather than silently ignored.
 class ReactConfigPatch(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     mcp_url: str = Field(
         alias="mcpUrl",
@@ -51,11 +53,6 @@ class ReactConfigPatch(BaseModel):
         max_length=2000,
         pattern=r"^https?://",
         description="MCP server URL.",
-    )
-    tool_filter: list[str] | None = Field(
-        default=None,
-        alias="toolFilter",
-        description="Tool names the program may call; null exposes every tool on the server.",
     )
 
 
@@ -90,7 +87,7 @@ class WizardUpdateRequest(BaseModel):
     )
     react_config: ReactConfigPatch | None = Field(
         default=None,
-        description="MCP tool source for a 'react' or 'flex' module: {mcpUrl, toolFilter}.",
+        description="MCP tool source for a 'react' or 'flex' module: {mcpUrl}.",
     )
     is_private: bool | None = Field(
         default=None,

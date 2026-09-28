@@ -282,8 +282,9 @@ def create_datasets_router(*, job_store) -> APIRouter:
         writing code. The rows are staged server-side and referenced by id:
         returning them inline would push the whole dataset through the
         agent's context, and the wizard rehydrates from the id anyway.
-        Staging is deliberately not gated by the storage quota: the copy is
-        ephemeral and the staged-dataset TTL sweep reclaims it.
+        The staged copy is marked as a sample, so it is neither gated by nor
+        counted toward the storage quota: it is ephemeral and the
+        staged-dataset TTL sweep reclaims it.
 
         Args:
             sample_id: Identifier of the bundled sample dataset.
@@ -315,6 +316,7 @@ def create_datasets_router(*, job_store) -> APIRouter:
             username=current_user.username,
             dataset_filename=sample["dataset_filename"],
             rows=sample["rows"],
+            sample=True,
         )
         wizard_state: dict[str, Any] = {
             "staged_dataset_id": staged_id,
