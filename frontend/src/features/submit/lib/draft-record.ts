@@ -89,8 +89,33 @@ export function isDraftExpired(record: Pick<WizardDraftRecord, "updatedAt">, now
   return now - record.updatedAt > DRAFT_TTL_MS;
 }
 
-const CREDENTIAL_FIELD =
-  /^(?:api[_-]?key|authorization|proxy[_-]?authorization|access[_-]?token|refresh[_-]?token|gateway[_-]?token|secret|password)$/i;
+// Provider kwargs name credentials every which way (`x-api-key`, `hf_token`,
+// `clientSecret`, `Proxy-Authorization`), so keys are matched by their words
+// rather than a fixed list — while budget knobs like `max_tokens` survive.
+const CREDENTIAL_WORDS = new Set([
+  "apikey",
+  "authorization",
+  "bearer",
+  "cookie",
+  "credential",
+  "credentials",
+  "passwd",
+  "password",
+  "secret",
+]);
+const KEY_QUALIFIERS = new Set(["access", "api", "auth", "private", "secret"]);
+
+function isCredentialField(key: string): boolean {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (words.some((w) => CREDENTIAL_WORDS.has(w))) return true;
+  const [last, qualifier] = words.slice(-2).reverse();
+  if (last === "token") return true;
+  return last === "key" && qualifier !== undefined && KEY_QUALIFIERS.has(qualifier);
+}
 
 function stripCredentialFields(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -106,7 +131,7 @@ function stripCredentialFields(value: unknown): unknown {
   let changed = false;
   const next: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (CREDENTIAL_FIELD.test(key)) {
+    if (isCredentialField(key)) {
       changed = true;
       continue;
     }

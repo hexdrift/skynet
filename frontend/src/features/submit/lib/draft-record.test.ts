@@ -140,6 +140,30 @@ test("stripModelSecrets drops inline credentials at any depth and keeps the rest
   assert.equal(stripModelSecrets(plain), plain);
 });
 
+test("stripModelSecrets recognises credential keys however a provider spells them", () => {
+  const stripped = stripModelSecrets({
+    name: "gpt",
+    token_source: "byok",
+    max_tokens: 512,
+    extra: {
+      headers: { "X-Api-Key": "k", Cookie: "c", "x-auth-token": "t" },
+      hf_token: "h",
+      clientSecret: "s",
+      private_key: "p",
+      aws_secret_access_key: "a",
+      credentials: { user: "u" },
+      cache_key: "keep",
+      max_tokens_per_call: 3,
+    },
+  });
+  assert.deepEqual(stripped, {
+    name: "gpt",
+    token_source: "byok",
+    max_tokens: 512,
+    extra: { headers: {}, cache_key: "keep", max_tokens_per_call: 3 },
+  });
+});
+
 test("scrubDraftSecrets clears every model's key and the MCP auth header", () => {
   const scrubbed = scrubDraftSecrets(
     programDraft({

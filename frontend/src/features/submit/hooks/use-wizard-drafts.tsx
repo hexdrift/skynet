@@ -86,8 +86,10 @@ function offerSummary(record: WizardDraftRecord): string | null {
  * Owns the durable draft for the signed-in account on `/submit`: discovers it
  * once the account is known, offers it back through one actionable toast,
  * and hands the wizard a small API for publishing snapshots. `onContinue`
- * and `onStartNew` remount the wizard; they fire only after storage has
- * confirmed the choice.
+ * remounts the wizard once storage has confirmed the choice. "Start new"
+ * keeps the form as it is: the wizard on screen while the offer is up is
+ * already a fresh one, and whatever the user typed there becomes the new
+ * draft on the next publish.
  *
  * `cloning` (a clone or share link is open) wins over a saved draft: the
  * draft is discarded without an offer and the clone becomes the new draft.
@@ -99,12 +101,10 @@ export function useWizardDraftController({
   cloning,
   suspended,
   onContinue,
-  onStartNew,
 }: {
   cloning: boolean;
   suspended: boolean;
   onContinue: () => void;
-  onStartNew: () => void;
 }) {
   const { data: session, status } = useSession();
   const accountId = status === "loading" ? null : sessionIdentity(session) || null;
@@ -114,10 +114,10 @@ export function useWizardDraftController({
   useEffect(() => {
     accountRef.current = accountId;
   }, [accountId]);
-  const transitions = useRef({ onContinue, onStartNew });
+  const transitions = useRef({ onContinue });
   useEffect(() => {
-    transitions.current = { onContinue, onStartNew };
-  }, [onContinue, onStartNew]);
+    transitions.current = { onContinue };
+  }, [onContinue]);
   const cloningRef = useRef(cloning);
   useEffect(() => {
     cloningRef.current = cloning;
@@ -153,7 +153,6 @@ export function useWizardDraftController({
     const saver = saverRef.current;
     if (!saver) {
       dismissOffer();
-      transitions.current.onStartNew();
       return true;
     }
     try {
@@ -167,7 +166,6 @@ export function useWizardDraftController({
     }
     dismissOffer();
     if (!pausedRef.current) saver.hold(false);
-    transitions.current.onStartNew();
     return true;
   }, [dismissOffer]);
 

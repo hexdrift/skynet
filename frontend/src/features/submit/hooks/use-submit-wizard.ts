@@ -869,17 +869,21 @@ export function useSubmitWizard() {
 
   // The canvas is the program for a workflow run: the agent submits what it
   // sees here, so canvas edits reach it and a non-workflow module clears it.
+  // Keyed on local state only: re-running on the context's own change would
+  // land in the same commit as an agent pulse, before the pulse's module and
+  // graph are seated, and clear or overwrite the graph the agent just sent.
   useEffect(() => {
-    if (!wizardCtx) return;
+    const ctx = wizardCtxRef.current;
+    if (!ctx) return;
     const spec = isWorkflow ? workflowSpec : null;
     if (spec) {
-      if (spec !== agentWorkflowRef.current && wizardCtx.state.workflow !== spec) {
-        wizardCtx.setField("workflow", spec, "user");
+      if (spec !== agentWorkflowRef.current && ctx.state.workflow !== spec) {
+        ctx.setField("workflow", spec, "user");
       }
-    } else if (wizardCtx.state.workflow != null) {
-      wizardCtx.clearField("workflow");
+    } else if (ctx.state.workflow != null) {
+      ctx.clearField("workflow");
     }
-  }, [isWorkflow, wizardCtx, workflowSpec]);
+  }, [isWorkflow, workflowSpec]);
 
   useEffect(() => {
     if (!wizardCtx) return;

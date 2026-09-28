@@ -130,24 +130,59 @@ function removeRecord(accountId: string): Promise<void> {
 }
 
 /**
+ * Delete every row past its TTL, whichever account wrote it, so a draft left
+ * by an account that never comes back to this browser still expires.
+ */
+function sweepExpiredDrafts(now: number): Promise<void> {
+  return openDatabase().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        try {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          const cursorRequest = tx.objectStore(STORE_NAME).openCursor();
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+            const value = cursor.value as { updatedAt?: unknown } | null;
+            const updatedAt = typeof value?.updatedAt === "number" ? value.updatedAt : 0;
+            if (isDraftExpired({ updatedAt }, now)) cursor.delete();
+            cursor.continue();
+          };
+          tx.oncomplete = () => resolve();
+          tx.onabort = () => reject(tx.error ?? new Error("indexeddb_aborted"));
+          tx.onerror = () => reject(tx.error ?? new Error("indexeddb_failed"));
+        } catch (error) {
+          reject(error);
+        }
+      }),
+  );
+}
+
+/**
  * The durable draft store: one IndexedDB row per account in this browser
- * profile. A row past its TTL reads as absent and is deleted on the way.
+ * profile. A row past its TTL reads as absent; every read also sweeps expired
+ * rows, this account's and any other's.
  */
 export const indexedDbDraftStore: DraftStore = {
   read: (accountId) =>
     runRequest<unknown>("readonly", (s) => s.get(accountId))
+      .finally(() => {
+        void sweepExpiredDrafts(Date.now()).catch(() => {});
+      })
       .then(normalizeDraftRecord)
       .then((record) => {
-        if (record && isDraftExpired(record, Date.now())) {
-          void removeRecord(accountId).catch(() => {});
-          return null;
-        }
+        if (record && isDraftExpired(record, Date.now())) return null;
         return record;
       }),
   write: (record: WizardDraftRecord) =>
     runRequest("readwrite", (s) => s.put(record)).then(() => undefined),
   remove: removeRecord,
 };
+
+// This tab's own listeners. A broadcast reaches them only on a later task,
+// after a debounced autosave here could already have queued its write behind
+// the sign-out wipe; a wipe notifies them synchronously instead.
+const localListeners = new Set<(message: DraftChannelMessage) => void>();
 
 export type DraftChannelMessage =
   | { type: "reset"; accountId: string }
@@ -164,8 +199,9 @@ export function openDraftChannel(onMessage: (message: DraftChannelMessage) => vo
   post: (message: DraftChannelMessage) => void;
   close: () => void;
 } {
+  localListeners.add(onMessage);
   if (typeof BroadcastChannel === "undefined") {
-    return { post: () => {}, close: () => {} };
+    return { post: () => {}, close: () => localListeners.delete(onMessage) };
   }
   const channel = new BroadcastChannel(CHANNEL_NAME);
   channel.onmessage = (event: MessageEvent<DraftChannelMessage>) => {
@@ -181,7 +217,10 @@ export function openDraftChannel(onMessage: (message: DraftChannelMessage) => vo
         // A closed channel or a serialization refusal only costs coordination.
       }
     },
-    close: () => channel.close(),
+    close: () => {
+      localListeners.delete(onMessage);
+      channel.close();
+    },
   };
 }
 
@@ -192,6 +231,7 @@ export function openDraftChannel(onMessage: (message: DraftChannelMessage) => vo
  * be opened holds nothing to wipe.
  */
 export async function clearAllWizardDrafts(): Promise<void> {
+  for (const listener of Array.from(localListeners)) listener({ type: "wipe" });
   const channel = openDraftChannel(() => {});
   channel.post({ type: "wipe" });
   const cleared = runRequest("readwrite", (s) => s.clear()).catch(() => {
