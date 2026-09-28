@@ -1931,6 +1931,9 @@ kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
   </ul>
 
   <p>Per-account overrides live in the <code>user_storage_quota_overrides</code> table (each row records who set it), created by the standard <code>0001_onprem</code> migration — no extra step. Enforcement reads the table live, so changes take effect immediately without a backend restart. <code>GET /admin/accounts</code> returns the default (<code>default_bytes</code>) plus each account's <code>quota_bytes</code> / <code>effective_bytes</code> / <code>used_bytes</code>.</p>
+
+  <h3>Wizard drafts in the browser</h3>
+  <p>Unsubmitted wizard drafts — including the rows of an uploaded dataset — are kept in the browser's IndexedDB (<code>skynet-wizard-drafts</code>), not on the server, and do not count against the storage budget. Each draft is scoped to the signed-in account, expires 7 days after its last edit, has model API keys and the MCP auth header scrubbed before it is written, and every draft in that browser is wiped on sign-out. Factor this in if dataset rows must not persist on shared workstations.</p>
 </section>
 
 <section id="clean">
