@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 
+from core.storage.models import SAMPLE_STAGED_ID_PREFIX
+
 
 class FakeJobStore:
     """Full in-memory implementation of the JobStore protocol.
@@ -302,13 +304,20 @@ class FakeJobStore:
             job["lease_expires_at"] = None
             return True
 
-    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
-        """Persist staged rows and return an opaque id."""
+    def stage_dataset(
+        self,
+        username: str,
+        dataset_filename: str,
+        rows: list[dict[str, Any]],
+        *,
+        sample: bool = False,
+    ) -> str:
+        """Persist staged rows and return an opaque id, prefixed for bundled samples."""
         if not rows:
             raise ValueError("staged dataset rows must be non-empty")
         if not hasattr(self, "_staged_datasets"):
             self._staged_datasets: dict[str, dict[str, Any]] = {}
-        staged_id = uuid4().hex
+        staged_id = f"{SAMPLE_STAGED_ID_PREFIX}{uuid4().hex[:29]}" if sample else uuid4().hex
         self._staged_datasets[staged_id] = {
             "username": username,
             "dataset_filename": dataset_filename,

@@ -23,6 +23,8 @@ import type {
   WorkflowSpec,
 } from "@/shared/types/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
+import type { TurnStats } from "@/shared/ui/agent/types";
+import { parseTurnStats } from "@/shared/ui/agent/turn-stats";
 import { I18N_KEY, tI18n } from "@/shared/lib/i18n";
 import { reportHandledError } from "@/shared/lib/report-error";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
@@ -2109,6 +2111,7 @@ export interface CodeAgentHandlers {
     signatureValid?: boolean;
     metricValid?: boolean;
     validationError?: string | null;
+    stats: TurnStats | null;
   }) => void;
   onError: (message: string) => void;
   signal?: AbortSignal;
@@ -2195,6 +2198,7 @@ export async function streamCodeAgent(
         signatureValid: data.signature_valid !== false,
         metricValid: data.metric_valid !== false,
         validationError: typeof data.validation_error === "string" ? data.validation_error : null,
+        stats: parseTurnStats(data.stats),
       });
     } else if (event === "error") {
       handlers.onError(String(data.error ?? msg("auto.shared.lib.api.literal.12")));

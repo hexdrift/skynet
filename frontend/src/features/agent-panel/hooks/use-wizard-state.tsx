@@ -300,6 +300,9 @@ export function extractWizardPatch(result: unknown): Partial<WizardState> {
   ) {
     patch.optimizer_kwargs = wrap.optimizer_kwargs as Record<string, unknown>;
   }
+  if (typeof wrap.target_score === "number" && Number.isFinite(wrap.target_score)) {
+    patch.target_score = wrap.target_score;
+  }
 
   return patch;
 }

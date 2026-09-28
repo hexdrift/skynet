@@ -27,6 +27,8 @@ services:
         REGISTRY_PREFIX: ${REGISTRY_PREFIX:-docker.io}
         DEBIAN_MIRROR: ${DEBIAN_MIRROR-}
         PIP_INDEX_URL: ${PIP_INDEX_URL-}
+        DENO_DOWNLOAD_BASE: ${DENO_DOWNLOAD_BASE:-https://github.com/denoland/deno/releases/download}
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY-}
         GIT_SHA: ${GIT_SHA:-unknown}
     ports:
       - "8000:8000"

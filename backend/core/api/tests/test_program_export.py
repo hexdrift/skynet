@@ -238,7 +238,7 @@ def test_react_export_restores_current_class_loop_budget_and_tool_overlay(tmp_pa
     """A ReAct export rebuilds the installed class and its complete optimized tool surface."""
     namespace: dict = {"dspy": dspy}
     exec(compile(_SIGNATURE_CODE, "<sig>", "exec", dont_inherit=True), namespace)
-    react_class = getattr(dspy, "ReActV2", None) or dspy.ReAct
+    react_class = dspy.ReActV2
     optimized_tool = dspy.Tool(
         lambda query: f"hit:{query}",
         name="lookup",
@@ -301,9 +301,8 @@ def test_react_export_falls_back_to_classic_dspy(tmp_path: Path, monkeypatch: py
     assert loaded.max_iters == 4
 
 
-@pytest.mark.skipif(not hasattr(dspy, "Flex"), reason="dspy.Flex requires the preview DSPy line")
 def test_flex_export_reconstructs_the_flex_program(tmp_path) -> None:
-    """A preview-line Flex export rebuilds the Flex shell before loading its code state."""
+    """A Flex export rebuilds the Flex shell before loading its code state."""
     namespace: dict = {"dspy": dspy}
     exec(compile(_SIGNATURE_CODE, "<sig>", "exec", dont_inherit=True), namespace)
     program = dspy.Flex(namespace["QA"])

@@ -5,7 +5,8 @@ routers' pattern: a ``RemoteDBJobStore`` subclass that skips the pgvector
 bootstrap so ``Base.metadata.create_all`` stands up the conversation tables).
 Covers the per-id outcomes of ``POST /agent/conversations/bulk-delete``: owned
 rows delete, duplicates collapse, unknown and other-users' ids are skipped, and
-an empty request is a no-op.
+an empty request is a no-op. Also covers the per-turn stats a conversation's
+messages carry back from ``router_metadata``.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from ...storage.models import AgentConversationModel, Base
+from ...storage.models import AgentConversationModel, AgentMessageModel, Base
 from ...storage.remote import RemoteDBJobStore
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
@@ -138,3 +139,26 @@ def test_bulk_delete_empty_is_noop() -> None:
     resp = client.post("/agent/conversations/bulk-delete", json={"ids": []})
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"deleted": [], "skipped": []}
+
+
+def test_conversation_messages_carry_persisted_turn_stats() -> None:
+    """An assistant turn's stored stats come back on the message; a turn without them reads null."""
+    client, store = _client(_ALICE)
+    _seed(store, ("c1", "alice"))
+    stats = {"input_tokens": 1200, "output_tokens": 300, "duration_ms": 4200, "ttft_ms": 900}
+    with store._session_factory() as session:
+        session.add_all(
+            [
+                AgentMessageModel(conversation_id="c1", role="user", content="hi"),
+                AgentMessageModel(
+                    conversation_id="c1", role="assistant", content="hello", router_metadata={"stats": stats}
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/agent/conversations/c1")
+
+    assert response.status_code == 200
+    messages = response.json()["messages"]
+    assert [m["stats"] for m in messages] == [None, stats]

@@ -110,6 +110,8 @@ Image build / push overrides (build-images, push-images):
   DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
   PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
   PIP_TRUSTED_HOST=artifactory.example.com
+  DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download
+  NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/   # backend pyodide cache
   BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine
   NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 
@@ -342,6 +344,8 @@ cmd_build_images() {
   [[ -n "${DEBIAN_MIRROR:-}" ]] && backend_args+=(--build-arg "DEBIAN_MIRROR=$DEBIAN_MIRROR")
   [[ -n "${PIP_INDEX_URL:-}" ]] && backend_args+=(--build-arg "PIP_INDEX_URL=$PIP_INDEX_URL")
   [[ -n "${PIP_TRUSTED_HOST:-}" ]] && backend_args+=(--build-arg "PIP_TRUSTED_HOST=$PIP_TRUSTED_HOST")
+  [[ -n "${DENO_DOWNLOAD_BASE:-}" ]] && backend_args+=(--build-arg "DENO_DOWNLOAD_BASE=$DENO_DOWNLOAD_BASE")
+  [[ -n "${NPM_CONFIG_REGISTRY:-}" ]] && backend_args+=(--build-arg "NPM_CONFIG_REGISTRY=$NPM_CONFIG_REGISTRY")
   local frontend_args=()
   [[ -n "${BASE_IMAGE:-}" ]] && frontend_args+=(--build-arg "BASE_IMAGE=$BASE_IMAGE")
   [[ -n "${NPM_REGISTRY:-}" ]] && frontend_args+=(--build-arg "NPM_REGISTRY=$NPM_REGISTRY")

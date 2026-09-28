@@ -11,6 +11,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+import dspy
 import pytest
 
 from core.registry.resolvers import (
@@ -31,7 +32,6 @@ from core.registry.tests.mocks import (
     fake_dspy_module,
     patch_loader,
 )
-from core.service_gateway.react_compat import REACT_CLASS
 
 
 @pytest.mark.parametrize(
@@ -290,13 +290,11 @@ def test_match_module_alias_react_is_registered() -> None:
 
 
 def test_resolve_module_factory_react_resolves_to_reactv2() -> None:
-    """``react`` resolves against real DSPy to the installed ReAct class.
+    """``react`` resolves against real DSPy to ``dspy.ReActV2`` with auto_signature on.
 
-    Unlike the mocked alias cases, this hits the real import. The alias prefers
-    ``dspy.ReActV2`` (DSPy 3.3+) and falls back to classic ``dspy.ReAct``
-    (DSPy 3.2.x); either way it lands on ``REACT_CLASS`` with auto_signature on.
+    Unlike the mocked alias cases, this hits the real import.
     """
     factory, auto_sig = resolve_module_factory("react")
 
     assert auto_sig is True
-    assert factory.func is REACT_CLASS
+    assert factory.func is dspy.ReActV2

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import base64
 import pickle
-from collections.abc import Generator
+from collections.abc import AsyncIterator, Generator
 from datetime import UTC, datetime
+from typing import Any
 
 import dspy
 import pytest
@@ -15,7 +16,6 @@ from ...constants import TQDM_REMAINING_KEY
 from ...models import OptimizationStatus
 from ...models.artifacts import ProgramArtifact, ReactOverlay
 from ...service_gateway.optimization.tool_overlay import hash_tool_schema
-from ...service_gateway.react_compat import REACT_CLASS
 from ...storage.usage import StorageUsage
 from ..auth import AuthenticatedUser
 from ..errors import DomainError
@@ -31,6 +31,7 @@ from ..routers._helpers import (
     clear_program_cache,
     enforce_storage_quota,
     load_program,
+    stream_with_llm_observation,
     strip_api_key,
 )
 from ..routers.constants import (
@@ -510,7 +511,7 @@ def _react_artifact(tool: dspy.Tool, schema_hashes: dict[str, str]) -> ProgramAr
         A ``ProgramArtifact`` with ``program_state_json`` and ``react_overlay``.
     """
     signature_cls = _helpers_mod.load_signature_from_code(_REACT_SIGNATURE_CODE)
-    seed = REACT_CLASS(signature_cls, tools=[tool], max_iters=4)
+    seed = dspy.ReActV2(signature_cls, tools=[tool], max_iters=4)
     return ProgramArtifact(
         program_state_json=seed.dump_state(),
         react_overlay=ReactOverlay(
@@ -546,7 +547,7 @@ def test_materialize_react_program_rebuilds_reactv2_with_overlays(
 
     program = _materialize_program(artifact, overview)
 
-    assert isinstance(program, REACT_CLASS)
+    assert isinstance(program, dspy.ReActV2)
     assert canned.desc == "GEPA-optimized echo wording."
     assert canned.args["query"]["description"] == "GEPA-optimized arg wording."
 
@@ -575,7 +576,7 @@ def test_materialize_react_program_renames_roster_from_overlay(
 
     program = _materialize_program(artifact, overview)
 
-    assert isinstance(program, REACT_CLASS)
+    assert isinstance(program, dspy.ReActV2)
     # Drift+desc/arg overlays applied under the canonical name before the rename.
     assert canned.desc == "GEPA-optimized echo wording."
     assert canned.name == "search_records"
@@ -680,6 +681,79 @@ def test_load_program_react_cache_key_includes_roster_identity(
     program, _, _ = load_program(store, "react-job", _TEST_USER)
 
     expected_key = f"react-job:{_stable_hash(schema_hashes)}"
-    assert isinstance(program, REACT_CLASS)
+    assert isinstance(program, dspy.ReActV2)
     assert expected_key in _helpers_mod._program_cache
     assert "react-job" not in _helpers_mod._program_cache
+
+
+class _HistoryLm:
+    """LM double carrying plain dspy-style history entries."""
+
+    def __init__(self, history: list[dict[str, Any]]) -> None:
+        """Store the history the usage readers walk.
+
+        Args:
+            history: History entries, each with a ``usage`` block.
+        """
+        self.model = "openai/onprem-alias"
+        self.history = history
+
+
+async def _observed(events: list[dict[str, Any]], sink: list) -> list[dict[str, Any]]:
+    """Run ``events`` through the observation wrapper and collect its output.
+
+    Args:
+        events: The upstream events to replay.
+        sink: The turn's usage sink.
+
+    Returns:
+        Every event the wrapper yielded.
+    """
+
+    async def source() -> AsyncIterator[dict[str, Any]]:
+        """Yield the scripted events."""
+        for event in events:
+            yield event
+
+    return [
+        event
+        async for event in stream_with_llm_observation(
+            source(), job_store=None, username="alice", description="Agent chat", usage_sink=sink
+        )
+    ]
+
+
+async def test_stream_observation_adds_turn_stats_to_done() -> None:
+    """The done event carries the turn's token split and timing for the reply footer."""
+    sink = [_HistoryLm([{"usage": {"prompt_tokens": 1_200, "completion_tokens": 300}}])]
+
+    events = await _observed(
+        [{"event": "message_patch", "data": {"chunk": "hi"}}, {"event": "done", "data": {"assistant_message": "hi"}}],
+        sink,
+    )
+
+    assert events[0] == {"event": "message_patch", "data": {"chunk": "hi"}}
+    done = events[-1]["data"]
+    assert done["assistant_message"] == "hi"
+    stats = done["stats"]
+    assert set(stats) == {"input_tokens", "output_tokens", "duration_ms", "ttft_ms"}
+    assert (stats["input_tokens"], stats["output_tokens"]) == (1_200, 300)
+    assert stats["duration_ms"] >= stats["ttft_ms"] >= 0
+
+
+async def test_stream_observation_reports_untracked_usage_as_unknown() -> None:
+    """With no usage and no reply token, the counts and first-token time read as unknown, not zero."""
+    events = await _observed([{"event": "done", "data": {"assistant_message": ""}}], [])
+
+    stats = events[-1]["data"]["stats"]
+    assert stats["input_tokens"] is None
+    assert stats["output_tokens"] is None
+    assert stats["ttft_ms"] is None
+    assert stats["duration_ms"] >= 0
+
+
+async def test_stream_observation_leaves_other_events_untouched() -> None:
+    """Only the terminal done event is annotated; an error stream passes through as is."""
+    error = {"event": "error", "data": {"error": "boom"}}
+
+    assert await _observed([error], []) == [error]

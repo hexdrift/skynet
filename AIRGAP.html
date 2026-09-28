@@ -948,11 +948,15 @@ copy .env.example .env          <span class="c">REM then edit .env</span></span>
   <p>Set these before <code>up</code> so neither the Postgres image nor the backend build reaches a public registry:</p>
 <pre><span data-os="unix">export REGISTRY_PREFIX=artifactory.example.com/docker-remote
 export DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
-export PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple</span><span data-os="win">set REGISTRY_PREFIX=artifactory.example.com/docker-remote
+export PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
+export DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download
+export NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/</span><span data-os="win">set REGISTRY_PREFIX=artifactory.example.com/docker-remote
 set DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
-set PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple</span></pre>
+set PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
+set DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download
+set NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/</span></pre>
   <p><code>REGISTRY_PREFIX</code> prefixes the <code>pgvector/pgvector:pg16</code> image and the backend base image; <code>DEBIAN_MIRROR</code> / <code>PIP_INDEX_URL</code> feed the backend build. The image installs from <code>uv.lock</code> via <code>uv</code> by default — the <em>Installer · uv</em> selection.<span data-pkg="pip"> To build the pip path instead, add <code>PKG_MANAGER: pip</code> under <code>services.api.build.args</code> in <code>docker-compose.yml</code>; the compose file does not forward it by default.</span></p>
-  <p>The dspy 3.3 image (the <code>uv</code> path and the <code>PKG_MANAGER: pip</code> / <code>DSPY_LINE: preview</code> line) bakes in a Deno runtime and a warm <code>npm:pyodide</code> cache so the <em>Flex</em> module can execute its generated Python in a WASM sandbox at serve time. Behind an air-gap, point its two extra build-args at internal mirrors so the build fetches nothing public: <code>DENO_DOWNLOAD_BASE</code> at a mirror of the Deno GitHub release zips (default <code>https://github.com/denoland/deno/releases/download</code>) and <code>NPM_CONFIG_REGISTRY</code> at your npm proxy (for the ~14&nbsp;MB <code>pyodide</code> package). The <code>DSPY_LINE: stable</code> image omits Flex and needs neither.</p>
+  <p>Every backend image, on either installer path, bakes in a Deno runtime and a warm <code>npm:pyodide</code> cache so the <em>Flex</em> module can execute its generated Python in a WASM sandbox at serve time. Behind an air-gap, point its two extra build-args at internal mirrors so the build fetches nothing public: <code>DENO_DOWNLOAD_BASE</code> at a mirror of the Deno GitHub release zips (default <code>https://github.com/denoland/deno/releases/download</code>) and <code>NPM_CONFIG_REGISTRY</code> at your npm proxy (for the ~14&nbsp;MB <code>pyodide</code> package). Compose forwards both from the environment, as in the block above. There is no build option that skips this layer.</p>
 
   <h3>3 · Bring it up</h3>
 <pre>docker compose up --build</pre>
@@ -1283,6 +1287,8 @@ REGISTRY_PREFIX=artifactory.example.com/docker-remote \
 DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
 PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
 PIP_TRUSTED_HOST=artifactory.example.com \
+DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download \
+NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
 BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine \
 NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
 scripts/airgap_migrate.sh build-images
@@ -1294,6 +1300,8 @@ set REGISTRY_PREFIX=artifactory.example.com/docker-remote
 set DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
 set PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
 set PIP_TRUSTED_HOST=artifactory.example.com
+set DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download
+set NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 set BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine
 set NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 scripts\airgap_migrate.bat build-images
@@ -1309,6 +1317,8 @@ scripts\airgap_migrate.bat push-images</span></pre>
   --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote \
   --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote \
   --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple \
+  --build-arg DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download \
+  --build-arg NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
 <span data-pkg="pip">  --build-arg PKG_MANAGER=pip \
 </span>  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
 
@@ -1323,6 +1333,8 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span><spa
   --build-arg REGISTRY_PREFIX=artifactory.example.com/docker-remote ^
   --build-arg DEBIAN_MIRROR=https://artifactory.example.com/debian-remote ^
   --build-arg PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple ^
+  --build-arg DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download ^
+  --build-arg NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ ^
 <span data-pkg="pip">  --build-arg PKG_MANAGER=pip ^
 </span>  --build-arg PIP_TRUSTED_HOST=artifactory.example.com
 
@@ -1346,6 +1358,7 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span></pr
     <li><strong>Container base images:</strong> pass <code>REGISTRY_PREFIX</code> for backend and <code>BASE_IMAGE</code> for frontend. You can also pre-bake internal <code>skynet/python-base</code> and <code>skynet/node-base</code> images.</li>
     <li><strong>Debian packages:</strong> pass <code>DEBIAN_MIRROR</code>, or pre-bake <code>build-essential</code> and <code>curl</code> into the Python base image.</li>
     <li><strong>Python packages:</strong> pass <code>PIP_INDEX_URL</code> and <code>PIP_TRUSTED_HOST</code>. The backend image installs from <code>uv.lock</code> via <code>uv</code> by default; add <code>--build-arg PKG_MANAGER=pip</code> to install the equivalent pinned <code>requirements.txt</code> with <code>pip</code> instead. Both resolve to the same wheel set.</li>
+    <li><strong>Deno and Pyodide (backend):</strong> the backend image always installs a Deno binary and caches <code>npm:pyodide</code> for the <em>Flex</em> sandbox. Pass <code>DENO_DOWNLOAD_BASE</code> pointing at a mirror of the Deno GitHub release zips and <code>NPM_CONFIG_REGISTRY</code> pointing at your npm proxy, or the backend build reaches <code>github.com</code> and <code>registry.npmjs.org</code>.</li>
     <li><strong>npm packages:</strong> pass <code>NPM_REGISTRY</code>; the Dockerfile sets <code>replace-registry-host=always</code> so lockfile tarball hosts are rewritten to the mirror.</li>
     <li><strong>Helm images:</strong> set <code>global.imageRegistry</code> and <code>global.imagePullSecrets</code> in the generated values file. That prefixes backend, frontend, and <code>pgvector/pgvector</code> images.</li>
   </ul>
@@ -1726,6 +1739,11 @@ helm upgrade --install skynet deploy\helm\skynet ^
   </table>
   <p>Both agent model ids default to the <strong>inert alias</strong> <code>openai/on-prem-default</code> (<code>DEFAULT_AGENT_MODEL_ID</code>) — no gateway serves it, so unconfigured agents fail fast instead of silently reaching a public provider. Set every base URL to your internal gateway; the <code>*_MODEL</code> ids must exactly match models your gateway serves (the <code>gpt-5</code> value in the generated values file is only a placeholder). <code>TAGGER_ASSIST_MODEL</code> / <code>TAGGER_ASSIST_BASE_URL</code> are optional — left empty, the tagging assist reuses the generalist pair, so it stays internal automatically. The embedding model placeholder is <code>jina-embeddings-v4</code> and must return at least 512 dimensions.</p>
 
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>The generalist agent always calls its tools through OpenAI-style native function calling (<code>tools</code> / <code>tool_choice</code> in the request, <code>tool_calls</code> in the reply); there is no text-protocol fallback. The gateway and the model behind <code>GENERALIST_AGENT_MODEL</code> must support it. On vLLM that means launching with <code>--enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</code> (the parser that matches the model family, e.g. <code>hermes</code> for Qwen); on a LiteLLM proxy the backing deployment must accept <code>tools</code>. Without it, agent turns fail instead of running tools.</p>
+  </div>
+
   <h4>Gateway flavor: id prefix + base-URL suffix</h4>
   <p>The runtime is gateway-agnostic, but the two strings you hand-type differ per flavor: the model-id <strong>prefix</strong> and the base-URL <strong>suffix</strong>. Pick yours with the <strong>LLM gateway</strong> selector above. In every case repoint <code>OPENAI_API_BASE</code> at the same internal gateway and leave <code>OPENROUTER_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> / <code>FIREWORKS_AI_API_KEY</code> unset — a wrong prefix or a public default <code>404</code>s (or phones home) the moment egress is blocked.</p>
 
@@ -1739,6 +1757,7 @@ OPENAI_API_KEY=<span class="s">&lt;proxy virtual/master key&gt;</span></pre>
   </div>
   <div data-gateway="vllm">
 <pre><span class="c"># vLLM — launch with --served-model-name; OpenAI-compatible /v1</span>
+<span class="c"># The generalist's model also needs --enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</span>
 CODE_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
 CODE_AGENT_BASE_URL=<span class="s">http://vllm.corp.internal:8000/v1</span>
 GENERALIST_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
@@ -1829,31 +1848,14 @@ EMBEDDINGS_MODEL=<span class="s">&lt;internal embedding model&gt;</span></pre>
 
 <section id="dspy-line">
   <h2><a class="anchor" href="#dspy-line">§</a>DSPy Version Line</h2>
-  <p>Skynet runs on either DSPy line. The agent layer bridges classic <code>ReAct</code> (3.2.x) and <code>ReActV2</code> (3.3) in <code>core.service_gateway.react_compat</code>, so the source is identical — only the vendored wheel set differs. Pick the line your change-control allows, then vendor that set.</p>
-  <table>
-    <thead><tr><th>Line</th><th>Pins</th><th>When to use</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><strong>Preview</strong> (default)</td>
-        <td><code>dspy==3.3.0b1</code> + <code>gepa==0.1.1</code><br>from <code>requirements.txt</code> / <code>uv.lock</code></td>
-        <td>What CI builds and tests against. Newest features — but it is a pre-release.</td>
-      </tr>
-      <tr>
-        <td><strong>Stable</strong></td>
-        <td><code>dspy==3.2.1</code> + <code>gepa==0.1.1</code><br>from <code>requirements.stable.txt</code></td>
-        <td>The latest stable DSPy release. Use when policy forbids pre-releases in production.</td>
-      </tr>
-    </tbody>
-  </table>
-  <p>The default build (<code>uv</code> installer, or <code>DSPY_LINE=preview</code>) pins the 3.3 preview from <code>uv.lock</code>. Build the stable line through the pip installer path:</p>
+  <p>Skynet runs on a single DSPy line: <code>dspy==3.3.1</code> with <code>gepa==0.1.4</code>, pinned in <code>uv.lock</code> and exported to <code>requirements.txt</code>. The agent layer is built on <code>ReActV2</code>, native tool-call history and <em>Flex</em>, all of which arrived in DSPy 3.3, so there is no older line to build. Both installer paths install the same wheel set, so one offline index serves every build:</p>
 <pre>docker build \
   --build-arg PKG_MANAGER=pip \
-  --build-arg DSPY_LINE=stable \
-  -t skynet-backend:stable backend/</pre>
-  <p>Vendor the wheels matching the requirements file you build with — <code>requirements.stable.txt</code> resolves a different transitive set than <code>requirements.txt</code>, so mirror that exact set into your offline index before building.</p>
-  <div class="callout danger">
-    <span class="label">Keep gepa at 0.1.1 on the stable line</span>
-    <p>DSPy 3.2.1 pins <code>gepa==0.0.27</code> by default, but the react <code>/run</code> tool-optimization needs gepa's <code>enable_tool_optimization</code> adapter — a 0.1.x feature. <code>requirements.stable.txt</code> therefore overrides gepa up to <code>0.1.1</code> (DSPy 3.2.1 runs cleanly against it). Drop gepa back to 0.0.27 and react tool-wording optimization breaks at adapter construction.</p>
+  -t skynet-backend:pip backend/</pre>
+  <p><code>gepa==0.1.4</code> is exactly the release DSPy 3.3.1 pins, so no dependency override is involved; mirror both from your PyPI proxy like any other wheel.</p>
+  <div class="callout">
+    <span class="label">Upgrading from a <code>DSPY_LINE=stable</code> build</span>
+    <p>The <code>DSPY_LINE</code> build-arg and <code>requirements.stable.txt</code> (DSPy 3.2.1) are gone. Drop <code>DSPY_LINE</code> from your build scripts and pipelines; Docker ignores an unknown build-arg with a warning. The rebuilt image now always contains the Deno/Pyodide layer, so a pip-path build that used the stable line also needs the <code>DENO_DOWNLOAD_BASE</code> and <code>NPM_CONFIG_REGISTRY</code> mirrors described in <a href="#build-images">Build Images</a>.</p>
   </div>
 </section>
 

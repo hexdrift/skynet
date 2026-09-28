@@ -70,6 +70,8 @@ class ConversationMessage(BaseModel):
     role: str
     content: str
     tool_calls: list[dict[str, Any]] | None = None
+    # Token usage and timing of the turn, from router_metadata.
+    stats: dict[str, Any] | None = None
     created_at: datetime
 
 
@@ -233,6 +235,7 @@ def create_agent_history_router(*, job_store) -> APIRouter:
                         AgentMessageModel.role,
                         AgentMessageModel.content,
                         AgentMessageModel.tool_calls,
+                        AgentMessageModel.router_metadata,
                         AgentMessageModel.created_at,
                     )
                 )
@@ -252,6 +255,7 @@ def create_agent_history_router(*, job_store) -> APIRouter:
                         role=cast(str, m.role),
                         content=cast(str, m.content),
                         tool_calls=cast("list[dict[str, Any]] | None", m.tool_calls),
+                        stats=m.router_metadata.get("stats") if isinstance(m.router_metadata, dict) else None,
                         created_at=cast(datetime, m.created_at),
                     )
                     for m in msgs

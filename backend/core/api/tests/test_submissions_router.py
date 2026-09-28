@@ -211,13 +211,21 @@ class _FakeJobStore:
         """
         return list(self._jobs.keys())
 
-    def stage_dataset(self, username: str, dataset_filename: str, rows: list[dict[str, Any]]) -> str:
+    def stage_dataset(
+        self,
+        username: str,
+        dataset_filename: str,
+        rows: list[dict[str, Any]],
+        *,
+        sample: bool = False,
+    ) -> str:
         """Persist staged rows and return an opaque id.
 
         Args:
             username: Submitter owner.
             dataset_filename: Original filename (kept for diagnostics).
             rows: Non-empty dataset rows.
+            sample: Unused; accepted for signature parity with the real store.
 
         Returns:
             Newly minted staged dataset id.

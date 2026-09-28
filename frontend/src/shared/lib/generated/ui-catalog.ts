@@ -51,6 +51,20 @@ export type MessageKey =
   | "agent.parallel.background_count"
   | "agent.parallel.busy_indicator"
   | "agent.parallel.queued"
+  | "agent.tool.list_samples.title"
+  | "agent.tool.pause_job.confirm"
+  | "agent.tool.pause_job.description"
+  | "agent.tool.pause_job.title"
+  | "agent.tool.restart_job.confirm"
+  | "agent.tool.restart_job.description"
+  | "agent.tool.restart_job.title"
+  | "agent.tool.resume_job.confirm"
+  | "agent.tool.resume_job.description"
+  | "agent.tool.resume_job.title"
+  | "agent.tool.stage_sample.confirm"
+  | "agent.tool.stage_sample.description"
+  | "agent.tool.stage_sample.title"
+  | "agent.tool.validate_datasets.title"
   | "agent.validation.failed"
   | "app.meta.description"
   | "app.shell.account.aria"
@@ -2137,6 +2151,13 @@ export type MessageKey =
   | "shared.agent.copy"
   | "shared.agent.copy_code"
   | "shared.agent.edit_and_resend"
+  | "shared.agent.info.first_token"
+  | "shared.agent.info.input_tokens"
+  | "shared.agent.info.label"
+  | "shared.agent.info.output_tokens"
+  | "shared.agent.info.speed"
+  | "shared.agent.info.tokens_per_second"
+  | "shared.agent.info.total_time"
   | "shared.agent.regenerate"
   | "shared.agent.run_code"
   | "shared.agent.run_code_prompt"
@@ -2900,6 +2921,20 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "agent.parallel.background_count": "שיחות רצות ברקע: {p1}",
   "agent.parallel.busy_indicator": "השיחה רצה ברקע",
   "agent.parallel.queued": "ממתין בתור…",
+  "agent.tool.list_samples.title": "דאטאסטים לדוגמה",
+  "agent.tool.pause_job.confirm": "השהה/השהי",
+  "agent.tool.pause_job.description": "ההרצה תישמר בנקודת ביקורת והעובד שלה יתפנה. אפשר להמשיך אותה מאותה נקודה.",
+  "agent.tool.pause_job.title": "השהיית {p1}",
+  "agent.tool.restart_job.confirm": "הרץ/הריצי מההתחלה",
+  "agent.tool.restart_job.description": "ההרצה תתחיל מחדש מאפס באותו מזהה, וההתקדמות הקודמת תימחק. הפעולה תופסת משאבי חישוב מחדש.",
+  "agent.tool.restart_job.title": "הרצת {p1} מההתחלה",
+  "agent.tool.resume_job.confirm": "המשך/המשיכי",
+  "agent.tool.resume_job.description": "ההרצה תמשיך מנקודת הביקורת האחרונה ותחזור לתפוס משאבי חישוב.",
+  "agent.tool.resume_job.title": "המשך {p1} מושהית",
+  "agent.tool.stage_sample.confirm": "טען/טעני",
+  "agent.tool.stage_sample.description": "טוען דאטאסט מוכן מהדוגמאות המובנות אל אשף ההגשה.",
+  "agent.tool.stage_sample.title": "טעינת דאטאסט לדוגמה",
+  "agent.tool.validate_datasets.title": "בדיקת חלוקת הדאטאסט",
   "agent.validation.failed": "האימות נכשל",
   "app.meta.description": "מערכת לאופטימיזציית פרומפטים עם DSPy — שיפור ביצועים של מודלי שפה באופן אוטומטי",
   "app.shell.account.aria": "תפריט חשבון",
@@ -4986,6 +5021,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.agent.copy": "העתק/העתיקי",
   "shared.agent.copy_code": "העתק/העתיקי את הקוד",
   "shared.agent.edit_and_resend": "ערוך/ערכי ושלח/שלחי מחדש",
+  "shared.agent.info.first_token": "זמן עד הטוקן הראשון",
+  "shared.agent.info.input_tokens": "טוקנים בקלט",
+  "shared.agent.info.label": "פרטי התשובה",
+  "shared.agent.info.output_tokens": "טוקנים בפלט",
+  "shared.agent.info.speed": "מהירות",
+  "shared.agent.info.tokens_per_second": "{value} טוקנים/שנ׳",
+  "shared.agent.info.total_time": "זמן כולל",
   "shared.agent.regenerate": "נסה/נסי שוב",
   "shared.agent.run_code": "בדוק/בדקי את הקוד",
   "shared.agent.run_code_prompt": "בדוק/בדקי את קטע הקוד הבא ({language}) והחזר/החזירי את התוצאות:\n\n```{language}\n{code}\n```",

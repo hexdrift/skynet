@@ -72,7 +72,6 @@ from ..language_models import (
     total_tokens_from_history,
     usage_by_model_from_history,
 )
-from ..react_compat import REACT_CLASS
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .artifacts import persist_program
 from .data import (
@@ -1296,7 +1295,7 @@ class DspyService:
             The persisted :class:`ProgramArtifact` with ``react_overlay`` set,
             or ``None`` when persistence produced no artifact.
         """
-        program = REACT_CLASS(signature_cls, tools=tools, max_iters=overlay["max_iters"])
+        program = dspy.ReActV2(signature_cls, tools=tools, max_iters=overlay["max_iters"])
         program.load_state(program_state)
         artifact = persist_program(program, artifact_id)
         if artifact is None:

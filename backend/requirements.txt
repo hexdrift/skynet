@@ -412,14 +412,11 @@ yarl==1.23.0
 zipp==4.1.0
     # via importlib-metadata
 # Pinned dependency set for the pip install path (PKG_MANAGER=pip) — the
-# lockfile-equivalent of uv.lock for the DEFAULT DSPy line (dspy==3.3.0).
-# uv.lock remains the source of truth. The project itself
-# installs separately (pip install -e . --no-deps), so it is not emitted here.
+# lockfile-equivalent of uv.lock. uv.lock remains the source of truth. The
+# project itself installs separately (pip install -e . --no-deps), so it is
+# not emitted here.
 #
-# For the STABLE line (dspy==3.2.1) use requirements.stable.txt instead — the
-# agent layer bridges classic ReAct vs ReActV2 (core.service_gateway.react_compat)
-# so the same source runs on either. Regenerate from the lock after changing
-# dependencies so the two stay in sync — the requirements check in CI fails
-# if they drift:
+# Regenerate from the lock after changing dependencies so the two stay in
+# sync — the requirements check in CI fails if they drift:
 #    uv export --no-emit-project --no-hashes --no-header -o requirements.txt
 #    # then restore this header block

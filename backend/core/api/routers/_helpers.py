@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import pickle
+import time
 from collections import OrderedDict
 from collections.abc import AsyncIterable, AsyncIterator
 from datetime import UTC, datetime
@@ -50,6 +51,7 @@ from ...models import (
 )
 from ...models.serve import WorkflowNodeTrace
 from ...registry import ResolverError, resolve_module_factory
+from ...service_gateway.language_models import usage_by_model_from_history
 from ...service_gateway.optimization.data import load_signature_from_code
 from ...service_gateway.optimization.retrying_react import RetryingReActV2
 from ...service_gateway.optimization.tool_overlay import (
@@ -181,10 +183,19 @@ async def stream_with_llm_observation(
         token_source: Credential source included for call-site compatibility.
 
     Yields:
-        The upstream events, unchanged.
+        The upstream events; a ``done`` event gains a ``stats`` block with the
+        turn's token usage and timing.
     """
+    started = time.monotonic()
+    first_token_at: float | None = None
     try:
         async for event in source:
+            name = event.get("event")
+            if name == "message_patch" and first_token_at is None:
+                first_token_at = time.monotonic()
+            elif name == "done" and isinstance(event.get("data"), dict):
+                stats = _turn_stats(usage_sink, started, first_token_at)
+                event = {**event, "data": {**event["data"], "stats": stats}}
             yield event
     finally:
         del token_source
@@ -196,6 +207,29 @@ async def stream_with_llm_observation(
                 list(usage_sink),
                 description=description,
             )
+
+
+def _turn_stats(usage_sink: list, started: float, first_token_at: float | None) -> dict[str, Any]:
+    """Summarize a finished turn for the reply's info popover.
+
+    Args:
+        usage_sink: The turn's LM objects.
+        started: ``time.monotonic()`` when the stream opened.
+        first_token_at: ``time.monotonic()`` of the first reply token, if any.
+
+    Returns:
+        Token counts (``None`` when untracked) and millisecond timings.
+    """
+    now = time.monotonic()
+    breakdown = usage_by_model_from_history(*usage_sink) if usage_sink else None
+    input_tokens = sum(pair[0] for pair in breakdown.values()) if breakdown else None
+    output_tokens = sum(pair[1] for pair in breakdown.values()) if breakdown else None
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "duration_ms": round((now - started) * 1000),
+        "ttft_ms": round((first_token_at - started) * 1000) if first_token_at is not None else None,
+    }
 
 
 # Idle gap after which the SSE serializer emits a comment line to keep the
