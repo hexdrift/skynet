@@ -28,6 +28,7 @@ prompt of :class:`GeneralistSig` instead.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import uuid
@@ -126,6 +127,10 @@ _DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
         "bulk_cancel_jobs_optimizations_bulk_cancel_post",
         "clone_job_optimizations",
         "retry_job_optimizations",
+        # Resume and restart put a stopped run back on the queue, so they start
+        # compute the same way a fresh submit does.
+        "resume_job_optimizations",
+        "restart_job_optimizations",
     }
 )
 
@@ -145,6 +150,11 @@ _SAFE_MUTATIONS: frozenset[str] = frozenset(
         # returned by this tool to its local settings store.
         "update_user_preferences",
         "bulk_pin_jobs_optimizations_bulk_pin_post",
+        # A pause keeps the checkpoint and is undone by resume, so it is not
+        # destructive the way cancel is.
+        "pause_job_optimizations",
+        # Staging a sample overwrites the wizard's dataset, roles and code.
+        "stage_sample_dataset_datasets_samples",
     }
 )
 
@@ -366,6 +376,32 @@ class _TurnAuthoringFlag:
     def __init__(self) -> None:
         """Initialize the flag as not-yet-requested for this turn."""
         self.authoring_requested = False
+        # The wrappers only hold the turn-start snapshot, so a name the agent
+        # sets mid-turn is tracked here for the sample-staging guard.
+        self.job_named = False
+
+
+_SAMPLE_STAGE_TOOL = "stage_sample_dataset_datasets_samples"
+
+
+def approval_key(call_id: str, owner: str | None) -> str:
+    """Return the registry key for a pending approval.
+
+    Binding the key to the stream's owner means a confirm from any other
+    account derives a different key and can never resolve the call, on the
+    in-process path and the cross-replica table alike. Owner-less callers
+    (the react-serve relay) keep the bare id.
+
+    Args:
+        call_id: The short id surfaced to the browser in ``pending_approval``.
+        owner: Username of the stream's authenticated caller, if known.
+
+    Returns:
+        The key used with :class:`ApprovalRegistry`, at most 45 characters.
+    """
+    if not owner:
+        return call_id
+    return f"{call_id}.{hashlib.sha256(owner.encode()).hexdigest()[:32]}"
 
 
 def _serialize_tool_result(v: Any) -> Any:
@@ -413,6 +449,7 @@ class _ApprovalGatedTool:
         wizard_state: WizardState | None = None,
         authoring_flag: _TurnAuthoringFlag | None = None,
         needs_approval: Callable[[str, TrustMode], bool] | None = None,
+        approval_owner: str | None = None,
     ) -> None:
         """Capture the underlying tool and the side-channel plumbing.
 
@@ -453,6 +490,8 @@ class _ApprovalGatedTool:
                 confirmation. Defaults to the wizard-tool classifier
                 :func:`_needs_approval`; the react-serve driver injects a
                 gate-everything-but-yolo policy for arbitrary MCP rosters.
+            approval_owner: Username of the stream's caller. When set, pending
+                approvals are keyed to it so only that account can confirm.
         """
         self._original = original
         self._tool_name = tool_name
@@ -465,6 +504,7 @@ class _ApprovalGatedTool:
         self._wizard_state = wizard_state or {}
         self._authoring_flag = authoring_flag or _TurnAuthoringFlag()
         self._needs_approval = needs_approval or _needs_approval
+        self._approval_owner = approval_owner
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Sync entrypoint — DSPy 3.3 ``Tool.__call__`` invokes this from a worker thread.
@@ -565,6 +605,7 @@ class _ApprovalGatedTool:
                     snapshot_code = self._wizard_state.get(code_field)
                     if snapshot_code:
                         kwargs[code_field] = snapshot_code
+            self._inject_snapshot_params(kwargs, module_name)
         # Profiling a staged dataset needs the same rehydration submit relies
         # on: the rows live behind an opaque id, never inline in the model's
         # args, so without this the agent passes an empty dataset, the profile
@@ -623,8 +664,9 @@ class _ApprovalGatedTool:
                         }
                     )
                     return order_error
+            pending_key = approval_key(call_id, self._approval_owner)
             if self._needs_approval(self._tool_name, self._trust_mode):
-                fut = self._registry.register(call_id)
+                fut = self._registry.register(pending_key)
                 self._emit(
                     {
                         "event": "pending_approval",
@@ -634,9 +676,9 @@ class _ApprovalGatedTool:
                 try:
                     # Bounded wait racing the local future against the durable
                     # store — see ApprovalRegistry.wait_for_decision.
-                    approved = await self._registry.wait_for_decision(call_id, fut)
+                    approved = await self._registry.wait_for_decision(pending_key, fut)
                 except asyncio.CancelledError:
-                    self._registry.cancel(call_id)
+                    self._registry.cancel(pending_key)
                     self._emit(
                         {
                             "event": "tool_end",
@@ -669,6 +711,8 @@ class _ApprovalGatedTool:
                     )
                     return "User declined"
             result = await self._original(*args, **kwargs)
+            if self._tool_name == "update_wizard_state" and str(kwargs.get("job_name") or "").strip():
+                self._authoring_flag.job_named = True
             self._emit(
                 {
                     "event": "tool_end",
@@ -676,7 +720,7 @@ class _ApprovalGatedTool:
                         "id": call_id,
                         "tool": self._tool_name,
                         "status": "ok",
-                        "result": _serialize_tool_result(result),
+                        "result": self._keep_existing_job_name(_serialize_tool_result(result)),
                     },
                 }
             )
@@ -697,6 +741,58 @@ class _ApprovalGatedTool:
             )
             raise
 
+    def _inject_snapshot_params(self, kwargs: dict[str, Any], module_name: str) -> None:
+        """Fill DSPy submit arguments the agent omitted from the wizard snapshot.
+
+        The wizard already holds the run's Params-step choices; without this
+        the model has to re-type each one from the ``wizard_state`` JSON and a
+        dropped field silently ships a default (a lost ``target_score`` or
+        split). An argument the agent did supply always wins.
+
+        Args:
+            kwargs: The submit tool's keyword arguments, mutated in place.
+            module_name: The snapshot's normalized ``module_name``.
+        """
+        for field in _SNAPSHOT_SUBMIT_FIELDS:
+            value = self._wizard_state.get(field)
+            if value is not None and value != "" and kwargs.get(field) is None:
+                kwargs[field] = value
+        react_config = self._wizard_state.get("react_config")
+        if (
+            self._tool_name in _READY_TO_SUBMIT_TOOLS
+            and not kwargs.get("tool_source")
+            and isinstance(react_config, dict)
+            and _uses_tools(module_name, self._wizard_state.get("workflow"))
+        ):
+            mcp_url = str(react_config.get("mcpUrl") or "").strip()
+            if mcp_url:
+                tool_source: dict[str, Any] = {"kind": "live_mcp", "mcp_url": mcp_url}
+                if "toolFilter" in react_config:
+                    tool_source["tool_filter"] = react_config["toolFilter"]
+                kwargs["tool_source"] = tool_source
+
+    def _keep_existing_job_name(self, serialized: Any) -> Any:
+        """Drop a staged sample's default ``job_name`` when the run is already named.
+
+        The staging route cannot see the wizard, so its patch always carries
+        the sample's name; applied as-is it overwrites a name the user or the
+        agent chose earlier.
+
+        Args:
+            serialized: The JSON-friendly tool result about to be emitted.
+
+        Returns:
+            ``serialized``, with ``wizard_state.job_name`` removed when the
+            run already has a name.
+        """
+        if self._tool_name != _SAMPLE_STAGE_TOOL or not isinstance(serialized, dict):
+            return serialized
+        patch = serialized.get("wizard_state")
+        named = self._authoring_flag.job_named or bool(str(self._wizard_state.get("job_name") or "").strip())
+        if not named or not isinstance(patch, dict) or "job_name" not in patch:
+            return serialized
+        return {**serialized, "wizard_state": {k: v for k, v in patch.items() if k != "job_name"}}
+
 
 def _wrap_tool_with_approval(
     tool: dspy.Tool,
@@ -710,6 +806,7 @@ def _wrap_tool_with_approval(
     wizard_state: WizardState | None = None,
     authoring_flag: _TurnAuthoringFlag | None = None,
     needs_approval: Callable[[str, TrustMode], bool] | None = None,
+    approval_owner: str | None = None,
 ) -> dspy.Tool:
     """Replace ``tool.func`` with an approval-aware wrapper.
 
@@ -733,6 +830,7 @@ def _wrap_tool_with_approval(
             ``request_code_authoring`` in the same turn.
         needs_approval: Optional gating policy override; defaults to the
             wizard-tool classifier when omitted.
+        approval_owner: Username pending approvals are bound to, if known.
 
     Returns:
         The same ``tool`` instance with its ``func`` replaced.
@@ -749,6 +847,7 @@ def _wrap_tool_with_approval(
         wizard_state=wizard_state,
         authoring_flag=authoring_flag,
         needs_approval=needs_approval,
+        approval_owner=approval_owner,
     )
     return tool
 
@@ -791,6 +890,16 @@ class WizardState(TypedDict, total=False):
     reflection_models: list[dict[str, Any]]
     use_all_generation_models: bool
     use_all_reflection_models: bool
+    # Params-step values the runtime copies into a submit call the model left
+    # blank, so a run ships what the wizard shows rather than what the model
+    # remembered to retype.
+    optimizer_kwargs: dict[str, Any]
+    split_fractions: dict[str, float]
+    shuffle: bool
+    seed: int
+    target_score: float
+    # MCP tool source for react / flex programs: ``{mcpUrl, toolFilter}``.
+    react_config: dict[str, Any]
 
 
 _ALWAYS_TOOLS = frozenset(
@@ -864,6 +973,10 @@ _ALWAYS_TOOLS = frozenset(
         "memory_nap",
         "memory_recall",
         "memory_zoom",
+        # Built-in demo datasets: a user with no file of their own can still
+        # reach a submittable run. Staging returns a wizard patch, never rows.
+        "list_sample_datasets_datasets_samples_get",
+        "stage_sample_dataset_datasets_samples",
     }
 )
 # Diagnostic tools unlocked the moment a dataset has columns + roles. These
@@ -873,6 +986,7 @@ _DATASET_READY_TOOLS = frozenset(
     {
         "validate_code_validate_code_post",
         "profile_datasets_profile_post",
+        "validate_datasets_validate_post",
     }
 )
 # UI-trigger tool — calling it renders an inline code-authoring card that runs
@@ -895,8 +1009,24 @@ _GRID_SUBMIT_TOOLS = frozenset({"submit_grid_search_grid_search_post"})
 # Every submit surface — used to scope the wrapper's argument injection (staged
 # dataset, validated program, privacy) uniformly across single and grid runs.
 _SUBMIT_TOOLS = _READY_TO_SUBMIT_TOOLS | _GRID_SUBMIT_TOOLS
+# Params-step choices the wrapper copies onto a DSPy submit when the agent left
+# the argument out. ``column_mapping`` is deliberately absent: it maps
+# signature field names the snapshot's column roles cannot reproduce.
+_SNAPSHOT_SUBMIT_FIELDS = (
+    "module_name",
+    "optimizer_name",
+    "optimizer_kwargs",
+    "split_fractions",
+    "shuffle",
+    "seed",
+    "target_score",
+)
+_TOOL_MODULE_NAMES = frozenset({"react", "flex"})
 _POST_SUBMIT_TOOLS = frozenset(
     {
+        "pause_job_optimizations",
+        "resume_job_optimizations",
+        "restart_job_optimizations",
         "cancel_job_optimizations",
         "bulk_cancel_jobs_optimizations_bulk_cancel_post",
         "delete_job_optimizations",
@@ -1046,6 +1176,31 @@ def _model_ready(state: WizardState) -> bool:
     return True
 
 
+def _uses_tools(module_name: str, workflow: Any) -> bool:
+    """Return True when the wizard's program calls MCP tools at run time.
+
+    Args:
+        module_name: The snapshot's normalized ``module_name``.
+        workflow: The snapshot's workflow graph, if any.
+
+    Returns:
+        True for a react/flex module, or a workflow with a tool-using node.
+    """
+    if module_name in _TOOL_MODULE_NAMES:
+        return True
+    if module_name != "workflow" or not isinstance(workflow, dict):
+        return False
+    return any(
+        isinstance(node, dict)
+        and (
+            node.get("kind") == "mcp"
+            or node.get("module_name") in _TOOL_MODULE_NAMES
+            or node.get("tool_filter")
+        )
+        for node in workflow.get("nodes") or []
+    )
+
+
 def tools_for(state: WizardState) -> set[str]:
     """Compute the MCP tool names exposed for a given wizard snapshot.
 
@@ -1104,6 +1259,8 @@ _FIELD_STEP: dict[str, int] = {
     "seed": 2,
     "shuffle": 2,
     "optimizer_kwargs": 2,
+    "target_score": 2,
+    "react_config": 2,
     "model_config": 4,
     "reflection_model_config": 4,
     "generation_models": 4,
@@ -1253,9 +1410,10 @@ class GeneralistSig(dspy.Signature):
            the task in prose. NEVER leave the run unnamed.
         2. Data — call ``request_user_dataset`` so the user attaches the
            dataset and confirms column roles.
-        3. Params — set ``optimizer_name`` / ``module_name`` / split if the
-           user wants non-defaults (``gepa`` + ``predict`` are the
-           defaults).
+        3. Params — set ``optimizer_name`` / ``module_name`` / split /
+           ``target_score`` if the user wants non-defaults (``gepa`` +
+           ``predict`` are the defaults). A ``react`` / ``flex`` program
+           also needs ``react_config`` here.
         4. Code — ``request_code_authoring`` becomes available ONLY after
            the run is named AND the dataset is ready. If you want to author
            code and the tool is NOT in your list this turn, the cause is a
@@ -1326,8 +1484,19 @@ class GeneralistSig(dspy.Signature):
       BootstrapFinetune, Ensemble, or any other DSPy optimizer — they are
       not wired into this backend.
     * Module (``module_name``): ``predict`` (dspy.Predict), ``cot``
-      (dspy.ChainOfThought), and ``workflow`` are the only supported
-      modules. ``workflow`` is a multi-node graph (a chain/DAG of
+      (dspy.ChainOfThought), ``react`` (dspy.ReAct — an agent that calls
+      tools), ``flex`` (dspy.Flex — a module whose source GEPA rewrites,
+      tools optional) and ``workflow`` are the only supported modules.
+      ``react`` / ``flex`` take their tools from an MCP server the USER
+      names: set ``react_config`` = ``{"mcpUrl": "https://…",
+      "toolFilter": ["tool_a", …] | null}`` via ``update_wizard_state``
+      (null exposes every tool on that server). Never invent an MCP URL
+      or tool names — ask. The runtime turns ``react_config`` into the
+      submit's ``tool_source`` for you; leave ``tool_source`` unset. An
+      MCP server that needs an auth header cannot be submitted from chat
+      (you never handle credentials): set everything else, then tell the
+      user to enter the header and press Submit in the wizard.
+      ``workflow`` is a multi-node graph (a chain/DAG of
       signatures, Python transforms, and tool calls) that the user
       composes in the visual builder on the Code step; pick it when the
       task needs multiple LLM steps wired together. The graph itself is
@@ -1355,18 +1524,36 @@ class GeneralistSig(dspy.Signature):
       and the confirmed column roles), you can validate or refine the
       configuration with ``set_column_roles`` if needed. Never invent
       column names — use what the user confirms verbatim.
+    * Sample datasets: when the user has no data of their own, wants a
+      demo, or asks "what can I try?", call ``list_sample_datasets`` and
+      offer the matches; ``stage_sample_dataset(sample_id=…)`` then loads
+      the chosen one into the wizard — dataset, column roles and a
+      ``staged_dataset_id`` in one step, no upload card needed. The
+      result carries ``row_count`` and a 3-row ``preview``, never the
+      full rows. Still name the run first.
+    * Split check: ``validate_datasets`` takes ``row_count`` +
+      ``fractions`` and reports the resulting train / val / test sizes and
+      any warning. Call it before patching a non-default
+      ``split_fractions``, or when the dataset is small, instead of
+      guessing whether a split is viable.
     * Existing jobs: ``clone_job`` duplicates a job (1–5 copies),
       ``retry_job`` re-runs a failed/cancelled one, ``bulk_pin_jobs``
       toggles pin state in batch, ``bulk_cancel_jobs`` stops many
       running/pending jobs at once, ``bulk_delete_jobs`` removes many
-      terminal jobs at once.
+      terminal jobs at once. ``pause_job`` checkpoints a running job and
+      frees its worker; ``resume_job`` continues a paused job from that
+      checkpoint; ``restart_job`` re-runs a job from scratch under the
+      same id (progress so far is discarded — confirm the user wants
+      that, and prefer ``resume_job`` for a paused job).
     * Column roles: ``set_column_roles`` writes a validated input/output
       map back to the wizard; prefer it over hand-editing code.
     * Any other wizard field: ``update_wizard_state`` patches any subset
       of editable fields — optimizer_name, module_name, model_config
       (teacher/student), reflection_model_config, generation_models /
       reflection_models (grid search), split_fractions, split_mode, seed,
-      shuffle, optimizer_kwargs, job_name, job_description, job_type.
+      shuffle, optimizer_kwargs, target_score (GEPA stops early once its
+      validation score reaches this PERCENTAGE, 1–100), react_config,
+      is_private, job_name, job_description, job_type.
       Supply only the fields you want to change; everything else is left
       alone. Prefer it over the narrow per-field tools when changing one
       thing. Do NOT patch ``signature_code`` / ``metric_code`` here — they
@@ -1487,6 +1674,12 @@ class GeneralistSig(dspy.Signature):
       ``use_all_*`` flags) instead of the single configs, and unlocks
       ``submit_grid_search_grid_search_post`` instead. Only propose a grid
       search when the user asks to compare/sweep models.
+    * Params handoff for submit: the runtime copies ``module_name``,
+      ``optimizer_name``, ``optimizer_kwargs``, ``split_fractions``,
+      ``shuffle``, ``seed`` and ``target_score`` from the wizard snapshot
+      into any submit call that leaves them unset. Change them with
+      ``update_wizard_state`` (so the user sees them in the wizard), not
+      by typing them into the submit arguments.
     * Run privacy: runs are private by default. Set ``is_private`` to false
       only when the user explicitly asks to publish in the authenticated
       on-premise Explorer corpus.
@@ -1559,9 +1752,12 @@ class GeneralistSig(dspy.Signature):
     * A failure on a previous turn (e.g. an earlier ``submit_job_run_post``
       returned a 422 because ``reflection_model_config`` was missing) is
       NOT evidence that the tool is missing or unavailable. It is
-      evidence of a missing wizard field. Diagnose the field from the
-      previous tool result, patch it via ``update_wizard_state``, and
-      call submit again on the next turn.
+      evidence of a missing wizard field. Earlier assistant turns in
+      ``chat_history`` carry a ``tools`` list — the calls that turn made
+      and what each returned (clipped). Diagnose the field from that
+      trace, patch it via ``update_wizard_state``, and call submit again
+      on the next turn. The trace is for your eyes only: never echo it to
+      the user, and never treat a traced result as a call made THIS turn.
     * Never tell the user — in Hebrew, English, or any other language
       — that you "do not have access to the submit tool" or "the
       submit option is not exposed to me" when the tool is in fact in
@@ -1574,7 +1770,9 @@ class GeneralistSig(dspy.Signature):
         desc="Your permanent memory, woken for this turn: #i date text entries and "
         "#lo-hi summary nodes, oldest first, plus any pending compression request."
     )
-    chat_history: str = dspy.InputField(desc="Prior {role, content} turns as JSON.")
+    chat_history: str = dspy.InputField(
+        desc="Prior {role, content} turns as JSON; assistant turns may carry a tools trace."
+    )
     reply_language: str = dspy.InputField(
         desc="Language every user-facing string you write must be in (e.g. 'Hebrew', 'French'). "
         "Applies to assistant_message, status lines, and tool prompt arguments."
@@ -1678,6 +1876,7 @@ async def _drive_generalist_agent(
     lm: Any,
     reply_language: str,
     auth_header: str | None = None,
+    approval_owner: str | None = None,
 ) -> str:
     """Open the MCP session, run the ReAct loop, and return the final assistant message.
 
@@ -1690,7 +1889,9 @@ async def _drive_generalist_agent(
         wizard_state: Snapshot of wizard state used to phase tool exposure.
         memory_context: The caller's woken permanent-memory document, fed to
             the Signature's ``memory_context`` input.
-        chat_history: Prior chat turns as ``{role, content}`` dicts.
+        chat_history: Prior chat turns as ``{role, content}`` dicts; an
+            assistant turn may also carry a ``tools`` list tracing the calls
+            it made.
         user_message: The user's latest message.
         trust_mode: Caller's trust level for tool gating.
         registry: Approval registry used for tool gating.
@@ -1702,6 +1903,8 @@ async def _drive_generalist_agent(
         auth_header: Verbatim ``Authorization`` header forwarded to the MCP
             session so tool calls hit the agent-tagged routes as the same
             user that opened the SSE stream.
+        approval_owner: Username pending approvals are bound to, so only the
+            stream's own caller can resolve them.
 
     Returns:
         The full assistant reply text after the loop completes.
@@ -1729,6 +1932,7 @@ async def _drive_generalist_agent(
                 source_dataset_id=source_id,
                 wizard_state=wizard_state,
                 authoring_flag=authoring_flag,
+                approval_owner=approval_owner,
             )
             for t in listing.tools
             if t.name in allowed_names
@@ -1758,7 +1962,7 @@ async def _drive_generalist_agent(
         react = RetryingReActV2(
             GeneralistSig,
             tools=dspy_tools,
-            max_iters=8,
+            max_iters=12,
             serial_tool_calls=True,
         )
         # The user's ``assistant_message`` rides a ``submit`` tool call;
@@ -1815,6 +2019,7 @@ async def run_generalist_agent(
     auth_header: str | None = None,
     locale: str | None = None,
     usage_sink: list | None = None,
+    approval_owner: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream generalist-agent events for one user turn.
 
@@ -1852,6 +2057,8 @@ async def run_generalist_agent(
         usage_sink: Optional list the built LM is appended to, so the caller
             can meter the turn's token usage on any exit path — including a
             client disconnect where the ``done`` event never fires.
+        approval_owner: Username of the authenticated caller. Pending
+            approvals are keyed to it so another account cannot resolve them.
 
     Yields:
         SSE event dicts of shape ``{"event": str, "data": dict}``.
@@ -1905,6 +2112,7 @@ async def run_generalist_agent(
             lm=lm,
             reply_language=_reply_language(locale),
             auth_header=auth_header,
+            approval_owner=approval_owner,
         )
     )
     try:

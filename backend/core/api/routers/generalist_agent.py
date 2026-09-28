@@ -32,6 +32,7 @@ from starlette.responses import StreamingResponse
 from ...service_gateway.agents.generalist import (
     TrustMode,
     WizardState,
+    approval_key,
     get_approval_registry,
     run_generalist_agent,
 )
@@ -48,12 +49,60 @@ AuthenticatedUserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_us
 
 TITLE_MAX_CHARS = 40
 
+# The history is re-sent in full every turn, so an unbounded thread grows the
+# prompt without limit. Recent turns carry the working context; the permanent
+# memory covers what scrolls out.
+HISTORY_MAX_TURNS = 24
+HISTORY_TURN_MAX_CHARS = 4000
+HISTORY_MAX_TOOL_CALLS = 8
+HISTORY_TOOL_RESULT_MAX_CHARS = 400
+
+
+# One tool call an earlier assistant turn made, as the panel recorded it.
+class ChatToolCall(BaseModel):
+    tool: str = Field(..., max_length=200, description="MCP tool name.")
+    status: str = Field(default="done", max_length=40, description="'done' or 'error'.")
+    result: str | None = Field(default=None, description="Tool result text, clipped client-side.")
+
 
 class ChatTurn(BaseModel):
     """A single prior turn in the agent conversation."""
 
     role: str = Field(..., description="'user' or 'assistant'.")
     content: str = Field(..., description="Message text.")
+    tool_calls: list[ChatToolCall] = Field(
+        default_factory=list,
+        description="Assistant turns only: the tool calls that turn made, oldest first.",
+    )
+
+
+def history_for_agent(turns: list[ChatTurn]) -> list[dict[str, Any]]:
+    """Bound the prior turns and attach each assistant turn's tool trace.
+
+    Without the trace the model only sees its own prose from earlier turns, so
+    it cannot tell which id a past submit returned or why a past call failed.
+
+    Args:
+        turns: The client-supplied prior turns, oldest first.
+
+    Returns:
+        At most ``HISTORY_MAX_TURNS`` ``{role, content}`` dicts, newest kept,
+        each assistant turn that called tools carrying a compact ``tools`` list.
+    """
+    history: list[dict[str, Any]] = []
+    for turn in turns[-HISTORY_MAX_TURNS:]:
+        entry: dict[str, Any] = {"role": turn.role, "content": turn.content[:HISTORY_TURN_MAX_CHARS]}
+        if turn.role == "assistant" and turn.tool_calls:
+            entry["tools"] = [
+                {
+                    "tool": call.tool,
+                    "status": call.status,
+                    "result": (call.result or "")[:HISTORY_TOOL_RESULT_MAX_CHARS],
+                }
+                for call in turn.tool_calls[-HISTORY_MAX_TOOL_CALLS:]
+            ]
+        history.append(entry)
+    return history
 
 
 class GeneralistAgentRequest(BaseModel):
@@ -98,7 +147,7 @@ class GeneralistAgentRequest(BaseModel):
 class ConfirmApprovalRequest(BaseModel):
     """Client → server reply to a ``pending_approval`` SSE event."""
 
-    call_id: str = Field(..., description="The id carried by the pending_approval event.")
+    call_id: str = Field(..., max_length=24, description="The id carried by the pending_approval event.")
     approved: bool = Field(..., description="True to proceed with the tool, False to decline.")
 
 
@@ -550,11 +599,12 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
         usage_sink: list = []
         source = run_generalist_agent(
             wizard_state=wizard_state,
-            chat_history=[t.model_dump() for t in req.chat_history],
+            chat_history=history_for_agent(req.chat_history),
             user_message=req.user_message,
             memory_context=memory_context,
             trust_mode=req.trust_mode,
             auth_header=authorization,
+            approval_owner=current_user.username,
             locale=req.locale,
             model_config=None,
             usage_sink=usage_sink,
@@ -593,7 +643,9 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
 
         Args:
             req: Confirm payload with the ``call_id`` and approval boolean.
-            current_user: The authenticated caller (required).
+            current_user: The authenticated caller. Pending approvals are keyed
+                to the stream's owner, so a confirm from any other account
+                addresses a different key and cannot resolve this one.
 
         Returns:
             A :class:`ConfirmApprovalResponse` with ``resolved=True`` on success.
@@ -604,7 +656,9 @@ def create_generalist_agent_router(*, job_store=None) -> APIRouter:
                 it as a UI warning. With a store, an unmatched confirm is
                 persisted for the replica that owns the stream to pick up.
         """
-        resolved = get_approval_registry().resolve_or_persist(req.call_id, req.approved)
+        resolved = get_approval_registry().resolve_or_persist(
+            approval_key(req.call_id, current_user.username), req.approved
+        )
         if not resolved:
             raise DomainError("agent.approval.unknown_call_id", status=404)
         return ConfirmApprovalResponse(resolved=True)

@@ -125,3 +125,37 @@ def test_metric_code_rejected(wizard_client: TestClient) -> None:
 
     assert resp.status_code == 422
     assert "request_code_authoring" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "react_config",
+    [
+        {"mcpUrl": "https://mcp.example/mcp", "toolFilter": ["search"]},
+        {"mcp_url": "https://mcp.example/mcp", "tool_filter": ["search"]},
+    ],
+)
+def test_react_config_accepts_both_spellings(wizard_client: TestClient, react_config: dict) -> None:
+    """Either spelling lands in the patch under the wizard's camelCase keys."""
+    resp = wizard_client.post("/wizard/update", json={"react_config": react_config})
+
+    assert resp.status_code == 200
+    echoed = resp.json()["wizard_state"]["react_config"]
+    assert echoed["mcpUrl"] == "https://mcp.example/mcp"
+    assert echoed["toolFilter"] == ["search"]
+
+
+def test_react_config_rejects_non_http_url(wizard_client: TestClient) -> None:
+    """A tool source that is not an http(s) URL is refused before it reaches the wizard."""
+    resp = wizard_client.post("/wizard/update", json={"react_config": {"mcpUrl": "file:///etc/passwd"}})
+
+    assert resp.status_code == 422
+
+
+def test_target_score_is_a_percentage(wizard_client: TestClient) -> None:
+    """A percentage is echoed as a float; values outside 0-100 are refused."""
+    ok = wizard_client.post("/wizard/update", json={"target_score": 90})
+    too_high = wizard_client.post("/wizard/update", json={"target_score": 101})
+
+    assert ok.status_code == 200
+    assert ok.json()["wizard_state"]["target_score"] == 90.0
+    assert too_high.status_code == 422

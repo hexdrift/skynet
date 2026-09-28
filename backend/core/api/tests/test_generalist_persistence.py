@@ -12,6 +12,7 @@ end so that regression can't return unnoticed.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -29,14 +30,21 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from ...service_gateway.agents.generalist import ApprovalRegistry, approval_key
 from ...storage.models import (
+    AgentApprovalModel,
     AgentConversationModel,
     AgentMessageModel,
     Base,
 )
 from .. import auth as auth_mod
 from ..routers import generalist_agent as agent_mod
-from ..routers.generalist_agent import create_generalist_agent_router
+from ..routers.generalist_agent import (
+    ChatToolCall,
+    ChatTurn,
+    create_generalist_agent_router,
+    history_for_agent,
+)
 
 _SECRET = "test-secret"
 
@@ -417,3 +425,135 @@ async def test_empty_greeting_turn_does_not_persist_on_teardown(wrapper_engine: 
     await _drive_then_close(_empty_then_dangle(), wrapper_engine, until="conversation_meta")
 
     assert _assistant_rows(wrapper_engine) == []
+
+
+def test_history_for_agent_attaches_tool_trace_to_assistant_turns() -> None:
+    """Prior assistant turns carry what they called, so ids and failures survive the turn."""
+    turns = [
+        ChatTurn(role="user", content="submit it"),
+        ChatTurn(
+            role="assistant",
+            content="Submitted.",
+            tool_calls=[ChatToolCall(tool="submit_job_run_post", status="done", result='{"optimization_id":"opt_1"}')],
+        ),
+    ]
+
+    history = history_for_agent(turns)
+
+    assert history[0] == {"role": "user", "content": "submit it"}
+    assert history[1]["tools"] == [
+        {"tool": "submit_job_run_post", "status": "done", "result": '{"optimization_id":"opt_1"}'}
+    ]
+
+
+def test_history_for_agent_bounds_turns_text_and_tool_results() -> None:
+    """A long conversation is clipped to the newest turns, with each field capped."""
+    calls = [ChatToolCall(tool=f"t{i}", status="done", result="r" * 5000) for i in range(50)]
+    turns = [ChatTurn(role="user", content=f"m{i}") for i in range(agent_mod.HISTORY_MAX_TURNS + 5)]
+    turns.append(ChatTurn(role="assistant", content="x" * (agent_mod.HISTORY_TURN_MAX_CHARS + 50), tool_calls=calls))
+
+    history = history_for_agent(turns)
+
+    assert len(history) == agent_mod.HISTORY_MAX_TURNS
+    assert history[0]["content"] == "m6"
+    last = history[-1]
+    assert len(last["content"]) == agent_mod.HISTORY_TURN_MAX_CHARS
+    assert len(last["tools"]) == agent_mod.HISTORY_MAX_TOOL_CALLS
+    assert last["tools"][-1]["tool"] == "t49"
+    assert all(len(call["result"]) == agent_mod.HISTORY_TOOL_RESULT_MAX_CHARS for call in last["tools"])
+
+
+def test_turn_forwards_tool_trace_and_owner(
+    persistence_client: tuple[TestClient, Engine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The stream receives the bounded history and the caller its approvals are bound to."""
+    client, _engine = persistence_client
+    seen: dict[str, Any] = {}
+
+    async def capture_stream(**kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+        """Record the forwarded kwargs and finish in one turn."""
+        seen.update(kwargs)
+        yield {"event": "done", "data": {"assistant_message": "ok"}}
+
+    monkeypatch.setattr(agent_mod, "run_generalist_agent", capture_stream)
+    resp = client.post(
+        "/optimizations/generalist-agent",
+        json={
+            "user_message": "what was the id?",
+            "chat_history": [
+                {
+                    "role": "assistant",
+                    "content": "Submitted.",
+                    "tool_calls": [{"tool": "submit_job_run_post", "status": "done", "result": "opt_1"}],
+                }
+            ],
+            "wizard_state": {},
+            "trust_mode": "ask",
+        },
+        headers={"Authorization": f"Bearer {_session_token()}"},
+    )
+
+    assert resp.status_code == 200
+    assert seen["approval_owner"] == "alice@example.com"
+    assert seen["chat_history"][0]["tools"][0]["result"] == "opt_1"
+
+
+def _confirm(client: TestClient, name: str) -> int:
+    """POST a confirm for the shared call id ``abc123`` as ``name``.
+
+    Args:
+        client: Bound test client.
+        name: The session identity sending the confirm.
+
+    Returns:
+        The HTTP status code.
+    """
+    return client.post(
+        "/optimizations/generalist-agent/confirm",
+        json={"call_id": "abc123", "approved": True},
+        headers={"Authorization": f"Bearer {_session_token(name)}"},
+    ).status_code
+
+
+def test_confirm_resolves_only_for_the_stream_owner(
+    persistence_client: tuple[TestClient, Engine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another account holding the call id cannot approve someone else's pending tool."""
+    client, _engine = persistence_client
+    registry = ApprovalRegistry()
+    monkeypatch.setattr(agent_mod, "get_approval_registry", lambda: registry)
+    loop = asyncio.new_event_loop()
+    try:
+
+        async def register() -> asyncio.Future[bool]:
+            """Register alice's pending approval on the helper loop."""
+            return registry.register(approval_key("abc123", "alice@example.com"))
+
+        decided = loop.run_until_complete(register())
+
+        assert _confirm(client, "mallory@example.com") == 404
+        assert not decided.done()
+        assert _confirm(client, "alice@example.com") == 200
+        assert decided.result() is True
+    finally:
+        loop.close()
+
+
+def test_cross_replica_confirm_persists_under_the_callers_key(
+    persistence_client: tuple[TestClient, Engine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With a durable store, a foreign confirm lands on its own key, never the owner's."""
+    client, _engine = persistence_client
+    approvals = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(approvals, tables=[AgentApprovalModel.__table__])
+    registry = ApprovalRegistry()
+    registry.bind_engine(approvals)
+    monkeypatch.setattr(agent_mod, "get_approval_registry", lambda: registry)
+
+    assert _confirm(client, "mallory@example.com") == 200
+
+    assert registry._take_durable(approval_key("abc123", "alice@example.com")) is None
+    assert registry._take_durable(approval_key("abc123", "mallory@example.com")) is True

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import cast
+from typing import Any, cast
 
 import dspy
 import litellm
@@ -20,6 +20,7 @@ from core.service_gateway.agents.generalist import (
     _needs_approval,
     _TurnAuthoringFlag,
     _wrap_tool_with_approval,
+    approval_key,
     tools_for,
     validate_wizard_patch_order,
 )
@@ -984,3 +985,230 @@ def test_agent_error_payload_plain_error_has_no_code() -> None:
     """Unclassified failures keep the text-only payload."""
     payload = _agent_error_payload(RuntimeError("boom"))
     assert payload == {"error": "RuntimeError: boom"}
+
+
+def test_new_always_and_lifecycle_tools_are_reachable() -> None:
+    """Sample datasets, the split check and pause/resume/restart need no wizard progress."""
+    allowed = tools_for(cast(WizardState, {}))
+    assert {
+        "list_sample_datasets_datasets_samples_get",
+        "stage_sample_dataset_datasets_samples",
+        "pause_job_optimizations",
+        "resume_job_optimizations",
+        "restart_job_optimizations",
+    } <= allowed
+
+
+def test_trust_gating_of_lifecycle_tools() -> None:
+    """Compute-starting tools gate in auto-safe; pause and samples only gate in ask."""
+    for tool in ("resume_job_optimizations", "restart_job_optimizations"):
+        assert _needs_approval(tool, "auto_safe") is True
+        assert _needs_approval(tool, "yolo") is False
+    for tool in ("pause_job_optimizations", "stage_sample_dataset_datasets_samples"):
+        assert _needs_approval(tool, "ask") is True
+        assert _needs_approval(tool, "auto_safe") is False
+
+
+def test_order_allows_target_score_and_react_config_as_params() -> None:
+    """The new Params fields follow the same order rule as the rest of the step."""
+    ready = cast(WizardState, {"job_name": "x", "dataset_ready": True})
+    assert validate_wizard_patch_order({"target_score": 90, "react_config": {"mcp_url": "https://m"}}, ready) is None
+    assert validate_wizard_patch_order({"target_score": 90}, cast(WizardState, {"job_name": "x"})) is not None
+
+
+def test_approval_key_binds_to_owner() -> None:
+    """Different owners derive different keys; an owner-less caller keeps the bare id."""
+    assert approval_key("abc123", None) == "abc123"
+    alice = approval_key("abc123", "alice")
+    assert alice.startswith("abc123.")
+    assert alice != approval_key("abc123", "bob")
+    assert alice == approval_key("abc123", "alice")
+    assert len(alice) <= 45
+
+
+@pytest.mark.asyncio
+async def test_pending_approval_resolves_only_with_owner_key() -> None:
+    """The bare call id from the event cannot resolve an owner-bound approval."""
+    events: list[dict] = []
+    registry = ApprovalRegistry()
+    tool = _wrap_tool_with_approval(
+        _make_fake_tool("delete_job_optimizations", return_value="deleted"),
+        trust_mode="ask",
+        registry=registry,
+        emit=events.append,
+        outer_loop=asyncio.get_running_loop(),
+        approval_owner="alice",
+    )
+    call_task = asyncio.create_task(tool.func._async_body())
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if any(e["event"] == "pending_approval" for e in events):
+            break
+    call_id = next(e for e in events if e["event"] == "pending_approval")["data"]["id"]
+    assert registry.resolve(call_id, True) is False
+    assert registry.resolve(approval_key(call_id, "bob"), True) is False
+    assert registry.resolve(approval_key(call_id, "alice"), True) is True
+    assert await call_task == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_submit_fills_params_from_snapshot() -> None:
+    """Params-step choices the agent omitted reach submit; a supplied argument wins."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(
+            WizardState,
+            {
+                "module_name": "cot",
+                "optimizer_name": "gepa",
+                "target_score": 85,
+                "seed": 7,
+                "split_fractions": {"train": 0.6, "val": 0.2, "test": 0.2},
+            },
+        ),
+    )
+    await tool.func._async_body(seed=11)
+    assert seen["module_name"] == "cot"
+    assert seen["optimizer_name"] == "gepa"
+    assert seen["target_score"] == 85
+    assert seen["split_fractions"] == {"train": 0.6, "val": 0.2, "test": 0.2}
+    assert seen["seed"] == 11
+    assert "tool_source" not in seen
+
+
+@pytest.mark.asyncio
+async def test_run_submit_injects_tool_source_for_react_module() -> None:
+    """A react run ships the wizard's MCP server as its live tool source."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(
+            WizardState,
+            {"module_name": "react", "react_config": {"mcpUrl": "https://mcp.example/mcp", "toolFilter": ["search"]}},
+        ),
+    )
+    await tool.func._async_body()
+    assert seen["tool_source"] == {
+        "kind": "live_mcp",
+        "mcp_url": "https://mcp.example/mcp",
+        "tool_filter": ["search"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_tool_source_skipped_for_grid_and_toolless_modules() -> None:
+    """The grid request has no tool_source, and a predict run never needs one."""
+    react_state = {"module_name": "react", "react_config": {"mcpUrl": "https://mcp.example/mcp"}}
+    for tool_name, state in (
+        ("submit_grid_search_grid_search_post", react_state),
+        ("submit_job_run_post", {**react_state, "module_name": "predict"}),
+    ):
+        tool, seen = _make_recording_tool(tool_name)
+        _wrap_tool_with_approval(
+            tool,
+            trust_mode="yolo",
+            registry=ApprovalRegistry(),
+            emit=lambda _e: None,
+            outer_loop=asyncio.get_running_loop(),
+            wizard_state=cast(WizardState, state),
+        )
+        await tool.func._async_body()
+        assert "tool_source" not in seen
+
+
+@pytest.mark.asyncio
+async def test_workflow_with_mcp_node_injects_tool_source() -> None:
+    """A workflow counts as tool-using when any node is an MCP node."""
+    tool, seen = _make_recording_tool("submit_job_run_post")
+    _wrap_tool_with_approval(
+        tool,
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=lambda _e: None,
+        outer_loop=asyncio.get_running_loop(),
+        wizard_state=cast(
+            WizardState,
+            {
+                "module_name": "workflow",
+                "workflow": {"nodes": [{"id": "a", "kind": "mcp"}]},
+                "react_config": {"mcpUrl": "https://mcp.example/mcp"},
+            },
+        ),
+    )
+    await tool.func._async_body()
+    assert seen["tool_source"] == {"kind": "live_mcp", "mcp_url": "https://mcp.example/mcp"}
+
+
+@pytest.mark.asyncio
+async def test_sample_staging_keeps_an_existing_job_name() -> None:
+    """A staged sample names an unnamed run but never renames a named one."""
+    loop = asyncio.get_running_loop()
+    staged = '{"sample_id": "s", "wizard_state": {"job_name": "Sample", "dataset_ready": true}}'
+
+    async def emitted_patch(state: dict[str, Any], *, name_first: bool) -> dict[str, Any]:
+        """Stage a sample and return the ``wizard_state`` patch the panel receives.
+
+        Args:
+            state: The turn-start wizard snapshot.
+            name_first: Whether the agent names the run earlier in the same turn.
+
+        Returns:
+            The patch carried by the staging tool's ``tool_end`` event.
+        """
+        events: list[dict[str, Any]] = []
+        flag = _TurnAuthoringFlag()
+
+        def wrap(tool: dspy.Tool) -> dspy.Tool:
+            """Wrap a tool on the shared turn flag.
+
+            Args:
+                tool: The tool to wrap.
+
+            Returns:
+                The wrapped tool.
+            """
+            return _wrap_tool_with_approval(
+                tool,
+                trust_mode="yolo",
+                registry=ApprovalRegistry(),
+                emit=events.append,
+                outer_loop=loop,
+                authoring_flag=flag,
+                wizard_state=cast(WizardState, state),
+            )
+
+        if name_first:
+            await wrap(_make_fake_tool("update_wizard_state")).func._async_body(job_name="Mine")
+        await wrap(_make_fake_tool("stage_sample_dataset_datasets_samples", return_value=staged)).func._async_body(
+            sample_id="s"
+        )
+        return events[-1]["data"]["result"]["wizard_state"]
+
+    assert await emitted_patch({}, name_first=False) == {"job_name": "Sample", "dataset_ready": True}
+    assert await emitted_patch({"job_name": "Mine"}, name_first=False) == {"dataset_ready": True}
+    assert await emitted_patch({}, name_first=True) == {"dataset_ready": True}
+
+
+def test_system_prompt_covers_new_capabilities() -> None:
+    """The prompt names the modules and tools the agent now supports."""
+    prompt = GeneralistSig.__doc__ or ""
+    for needle in ("react", "flex", "target_score", "validate_datasets", "restart"):
+        assert needle in prompt
+    assert "blackbox" not in prompt.lower()
+
+
+def test_split_check_is_reachable_once_a_dataset_is_ready() -> None:
+    """The dataset split check unlocks with the rest of the dataset diagnostics."""
+    assert "validate_datasets_validate_post" not in tools_for(cast(WizardState, {}))
+    assert "validate_datasets_validate_post" in tools_for(
+        cast(WizardState, {"job_name": "x", "dataset_ready": True})
+    )
