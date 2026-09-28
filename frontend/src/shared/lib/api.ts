@@ -182,7 +182,7 @@ if (typeof window !== "undefined") {
 }
 
 /** Backend error code for the unified storage budget being exceeded (HTTP 409). */
-export const STORAGE_QUOTA_CODE = I18N_KEY.USER_STORAGE_QUOTA_EXCEEDED;
+const STORAGE_QUOTA_CODE = I18N_KEY.USER_STORAGE_QUOTA_EXCEEDED;
 
 /** Browser event the central error path fires when a write hits the storage budget. */
 export const STORAGE_QUOTA_EVENT = "storage-quota-exceeded";
@@ -973,21 +973,6 @@ export function getSharing(optimizationId: string) {
 }
 
 /**
- * Set the link policy: `general_access` (restricted vs anyone-with-link) and,
- * optionally, `general_role` — the tier an anyone-link grants signed-in
- * visitors (viewer/editor). Mints a link if needed.
- */
-export function putSharing(
-  optimizationId: string,
-  body: { general_access: GeneralAccess; general_role?: LinkRole },
-) {
-  return request<SharingState>(`/optimizations/${optimizationId}/sharing`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-}
-
-/**
  * Flip an optimization's public-Explore visibility (owner-only). `isPrivate:
  * true` hides it from the public corpus; `false` lists it. Independent of the
  * share link's general access. Returns the refreshed sharing state.
@@ -1453,17 +1438,6 @@ export function getDatasetSharing(datasetId: string) {
   return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing`);
 }
 
-/** Set the dataset link policy (general access + optional anyone-link role). */
-export function putDatasetSharing(
-  datasetId: string,
-  body: { general_access: GeneralAccess; general_role?: LinkRole },
-) {
-  return request<DatasetSharingState>(`/datasets/library/${datasetId}/sharing`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-}
-
 /** Invite a user to a dataset (add or replace a member grant). */
 export function addDatasetShareMember(
   datasetId: string,
@@ -1687,17 +1661,6 @@ export function getTaggerSessionSharing(sessionId: string) {
   return request<TaggerSessionSharingState>(`/tagging-sessions/${sessionId}/sharing`);
 }
 
-/** Set the session link policy (general access + optional anyone-link role). */
-export function putTaggerSessionSharing(
-  sessionId: string,
-  body: { general_access: GeneralAccess; general_role?: LinkRole },
-) {
-  return request<TaggerSessionSharingState>(`/tagging-sessions/${sessionId}/sharing`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-}
-
 /** Invite a user to a labeling session (add or replace a member grant). */
 export function addTaggerSessionShareMember(
   sessionId: string,
@@ -1772,7 +1735,7 @@ export async function transcribeAudio(
 }
 
 /** Bulk-delete the caller's pending (staged) uploads. */
-export async function bulkDeleteStagedUploads(ids: string[]): Promise<BulkDeleteResult> {
+async function bulkDeleteStagedUploads(ids: string[]): Promise<BulkDeleteResult> {
   const res = await request<BulkDeleteResult>("/usage/storage/staged/bulk-delete", {
     method: "POST",
     body: JSON.stringify({ ids }),
@@ -1782,7 +1745,7 @@ export async function bulkDeleteStagedUploads(ids: string[]): Promise<BulkDelete
 }
 
 /** Bulk-delete the caller's saved agent conversations. */
-export async function bulkDeleteConversations(ids: string[]): Promise<BulkDeleteResult> {
+async function bulkDeleteConversations(ids: string[]): Promise<BulkDeleteResult> {
   const res = await request<BulkDeleteResult>("/agent/conversations/bulk-delete", {
     method: "POST",
     body: JSON.stringify({ ids }),

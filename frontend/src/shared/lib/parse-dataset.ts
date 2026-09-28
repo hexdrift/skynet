@@ -1,6 +1,6 @@
 /** File extensions `parseDatasetFile` understands; every upload picker
  *  derives its `accept` list from this so none offers a format that fails. */
-export const DATASET_UPLOAD_EXTENSIONS = ["csv", "json", "xlsx", "xls"] as const;
+const DATASET_UPLOAD_EXTENSIONS = ["csv", "json", "xlsx", "xls"] as const;
 export const DATASET_UPLOAD_ACCEPT = DATASET_UPLOAD_EXTENSIONS.map((e) => `.${e}`).join(",");
 
 export interface ParsedDataset {

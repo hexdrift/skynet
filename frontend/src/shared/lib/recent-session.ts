@@ -14,7 +14,7 @@ const STORAGE_KEY: Record<RecentKind, string> = {
 };
 
 /** How recently the user must have been in a session for the nav button to resume it. */
-export const RESUME_WINDOW_MS = 60_000;
+const RESUME_WINDOW_MS = 60_000;
 
 /** Record that the user is (or just was) viewing ``id`` of the given kind. */
 export function markRecentSession(kind: RecentKind, id: string): void {

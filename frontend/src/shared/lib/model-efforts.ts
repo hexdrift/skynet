@@ -7,7 +7,7 @@ import { msg } from "@/shared/lib/messages";
 // (MiniMax M3's thinking is an on/off toggle, not a ladder). "max" is
 // Sol-only among OpenAI models and "ultra" is a separate mode, not an
 // effort level, so it is deliberately absent.
-export const DEFAULT_EFFORTS = ["low", "medium", "high"] as const;
+const DEFAULT_EFFORTS = ["low", "medium", "high"] as const;
 const OPENAI_EFFORTS = ["none", "low", "medium", "high", "xhigh"] as const;
 const ANTHROPIC_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 const MODEL_EFFORTS: Record<string, readonly string[]> = {

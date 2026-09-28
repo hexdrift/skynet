@@ -239,7 +239,7 @@ export function Carousel<T>({
   );
 }
 
-export function CarouselNav({
+function CarouselNav({
   direction,
   disabled,
   onClick,

@@ -88,7 +88,6 @@ export {
   TabsList,
   TabsTrigger,
   TabsContent,
-  tabsListVariants,
   SLIDING_PILL_TABS_LIST_CLASS,
   SLIDING_PILL_TABS_INDICATOR_CLASS,
   SLIDING_PILL_TABS_TRIGGER_CLASS,

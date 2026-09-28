@@ -6,7 +6,7 @@ import { Check, Minus } from "@/shared/ui/icons";
 import { cn } from "@/shared/lib/utils";
 
 /** The shared checkbox box look; ``"mixed"`` fills like checked but shows a dash. */
-export function checkboxBoxClass(state: boolean | "mixed") {
+function checkboxBoxClass(state: boolean | "mixed") {
   return cn(
     "grid size-5 shrink-0 place-items-center rounded-md border transition-colors duration-150",
     state ? "border-transparent bg-foreground text-background" : "border-border/70 bg-background",

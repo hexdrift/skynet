@@ -12,7 +12,7 @@ import type {
 /** Rows per review round the human audits before the gate re-evaluates. */
 export const REVIEW_BATCH_SIZE = 20;
 /** Auto-tagged rows below this confidence are flagged for the optional pass. */
-export const FLAG_CONFIDENCE = 0.75;
+const FLAG_CONFIDENCE = 0.75;
 /** Rows a synthetic dataset gets when the interview names no count. */
 export const DEFAULT_SYNTHETIC_ROWS = 30;
 /** Freetext agreement threshold on the token-overlap similarity. */

@@ -21,7 +21,7 @@ type StoredProgramDraft = Omit<WizardDraftData, "stage" | "furthestStage"> &
   };
 
 /** Adopt a stored draft from either layout, mapping legacy step indices onto stages. */
-export function normalizeProgramDraft(raw: StoredProgramDraft): WizardDraftData | null {
+function normalizeProgramDraft(raw: StoredProgramDraft): WizardDraftData | null {
   const { step, furthestReachedStep, stage, furthestStage, ...rest } = raw;
   if (isWizardStageId(stage) && isWizardStageId(furthestStage)) {
     return { ...rest, stage, furthestStage };
@@ -41,7 +41,7 @@ export function normalizeProgramDraft(raw: StoredProgramDraft): WizardDraftData 
  * this build writes. Anything else — an older layout, a foreign object, a
  * partially written row — reads as "no draft" rather than a crash.
  */
-export function normalizeDraftRecord(raw: unknown): WizardDraftRecord | null {
+function normalizeDraftRecord(raw: unknown): WizardDraftRecord | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Partial<WizardDraftRecord>;
   if (r.version !== DRAFT_RECORD_VERSION) return null;

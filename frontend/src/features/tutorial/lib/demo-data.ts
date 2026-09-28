@@ -988,14 +988,14 @@ function toAnalyticsJob(j: OptimizationSummaryResponse): DashboardAnalyticsJob {
   };
 }
 
-export const DEMO_DASHBOARD_JOBS: PaginatedJobsResponse = perLocale(() => ({
+const DEMO_DASHBOARD_JOBS: PaginatedJobsResponse = perLocale(() => ({
   items: DEMO_JOBS,
   total: DEMO_JOBS.length,
   limit: 20,
   offset: 0,
 }));
 
-export const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = perLocale(() => ({
+const DEMO_DASHBOARD_ANALYTICS: DashboardAnalytics = perLocale(() => ({
   filtered_total: DEMO_JOBS.length,
   status_counts: { success: 7, failed: 1, running: 1 },
   optimizer_counts: { GEPA: 5, MIPROv2: 2, BootstrapFewShot: 2 },
@@ -1402,7 +1402,7 @@ function buildExploreDemoPoints(): PublicDashboardPoint[] {
   return points;
 }
 
-export const DEMO_EXPLORE_POINTS: PublicDashboardPoint[] = perLocale(buildExploreDemoPoints);
+const DEMO_EXPLORE_POINTS: PublicDashboardPoint[] = perLocale(buildExploreDemoPoints);
 
 /**
  * Cached “real” data layer.
@@ -1488,14 +1488,4 @@ export function getCachedDemoExplorePoints(): PublicDashboardPoint[] {
   const cached = readTutorialCache<PublicDashboardPoint[]>("explore-points");
   if (cached && Array.isArray(cached)) return cached;
   return plain;
-}
-
-export function primeTutorialCacheFromLiveData(opts?: {
-  jobs?: PaginatedJobsResponse;
-  analytics?: DashboardAnalytics;
-  explorePoints?: PublicDashboardPoint[];
-}): void {
-  if (opts?.jobs) writeTutorialCache("dashboard-jobs", opts.jobs);
-  if (opts?.analytics) writeTutorialCache("dashboard-analytics", opts.analytics);
-  if (opts?.explorePoints) writeTutorialCache("explore-points", opts.explorePoints);
 }

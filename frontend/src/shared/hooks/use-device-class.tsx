@@ -30,7 +30,7 @@ export function DeviceClassProvider({
   return <DeviceClassContext.Provider value={deviceClass}>{children}</DeviceClassContext.Provider>;
 }
 
-export function useDeviceClass(): DeviceClass {
+function useDeviceClass(): DeviceClass {
   return React.useContext(DeviceClassContext);
 }
 

@@ -16,7 +16,7 @@ import type {
 } from "@/shared/types/api";
 import { buildSignatureTemplate } from "../lib/build-signature";
 
-export const IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
+const IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 export interface PortInfo {
   name: string;
@@ -46,7 +46,7 @@ const SIGNATURE_FIELD_RE =
  * for live port rendering; the backend's exec-based pass remains the source
  * of truth at validation/submit time.
  */
-export function parseSignaturePorts(code: string): NodePorts {
+function parseSignaturePorts(code: string): NodePorts {
   const inputs: PortInfo[] = [];
   const outputs: PortInfo[] = [];
   for (const line of code.split("\n")) {
@@ -64,7 +64,7 @@ export function parseSignaturePorts(code: string): NodePorts {
 const TRANSFORM_DEF_RE = /def\s+transform\s*\(([^)]*)\)/;
 
 /** Parse the transform function's parameter names (empty when unparseable). */
-export function parseTransformParams(code: string): string[] {
+function parseTransformParams(code: string): string[] {
   const m = TRANSFORM_DEF_RE.exec(code);
   if (!m) return [];
   return (m[1] ?? "")
@@ -96,7 +96,7 @@ export function nodePorts(node: WorkflowNodeSpec): NodePorts {
 // A react node always draws on the roster; a flex node is a complete module
 // without tools, so it only counts once it names the ones it wants.
 /** True when the node consumes the run-level tool roster (react/mcp/flex+tools). */
-export function isToolUserNode(node: WorkflowNodeSpec): boolean {
+function isToolUserNode(node: WorkflowNodeSpec): boolean {
   if (node.kind === "mcp") return true;
   return (
     node.kind === "signature" && (node.module_name === "react" || node.tool_filter != null)

@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/shared/lib/utils";
 
-export const KBD_CLASS =
+const KBD_CLASS =
   "inline-flex items-center justify-center rounded-md border border-border/70 bg-muted/55 font-medium text-muted-foreground";
 
 /** A keyboard key or shortcut rendered as a key cap. */

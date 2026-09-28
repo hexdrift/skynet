@@ -5,5 +5,4 @@ export { ChatTranscript } from "./chat-transcript";
 export { Composer } from "./composer";
 export { MessageActions } from "./message-actions";
 export { QuestionChoices, QuestionChoicesSkeleton } from "./question-choices";
-export { parseTurnStats } from "./turn-stats";
-export type { AgentMessage, AgentThinking, AgentToolCall, TurnStats } from "./types";
+export type { AgentMessage, AgentThinking, AgentToolCall } from "./types";

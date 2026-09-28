@@ -12,7 +12,7 @@ interface StorageCategoryMeta {
   itemType: StorageItem["type"];
 }
 
-export const CATEGORY_META: Record<StorageCategory, StorageCategoryMeta> = {
+const CATEGORY_META: Record<StorageCategory, StorageCategoryMeta> = {
   optimizations: {
     label: "storage.category.optimizations",
     description: "storage.category.desc.optimizations",
