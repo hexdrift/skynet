@@ -472,3 +472,36 @@ def test_fetch_corpus_facets_rejects_an_unknown_dimension() -> None:
     """A typo in the dimension fails loudly instead of producing a malformed UNION."""
     with pytest.raises(ValueError, match="unknown facet dimension"):
         dashboard.fetch_corpus_facets(job_store=SimpleNamespace(engine=object()), dimension="tasks")
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected"),
+    [
+        (dashboard.SEARCH_SORT_OLDEST, "ORDER BY j.created_at ASC, j.optimization_id ASC"),
+        (dashboard.SEARCH_SORT_RECENT, "ORDER BY j.created_at DESC, j.optimization_id DESC"),
+    ],
+)
+def test_search_lexical_orders_by_creation_time_for_sort(monkeypatch, sort: str, expected: str) -> None:
+    """The oldest sort ranks lexical matches ascending by creation; recent descending."""
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.execute.return_value.mappings.return_value.all.return_value = []
+    monkeypatch.setattr(dashboard, "Session", lambda _engine: session)
+
+    dashboard._search_lexical(
+        job_store=SimpleNamespace(engine=object()),
+        je_rel="job_embeddings",
+        query="",
+        models=None,
+        optimizers=None,
+        optimization_types=None,
+        tasks=None,
+        modules=None,
+        date_from=None,
+        date_to=None,
+        sort=sort,
+        page=1,
+        size=10,
+    )
+
+    assert expected in str(session.execute.call_args.args[0])

@@ -127,7 +127,7 @@ def test_extract_scores_run_falls_back_to_result_baseline() -> None:
 
     GEPA run jobs only keep ``optimized_test_metric`` in latest_metrics at
     completion; the baseline survives in ``result``. Without the fallback the
-    embedded baseline is NULL and the gain sort collapses to raw score.
+    embedded baseline is NULL and the run's improvement is lost.
     """
     job = _success_job(
         latest_metrics={"optimized_test_metric": 90.0},

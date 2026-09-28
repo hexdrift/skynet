@@ -158,11 +158,10 @@ def _jobs_metric_sql(key: str) -> str:
     )
 
 
-# The embedded metric when present, else the job's own scores. Keeps the gain
-# sort and the result-card score badges meaningful on the lexical/BM25 paths,
-# where unembedded rows (embeddings disabled, table absent, or backfill still
-# running) would otherwise all carry NULL metrics and the gain ranking would
-# silently degrade to recency.
+# The embedded metric when present, else the job's own scores. Keeps each
+# result row's score pair meaningful on the lexical/BM25 paths, where
+# unembedded rows (embeddings disabled, table absent, or backfill still
+# running) would otherwise all carry NULL metrics.
 _CORPUS_BASELINE_METRIC_SQL = (
     f"COALESCE(je.baseline_metric, {_jobs_metric_sql('baseline_test_metric')})"
 )
@@ -837,7 +836,7 @@ def search_optimizations(
 
     if use_lexical:
         # BM25 ranks by relevance, so it only serves the relevance sort with a
-        # query present; explicit gain/recent sorts keep the ILIKE path's
+        # query present; explicit recent/oldest sorts keep the ILIKE path's
         # ordering. Any pg_search failure degrades to the ILIKE search below.
         if (
             query_clean
@@ -1211,9 +1210,8 @@ def _search_lexical(
     Walks ``jobs LEFT JOIN job_embeddings`` so unembedded successful jobs
     are still returned — their text comes from ``payload_overview`` rather
     than the LLM-authored summary, structured filters fall back to the
-    payload values when the embedding row is missing, and the score pair
-    (used by the gain sort and the result badges) falls back to the job's
-    own ``latest_metrics`` / ``result`` values.
+    payload values when the embedding row is missing, and each row's score
+    pair falls back to the job's own ``latest_metrics`` / ``result`` values.
 
     The relevance sort is degraded to recency, since lexical matching has
     no continuous similarity score and emitting a synthetic one would be

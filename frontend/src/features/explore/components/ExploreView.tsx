@@ -103,13 +103,6 @@ export function ExploreView() {
 
   const { recent, push: pushRecent, clear: clearRecent } = useRecentQueries();
 
-  // A query is recorded only when it leads to an opened optimization — a result
-  // row clicked, or Enter pressed on a keyboard-highlighted row — never on a
-  // bare Enter-to-search or debounced typing. Tying the signal to a click-through
-  // keeps idle or mistyped queries out of recent and the trending counts. Recent
-  // is personal and per-device, recorded for any corpus; trending is public-corpus
-  // only and logged server-side. The consecutive-dedup ref guards against a
-  // keyboard-open and the row's own click handler double-counting the same query.
   const lastLoggedRef = React.useRef("");
   const commitQuery = React.useCallback(
     (raw: string) => {
@@ -156,22 +149,10 @@ export function ExploreView() {
   }, [demoPoints, openDimension, facetQuery, facetLimit, fetchedOptions]);
   const canShowMore =
     facetLimit < FACET_LIMIT_MAX && facetOptions.total > facetOptions.options.length;
-  // Popular searches for a blank field: real trending only — what people
-  // actually searched (public corpus, logged server-side on explicit commit).
-  // When the log has no data yet, this is empty and the section simply doesn't
-  // render; showing nothing beats surfacing irrelevant filler.
-  const trendingQueries = usePopularQueries();
-  const popularSearches = React.useMemo<string[]>(
-    () => trendingQueries.map((q) => q.query),
-    [trendingQueries],
-  );
-
-  const corpusTotal = points.length;
+  const popularSearches = usePopularQueries().map((entry) => entry.query);
   const isPublicCorpus = query.corpus === "public";
-  // The dashed empty state only fires when the public corpus is genuinely
-  // empty — we still want the corpus toggle visible so the user can pivot
-  // to "Mine" without first creating a public job.
-  const isTrulyEmpty = isPublicCorpus && !corpusLoading && !corpusError && corpusTotal === 0;
+  const isTrulyEmpty =
+    isPublicCorpus && !corpusLoading && !corpusError && points.length === 0;
 
   if (status === "loading") {
     return <ExploreSkeleton />;

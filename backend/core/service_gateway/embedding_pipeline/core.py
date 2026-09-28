@@ -90,10 +90,9 @@ def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
     after the metric-scale normalization migration — so no rescaling happens
     here.
 
-    A missing baseline matters: the gain sort ranks on
-    ``optimized - baseline``, so a ``None`` baseline would silently collapse
-    the ranking to raw optimized score and float an unimproved-but-high run
-    above one that actually gained.
+    A missing baseline matters: the stored score pair is what search results
+    report, so a ``None`` baseline would hide how much a run actually
+    improved.
 
     Args:
         job: The job-store record for a finished optimization.
