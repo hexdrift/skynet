@@ -93,19 +93,49 @@ class DashboardAnalyticsNameValue(BaseModel):
     value: float = 0.0
 
 
-class DashboardAnalyticsOptimizerAverage(BaseModel):
-    """Averaged per-optimizer metric used by the grouped bar charts."""
+class DashboardAnalyticsRangeBucket(BaseModel):
+    """Histogram bucket counting runs whose value fell in ``[lower, upper)``."""
+
+    # ``None`` marks an open end: the first bucket has no lower bound and the
+    # last has no upper bound, so every value lands somewhere.
+    lower: float | None = None
+    upper: float | None = None
+    count: int = 0
+    # Mean improvement (percentage points) of the successful runs in the
+    # bucket; only populated for the dataset-size breakdown.
+    avg_improvement: float | None = None
+
+
+class DashboardAnalyticsOptimizerStat(BaseModel):
+    """Per-optimizer roll-up powering the optimizer comparison table."""
 
     name: str
-    average: float = 0.0
     count: int = 0
+    success_count: int = 0
+    success_rate: float = 0.0
+    avg_improvement: float | None = None
+    avg_runtime_minutes: float | None = None
+
+
+class DashboardAnalyticsModelStat(BaseModel):
+    """Per-model roll-up powering the model comparison list."""
+
+    name: str
+    count: int = 0
+    success_count: int = 0
+    success_rate: float = 0.0
+    avg_improvement: float | None = None
 
 
 class DashboardAnalyticsTimelineBucket(BaseModel):
-    """One-day bucket for the "optimizations per day" timeline."""
+    """One calendar bucket (day, week or month) of the submissions timeline."""
 
+    # ISO date of the bucket start; the response's ``timeline_granularity``
+    # says whether it covers a day, an ISO week or a calendar month.
     date: str
     count: int = 0
+    success_count: int = 0
+    failed_count: int = 0
 
 
 class DashboardAnalyticsResponse(BaseModel):
@@ -120,9 +150,6 @@ class DashboardAnalyticsResponse(BaseModel):
     optimizer_counts: dict[str, int] = Field(default_factory=dict)
     job_type_counts: dict[str, int] = Field(default_factory=dict)
 
-    # Model usage — list of {name, value} sorted desc, trimmed to top 8.
-    model_usage: list[DashboardAnalyticsNameValue] = Field(default_factory=list)
-
     # Owner usage — runs per owning username, sorted desc, trimmed to top 8.
     # Powers the control panel's "by owner" breakdown; clicking a bar scopes
     # the other charts to that owner via the `owner` filter param.
@@ -133,32 +160,40 @@ class DashboardAnalyticsResponse(BaseModel):
     # to that tier via the `access` filter param. Empty when no caller context.
     access_usage: list[DashboardAnalyticsNameValue] = Field(default_factory=list)
 
+    # Module (DSPy program type) usage across the filtered runs.
+    module_counts: dict[str, int] = Field(default_factory=dict)
+
     success_count: int = 0
     failed_count: int = 0
     running_count: int = 0
     terminal_count: int = 0
     success_rate: float = 0.0
+    # Improvement aggregates are in percentage points: ratio-scale metrics
+    # (|delta| <= 1) are scaled by 100 so the dashboard can mix metric kinds.
     avg_improvement: float | None = None
+    median_improvement: float | None = None
+    best_improvement: float | None = None
     avg_runtime_seconds: float | None = None
     total_dataset_rows: int = 0
     total_pairs_run: int = 0
     grid_search_count: int = 0
     single_run_count: int = 0
-    best_improvement: float | None = None
 
-    # Per-optimizer averages (powering avg-improvement and
-    # avg-runtime grouped-bar charts). Runtime is in minutes, not
-    # seconds — the frontend rendered it that way already.
-    improvement_by_optimizer: list[DashboardAnalyticsOptimizerAverage] = Field(default_factory=list)
-    runtime_minutes_by_optimizer: list[DashboardAnalyticsOptimizerAverage] = Field(default_factory=list)
+    # Fixed-edge distributions that stay readable at any run count: how
+    # improvements, runtimes and dataset sizes spread across the filtered set.
+    improvement_histogram: list[DashboardAnalyticsRangeBucket] = Field(default_factory=list)
+    runtime_histogram: list[DashboardAnalyticsRangeBucket] = Field(default_factory=list)
+    dataset_size_buckets: list[DashboardAnalyticsRangeBucket] = Field(default_factory=list)
 
-    top_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
-    runtime_distribution: list[DashboardAnalyticsJob] = Field(default_factory=list)
-    dataset_vs_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
-    efficiency: list[DashboardAnalyticsJob] = Field(default_factory=list)
+    optimizer_stats: list[DashboardAnalyticsOptimizerStat] = Field(default_factory=list)
+    model_stats: list[DashboardAnalyticsModelStat] = Field(default_factory=list)
+
     top_jobs_by_improvement: list[DashboardAnalyticsJob] = Field(default_factory=list)
 
     timeline: list[DashboardAnalyticsTimelineBucket] = Field(default_factory=list)
+    # "day", "week" or "month" — chosen from the span of the filtered runs so
+    # the timeline never degenerates into hundreds of one-run bars.
+    timeline_granularity: str = "day"
 
     # Filter dropdown option lists (every unique optimizer/model
     # the caller has ever used — the user can pick any of these

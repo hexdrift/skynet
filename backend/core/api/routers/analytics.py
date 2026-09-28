@@ -13,12 +13,15 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from datetime import date as date_type
+from statistics import median
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...constants import (
+    COMPOSITION_WORKFLOW,
     OPTIMIZATION_TYPE_GRID_SEARCH,
     OPTIMIZATION_TYPE_RUN,
     PAYLOAD_OVERVIEW_DATASET_ROWS,
@@ -31,8 +34,10 @@ from ...i18n import t
 from ...models import (
     AnalyticsSummaryResponse,
     DashboardAnalyticsJob,
+    DashboardAnalyticsModelStat,
     DashboardAnalyticsNameValue,
-    DashboardAnalyticsOptimizerAverage,
+    DashboardAnalyticsOptimizerStat,
+    DashboardAnalyticsRangeBucket,
     DashboardAnalyticsResponse,
     DashboardAnalyticsTimelineBucket,
     ModelStatsItem,
@@ -107,6 +112,224 @@ def _summary_to_analytics_job(s: OptimizationSummaryResponse) -> DashboardAnalyt
         best_pair_label=s.best_pair_label,
         created_at=created_at_str,
     )
+
+
+# Bucket edges for the dashboard histograms. Improvement is in percentage
+# points, runtime in minutes, dataset size in rows; the first bucket is open
+# below the first edge and the last is open above the final edge.
+_IMPROVEMENT_EDGES_POINTS: tuple[float, ...] = (0.0, 5.0, 10.0, 20.0, 30.0)
+_RUNTIME_EDGES_MINUTES: tuple[float, ...] = (1.0, 5.0, 15.0, 30.0, 60.0, 120.0)
+_DATASET_ROW_EDGES: tuple[float, ...] = (50.0, 100.0, 250.0, 500.0, 1000.0)
+
+# Timeline granularity thresholds (days between first and last run).
+_TIMELINE_DAY_MAX_SPAN = 60
+_TIMELINE_WEEK_MAX_SPAN = 400
+
+# Job-type bucket for single runs whose program is a multi-node workflow;
+# they share ``optimization_type == "run"`` with plain single-module runs.
+_JOB_TYPE_WORKFLOW = "workflow"
+
+
+def _improvement_points(value: float) -> float:
+    """Normalize a raw metric delta to percentage points.
+
+    Ratio-scale metrics (accuracy in ``0..1``) are scaled by 100 so they can
+    be aggregated alongside metrics already expressed in points.
+
+    Args:
+        value: Raw ``optimized - baseline`` delta.
+
+    Returns:
+        The delta in percentage points.
+    """
+    return value * 100 if abs(value) <= 1 else value
+
+
+def _job_type_key(summary: OptimizationSummaryResponse) -> str:
+    """Return the dashboard job-type bucket for a run.
+
+    Args:
+        summary: The run's dashboard summary.
+
+    Returns:
+        The ``optimization_type``, except that single runs of a multi-node
+        workflow program report :data:`_JOB_TYPE_WORKFLOW`.
+    """
+    job_type = summary.optimization_type or OPTIMIZATION_TYPE_RUN
+    if job_type == OPTIMIZATION_TYPE_RUN and summary.composition == COMPOSITION_WORKFLOW:
+        return _JOB_TYPE_WORKFLOW
+    return job_type
+
+
+def _in_bucket(value: float | None, lower: float | None, upper: float | None) -> bool:
+    """Report whether ``value`` falls inside the half-open ``[lower, upper)`` range.
+
+    Mirrors :func:`_range_buckets` so a histogram bar's edges can be echoed
+    back as a filter and select exactly the runs that bar counted.
+
+    Args:
+        value: The measured value, or None when the run has no measurement.
+        lower: Inclusive lower edge, or None for an open start.
+        upper: Exclusive upper edge, or None for an open end.
+
+    Returns:
+        False when the value is missing or outside the range.
+    """
+    if value is None:
+        return False
+    if lower is not None and value < lower:
+        return False
+    return upper is None or value < upper
+
+
+def _created_at_utc(value: datetime | str | None) -> datetime | None:
+    """Coerce a summary's ``created_at`` to an aware UTC datetime.
+
+    Args:
+        value: The summary's ``created_at`` (datetime or ISO string).
+
+    Returns:
+        An aware UTC datetime, or None when the value is missing/unparseable.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _range_buckets(
+    samples: list[tuple[float, float | None]],
+    edges: tuple[float, ...],
+) -> list[DashboardAnalyticsRangeBucket]:
+    """Bucket ``(value, improvement)`` samples into fixed ``[lower, upper)`` ranges.
+
+    Args:
+        samples: Pairs of the bucketed value and the run's improvement in
+            points (None when the run has no improvement figure).
+        edges: Ascending interior bucket edges.
+
+    Returns:
+        One bucket per range, open-ended at both extremes, in ascending order.
+    """
+    bounds: list[tuple[float | None, float | None]] = [(None, edges[0])]
+    bounds.extend((edges[i], edges[i + 1]) for i in range(len(edges) - 1))
+    bounds.append((edges[-1], None))
+    buckets: list[DashboardAnalyticsRangeBucket] = []
+    for lower, upper in bounds:
+        members = [
+            improvement
+            for value, improvement in samples
+            if (lower is None or value >= lower) and (upper is None or value < upper)
+        ]
+        improvements = [v for v in members if v is not None]
+        buckets.append(
+            DashboardAnalyticsRangeBucket(
+                lower=lower,
+                upper=upper,
+                count=len(members),
+                avg_improvement=round(sum(improvements) / len(improvements), 2) if improvements else None,
+            )
+        )
+    return buckets
+
+
+def _timeline_granularity(first: date_type, last: date_type) -> str:
+    """Pick the coarsest timeline bucket that still shows a trend.
+
+    Args:
+        first: Earliest run date in the filtered set.
+        last: Latest run date in the filtered set.
+
+    Returns:
+        ``"day"``, ``"week"`` or ``"month"``.
+    """
+    span_days = (last - first).days
+    if span_days <= _TIMELINE_DAY_MAX_SPAN:
+        return "day"
+    if span_days <= _TIMELINE_WEEK_MAX_SPAN:
+        return "week"
+    return "month"
+
+
+def _bucket_start(day: date_type, granularity: str) -> date_type:
+    """Snap a date to the start of its timeline bucket.
+
+    Args:
+        day: Any calendar date.
+        granularity: ``"day"``, ``"week"`` (ISO, Monday start) or ``"month"``.
+
+    Returns:
+        The first date of the bucket containing ``day``.
+    """
+    if granularity == "week":
+        return day - timedelta(days=day.weekday())
+    if granularity == "month":
+        return day.replace(day=1)
+    return day
+
+
+def _next_bucket(start: date_type, granularity: str) -> date_type:
+    """Return the start of the bucket following ``start``.
+
+    Args:
+        start: A bucket start date.
+        granularity: ``"day"``, ``"week"`` or ``"month"``.
+
+    Returns:
+        The next bucket's start date.
+    """
+    if granularity == "week":
+        return start + timedelta(days=7)
+    if granularity == "month":
+        return (start.replace(day=1) + timedelta(days=32)).replace(day=1)
+    return start + timedelta(days=1)
+
+
+def _build_timeline(
+    dated: list[tuple[date_type, str]],
+) -> tuple[list[DashboardAnalyticsTimelineBucket], str]:
+    """Bucket runs by calendar period, filling empty periods with zeros.
+
+    Args:
+        dated: ``(created date, status)`` pairs for every filtered run.
+
+    Returns:
+        The contiguous bucket list and the granularity it was built at.
+    """
+    if not dated:
+        return [], "day"
+    first = min(day for day, _ in dated)
+    last = max(day for day, _ in dated)
+    granularity = _timeline_granularity(first, last)
+    counts: dict[date_type, list[int]] = {}
+    for day, status_value in dated:
+        row = counts.setdefault(_bucket_start(day, granularity), [0, 0, 0])
+        row[0] += 1
+        if status_value == OptimizationStatus.success.value:
+            row[1] += 1
+        elif status_value == OptimizationStatus.failed.value:
+            row[2] += 1
+    timeline: list[DashboardAnalyticsTimelineBucket] = []
+    cursor = _bucket_start(first, granularity)
+    end = _bucket_start(last, granularity)
+    while cursor <= end:
+        total, ok, failed = counts.get(cursor, [0, 0, 0])
+        timeline.append(
+            DashboardAnalyticsTimelineBucket(
+                date=cursor.isoformat(),
+                count=total,
+                success_count=ok,
+                failed_count=failed,
+            )
+        )
+        cursor = _next_bucket(cursor, granularity)
+    return timeline, granularity
 
 
 _ACTIVE_STATUSES = frozenset({"pending", "validating", "running"})
@@ -563,6 +786,16 @@ def create_analytics_router(*, job_store) -> APIRouter:
         username: str | None = Query(default=None, description="Only include optimizations owned by this user"),
         optimization_id: str | None = Query(default=None, description="Limit the aggregation to a single optimization"),
         date: str | None = Query(default=None, description="YYYY-MM-DD day filter on created_at"),
+        date_to: str | None = Query(
+            default=None,
+            description="YYYY-MM-DD inclusive end of a created_at range that starts at `date`",
+        ),
+        days: int | None = Query(
+            default=None,
+            ge=1,
+            le=3650,
+            description="Only include optimizations created within the last N days",
+        ),
         include_shared: bool = Query(
             default=False,
             description="Fold runs shared with `username` into the aggregation (Drive-style sharing).",
@@ -572,15 +805,36 @@ def create_analytics_router(*, job_store) -> APIRouter:
             default=None,
             description="Restrict to a caller access tier: 'mine', 'owner', 'editor', or 'viewer'.",
         ),
+        job_type: str | None = Query(
+            default=None,
+            description="Job-type bucket filter: 'run', 'grid_search' or 'workflow'.",
+        ),
+        module: str | None = Query(default=None, description="Exact-match module name filter"),
+        improvement_min: float | None = Query(
+            default=None, description="Inclusive lower bound on improvement, in percentage points"
+        ),
+        improvement_max: float | None = Query(
+            default=None, description="Exclusive upper bound on improvement, in percentage points"
+        ),
+        runtime_min: float | None = Query(
+            default=None, ge=0, description="Inclusive lower bound on run time, in minutes"
+        ),
+        runtime_max: float | None = Query(
+            default=None, ge=0, description="Exclusive upper bound on run time, in minutes"
+        ),
+        dataset_min: float | None = Query(default=None, ge=0, description="Inclusive lower bound on dataset rows"),
+        dataset_max: float | None = Query(default=None, ge=0, description="Exclusive upper bound on dataset rows"),
     ) -> DashboardAnalyticsResponse:
         """Return a pre-shaped payload for the whole analytics dashboard.
 
         Caps at :data:`_ANALYTICS_JOB_HARD_CAP` jobs per request and surfaces
-        ``truncated=True`` when the cap is hit. Improvements are raw floats;
-        the frontend normalizes ratios. When ``include_shared`` is set the job
-        set is the union of ``username``'s owned and shared-with-them runs;
-        ``owner`` then narrows the aggregation to a single owner within that
-        set (powering the "by owner" breakdown's click-through).
+        ``truncated=True`` when the cap is hit. Improvement aggregates are in
+        percentage points (see :func:`_improvement_points`); the per-job
+        ``metric_improvement`` on the leaderboard stays raw. When
+        ``include_shared`` is set the job set is the union of ``username``'s
+        owned and shared-with-them runs; ``owner`` then narrows the
+        aggregation to a single owner within that set (powering the "by
+        owner" breakdown's click-through).
 
         Args:
             optimizer: Exact-match optimizer name filter.
@@ -588,10 +842,21 @@ def create_analytics_router(*, job_store) -> APIRouter:
             status: Optimization status filter.
             username: Only include optimizations owned by this user.
             optimization_id: Limit the aggregation to a single optimization.
-            date: ``YYYY-MM-DD`` day filter on ``created_at``.
+            date: ``YYYY-MM-DD`` day filter on ``created_at``, or the range
+                start when ``date_to`` is given.
+            date_to: Inclusive ``YYYY-MM-DD`` end of the ``created_at`` range.
+            days: Only include runs created within the last ``days`` days.
             include_shared: Union in runs shared with ``username``.
             owner: Restrict the aggregation to runs owned by this username.
             access: Restrict to a caller access tier (mine/owner/editor/viewer).
+            job_type: Restrict to one job-type bucket (run/grid_search/workflow).
+            module: Exact-match module name filter.
+            improvement_min: Inclusive lower bound on improvement (points).
+            improvement_max: Exclusive upper bound on improvement (points).
+            runtime_min: Inclusive lower bound on run time (minutes).
+            runtime_max: Exclusive upper bound on run time (minutes).
+            dataset_min: Inclusive lower bound on dataset rows.
+            dataset_max: Exclusive upper bound on dataset rows.
             current_user: The authenticated caller (scopes the aggregation).
 
         Returns:
@@ -621,6 +886,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 ),
             )
         truncated = len(all_jobs_raw) >= _ANALYTICS_JOB_HARD_CAP
+        since = datetime.now(UTC) - timedelta(days=days) if days else None
 
         # Build summaries up front so every downstream filter and
         # aggregation works against the same view the dashboard would
@@ -652,12 +918,38 @@ def create_analytics_router(*, job_store) -> APIRouter:
                 continue
             if optimization_id and summary.optimization_id != optimization_id:
                 continue
-            if date:
-                created = summary.created_at
+            if job_type and _job_type_key(summary) != job_type:
+                continue
+            if module and summary.module_name != module:
+                continue
+            if (improvement_min is not None or improvement_max is not None) and not _in_bucket(
+                None if summary.metric_improvement is None else _improvement_points(summary.metric_improvement),
+                improvement_min,
+                improvement_max,
+            ):
+                continue
+            if (runtime_min is not None or runtime_max is not None) and not _in_bucket(
+                None if summary.elapsed_seconds is None else summary.elapsed_seconds / 60.0,
+                runtime_min,
+                runtime_max,
+            ):
+                continue
+            if (dataset_min is not None or dataset_max is not None) and not _in_bucket(
+                float(summary.dataset_rows) if summary.dataset_rows else None,
+                dataset_min,
+                dataset_max,
+            ):
+                continue
+            if date or date_to or since:
+                created = _created_at_utc(summary.created_at)
                 if created is None:
                     continue
-                created_day = created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else str(created)[:10]
-                if created_day != date:
+                day = created.date().isoformat()
+                if date and (day < date if date_to else day != date):
+                    continue
+                if date_to and day > date_to:
+                    continue
+                if since and created < since:
                     continue
             summaries.append(summary)
 
@@ -693,6 +985,7 @@ def create_analytics_router(*, job_store) -> APIRouter:
 
         optimizer_counts: dict[str, int] = {}
         job_type_counts: dict[str, int] = {}
+        module_counts: dict[str, int] = {}
         total_dataset_rows = 0
         total_pairs_run = 0
         grid_search_count = 0
@@ -700,26 +993,19 @@ def create_analytics_router(*, job_store) -> APIRouter:
         for s in summaries:
             opt = s.optimizer_name or t("analytics.other_bucket")
             optimizer_counts[opt] = optimizer_counts.get(opt, 0) + 1
-            job_type = s.optimization_type or OPTIMIZATION_TYPE_RUN
-            job_type_counts[job_type] = job_type_counts.get(job_type, 0) + 1
+            type_key = _job_type_key(s)
+            job_type_counts[type_key] = job_type_counts.get(type_key, 0) + 1
+            if s.module_name:
+                module_counts[s.module_name] = module_counts.get(s.module_name, 0) + 1
             if s.dataset_rows:
                 total_dataset_rows += s.dataset_rows
-            if job_type == OPTIMIZATION_TYPE_GRID_SEARCH:
+            if s.optimization_type == OPTIMIZATION_TYPE_GRID_SEARCH:
                 grid_search_count += 1
                 if s.total_pairs:
                     total_pairs_run += s.total_pairs
             else:
                 single_run_count += 1
                 total_pairs_run += 1
-
-        model_counter: Counter = Counter()
-        for s in summaries:
-            m = s.model_name or (s.best_pair_label.split(" + ")[0] if s.best_pair_label else None)
-            if m:
-                model_counter[m] += 1
-        model_usage = [
-            DashboardAnalyticsNameValue(name=name, value=count) for name, count in model_counter.most_common(8)
-        ]
 
         owner_counter: Counter = Counter()
         for s in summaries:
@@ -738,108 +1024,148 @@ def create_analytics_router(*, job_store) -> APIRouter:
             DashboardAnalyticsNameValue(name=name, value=count) for name, count in access_counter.most_common()
         ]
 
-        improvements = [(s, s.metric_improvement) for s in success_items if s.metric_improvement is not None]
-        numeric_improvements = [v for _, v in improvements]
-        avg_improvement = sum(numeric_improvements) / len(numeric_improvements) if numeric_improvements else None
-        best_improvement = max(numeric_improvements) if numeric_improvements else None
+        points_by_id = {
+            s.optimization_id: _improvement_points(s.metric_improvement)
+            for s in success_items
+            if s.metric_improvement is not None
+        }
+        improvement_points = list(points_by_id.values())
+        avg_improvement = sum(improvement_points) / len(improvement_points) if improvement_points else None
+        median_improvement = median(improvement_points) if improvement_points else None
+        best_improvement = max(improvement_points) if improvement_points else None
         success_rate = (success_count / terminal_count) if terminal_count else 0.0
 
         runtimes = [s.elapsed_seconds for s in success_items if s.elapsed_seconds is not None]
         avg_runtime_seconds = (sum(runtimes) / len(runtimes)) if runtimes else None
 
-        opt_improvements: dict[str, list[float]] = {}
-        opt_runtimes: dict[str, list[float]] = {}
-        for s in success_items:
-            name = s.optimizer_name
-            if not name:
-                continue
-            if s.metric_improvement is not None:
-                opt_improvements.setdefault(name, []).append(s.metric_improvement)
-            if s.elapsed_seconds is not None:
-                opt_runtimes.setdefault(name, []).append(s.elapsed_seconds)
-        improvement_by_optimizer = [
-            DashboardAnalyticsOptimizerAverage(
+        improvement_histogram = _range_buckets([(v, v) for v in improvement_points], _IMPROVEMENT_EDGES_POINTS)
+        runtime_histogram = _range_buckets(
+            [
+                (s.elapsed_seconds / 60.0, points_by_id.get(s.optimization_id))
+                for s in success_items
+                if s.elapsed_seconds is not None
+            ],
+            _RUNTIME_EDGES_MINUTES,
+        )
+        dataset_size_buckets = _range_buckets(
+            [(float(s.dataset_rows), points_by_id.get(s.optimization_id)) for s in success_items if s.dataset_rows],
+            _DATASET_ROW_EDGES,
+        )
+
+        def _model_key(s: OptimizationSummaryResponse) -> str | None:
+            """Return the run's primary model, falling back to the grid's best pair.
+
+            Args:
+                s: The optimization summary.
+
+            Returns:
+                The model name, or None when the run recorded none.
+            """
+            if s.model_name:
+                return s.model_name
+            return s.best_pair_label.split(" + ")[0] if s.best_pair_label else None
+
+        def _group_stats(key_of: Callable[[OptimizationSummaryResponse], str | None]) -> dict[str, dict[str, Any]]:
+            """Roll the filtered runs up by ``key_of`` for the comparison tables.
+
+            Args:
+                key_of: Extracts the grouping key (optimizer / model) from a run.
+
+            Returns:
+                Per-key counts, success/terminal tallies and success-only
+                improvement/runtime samples, in first-seen order.
+            """
+            groups: dict[str, dict[str, Any]] = {}
+            for s in summaries:
+                key = key_of(s)
+                if not key:
+                    continue
+                g = groups.setdefault(
+                    key, {"count": 0, "success": 0, "terminal": 0, "improvements": [], "runtimes": []}
+                )
+                g["count"] += 1
+                if s.status in _TERMINAL_SUCCESS_OR_FAILED:
+                    g["terminal"] += 1
+                if s.status != OptimizationStatus.success:
+                    continue
+                g["success"] += 1
+                if s.optimization_id in points_by_id:
+                    g["improvements"].append(points_by_id[s.optimization_id])
+                if s.elapsed_seconds is not None:
+                    g["runtimes"].append(s.elapsed_seconds)
+            return groups
+
+        optimizer_stats = [
+            DashboardAnalyticsOptimizerStat(
                 name=name,
-                average=round(sum(vals) / len(vals), 6),
-                count=len(vals),
+                count=g["count"],
+                success_count=g["success"],
+                success_rate=round(g["success"] / g["terminal"], 4) if g["terminal"] else 0.0,
+                avg_improvement=round(sum(g["improvements"]) / len(g["improvements"]), 2)
+                if g["improvements"]
+                else None,
+                avg_runtime_minutes=round(sum(g["runtimes"]) / len(g["runtimes"]) / 60.0, 2) if g["runtimes"] else None,
             )
-            for name, vals in opt_improvements.items()
+            for name, g in sorted(_group_stats(lambda s: s.optimizer_name).items(), key=lambda kv: -kv[1]["count"])
         ]
-        runtime_minutes_by_optimizer = [
-            DashboardAnalyticsOptimizerAverage(
+        model_stats = [
+            DashboardAnalyticsModelStat(
                 name=name,
-                average=round((sum(vals) / len(vals)) / 60.0, 2),
-                count=len(vals),
+                count=g["count"],
+                success_count=g["success"],
+                success_rate=round(g["success"] / g["terminal"], 4) if g["terminal"] else 0.0,
+                avg_improvement=round(sum(g["improvements"]) / len(g["improvements"]), 2)
+                if g["improvements"]
+                else None,
             )
-            for name, vals in opt_runtimes.items()
+            for name, g in sorted(_group_stats(_model_key).items(), key=lambda kv: -kv[1]["count"])[:12]
         ]
-
-        top_improvement_items = [s for s in success_items if s.optimized_test_metric is not None][:10]
-        top_improvement = [_summary_to_analytics_job(s) for s in top_improvement_items]
-
-        runtime_distribution_items = [s for s in success_items if s.elapsed_seconds is not None][:15]
-        runtime_distribution = [_summary_to_analytics_job(s) for s in runtime_distribution_items]
-
-        dvs_items = [s for s in success_items if s.dataset_rows is not None and s.metric_improvement is not None]
-        dataset_vs_improvement = [_summary_to_analytics_job(s) for s in dvs_items]
-
-        eff_items: list[tuple[float, Any]] = []
-        for s in success_items:
-            if s.metric_improvement is None or s.elapsed_seconds is None or s.elapsed_seconds <= 0:
-                continue
-            delta = s.metric_improvement
-            if abs(delta) <= 1:
-                delta = delta * 100
-            efficiency = (delta / s.elapsed_seconds) * 60.0
-            eff_items.append((efficiency, s))
-        eff_items.sort(key=lambda pair: pair[0], reverse=True)
-        efficiency = [_summary_to_analytics_job(s) for _, s in eff_items[:10]]
 
         ranked = sorted(
-            improvements,
-            key=lambda pair: pair[1] if abs(pair[1]) > 1 else pair[1] * 100,
+            (s for s in success_items if s.optimization_id in points_by_id),
+            key=lambda s: points_by_id[s.optimization_id],
             reverse=True,
         )
-        top_jobs_by_improvement = [_summary_to_analytics_job(s) for s, _ in ranked[:5]]
+        top_jobs_by_improvement = [_summary_to_analytics_job(s) for s in ranked[:10]]
 
-        timeline_buckets: dict[str, int] = {}
+        dated: list[tuple[date_type, str]] = []
         for s in summaries:
-            created = s.created_at
+            created = _created_at_utc(s.created_at)
             if created is None:
                 continue
-            day = created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else str(created)[:10]
-            timeline_buckets[day] = timeline_buckets.get(day, 0) + 1
-        timeline_entries = sorted(timeline_buckets.items())[-14:]
-        timeline = [DashboardAnalyticsTimelineBucket(date=d, count=c) for d, c in timeline_entries]
+            status_value = s.status.value if isinstance(s.status, OptimizationStatus) else str(s.status)
+            dated.append((created.date(), status_value))
+        timeline, timeline_granularity = _build_timeline(dated)
 
         return DashboardAnalyticsResponse(
             filtered_total=filtered_total,
             status_counts=status_counts,
             optimizer_counts=optimizer_counts,
             job_type_counts=job_type_counts,
-            model_usage=model_usage,
             owner_usage=owner_usage,
             access_usage=access_usage,
+            module_counts=module_counts,
             success_count=success_count,
             failed_count=failed_count,
             running_count=running_count,
             terminal_count=terminal_count,
             success_rate=round(success_rate, 4),
-            avg_improvement=round(avg_improvement, 6) if avg_improvement is not None else None,
+            avg_improvement=round(avg_improvement, 2) if avg_improvement is not None else None,
+            median_improvement=round(median_improvement, 2) if median_improvement is not None else None,
+            best_improvement=round(best_improvement, 2) if best_improvement is not None else None,
             avg_runtime_seconds=round(avg_runtime_seconds, 2) if avg_runtime_seconds is not None else None,
             total_dataset_rows=total_dataset_rows,
             total_pairs_run=total_pairs_run,
             grid_search_count=grid_search_count,
             single_run_count=single_run_count,
-            best_improvement=round(best_improvement, 6) if best_improvement is not None else None,
-            improvement_by_optimizer=improvement_by_optimizer,
-            runtime_minutes_by_optimizer=runtime_minutes_by_optimizer,
-            top_improvement=top_improvement,
-            runtime_distribution=runtime_distribution,
-            dataset_vs_improvement=dataset_vs_improvement,
-            efficiency=efficiency,
+            improvement_histogram=improvement_histogram,
+            runtime_histogram=runtime_histogram,
+            dataset_size_buckets=dataset_size_buckets,
+            optimizer_stats=optimizer_stats,
+            model_stats=model_stats,
             top_jobs_by_improvement=top_jobs_by_improvement,
             timeline=timeline,
+            timeline_granularity=timeline_granularity,
             available_optimizers=sorted(available_optimizers),
             available_models=sorted(available_models),
             truncated=truncated,

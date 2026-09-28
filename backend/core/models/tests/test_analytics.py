@@ -8,7 +8,8 @@ from core.models.analytics import (
     AnalyticsSummaryResponse,
     DashboardAnalyticsJob,
     DashboardAnalyticsNameValue,
-    DashboardAnalyticsOptimizerAverage,
+    DashboardAnalyticsOptimizerStat,
+    DashboardAnalyticsRangeBucket,
     DashboardAnalyticsResponse,
     DashboardAnalyticsTimelineBucket,
     ModelStatsItem,
@@ -146,12 +147,22 @@ def test_dashboard_analytics_name_value_defaults_zero() -> None:
     assert nv.value == pytest.approx(0.0)
 
 
-def test_dashboard_analytics_optimizer_average_defaults() -> None:
-    """Verify DashboardAnalyticsOptimizerAverage defaults numeric fields."""
-    a = DashboardAnalyticsOptimizerAverage(name="gepa")
+def test_dashboard_analytics_optimizer_stat_defaults() -> None:
+    """Verify DashboardAnalyticsOptimizerStat defaults numeric fields."""
+    a = DashboardAnalyticsOptimizerStat(name="gepa")
 
-    assert a.average == pytest.approx(0.0)
     assert a.count == 0
+    assert a.success_rate == pytest.approx(0.0)
+    assert a.avg_improvement is None
+
+
+def test_dashboard_analytics_range_bucket_defaults_open_ended() -> None:
+    """Verify DashboardAnalyticsRangeBucket defaults to an open, empty range."""
+    b = DashboardAnalyticsRangeBucket()
+
+    assert b.lower is None
+    assert b.upper is None
+    assert b.count == 0
 
 
 def test_dashboard_analytics_timeline_bucket_defaults_zero() -> None:
@@ -160,6 +171,7 @@ def test_dashboard_analytics_timeline_bucket_defaults_zero() -> None:
 
     assert b.date == "2026-04-28"
     assert b.count == 0
+    assert b.success_count == 0
 
 
 def test_dashboard_analytics_response_defaults() -> None:
@@ -170,17 +182,18 @@ def test_dashboard_analytics_response_defaults() -> None:
     assert r.status_counts == {}
     assert r.optimizer_counts == {}
     assert r.job_type_counts == {}
-    assert r.model_usage == []
+    assert r.module_counts == {}
     assert r.success_count == 0
     assert r.success_rate == pytest.approx(0.0)
-    assert r.improvement_by_optimizer == []
-    assert r.runtime_minutes_by_optimizer == []
-    assert r.top_improvement == []
-    assert r.runtime_distribution == []
-    assert r.dataset_vs_improvement == []
-    assert r.efficiency == []
+    assert r.median_improvement is None
+    assert r.improvement_histogram == []
+    assert r.runtime_histogram == []
+    assert r.dataset_size_buckets == []
+    assert r.optimizer_stats == []
+    assert r.model_stats == []
     assert r.top_jobs_by_improvement == []
     assert r.timeline == []
+    assert r.timeline_granularity == "day"
     assert r.available_optimizers == []
     assert r.available_models == []
     assert r.truncated is False
@@ -190,14 +203,14 @@ def test_dashboard_analytics_response_nested_payloads() -> None:
     """Verify DashboardAnalyticsResponse stores nested model collections."""
     r = DashboardAnalyticsResponse(
         filtered_total=2,
-        model_usage=[DashboardAnalyticsNameValue(name="gpt-4o", value=5.0)],
-        improvement_by_optimizer=[DashboardAnalyticsOptimizerAverage(name="gepa", average=0.2, count=2)],
+        owner_usage=[DashboardAnalyticsNameValue(name="alice", value=5.0)],
+        optimizer_stats=[DashboardAnalyticsOptimizerStat(name="gepa", count=2, avg_improvement=0.2)],
         timeline=[DashboardAnalyticsTimelineBucket(date="2026-04-28", count=2)],
-        top_improvement=[DashboardAnalyticsJob(optimization_id="a", status="success")],
+        top_jobs_by_improvement=[DashboardAnalyticsJob(optimization_id="a", status="success")],
     )
 
     assert r.filtered_total == 2
-    assert r.model_usage[0].name == "gpt-4o"
-    assert r.improvement_by_optimizer[0].count == 2
+    assert r.owner_usage[0].name == "alice"
+    assert r.optimizer_stats[0].count == 2
     assert r.timeline[0].count == 2
-    assert r.top_improvement[0].optimization_id == "a"
+    assert r.top_jobs_by_improvement[0].optimization_id == "a"
