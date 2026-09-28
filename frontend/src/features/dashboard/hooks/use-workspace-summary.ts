@@ -45,9 +45,21 @@ export function useWorkspaceSummary(): WorkspaceSummary {
   const [datasets, setDatasets] = useState<WorkspaceDatasetsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const token = session?.backendAccessToken;
+  const hasToken = Boolean(token);
+  // Declared before the fetch effect so the bearer is installed first on mount
+  // (child effects run before ApiAuthTokenBridge's). Keyed on the token value
+  // so a rotated token is picked up without re-fetching the summary below.
+  useEffect(() => {
+    if (token) setApiAuthToken(token);
+  }, [token]);
+
+  // Every NextAuth session refetch mints a fresh backend JWT (new iat/jti), so
+  // keying this on the token *value* re-pulled both lists on each rotation
+  // (twice during dev hydration). The data does not depend on which token
+  // signed the request, so only re-run when auth state actually changes.
   useEffect(() => {
     if (status === "loading") return;
-    if (session?.backendAccessToken) setApiAuthToken(session.backendAccessToken);
     let cancelled = false;
     void Promise.allSettled([listTaggerSessions({ limit: 12 }), listDatasets()]).then(
       ([sessions, library]) => {
@@ -71,7 +83,7 @@ export function useWorkspaceSummary(): WorkspaceSummary {
     return () => {
       cancelled = true;
     };
-  }, [status, session?.backendAccessToken]);
+  }, [status, hasToken]);
 
   return { tagging, datasets, loading };
 }
