@@ -71,6 +71,30 @@ def test_get_job_payload_returns_when_present(client: TestClient, job_store: Fak
     assert body["payload"]["dataset"] == [{"q": 1}]
 
 
+def test_get_job_payload_redacts_api_keys_under_wire_aliases(client: TestClient, job_store: FakeJobStore) -> None:
+    """Payloads stored with ``by_alias=True`` still have every inline api_key scrubbed."""
+    secret_config = {"name": "openai/gpt-4o-mini", "extra": {"api_key": "sk-secret", "api_base": "http://gw"}}
+    job_store.seed_job(
+        "job-alias",
+        payload={
+            "model_config": secret_config,
+            "reflection_model_config": secret_config,
+            "task_model_config": secret_config,
+            "generation_models": [secret_config],
+            "reflection_models": [secret_config],
+        },
+        payload_overview={"job_type": "run"},
+    )
+    r = client.get("/optimizations/job-alias/payload")
+    assert r.status_code == 200
+    payload = r.json()["payload"]
+    assert "sk-secret" not in r.text
+    for field in ("model_config", "reflection_model_config", "task_model_config"):
+        assert payload[field]["extra"] == {"api_base": "http://gw"}
+    for field in ("generation_models", "reflection_models"):
+        assert payload[field][0]["extra"] == {"api_base": "http://gw"}
+
+
 def test_rename_job_validates_length(client: TestClient, job_store: FakeJobStore) -> None:
     """An empty rename payload is rejected by length validation (422)."""
     job_store.seed_job("rn1", payload_overview={})
