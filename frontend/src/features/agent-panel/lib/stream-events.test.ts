@@ -90,9 +90,15 @@ test("done carries the assistant message, blank when missing", () => {
     ["done", {}],
   ]);
   assert.deepEqual(calls, [
-    ["done", { assistant_message: "hi" }],
-    ["done", { assistant_message: "" }],
+    ["done", { assistant_message: "hi", stats: null }],
+    ["done", { assistant_message: "", stats: null }],
   ]);
+});
+
+test("done passes the turn stats through untouched", () => {
+  const stats = { input_tokens: 12, output_tokens: 3, duration_ms: 900, ttft_ms: 200 };
+  const calls = dispatch([["done", { assistant_message: "hi", stats }]]);
+  assert.deepEqual(calls, [["done", { assistant_message: "hi", stats }]]);
 });
 
 test("an error carries its code, and falls back to the generic text", () => {

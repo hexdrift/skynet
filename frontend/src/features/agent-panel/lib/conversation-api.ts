@@ -7,6 +7,7 @@
 // missing data is fatal (drawer empty) or silent (no-op).
 
 import type { AgentMessage, AgentToolCall } from "@/shared/ui/agent/types";
+import { parseTurnStats } from "@/shared/ui/agent/turn-stats";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { fetchWithAuthRetry } from "@/shared/lib/api";
 
@@ -42,6 +43,7 @@ interface RawMessage {
   role: string;
   content: string;
   tool_calls?: Array<Record<string, unknown>> | null;
+  stats?: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -70,6 +72,7 @@ function toMessage(raw: RawMessage): AgentMessage {
     role,
     content: raw.content,
     toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+    stats: parseTurnStats(raw.stats),
   };
 }
 

@@ -59,7 +59,10 @@ export function dispatchGeneralistEvent(
       });
       break;
     case "done":
-      handlers.onDone({ assistant_message: String(data.assistant_message ?? "") });
+      handlers.onDone({
+        assistant_message: String(data.assistant_message ?? ""),
+        stats: data.stats ?? null,
+      });
       break;
     case "error":
       handlers.onError(

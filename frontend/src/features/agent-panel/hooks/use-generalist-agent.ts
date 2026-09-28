@@ -6,6 +6,7 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveLocale } from "@/shared/lib/runtime-locale";
 
 import type { AgentMessage, AgentStatus, AgentToolCall } from "@/shared/ui/agent/types";
+import { parseTurnStats } from "@/shared/ui/agent/turn-stats";
 
 import { confirmGeneralistApproval, streamGeneralistAgent } from "../lib/stream";
 import type {
@@ -488,6 +489,7 @@ export function useGeneralistAgent(args: UseGeneralistAgentArgs): GeneralistAgen
               next[next.length - 1] = {
                 ...last,
                 content: result.assistant_message || fallback,
+                stats: parseTurnStats(result.stats),
               };
               return next;
             });

@@ -2151,6 +2151,13 @@ export type MessageKey =
   | "shared.agent.copy"
   | "shared.agent.copy_code"
   | "shared.agent.edit_and_resend"
+  | "shared.agent.info.first_token"
+  | "shared.agent.info.input_tokens"
+  | "shared.agent.info.label"
+  | "shared.agent.info.output_tokens"
+  | "shared.agent.info.speed"
+  | "shared.agent.info.tokens_per_second"
+  | "shared.agent.info.total_time"
   | "shared.agent.regenerate"
   | "shared.agent.run_code"
   | "shared.agent.run_code_prompt"
@@ -4995,6 +5002,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.agent.copy": "העתק/העתיקי",
   "shared.agent.copy_code": "העתק/העתיקי את הקוד",
   "shared.agent.edit_and_resend": "ערוך/ערכי ושלח/שלחי מחדש",
+  "shared.agent.info.first_token": "זמן עד הטוקן הראשון",
+  "shared.agent.info.input_tokens": "טוקנים בקלט",
+  "shared.agent.info.label": "פרטי התשובה",
+  "shared.agent.info.output_tokens": "טוקנים בפלט",
+  "shared.agent.info.speed": "מהירות",
+  "shared.agent.info.tokens_per_second": "{value} טוקנים/שנ׳",
+  "shared.agent.info.total_time": "זמן כולל",
   "shared.agent.regenerate": "נסה/נסי שוב",
   "shared.agent.run_code": "בדוק/בדקי את הקוד",
   "shared.agent.run_code_prompt": "בדוק/בדקי את קטע הקוד הבא ({language}) והחזר/החזירי את התוצאות:\n\n```{language}\n{code}\n```",

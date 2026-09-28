@@ -40,7 +40,11 @@ export interface GeneralistAgentHandlers {
   onApprovalResolved?: (ev: ApprovalResolvedPayload) => void;
   onMessagePatch?: (chunk: string) => void;
   onConversationMeta?: (ev: ConversationMetaPayload) => void;
-  onDone: (result: { assistant_message: string }) => void;
+  onDone: (result: {
+    assistant_message: string;
+    /** Raw `stats` block; read it with `parseTurnStats`. */
+    stats: unknown;
+  }) => void;
   onError: (message: string, code?: string) => void;
   signal?: AbortSignal;
 }

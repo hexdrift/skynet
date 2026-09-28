@@ -127,7 +127,7 @@ export function ChatTranscript({
       !isEditing &&
       agentMsg !== null &&
       !isStreamingThisPair &&
-      (agentText.length > 0 || Boolean(agentMsg.model));
+      (agentText.length > 0 || Boolean(agentMsg.model) || Boolean(agentMsg.stats));
 
     // The send → first-token gap: mirrors exactly when AgentBubble collapses to
     // null (no text, tools, or reasoning yet). The ember stands in for that
@@ -178,6 +178,7 @@ export function ChatTranscript({
                   text={agentMsg.content}
                   model={agentMsg.model}
                   servedModel={agentMsg.servedModel}
+                  stats={agentMsg.stats}
                   onRegenerate={
                     pair.user
                       ? () =>
