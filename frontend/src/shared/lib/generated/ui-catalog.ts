@@ -4611,7 +4611,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.agent.regenerate": "נסה/נסי שוב",
   "shared.agent.run_code": "בדוק/בדקי את הקוד",
   "shared.agent.run_code_prompt": "בדוק/בדקי את קטע הקוד הבא ({language}) והחזר/החזירי את התוצאות:\n\n```{language}\n{code}\n```",
-  "shared.agent.seconds_short": "s",
+  "shared.agent.seconds_short": "שנ׳",
   "shared.agent.send": "שלח/שלחי",
   "shared.agent.thinking": "חושב",
   "shared.agent.thought_seconds": "חשב במשך {seconds} שניות",
