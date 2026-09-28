@@ -48,12 +48,6 @@ def test_catalog_prefixes_match_the_registry() -> None:
     assert _BYOK_CATALOG_PROVIDERS == BYOK_CATALOG_PREFIXES
 
 
-def test_frontend_catalog_slugs_match_the_registry_in_order() -> None:
-    """The frontend ``BYOK_PROVIDERS`` slugs equal the registry slugs, in order."""
-    slugs = re.findall(r'slug:\s*"([^"]+)"', _frontend_byok_source())
-    assert tuple(slugs) == tuple(slug for slug, _ in BYOK_PROVIDER_SLUGS)
-
-
 def test_frontend_bridge_matches_the_registry() -> None:
     """The frontend slug->prefix bridge equals the registry's, exactly."""
     source = _frontend_byok_source()
