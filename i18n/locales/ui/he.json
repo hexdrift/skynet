@@ -9,7 +9,6 @@
   "agent.composer.transcribe_failed": "התמלול נכשל — אפשר לנסות שוב",
   "agent.composer.transcribing": "מתמלל...",
   "agent.error.context_too_long": "השיחה ארוכה מדי עבור חלון ההקשר של המודל — התחילו שיחה חדשה או קצרו את ההודעה",
-  "agent.model_menu.auto": "אוטומטי",
   "agent.model_menu.effort_high": "גבוהה",
   "agent.model_menu.effort_low": "נמוכה",
   "agent.model_menu.effort_max": "מקסימלית",

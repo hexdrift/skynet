@@ -17,8 +17,8 @@ Two distinct modes share this module:
   call so the UI can render a tool-call card and swap the code atomically.
 
 The agent runs on whatever LiteLLM-compatible model is configured via
-``settings.code_agent_model`` (default: ``openrouter/openrouter/auto-beta``,
-OpenRouter's Auto Router). Users can point it at an internal gateway via
+``settings.code_agent_model`` (default: the inert ``openai/on-prem-default``
+alias, which no gateway serves). Operators point it at an internal gateway via
 ``CODE_AGENT_BASE_URL``.
 """
 

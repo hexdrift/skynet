@@ -15,8 +15,6 @@ import type { TurnStats } from "./types";
 interface MessageActionsProps {
   text: string;
   model?: string | null;
-  /** Concrete model the Auto Router picked for this turn, when known. */
-  servedModel?: string | null;
   stats?: TurnStats | null;
   onRegenerate?: () => void;
   className?: string;
@@ -96,26 +94,13 @@ function statRows(stats: TurnStats | null | undefined): Array<{ label: string; v
 export function MessageActions({
   text,
   model,
-  servedModel,
   stats,
   onRegenerate,
   className,
 }: MessageActionsProps) {
   const { copied, copy } = useCopyToClipboard();
 
-  // Turns routed by OpenRouter's Auto Router (the composer's Auto tiers)
-  // report the router's own id — read it back as "Auto", and when the
-  // backend resolved the concrete pick, reveal it: "Auto · gemini-3.6-flash".
-  const isAutoRouted = !!model && model.startsWith("openrouter/openrouter/auto");
-  const served = servedModel ? (servedModel.split("/").pop() ?? servedModel) : null;
-  const shortModel = isAutoRouted
-    ? served
-      ? `${msg("agent.model_menu.auto")} · ${served}`
-      : msg("agent.model_menu.auto")
-    : model
-      ? (model.split("/").pop() ?? model)
-      : null;
-  const fullModel = isAutoRouted && servedModel ? servedModel : model;
+  const shortModel = model ? (model.split("/").pop() ?? model) : null;
   const rows = statRows(stats);
 
   return (
@@ -174,7 +159,7 @@ export function MessageActions({
             </Badge>
           </TooltipTrigger>
           <TooltipContent side="top" dir="ltr" className="font-mono">
-            {fullModel}
+            {model}
           </TooltipContent>
         </Tooltip>
       )}

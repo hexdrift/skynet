@@ -11,7 +11,6 @@ export type MessageKey =
   | "agent.composer.transcribe_failed"
   | "agent.composer.transcribing"
   | "agent.error.context_too_long"
-  | "agent.model_menu.auto"
   | "agent.model_menu.effort_high"
   | "agent.model_menu.effort_low"
   | "agent.model_menu.effort_max"
@@ -2675,7 +2674,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "agent.composer.transcribe_failed": "התמלול נכשל — אפשר לנסות שוב",
   "agent.composer.transcribing": "מתמלל...",
   "agent.error.context_too_long": "השיחה ארוכה מדי עבור חלון ההקשר של המודל — התחילו שיחה חדשה או קצרו את ההודעה",
-  "agent.model_menu.auto": "אוטומטי",
   "agent.model_menu.effort_high": "גבוהה",
   "agent.model_menu.effort_low": "נמוכה",
   "agent.model_menu.effort_max": "מקסימלית",

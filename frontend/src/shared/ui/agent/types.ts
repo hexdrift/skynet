@@ -17,8 +17,6 @@ export interface AgentMessage {
   content: string;
   toolCalls?: AgentToolCall[];
   model?: string | null;
-  /** Concrete model the Auto Router picked for this turn, when resolved. */
-  servedModel?: string | null;
   stats?: TurnStats | null;
 }
 
