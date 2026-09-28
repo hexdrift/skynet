@@ -1509,7 +1509,7 @@ def _build_agent_lm(
         reasoning_effort: Explicit effort level for the chosen model; ``None``
             keeps the model's default.
         lm_extra_body: Extra request-body fields merged into the provider
-            call (the auto router's plugin dial rides here).
+            call.
 
     Reasoning knobs we send, by provider:
 
@@ -1517,11 +1517,12 @@ def _build_agent_lm(
       ``extra_body={"reasoning_split": true}`` so the provider emits its
       interleaved ``<think>`` reasoning in a clean ``reasoning_details``
       channel. Thinking depth is always max on this endpoint — no knob.
-    - **OpenRouter MiniMax** (``openrouter/minimax/...``, the shipped default)
-      **and Fireworks-hosted MiniMax** (``fireworks_ai/.../minimax-*``):
-      reasoning arrives inline in the assistant content as ``<think>…</think>``
-      blocks. Neither host honours ``reasoning_split``, so we send nothing.
-    - **Everything else** (``openai/gpt-4o-mini`` etc.): no reasoning knob.
+    - **Fireworks-hosted MiniMax** (``fireworks_ai/.../minimax-*``) **and
+      BYOK OpenRouter MiniMax** (``openrouter/minimax/...``): reasoning arrives
+      inline in the assistant content as ``<think>…</think>`` blocks. Neither
+      host honours ``reasoning_split``, so we send nothing.
+    - **Everything else** (including the default ``openai/on-prem-default``
+      internal-gateway alias): no reasoning knob.
 
     Returns:
         A configured :class:`dspy.LM` instance for the code agent.
@@ -3087,8 +3088,8 @@ async def run_code_agent(
             (``settings.code_agent_model``).
         reasoning_effort: Explicit reasoning-effort level for ``model``;
             ``None`` keeps the model's default.
-        lm_extra_body: Provider ``extra_body`` (e.g. the auto-router plugin
-            dial) merged into the LM's request payload.
+        lm_extra_body: Provider ``extra_body`` merged into the LM's request
+            payload.
         usage_sink: Optional list the built LM is appended to, so the caller
             can meter the turn's token usage on any exit path.
 

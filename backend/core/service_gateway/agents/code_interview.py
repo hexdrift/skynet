@@ -336,8 +336,7 @@ async def interview_turn_stream(
         model: LiteLLM id conducting the interview; ``None`` runs the default.
         reasoning_effort: Explicit effort level for ``model``; ``None`` keeps
             the model's default.
-        lm_extra_body: Extra request-body fields for the LM call (the auto
-            router's plugin dial when the composer picked an Auto tier).
+        lm_extra_body: Extra request-body fields for the LM call.
         usage_sink: Optional list the built LM is appended to, so the caller
             can meter the turn's token usage on any exit path.
     """

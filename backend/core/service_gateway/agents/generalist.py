@@ -79,17 +79,18 @@ def _build_generalist_lm() -> dspy.LM:
 
     - **Native MiniMax** (``minimax/...``): ``extra_body={"reasoning_split": true}``
       surfaces the interleaved ``<think>`` channel as ``reasoning_details``.
-    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``) **and OpenRouter
-      MiniMax** (``openrouter/minimax/...``, the shipped default): reasoning
-      streams inline in the assistant content as ``<think>…</think>`` blocks;
-      no provider-side knob.
+    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``) **and BYOK
+      OpenRouter MiniMax** (``openrouter/minimax/...``): reasoning streams
+      inline in the assistant content as ``<think>…</think>`` blocks; no
+      provider-side knob.
     - **OpenAI reasoning models** (``openai/gpt-5.*``, ``openai/o1|o3|o4*``):
       pass ``reasoning_effort="medium"`` so the model emits reasoning content
       that LiteLLM normalizes to ``delta.reasoning_content``. DSPy validates
       these models at init — ``temperature=1.0`` and ``max_tokens>=16000`` are
       mandatory, not optional.
-    - **Everything else**: no reasoning knob; ``max_tokens=4000`` is plenty for
-      a chat-style reply.
+    - **Everything else** (including the default ``openai/on-prem-default``
+      internal-gateway alias): no reasoning knob; ``max_tokens=4000`` is plenty
+      for a chat-style reply.
 
     Returns:
         A configured :class:`dspy.LM` instance for the generalist agent.
