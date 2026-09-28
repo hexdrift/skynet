@@ -7,7 +7,12 @@ from unittest.mock import MagicMock, patch
 import dspy
 import pytest
 
-from core.constants import PROGRESS_GRID_PAIR_FAILED, PROGRESS_SPLITS_READY
+from core.constants import (
+    PROGRESS_EVALUATION_STARTED,
+    PROGRESS_GRID_PAIR_FAILED,
+    PROGRESS_OPTIMIZED,
+    PROGRESS_SPLITS_READY,
+)
 from core.exceptions import ServiceError
 from core.models import (
     ColumnMapping,
@@ -147,6 +152,44 @@ def test_run_calls_progress_callback_for_splits_ready() -> None:
         service.run(payload, progress_callback=_cb)
 
     assert PROGRESS_SPLITS_READY in events
+
+
+def test_run_emits_evaluation_started_before_the_optimized_result() -> None:
+    """The final held-out pass is announced before its result lands."""
+    service = _service()
+    payload = _run_request_with_test()
+    events: list[str] = []
+
+    def _cb(event: str, data: dict) -> None:
+        events.append(event)
+
+    with patch_core_dependencies():
+        service.run(payload, progress_callback=_cb)
+
+    assert events.index(PROGRESS_EVALUATION_STARTED) < events.index(PROGRESS_OPTIMIZED)
+
+
+def test_run_grid_search_tags_evaluation_started_with_the_pair_index() -> None:
+    """Each grid pair announces its own final evaluation, tagged with its index."""
+    service = _service()
+    payload = _grid_request()
+    started: list[dict] = []
+
+    def _cb(event: str, data: dict) -> None:
+        if event == PROGRESS_EVALUATION_STARTED:
+            started.append(data)
+
+    def _eval_side_effect(program, test_examples, metric, collect_per_example=False):
+        return (0.8, [])
+
+    with (
+        patch_core_dependencies(),
+        patch("core.service_gateway.optimization.core.evaluate_on_test", side_effect=_eval_side_effect),
+        patch("core.worker.log_handler.set_current_pair_index"),
+    ):
+        service.run_grid_search(payload, progress_callback=_cb)
+
+    assert sorted(d["pair_index"] for d in started) == [0, 1]
 
 
 def test_run_returns_baseline_program_when_optimized_worse() -> None:

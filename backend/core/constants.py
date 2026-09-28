@@ -60,6 +60,10 @@ PAYLOAD_OVERVIEW_SOURCE_DATASET_ID = "source_dataset_id"
 PROGRESS_SPLITS_READY = "dataset_splits_ready"
 PROGRESS_BASELINE = "baseline_evaluated"
 PROGRESS_OPTIMIZED = "optimized_evaluated"
+# Fires when the optimizer has finished and the final held-out scoring of
+# its best version begins: without it the run view shows that pass as
+# "optimizing", since the next marker is only its result.
+PROGRESS_EVALUATION_STARTED = "evaluation_started"
 PROGRESS_OPTIMIZER = "optimizer_progress"
 PROGRESS_CANDIDATE = "candidate"
 PROGRESS_REJECTED = "candidate_rejected"
@@ -84,6 +88,7 @@ STRUCTURAL_PROGRESS_EVENTS = frozenset(
         PROGRESS_SPLITS_READY,
         PROGRESS_BASELINE,
         PROGRESS_OPTIMIZED,
+        PROGRESS_EVALUATION_STARTED,
         PROGRESS_CANDIDATE,
         PROGRESS_REJECTED,
         PROGRESS_VALSET,
