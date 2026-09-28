@@ -810,6 +810,7 @@ class DspyService:
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            split_version=payload.split_version,
         )
         logger.info(
             "Split dataset -> train=%d val=%d test=%d",
@@ -1069,6 +1070,7 @@ class DspyService:
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            split_version=payload.split_version,
         )
         if progress_callback:
             progress_callback(
@@ -1401,6 +1403,7 @@ class DspyService:
             payload.split_fractions,
             shuffle=payload.shuffle,
             seed=payload.seed or self.default_seed,
+            split_version=payload.split_version,
         )
         split_counts = SplitCounts(
             train=len(splits.train),

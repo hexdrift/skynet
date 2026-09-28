@@ -32,6 +32,7 @@ from ...constants import (
 from ...i18n_keys import I18nKey
 from ...registry import RegistryError
 from ...service_gateway import ServiceError
+from ...service_gateway.datasets.split_counts import CURRENT_SPLIT_VERSION, SPLIT_VERSION_LEGACY
 from ...storage.models import Base, ByokProviderKeyModel
 from ...storage.usage import StorageUsage
 from ..model_catalog import CatalogModel, ModelCatalogResponse
@@ -455,6 +456,34 @@ def test_submit_persists_without_starting_worker_on_api_only_pods(
     row = store._jobs[resp.json()["optimization_id"]]
     assert row["payload"]["username"] == "alice"
     assert row["code_version"] == _sub_mod.settings.code_version
+
+
+@pytest.mark.parametrize(
+    ("path", "payload_factory"),
+    [("/run", _run_payload), ("/grid-search", _grid_payload)],
+)
+def test_submit_stamps_the_current_split_version(
+    path: str,
+    payload_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new submission is stored with the current split allocator, whatever the body claims.
+
+    Args:
+        path: Submission endpoint under test.
+        payload_factory: Callable producing a valid endpoint payload.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    store = _FakeJobStore()
+    client = _make_client(_FakeService(), store, monkeypatch=monkeypatch)
+    payload = payload_factory()
+    payload["split_version"] = SPLIT_VERSION_LEGACY
+
+    resp = client.post(path, json=payload)
+
+    assert resp.status_code == 201
+    row = store._jobs[resp.json()["optimization_id"]]
+    assert row["payload"]["split_version"] == CURRENT_SPLIT_VERSION
 
 
 def test_submit_run_echoes_name_and_authenticated_username(monkeypatch: pytest.MonkeyPatch) -> None:

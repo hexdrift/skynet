@@ -35,6 +35,7 @@ import random
 from ...i18n import t
 from ...models.common import SplitCounts, SplitFractions
 from ...models.dataset import DatasetProfile, SplitPlan
+from .split_counts import split_counts
 
 TIER_TINY = 30
 TIER_SMALL = 80
@@ -60,7 +61,7 @@ def recommend_split(profile: DatasetProfile, *, seed: int | None = None) -> Spli
     """
     total = profile.row_count
     fractions = _recommend_fractions(total)
-    counts = _compute_counts(total, fractions)
+    counts = split_counts(total, fractions)
     resolved_seed = seed if seed is not None else random.Random().randint(0, 2**31 - 1)
 
     return SplitPlan(
@@ -110,36 +111,12 @@ def _recommend_fractions(total: int) -> SplitFractions:
     return SplitFractions(train=train_fraction, val=val_fraction, test=test_fraction)
 
 
-def _compute_counts(total: int, fractions: SplitFractions) -> SplitCounts:
-    """Convert fractional sizes into integer counts that sum to ``total``.
-
-    Rounds train and val down; test absorbs the remainder so the three
-    counts always sum exactly to ``total``. No floor logic — the new
-    tier policy already guarantees test=0 when the dataset can't
-    afford a meaningful holdout.
-
-    Args:
-        total: Total number of rows in the dataset.
-        fractions: Recommended train/val/test fractions.
-
-    Returns:
-        :class:`SplitCounts` with train+val+test == total.
-    """
-    train = int(total * fractions.train)
-    val = int(total * fractions.val)
-    if fractions.test == 0:
-        train = total - val
-        return SplitCounts(train=train, val=val, test=0)
-    test = total - train - val
-    return SplitCounts(train=train, val=val, test=test)
-
-
 def _build_rationale(total: int, counts: SplitCounts) -> list[str]:
     """Build short Hebrew rationale bullets explaining the chosen tier.
 
     Args:
         total: Total dataset size.
-        counts: Per-split row counts produced by ``_compute_counts``.
+        counts: Per-split row counts produced by ``split_counts``.
 
     Returns:
         A list of short Hebrew bullet strings describing the plan.

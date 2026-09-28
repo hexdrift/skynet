@@ -63,6 +63,7 @@ from ...notifications import (
     notify_share_invite,
 )
 from ...service_gateway.dashboard import invalidate_public_dashboard_cache
+from ...service_gateway.datasets.split_counts import split_counts_for_version
 from ...service_gateway.embedding_pipeline import set_embedding_privacy
 from ...service_gateway.language_models import build_language_model
 from ...storage.models import (
@@ -266,8 +267,9 @@ def _test_split_indices(payload: dict[str, Any], optimization_id: str, total: in
     ordered = list(range(total))
     if shuffle:
         random.Random(effective_seed).shuffle(ordered)
-    train_end = int(total * fractions.train)
-    val_end = train_end + int(total * fractions.val)
+    counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+    train_end = counts.train
+    val_end = train_end + counts.val
     return ordered[val_end:]
 
 
@@ -307,8 +309,9 @@ def _full_dataset(job_data: dict[str, Any], optimization_id: str) -> dict[str, A
     indices = list(range(total))
     if shuffle:
         random.Random(effective_seed).shuffle(indices)
-    train_end = int(total * fractions.train)
-    val_end = train_end + int(total * fractions.val)
+    counts = split_counts_for_version(total, fractions, payload.get("split_version"))
+    train_end = counts.train
+    val_end = train_end + counts.val
     train_idx = indices[:train_end]
     val_idx = indices[train_end:val_end]
     test_idx = indices[val_end:]
