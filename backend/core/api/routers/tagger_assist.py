@@ -722,6 +722,10 @@ def create_tagger_assist_router(*, job_store, get_worker_ref: Callable[[], Any])
         data = tagging.build_data_rows(columns, rows)
         with Session(job_store.engine) as db:
             row = _load_for_role(db, session_id, user)
+            # A concurrent generate (a second tab) may have landed first; never
+            # overwrite rows that are already stored.
+            if row.data:
+                raise DomainError("tagger.assist.not_synthetic", status=409)
             row.config = cast(Any, {**cast("dict[str, Any]", row.config), "inputColumns": columns})
             row.columns = cast(Any, columns)
             row.data = cast(Any, data)

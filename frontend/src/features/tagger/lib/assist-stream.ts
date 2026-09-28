@@ -2,6 +2,7 @@ import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { readServerSentEvents } from "@/shared/lib/sse";
 import { fetchWithAuthRetry, parseInterviewOptions, type InterviewOption } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
+import { DEFAULT_SYNTHETIC_ROWS } from "./assist";
 import type { AssistPrediction, DatasetSpec, TaggerConfig } from "./types";
 
 // Resolve lazily — a module-load const races the injected window.__SKYNET_ENV__
@@ -28,7 +29,10 @@ function parseDatasetSpec(raw: unknown): DatasetSpec | null {
   return {
     brief,
     columns: Array.isArray(spec.columns) ? spec.columns.map(String) : [],
-    rows: typeof spec.rows === "number" && spec.rows > 0 ? Math.round(spec.rows) : 30,
+    rows:
+      typeof spec.rows === "number" && spec.rows > 0
+        ? Math.round(spec.rows)
+        : DEFAULT_SYNTHETIC_ROWS,
   };
 }
 

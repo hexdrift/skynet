@@ -38,7 +38,7 @@ import type { InterviewOption } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
 import type { AutotagEstimate } from "../hooks/use-tagger";
-import { calibrationTarget } from "../lib/assist";
+import { DEFAULT_SYNTHETIC_ROWS, calibrationTarget } from "../lib/assist";
 import type { AnnotationMode, AssistState, Category, TaggerConfig } from "../lib/types";
 import { Textarea } from "@/shared/ui/primitives/textarea";
 
@@ -165,7 +165,9 @@ export function TaggerInterview({
         <RubricCard
           config={config}
           assist={assist}
-          rowCount={datasetPending ? (assist.datasetSpec?.rows ?? 0) : rowCount}
+          rowCount={
+            datasetPending ? (assist.datasetSpec?.rows ?? DEFAULT_SYNTHETIC_ROWS) : rowCount
+          }
           datasetPending={datasetPending}
           generating={generating}
           error={error}

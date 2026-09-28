@@ -46,6 +46,7 @@ import {
   flaggedRowIds,
   initialAssistState,
   labelsAgree,
+  pendingDatasetSpec,
   sampleRowIds,
 } from "../lib/assist";
 import { prefillFreetextPredictions } from "../lib/freetext-prefill";
@@ -723,8 +724,12 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
   // that follows samples real rows. Resolves false when nothing was written,
   // leaving the contract card up with the error and its retry.
   const generateDataset = useCallback(async (): Promise<boolean> => {
-    const spec = assistRef.current?.datasetSpec;
-    if (!sessionId || !spec || generating) return false;
+    if (!sessionId || !assistRef.current || generating) return false;
+    const spec = pendingDatasetSpec(assistRef.current);
+    if (!spec) {
+      setAssistError("synthesize");
+      return false;
+    }
     setGenerating(true);
     setAssistError(null);
     try {

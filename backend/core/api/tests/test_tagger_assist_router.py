@@ -724,3 +724,24 @@ def test_synthesize_maps_engine_failure_to_502(monkeypatch) -> None:
     resp = client.post(f"/tagging-sessions/{session_id}/assist/synthesize", json={"brief": "Reviews", "rows": 5})
     assert resp.status_code == 502
     assert resp.json()["code"] == "tagger.assist.llm_failed"
+
+
+def test_synthesize_never_overwrites_rows_that_landed_meanwhile(monkeypatch) -> None:
+    """A concurrent generate that stored rows first wins; the late one gets 409."""
+    client, store = _client(_ALICE)
+    session_id = client.post("/tagging-sessions", json=_SYNTHETIC_BODY).json()["id"]
+    first = [{"id": 1, "text": "First", "fields": [{"column": "text", "value": "First"}]}]
+
+    def racing_synthesize(brief, columns, count, usage_sink=None):
+        """Store another request's rows while this one is still generating."""
+        with Session(store.engine) as db:
+            row = db.get(TaggingSessionModel, session_id)
+            row.data = first
+            row.row_count = 1
+            db.commit()
+        return ["text"], [{"text": "Second"}]
+
+    monkeypatch.setattr(tagging, "synthesize_rows", racing_synthesize)
+    resp = client.post(f"/tagging-sessions/{session_id}/assist/synthesize", json={"brief": "Reviews", "rows": 1})
+    assert resp.status_code == 409
+    assert client.get(f"/tagging-sessions/{session_id}").json()["data"] == first
