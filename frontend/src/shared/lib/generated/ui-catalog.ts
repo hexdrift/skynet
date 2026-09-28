@@ -1721,31 +1721,48 @@ export type MessageKey =
   | "explore.empty.title"
   | "explore.filter.grid"
   | "explore.filter.run"
-  | "explore.filters.apply"
   | "explore.filters.button"
   | "explore.filters.clear"
   | "explore.filters.close"
+  | "explore.filters.date.custom"
   | "explore.filters.date.from"
+  | "explore.filters.date.preset.30d"
+  | "explore.filters.date.preset.7d"
+  | "explore.filters.date.preset.90d"
+  | "explore.filters.date.range"
   | "explore.filters.date.to"
   | "explore.filters.empty_section"
+  | "explore.filters.field.any"
+  | "explore.filters.group.matches"
+  | "explore.filters.group.top"
+  | "explore.filters.picker.clear"
+  | "explore.filters.picker.placeholder.models"
+  | "explore.filters.picker.placeholder.modules"
+  | "explore.filters.picker.placeholder.optimizers"
   | "explore.filters.reset"
+  | "explore.filters.search.clear"
   | "explore.filters.section.date"
   | "explore.filters.section.models"
   | "explore.filters.section.modules"
   | "explore.filters.section.no_search_match"
+  | "explore.filters.section.none_in_selection"
   | "explore.filters.section.optimizers"
   | "explore.filters.section.search"
-  | "explore.filters.section.selected"
-  | "explore.filters.section.selected_many"
   | "explore.filters.section.types"
-  | "explore.filters.subtitle"
+  | "explore.filters.show_more"
+  | "explore.filters.show_results"
+  | "explore.filters.show_results_one"
   | "explore.filters.title"
+  | "explore.filters.trigger.date"
+  | "explore.filters.trigger.models"
+  | "explore.filters.trigger.modules"
+  | "explore.filters.trigger.optimizers"
+  | "explore.filters.trigger.types"
   | "explore.page.indicator"
   | "explore.page.jump"
   | "explore.page.next"
   | "explore.page.prev"
   | "explore.page.title"
-  | "explore.relative.now"
   | "explore.results.count.many"
   | "explore.results.count.one"
   | "explore.results.empty.clear_filters"
@@ -1761,8 +1778,8 @@ export type MessageKey =
   | "explore.search.clear"
   | "explore.search.placeholder"
   | "explore.sort.aria"
-  | "explore.sort.gain"
-  | "explore.sort.gain.tip"
+  | "explore.sort.oldest"
+  | "explore.sort.oldest.tip"
   | "explore.sort.recent"
   | "explore.sort.recent.tip"
   | "explore.sort.relevance"
@@ -4593,31 +4610,48 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.empty.title": "עדיין אין ריצות",
   "explore.filter.grid": "{term.optimizationTypeGrid}",
   "explore.filter.run": "{term.optimizationTypeRun}",
-  "explore.filters.apply": "סיים/סיימי",
   "explore.filters.button": "מסננים",
   "explore.filters.clear": "נקה/נקי הכול",
   "explore.filters.close": "סגור/סגרי את המסננים",
+  "explore.filters.date.custom": "טווח מותאם אישית",
   "explore.filters.date.from": "מתאריך",
+  "explore.filters.date.preset.30d": "30 הימים האחרונים",
+  "explore.filters.date.preset.7d": "7 הימים האחרונים",
+  "explore.filters.date.preset.90d": "90 הימים האחרונים",
+  "explore.filters.date.range": "{from} – {to}",
   "explore.filters.date.to": "עד תאריך",
   "explore.filters.empty_section": "אין ערכים זמינים.",
+  "explore.filters.field.any": "הכל",
+  "explore.filters.group.matches": "{shown} מתוך {total} התאמות",
+  "explore.filters.group.top": "{shown} המובילים מתוך {total}",
+  "explore.filters.picker.clear": "ניקוי הבחירה",
+  "explore.filters.picker.placeholder.models": "חיפוש מודלים…",
+  "explore.filters.picker.placeholder.modules": "חיפוש מודולים…",
+  "explore.filters.picker.placeholder.optimizers": "חיפוש אופטימייזרים…",
   "explore.filters.reset": "אפס/י את המסננים",
+  "explore.filters.search.clear": "ניקוי החיפוש",
   "explore.filters.section.date": "טווח תאריכים",
   "explore.filters.section.models": "מודלים",
   "explore.filters.section.modules": "מודולים",
   "explore.filters.section.no_search_match": "אין התאמות לחיפוש.",
+  "explore.filters.section.none_in_selection": "אין ריצות בשילוב עם שאר המסננים.",
   "explore.filters.section.optimizers": "אופטימייזרים",
   "explore.filters.section.search": "חפש/חפשי בתוך {section}",
-  "explore.filters.section.selected": "{n} פעיל",
-  "explore.filters.section.selected_many": "{n} פעילים",
   "explore.filters.section.types": "סוג ריצה",
-  "explore.filters.subtitle": "שלב/שלבי מסננים כדי לדייק את החיפוש החופשי.",
+  "explore.filters.show_more": "הצגת עוד",
+  "explore.filters.show_results": "הצגת {n} ריצות",
+  "explore.filters.show_results_one": "הצגת ריצה אחת",
   "explore.filters.title": "מסננים",
+  "explore.filters.trigger.date": "תאריך",
+  "explore.filters.trigger.models": "מודל",
+  "explore.filters.trigger.modules": "מודול",
+  "explore.filters.trigger.optimizers": "אופטימייזר",
+  "explore.filters.trigger.types": "סוג",
   "explore.page.indicator": "עמוד {page} מתוך {total}",
   "explore.page.jump": "עבור/עברי לעמוד {page}",
   "explore.page.next": "הבא",
   "explore.page.prev": "הקודם",
   "explore.page.title": "חיפוש",
-  "explore.relative.now": "עכשיו",
   "explore.results.count.many": "{n} תוצאות",
   "explore.results.count.one": "תוצאה אחת",
   "explore.results.empty.clear_filters": "נקה/נקי את המסננים",
@@ -4633,9 +4667,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.search.clear": "נקה/נקי את החיפוש",
   "explore.search.placeholder": "חפש/חפשי אופטימיזציות לפי משימה, מודל או אופטימייזר",
   "explore.sort.aria": "מיון התוצאות",
-  "explore.sort.gain": "שיפור",
-  "explore.sort.gain.tip": "מיון לפי {term.scoreImprovement} — הפער בין {term.optimizedScore} ל{term.baselineScore}, מהגבוה לנמוך",
-  "explore.sort.recent": "אחרונות",
+  "explore.sort.oldest": "הישנות ביותר",
+  "explore.sort.oldest.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} הישנות ביותר מופיעות ראשונות",
+  "explore.sort.recent": "החדשות ביותר",
   "explore.sort.recent.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} החדשות ביותר מופיעות ראשונות",
   "explore.sort.relevance": "התאמה",
   "explore.sort.relevance.tip": "מיון לפי התאמה לכוונת החיפוש — התוצאות המתאימות ביותר מופיעות ראשונות",
