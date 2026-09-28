@@ -221,9 +221,10 @@ def configure_logging() -> None:
 
     Existing handlers (e.g. one installed by Uvicorn or pytest at import
     time) are removed so log output has a single, predictable shape. When
-    ``ALERT_WEBHOOK_URL`` is set, an :class:`~core.api.alerts.AlertLogHandler`
-    is also attached so records at or above ``ALERT_MIN_LEVEL`` are forwarded
-    to the chat webhook. When ``LOG_SHIP_URL`` is set, a
+    ``ALERT_WEBHOOK_URL`` or ``ALERT_EMAIL`` (with the SMTP relay) is set, an
+    :class:`~core.api.alerts.AlertLogHandler` is also attached so records at or
+    above ``ALERT_MIN_LEVEL`` are forwarded to the chat webhook and/or the
+    operator inbox. When ``LOG_SHIP_URL`` is set, a
     :class:`~core.api.log_shipping.LogShipHandler` ships a JSON copy of every
     admitted record to that endpoint.
     """

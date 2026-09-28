@@ -501,6 +501,25 @@ class Settings(BaseSettings):
             "alerting: records still reach the logs, they just aren't forwarded."
         ),
     )
+    alert_email: str = Field(
+        default="",
+        alias="ALERT_EMAIL",
+        description=(
+            "Operator address that receives every operational alert by email "
+            "through the internal SMTP relay (requires SMTP_HOST), alongside or "
+            "instead of ALERT_WEBHOOK_URL. Empty disables email alerts."
+        ),
+    )
+    alert_email_max_per_hour: int = Field(
+        default=20,
+        ge=0,
+        alias="ALERT_EMAIL_MAX_PER_HOUR",
+        description=(
+            "Per-process cap on alert emails in any rolling hour, so a burst of "
+            "distinct errors can't flood the inbox. Alerts past the cap still "
+            "reach the logs and the webhook."
+        ),
+    )
     alert_min_level: str = Field(
         default="ERROR",
         alias="ALERT_MIN_LEVEL",

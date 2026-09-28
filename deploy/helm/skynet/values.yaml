@@ -92,6 +92,11 @@ backend:
     ALERT_WEBHOOK_URL: ""
     ALERT_MIN_LEVEL: "ERROR"
     ALERT_ENVIRONMENT: "production"
+    # Emails every alert through the internal SMTP relay; set SMTP_HOST and
+    # friends here (SMTP_PASSWORD under secrets) and allow the relay in
+    # networkPolicy.egressCidrs when egress is restricted. Empty disables it.
+    ALERT_EMAIL: ""
+    ALERT_EMAIL_MAX_PER_HOUR: "20"
     ALERT_THROTTLE_SECONDS: "300"
     POSTHOG_HOST: ""
     TRANSCRIPTION_BASE_URL: ""

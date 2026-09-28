@@ -1,4 +1,4 @@
-"""Forward operational alerts to a chat webhook.
+"""Forward operational alerts to a chat webhook and/or an operator inbox.
 
 The backend already logs the things an operator needs to know about — an
 unhandled 500, a dead worker, a balance below its floor — but on a hosted
@@ -14,11 +14,14 @@ Two entry points:
   below the handler's threshold (e.g. a ``WARNING`` balance-floor breach), which
   fires regardless of ``ALERT_MIN_LEVEL``.
 
-Everything degrades to a no-op when ``ALERT_WEBHOOK_URL`` is unset: alerting is
-opt-in, records still reach the logs, and a webhook outage never propagates into
-the request path. Delivery runs on a daemon thread and swallows its own
-failures, and identical alerts are throttled so an error loop can't flood the
-channel.
+Alerts go to ``ALERT_WEBHOOK_URL`` and, when ``ALERT_EMAIL`` is set and the
+internal SMTP relay (``SMTP_*``) is configured, to that address by email.
+Everything degrades to a no-op when neither is configured: alerting is opt-in,
+records still reach the logs, and a delivery outage never propagates into the
+request path. Delivery runs on a daemon thread and swallows its own failures,
+identical alerts are throttled so an error loop can't flood the channel, and
+emails are further capped per hour because a burst of distinct errors would
+otherwise become a burst of mail.
 
 The payload is Slack's ``{"text": …}`` shape, which Mattermost and Google Chat
 also accept. Discord's webhook wants ``{"content": …}`` and needs a small
@@ -37,6 +40,7 @@ import traceback
 import urllib.request
 
 from ..config import settings
+from .email_sender import email_configured, send_email
 
 logger = logging.getLogger(__name__)
 
@@ -99,10 +103,43 @@ class _Throttle:
 
 _throttle = _Throttle()
 
+_EMAIL_WINDOW_SECONDS = 3600.0
+_email_lock = threading.Lock()
+_email_sent_at: list[float] = []
+
+
+def _email_target() -> str:
+    """Return the alert inbox, or ``""`` when email alerts are off.
+
+    Returns:
+        ``ALERT_EMAIL`` when it is set and SMTP is configured, else ``""``.
+    """
+    address = settings.alert_email.strip()
+    return address if address and email_configured() else ""
+
+
+def _email_allowed(now: float) -> bool:
+    """Return whether this process may send one more alert email, recording it.
+
+    Args:
+        now: Current monotonic clock reading.
+
+    Returns:
+        True while fewer than ``ALERT_EMAIL_MAX_PER_HOUR`` emails went out in
+        the last hour.
+    """
+    cap = settings.alert_email_max_per_hour
+    with _email_lock:
+        _email_sent_at[:] = [stamp for stamp in _email_sent_at if now - stamp < _EMAIL_WINDOW_SECONDS]
+        if len(_email_sent_at) >= cap:
+            return False
+        _email_sent_at.append(now)
+        return True
+
 
 def alerts_configured() -> bool:
-    """Return whether an outbound alert webhook is configured."""
-    return bool(settings.alert_webhook_url)
+    """Return whether an outbound alert webhook or alert inbox is configured."""
+    return bool(settings.alert_webhook_url or _email_target())
 
 
 def _truncate(text_value: str, limit: int) -> str:
@@ -164,19 +201,27 @@ def _post(url: str, text_value: str, timeout: float) -> None:
         response.read()
 
 
-def _deliver(url: str, text_value: str) -> None:
+def _deliver(url: str, email: str, subject: str, text_value: str) -> None:
     """Deliver one alert, swallowing failures so the sender thread never raises.
 
     Args:
-        url: The webhook URL.
+        url: The webhook URL, or ``""`` to skip the webhook.
+        email: The inbox address, or ``""`` to skip email.
+        subject: Email subject line.
         text_value: The rendered message text.
     """
-    try:
-        _post(url, text_value, _DELIVERY_TIMEOUT_SECONDS)
-    except Exception as exc:
-        # DEBUG (not WARNING) on purpose: a webhook outage must not recurse back
-        # through AlertLogHandler and try to alert about failing to alert.
-        logger.debug("Alert delivery to webhook failed: %s", exc)
+    # DEBUG (not WARNING) on purpose: a delivery outage must not recurse back
+    # through AlertLogHandler and try to alert about failing to alert.
+    if url:
+        try:
+            _post(url, text_value, _DELIVERY_TIMEOUT_SECONDS)
+        except Exception as exc:
+            logger.debug("Alert delivery to webhook failed: %s", exc)
+    if email:
+        try:
+            send_email(email, subject, text_value)
+        except Exception as exc:
+            logger.debug("Alert delivery by email failed: %s", exc)
 
 
 def send_alert(
@@ -186,10 +231,11 @@ def send_alert(
     level: str = "ERROR",
     now: float | None = None,
 ) -> threading.Thread | None:
-    """Forward an alert to the configured webhook on a background thread.
+    """Forward an alert to the configured webhook and inbox on a background thread.
 
-    A no-op when no webhook is configured or when an identical alert was sent
-    within the throttle window. Delivery is fire-and-forget: the returned thread
+    A no-op when neither is configured or when an identical alert was sent
+    within the throttle window; the email is also skipped once the hourly
+    email cap is reached. Delivery is fire-and-forget: the returned thread
     is a daemon and its failures are swallowed.
 
     Args:
@@ -203,14 +249,22 @@ def send_alert(
         The daemon delivery thread when an alert was dispatched, else ``None``.
     """
     url = settings.alert_webhook_url
-    if not url:
+    email = _email_target()
+    if not url and not email:
         return None
     stamp = now if now is not None else time.monotonic()
     key = f"{level}\x00{title}\x00{body}"
     if not _throttle.allow(key, stamp, settings.alert_throttle_seconds):
         return None
+    if email and not _email_allowed(stamp):
+        email = ""
+        if not url:
+            return None
     text_value = _render(title, body, level)
-    thread = threading.Thread(target=_deliver, args=(url, text_value), name="alert-webhook", daemon=True)
+    subject = text_value.splitlines()[0][:_MAX_TITLE_CHARS]
+    thread = threading.Thread(
+        target=_deliver, args=(url, email, subject, text_value), name="alert-delivery", daemon=True
+    )
     thread.start()
     return thread
 
@@ -249,9 +303,9 @@ def install_alert_log_handler(root: logging.Logger | None = None) -> AlertLogHan
         root: Logger to attach to; defaults to the root logger.
 
     Returns:
-        The installed handler, or ``None`` when no webhook is configured.
+        The installed handler, or ``None`` when no alert channel is configured.
     """
-    if not settings.alert_webhook_url:
+    if not settings.alert_webhook_url and not _email_target():
         return None
     target = root if root is not None else logging.getLogger()
     handler = AlertLogHandler()
