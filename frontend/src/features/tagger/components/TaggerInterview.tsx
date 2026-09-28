@@ -668,7 +668,7 @@ function RubricCard({
               // over the cards.
               "group relative flex w-full cursor-pointer flex-row items-center justify-center gap-3 overflow-hidden lg:w-[100px] lg:flex-col lg:gap-4",
               "rounded-2xl bg-primary py-4 text-base font-semibold text-primary-foreground lg:py-8",
-              "transition-all duration-300 hover:scale-[1.01] hover:shadow-[0_0_30px_rgba(61,46,34,0.35)]",
+              "transition-all duration-300 hover:scale-[1.01]",
               "active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >

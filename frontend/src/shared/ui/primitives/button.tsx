@@ -32,11 +32,9 @@ const buttonVariants = cva(
         xs: "h-7 gap-1 rounded-md px-2.5 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-5 has-[>svg]:px-4",
-        pill: "h-10 rounded-full px-7 text-sm font-semibold has-[>svg]:px-5 hover:shadow-[0_0_16px_rgba(61,46,34,0.2)]",
-        "pill-sm":
-          "h-8 rounded-full px-5 text-xs font-semibold has-[>svg]:px-3.5 hover:shadow-[0_0_12px_rgba(61,46,34,0.15)]",
-        "pill-lg":
-          "h-12 rounded-full px-9 text-base font-semibold has-[>svg]:px-6 hover:shadow-[0_0_20px_rgba(61,46,34,0.25)]",
+        pill: "h-10 rounded-full px-7 text-sm font-semibold has-[>svg]:px-5",
+        "pill-sm": "h-8 rounded-full px-5 text-xs font-semibold has-[>svg]:px-3.5",
+        "pill-lg": "h-12 rounded-full px-9 text-base font-semibold has-[>svg]:px-6",
         icon: "size-9 rounded-md",
         "icon-xs": "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3.5",
         "icon-sm": "size-8 rounded-md",

@@ -52,7 +52,7 @@ export function MinimizedPill({
         "inline-flex min-h-[44px] items-center gap-2 rounded-full",
         "border border-border/60 bg-background/90 backdrop-blur-md",
         "px-3.5 py-2 text-[0.75rem] text-foreground shadow-[0_6px_18px_rgba(61,46,34,0.08)]",
-        "transition-all duration-200 hover:bg-background hover:shadow-[0_10px_24px_rgba(61,46,34,0.12)]",
+        "transition-all duration-200 hover:bg-background",
         "active:scale-[0.98] cursor-pointer",
         className,
       )}
