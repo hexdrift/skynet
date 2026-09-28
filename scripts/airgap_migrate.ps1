@@ -151,6 +151,8 @@ Image build / push overrides (build-images, push-images):
   DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
   PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
   PIP_TRUSTED_HOST=artifactory.example.com
+  DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/deno/releases/download
+  NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/   # backend pyodide cache
   BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine
   NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
 
@@ -444,6 +446,8 @@ function Invoke-BuildImages {
     $debianMirror    = Get-OrDefault 'DEBIAN_MIRROR'    ''
     $pipIndexUrl     = Get-OrDefault 'PIP_INDEX_URL'    ''
     $pipTrustedHost  = Get-OrDefault 'PIP_TRUSTED_HOST' ''
+    $denoDownload    = Get-OrDefault 'DENO_DOWNLOAD_BASE' ''
+    $npmConfigReg    = Get-OrDefault 'NPM_CONFIG_REGISTRY' ''
     $baseImage       = Get-OrDefault 'BASE_IMAGE'       ''
     $npmRegistry     = Get-OrDefault 'NPM_REGISTRY'     ''
 
@@ -453,6 +457,8 @@ function Invoke-BuildImages {
     if ($debianMirror)   { $backendArgs += @('--build-arg', "DEBIAN_MIRROR=$debianMirror") }
     if ($pipIndexUrl)    { $backendArgs += @('--build-arg', "PIP_INDEX_URL=$pipIndexUrl") }
     if ($pipTrustedHost) { $backendArgs += @('--build-arg', "PIP_TRUSTED_HOST=$pipTrustedHost") }
+    if ($denoDownload)   { $backendArgs += @('--build-arg', "DENO_DOWNLOAD_BASE=$denoDownload") }
+    if ($npmConfigReg)   { $backendArgs += @('--build-arg', "NPM_CONFIG_REGISTRY=$npmConfigReg") }
 
     $frontendArgs = @('build', (Join-Path $RootDir 'frontend'),
                       '-t', "$REGISTRY/$FRONTEND_REPOSITORY`:$IMAGE_TAG")

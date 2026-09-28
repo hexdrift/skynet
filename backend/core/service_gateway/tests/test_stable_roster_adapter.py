@@ -16,10 +16,6 @@ from dspy.adapters.types.tool import ToolCallResults, ToolCalls
 from ..optimization.retrying_react import RetryingPredict, RetryingReActV2
 from ..stable_roster_adapter import StableRosterChatAdapter
 
-pytestmark = pytest.mark.skipif(
-    not hasattr(dspy, "ReActV2"), reason="the roster is a ReActV2 input; classic ReAct has none"
-)
-
 ROSTER_MARKER = "[[ ## tools ## ]]"
 
 
