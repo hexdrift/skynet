@@ -7,6 +7,8 @@ its failure modes (syntax errors, timeouts, wrong return shapes).
 
 from __future__ import annotations
 
+import multiprocessing as mp
+
 import pytest
 
 from core.exceptions import ServiceError
@@ -182,6 +184,25 @@ class TestProbeMetricOnSample:
         assert probe.result_kind == "error"
         assert probe.error is not None
         assert len(probe.error) == 3_000_000
+
+    def test_child_left_running_after_its_result_is_reaped(self) -> None:
+        """A child kept alive by a user thread after sending its result is not leaked."""
+        before = set(mp.active_children())
+        probe = probe_metric_on_sample(
+            metric_code=(
+                "import threading, time\n"
+                "def metric(example, prediction, trace=None):\n"
+                "    threading.Thread(target=time.sleep, args=(120,)).start()\n"
+                "    return 1.0\n"
+            ),
+            example_payload={"question": "q", "answer": "a"},
+            prediction_payload={"question": "q", "answer": "a"},
+            input_field_names=["question"],
+            timeout_seconds=20.0,
+        )
+
+        assert probe.result_kind == "numeric"
+        assert set(mp.active_children()) - before == set()
 
     def test_broken_metric_code_surfaces_as_service_error(self) -> None:
         """A syntactically broken metric raises ``ServiceError`` from the probe entry-point."""

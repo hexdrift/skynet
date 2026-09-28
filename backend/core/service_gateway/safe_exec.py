@@ -156,6 +156,19 @@ class MetricProbeResult:
     logged_metrics: dict[str, float] = field(default_factory=dict)
 
 
+def _stop_process(proc: Any) -> None:
+    """Terminate a child process, escalating to kill if it ignores SIGTERM.
+
+    Args:
+        proc: The started ``multiprocessing`` process to stop.
+    """
+    proc.terminate()
+    proc.join(_TERMINATE_GRACE_SECONDS)
+    if proc.is_alive():
+        proc.kill()
+        proc.join(_TERMINATE_GRACE_SECONDS)
+
+
 def _run_in_subprocess(
     target: Callable[..., None],
     args: tuple[Any, ...],
@@ -198,15 +211,15 @@ def _run_in_subprocess(
             if not proc.is_alive():
                 break
             if time.monotonic() >= deadline:
-                proc.terminate()
-                proc.join(_TERMINATE_GRACE_SECONDS)
-                if proc.is_alive():
-                    proc.kill()
-                    proc.join(_TERMINATE_GRACE_SECONDS)
+                _stop_process(proc)
                 raise ServiceError(
                     f"user code exceeded the {timeout_seconds:.0f}s validation timeout and was terminated."
                 ) from None
     proc.join(_TERMINATE_GRACE_SECONDS)
+    # User code can leave a non-daemon thread running after the result is
+    # sent, which keeps the child from exiting; reap it instead of leaking it.
+    if proc.is_alive():
+        _stop_process(proc)
 
     if result is _NO_RESULT:
         try:
