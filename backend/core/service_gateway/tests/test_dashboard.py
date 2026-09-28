@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+import re
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.pool import StaticPool
 
@@ -143,16 +145,18 @@ def _sqlite_jsonb_typeof(value: str | None) -> str | None:
     return "other"
 
 
-def test_corpus_metric_sql_falls_back_to_job_scores_for_gain_ranking() -> None:
-    """Unembedded rows rank by their own job scores under the gain sort.
+def test_corpus_metric_sql_falls_back_to_job_scores() -> None:
+    """Unembedded rows resolve their own job scores for the displayed score/delta.
 
-    Executes the real metric-fallback SQL against an in-memory schema. The
-    embedded pair must win when present; otherwise runs read
+    Executes the real metric-fallback SQL against an in-memory schema — the
+    SQL that fills each result row's ``baseline_metric``/``optimized_metric``.
+    The embedded pair must win when present; otherwise runs read
     ``latest_metrics`` then ``result`` and grid jobs read
     ``result.best_pair``, mirroring the embedding pipeline's
     ``_extract_scores``. Rows with no numeric pair anywhere (including a
-    malformed non-numeric value, which must not error) sink below every
-    scored row and fall back to recency among themselves.
+    malformed non-numeric value, which must not error) resolve to NULL. The
+    ``optimized - baseline`` ordering here is only the assertion vehicle for
+    the resolved values, not a production sort.
     """
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -337,3 +341,134 @@ def test_search_optimizations_forces_lexical_when_embeddings_table_absent(monkey
         owner_username="someone@example.com",
     )
     assert out is sentinel
+
+
+def test_fetch_corpus_facets_counts_each_dimension_against_the_other_filters(monkeypatch) -> None:
+    """Every dimension's count excludes its own filter and applies the others.
+
+    Selections within one dimension are OR'd, so a model's count must ignore
+    the active model filter (otherwise every unselected model would read 0)
+    while honouring the active run-type filter. No dimension comes back in
+    full: each branch keeps only positive counts, ranks by count, and is
+    capped, while a NULL-value row per dimension carries the distinct total.
+    """
+    monkeypatch.setattr(dashboard, "_job_embeddings_relation", lambda _store: "job_embeddings")
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.execute.return_value.mappings.return_value.all.return_value = [
+        {"dim": "models", "value": "gpt-b", "n": 2},
+        {"dim": "models", "value": "gpt-a", "n": 2},
+        {"dim": "models", "value": "gpt-c", "n": 7},
+        {"dim": "models", "value": None, "n": 1240},
+        {"dim": "types", "value": "run", "n": 5},
+        {"dim": "types", "value": "grid_search", "n": 2},
+        {"dim": "types", "value": None, "n": 2},
+        {"dim": "modules", "value": "predict", "n": 1},
+        {"dim": "modules", "value": None, "n": 1},
+        {"dim": "optimizers", "value": None, "n": 0},
+    ]
+    monkeypatch.setattr(dashboard, "Session", lambda _engine: session)
+
+    out = dashboard.fetch_corpus_facets(
+        job_store=SimpleNamespace(engine=object()),
+        optimization_types=["grid_search"],
+        models=["gpt-a"],
+        date_from=date(2026, 1, 1),
+        limit=3,
+    )
+
+    sql = str(session.execute.call_args.args[0])
+    params = session.execute.call_args.args[1]
+    branches = [part for part in sql.split("UNION ALL") if "AS value" in part]
+    selects = {}
+    for part in branches:
+        name = re.search(r"SELECT '(\w+)' AS dim", part).group(1)
+        selects.setdefault(name, []).append(part)
+    values_sql = {name: parts[0] for name, parts in selects.items()}
+    totals_sql = {name: parts[1] for name, parts in selects.items()}
+    assert "FILTER (WHERE run_type = ANY(:optimization_types))" in values_sql["models"]
+    assert "FILTER (WHERE model = ANY(:models))" in values_sql["types"]
+    assert "run_type = ANY" not in values_sql["types"]
+    assert "FILTER (WHERE model = ANY(:models) AND run_type = ANY(:optimization_types))" in values_sql["modules"]
+    assert "WHERE module <> '' GROUP BY module" in values_sql["modules"]
+    assert "blackbox" not in sql
+    assert "HAVING COUNT(*) FILTER (WHERE run_type = ANY(:optimization_types)) > 0" in values_sql["models"]
+    assert "ORDER BY n DESC, value ASC LIMIT :facet_limit" in values_sql["models"]
+    assert "COUNT(DISTINCT model) AS n FROM corpus WHERE model <> '' AND run_type = ANY(:optimization_types)" in totals_sql["models"]
+    assert "ILIKE" not in sql
+    assert "j.created_at >= :date_from" in sql
+    assert params["optimization_types"] == ["grid_search"]
+    assert params["facet_limit"] == 3
+    assert "date_to_excl" not in params
+    assert "value_pattern" not in params
+
+    assert out["models"] == [
+        {"value": "gpt-c", "count": 7},
+        {"value": "gpt-a", "count": 2},
+        {"value": "gpt-b", "count": 2},
+    ]
+    assert out["types"] == [{"value": "run", "count": 5}, {"value": "grid_search", "count": 2}]
+    assert out["modules"] == [{"value": "predict", "count": 1}]
+    assert out["optimizers"] == []
+    assert out["totals"] == {"models": 1240, "optimizers": 0, "modules": 1, "types": 2}
+
+
+def test_fetch_corpus_facets_value_query_matches_every_dimension_and_escapes_like(monkeypatch) -> None:
+    """A value search narrows every dimension with an escaped ILIKE substring, and the limit is capped."""
+    monkeypatch.setattr(dashboard, "_job_embeddings_relation", lambda _store: "job_embeddings")
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.execute.return_value.mappings.return_value.all.return_value = []
+    monkeypatch.setattr(dashboard, "Session", lambda _engine: session)
+
+    out = dashboard.fetch_corpus_facets(
+        job_store=SimpleNamespace(engine=object()),
+        value_query=" 50%_off ",
+        limit=10_000,
+    )
+
+    sql = str(session.execute.call_args.args[0])
+    params = session.execute.call_args.args[1]
+    assert params["value_pattern"] == "%50\\%\\_off%"
+    assert params["facet_limit"] == dashboard.FACET_LIMIT_MAX
+    assert sql.count("ILIKE :value_pattern") == 8
+    assert "WHERE model <> '' AND model ILIKE :value_pattern GROUP BY model" in sql
+    assert "COUNT(DISTINCT optimizer) AS n FROM corpus WHERE optimizer <> '' AND optimizer ILIKE :value_pattern AND TRUE" in sql
+    assert out == {"models": [], "optimizers": [], "modules": [], "types": [], "totals": {"models": 0, "optimizers": 0, "modules": 0, "types": 0}}
+
+
+def test_fetch_corpus_facets_dimension_restricts_the_query_to_one_dimension(monkeypatch) -> None:
+    """One open picker queries only its own dimension, still counted against the other filters."""
+    monkeypatch.setattr(dashboard, "_job_embeddings_relation", lambda _store: "job_embeddings")
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.execute.return_value.mappings.return_value.all.return_value = [
+        {"dim": "optimizers", "value": "mipro", "n": 3},
+        {"dim": "optimizers", "value": None, "n": 12},
+    ]
+    monkeypatch.setattr(dashboard, "Session", lambda _engine: session)
+
+    out = dashboard.fetch_corpus_facets(
+        job_store=SimpleNamespace(engine=object()),
+        models=["gpt-4o"],
+        dimension="optimizers",
+    )
+
+    sql = str(session.execute.call_args.args[0])
+    assert sql.count("AS dim") == 2
+    assert "SELECT 'optimizers' AS dim" in sql
+    assert "SELECT 'models' AS dim" not in sql
+    assert "FILTER (WHERE model = ANY(:models))" in sql
+    assert out == {
+        "models": [],
+        "optimizers": [{"value": "mipro", "count": 3}],
+        "modules": [],
+        "types": [],
+        "totals": {"models": 0, "optimizers": 12, "modules": 0, "types": 0},
+    }
+
+
+def test_fetch_corpus_facets_rejects_an_unknown_dimension() -> None:
+    """A typo in the dimension fails loudly instead of producing a malformed UNION."""
+    with pytest.raises(ValueError, match="unknown facet dimension"):
+        dashboard.fetch_corpus_facets(job_store=SimpleNamespace(engine=object()), dimension="tasks")

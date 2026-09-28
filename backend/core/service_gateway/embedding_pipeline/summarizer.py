@@ -1,17 +1,24 @@
 """LLM-backed task summariser feeding ``embedding_summary``.
 
 Given a finished job, we want ~2-3 sentences describing *what the task is*
-in natural language: input → output, objective, metric shape. This text is
-embedded into ``embedding_summary``, which drives explore semantic search.
-Keeping a natural-language summary (rather than raw code) lets
-semantically-similar tasks cluster together even when their Python source
-looks unrelated.
+in natural language. This text is embedded into ``embedding_summary``, which
+drives explore semantic search. The summary is built from only what a human
+recognises the task by — its title, its description, and a sample of its
+training rows — never from the run's signature, metric, column mapping or
+optimiser, which are fragile, gameable signals that pull unrelated tasks
+together. Because a published job's summary is surfaced to other users, the
+signature steers the model to describe the task's domain and shape in general
+terms and never to reproduce verbatim values from the data sample — the
+sample is evidence of *what kind* of task this is, not content to be echoed.
+Keeping a natural-language summary (rather than raw fields) lets
+semantically-similar tasks cluster together even when their submissions look
+unrelated.
 
 The summariser is cheap to stub: ``settings.embeddings_summary_model`` (or
 ``settings.code_agent_model`` as fallback) is a normal LiteLLM model id,
 wrapped in ``dspy.Predict``. If it fails for any reason (no key, network
-error, quota) we fall back to a heuristic text composed from the column
-mapping — the pipeline keeps working, just with weaker signal.
+error, quota) we fall back to a heuristic text composed from the title and
+description — the pipeline keeps working, just with weaker signal.
 """
 
 from __future__ import annotations
@@ -52,54 +59,45 @@ def _truncate(value: str, limit: int, *, label: str) -> str:
 class _TaskSummary(dspy.Signature):
     """Describe a DSPy optimization task in 2-3 sentences."""
 
-    signature_code: str = dspy.InputField(desc="The DSPy Signature source code being optimised.")
-    metric_code: str = dspy.InputField(desc="The metric function source code (scoring rule).")
-    column_mapping: str = dspy.InputField(desc="JSON column → role map (which columns feed inputs vs outputs).")
-    dataset_sample: str = dspy.InputField(desc="A handful of sample rows from the training dataset.")
+    title: str = dspy.InputField(desc="The task's name.")
+    description: str = dspy.InputField(desc="The user's own description of what the task does.")
+    dataset_sample: str = dspy.InputField(
+        desc=(
+            "Several sample rows from the training dataset, as illustrative "
+            "evidence of the task's domain and shape. They may be unrepresentative, "
+            "so infer the general task — not the specifics of these particular rows."
+        )
+    )
     task_description: str = dspy.OutputField(
         desc=(
-            "2-3 sentences describing the task in plain English: what the "
-            "inputs are, what output is produced, what the objective is. "
-            "Avoid naming the optimizer or model — this text describes the "
-            "task itself, not how it's trained."
+            "2-3 sentences describing the task in plain English, drawn only "
+            "from its title, description and sample data: what the inputs are "
+            "and what output is produced. Avoid naming the optimizer or model "
+            "— this text describes the task itself, not how it's trained. "
+            "Describe the domain in general terms; never quote or reproduce "
+            "specific values, names, emails, identifiers or other verbatim "
+            "content from the sample rows, and don't fixate on their formatting."
         )
     )
 
 
-def _heuristic_summary(
-    signature_code: str | None,
-    metric_code: str | None,
-    column_mapping: dict[str, Any] | None,
-) -> str:
-    """Fallback summary built by inspecting the code + column mapping.
+def _heuristic_summary(title: str | None, description: str | None) -> str:
+    """Fallback summary built from the task's title and description.
 
-    Used when the LLM call is unavailable. Worse than a real summary
-    for semantic search, but still non-empty and deterministic.
+    Used when the summariser LLM is unavailable. Weaker than a real summary
+    for semantic search, but non-empty and deterministic whenever the task
+    carried a title or a description.
 
     Args:
-        signature_code: Source code of the user's DSPy signature.
-        metric_code: Source code of the user's metric function.
-        column_mapping: Optional ``{"inputs": ..., "outputs": ...}`` map.
+        title: The task's name.
+        description: The user's description of the task.
 
     Returns:
-        A short text summary derived from the column mapping and metric
-        first-line, or the truncated signature code when the mapping is
-        missing.
+        The non-empty parts joined by a space, capped at 600 characters;
+        empty only when the task had neither a title nor a description.
     """
-    if not column_mapping:
-        return (signature_code or "").strip()[:500]
-    inputs = column_mapping.get("inputs", {}) or {}
-    outputs = column_mapping.get("outputs", {}) or {}
-    in_names = list(inputs.values()) if isinstance(inputs, dict) else []
-    out_names = list(outputs.values()) if isinstance(outputs, dict) else []
-    parts: list[str] = []
-    if in_names and out_names:
-        parts.append(f"Task maps {', '.join(in_names)} to {', '.join(out_names)}.")
-    elif in_names:
-        parts.append(f"Task takes {', '.join(in_names)} as input.")
-    if metric_code and len(metric_code) < 400:
-        parts.append(f"Scored by: {metric_code.strip().splitlines()[0] if metric_code.strip() else ''}")
-    return " ".join(p for p in parts if p).strip() or (signature_code or "").strip()[:500]
+    parts = [part.strip() for part in (title, description) if part and part.strip()]
+    return " ".join(parts)[:600]
 
 
 def _build_lm() -> dspy.LM | None:
@@ -128,44 +126,40 @@ def _build_lm() -> dspy.LM | None:
 
 def summarize_task(
     *,
-    signature_code: str | None,
-    metric_code: str | None,
-    column_mapping: dict[str, Any] | None,
+    title: str | None,
+    description: str | None,
     dataset_sample: list[dict[str, Any]] | None,
 ) -> str:
-    """Return a short natural-language description of the task.
+    """Return a short natural-language description of a DSPy task.
 
     Never raises. Returns an empty string if nothing useful can be
     produced — callers should treat empty as "skip the summary
     embedding for this job."
 
     Args:
-        signature_code: Source code of the user's DSPy signature.
-        metric_code: Source code of the user's metric function.
-        column_mapping: Optional column → role map for the dataset.
-        dataset_sample: Optional list of sample rows; the first three
+        title: The task's name.
+        description: The user's description of the task.
+        dataset_sample: Optional list of sample rows; the first ten
             are forwarded to the summariser LM.
 
     Returns:
         A 2-3 sentence task description from the LLM, or the heuristic
-        fallback string when the LLM is unavailable or its call fails.
+        fallback (title + description) when the LLM is unavailable or its
+        call fails.
     """
-    fallback = _heuristic_summary(signature_code, metric_code, column_mapping)
+    fallback = _heuristic_summary(title, description)
     lm = _build_lm()
     if lm is None:
         return fallback
     try:
-        sample_rows = dataset_sample[:3] if dataset_sample else []
+        sample_rows = dataset_sample[:10] if dataset_sample else []
         predictor = dspy.Predict(_TaskSummary)
         with dspy.context(lm=lm):
             out = predictor(
-                signature_code=_truncate((signature_code or "").strip(), 4000, label="signature_code"),
-                metric_code=_truncate((metric_code or "").strip(), 4000, label="metric_code"),
-                column_mapping=_truncate(
-                    json.dumps(column_mapping or {}, ensure_ascii=False), 1000, label="column_mapping"
-                ),
+                title=_truncate((title or "").strip(), 500, label="title"),
+                description=_truncate((description or "").strip(), 4000, label="description"),
                 dataset_sample=_truncate(
-                    json.dumps(sample_rows, ensure_ascii=False), 2000, label="dataset_sample"
+                    json.dumps(sample_rows, ensure_ascii=False), 6000, label="dataset_sample"
                 ),
             )
         text = (out.task_description or "").strip()

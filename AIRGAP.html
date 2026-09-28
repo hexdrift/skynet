@@ -1774,6 +1774,9 @@ EMBEDDINGS_MODEL=<span class="s">&lt;internal embedding model&gt;</span></pre>
       <span class="label">TODO · On-premise</span>
       <p><code>EMBEDDINGS_DIM</code> defaults to <code>512</code> and must equal the <code>vector(512)</code> schema column — a mismatch fails loudly at boot with a <code>RuntimeError</code>, it does not silently degrade. An embedding model whose native dimension isn't 512 therefore needs a schema migration to widen the column before you can raise <code>EMBEDDINGS_DIM</code> to match.</p>
     </div>
+    <p>Before a finished run is embedded, the summary model (<code>EMBEDDINGS_SUMMARY_MODEL</code>, empty = <code>CODE_AGENT_MODEL</code>) describes it in two or three sentences drawn only from the run's title, description and a ten-row sample of its data — not its signature, metric or optimizer. Runs embedded by an older release keep their old summaries until they are next re-embedded. Re-embedding them is <strong>optional</strong>: new runs use the new inputs either way, and the background repair pass never revisits rows that already look fresh. To rebuild every existing summary at once, run <code>python manage.py reembed</code> from <code>backend/</code> (or inside a backend pod):</p>
+<pre><span data-os="unix">kubectl -n skynet exec deploy/skynet-skynet-backend -- python manage.py reembed</span><span data-os="win">kubectl -n skynet exec deploy/skynet-skynet-backend -- python manage.py reembed</span></pre>
+    <p>It runs synchronously and makes one summary-model call plus one embedding call per successful run on your internal gateways, so schedule it for a quiet window on a large corpus. It does nothing unless <code>SEARCH_BACKEND=semantic</code>.</p>
   </div>
 
   <h4>Known intended runtime egress</h4>
