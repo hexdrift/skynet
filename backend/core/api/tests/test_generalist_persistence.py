@@ -413,6 +413,23 @@ async def test_persist_on_done_writes_exactly_once(wrapper_engine: Engine) -> No
     assert rows[0].model is None
 
 
+async def test_persist_on_done_keeps_the_turn_stats(wrapper_engine: Engine) -> None:
+    """The stats block the observation wrapper adds to ``done`` is stored with the turn."""
+    stats = {"input_tokens": 10, "output_tokens": 2, "duration_ms": 50, "ttft_ms": 20}
+
+    async def _turn_with_stats() -> AsyncIterator[dict[str, Any]]:
+        """Emit a turn whose ``done`` carries stats."""
+        yield {"event": "message_patch", "data": {"chunk": "שלום"}}
+        yield {"event": "done", "data": {"assistant_message": "שלום", "stats": stats}}
+
+    events = await _drain(_turn_with_stats(), wrapper_engine)
+
+    assert events[-1]["data"]["stats"] == stats
+    rows = _assistant_rows(wrapper_engine)
+    assert len(rows) == 1
+    assert rows[0].router_metadata == {"stats": stats}
+
+
 async def test_empty_greeting_turn_does_not_persist_on_teardown(wrapper_engine: Engine) -> None:
     """A teardown with no text and no settled tool-calls writes no empty row."""
 

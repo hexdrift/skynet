@@ -307,8 +307,8 @@ def _persist_assistant_turn(
         wizard_state_after: Wizard snapshot at turn end (training metadata).
         allowed_tools: Tool names exposed to the agent this turn.
         tool_schema_hashes: ``{tool_name: sha256(schema_json)}`` snapshot.
-        router_metadata: OpenRouter upstream id + served-by host + latency.
-            ``None`` until the runtime captures it (see spec §4).
+        router_metadata: Per-turn runtime metadata: ``stats`` holds the
+            turn's token counts and timing. ``None`` when nothing was captured.
     """
     now = datetime.now(UTC)
     with Session(job_store.engine) as session:
@@ -381,6 +381,7 @@ async def _wrap_with_persistence(
     assistant_buf: list[str] = []
     tool_calls: dict[str, dict[str, Any]] = {}
     tool_order: list[str] = []
+    turn_stats: dict[str, Any] | None = None
     allowed_tools: list[str] | None = None
     tool_schema_hashes: dict[str, str] | None = None
     wizard_state_after: dict[str, Any] = dict(wizard_state_before) if wizard_state_before else {}
@@ -411,6 +412,7 @@ async def _wrap_with_persistence(
                 wizard_state_after=wizard_state_after or None,
                 allowed_tools=allowed_tools,
                 tool_schema_hashes=tool_schema_hashes,
+                router_metadata={"stats": turn_stats} if turn_stats else None,
             )
         except Exception:
             logger.exception("Failed to persist assistant turn")
@@ -460,6 +462,8 @@ async def _wrap_with_persistence(
             elif name == "done":
                 final_text = data.get("assistant_message")
                 content = final_text if isinstance(final_text, str) and final_text else "".join(assistant_buf)
+                raw_stats = data.get("stats")
+                turn_stats = raw_stats if isinstance(raw_stats, dict) else None
                 await _do_persist(content)
             yield event
     finally:
