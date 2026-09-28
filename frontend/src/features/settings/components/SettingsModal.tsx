@@ -12,7 +12,6 @@ import { useSession } from "next-auth/react";
 import { toast } from "react-toastify";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  ChatText,
   BookOpen,
   CircleNotch,
   Brain,
@@ -35,7 +34,6 @@ import {
   Trash,
   User,
   Info,
-  X,
 } from "@/shared/ui/icons";
 import {
   Dialog,

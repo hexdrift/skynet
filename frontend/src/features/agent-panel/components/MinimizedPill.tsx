@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import { Sparkle } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
 
