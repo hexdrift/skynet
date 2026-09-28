@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { CaretDown } from "@/shared/ui/icons";
 import {
   Card,
@@ -18,12 +20,14 @@ import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
+import { Disclosure } from "../Disclosure";
 import { TOUCH_FIELD } from "@/shared/ui/touch";
 
 export function BasicsStep({ w }: { w: SubmitWizardContext }) {
   const {
     jobName,
     setJobName,
+    suggestedName,
     jobDescription,
     setJobDescription,
     jobType,
@@ -33,6 +37,12 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
     optimizationTypeOpen,
     setOptimizationTypeOpen,
   } = w;
+  // The description is optional, so it folds away until someone asks for it;
+  // one that already has text (restored draft, clone, agent) stays visible.
+  const [descriptionOpen, setDescriptionOpen] = useState(() => jobDescription.trim() !== "");
+  useEffect(() => {
+    if (jobDescription.trim() !== "") setDescriptionOpen(true);
+  }, [jobDescription]);
 
   return (
     <Card
@@ -56,15 +66,20 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
           </Label>
           <Input
             id="job-name"
-            placeholder={msg("auto.features.submit.components.steps.basicsstep.literal.1")}
+            placeholder={
+              suggestedName || msg("auto.features.submit.components.steps.basicsstep.literal.1")
+            }
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
             className={TOUCH_FIELD}
           />
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>{msg("auto.features.submit.components.steps.basicsstep.4")}</Label>
+        <Disclosure
+          id="job-description-panel"
+          label={msg("auto.features.submit.components.steps.basicsstep.4")}
+          open={descriptionOpen}
+          onOpenChange={setDescriptionOpen}
+          trailing={
             <span
               className={cn(
                 "text-[0.625rem] tabular-nums transition-colors",
@@ -76,9 +91,11 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
               {jobDescription.length}
               {msg("auto.features.submit.components.steps.basicsstep.5")}
             </span>
-          </div>
+          }
+        >
           <Textarea
             data-tutorial="job-description"
+            aria-label={msg("auto.features.submit.components.steps.basicsstep.4")}
             value={jobDescription}
             onChange={(e) => {
               if (e.target.value.length <= 280) setJobDescription(e.target.value);
@@ -88,7 +105,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             })}
             rows={4}
           />
-        </div>
+        </Disclosure>
         <div className="space-y-3">
           <Label>{msg("submit.basics.privacy.label")}</Label>
           <Segmented<"private" | "public">

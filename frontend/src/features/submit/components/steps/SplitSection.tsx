@@ -18,6 +18,7 @@ import { msg } from "@/shared/lib/messages";
 import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
+import { Disclosure } from "../Disclosure";
 import { SplitRecommendationCard } from "../SplitRecommendationCard";
 import { splitExampleCounts } from "../../lib/split-example-counts";
 
@@ -49,15 +50,17 @@ const FIELDS: ReadonlyArray<{
   },
 ];
 
-// The recommendation card carries the mode switch; the manual fractions only
-// appear once the user picks manual selection, each with the number of
-// examples it takes from the dataset.
+// The recommendation always shows. The manual fractions fold behind a
+// disclosure whose open state is the split mode itself: closing it hands the
+// numbers back to the planner, and a clone or draft that brought its own
+// split arrives with the panel already open.
 export function SplitSection({ w }: { w: SubmitWizardContext }) {
   const {
     split,
     updateSplit,
     splitSum,
     splitMode,
+    setSplitMode,
     splitPlan,
     profileLoading,
     shuffle,
@@ -92,8 +95,14 @@ export function SplitSection({ w }: { w: SubmitWizardContext }) {
           <p className="text-sm text-muted-foreground">{msg("submit.split.empty")}</p>
         )}
         <SplitRecommendationCard w={w} />
-        {splitMode === "manual" && (
-          <div className="space-y-3">
+        <Disclosure
+          id="split-adjust"
+          label={msg("submit.split.adjust_toggle")}
+          tip={msg("submit.split.adjust_hint")}
+          open={splitMode === "manual"}
+          onOpenChange={(open) => setSplitMode(open ? "manual" : "auto")}
+        >
+          <div className="space-y-3 pt-1">
             <div className="flex h-3 rounded-full overflow-hidden">
               {FIELDS.map((field) => (
                 <div
@@ -132,7 +141,7 @@ export function SplitSection({ w }: { w: SubmitWizardContext }) {
               ))}
             </div>
           </div>
-        )}
+        </Disclosure>
         <div className="flex items-center justify-between">
           <Label htmlFor="shuffle" className="cursor-pointer text-sm">
             <HelpTip text={tip("data.shuffle_explanation")}>

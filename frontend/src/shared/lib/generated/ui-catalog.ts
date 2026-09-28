@@ -2364,13 +2364,13 @@ export type MessageKey =
   | "submit.react.tools_list_label"
   | "submit.react.tools_next"
   | "submit.react.tools_prev"
+  | "submit.split.adjust_hint"
+  | "submit.split.adjust_toggle"
   | "submit.split.empty"
   | "submit.split.example_count"
   | "submit.split.label_test"
   | "submit.split.label_train"
   | "submit.split.label_val"
-  | "submit.split.mode_auto"
-  | "submit.split.mode_manual"
   | "submit.split.rationale.large"
   | "submit.split.rationale.medium"
   | "submit.split.rationale.small"
@@ -5223,13 +5223,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.react.tools_list_label": "כלים מחוברים",
   "submit.react.tools_next": "כלים הבאים",
   "submit.react.tools_prev": "כלים קודמים",
+  "submit.split.adjust_hint": "סגירה מחזירה לחלוקה המומלצת.",
+  "submit.split.adjust_toggle": "התאמת החלוקה",
   "submit.split.empty": "אין עדיין מה לחלק. אחרי שתעלו {term.dataset} ותסמנו עמודות קלט ופלט, החלוקה המומלצת תופיע כאן.",
   "submit.split.example_count": "{term.examplePlural}: {count}",
   "submit.split.label_test": "{term.splitTest}",
   "submit.split.label_train": "{term.splitTrain}",
   "submit.split.label_val": "{term.splitVal}",
-  "submit.split.mode_auto": "לפי ההמלצה",
-  "submit.split.mode_manual": "בחירה ידנית",
   "submit.split.rationale.large": "הדאטאסט גדול ({total} {term.examplePlural}). הוקצו {val_count} {term.examplePlural} ל{term.splitVal} ו-{test_count} ל{term.splitTest}; כשהדאטאסט מגיע למכסות האלה, הן שומרות על זמן {term.optimization} סביר בלי להריץ הערכה על יותר {term.examplePlural} מהנדרש.",
   "submit.split.rationale.medium": "הדאטאסט בגודל בינוני ({total} {term.examplePlural}). חלוקת 60/20/20 משאירה מספיק {term.examplePlural} לכל שלושת הסטים.",
   "submit.split.rationale.small": "הדאטאסט קטן ({total} {term.examplePlural}). הוקצו 80% ל{term.splitTrain} ו-20% ל{term.splitVal} כדי לתת ל-GEPA בסיס הערכה נפרד; אין מספיק {term.examplePlural} גם ל{term.splitTest}.",

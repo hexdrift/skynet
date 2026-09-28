@@ -4,7 +4,6 @@ import { PingDot } from "@/shared/ui/ping-dot";
 import { Sparkle, Info } from "@/shared/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { cn } from "@/shared/lib/utils";
-import { Segmented } from "@/shared/ui/segmented";
 import { msg, type MessageKey } from "@/shared/lib/messages";
 import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 import { useLocale } from "@/shared/providers";
@@ -31,7 +30,7 @@ function rationaleKey(total: number): MessageKey {
 }
 
 export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
-  const { splitPlan, splitMode, setSplitMode, profileLoading } = w;
+  const { splitPlan, splitMode, profileLoading } = w;
   // The rationale/warning copy is portaled into a Radix tooltip, where the `rtl:`
   // variant doesn't fire — drive direction off the locale explicitly instead.
   const { locale } = useLocale();
@@ -100,7 +99,6 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
               </Tooltip>
             )}
           </div>
-          <ModeToggle value={splitMode} onChange={setSplitMode} />
         </div>
       </div>
 
@@ -150,27 +148,6 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function ModeToggle({
-  value,
-  onChange,
-}: {
-  value: "auto" | "manual";
-  onChange: (mode: "auto" | "manual") => void;
-}) {
-  return (
-    <Segmented<"auto" | "manual">
-      size="sm"
-      className="w-full sm:w-auto"
-      value={value}
-      onChange={onChange}
-      options={[
-        { value: "auto", label: msg("submit.split.mode_auto") },
-        { value: "manual", label: msg("submit.split.mode_manual") },
-      ]}
-    />
   );
 }
 
