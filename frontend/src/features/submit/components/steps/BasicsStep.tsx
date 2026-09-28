@@ -16,14 +16,11 @@ import { Segmented } from "@/shared/ui/segmented";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { useUserPrefs } from "@/features/settings";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 import { TOUCH_FIELD } from "@/shared/ui/touch";
 
 export function BasicsStep({ w }: { w: SubmitWizardContext }) {
-  const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
   const {
     jobName,
     setJobName,
@@ -112,61 +109,59 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             ]}
           />
         </div>
-        {advanced && <Separator />}
-        {advanced && (
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setOptimizationTypeOpen(!optimizationTypeOpen)}
-              aria-expanded={optimizationTypeOpen}
-              className="flex w-full cursor-pointer items-center justify-between gap-2"
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="text-sm leading-none font-medium">
-                  {msg("auto.features.submit.components.steps.basicsstep.6")}
-                  {TERMS.optimization}
-                </span>
-                {!optimizationTypeOpen && (
-                  <span className="text-xs text-muted-foreground">
-                    {jobType === "run" ? TERMS.optimizationTypeRun : TERMS.optimizationTypeGrid}
-                  </span>
-                )}
+        <Separator />
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setOptimizationTypeOpen(!optimizationTypeOpen)}
+            aria-expanded={optimizationTypeOpen}
+            className="flex w-full cursor-pointer items-center justify-between gap-2"
+          >
+            <span className="flex items-baseline gap-2">
+              <span className="text-sm leading-none font-medium">
+                {msg("auto.features.submit.components.steps.basicsstep.6")}
+                {TERMS.optimization}
               </span>
-              <CaretDown
-                className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
-                  optimizationTypeOpen && "rotate-180",
-                )}
+              {!optimizationTypeOpen && (
+                <span className="text-xs text-muted-foreground">
+                  {jobType === "run" ? TERMS.optimizationTypeRun : TERMS.optimizationTypeGrid}
+                </span>
+              )}
+            </span>
+            <CaretDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+                optimizationTypeOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {optimizationTypeOpen && (
+            <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+              <Segmented<"run" | "grid_search">
+                segmentClassName="sm:px-4"
+                value={jobType}
+                onChange={setOptimizationType}
+                options={[
+                  {
+                    value: "run",
+                    label: TERMS.optimizationTypeRun,
+                    desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.2", {
+                      p1: TERMS.optimization,
+                      p2: TERMS.model,
+                    }),
+                  },
+                  {
+                    value: "grid_search",
+                    label: TERMS.optimizationTypeGrid,
+                    desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.3", {
+                      p1: TERMS.optimizationTypeGrid,
+                    }),
+                  },
+                ]}
               />
-            </button>
-            {optimizationTypeOpen && (
-              <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
-                <Segmented<"run" | "grid_search">
-                  segmentClassName="sm:px-4"
-                  value={jobType}
-                  onChange={setOptimizationType}
-                  options={[
-                    {
-                      value: "run",
-                      label: TERMS.optimizationTypeRun,
-                      desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.2", {
-                        p1: TERMS.optimization,
-                        p2: TERMS.model,
-                      }),
-                    },
-                    {
-                      value: "grid_search",
-                      label: TERMS.optimizationTypeGrid,
-                      desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.3", {
-                        p1: TERMS.optimizationTypeGrid,
-                      }),
-                    },
-                  ]}
-                />
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

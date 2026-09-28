@@ -97,8 +97,6 @@ export interface TutorialHooks {
    * target exists when the spotlight lands.
    */
   setAdvancedSectionsOpen: (open: boolean) => void;
-  /** Enable or disable the global advanced mode that gates dataset splits and GEPA tuning. */
-  setAdvancedMode: (enabled: boolean) => void;
   /**
    * Replay the demo optimization simulation. The results guide calls this
    * when reaching the trajectory step so the user sees the tree grow live

@@ -1374,7 +1374,7 @@ class GeneralistSig(dspy.Signature):
       ``update_wizard_state`` endpoint REJECTS those two fields.
     * User preferences: when the user explicitly asks to turn a local
       preference on or off, call ``update_user_preferences``. Supported fields
-      are ``advanced_mode``, ``expand_advanced``, ``lite_mode``,
+      are ``expand_advanced``, ``lite_mode``,
       ``wizard_code_assist`` (``auto`` or ``manual``), ``wizard_split_mode``
       (``auto`` or ``manual``), ``tagger_assist``, and ``dictation_enabled``.
       Bundle all requested changes into one call and end the turn with a

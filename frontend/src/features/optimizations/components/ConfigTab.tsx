@@ -277,7 +277,6 @@ export function ConfigTab({
   activePair?: PairResult;
 }) {
   const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
   const prefersReducedMotion = useReducedMotion() || prefs.liteMode;
   const isRtl = getActiveDir() === "rtl";
   const [activeSlide, setActiveSlide] = useState(0);
@@ -354,7 +353,7 @@ export function ConfigTab({
     },
     ...reactRows,
     ...Object.entries(optKw)
-      .filter(([k]) => k !== "metric" && (advanced || k === "auto"))
+      .filter(([k]) => k !== "metric")
       .map(([k, v]) => ({
         label: labelWithTip(k),
         value: formatParamValue(k, v),
@@ -656,10 +655,7 @@ export function ConfigTab({
                   {job.source_dataset_id && (
                     <Link
                       href={`/datasets?open=${job.source_dataset_id}`}
-                      className={cn(
-                        "group/srclink flex min-h-28 items-center gap-4 rounded-2xl border border-border/60 bg-[#F8F4EE] p-5 transition-[background-color,border-color,transform] hover:border-[#C8A882]/70 hover:bg-[#F4EEE6] active:scale-[0.995] sm:p-6",
-                        !advanced && "flex-1",
-                      )}
+                      className="group/srclink flex min-h-28 items-center gap-4 rounded-2xl border border-border/60 bg-[#F8F4EE] p-5 transition-[background-color,border-color,transform] hover:border-[#C8A882]/70 hover:bg-[#F4EEE6] active:scale-[0.995] sm:p-6"
                     >
                       <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#3D2E22] text-[#FAF8F5] shadow-sm">
                         <Books className="size-6" aria-hidden="true" />
@@ -681,96 +677,89 @@ export function ConfigTab({
                       <ArrowUpRight className="size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover/srclink:text-foreground" />
                     </Link>
                   )}
-                  {advanced && (
-                    <div className="flex flex-1 flex-col gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
-                          <Database className="size-4" aria-hidden="true" />
+                  <div className="flex flex-1 flex-col gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
+                        <Database className="size-4" aria-hidden="true" />
+                      </span>
+                      <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                        <HelpTip text={tip("data.split_explanation")}>
+                          {msg("auto.features.optimizations.components.configtab.9")}
+                          {TERMS.dataset}
+                        </HelpTip>
+                      </p>
+                    </div>
+                    <div className="flex min-h-28 flex-1 overflow-hidden rounded-2xl border border-border/50 bg-muted/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.42)]">
+                      <div
+                        className="flex min-w-0 flex-col items-center justify-center gap-3 bg-[#3D2E22] p-2 text-[#FAF8F5] transition-[width] sm:items-stretch sm:justify-between sm:p-5"
+                        style={{ width: `${splitFractions.train * 100}%` }}
+                      >
+                        <span className="hidden truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em] opacity-70 sm:block">
+                          {msg("auto.features.optimizations.components.configtab.10")}
                         </span>
-                        <p className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
-                          <HelpTip text={tip("data.split_explanation")}>
-                            {msg("auto.features.optimizations.components.configtab.9")}
-                            {TERMS.dataset}
-                          </HelpTip>
-                        </p>
+                        <span
+                          className="font-mono text-sm font-semibold tabular-nums sm:text-2xl"
+                          dir="ltr"
+                        >
+                          {Math.round(splitFractions.train * 100)}%
+                        </span>
                       </div>
-                      <div className="flex min-h-28 flex-1 overflow-hidden rounded-2xl border border-border/50 bg-muted/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.42)]">
-                        <div
-                          className="flex min-w-0 flex-col items-center justify-center gap-3 bg-[#3D2E22] p-2 text-[#FAF8F5] transition-[width] sm:items-stretch sm:justify-between sm:p-5"
-                          style={{ width: `${splitFractions.train * 100}%` }}
+                      <div
+                        className="flex min-w-0 flex-col items-center justify-center gap-3 bg-[#C8A882] p-2 text-[#3D2E22] transition-[width] sm:items-stretch sm:justify-between sm:p-5"
+                        style={{ width: `${splitFractions.val * 100}%` }}
+                      >
+                        <span className="hidden truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em] opacity-70 sm:block">
+                          {msg("auto.features.optimizations.components.configtab.11")}
+                        </span>
+                        <span
+                          className="font-mono text-sm font-semibold tabular-nums sm:text-2xl"
+                          dir="ltr"
                         >
-                          <span className="hidden truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em] opacity-70 sm:block">
-                            {msg("auto.features.optimizations.components.configtab.10")}
-                          </span>
-                          <span
-                            className="font-mono text-sm font-semibold tabular-nums sm:text-2xl"
-                            dir="ltr"
-                          >
-                            {Math.round(splitFractions.train * 100)}%
-                          </span>
-                        </div>
-                        <div
-                          className="flex min-w-0 flex-col items-center justify-center gap-3 bg-[#C8A882] p-2 text-[#3D2E22] transition-[width] sm:items-stretch sm:justify-between sm:p-5"
-                          style={{ width: `${splitFractions.val * 100}%` }}
+                          {Math.round(splitFractions.val * 100)}%
+                        </span>
+                      </div>
+                      <div
+                        className="flex min-w-0 flex-col items-center justify-center gap-3 bg-[#8C7A6B] p-2 text-[#FAF8F5] transition-[width] sm:items-stretch sm:justify-between sm:p-5"
+                        style={{ width: `${splitFractions.test * 100}%` }}
+                      >
+                        <span className="hidden truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em] opacity-70 sm:block">
+                          {msg("auto.features.optimizations.components.configtab.12")}
+                        </span>
+                        <span
+                          className="font-mono text-sm font-semibold tabular-nums sm:text-2xl"
+                          dir="ltr"
                         >
-                          <span className="hidden truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em] opacity-70 sm:block">
-                            {msg("auto.features.optimizations.components.configtab.11")}
-                          </span>
-                          <span
-                            className="font-mono text-sm font-semibold tabular-nums sm:text-2xl"
-                            dir="ltr"
-                          >
-                            {Math.round(splitFractions.val * 100)}%
-                          </span>
-                        </div>
-                        <div
-                          className="flex min-w-0 flex-col items-center justify-center gap-3 bg-[#8C7A6B] p-2 text-[#FAF8F5] transition-[width] sm:items-stretch sm:justify-between sm:p-5"
-                          style={{ width: `${splitFractions.test * 100}%` }}
-                        >
-                          <span className="hidden truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em] opacity-70 sm:block">
-                            {msg("auto.features.optimizations.components.configtab.12")}
-                          </span>
-                          <span
-                            className="font-mono text-sm font-semibold tabular-nums sm:text-2xl"
-                            dir="ltr"
-                          >
-                            {Math.round(splitFractions.test * 100)}%
-                          </span>
-                        </div>
+                          {Math.round(splitFractions.test * 100)}%
+                        </span>
                       </div>
                     </div>
-                  )}
-                  {advanced && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <InfoCard
+                      label={
+                        <HelpTip text={tip("data.shuffle_explanation")}>
+                          {msg("auto.features.optimizations.components.configtab.13")}
+                        </HelpTip>
+                      }
+                      value={
+                        shuffleVal
+                          ? msg("auto.features.optimizations.components.configtab.literal.16")
+                          : msg("auto.features.optimizations.components.configtab.literal.17")
+                      }
+                      icon={<Shuffle className="size-3.5" />}
+                    />
+                    {seedVal != null && (
                       <InfoCard
                         label={
-                          <HelpTip text={tip("data.shuffle_explanation")}>
-                            {msg("auto.features.optimizations.components.configtab.13")}
+                          <HelpTip text={tip("data.seed")}>
+                            {msg("auto.features.optimizations.components.configtab.14")}
                           </HelpTip>
                         }
-                        value={
-                          shuffleVal
-                            ? msg("auto.features.optimizations.components.configtab.literal.16")
-                            : msg("auto.features.optimizations.components.configtab.literal.17")
-                        }
-                        icon={<Shuffle className="size-3.5" />}
+                        value={seedVal}
+                        icon={<DiceFive className="size-3.5" />}
                       />
-                      {seedVal != null && (
-                        <InfoCard
-                          label={
-                            <HelpTip text={tip("data.seed")}>
-                              {msg("auto.features.optimizations.components.configtab.14")}
-                            </HelpTip>
-                          }
-                          value={seedVal}
-                          icon={<DiceFive className="size-3.5" />}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {!job.source_dataset_id && !advanced && (
-                    <p className="py-12 text-center text-sm text-muted-foreground">—</p>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </motion.div>

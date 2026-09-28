@@ -983,7 +983,6 @@ export type MessageKey =
   | "auto.features.submit.components.steps.paramsstep.6"
   | "auto.features.submit.components.steps.paramsstep.7"
   | "auto.features.submit.components.steps.paramsstep.8"
-  | "auto.features.submit.components.steps.paramsstep.9"
   | "auto.features.submit.components.steps.paramsstep.literal.1"
   | "auto.features.submit.components.steps.paramsstep.literal.2"
   | "auto.features.submit.components.steps.paramsstep.literal.3"
@@ -1858,7 +1857,6 @@ export type MessageKey =
   | "optimization.storage_label"
   | "optimization.workflow.hint"
   | "optimizations.datatab.description"
-  | "optimizations.datatab.description_simple"
   | "optimizations.detail.title"
   | "optimizations.duration.lt_0_1s"
   | "optimizations.duration.seconds"
@@ -1905,8 +1903,6 @@ export type MessageKey =
   | "settings.about.reset_all.label"
   | "settings.about.reset_all.success"
   | "settings.about.version.label"
-  | "settings.account.advanced_mode.description"
-  | "settings.account.advanced_mode.label"
   | "settings.account.expand_advanced.description"
   | "settings.account.expand_advanced.label"
   | "settings.account.lite.description"
@@ -2331,9 +2327,8 @@ export type MessageKey =
   | "submit.dataset.library_picker_title"
   | "submit.dataset.library_search"
   | "submit.dataset.library_search_empty"
+  | "submit.depth.custom"
   | "submit.metric_calls"
-  | "submit.metric_calls.clear"
-  | "submit.metric_calls.hint"
   | "submit.modelpicker.purpose.all"
   | "submit.modelpicker.purpose.aria"
   | "submit.modelpicker.purpose.multilingual"
@@ -2350,6 +2345,8 @@ export type MessageKey =
   | "submit.module.tagline.react"
   | "submit.module.tagline.workflow"
   | "submit.nav.validating"
+  | "submit.optimizer_settings.customized"
+  | "submit.optimizer_settings.defaults"
   | "submit.pxn.batch_hint"
   | "submit.pxn.parents"
   | "submit.pxn.proposals"
@@ -3832,7 +3829,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.steps.paramsstep.6": "אימון",
   "auto.features.submit.components.steps.paramsstep.7": "אימות",
   "auto.features.submit.components.steps.paramsstep.8": "בדיקה",
-  "auto.features.submit.components.steps.paramsstep.9": "הגדרות נוספות",
   "auto.features.submit.components.steps.paramsstep.literal.1": "קל",
   "auto.features.submit.components.steps.paramsstep.literal.2": "בינוני",
   "auto.features.submit.components.steps.paramsstep.literal.3": "מעמיק",
@@ -4707,7 +4703,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimization.storage_label": "נפח האחסון של הריצה — לחצו לניהול",
   "optimization.workflow.hint": "גלילה לזום · גרירה להזזה · לחיצה על צומת לפרטים",
   "optimizations.datatab.description": "הנתונים ששימשו ב{term.optimization} — מחולקים ל{term.splitTrain}, {term.splitVal} ו{term.splitTest}, עם התוצאות לכל דוגמה.",
-  "optimizations.datatab.description_simple": "הדוגמאות שנמדדו — כל דוגמה עם התוצאה שלה, לפני ואחרי ה{term.optimization}.",
   "optimizations.detail.title": "פרטי אופטימיזציה",
   "optimizations.duration.lt_0_1s": "<0.1ש׳",
   "optimizations.duration.seconds": "{value}ש׳",
@@ -4754,8 +4749,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.about.reset_all.label": "איפוס כל ההעדפות",
   "settings.about.reset_all.success": "ההעדפות אופסו",
   "settings.about.version.label": "גרסה",
-  "settings.account.advanced_mode.description": "מציג בקרות אופטימיזציה למתקדמים — סריקות מודלים, כוונון האופטימייזר ופרטי אימון/אימות/בדיקה",
-  "settings.account.advanced_mode.label": "מצב מתקדם",
   "settings.account.expand_advanced.description": "אפשרויות מתקדמות ייפתחו כברירת מחדל באשף האופטימיזציה במקום להישאר מקופלות",
   "settings.account.expand_advanced.label": "הצגת אפשרויות מתקדמות",
   "settings.account.lite.description": "מכבה אנימציות ומחליף תצוגות כבדות בגרסאות פשוטות — לחוויה חלקה במחשבים חלשים",
@@ -5180,9 +5173,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.dataset.library_picker_title": "בחירת {term.dataset} מהספרייה",
   "submit.dataset.library_search": "חיפוש {term.dataset}…",
   "submit.dataset.library_search_empty": "לא נמצאו דאטאסטים תואמים",
+  "submit.depth.custom": "מותאם אישית",
   "submit.metric_calls": "תקציב קריאות מדד",
-  "submit.metric_calls.clear": "ניקוי",
-  "submit.metric_calls.hint": "עוקף את סבבי ההערכה — הריצה נעצרת אחרי מספר זה של קריאות מדד",
   "submit.modelpicker.purpose.all": "הכל",
   "submit.modelpicker.purpose.aria": "סינון מודלים לפי ייעוד",
   "submit.modelpicker.purpose.multilingual": "רב-לשוני",
@@ -5199,6 +5191,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.module.tagline.react": "קורא לכלים בלולאה עד לתשובה",
   "submit.module.tagline.workflow": "כמה צעדים מחוברים על קנבס אחד",
   "submit.nav.validating": "מאמת…",
+  "submit.optimizer_settings.customized": "מותאם",
+  "submit.optimizer_settings.defaults": "ברירות מחדל",
   "submit.pxn.batch_hint": "{total} מועמדים נבדקים בכל סבב",
   "submit.pxn.parents": "מועמדים לשיפור (p)",
   "submit.pxn.proposals": "הצעות לכל מועמד (n)",
