@@ -400,7 +400,7 @@ uvicorn==0.53.0
     #   skynet
 watchfiles==1.2.0
     # via fastmcp-slim
-websockets==17.0.1
+websockets==17.1
     # via fastmcp-slim
 yarl==1.25.1
     # via aiohttp
