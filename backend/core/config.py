@@ -126,11 +126,6 @@ class Settings(BaseSettings):
         alias="LITELLM_PROXY_API_KEY",
         description="Virtual key the backend presents to the LiteLLM proxy for managed runs. Only consulted when LITELLM_PROXY_URL is set.",
     )
-    openrouter_api_key: SecretStr | None = Field(
-        default=None,
-        alias="OPENROUTER_API_KEY",
-        description="Optional operator-managed OpenRouter key for centrally configured models.",
-    )
     worker_enabled: bool = Field(
         default=True,
         alias="WORKER_ENABLED",

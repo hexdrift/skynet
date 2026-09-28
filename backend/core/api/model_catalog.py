@@ -192,7 +192,6 @@ _PROVIDER_META: dict[str, tuple[str, list[_DataCenter]]] = {
             _DataCenter(
                 base_url="https://openrouter.ai/api/v1",
                 models_url="https://openrouter.ai/api/v1/models",
-                env_var="OPENROUTER_API_KEY",
             )
         ],
     ),
