@@ -811,7 +811,7 @@ class _UsageLm:
     def __init__(self) -> None:
         """Seed one history entry with a token usage block."""
         self.history = [{"usage": {"prompt_tokens": 120_000, "completion_tokens": 30_000}}]
-        self.model = "openrouter/test/unpriced"
+        self.model = "together_ai/test/unpriced"
 
 
 @pytest.fixture

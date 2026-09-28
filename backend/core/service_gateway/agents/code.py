@@ -1043,10 +1043,10 @@ def _extract_reasoning_token(chunk: object) -> str | None:
     Handles the conventions in the wild:
       - LiteLLM-normalized: ``delta.reasoning_content`` (string). Emitted by
         Fireworks, DeepSeek, OpenAI o-series, and most reasoning providers.
-      - OpenRouter passthrough: ``delta.reasoning`` (string) on responses that
-        skip LiteLLM's normalization (direct/BYOK OpenRouter calls).
+      - Passthrough: ``delta.reasoning`` (string) on responses that skip
+        LiteLLM's normalization (e.g. OpenAI-compatible gateways such as vLLM).
       - Detail blocks: ``delta.reasoning_details`` — MiniMax ``reasoning_split``
-        and OpenRouter both use it; blocks carry ``text`` (``reasoning.text``)
+        uses it; blocks carry ``text`` (``reasoning.text``)
         or ``summary`` (``reasoning.summary``, OpenAI-style summarized CoT).
 
     Args:
@@ -1517,10 +1517,9 @@ def _build_agent_lm(
       ``extra_body={"reasoning_split": true}`` so the provider emits its
       interleaved ``<think>`` reasoning in a clean ``reasoning_details``
       channel. Thinking depth is always max on this endpoint — no knob.
-    - **Fireworks-hosted MiniMax** (``fireworks_ai/.../minimax-*``) **and
-      BYOK OpenRouter MiniMax** (``openrouter/minimax/...``): reasoning arrives
-      inline in the assistant content as ``<think>…</think>`` blocks. Neither
-      host honours ``reasoning_split``, so we send nothing.
+    - **Fireworks-hosted MiniMax** (``fireworks_ai/.../minimax-*``): reasoning
+      arrives inline in the assistant content as ``<think>…</think>`` blocks.
+      The host doesn't honour ``reasoning_split``, so we send nothing.
     - **Everything else** (including the default ``openai/on-prem-default``
       internal-gateway alias): no reasoning knob.
 
@@ -1531,7 +1530,7 @@ def _build_agent_lm(
     lower = model_name.lower()
     extra: dict = {}
     is_native_minimax = lower.startswith("minimax/") or (
-        "minimax" in lower and "fireworks" not in lower and "openrouter" not in lower
+        "minimax" in lower and "fireworks" not in lower
     )
     if is_native_minimax:
         extra["extra_body"] = {"reasoning_split": True}

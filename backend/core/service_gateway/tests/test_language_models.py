@@ -14,7 +14,6 @@ from core.models import ModelConfig
 from core.service_gateway.language_models import (
     MeteredLM,
     _apply_managed_gateway,
-    _translate_gateway_reasoning,
     apply_model_reasoning_config,
     apply_reasoning_effort,
     build_language_model,
@@ -371,73 +370,6 @@ def test_managed_gateway_noop_without_proxy(monkeypatch: pytest.MonkeyPatch) -> 
     assert kwargs["model"] == "openai/gpt-4o"  # untouched without a proxy
 
 
-def test_gateway_reasoning_translates_effort_to_native_param() -> None:
-    """On a direct OpenRouter call ``reasoning_effort`` is mirrored into ``reasoning``.
-
-    The kwarg must survive (not be popped): dspy's ``Reasoning`` field injects
-    ``reasoning_effort="low"`` at call time when the LM carries none, and
-    OpenRouter rejects requests where the two forms disagree.
-    """
-    kwargs: dict[str, object] = {
-        "model": "openrouter/google/gemini-3.6-flash",
-        "reasoning_effort": "low",
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "low"
-    assert kwargs["extra_body"] == {"reasoning": {"effort": "low"}}
-
-
-def test_gateway_reasoning_maps_max_to_openrouter_ceiling() -> None:
-    """Anthropic's ``max`` maps to ``xhigh`` on both wire forms, kept in agreement."""
-    kwargs: dict[str, object] = {
-        "model": "openrouter/anthropic/claude-fable-5",
-        "reasoning_effort": "max",
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "xhigh"
-    assert kwargs["extra_body"] == {"reasoning": {"effort": "xhigh"}}
-
-
-@pytest.mark.parametrize("model", ["openai/gpt-5.6-sol", "litellm_proxy/openai/gpt-5.6-sol"])
-def test_gateway_reasoning_leaves_non_openrouter_calls_alone(model: str) -> None:
-    """Direct and self-hosted-proxy calls keep the LiteLLM-native ``reasoning_effort``.
-
-    Args:
-        model: The model id, bare or addressed through the internal proxy.
-    """
-    kwargs: dict[str, object] = {"model": model, "reasoning_effort": "low"}
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "low"
-    assert "extra_body" not in kwargs
-
-
-def test_gateway_reasoning_preserves_existing_extra_body() -> None:
-    """Translation merges into an existing ``extra_body`` without clobbering it."""
-    kwargs: dict[str, object] = {
-        "model": "openrouter/google/gemini-3.6-flash",
-        "reasoning_effort": "high",
-        "extra_body": {"transforms": ["middle-out"]},
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["extra_body"] == {
-        "transforms": ["middle-out"],
-        "reasoning": {"effort": "high"},
-    }
-
-
-def test_gateway_reasoning_aligns_kwarg_to_caller_supplied_body() -> None:
-    """A caller-set ``extra_body.reasoning`` wins and the kwarg is aligned to it."""
-    kwargs: dict[str, object] = {
-        "model": "openrouter/deepseek/deepseek-v4-pro",
-        "reasoning_effort": "max",
-        "extra_body": {"reasoning": {"effort": "high"}},
-    }
-    _translate_gateway_reasoning(kwargs)
-    assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["extra_body"] == {"reasoning": {"effort": "high"}}
-
-
 def test_disable_cache_sends_proxy_no_cache_directive(monkeypatch: pytest.MonkeyPatch) -> None:
     """``disable_cache`` opts a proxied call out of the proxy's server-side cache too."""
     monkeypatch.setattr(settings, "litellm_proxy_url", "https://proxy.internal/v1")
@@ -478,7 +410,7 @@ def test_served_model_from_reveals_auto_routed_pick() -> None:
     lm = _FakeLm(
         [
             {
-                "model": "openrouter/openrouter/auto-beta",
+                "model": "together_ai/auto-router",
                 "response_model": "google/gemini-3.6-flash",
             }
         ]
@@ -489,12 +421,12 @@ def test_served_model_from_reveals_auto_routed_pick() -> None:
 def test_served_model_from_reads_metered_lm_attributes() -> None:
     """MeteredLM drops history, so the reveal reads the stashed model ids."""
     lm = MagicMock(spec=[])
-    lm.last_request_model = "openrouter/openrouter/auto-beta"
+    lm.last_request_model = "together_ai/auto-router"
     lm.last_response_model = "deepseek/deepseek-v4-flash"
     assert served_model_from(lm) == "deepseek/deepseek-v4-flash"
 
     echo = MagicMock(spec=[])
-    echo.last_request_model = "openrouter/openai/gpt-5.6-terra"
+    echo.last_request_model = "together_ai/openai/gpt-5.6-terra"
     echo.last_response_model = "openai/gpt-5.6-terra"
     assert served_model_from(echo) is None
 
@@ -507,12 +439,12 @@ def test_metered_lm_update_history_stashes_model_ids() -> None:
     MeteredLM.update_history(
         lm,
         {
-            "model": "openrouter/openrouter/auto-beta",
+            "model": "together_ai/auto-router",
             "response_model": "google/gemini-3.6-flash",
             "usage": {},
         },
     )
-    assert lm.last_request_model == "openrouter/openrouter/auto-beta"
+    assert lm.last_request_model == "together_ai/auto-router"
     assert lm.last_response_model == "google/gemini-3.6-flash"
 
 
@@ -523,7 +455,7 @@ def test_served_model_from_suppresses_non_news() -> None:
     same = {"model": "openai/gpt-4o-mini", "response_model": "openai/gpt-4o-mini"}
     assert served_model_from(_FakeLm([same])) is None
     stripped = {
-        "model": "openrouter/openai/gpt-5.6-terra",
+        "model": "together_ai/openai/gpt-5.6-terra",
         "response_model": "openai/gpt-5.6-terra",
     }
     assert served_model_from(_FakeLm([stripped])) is None

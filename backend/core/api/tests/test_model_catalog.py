@@ -120,7 +120,7 @@ def test_get_catalog_returns_correct_types(monkeypatch: pytest.MonkeyPatch) -> N
     fake_cost: dict = dict(litellm.model_cost)
     fake_cost["fakeprovider-model-a"] = {
         "mode": "chat",
-        "litellm_provider": "openrouter",
+        "litellm_provider": "together_ai",
         "supports_reasoning": False,
         "max_input_tokens": 4096,
         "input_cost_per_token": 0,
@@ -146,14 +146,14 @@ def test_get_catalog_surfaces_per_token_costs(monkeypatch: pytest.MonkeyPatch) -
     fake_cost: dict = {
         "priced-model": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "max_input_tokens": 4096,
             "input_cost_per_token": 1.5e-7,
             "output_cost_per_token": 6e-7,
         },
         "freebie-model": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "max_input_tokens": 4096,
             "input_cost_per_token": 0,  # zero/absent must surface as None, not free
         },
@@ -163,10 +163,10 @@ def test_get_catalog_surfaces_per_token_costs(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(mc, "_probe_all_providers", dict)
 
     by_value = {m.value: m for m in get_catalog().models}
-    priced = by_value["openrouter/priced-model"]
+    priced = by_value["together_ai/priced-model"]
     assert priced.input_cost_per_token == 1.5e-7
     assert priced.output_cost_per_token == 6e-7
-    freebie = by_value["openrouter/freebie-model"]
+    freebie = by_value["together_ai/freebie-model"]
     assert freebie.input_cost_per_token is None
     assert freebie.output_cost_per_token is None
 
@@ -176,7 +176,7 @@ def test_get_catalog_only_returns_available_models(monkeypatch: pytest.MonkeyPat
     fake_cost: dict = {
         "only-in-registry": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 4096,
             "input_cost_per_token": 0,
@@ -201,7 +201,7 @@ def test_get_catalog_deduplicates_dated_variants(monkeypatch: pytest.MonkeyPatch
     fake_cost: dict = {
         "gpt-4o": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 128000,
             "input_cost_per_token": 0,
@@ -209,7 +209,7 @@ def test_get_catalog_deduplicates_dated_variants(monkeypatch: pytest.MonkeyPatch
         },
         "gpt-4o-2024-08-06": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 128000,
             "input_cost_per_token": 0,
@@ -234,7 +234,7 @@ def test_get_catalog_filters_out_non_chat_modes(monkeypatch: pytest.MonkeyPatch)
     fake_cost: dict = {
         "text-embedding-ada-002": {
             "mode": "embedding",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "max_input_tokens": 8192,
             "input_cost_per_token": 0,
             "output_cost_per_token": 0,
@@ -254,7 +254,7 @@ def test_get_catalog_propagates_supports_vision_flag(monkeypatch: pytest.MonkeyP
     fake_cost: dict = {
         "vision-model": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "supports_vision": True,
             "max_input_tokens": 128000,
@@ -263,7 +263,7 @@ def test_get_catalog_propagates_supports_vision_flag(monkeypatch: pytest.MonkeyP
         },
         "text-only-model": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 8192,
             "input_cost_per_token": 0,
@@ -277,8 +277,8 @@ def test_get_catalog_propagates_supports_vision_flag(monkeypatch: pytest.MonkeyP
     result = get_catalog()
 
     by_value = {m.value: m for m in result.models}
-    assert by_value["openrouter/vision-model"].supports_vision is True
-    assert by_value["openrouter/text-only-model"].supports_vision is False
+    assert by_value["together_ai/vision-model"].supports_vision is True
+    assert by_value["together_ai/text-only-model"].supports_vision is False
 
 
 def test_get_catalog_handles_valid_models_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -290,7 +290,7 @@ def test_get_catalog_handles_valid_models_failure(monkeypatch: pytest.MonkeyPatc
     fake_cost: dict = {
         "gpt-4o": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 128000,
             "input_cost_per_token": 0,
@@ -314,14 +314,14 @@ def test_single_endpoint_provider_has_none_data_center(monkeypatch: pytest.Monke
     Preserves the historical single-DC wire shape so existing clients keep
     working when no on-prem gateway is configured.
     """
-    centers = _provider_data_centers("openrouter")
+    centers = _provider_data_centers("together_ai")
     assert len(centers) == 1
     assert centers[0].label is None
 
     fake_cost: dict = {
-        "openrouter/vendor/chat-model": {
+        "together_ai/vendor/chat-model": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 128000,
             "input_cost_per_token": 0,
@@ -329,15 +329,15 @@ def test_single_endpoint_provider_has_none_data_center(monkeypatch: pytest.Monke
         }
     }
     monkeypatch.setattr(litellm, "model_cost", fake_cost)
-    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["openrouter/vendor/chat-model"])
+    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["together_ai/vendor/chat-model"])
     monkeypatch.setattr(mc, "_probe_all_providers", dict)
 
     result = get_catalog()
 
-    entries = [m for m in result.models if m.provider == "openrouter"]
+    entries = [m for m in result.models if m.provider == "together_ai"]
     assert len(entries) == 1
     assert entries[0].data_center is None
-    providers = [p for p in result.providers if p.slug == "openrouter"]
+    providers = [p for p in result.providers if p.slug == "together_ai"]
     assert len(providers) == 1
     assert providers[0].data_center is None
 
@@ -362,9 +362,9 @@ def test_platform_catalog_includes_each_configured_provider(monkeypatch: pytest.
             "input_cost_per_token": 0,
             "output_cost_per_token": 0,
         },
-        "openrouter/vendor/chat-model": {
+        "together_ai/vendor/chat-model": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 128000,
             "input_cost_per_token": 0,
@@ -375,14 +375,14 @@ def test_platform_catalog_includes_each_configured_provider(monkeypatch: pytest.
     monkeypatch.setattr(
         litellm,
         "get_valid_models",
-        lambda: ["gpt-4o", "claude-3-5-haiku", "openrouter/vendor/chat-model"],
+        lambda: ["gpt-4o", "claude-3-5-haiku", "together_ai/vendor/chat-model"],
     )
     monkeypatch.setattr(mc, "_probe_all_providers", dict)
 
     result = get_catalog()
 
-    assert {m.provider for m in result.models} == {"openai", "anthropic", "openrouter"}
-    assert {p.slug for p in result.providers} == {"openai", "anthropic", "openrouter"}
+    assert {m.provider for m in result.models} == {"openai", "anthropic", "together_ai"}
+    assert {p.slug for p in result.providers} == {"openai", "anthropic", "together_ai"}
 
 
 def test_on_prem_uses_openai_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -398,7 +398,7 @@ def test_on_prem_uses_openai_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_catalog_adds_probe_only_models_with_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     """Probe-reported models absent from LiteLLM's registry are added with metadata.
 
-    Simulates an OpenRouter ``/models`` probe that returns two MiniMax models
+    Simulates a Together AI ``/models`` probe that returns two MiniMax models
     LiteLLM never listed: a vision/reasoning one and a text-only one. Both must
     appear in the catalog, provider-prefixed, with vision/thinking flags and the
     context window derived defensively from the raw probe item.
@@ -407,23 +407,15 @@ def test_get_catalog_adds_probe_only_models_with_metadata(monkeypatch: pytest.Mo
     monkeypatch.setattr(litellm, "get_valid_models", list)
 
     probe = {
-        ("openrouter", None): {
+        ("together_ai", None): {
             "minimax/minimax-m3": {
                 "id": "minimax/minimax-m3",
-                "architecture": {
-                    "input_modalities": ["text", "image", "video"],
-                    "output_modalities": ["text"],
-                },
-                "supported_parameters": ["reasoning", "temperature"],
+                "supports_vision": True,
+                "supports_reasoning": True,
                 "context_length": 200000,
             },
             "minimax/minimax-m2.7": {
                 "id": "minimax/minimax-m2.7",
-                "architecture": {
-                    "input_modalities": ["text"],
-                    "output_modalities": ["text"],
-                },
-                "supported_parameters": ["temperature"],
                 "context_length": 100000,
             },
         }
@@ -433,50 +425,22 @@ def test_get_catalog_adds_probe_only_models_with_metadata(monkeypatch: pytest.Mo
     result = get_catalog()
 
     by_value = {m.value: m for m in result.models}
-    assert "openrouter/minimax/minimax-m3" in by_value
-    assert "openrouter/minimax/minimax-m2.7" in by_value
+    assert "together_ai/minimax/minimax-m3" in by_value
+    assert "together_ai/minimax/minimax-m2.7" in by_value
 
-    m3 = by_value["openrouter/minimax/minimax-m3"]
+    m3 = by_value["together_ai/minimax/minimax-m3"]
     assert m3.supports_vision is True
     assert m3.supports_thinking is True
     assert m3.available is True
     assert m3.max_input_tokens == 200000
-    assert m3.provider == "openrouter"
+    assert m3.provider == "together_ai"
     assert m3.label == "minimax-m3"
 
-    m27 = by_value["openrouter/minimax/minimax-m2.7"]
+    m27 = by_value["together_ai/minimax/minimax-m2.7"]
     assert m27.supports_vision is False
     assert m27.supports_thinking is False
 
-    assert any(p.slug == "openrouter" for p in result.providers)
-
-
-def test_get_catalog_skips_non_text_probe_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A probe item whose output modalities lack ``"text"`` is skipped.
-
-    An embedding/image model (output_modalities without ``"text"``) must not
-    leak into the chat catalog, while an item with no modality info defaults
-    to being included.
-    """
-    monkeypatch.setattr(litellm, "model_cost", {})
-    monkeypatch.setattr(litellm, "get_valid_models", list)
-
-    probe = {
-        ("openrouter", None): {
-            "vendor/image-gen": {
-                "id": "vendor/image-gen",
-                "architecture": {"input_modalities": ["text"], "output_modalities": ["image"]},
-            },
-            "vendor/bare-chat": {"id": "vendor/bare-chat"},
-        }
-    }
-    monkeypatch.setattr(mc, "_probe_all_providers", lambda: probe)
-
-    result = get_catalog()
-
-    values = {m.value for m in result.models}
-    assert "openrouter/vendor/image-gen" not in values
-    assert "openrouter/vendor/bare-chat" in values
+    assert any(p.slug == "together_ai" for p in result.providers)
 
 
 def test_get_catalog_does_not_duplicate_registry_models_from_probe(
@@ -484,9 +448,9 @@ def test_get_catalog_does_not_duplicate_registry_models_from_probe(
 ) -> None:
     """A model present in both the registry and the probe is emitted only once."""
     fake_cost: dict = {
-        "openrouter/vendor/known": {
+        "together_ai/vendor/known": {
             "mode": "chat",
-            "litellm_provider": "openrouter",
+            "litellm_provider": "together_ai",
             "supports_reasoning": False,
             "max_input_tokens": 8192,
             "input_cost_per_token": 0,
@@ -494,10 +458,10 @@ def test_get_catalog_does_not_duplicate_registry_models_from_probe(
         }
     }
     monkeypatch.setattr(litellm, "model_cost", fake_cost)
-    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["openrouter/vendor/known"])
+    monkeypatch.setattr(litellm, "get_valid_models", lambda: ["together_ai/vendor/known"])
 
     probe = {
-        ("openrouter", None): {
+        ("together_ai", None): {
             "vendor/known": {"id": "vendor/known", "context_length": 999999},
         }
     }
@@ -505,7 +469,7 @@ def test_get_catalog_does_not_duplicate_registry_models_from_probe(
 
     result = get_catalog()
 
-    matches = [m for m in result.models if m.value == "openrouter/vendor/known"]
+    matches = [m for m in result.models if m.value == "together_ai/vendor/known"]
     assert len(matches) == 1
 
 

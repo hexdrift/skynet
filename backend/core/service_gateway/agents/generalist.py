@@ -79,8 +79,7 @@ def _build_generalist_lm() -> dspy.LM:
 
     - **Native MiniMax** (``minimax/...``): ``extra_body={"reasoning_split": true}``
       surfaces the interleaved ``<think>`` channel as ``reasoning_details``.
-    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``) **and BYOK
-      OpenRouter MiniMax** (``openrouter/minimax/...``): reasoning streams
+    - **Fireworks-hosted MiniMax** (``fireworks_ai/...``): reasoning streams
       inline in the assistant content as ``<think>…</think>`` blocks; no
       provider-side knob.
     - **OpenAI reasoning models** (``openai/gpt-5.*``, ``openai/o1|o3|o4*``):

@@ -430,7 +430,7 @@ def _create_with_client_model(client: TestClient) -> str:
         "modelParams": {
             "temperature": 0.1,
             "token_source": "byok",
-            "byok_provider": "openrouter",
+            "byok_provider": "together",
         },
     }
     resp = client.post("/tagging-sessions", json=body)

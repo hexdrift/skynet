@@ -186,15 +186,6 @@ _PROVIDER_META: dict[str, tuple[str, list[_DataCenter]]] = {
             )
         ],
     ),
-    "openrouter": (
-        "OpenRouter",
-        [
-            _DataCenter(
-                base_url="https://openrouter.ai/api/v1",
-                models_url="https://openrouter.ai/api/v1/models",
-            )
-        ],
-    ),
     "cerebras": (
         "Cerebras",
         [
@@ -334,11 +325,10 @@ def _probe_prefixed_id(provider_slug: str, model_id: str) -> str:
     ID gets ``provider_slug/`` prepended; an ID that already starts with that
     prefix is passed through unchanged. Fireworks reports
     ``accounts/fireworks/models/...`` (no provider prefix) so it correctly
-    becomes ``fireworks_ai/accounts/fireworks/models/...``, while OpenRouter
-    reports bare ``vendor/model`` so it becomes ``openrouter/vendor/model``.
+    becomes ``fireworks_ai/accounts/fireworks/models/...``.
 
     Args:
-        provider_slug: LiteLLM provider key (e.g. ``"openrouter"``).
+        provider_slug: LiteLLM provider key (e.g. ``"fireworks_ai"``).
         model_id: The model ID exactly as the probe reported it.
 
     Returns:
@@ -352,10 +342,8 @@ def _probe_prefixed_id(provider_slug: str, model_id: str) -> str:
 def _probe_item_supports_vision(item: dict) -> bool:
     """Decide whether a probe item accepts image input.
 
-    Reads OpenRouter's ``architecture.input_modalities`` list first (vision
-    when it contains ``"image"``), then falls back to a top-level
-    ``supports_vision`` / ``vision`` boolean. Defaults to ``False`` when no
-    modality signal is present.
+    Reads a top-level ``supports_vision`` / ``vision`` boolean. Defaults to
+    ``False`` when no vision signal is present.
 
     Args:
         item: The raw provider item dict (may be empty for string entries).
@@ -363,20 +351,13 @@ def _probe_item_supports_vision(item: dict) -> bool:
     Returns:
         ``True`` when the model plausibly accepts images.
     """
-    arch = item.get("architecture")
-    if isinstance(arch, dict):
-        modalities = arch.get("input_modalities")
-        if isinstance(modalities, list):
-            return "image" in modalities
     return bool(item.get("supports_vision") or item.get("vision"))
 
 
 def _probe_item_supports_thinking(item: dict) -> bool:
     """Decide whether a probe item supports reasoning/thinking.
 
-    Reads OpenRouter's ``supported_parameters`` list (thinking when it
-    contains ``"reasoning"``), then falls back to a top-level
-    ``supports_reasoning`` boolean. Defaults to ``False``.
+    Reads a top-level ``supports_reasoning`` boolean. Defaults to ``False``.
 
     Args:
         item: The raw provider item dict (may be empty for string entries).
@@ -384,9 +365,6 @@ def _probe_item_supports_thinking(item: dict) -> bool:
     Returns:
         ``True`` when the model exposes a reasoning capability.
     """
-    params = item.get("supported_parameters")
-    if isinstance(params, list):
-        return "reasoning" in params
     return bool(item.get("supports_reasoning"))
 
 
@@ -405,29 +383,6 @@ def _probe_item_max_input_tokens(item: dict) -> int | None:
         if isinstance(val, int):
             return val
     return None
-
-
-def _probe_item_is_chat(item: dict) -> bool:
-    """Decide whether a probe item plausibly outputs text (is a chat model).
-
-    Skips embedding/image-generation/TTS models by checking OpenRouter's
-    ``architecture.output_modalities``: a model is chat when that list
-    contains ``"text"``. When no modality info exists at all the item is
-    treated as chat (the conservative default for providers that don't
-    annotate modalities).
-
-    Args:
-        item: The raw provider item dict (may be empty for string entries).
-
-    Returns:
-        ``True`` to include the model, ``False`` to skip a clearly non-chat one.
-    """
-    arch = item.get("architecture")
-    if isinstance(arch, dict):
-        modalities = arch.get("output_modalities")
-        if isinstance(modalities, list):
-            return "text" in modalities
-    return True
 
 
 def _probe_deployed_models(provider_slug: str, data_center: _DataCenter) -> dict[str, dict] | None:
@@ -608,7 +563,7 @@ def get_catalog() -> ModelCatalogResponse:
             )
 
     # Second pass: surface chat models the live probe reports that LiteLLM's
-    # static registry never listed (e.g. brand-new OpenRouter models). The
+    # static registry never listed (e.g. brand-new Together AI models). The
     # registry pass above can only emit models present in ``litellm.model_cost``;
     # this pass closes that gap from the provider's own ``/models`` response.
     for (probe_slug, dc_label), deployed in deployed_by_dc.items():
@@ -622,8 +577,6 @@ def get_catalog() -> ModelCatalogResponse:
         if dc is None:
             continue
         for probe_id, item in deployed.items():
-            if not _probe_item_is_chat(item):
-                continue
             value = _probe_prefixed_id(probe_slug, probe_id)
             if (value, dc_label) in emitted:
                 continue

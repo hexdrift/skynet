@@ -1155,7 +1155,7 @@ def test_submit_run_supports_mixed_per_model_sources_and_strips_inline_connectio
             },
         },
         "reflection_model_settings": {
-            "name": "openrouter/anthropic/claude-3.5-haiku",
+            "name": "together_ai/anthropic/claude-3.5-haiku",
             "token_source": "managed",
         },
     }
@@ -1167,7 +1167,7 @@ def test_submit_run_supports_mixed_per_model_sources_and_strips_inline_connectio
     assert row["overview"]["token_source"] == "managed"
     assert row["overview"][PAYLOAD_OVERVIEW_TOKEN_SOURCES_BY_MODEL] == {
         "openai/private-chat": "byok",
-        "openrouter/anthropic/claude-3.5-haiku": "managed",
+        "together_ai/anthropic/claude-3.5-haiku": "managed",
     }
     stored = row["payload"]["model_config"]
     assert stored["token_source"] == "byok"

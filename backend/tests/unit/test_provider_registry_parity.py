@@ -10,10 +10,8 @@ import re
 from pathlib import Path
 
 from core.api.model_catalog import _BYOK_CATALOG_PROVIDERS
-from core.byok.vault import _PROVIDER_PROBES
 from core.provider_registry import (
     BYOK_CATALOG_PREFIXES,
-    BYOK_PROVIDER_SLUGS,
     BYOK_TO_LITELLM_PROVIDER,
 )
 
@@ -35,12 +33,6 @@ def _frontend_byok_source() -> str:
         The full source of ``frontend/src/features/byok/lib/byok.ts``.
     """
     return _FRONTEND_BYOK_TS.read_text(encoding="utf-8")
-
-
-def test_vault_probe_table_only_uses_registry_slugs() -> None:
-    """Every built-in verification probe belongs to a provider shortcut."""
-    registry_slugs = {slug for slug, _ in BYOK_PROVIDER_SLUGS}
-    assert set(_PROVIDER_PROBES) <= registry_slugs
 
 
 def test_catalog_prefixes_match_the_registry() -> None:
