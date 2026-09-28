@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { stageIssue, type StageSnapshot } from "./stage-issue.ts";
+import { restoreTarget, stageAt } from "./wizard-steps.ts";
 
 const complete: StageSnapshot = {
   username: "dana",
@@ -96,6 +97,22 @@ test("structure-only checks skip server evidence but not missing code", () => {
   assert.equal(
     stageIssue("evaluation", snap({ splitErrors: 2 }))?.key,
     "submit.validation.split_too_small",
+  );
+});
+
+test("saved keys still loading do not hold Optimization", () => {
+  assert.equal(stageIssue("optimization", snap({ hasApiKey: null })), null);
+  assert.equal(
+    stageIssue("optimization", snap({ hasApiKey: null, modelName: "" }))?.key,
+    "submit.validation.model_required",
+  );
+});
+
+test("a clone restored before the saved keys load opens on Review", () => {
+  const cloned = snap({ hasApiKey: null, signatureErrors: null, metricErrors: null });
+  assert.deepEqual(
+    restoreTarget("review", "review", (i) => stageIssue(stageAt(i), cloned, true) === null),
+    { open: 3, reachable: 3 },
   );
 });
 

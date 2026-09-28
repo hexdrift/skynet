@@ -35,7 +35,8 @@ export interface StageSnapshot {
   metricErrors: number | null;
   splitErrors: number | null;
   targetScore: "ok" | "invalid" | "requires_val";
-  hasApiKey: boolean;
+  /** Whether a provider key is saved, or null while the saved keys load. */
+  hasApiKey: boolean | null;
   jobType: "run" | "grid_search";
   modelName: string;
   reflectionModelName: string;
@@ -107,7 +108,7 @@ function optimizationIssue(s: StageSnapshot): WizardIssue | null {
   if (s.targetScore === "requires_val") {
     return issue("submit.validation.target_score_requires_val", "target-score");
   }
-  if (!s.hasApiKey) return issue("submit.validation.api_key_required", "model-catalog");
+  if (s.hasApiKey === false) return issue("submit.validation.api_key_required", "model-catalog");
   if (s.jobType === "run") {
     if (blank(s.modelName)) return issue("submit.validation.model_required", "model-catalog");
     if (blank(s.reflectionModelName)) {

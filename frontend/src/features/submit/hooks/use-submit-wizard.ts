@@ -138,7 +138,7 @@ export function useSubmitWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const { keys: byokKeys } = useByokKeys();
+  const { keys: byokKeys, loading: byokLoading } = useByokKeys();
   const { prefs } = useUserPrefs();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -160,7 +160,7 @@ export function useSubmitWizard() {
   const [jobName, setJobName] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [moduleName, setModuleName] = useState("predict");
-  // The code step opens on the picker and the step will not advance until a
+  // The Goal stage opens on the picker and the wizard will not advance until a
   // module is committed — `moduleName` is only the carousel's starting slide
   // until then, never an implicit choice. While the picker is open
   // (moduleChosen=false) the editors and the agent's seed pass wait. Flows
@@ -271,7 +271,7 @@ export function useSubmitWizard() {
 
   // Seed the starter graph when the workflow module is selected, and keep
   // re-seeding from the dataset's column roles for as long as the graph is
-  // pristine (the module is often picked on the Basics step, before the
+  // pristine (the module is picked on the Goal stage, before the
   // dataset exists). An edited graph is never clobbered.
   useEffect(() => {
     if (!isWorkflow) return;
@@ -1417,21 +1417,6 @@ export function useSubmitWizard() {
     return effectiveSplitFractions().val <= 0 ? "requires_val" : "ok";
   };
 
-  const validateTargetScore = (showToast: boolean): boolean => {
-    const state = targetScoreState();
-    if (state === "ok") return true;
-    if (showToast) {
-      toast.error(
-        msg(
-          state === "invalid"
-            ? "submit.validation.target_score_invalid"
-            : "submit.validation.target_score_requires_val",
-        ),
-      );
-    }
-    return false;
-  };
-
   useDatasetProfiling({
     parsedDataset,
     columnRoles,
@@ -1497,7 +1482,9 @@ export function useSubmitWizard() {
         metricErrors: metricValidation ? metricValidation.errors.length : null,
         splitErrors: datasetValidation ? datasetValidation.errors.length : null,
         targetScore: targetScoreState(),
-        hasApiKey: byokKeys.length > 0,
+        // Unknown until the saved keys load, so a draft or clone restored on
+        // mount is not held back on Optimization by an empty first fetch.
+        hasApiKey: byokLoading ? null : byokKeys.length > 0,
         jobType,
         modelName: modelConfig.name,
         reflectionModelName: secondModelConfig?.name ?? "",
@@ -1548,6 +1535,13 @@ export function useSubmitWizard() {
   }, [pendingRestore, validateStep]);
 
   const maxReachableStep = furthestReachedStep;
+
+  // Mirrors `step` for `advance`, whose server checks outlive the render that
+  // started them.
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   const validateBlock = async (
     kind: "signature" | "metric",
@@ -1661,18 +1655,27 @@ export function useSubmitWizard() {
     }
   };
 
-  const handleNext = async () => {
+  // Forward moves — Next and later stages in the stepper — stop on the first
+  // stage before the target that shows a problem, landing there with it
+  // surfaced. Crossing Evaluation also runs its server checks (split sizes,
+  // then code) under one toast.
+  const advance = async (target: number) => {
     if (advancingRef.current) return;
-    advancingRef.current = true;
-    setAdvancing(true);
-    try {
-      // Hold the forward move on what the stage already shows; the server
-      // checks below only run once nothing local is missing.
-      if (!validateStep(step, true, true)) return;
-      if (step !== WIZARD_STAGE.evaluation) {
-        goNext();
+    for (let i = 0; i < target; i++) {
+      if (!validateStep(i, true, true)) {
+        if (i !== step) goTo(i);
         return;
       }
+    }
+    toast.dismiss(WIZARD_ISSUE_TOAST);
+    if (step > WIZARD_STAGE.evaluation || target <= WIZARD_STAGE.evaluation) {
+      goTo(target);
+      return;
+    }
+    advancingRef.current = true;
+    setAdvancing(true);
+    const from = step;
+    try {
       const checkCode =
         !moduleSelectionRequired &&
         (isWorkflow || !!signatureCode.trim()) &&
@@ -1685,35 +1688,52 @@ export function useSubmitWizard() {
         `wizard-validate-${++validationAttemptRef.current}`,
         msg("submit.validation.toast.running"),
       );
+      // A stepper jump back while a check runs wins over this move.
+      const moved = () => {
+        if (stepRef.current === from) return false;
+        t.dismiss();
+        return true;
+      };
       t.phase(msg("submit.validation.toast.checking_split"));
       if (!(await handleValidateDataset(t.fail))) {
+        if (moved()) return;
+        if (from !== WIZARD_STAGE.evaluation) goTo(WIZARD_STAGE.evaluation);
         focusField("data-splits");
         return;
       }
+      if (moved()) return;
       if (checkCode) {
         t.phase(msg("submit.validation.toast.checking_code"));
-        if (!(await handleValidateCode(t.fail))) return;
+        const codeOk = await handleValidateCode(t.fail);
+        if (moved()) return;
+        if (!codeOk) {
+          if (from !== WIZARD_STAGE.evaluation) goTo(WIZARD_STAGE.evaluation);
+          return;
+        }
       }
       // The results those calls stored reach state only on the next render,
       // so this closure can't re-read them; both just passed.
       t.succeed(msg("submit.validation.toast.passed"));
-      goNext();
+      goTo(target);
     } finally {
       advancingRef.current = false;
       setAdvancing(false);
     }
   };
 
+  const handleNext = async () => {
+    if (step < LAST_WIZARD_STAGE) await advance(step + 1);
+  };
+
   // Going back — the Back button or an earlier stage in the stepper — is
-  // never held. Going forward is held while the current stage shows a
-  // problem, then allowed up to the furthest stage already reached.
+  // never held. Going forward is allowed up to the furthest stage already
+  // reached, through the same checks as Next.
   const handleTabClick = (idx: number) => {
     if (idx <= step) {
       goTo(idx);
       return;
     }
-    if (!validateStep(step, true, true)) return;
-    if (idx <= maxReachableStep) goTo(idx);
+    if (idx <= maxReachableStep) void advance(idx);
   };
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1816,57 +1836,19 @@ export function useSubmitWizard() {
   const splitSum = +(split.train + split.val + split.test).toFixed(4);
 
   const handleSubmit = async () => {
-    if (!username.trim()) {
-      toast.error(msg("submit.validation.username_required"));
-      goTo(WIZARD_STAGE.review);
-      return;
-    }
-    if (!parsedDataset || parsedDataset.rowCount === 0) {
-      toast.error(msg("submit.validation.dataset_required_short"));
-      goTo(WIZARD_STAGE.evaluation);
-      return;
-    }
-    if (isWorkflow) {
-      if (!workflowSpec || validateWorkflowSpec(workflowSpec, workflowIssueText).length > 0) {
-        toast.error(msg("submit.validation.workflow_invalid"));
-        goTo(WIZARD_STAGE.evaluation);
+    // Every stage's local checks, in order — including the run name, which
+    // lives on Review — landing on the first stage that shows a problem.
+    for (let i = 0; i <= LAST_WIZARD_STAGE; i++) {
+      if (!validateStep(i, true, true)) {
+        if (i !== step) goTo(i);
         return;
       }
-    } else if (!signatureCode.trim()) {
-      toast.error(msg("submit.validation.signature_required"));
-      goTo(WIZARD_STAGE.evaluation);
-      return;
     }
-    if (!metricCode.trim()) {
-      toast.error(msg("submit.validation.metric_required"));
-      goTo(WIZARD_STAGE.evaluation);
-      return;
-    }
-    if (!validateTargetScore(true)) {
-      goTo(WIZARD_STAGE.optimization);
-      return;
-    }
+    // Evaluation just passed, so the dataset is loaded.
+    if (!parsedDataset) return;
     const needsToolSource =
       isReact || (isWorkflow && !!workflowSpec && workflowUsesTools(workflowSpec));
-    if (needsToolSource && !reactConfig.mcpUrl.trim()) {
-      toast.error(msg("submit.validation.mcp_url_required"));
-      // The tool-source config lives on the Evaluation stage (it appears once
-      // the module choice reveals a tool-using run).
-      goTo(WIZARD_STAGE.evaluation);
-      return;
-    }
-
     const columnMapping = currentColumnMapping();
-    if (Object.keys(columnMapping.inputs).length === 0) {
-      toast.error(msg("submit.validation.input_column_required"));
-      goTo(WIZARD_STAGE.evaluation);
-      return;
-    }
-    if (Object.keys(columnMapping.outputs).length === 0) {
-      toast.error(msg("submit.validation.output_column_required"));
-      goTo(WIZARD_STAGE.evaluation);
-      return;
-    }
 
     setSubmitting(true);
     setSubmitPhase("sending");
