@@ -82,8 +82,6 @@ dnspython==2.8.0
     # via email-validator
 docstring-parser==0.18.0
     # via cyclopts
-docutils==0.23
-    # via rich-rst
 dspy==3.3.1
     # via skynet
 email-validator==2.3.0
@@ -271,7 +269,9 @@ pydantic-settings==2.15.0
     #   mcp
     #   skynet
 pygments==2.21.0
-    # via rich
+    # via
+    #   rich
+    #   rich-rst
 pyjwt==2.14.0
     # via mcp
 pyperclip==1.11.0
@@ -318,7 +318,7 @@ rich==15.0.0
     #   cyclopts
     #   fastmcp-slim
     #   rich-rst
-rich-rst==1.3.2
+rich-rst==2.1.0
     # via cyclopts
 rpds-py==2026.6.3
     # via
