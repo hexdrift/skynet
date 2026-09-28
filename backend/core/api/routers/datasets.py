@@ -37,6 +37,7 @@ from ...models import (
 )
 from ...service_gateway.datasets.planner import recommend_split
 from ...service_gateway.datasets.profiler import profile_dataset
+from ...service_gateway.datasets.split_counts import split_counts
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
 
@@ -215,6 +216,7 @@ def create_datasets_router(*, job_store) -> APIRouter:
         dataset step. A split with ``val=0`` and ``test=0`` produces no
         held-out data for evaluation, so the optimization can't measure
         improvement and must be rejected here rather than failing later.
+        Counts come from the same allocator a submitted run splits with.
 
         Args:
             payload: Request containing the dataset row count and the
@@ -230,9 +232,8 @@ def create_datasets_router(*, job_store) -> APIRouter:
         if total <= 0:
             errors.append("Dataset is empty.")
         else:
-            val_count = int(total * payload.fractions.val)
-            test_count = int(total * payload.fractions.test)
-            if val_count + test_count == 0:
+            counts = split_counts(total, payload.fractions)
+            if counts.val + counts.test == 0:
                 errors.append(
                     "Dataset is too small to run optimization: chosen split has 0 validation and 0 test rows."
                 )
