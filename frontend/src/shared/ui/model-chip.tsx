@@ -27,9 +27,6 @@ interface ModelChipProps {
   onRemove?: () => void;
   /** If true, shows a subtle "required" style */
   required?: boolean;
-  /** Shows a visible "copy from X" button when the chip is empty */
-  copyFromLabel?: string;
-  onCopyFrom?: () => void;
   /** Catalog used to resolve a model's vision capability for the badge. */
   catalogModels?: CatalogModel[];
   /** Placeholder when no model is set; overrides the required/not-configured copy. */
@@ -88,8 +85,6 @@ export function ModelChip({
   onClone,
   onRemove,
   required,
-  copyFromLabel,
-  onCopyFrom,
   catalogModels,
   emptyLabel,
   tooltip,
@@ -176,20 +171,6 @@ export function ModelChip({
       {/* The explanation tooltip lives only on the Info button below — hovering
           the card body itself must stay quiet. */}
       {content}
-
-      {isEmpty && copyFromLabel && onCopyFrom && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCopyFrom();
-          }}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-dashed border-primary/30 px-2 py-1 text-[0.625rem] font-medium text-primary/80 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer"
-        >
-          <Copy className="size-2.5" />
-          {copyFromLabel}
-        </button>
-      )}
 
       <div className="flex shrink-0 items-center gap-1">
         {tooltip && (
