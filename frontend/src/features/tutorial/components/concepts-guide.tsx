@@ -16,6 +16,7 @@ import {
 import { msg, formatMsg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { isGeneralistAgentEnabled } from "@/features/agent-panel";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
@@ -1009,8 +1010,15 @@ function SectionApp() {
     >
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.352")}</p>
 
-      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.353")}</SubHeading>
-      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.354")}</p>
+      {/* Builds without the agent panel must not describe it. */}
+      {isGeneralistAgentEnabled() && (
+        <>
+          <SubHeading>
+            {msg("auto.features.tutorial.components.concepts.guide.literal.353")}
+          </SubHeading>
+          <p>{msg("auto.features.tutorial.components.concepts.guide.literal.354")}</p>
+        </>
+      )}
 
       <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.355")}</SubHeading>
       <p>{msg("auto.features.tutorial.components.concepts.guide.literal.356")}</p>
