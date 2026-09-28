@@ -14,16 +14,20 @@ language-model builder on the ``share`` module so it never touches a real model.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from ...models import ProgramArtifact
 from ...storage.models import Base, JobModel
 from ...storage.remote import RemoteDBJobStore
 from ..auth import AuthenticatedUser, get_authenticated_user
+from ..routers import share as share_module
 from ..routers.share import create_share_router
 
 
@@ -473,3 +477,21 @@ def test_public_view_unknown_optimization_404() -> None:
     store = _MemStore()
     stranger = _client(store, user="bob")
     assert stranger.get("/optimizations/does-not-exist/public").status_code == 404
+
+
+def test_share_serve_info_falls_back_to_column_mapping_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shared Flex run, whose artifact has no prompt, lists the fields its column mapping names."""
+    overview = {
+        "module_name": "flex",
+        "optimizer_name": "gepa",
+        "column_mapping": {"inputs": {"review": "text"}, "outputs": {"score": "stars"}},
+    }
+    result = SimpleNamespace(program_artifact=ProgramArtifact(program_state_json={}, optimized_prompt=None))
+    monkeypatch.setattr(share_module, "load_program", lambda *_args: (None, result, overview))
+
+    info = share_module._serve_info(_MemStore(), "opt-flex", "alice")
+
+    assert info is not None
+    assert info.input_fields == ["review"]
+    assert info.output_fields == ["score"]
+

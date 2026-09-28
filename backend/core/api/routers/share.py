@@ -487,6 +487,8 @@ def _serve_info(job_store, optimization_id: str, owner: str) -> ServeInfoRespons
         output_fields = list(prompt.output_fields)
         instructions = prompt.instructions
         demo_count = len(prompt.demos)
+    if not input_fields:
+        input_fields, output_fields = _column_mapping_fields(overview)
     return ServeInfoResponse(
         optimization_id=optimization_id,
         module_name=overview.get("module_name", ""),
