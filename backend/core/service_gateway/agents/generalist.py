@@ -1625,7 +1625,7 @@ Capabilities worth knowing about:
 * Cross-corpus search: ``public_search`` does semantic + structured
   search over every public optimization (free-text query in any
   language, plus optional models / optimizers / optimization_types /
-  date filters, sorted by relevance / recency / gain). Use it when the
+  date filters, sorted by relevance / newest / oldest). Use it when the
   user asks to find comparable runs (free-text queries in the user's
   language, like
   "show me sentiment runs that scored above 0.8") before reaching for

@@ -22,6 +22,7 @@ when added.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 import weakref
@@ -157,11 +158,10 @@ def _jobs_metric_sql(key: str) -> str:
     )
 
 
-# The embedded metric when present, else the job's own scores. Keeps the gain
-# sort and the result-card score badges meaningful on the lexical/BM25 paths,
-# where unembedded rows (embeddings disabled, table absent, or backfill still
-# running) would otherwise all carry NULL metrics and the gain ranking would
-# silently degrade to recency.
+# The embedded metric when present, else the job's own scores. Keeps each
+# result row's score pair meaningful on the lexical/BM25 paths, where
+# unembedded rows (embeddings disabled, table absent, or backfill still
+# running) would otherwise all carry NULL metrics.
 _CORPUS_BASELINE_METRIC_SQL = (
     f"COALESCE(je.baseline_metric, {_jobs_metric_sql('baseline_test_metric')})"
 )
@@ -414,21 +414,74 @@ def invalidate_public_dashboard_cache() -> None:
         _CACHE["payload"] = None
 
 
+# Each facet dimension is a column of the scoped corpus CTE plus the name of
+# the bound list parameter that filters it, so one loop can build "all filters
+# except this dimension's own" for every dimension.
+_FACET_DIMENSIONS: tuple[tuple[str, str, str], ...] = (
+    ("models", "model", "models"),
+    ("optimizers", "optimizer", "optimizers"),
+    ("modules", "module", "modules"),
+    ("types", "run_type", "optimization_types"),
+)
+
+FACET_LIMIT_DEFAULT = 8
+FACET_LIMIT_MAX = 50
+
+
+def _facet_like_pattern(value_query: str) -> str:
+    """Turn a free-text facet search into a substring ``ILIKE`` pattern.
+
+    Args:
+        value_query: The user's (already non-blank) search text.
+
+    Returns:
+        ``%text%`` with LIKE metacharacters escaped so a literal ``%`` or
+        ``_`` in a model id matches itself rather than anything.
+    """
+    return "%" + re.sub(r"([\\%_])", r"\\\1", value_query.strip()) + "%"
+
+
 def fetch_corpus_facets(
     *,
     job_store: Any,
     owner_username: str | None = None,
     shared_with_username: str | None = None,
-) -> dict[str, list[str]]:
-    """Return the distinct model / optimizer / module values in one corpus.
+    models: list[str] | None = None,
+    optimizers: list[str] | None = None,
+    optimization_types: list[str] | None = None,
+    modules: list[str] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    value_query: str | None = None,
+    limit: int = FACET_LIMIT_DEFAULT,
+    dimension: str | None = None,
+) -> dict[str, Any]:
+    """Return the busiest filter values per dimension in one corpus, with counts.
 
     Backs ``GET /dashboard/facets`` so each /explore tab lists the filter
     options drawn from its OWN scope — the mine tab surfaces a user's private
-    react runs, not just whatever appears in the public archive. The scope
-    predicate and the payload-first / embedded-first ``COALESCE`` derivation
-    mirror :func:`_fetch_corpus_points` and :func:`_search_semantic` exactly,
-    so every value returned here lines up with a run the same scope can
-    actually filter to.
+    react runs, not just whatever appears in the public archive. Counts are
+    conjunctive in the usual faceted-navigation sense: a value's count is the
+    number of runs it would leave when combined with every *other* active
+    filter, while its own dimension's selection is ignored (selections inside
+    a dimension are OR'd, so applying them would zero out every unselected
+    sibling). The free-text query is deliberately not part of the context —
+    semantic ranking has no crisp matched set to count against.
+
+    A dimension can hold thousands of distinct values (every model id ever
+    optimized against), so no dimension is ever returned in full: each is
+    capped at ``limit`` values ranked by contextual count, values the other
+    filters rule out (count 0) are dropped rather than padded in, and the
+    number of distinct values still available is reported separately so the
+    UI can say "top 8 of 1,240" and offer search for the rest. ``value_query``
+    is that search: a case-insensitive substring match on the raw value.
+    The UI opens one dimension's picker at a time, so ``dimension`` restricts
+    the work to that dimension; the others come back empty with a zero total.
+
+    The scope predicate and the payload-first / embedded-first ``COALESCE``
+    derivation mirror :func:`_fetch_corpus_points` and :func:`_search_lexical`
+    exactly, so every value returned here lines up with a run the same scope
+    can actually filter to.
 
     Args:
         job_store: A store exposing a SQLAlchemy ``engine`` attribute.
@@ -436,11 +489,31 @@ def fetch_corpus_facets(
             private rows) instead of the public corpus.
         shared_with_username: When set (and ``owner_username`` is not), scope to
             jobs shared with that user via a member grant.
+        models: Active model filter, or ``None`` / empty for no filter.
+        optimizers: Active optimizer / engine filter.
+        optimization_types: Active run-type filter.
+        modules: Active DSPy module filter.
+        date_from: Inclusive lower bound on ``created_at`` (date precision).
+        date_to: Inclusive upper bound on ``created_at`` (date precision).
+        value_query: Optional substring to match values against; blank means
+            no restriction.
+        limit: Maximum values returned per dimension (``1..FACET_LIMIT_MAX``).
+        dimension: One of ``models`` / ``optimizers`` / ``modules`` / ``types``
+            to compute only that dimension, or ``None`` for all four.
 
     Returns:
-        ``{"models": [...], "optimizers": [...], "modules": [...]}`` — each a
-        case-sensitively sorted list of distinct non-empty values.
+        ``{"models": [...], "optimizers": [...], "modules": [...], "types": [...],
+        "totals": {"models": int, ...}}`` — each list holds up to ``limit``
+        ``{"value": str, "count": int}`` dicts with ``count > 0``, ordered by
+        count descending then value, and ``totals`` gives the number of
+        distinct values with a positive count per dimension (so a total larger
+        than the list length means there is more to search for).
+
+    Raises:
+        ValueError: When ``dimension`` names no facet dimension.
     """
+    if dimension is not None and dimension not in {name for name, _, _ in _FACET_DIMENSIONS}:
+        raise ValueError(f"unknown facet dimension: {dimension!r}")
     params: dict[str, Any] = {}
     if owner_username is not None:
         scope_sql = "j.username = :owner_username"
@@ -453,46 +526,100 @@ def fetch_corpus_facets(
             "NOT COALESCE(je.is_private, "
             "(j.payload_overview->>'is_private')::boolean, FALSE)"
         )
-    je_rel = _job_embeddings_relation(job_store)
-    with Session(job_store.engine) as session:
-        row = (
-            session.execute(
-                text(
-                    "SELECT "
-                    "ARRAY_AGG(DISTINCT model) FILTER (WHERE model <> '') AS models, "
-                    "ARRAY_AGG(DISTINCT optimizer) FILTER (WHERE optimizer <> '') "
-                    "AS optimizers, "
-                    "ARRAY_AGG(DISTINCT module) FILTER (WHERE module <> '') AS modules "
-                    "FROM ("
-                    "SELECT "
-                    "COALESCE(je.winning_model, "
-                    f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') AS model, "
-                    "COALESCE(je.optimizer_name, "
-                    f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') AS optimizer, "
-                    "COALESCE(je.module_name, "
-                    f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') AS module "
-                    "FROM jobs j "
-                    f"LEFT JOIN {je_rel} je "
-                    "ON je.optimization_id = j.optimization_id "
-                    f"WHERE j.status = 'success' AND {_USER_FACING_CORPUS_SQL} AND {scope_sql}"
-                    ") sub"
-                ),
-                params,
-            )
-            .mappings()
-            .first()
+    date_parts: list[str] = []
+    if date_from is not None:
+        date_parts.append("AND j.created_at >= :date_from")
+        params["date_from"] = date_from
+    if date_to is not None:
+        date_parts.append("AND j.created_at < :date_to_excl")
+        params["date_to_excl"] = date_to + timedelta(days=1)
+
+    active: dict[str, list[str]] = {}
+    for key, values in (
+        ("models", models),
+        ("optimizers", optimizers),
+        ("modules", modules),
+        ("optimization_types", optimization_types),
+    ):
+        if values:
+            active[key] = list(values)
+            params[key] = list(values)
+
+    # Legacy rows predate the type column everywhere; they are plain runs
+    # (see ``_USER_FACING_CORPUS_SQL``), so they count under 'run' rather
+    # than vanishing from the type facet.
+    corpus_cte = (
+        "WITH corpus AS ("
+        "SELECT "
+        f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+        "AS model, "
+        f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+        "AS optimizer, "
+        f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+        "AS module, "
+        "COALESCE(je.optimization_type, j.optimization_type, "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE}', "
+        f"'{OPTIMIZATION_TYPE_RUN}') AS run_type "
+        "FROM jobs j "
+        f"LEFT JOIN {_job_embeddings_relation(job_store)} je "
+        "ON je.optimization_id = j.optimization_id "
+        f"WHERE j.status = 'success' AND {_USER_FACING_CORPUS_SQL} AND {scope_sql} "
+        + " ".join(date_parts)
+        + ")"
+    )
+    params["facet_limit"] = max(1, min(int(limit), FACET_LIMIT_MAX))
+    match_sql = ""
+    if value_query and value_query.strip():
+        params["value_pattern"] = _facet_like_pattern(value_query)
+        match_sql = " AND {column} ILIKE :value_pattern"
+
+    selects: list[str] = []
+    for name, column, param in _FACET_DIMENSIONS:
+        if dimension is not None and name != dimension:
+            continue
+        others = [
+            f"{other_column} = ANY(:{other_param})"
+            for _, other_column, other_param in _FACET_DIMENSIONS
+            if other_param != param and other_param in active
+        ]
+        context_sql = " AND ".join(others) if others else "TRUE"
+        member_sql = f"{column} <> ''" + match_sql.format(column=column)
+        count_sql = f"COUNT(*) FILTER (WHERE {context_sql})"
+        selects.append(
+            f"(SELECT '{name}' AS dim, {column} AS value, {count_sql} AS n "
+            f"FROM corpus WHERE {member_sql} GROUP BY {column} "
+            f"HAVING {count_sql} > 0 ORDER BY n DESC, value ASC LIMIT :facet_limit)"
         )
-    return {
-        "models": sorted(row["models"] or []) if row else [],
-        "optimizers": sorted(row["optimizers"] or []) if row else [],
-        "modules": sorted(row["modules"] or []) if row else [],
-    }
+        # A NULL value row carries the dimension's distinct-value total, so
+        # the list and its "of N" arrive in the same round-trip.
+        selects.append(
+            f"(SELECT '{name}' AS dim, NULL AS value, COUNT(DISTINCT {column}) AS n "
+            f"FROM corpus WHERE {member_sql} AND {context_sql})"
+        )
+    sql = corpus_cte + " " + " UNION ALL ".join(selects)
+
+    facets: dict[str, Any] = {name: [] for name, _, _ in _FACET_DIMENSIONS}
+    totals: dict[str, int] = {name: 0 for name, _, _ in _FACET_DIMENSIONS}
+    with Session(job_store.engine) as session:
+        rows = session.execute(text(sql), params).mappings().all()
+    for row in rows:
+        if row["value"] is None:
+            totals[str(row["dim"])] = int(row["n"])
+        else:
+            facets[str(row["dim"])].append({"value": str(row["value"]), "count": int(row["n"])})
+    # UNION ALL does not promise to keep each branch's ORDER BY intact.
+    for options in facets.values():
+        options.sort(key=lambda option: (-option["count"], option["value"]))
+    facets["totals"] = totals
+    return facets
 
 
+# ``recent`` orders newest-first, ``oldest`` oldest-first — the two date
+# directions the UI exposes as "Newest"/"Oldest".
 SEARCH_SORT_RELEVANCE = "relevance"
 SEARCH_SORT_RECENT = "recent"
-SEARCH_SORT_GAIN = "gain"
-SEARCH_SORTS = (SEARCH_SORT_RELEVANCE, SEARCH_SORT_RECENT, SEARCH_SORT_GAIN)
+SEARCH_SORT_OLDEST = "oldest"
+SEARCH_SORTS = (SEARCH_SORT_RELEVANCE, SEARCH_SORT_RECENT, SEARCH_SORT_OLDEST)
 
 SEARCH_PAGE_SIZE_DEFAULT = 30
 SEARCH_PAGE_SIZE_MAX = 50
@@ -709,7 +836,7 @@ def search_optimizations(
 
     if use_lexical:
         # BM25 ranks by relevance, so it only serves the relevance sort with a
-        # query present; explicit gain/recent sorts keep the ILIKE path's
+        # query present; explicit recent/oldest sorts keep the ILIKE path's
         # ordering. Any pg_search failure degrades to the ILIKE search below.
         if (
             query_clean
@@ -847,7 +974,7 @@ def _search_semantic(
     owner_username: str | None = None,
     shared_with_username: str | None = None,
 ) -> dict[str, Any]:
-    """Rank the embedded corpus by pgvector cosine similarity (or recency / gain).
+    """Rank the embedded corpus by pgvector cosine similarity (or by date).
 
     Args:
         job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
@@ -930,14 +1057,8 @@ def _search_semantic(
         params["query_vec"] = _vector_literal(query_vector)  # type: ignore[arg-type]
         order_sql = "je.embedding_summary <=> CAST(:query_vec AS vector) ASC, je.created_at DESC"
         relevance_sql = "1 - (je.embedding_summary <=> CAST(:query_vec AS vector))"
-    elif sort == SEARCH_SORT_GAIN:
-        # Plain ``optimized - baseline`` (not COALESCE-to-0): a row missing
-        # either metric yields NULL and sinks via NULLS LAST, rather than a
-        # baseline-less run posing as a gain equal to its raw optimized score.
-        order_sql = (
-            "(je.optimized_metric - je.baseline_metric) DESC NULLS LAST, "
-            "je.created_at DESC"
-        )
+    elif sort == SEARCH_SORT_OLDEST:
+        order_sql = "je.created_at ASC, je.optimization_id ASC"
         relevance_sql = "NULL::float"
     else:
         order_sql = "je.created_at DESC, je.optimization_id DESC"
@@ -1089,9 +1210,8 @@ def _search_lexical(
     Walks ``jobs LEFT JOIN job_embeddings`` so unembedded successful jobs
     are still returned — their text comes from ``payload_overview`` rather
     than the LLM-authored summary, structured filters fall back to the
-    payload values when the embedding row is missing, and the score pair
-    (used by the gain sort and the result badges) falls back to the job's
-    own ``latest_metrics`` / ``result`` values.
+    payload values when the embedding row is missing, and each row's score
+    pair falls back to the job's own ``latest_metrics`` / ``result`` values.
 
     The relevance sort is degraded to recency, since lexical matching has
     no continuous similarity score and emitting a synthetic one would be
@@ -1182,15 +1302,8 @@ def _search_lexical(
 
     where_sql = " AND ".join(where_parts)
 
-    if sort == SEARCH_SORT_GAIN:
-        # Plain ``optimized - baseline`` (not COALESCE-to-0): a row missing
-        # either metric yields NULL and sinks via NULLS LAST, rather than a
-        # baseline-less run posing as a gain equal to its raw optimized score.
-        order_sql = (
-            f"({_CORPUS_OPTIMIZED_METRIC_SQL} - {_CORPUS_BASELINE_METRIC_SQL}) "
-            "DESC NULLS LAST, "
-            "j.created_at DESC, j.optimization_id DESC"
-        )
+    if sort == SEARCH_SORT_OLDEST:
+        order_sql = "j.created_at ASC, j.optimization_id ASC"
     else:
         order_sql = "j.created_at DESC, j.optimization_id DESC"
 

@@ -50,6 +50,15 @@ class TestProgressEventKeys:
         """
         assert C.PROGRESS_CANDIDATE in C.STRUCTURAL_PROGRESS_EVENTS
 
+    def test_progress_evaluation_started_value_and_structural(self) -> None:
+        """``PROGRESS_EVALUATION_STARTED`` is ``"evaluation_started"`` and survives eviction.
+
+        The run view's stage tracker switches to "evaluating" on this marker, so
+        dropping it during FIFO eviction would regress a live run to "optimizing".
+        """
+        assert C.PROGRESS_EVALUATION_STARTED == "evaluation_started"
+        assert C.PROGRESS_EVALUATION_STARTED in C.STRUCTURAL_PROGRESS_EVENTS
+
 
 class TestTqdmKeys:
     """Pin the tqdm wire keys read by the API layer."""

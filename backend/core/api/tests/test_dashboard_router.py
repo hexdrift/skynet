@@ -10,6 +10,7 @@ only pin the route's scope-resolution contract.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import pytest
@@ -58,9 +59,15 @@ def _spy_facets(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """
     captured: dict[str, Any] = {}
 
-    def _fake(**kwargs: Any) -> dict[str, list[str]]:
+    def _fake(**kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
-        return {"models": [], "optimizers": [], "modules": []}
+        return {
+            "models": [],
+            "optimizers": [],
+            "modules": [],
+            "types": [],
+            "totals": {"models": 0, "optimizers": 0, "modules": 0, "types": 0},
+        }
 
     monkeypatch.setattr(dashboard_module, "fetch_corpus_facets", _fake)
     return captured
@@ -154,9 +161,55 @@ def test_facets_public_forwards_no_scope(monkeypatch: pytest.MonkeyPatch) -> Non
     client = _client(monkeypatch)
     resp = client.get("/dashboard/facets")
     assert resp.status_code == 200
-    assert resp.json() == {"models": [], "optimizers": [], "modules": []}
+    assert resp.json() == {
+        "models": [],
+        "optimizers": [],
+        "modules": [],
+        "types": [],
+        "totals": {"models": 0, "optimizers": 0, "modules": 0, "types": 0},
+    }
+    assert captured["value_query"] is None
+    assert captured["limit"] == 8
+    assert captured["dimension"] is None
     assert captured["owner_username"] is None
     assert captured["shared_with_username"] is None
+    assert captured["optimization_types"] is None
+    assert captured["date_from"] is None
+
+
+def test_facets_forward_active_filters_for_contextual_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated filter params and the date bounds reach the gateway as lists / dates."""
+    captured = _spy_facets(monkeypatch)
+    client = _client(monkeypatch)
+    resp = client.get(
+        "/dashboard/facets?optimization_types=grid_search&models=a&models=b"
+        "&date_from=2026-01-02&q=gpt&limit=20&dim=models",
+    )
+    assert resp.status_code == 200
+    assert captured["dimension"] == "models"
+    assert captured["optimization_types"] == ["grid_search"]
+    assert captured["models"] == ["a", "b"]
+    assert captured["date_from"] == date(2026, 1, 2)
+    assert captured["date_to"] is None
+    assert captured["value_query"] == "gpt"
+    assert captured["limit"] == 20
+
+
+def test_facets_limit_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dimension is never returned in full: ``limit`` above the cap is a 422."""
+    _spy_facets(monkeypatch)
+    client = _client(monkeypatch)
+    assert client.get("/dashboard/facets?limit=500").status_code == 422
+    assert client.get("/dashboard/facets?limit=0").status_code == 422
+
+
+def test_facets_dimension_must_be_known(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``dim`` is validated at the edge so the gateway never builds an empty query."""
+    _spy_facets(monkeypatch)
+    client = _client(monkeypatch)
+    assert client.get("/dashboard/facets?dim=tasks").status_code == 422
 
 
 def test_facets_owner_scope_is_resolved_and_forwarded(

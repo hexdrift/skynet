@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import Link from "next/link";
 import { toast } from "react-toastify";
 import {
@@ -27,7 +28,6 @@ import {
   ResetFiltersButton,
   useColumnFilters,
   useColumnResize,
-  type SortDir,
 } from "@/shared/ui/excel-filter";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { CopyButton } from "@/shared/ui/copy-button";
@@ -47,7 +47,7 @@ import {
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatRelativeTime } from "@/shared/lib/formatters";
-import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { getActiveDir, getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 import { arrowPageStep } from "@/shared/lib/arrow-paging";
 
 // The grid sorts/filters the full row set in memory, but caps the DOM at this
@@ -105,8 +105,7 @@ export function DatasetDetailDialog({
 
   const colFilters = useColumnFilters();
   const colResize = useColumnResize();
-  const [sortKey, setSortKey] = React.useState("");
-  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
+  const { sortKey, sortDir, toggleSort, resetSort } = useTableSort<string>("");
   const { clearAll: clearFilters } = colFilters;
   const { resetAll: resetWidths } = colResize;
 
@@ -117,8 +116,7 @@ export function DatasetDetailDialog({
     setOptimizations(null);
     setTab("rows");
     setReaderIndex(null);
-    setSortKey("");
-    setSortDir("asc");
+    resetSort();
     clearFilters();
     resetWidths();
     getDatasetRows(datasetId)
@@ -134,18 +132,10 @@ export function DatasetDetailDialog({
     return () => {
       cancelled = true;
     };
-  }, [datasetId, clearFilters, resetWidths]);
+  }, [datasetId, resetSort, clearFilters, resetWidths]);
 
   const columns = rows?.columns ?? [];
   const allRows = React.useMemo(() => rows?.rows ?? [], [rows]);
-
-  const toggleSort = (key: string) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
 
   const filtered = React.useMemo(() => {
     let result = allRows.filter((r) => {
@@ -156,8 +146,9 @@ export function DatasetDetailDialog({
       return true;
     });
     if (sortKey) {
+      const collLocale = getActiveIntlLocale();
       result = [...result].sort((a, b) => {
-        const cmp = cellText(a[sortKey]).localeCompare(cellText(b[sortKey]), "he", {
+        const cmp = cellText(a[sortKey]).localeCompare(cellText(b[sortKey]), collLocale, {
           numeric: true,
         });
         return sortDir === "asc" ? cmp : -cmp;

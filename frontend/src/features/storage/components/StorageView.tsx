@@ -6,18 +6,11 @@ import { CaretLeft, CaretRight, HardDrive } from "@/shared/ui/icons";
 import { getStorageUsage, type StorageUsageResponse } from "@/shared/lib/api";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { formatStorageSize } from "@/shared/lib/formatters";
-import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
+import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { StorageCategoryDrawer } from "./StorageCategoryDrawer";
 import { StorageSkeleton } from "./StorageSkeleton";
-
-/** Per-category label keys, mirroring the backend ``STORAGE_CATEGORIES``. */
-const CATEGORY_LABELS: Record<string, MessageKey> = {
-  optimizations: "storage.category.optimizations",
-  datasets: "storage.category.datasets",
-  agent_chats: "storage.category.agent_chats",
-  staged_uploads: "storage.category.staged_uploads",
-};
+import { categoryLabel } from "../lib/categories";
 
 /**
  * Top-level /storage page: the account-wide cleanup surface. A usage gauge over
@@ -112,8 +105,7 @@ export function StorageView() {
         ) : (
           <ul className="mt-3 flex flex-col gap-1.5">
             {breakdown.map(([key, bytes]) => {
-              const labelKey = CATEGORY_LABELS[key];
-              const label = labelKey ? msg(labelKey) : key;
+              const label = categoryLabel(key);
               const pct = used > 0 ? Math.max(2, (bytes / used) * 100) : 0;
               const bar = (
                 <ProgressBar

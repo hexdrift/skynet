@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, CaretDown, Check } from "@/shared/ui/icons";
-import { formatMsg, msg } from "@/shared/lib/messages";
-import { perLocale } from "@/shared/lib/per-locale";
+import { formatMsg } from "@/shared/lib/messages";
+import { effortLabel } from "@/shared/lib/model-efforts";
 
 export function InfoCard({
   label,
@@ -116,18 +116,9 @@ export function LangPicker<T extends string>({
   );
 }
 
-const REASONING_EFFORT_LABELS = perLocale(
-  (): Record<string, string> => ({
-    minimal: msg("optimizations.reasoning_effort.minimal"),
-    low: msg("optimizations.reasoning_effort.low"),
-    medium: msg("optimizations.reasoning_effort.medium"),
-    high: msg("optimizations.reasoning_effort.high"),
-  }),
-);
-
 function reasoningEffortLabel(value: string | null | undefined): string | null {
   if (!value) return null;
-  return REASONING_EFFORT_LABELS[value.toLowerCase()] ?? value;
+  return effortLabel(value.toLowerCase());
 }
 
 export function ReasoningPill({

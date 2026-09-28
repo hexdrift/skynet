@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from core.service_gateway.embedding_pipeline import core as pipeline
+from core.service_gateway.embedding_pipeline import summarizer
 
 
 class _FakeEmbedder:
@@ -126,7 +127,7 @@ def test_extract_scores_run_falls_back_to_result_baseline() -> None:
 
     GEPA run jobs only keep ``optimized_test_metric`` in latest_metrics at
     completion; the baseline survives in ``result``. Without the fallback the
-    embedded baseline is NULL and the gain sort collapses to raw score.
+    embedded baseline is NULL and the run's improvement is lost.
     """
     job = _success_job(
         latest_metrics={"optimized_test_metric": 90.0},
@@ -272,6 +273,82 @@ def test_embed_finished_job_writes_summary_row(monkeypatch) -> None:
     session.commit.assert_called_once()
 
 
+def test_embed_finished_job_summarises_title_description_and_data() -> None:
+    """The summariser sees the task's title, description and data — never its code."""
+    job = _success_job()
+    job["payload_overview"]["description"] = "Classify the tone of a greeting"
+    store = _FakeJobStore({"job-1": job})
+    session = MagicMock(name="session")
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    session.query.return_value.filter.return_value.first.return_value = None
+
+    with (
+        patch.object(pipeline.settings, "embeddings_enabled", True),
+        patch.object(pipeline, "get_embedder", return_value=_FakeEmbedder()),
+        patch.object(pipeline, "summarize_task", return_value="A task summary.") as summarise,
+        patch.object(pipeline, "Session", return_value=session),
+    ):
+        assert pipeline.embed_finished_job("job-1", job_store=store) is True
+
+    assert summarise.call_args.kwargs == {
+        "title": "Sentiment task",
+        "description": "Classify the tone of a greeting",
+        "dataset_sample": [{"question": "hi", "answer": "hello"}],
+    }
+
+
+def test_heuristic_summary_joins_title_and_description() -> None:
+    """The LLM-less fallback is the title plus description, capped and never code."""
+    assert summarizer._heuristic_summary(" Sentiment ", "Tone of a greeting") == (
+        "Sentiment Tone of a greeting"
+    )
+    assert summarizer._heuristic_summary(None, "  ") == ""
+    assert len(summarizer._heuristic_summary("t", "x" * 2000)) == 600
+
+
+def test_summarize_task_falls_back_without_a_model() -> None:
+    """With no summariser model configured the heuristic text is returned as is."""
+    with patch.object(summarizer, "_build_lm", return_value=None):
+        out = summarizer.summarize_task(
+            title="Sentiment task",
+            description="Classify tone",
+            dataset_sample=[{"q": "hi"}],
+        )
+    assert out == "Sentiment task Classify tone"
+
+
+def test_summarize_task_forwards_ten_sample_rows_to_the_model() -> None:
+    """The model is given the title, description and at most ten sample rows."""
+    captured: dict[str, Any] = {}
+
+    class _FakePredict:
+        """Records the predictor inputs and returns a canned description."""
+
+        def __init__(self, _signature: Any) -> None:
+            """Accept and ignore the signature class."""
+
+        def __call__(self, **kwargs: Any) -> Any:
+            """Capture the inputs and return a canned prediction."""
+            captured.update(kwargs)
+            return SimpleNamespace(task_description=" Classifies greeting tone. ")
+
+    rows = [{"q": str(i)} for i in range(25)]
+    with (
+        patch.object(summarizer, "_build_lm", return_value=MagicMock(name="lm")),
+        patch.object(summarizer.dspy, "Predict", _FakePredict),
+        patch.object(summarizer.dspy, "context", MagicMock()),
+    ):
+        out = summarizer.summarize_task(title="Sentiment", description="Tone", dataset_sample=rows)
+
+    assert out == "Classifies greeting tone."
+    assert set(captured) == {"title", "description", "dataset_sample"}
+    assert captured["title"] == "Sentiment"
+    assert captured["description"] == "Tone"
+    assert '"q": "9"' in captured["dataset_sample"]
+    assert '"q": "10"' not in captured["dataset_sample"]
+
+
 def test_embed_finished_job_updates_existing_row() -> None:
     """An existing row is mutated in-place rather than re-inserted."""
     store = _FakeJobStore({"job-1": _success_job()})
@@ -408,6 +485,50 @@ def test_drain_backfill_queue_continues_after_embed_failure() -> None:
     with patch.object(pipeline, "embed_finished_job", side_effect=_fake_embed):
         pipeline._drain_backfill_queue(store, ["a", "b", "c"])
     assert seen == ["a", "b", "c"]
+
+
+def test_fetch_all_success_ids_returns_ids() -> None:
+    """The corpus-wide scan unwraps every success job's ``optimization_id``."""
+    store = _FakeJobStore()
+    session = MagicMock(name="session")
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    session.execute.return_value.mappings.return_value.all.return_value = [
+        {"optimization_id": "a"},
+        {"optimization_id": "b"},
+    ]
+    with patch.object(pipeline, "Session", return_value=session):
+        ids = pipeline._fetch_all_success_ids(store)
+    assert ids == ["a", "b"]
+
+
+def test_reembed_all_returns_zero_when_disabled() -> None:
+    """``embeddings_enabled=False`` skips even the scan."""
+    store = _FakeJobStore()
+    with (
+        patch.object(pipeline.settings, "embeddings_enabled", False),
+        patch.object(pipeline, "_fetch_all_success_ids", side_effect=AssertionError("scanned")),
+    ):
+        assert pipeline.reembed_all_embeddings(store) == 0
+
+
+def test_reembed_all_drains_every_success_id() -> None:
+    """Every success id is re-embedded synchronously and the written count returned."""
+    store = _FakeJobStore()
+    calls: list[str] = []
+
+    def _fake_embed(optimization_id: str, *, job_store: Any) -> bool:
+        """Stub embedder that records each call and reports success."""
+        calls.append(optimization_id)
+        return True
+
+    with (
+        patch.object(pipeline.settings, "embeddings_enabled", True),
+        patch.object(pipeline, "_fetch_all_success_ids", return_value=["a", "b", "c"]),
+        patch.object(pipeline, "embed_finished_job", side_effect=_fake_embed),
+    ):
+        assert pipeline.reembed_all_embeddings(store) == 3
+    assert calls == ["a", "b", "c"]
 
 
 def test_embedding_index_sweeper_repairs_a_bounded_batch() -> None:

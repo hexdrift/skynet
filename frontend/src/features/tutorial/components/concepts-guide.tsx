@@ -192,14 +192,11 @@ function GuideHeader({
   closeBtnRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   return (
-    <header className="flex items-start gap-3 px-5 sm:px-7 py-4 border-b border-[#E5DDD4] bg-gradient-to-b from-[#FAF8F5] to-[#F5F1EC]">
+    <header className="flex items-center gap-3 px-5 sm:px-7 py-4 border-b border-[#E5DDD4] bg-gradient-to-b from-[#FAF8F5] to-[#F5F1EC]">
       <div className="size-10 rounded-xl bg-[#3D2E22] flex items-center justify-center flex-shrink-0 shadow-[0_2px_6px_rgba(61,46,34,0.25)]">
         <Lightbulb className="size-5 text-[#FAF8F5]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7C6350]">
-          {msg("auto.features.tutorial.components.concepts.guide.literal.8")}
-        </p>
         <h2
           id={titleId}
           className="text-lg sm:text-xl font-bold text-[#3D2E22] leading-tight"

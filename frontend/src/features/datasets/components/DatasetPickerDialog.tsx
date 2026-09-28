@@ -64,11 +64,11 @@ export function DatasetPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(32rem,92vw)] max-w-[min(32rem,92vw)] sm:max-w-lg">
-        <DialogTitleRow
-          title={msg("submit.dataset.library_picker_title")}
-          description={msg("submit.dataset.library_picker_subtitle")}
-        />
+      <DialogContent
+        className="w-[min(32rem,92vw)] max-w-[min(32rem,92vw)] sm:max-w-lg"
+        aria-describedby={undefined}
+      >
+        <DialogTitleRow title={msg("submit.dataset.library_picker_title")} />
 
         <SearchInput
           value={search}

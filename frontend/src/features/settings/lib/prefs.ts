@@ -2,14 +2,6 @@ export type CodeAssistDefault = "auto" | "manual";
 export type SplitModeDefault = "auto" | "manual";
 export type TrustModeDefault = "ask" | "auto_safe" | "yolo";
 
-export interface AgentShortcut {
-  key: string;
-  ctrl: boolean;
-  alt: boolean;
-  shift: boolean;
-  meta: boolean;
-}
-
 export interface UserPrefs {
   // Layout preference: the wizard's collapsible sections start expanded.
   expandAdvanced: boolean;
@@ -20,7 +12,6 @@ export interface UserPrefs {
   wizardCodeAssist: CodeAssistDefault;
   wizardSplitMode: SplitModeDefault;
   agentTrustMode: TrustModeDefault;
-  agentShortcut: AgentShortcut;
   // AI co-tagging in the tagger: the master toggle (off = today's fully
   // manual tagger).
   taggerAssist: boolean;
@@ -91,17 +82,8 @@ export const PREF_KEYS: Record<keyof UserPrefs, string> = {
   wizardCodeAssist: "skynet.prefs.wizard.code-assist",
   wizardSplitMode: "skynet.prefs.wizard.split-mode",
   agentTrustMode: "skynet.prefs.agent.trust-mode",
-  agentShortcut: "skynet.prefs.agent.shortcut",
   taggerAssist: "skynet.prefs.tagger.assist",
   dictationEnabled: "skynet.prefs.composer.dictation",
-};
-
-export const DEFAULT_AGENT_SHORTCUT: AgentShortcut = {
-  key: "j",
-  ctrl: true,
-  alt: false,
-  shift: false,
-  meta: false,
 };
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -110,7 +92,6 @@ export const DEFAULT_PREFS: UserPrefs = {
   wizardCodeAssist: "auto",
   wizardSplitMode: "auto",
   agentTrustMode: "ask",
-  agentShortcut: DEFAULT_AGENT_SHORTCUT,
   taggerAssist: true,
   dictationEnabled: true,
 };

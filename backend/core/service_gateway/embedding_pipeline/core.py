@@ -34,8 +34,10 @@ from sqlalchemy.orm import Session
 from ...config import settings
 from ...constants import (
     OPTIMIZATION_TYPE_GRID_SEARCH,
+    PAYLOAD_OVERVIEW_DESCRIPTION,
     PAYLOAD_OVERVIEW_IS_PRIVATE,
     PAYLOAD_OVERVIEW_MODEL_NAME,
+    PAYLOAD_OVERVIEW_NAME,
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_USERNAME,
 )
@@ -88,10 +90,9 @@ def _extract_scores(job: dict[str, Any]) -> tuple[float | None, float | None]:
     after the metric-scale normalization migration — so no rescaling happens
     here.
 
-    A missing baseline matters: the gain sort ranks on
-    ``optimized - baseline``, so a ``None`` baseline would silently collapse
-    the ranking to raw optimized score and float an unimproved-but-high run
-    above one that actually gained.
+    A missing baseline matters: the stored score pair is what search results
+    report, so a ``None`` baseline would hide how much a run actually
+    improved.
 
     Args:
         job: The job-store record for a finished optimization.
@@ -239,15 +240,10 @@ def _embed_finished_job_once(optimization_id: str, *, job_store: Any) -> bool:
     payload = job.get("payload") or {}
     overview = job.get("payload_overview") or {}
     signature_code = payload.get("signature_code")
-    metric_code = payload.get("metric_code")
-    column_mapping = payload.get("column_mapping")
-    dataset = payload.get("dataset") or []
-
     summary_text = summarize_task(
-        signature_code=signature_code,
-        metric_code=metric_code,
-        column_mapping=column_mapping,
-        dataset_sample=dataset,
+        title=overview.get(PAYLOAD_OVERVIEW_NAME) or payload.get("name"),
+        description=overview.get(PAYLOAD_OVERVIEW_DESCRIPTION) or payload.get("description"),
+        dataset_sample=payload.get("dataset") or [],
     )
 
     emb_summary = embedder.encode(summary_text, task="retrieval.passage") if summary_text else None
@@ -475,6 +471,67 @@ def backfill_missing_embeddings(job_store: Any) -> int:
     )
     thread.start()
     return len(ids)
+
+
+def _fetch_all_success_ids(job_store: Any) -> list[str]:
+    """Return every successful job's id, oldest first.
+
+    Unlike :func:`_fetch_missing_embedding_ids`, this ignores whether an
+    embedding row already exists or looks fresh. It is the corpus-wide
+    re-embed path for when the summariser *inputs* change: every stored
+    embedding is then stale even though its ``updated_at`` is recent, so the
+    missing/stale scan would never revisit it.
+
+    Args:
+        job_store: Job-store handle exposing a SQLAlchemy engine.
+
+    Returns:
+        All success-state optimization IDs, oldest completion first; an empty
+        list when the scan fails.
+    """
+    try:
+        with Session(job_store.engine) as session:
+            rows = (
+                session.execute(
+                    text(
+                        "SELECT optimization_id FROM jobs "
+                        "WHERE status = 'success' "
+                        "ORDER BY COALESCE(completed_at, created_at) ASC, optimization_id ASC"
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            return [row["optimization_id"] for row in rows]
+    except Exception as exc:
+        logger.warning("Could not scan for success jobs to re-embed: %s", exc)
+        return []
+
+
+def reembed_all_embeddings(job_store: Any) -> int:
+    """Recompute the summary embedding for every successful job, in place.
+
+    The corpus-wide counterpart to :func:`backfill_missing_embeddings`. Where
+    backfill only touches rows the periodic scan flags as missing or stale,
+    this recomputes *all* of them — the path to run after the summariser
+    inputs change, since existing rows carry a fresh ``updated_at`` and would
+    otherwise never be revisited.
+
+    Runs the drain synchronously (not on a daemon thread) so a CLI operator
+    invoking it sees it through to completion. ``embed_finished_job`` upserts,
+    so each existing row is overwritten with the new summary and vector.
+
+    Args:
+        job_store: Job-store handle forwarded to the drain.
+
+    Returns:
+        The number of rows re-embedded successfully.
+    """
+    if not settings.embeddings_enabled:
+        logger.info("Re-embed skipped: SEARCH_BACKEND is not 'semantic'.")
+        return 0
+    ids = _fetch_all_success_ids(job_store)
+    return _drain_backfill_queue(job_store, ids)
 
 
 class EmbeddingIndexSweeper:

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trash, X } from "@/shared/ui/icons";
 
@@ -10,14 +11,52 @@ interface SelectionBarProps {
   count: number;
   onClear: () => void;
   onDelete: () => void;
+  /** Extra ``SelectionAction`` buttons, rendered between clear and delete. */
+  children?: React.ReactNode;
+  /** ``data-tutorial`` anchor on the pill, for a guide step that spotlights it. */
+  tutorialId?: string;
+}
+
+/** One round icon button in the selection bar. */
+export function SelectionAction({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <TooltipButton tooltip={label} side="top" delayDuration={150}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+        aria-label={label}
+      >
+        {children}
+      </button>
+    </TooltipButton>
+  );
 }
 
 /**
  * Floating bulk-action pill for multi-select card lists (labeling sessions,
- * datasets) — the dashboard jobs table's bottom-docked bar reduced to
- * count + clear + delete. Renders nothing until something is selected.
+ * datasets), matching the dashboard jobs table's bottom-docked bar: count,
+ * clear, any extra actions, then delete. Renders nothing until something is
+ * selected.
  */
-export function SelectionBar({ count, onClear, onDelete }: SelectionBarProps) {
+export function SelectionBar({
+  count,
+  onClear,
+  onDelete,
+  children,
+  tutorialId,
+}: SelectionBarProps) {
   return (
     <AnimatePresence>
       {count > 0 && (
@@ -28,7 +67,10 @@ export function SelectionBar({ count, onClear, onDelete }: SelectionBarProps) {
           transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
         >
-          <div className="flex max-w-[92vw] items-center gap-1 rounded-full border border-border/60 bg-background/95 px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+          <div
+            data-tutorial={tutorialId}
+            className="flex max-w-[92vw] flex-wrap items-center justify-center gap-1 rounded-full border border-border/60 bg-background/95 px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+          >
             <span className="min-w-0 px-1 text-sm tabular-nums text-foreground">
               {formatMsg("shared.selection.count", { count })}
             </span>
@@ -43,6 +85,25 @@ export function SelectionBar({ count, onClear, onDelete }: SelectionBarProps) {
                 <X />
               </button>
             </TooltipButton>
+            {/* Actions that only fit some selections (a single dataset's
+                label/edit/share/rename) slide open and shut as one group, so
+                crossing between one and two selected grows or shrinks the
+                pill instead of snapping. The negative margins cancel the
+                flex gap while the group is collapsed. */}
+            <AnimatePresence initial={false}>
+              {React.Children.toArray(children).length > 0 && (
+                <motion.div
+                  key="extra-actions"
+                  initial={{ width: 0, opacity: 0, marginLeft: -2, marginRight: -2 }}
+                  animate={{ width: "auto", opacity: 1, marginLeft: 0, marginRight: 0 }}
+                  exit={{ width: 0, opacity: 0, marginLeft: -2, marginRight: -2 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 34, mass: 0.8 }}
+                  className="flex shrink-0 items-center gap-1 overflow-hidden"
+                >
+                  {children}
+                </motion.div>
+              )}
+            </AnimatePresence>
             <TooltipButton tooltip={msg("shared.selection.delete")} side="top" delayDuration={150}>
               <button
                 type="button"

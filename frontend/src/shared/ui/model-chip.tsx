@@ -16,6 +16,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import type { CatalogModel, ModelConfig } from "@/shared/types/api";
 import { msg } from "@/shared/lib/messages";
+import { effortLabel } from "@/shared/lib/model-efforts";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { Button } from "@/shared/ui/primitives/button";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
@@ -37,16 +38,9 @@ interface ModelChipProps {
   className?: string;
 }
 
-const REASONING_EFFORT_LABELS: Record<string, string> = {
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
-
 function reasoningEffortLabel(value: string | null | undefined): string | null {
   if (!value) return null;
-  return REASONING_EFFORT_LABELS[value.toLowerCase()] ?? value;
+  return effortLabel(value.toLowerCase());
 }
 
 /** Tiny model capability pill (reasoning, token source, vision). */

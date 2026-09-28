@@ -27,7 +27,7 @@ import { Separator } from "@/shared/ui/primitives/separator";
 import { cn } from "@/shared/lib/utils";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { tip } from "@/shared/lib/tooltips";
-import { parseDatasetFile } from "@/shared/lib/parse-dataset";
+import { DATASET_UPLOAD_ACCEPT, parseDatasetFile } from "@/shared/lib/parse-dataset";
 import { getDatasetRows } from "@/shared/lib/api";
 import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
 import { DatasetPickerDialog } from "@/features/datasets";
@@ -455,7 +455,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           )}
           <input
             type="file"
-            accept=".json,.csv,.xlsx,.xls"
+            accept={DATASET_UPLOAD_ACCEPT}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

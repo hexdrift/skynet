@@ -1,8 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useUserPrefs, type AgentShortcut } from "@/features/settings";
-
 import {
   DEFAULT_WIDTH,
   MAX_WIDTH,
@@ -10,20 +8,6 @@ import {
   STORAGE_KEY_OPEN,
   STORAGE_KEY_WIDTH,
 } from "../constants";
-
-// The default shortcut is ``Ctrl+J`` (see ``DEFAULT_AGENT_SHORTCUT`` in
-// ``features/settings/lib/prefs.ts``). On macOS users naturally press
-// ``Cmd+J`` instead, so we treat ``ctrl`` and ``meta`` as interchangeable
-// for the panel toggle. The exact-match ``matchShortcut`` from settings is
-// still correct for the recorder UI and is intentionally not used here.
-function matchPanelShortcut(e: KeyboardEvent, s: AgentShortcut): boolean {
-  const ctrlOrMeta = e.ctrlKey || e.metaKey;
-  const wantsCtrlOrMeta = s.ctrl || s.meta;
-  if (ctrlOrMeta !== wantsCtrlOrMeta) return false;
-  if (e.altKey !== s.alt) return false;
-  if (e.shiftKey !== s.shift) return false;
-  return e.key.toLowerCase() === s.key.toLowerCase();
-}
 
 interface PanelState {
   open: boolean;
@@ -45,14 +29,13 @@ function clampWidth(n: number): number {
 
 /**
  * Provides the generalist panel's persistent UI state (open/closed,
- * width) and owns the global ``Ctrl+J`` toggle.
+ * width).
  *
  * Mounted once in the app shell so the panel's thread survives route
  * changes. Hydrates from ``localStorage`` on the client only to avoid
  * SSR mismatches.
  */
 export function GeneralistPanelProvider({ children }: { children: React.ReactNode }) {
-  const { prefs } = useUserPrefs();
   const [open, setOpenState] = React.useState(false);
   const [width, setWidthState] = React.useState(DEFAULT_WIDTH);
 
@@ -107,18 +90,6 @@ export function GeneralistPanelProvider({ children }: { children: React.ReactNod
     setPillDock(el);
     return () => setPillDock((prev) => (prev === el ? null : prev));
   }, []);
-
-  const shortcut = prefs.agentShortcut;
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (matchPanelShortcut(e, shortcut)) {
-        e.preventDefault();
-        toggle();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [toggle, shortcut]);
 
   const value = React.useMemo<PanelState>(
     () => ({ open, setOpen, toggle, width, setWidth, pillDock, registerPillDock }),

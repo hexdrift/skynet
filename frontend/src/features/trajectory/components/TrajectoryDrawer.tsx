@@ -508,9 +508,11 @@ function MinibatchEntryCard({
       <div className="flex items-center justify-between gap-2 border-b border-border/30 bg-[#F8F4EF]/60 px-3 py-2">
         <div className="flex items-center gap-2 text-[11px]">
           <StatusChip passed={passed} />
-          <span className="font-mono text-[10px] text-muted-foreground" dir="ltr">
-            #{entry.example_id}
-          </span>
+          {entry.example_id !== "?" && (
+            <span className="font-mono text-[10px] text-muted-foreground" dir="ltr">
+              #{entry.example_id}
+            </span>
+          )}
         </div>
         <HelpTip text={msg("trajectory.minibatch.score_label.explain")}>
           <span className="inline-flex items-baseline gap-1.5">
@@ -1659,7 +1661,8 @@ function PromptKindHeader({
         <KindIcon className="size-3" />
         {kindText}
       </span>
-      {!decomposed && label.length > 0 ? (
+      {/* "self" is the name DSPy gives a lone predictor, not a useful label. */}
+      {!decomposed && label.length > 0 && label !== "self" ? (
         <span className="truncate font-mono text-[0.625rem] text-muted-foreground/70" dir="ltr">
           {label}
         </span>

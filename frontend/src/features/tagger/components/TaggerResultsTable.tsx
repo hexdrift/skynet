@@ -2,6 +2,7 @@
 
 import { EmptyState } from "@/shared/ui/empty-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import { WarningCircle } from "@/shared/ui/icons";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { Badge } from "@/shared/ui/primitives/badge";
@@ -12,7 +13,6 @@ import {
   ResetFiltersButton,
   useColumnFilters,
   useColumnResize,
-  type SortDir,
 } from "@/shared/ui/excel-filter";
 import { ExportTableMenu } from "@/shared/ui/export-table-menu";
 import { cn } from "@/shared/lib/utils";
@@ -60,8 +60,7 @@ export function TaggerResultsTable({
   assist: AssistState | null;
   onOpenRow: (index: number) => void;
 }) {
-  const [sortKey, setSortKey] = useState<SortState>("none");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const { sortKey, sortDir, toggleSort: cycleSort } = useTableSort<SortState>("none");
   const colFilters = useColumnFilters();
   const colResize = useColumnResize();
   const [selected, setSelected] = useState(0);
@@ -106,17 +105,12 @@ export function TaggerResultsTable({
     }));
   }, [rows]);
 
-  const toggleSort = useCallback((key: SortState) => {
-    if (key === "none") return;
-    setSortKey((prev) => {
-      if (prev === key) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setSortDir("asc");
-      return key;
-    });
-  }, []);
+  const toggleSort = useCallback(
+    (key: SortState) => {
+      if (key !== "none") cycleSort(key);
+    },
+    [cycleSort],
+  );
 
   const visible = useMemo(() => {
     const labelFilter = colFilters.filters["label"];

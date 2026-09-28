@@ -7,7 +7,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import {
-  SquaresFour,
   PaperPlaneTilt,
   Trash,
   DotsThree,
@@ -17,9 +16,7 @@ import {
   CircleNotch,
   GridFour,
   CaretLeft,
-  Compass,
   Copy,
-  Database,
   ArrowCounterClockwise,
   Play,
   User,
@@ -66,7 +63,8 @@ import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { sessionIdentity } from "@/shared/lib/session-identity";
 import { recentResumableId } from "@/shared/lib/recent-session";
 import { TERMS } from "@/shared/lib/terms";
-import { sentenceCase } from "@/shared/lib/formatters";
+import { APP_PAGES } from "@/shared/lib/app-pages";
+import { APP_PAGE_ICONS, appPageLabel } from "@/shared/lib/app-pages-ui";
 import { EmptyState } from "@/shared/ui/empty-state";
 import {
   COMPACT_POPOVER_ICON_CLASS,
@@ -75,28 +73,13 @@ import {
 } from "@/shared/ui/compact-popover-menu";
 import { Input } from "@/shared/ui/primitives/input";
 
-const NAV_ITEMS = perLocale(
-  () =>
-    [
-      {
-        href: "/",
-        label: msg("auto.features.sidebar.components.sidebar.literal.1"),
-        icon: SquaresFour,
-      },
-      // One entry covers the whole Data hub: the dataset library and the
-      // labeling-session chooser are tabs of the same surface, so both route
-      // prefixes light it up.
-      {
-        href: "/datasets",
-        label: msg("sidebar.nav.data"),
-        icon: Database,
-        match: ["/datasets", "/tagger"],
-      },
-      // The glossary term is lowercase for mid-sentence use; nav items are
-      // sentence-cased ("Explore", "Data"), so this one matches.
-      { href: "/submit", label: sentenceCase(TERMS.notificationNewOpt), icon: PaperPlaneTilt },
-      { href: "/explore", label: msg("sidebar.nav.explore"), icon: Compass },
-    ] as const,
+const NAV_ITEMS = perLocale(() =>
+  APP_PAGES.filter((page) => page.sidebar).map((page) => ({
+    href: page.href,
+    label: appPageLabel(page),
+    icon: APP_PAGE_ICONS[page.id],
+    match: page.match ?? [page.href],
+  })),
 );
 
 const PAGE_SIZE = 20;
@@ -498,9 +481,7 @@ export function Sidebar() {
               active={
                 item.href === "/"
                   ? pathname === "/"
-                  : ("match" in item ? item.match : [item.href]).some((prefix) =>
-                      pathname.startsWith(prefix),
-                    )
+                  : item.match.some((prefix) => pathname.startsWith(prefix))
               }
               badge={
                 item.href === "/" && renderedTab === "mine" && activeCount > 0 ? activeCount : null
@@ -1007,28 +988,33 @@ function JobRow({
           </Button>
         )}
         <PopoverPrimitive.Root open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverPrimitive.Trigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-              aria-label={formatMsg("auto.features.sidebar.components.sidebar.template.3", {
-                p1: displayName,
-              })}
-            >
-              <DotsThree
-                className={cn(
-                  "size-3.5 transition-colors duration-150 motion-reduce:transition-none",
-                  menuOpen && "text-foreground",
-                )}
-                aria-hidden="true"
-              />
-            </Button>
-          </PopoverPrimitive.Trigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverPrimitive.Trigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label={formatMsg("auto.features.sidebar.components.sidebar.template.3", {
+                    p1: displayName,
+                  })}
+                >
+                  <DotsThree
+                    className={cn(
+                      "size-3.5 transition-colors duration-150 motion-reduce:transition-none",
+                      menuOpen && "text-foreground",
+                    )}
+                    aria-hidden="true"
+                  />
+                </Button>
+              </PopoverPrimitive.Trigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{msg("sidebar.row_menu")}</TooltipContent>
+          </Tooltip>
           <PopoverPrimitive.Portal>
             <PopoverPrimitive.Content
               align="end"

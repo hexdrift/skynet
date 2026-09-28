@@ -45,9 +45,9 @@ const SORT_OPTIONS = [
     queryOnly: false,
   },
   {
-    value: "gain" as const,
-    label: () => msg("explore.sort.gain"),
-    tip: () => msg("explore.sort.gain.tip"),
+    value: "oldest" as const,
+    label: () => msg("explore.sort.oldest"),
+    tip: () => msg("explore.sort.oldest.tip"),
     queryOnly: false,
   },
 ];

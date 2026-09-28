@@ -46,7 +46,7 @@ export interface SearchResponseState {
 
 const VALID_SIZES = new Set([10, 30, 50]);
 const VALID_CORPORA = new Set<ExploreCorpus>(["mine", "public", "shared"]);
-const VALID_SORTS = new Set<SearchSort>(["relevance", "recent", "gain"]);
+const VALID_SORTS = new Set<SearchSort>(["relevance", "recent", "oldest"]);
 
 const DEFAULT_SIZE = 30;
 const DEFAULT_PAGE = 1;

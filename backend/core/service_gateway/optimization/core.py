@@ -35,6 +35,7 @@ from ...constants import (
     OPTIMIZER_NAME_GEPA,
     PROGRESS_BASELINE,
     PROGRESS_CANDIDATE,
+    PROGRESS_EVALUATION_STARTED,
     PROGRESS_GRID_PAIR_COMPLETED,
     PROGRESS_GRID_PAIR_FAILED,
     PROGRESS_GRID_PAIR_STARTED,
@@ -523,6 +524,8 @@ def _run_grid_pair(
             optimized = None
             optimized_test_results: list[dict] = []
             if ctx.splits.test:
+                if ctx.progress_callback:
+                    ctx.progress_callback(PROGRESS_EVALUATION_STARTED, {"pair_index": i})
                 with track_stage(STAGE_EVALUATION, *timing_callbacks):
                     optimized, optimized_test_results = evaluate_on_test(
                         compiled,
@@ -905,6 +908,8 @@ class DspyService:
                 optimized_test_metric = None
                 optimized_test_results: list[dict] = []
                 if splits.test:
+                    if progress_callback:
+                        progress_callback(PROGRESS_EVALUATION_STARTED, {})
                     with track_stage(STAGE_EVALUATION, *timing_callbacks):
                         optimized_test_metric, optimized_test_results = evaluate_on_test(
                             compiled_program,

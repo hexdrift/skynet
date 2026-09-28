@@ -1,6 +1,5 @@
 "use client";
 
-import { Kbd } from "@/shared/ui/kbd";
 import { CountBadge } from "@/shared/ui/count-badge";
 import * as React from "react";
 import { createPortal } from "react-dom";
@@ -29,7 +28,7 @@ import { SubmitSplashOverlay, SUBMIT_SPLASH_HOLD_MS } from "@/shared/ui/submit-s
 import { cn } from "@/shared/lib/utils";
 import { formatMsg } from "@/shared/lib/messages";
 
-import { formatShortcut, parseAgentPreferencePatch, useUserPrefs } from "@/features/settings";
+import { parseAgentPreferencePatch, useUserPrefs } from "@/features/settings";
 
 import { useConversationStore } from "../hooks/use-conversation-store";
 import { useGeneralistAgent, type SessionEventContext } from "../hooks/use-generalist-agent";
@@ -104,14 +103,13 @@ interface GeneralistPanelProps {
 /**
  * Docked generalist agent panel. Renders as an aside anchored to the document's
  * inline-end edge — left in Hebrew/RTL, right in English/LTR — that the user can
- * resize, minimize to a pill, and toggle with Ctrl+J.
+ * resize, and minimize to a pill.
  * Mounted once in the app shell so the thread survives route changes.
  */
 export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   const { open, setOpen, width, setWidth, pillDock } = useGeneralistPanelState();
   const { mode: trustMode, next: cycleTrust } = useTrustMode();
-  const { prefs, updatePrefs } = useUserPrefs();
-  const shortcutLabel = formatShortcut(prefs.agentShortcut);
+  const { updatePrefs } = useUserPrefs();
   const reduceMotion = useReducedMotion();
   const hue = TRUST_MODE_HUE[trustMode];
   const dir = getActiveDir();
@@ -828,8 +826,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      {msg("auto.features.agent.panel.components.generalistpanel.6")}{" "}
-                      <Kbd className="font-mono">{shortcutLabel}</Kbd>
+                      {msg("auto.features.agent.panel.components.generalistpanel.6")}
                     </TooltipContent>
                   </Tooltip>
                 </div>

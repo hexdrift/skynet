@@ -611,8 +611,8 @@ class Settings(BaseSettings):
     generalist_agent_model: str = Field(
         default=DEFAULT_AGENT_MODEL_ID,
         description=(
-            "LiteLLM model id used by the generalist agent (Cmd/Ctrl+J "
-            "panel). Defaults to the inert on-prem alias; override via "
+            "LiteLLM model id used by the generalist agent panel. "
+            "Defaults to the inert on-prem alias; override via "
             "GENERALIST_AGENT_MODEL."
         ),
     )

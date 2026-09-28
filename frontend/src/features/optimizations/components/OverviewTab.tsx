@@ -17,8 +17,9 @@ import {
 import { FadeIn, StaggerContainer, StaggerItem, TiltCard } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import type { LMActivity, OptimizationStatusResponse, PairResult } from "@/shared/types/api";
-import { type PipelineStage } from "../constants";
+import type { PipelineStage } from "../constants";
 import { detectPairStage, detectStage } from "../lib/detect-stage";
+import { planPipelineStages } from "../lib/pipeline-plan";
 import { formatDuration, formatImprovement, formatPercent } from "@/shared/lib";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
@@ -96,7 +97,6 @@ function OverviewTabImpl({
   scorePoints,
   activePairIndex,
   activePair,
-  onStageClick,
   onPairSelect,
   onPairDeleted,
   trajectoryPreviewLayout,
@@ -106,7 +106,6 @@ function OverviewTabImpl({
   scorePoints: ScorePoint[];
   activePairIndex: number | null;
   activePair?: PairResult | null;
-  onStageClick: (stage: PipelineStage) => void;
   onPairSelect: (pairIndex: number) => void;
   onPairDeleted?: (pairIndex: number) => void;
   trajectoryPreviewLayout?: { width: number; height: number };
@@ -120,6 +119,7 @@ function OverviewTabImpl({
   const renderGridAgg = job.optimization_type === "grid_search" && !isPairContext;
 
   const pairIndex = isPairContext ? activePair.pair_index : undefined;
+  const stagePlan = planPipelineStages(job);
   const currentStage = isPairContext
     ? detectPairStage(job, activePair.pair_index)
     : job.status === "success"
@@ -161,6 +161,15 @@ function OverviewTabImpl({
   const improvement =
     runResult?.metric_improvement ??
     (baseline != null && optimized != null ? optimized - baseline : undefined);
+  // A stage the run never executed (no baseline or final score without a test
+  // split) must not read as completed once the run is past it.
+  const stageIndex = (stage: PipelineStage | "done") =>
+    stage === "done" ? stagePlan.length : stagePlan.findIndex((s) => s.key === stage);
+  const skippedStages: PipelineStage[] = [];
+  if (baseline == null && stageIndex(currentStage) > stageIndex("baseline"))
+    skippedStages.push("baseline");
+  if (optimized == null && currentStage === "done" && !stagesFailed)
+    skippedStages.push("evaluating");
   const scoresReady =
     runResult != null && baseline != null && optimized != null && !activePair?.error;
   const lmActivity: LMActivity | null = (runResult?.lm_activity as LMActivity | undefined) ?? null;
@@ -297,11 +306,13 @@ function OverviewTabImpl({
       {renderRunBlocks && (
         <FadeIn delay={0.05}>
           <PipelineStages
+            plan={stagePlan}
             currentStage={currentStage}
             stageTs={stageTs}
+            startedAt={job.started_at}
             isActive={stagesActive}
             isFailed={stagesFailed}
-            onStageClick={onStageClick}
+            skippedStages={skippedStages}
             dataTutorial={isPairContext ? undefined : "pipeline-stages"}
           />
         </FadeIn>

@@ -9,7 +9,9 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { SearchInput } from "@/shared/ui/search-input";
 
-export type SortDir = "asc" | "desc";
+import type { SortDir } from "@/shared/lib/table-sort";
+
+export type { SortDir };
 export type Filters = Record<string, Set<string>>;
 
 export function ColumnHeader<K extends string>({

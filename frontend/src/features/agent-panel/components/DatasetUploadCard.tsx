@@ -17,7 +17,7 @@ import {
 } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
-import { parseDatasetFile } from "@/shared/lib/parse-dataset";
+import { DATASET_UPLOAD_ACCEPT, parseDatasetFile } from "@/shared/lib/parse-dataset";
 
 import type { AgentToolCall } from "@/shared/ui/agent/types";
 
@@ -52,7 +52,7 @@ interface DatasetUploadCardProps {
   onConfirm: (confirmed: ConfirmedDataset) => void;
 }
 
-export const DATASET_FILE_ACCEPT = ".csv,.json,.jsonl,.xlsx,.xls";
+export const DATASET_FILE_ACCEPT = DATASET_UPLOAD_ACCEPT;
 
 function defaultRoleFor(idx: number, total: number): ColumnRole {
   if (total === 1) return "input";

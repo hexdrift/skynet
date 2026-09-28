@@ -42,6 +42,7 @@ from core.constants import (
     DETAIL_BASELINE,
     DETAIL_OPTIMIZED,
     PROGRESS_BASELINE,
+    PROGRESS_EVALUATION_STARTED,
     PROGRESS_OPTIMIZED,
 )
 
@@ -758,6 +759,8 @@ def run_react_optimization(
     best_program = adapter.build_program(best_candidate)
     program_state = extract_program_state(best_program)
 
+    if progress_callback:
+        progress_callback(PROGRESS_EVALUATION_STARTED, {})
     with track_stage(STAGE_EVALUATION, *timing_callbacks):
         optimized_scalars, optimized_outputs = _scores_and_outputs(
             adapter, best_candidate, test

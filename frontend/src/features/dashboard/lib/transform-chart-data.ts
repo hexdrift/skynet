@@ -1,196 +1,229 @@
-import type { DashboardAnalytics, DashboardAnalyticsJob } from "@/shared/lib/api";
+import type {
+  DashboardAnalytics,
+  DashboardAnalyticsGranularity,
+  DashboardAnalyticsJob,
+  DashboardAnalyticsRangeBucket,
+} from "@/shared/lib/api";
 import { getStatusLabel } from "@/shared/constants/job-status";
-import { TERMS } from "@/shared/lib/terms";
-import { STATUS_COLORS } from "../constants";
 import { msg } from "@/shared/lib/messages";
 import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
+import { STATUS_COLORS } from "../constants";
+
+export type ShareBar = { key: string; name: string; value: number; pct: number };
+
+export type HistogramBar = {
+  label: string;
+  count: number;
+  avgImprovement: number | null;
+  /** Backend `[lower, upper)` edges (null = open end) so a bar can become a filter. */
+  lower: number | null;
+  upper: number | null;
+};
+
+export type OptimizerRow = {
+  name: string;
+  count: number;
+  successRate: number;
+  avgImprovement: number | null;
+  avgRuntimeMinutes: number | null;
+  share: number;
+};
+
+export type ModelRow = {
+  name: string;
+  count: number;
+  successRate: number;
+  avgImprovement: number | null;
+  share: number;
+};
+
+export type TimelinePoint = {
+  date: string;
+  label: string;
+  success: number;
+  failed: number;
+  other: number;
+  total: number;
+};
 
 export type ChartData = {
-  status: Array<{ key: string; name: string; value: number; fill: string }>;
-  improvement: Array<{
-    name: string;
-    optimizedScore: number;
-    baselineScore: number;
-    delta: number | undefined;
-  }>;
-  improvementJobIds: string[];
-  optimizer: Array<{ name: string; value: number }>;
   kpis: null | {
+    total: number;
     successRate: number;
-    avgImprovement: number;
-    avgRuntime: number;
-    totalRows: number;
     successCount: number;
     terminalCount: number;
-    totalPairsRun: number;
-    gridSearchCount: number;
-    singleRunCount: number;
-    bestImprovement: number;
+    runningCount: number;
+    avgImprovement: number | null;
+    medianImprovement: number | null;
+    bestImprovement: number | null;
+    avgRuntimeSeconds: number | null;
+    totalRows: number;
   };
-  avgByOptimizer: Array<{ name: string; avgImprovement: number; count: number }>;
-  modelUsage: Array<{ name: string; count: number }>;
+  status: ShareBar[];
+  jobTypes: ShareBar[];
+  modules: ShareBar[];
+  optimizerStats: OptimizerRow[];
+  modelStats: ModelRow[];
   ownerUsage: Array<{ name: string; count: number }>;
   accessUsage: Array<{ name: string; count: number }>;
+  improvementHistogram: HistogramBar[];
+  runtimeHistogram: HistogramBar[];
+  datasetBuckets: HistogramBar[];
+  timeline: TimelinePoint[];
+  timelineGranularity: DashboardAnalyticsGranularity;
   topJobs: DashboardAnalyticsJob[];
-  jobTypeData: Array<{ name: string; value: number }>;
-  runtimeDistribution: Array<{ name: string; runtimeMinutes: number }>;
-  runtimeDistributionJobIds: string[];
-  datasetVsImprovement: Array<{ rows: number; improvement: number; name: string }>;
-  datasetVsImprovementIds: string[];
-  efficiencyData: Array<{ name: string; efficiency: number }>;
-  efficiencyJobIds: string[];
-  timelineData: Array<{ name: string; [valueKey: string]: string | number }>;
-  timelineDates: string[];
+  truncated: boolean;
 };
 
 const EMPTY_CHART_DATA: ChartData = {
-  status: [],
-  improvement: [],
-  improvementJobIds: [],
-  optimizer: [],
   kpis: null,
-  avgByOptimizer: [],
-  modelUsage: [],
+  status: [],
+  jobTypes: [],
+  modules: [],
+  optimizerStats: [],
+  modelStats: [],
   ownerUsage: [],
   accessUsage: [],
+  improvementHistogram: [],
+  runtimeHistogram: [],
+  datasetBuckets: [],
+  timeline: [],
+  timelineGranularity: "day",
   topJobs: [],
-  jobTypeData: [],
-  runtimeDistribution: [],
-  runtimeDistributionJobIds: [],
-  datasetVsImprovement: [],
-  datasetVsImprovementIds: [],
-  efficiencyData: [],
-  efficiencyJobIds: [],
-  timelineData: [],
-  timelineDates: [],
+  truncated: false,
 };
 
-const shortId = (id: string) => `${id.slice(0, 8)}…`;
+function shareBars(counts: Record<string, number>, label: (key: string) => string): ShareBar[] {
+  const entries = Object.entries(counts);
+  const total = entries.reduce((sum, [, value]) => sum + value, 0);
+  return entries
+    .map(([key, value]) => ({
+      key,
+      name: label(key),
+      value,
+      pct: total > 0 ? (value / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export function jobTypeLabel(key: string): string {
+  switch (key) {
+    case "grid_search":
+      return msg("auto.features.dashboard.lib.transform.chart.data.literal.1");
+    case "workflow":
+      return msg("dashboard.analytics.type_workflow");
+    default:
+      return msg("auto.features.dashboard.lib.transform.chart.data.literal.2");
+  }
+}
+
+/**
+ * Turn `[lower, upper)` edges into a compact axis label: "<5", "5–10", "30+".
+ * Open ends come from the backend as `null`.
+ */
+function bucketLabel(bucket: DashboardAnalyticsRangeBucket, fmt: Intl.NumberFormat): string {
+  if (bucket.lower == null && bucket.upper == null) return "—";
+  if (bucket.lower == null) return `<${fmt.format(bucket.upper!)}`;
+  if (bucket.upper == null) return `${fmt.format(bucket.lower)}+`;
+  return `${fmt.format(bucket.lower)}–${fmt.format(bucket.upper)}`;
+}
+
+function histogram(buckets: DashboardAnalyticsRangeBucket[], fmt: Intl.NumberFormat): HistogramBar[] {
+  // An all-zero histogram means no run had the measurement at all (e.g. no
+  // successful run yet); the chart renders its empty state instead of flat bars.
+  if (buckets.every((b) => b.count === 0)) return [];
+  return buckets.map((b) => ({
+    label: bucketLabel(b, fmt),
+    count: b.count,
+    avgImprovement: b.avg_improvement,
+    lower: b.lower,
+    upper: b.upper,
+  }));
+}
+
+function timelineLabel(date: string, granularity: DashboardAnalyticsGranularity, locale: string) {
+  // Bucket dates are calendar days; parsing at UTC midnight keeps the label
+  // on that day regardless of the viewer's timezone.
+  const d = new Date(`${date}T00:00:00Z`);
+  if (granularity === "month") {
+    return d.toLocaleDateString(locale, { month: "short", year: "2-digit", timeZone: "UTC" });
+  }
+  return d.toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
+}
 
 export function transformChartData(analyticsData: DashboardAnalytics | null): ChartData {
   if (!analyticsData) return EMPTY_CHART_DATA;
 
-  const status = Object.entries(analyticsData.status_counts).map(([key, count]) => ({
-    key,
-    name: getStatusLabel(key),
-    value: count,
-    fill: STATUS_COLORS[key] ?? "var(--color-chart-5)",
-  }));
-
-  const improvement = analyticsData.top_improvement.map((j) => {
-    const opt = j.optimized_test_metric ?? 0;
-    const bl = j.baseline_test_metric ?? 0;
-    return {
-      name: shortId(j.optimization_id),
-      optimizedScore: Math.round(opt),
-      baselineScore: Math.round(bl),
-      delta: j.metric_improvement ?? undefined,
-    };
-  });
-  const improvementJobIds = analyticsData.top_improvement.map((j) => j.optimization_id);
-
-  const optimizer = Object.entries(analyticsData.optimizer_counts).map(([name, value]) => ({
-    name,
-    value,
-  }));
+  const locale = getActiveIntlLocale();
+  const fmt = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
 
   const kpis = {
+    total: analyticsData.filtered_total,
     successRate: analyticsData.success_rate * 100,
-    avgImprovement: analyticsData.avg_improvement ?? 0,
-    avgRuntime: analyticsData.avg_runtime_seconds ?? 0,
-    totalRows: analyticsData.total_dataset_rows,
     successCount: analyticsData.success_count,
     terminalCount: analyticsData.terminal_count,
-    totalPairsRun: analyticsData.total_pairs_run,
-    gridSearchCount: analyticsData.grid_search_count,
-    singleRunCount: analyticsData.single_run_count,
-    bestImprovement: analyticsData.best_improvement ?? 0,
+    runningCount: analyticsData.running_count,
+    avgImprovement: analyticsData.avg_improvement,
+    medianImprovement: analyticsData.median_improvement,
+    bestImprovement: analyticsData.best_improvement,
+    avgRuntimeSeconds: analyticsData.avg_runtime_seconds,
+    totalRows: analyticsData.total_dataset_rows,
   };
 
-  const avgByOptimizer = analyticsData.improvement_by_optimizer.map((o) => ({
+  const status = Object.entries(analyticsData.status_counts)
+    .map(([key, value]) => ({ key, value }))
+    .sort((a, b) => b.value - a.value)
+    .map(({ key, value }) => ({
+      key,
+      name: getStatusLabel(key),
+      value,
+      pct: kpis.total > 0 ? (value / kpis.total) * 100 : 0,
+    }));
+
+  const maxOptimizer = analyticsData.optimizer_stats[0]?.count ?? 0;
+  const optimizerStats = analyticsData.optimizer_stats.map((o) => ({
     name: o.name,
-    avgImprovement: +o.average.toFixed(1),
     count: o.count,
+    successRate: o.success_rate * 100,
+    avgImprovement: o.avg_improvement,
+    avgRuntimeMinutes: o.avg_runtime_minutes,
+    share: maxOptimizer > 0 ? (o.count / maxOptimizer) * 100 : 0,
   }));
 
-  const modelUsage = analyticsData.model_usage.map((m) => ({
+  const maxModel = analyticsData.model_stats[0]?.count ?? 0;
+  const modelStats = analyticsData.model_stats.map((m) => ({
     name: m.name,
-    count: m.value,
+    count: m.count,
+    successRate: m.success_rate * 100,
+    avgImprovement: m.avg_improvement,
+    share: maxModel > 0 ? (m.count / maxModel) * 100 : 0,
   }));
 
-  const ownerUsage = (analyticsData.owner_usage ?? []).map((o) => ({
-    name: o.name,
-    count: o.value,
+  const timeline = analyticsData.timeline.map((t) => ({
+    date: t.date,
+    label: timelineLabel(t.date, analyticsData.timeline_granularity, locale),
+    success: t.success_count,
+    failed: t.failed_count,
+    other: Math.max(0, t.count - t.success_count - t.failed_count),
+    total: t.count,
   }));
-
-  const accessUsage = (analyticsData.access_usage ?? []).map((a) => ({
-    name: a.name,
-    count: a.value,
-  }));
-
-  const topJobs = analyticsData.top_jobs_by_improvement;
-
-  const jobTypeData = Object.entries(analyticsData.job_type_counts).map(([key, value]) => ({
-    name:
-      key === "grid_search"
-        ? msg("auto.features.dashboard.lib.transform.chart.data.literal.1")
-        : msg("auto.features.dashboard.lib.transform.chart.data.literal.2"),
-    value,
-  }));
-
-  const runtimeDistribution = analyticsData.runtime_distribution.map((j) => ({
-    name: shortId(j.optimization_id),
-    runtimeMinutes: +((j.elapsed_seconds ?? 0) / 60).toFixed(1),
-  }));
-  const runtimeDistributionJobIds = analyticsData.runtime_distribution.map(
-    (j) => j.optimization_id,
-  );
-
-  const datasetVsImprovement = analyticsData.dataset_vs_improvement.map((j) => ({
-    rows: j.dataset_rows ?? 0,
-    improvement: +(j.metric_improvement ?? 0).toFixed(1),
-    name: shortId(j.optimization_id),
-  }));
-  const datasetVsImprovementIds = analyticsData.dataset_vs_improvement.map(
-    (j) => j.optimization_id,
-  );
-
-  const efficiencyData = analyticsData.efficiency.map((j) => {
-    const delta = j.metric_improvement ?? 0;
-    const elapsed = j.elapsed_seconds ?? 0;
-    const efficiency = elapsed > 0 ? +((delta / elapsed) * 60).toFixed(2) : 0;
-    return { name: shortId(j.optimization_id), efficiency };
-  });
-  const efficiencyJobIds = analyticsData.efficiency.map((j) => j.optimization_id);
-
-  const timelineData = analyticsData.timeline.map((t) => ({
-    name: new Date(t.date).toLocaleDateString(getActiveIntlLocale(), {
-      day: "numeric",
-      month: "short",
-    }),
-    [TERMS.optimizationPlural]: t.count,
-  }));
-  const timelineDates = analyticsData.timeline.map((t) => t.date);
 
   return {
-    status,
-    improvement,
-    improvementJobIds,
-    optimizer,
     kpis,
-    avgByOptimizer,
-    modelUsage,
-    ownerUsage,
-    accessUsage,
-    topJobs,
-    jobTypeData,
-    runtimeDistribution,
-    runtimeDistributionJobIds,
-    datasetVsImprovement,
-    datasetVsImprovementIds,
-    efficiencyData,
-    efficiencyJobIds,
-    timelineData,
-    timelineDates,
+    status,
+    jobTypes: shareBars(analyticsData.job_type_counts, jobTypeLabel),
+    modules: shareBars(analyticsData.module_counts, (key) => key),
+    optimizerStats,
+    modelStats,
+    ownerUsage: analyticsData.owner_usage.map((o) => ({ name: o.name, count: o.value })),
+    accessUsage: analyticsData.access_usage.map((a) => ({ name: a.name, count: a.value })),
+    improvementHistogram: histogram(analyticsData.improvement_histogram, fmt),
+    runtimeHistogram: histogram(analyticsData.runtime_histogram, fmt),
+    datasetBuckets: histogram(analyticsData.dataset_size_buckets, fmt),
+    timeline,
+    timelineGranularity: analyticsData.timeline_granularity,
+    topJobs: analyticsData.top_jobs_by_improvement,
+    truncated: analyticsData.truncated,
   };
 }
+

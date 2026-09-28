@@ -104,13 +104,12 @@ export function TaggerMoveToDatasets({
   return (
     <>
       <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
+        <div className="flex items-center gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
             <Database className="size-4" />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{msg("tagger.move.title")}</p>
-            <p className="text-sm text-muted-foreground">{msg("tagger.move.subtitle")}</p>
           </div>
         </div>
         <TooltipButton tooltip={msg("tagger.move.cta")}>
@@ -127,11 +126,11 @@ export function TaggerMoveToDatasets({
       </div>
 
       <Dialog open={open} onOpenChange={(v) => !moving && setOpen(v)}>
-        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
-          <DialogTitleRow
-            title={msg("tagger.move.confirm_title")}
-            description={msg("tagger.move.confirm_body")}
-          />
+        <DialogContent
+          className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md"
+          aria-describedby={undefined}
+        >
+          <DialogTitleRow title={msg("tagger.move.confirm_title")} />
           <div className="space-y-2">
             <Label htmlFor="move-dataset-name">{msg("tagger.library.name_label")}</Label>
             <Input

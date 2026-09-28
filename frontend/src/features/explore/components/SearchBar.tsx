@@ -20,6 +20,10 @@ interface SearchBarProps {
   /** Disables the session-scoped tabs (Mine, Shared) when no logged-in user. */
   signedIn: boolean;
   filtersCount: number;
+  /** Whether the filter panel is open; the button toggles it. */
+  filtersOpen: boolean;
+  /** The filter button, so the panel can hand focus back when it closes. */
+  filtersButtonRef?: React.Ref<HTMLButtonElement>;
   onOpenFilters: () => void;
   /** Quick-clears the metadata filters (preserving the text query). */
   onClearFilters: () => void;
@@ -66,6 +70,8 @@ export function SearchBar({
   onCorpusChange,
   signedIn,
   filtersCount,
+  filtersOpen,
+  filtersButtonRef,
   onOpenFilters,
   onClearFilters,
   loading,
@@ -210,9 +216,11 @@ export function SearchBar({
           </TooltipButton>
         )}
         <button
+          ref={filtersButtonRef}
           type="button"
           onClick={onOpenFilters}
           aria-label={msg("explore.filters.button")}
+          aria-expanded={filtersOpen}
           className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] text-foreground/70 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
         >
           <FadersHorizontal className="size-[1.125rem]" aria-hidden="true" />

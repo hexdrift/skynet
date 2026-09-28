@@ -3,11 +3,9 @@
 import * as React from "react";
 import { Sparkle } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
-import { formatShortcut, useUserPrefs } from "@/features/settings";
 
 import { cn } from "@/shared/lib/utils";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
-import { useIsPhone } from "@/shared/hooks/use-device-class";
 
 interface MinimizedPillProps {
   onOpen: () => void;
@@ -27,13 +25,7 @@ export function MinimizedPill({
   inline = false,
   className,
 }: MinimizedPillProps) {
-  const { prefs } = useUserPrefs();
-  // No keyboard on a phone, so the shortcut hint would only be noise.
-  const isPhone = useIsPhone();
-  const shortcutLabel = formatShortcut(prefs.agentShortcut);
-  const ariaLabel = isPhone
-    ? msg("auto.features.agent.panel.components.minimizedpill.literal.1")
-    : `${msg("auto.features.agent.panel.components.minimizedpill.literal.1")} (${shortcutLabel})`;
+  const ariaLabel = msg("auto.features.agent.panel.components.minimizedpill.literal.1");
   const showLabel = active && Boolean(statusLabel);
 
   return (
@@ -76,11 +68,6 @@ export function MinimizedPill({
           ? statusLabel
           : msg("auto.features.agent.panel.components.minimizedpill.literal.3")}
       </span>
-      {!isPhone && (
-        <span className="text-muted-foreground/70 font-mono text-[0.625rem] tracking-tight">
-          {shortcutLabel}
-        </span>
-      )}
     </button>
   );
 }

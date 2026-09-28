@@ -7,6 +7,7 @@ import { EmptyState } from "@/shared/ui/empty-state";
 import { StorageUsageBar } from "@/shared/ui/progress-bar";
 import { ExpandToggleButton } from "@/shared/ui/expand-toggle-button";
 import * as React from "react";
+import { useTableSort } from "@/shared/hooks/use-table-sort";
 import { useSession } from "next-auth/react";
 import { toast } from "react-toastify";
 import { motion, useReducedMotion } from "framer-motion";
@@ -14,19 +15,14 @@ import {
   ChatText,
   BookOpen,
   CircleNotch,
-  Robot,
   Brain,
   Columns,
   Key,
   ArrowSquareOut,
   Feather,
-  HardDrive,
-  Keyboard,
-  type Icon,
   Microphone,
   PencilSimple,
   PencilSimpleLine,
-  Plug,
   Plus,
   ArrowCounterClockwise,
   HardDrives,
@@ -44,7 +40,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/primitives/dialog";
@@ -82,7 +77,6 @@ import {
   ColumnHeader,
   ResetColumnsButton,
   ResetFiltersButton,
-  type SortDir,
   useColumnFilters,
   useColumnResize,
 } from "@/shared/ui/excel-filter";
@@ -115,8 +109,7 @@ import {
 import { useUserPrefs } from "../hooks/use-user-prefs";
 import { useSettingsModal } from "../hooks/use-settings-modal";
 import { useIsPhone } from "@/shared/hooks/use-device-class";
-import { isPhoneSettingsTab } from "@/shared/lib/device-class";
-import { ShortcutRecorder } from "./ShortcutRecorder";
+import { SETTINGS_TABS, visibleSettingsTabs, type SettingsTab } from "../lib/tabs";
 import { SettingsRow } from "@/shared/ui/settings-row";
 
 function WizardTab() {
@@ -308,14 +301,6 @@ function AgentTab() {
             <SelectItem value="yolo">{msg("settings.agent.trust.yolo")}</SelectItem>
           </SelectContent>
         </Select>
-      </SettingsRow>
-
-      <SettingsRow
-        icon={Keyboard}
-        label={msg("settings.agent.shortcut.label")}
-        description={msg("settings.agent.shortcut.description")}
-      >
-        <ShortcutRecorder />
       </SettingsRow>
 
       {memory && (
@@ -541,15 +526,7 @@ function AdminTab() {
   const [newBudgetMb, setNewBudgetMb] = React.useState<number | "">("");
   const colFilters = useColumnFilters();
   const colResize = useColumnResize();
-  const [sortKey, setSortKey] = React.useState<string>("username");
-  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
-
-  const toggleSort = React.useCallback((key: string) => {
-    setSortKey((prevKey) => {
-      setSortDir((prevDir) => (prevKey === key ? (prevDir === "asc" ? "desc" : "asc") : "asc"));
-      return key;
-    });
-  }, []);
+  const { sortKey, sortDir, toggleSort } = useTableSort<string>("username");
 
   const filterOptions = React.useMemo(() => {
     const unique = (key: keyof ManagedAccount) => {
@@ -570,6 +547,7 @@ function AdminTab() {
       }
       return true;
     });
+    const collLocale = getActiveIntlLocale();
     items.sort((a, b) => {
       const av = (a as unknown as Record<string, unknown>)[sortKey];
       const bv = (b as unknown as Record<string, unknown>)[sortKey];
@@ -580,7 +558,7 @@ function AdminTab() {
       else if (aMissing) cmp = -1;
       else if (bMissing) cmp = 1;
       else if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
-      else cmp = String(av).localeCompare(String(bv), "he", { numeric: true });
+      else cmp = String(av).localeCompare(String(bv), collLocale, { numeric: true });
       return sortDir === "asc" ? cmp : -cmp;
     });
     return items;
@@ -1329,69 +1307,6 @@ function ApiTab() {
   );
 }
 
-const SETTINGS_TAB_ORDER = [
-  "wizard",
-  "tagging",
-  "agent",
-  "account",
-  "providers",
-  "api",
-  "admin",
-  "about",
-] as const;
-type SettingsTab = (typeof SETTINGS_TAB_ORDER)[number];
-type SettingsMessageKey = Parameters<typeof msg>[0];
-
-const SETTINGS_TAB_META: Record<
-  SettingsTab,
-  {
-    icon: Icon;
-    labelKey: SettingsMessageKey;
-    group: "workflows" | "assistants" | "preferences" | "access" | "system";
-  }
-> = {
-  wizard: {
-    icon: Sparkle,
-    labelKey: "settings.tab.wizard",
-    group: "workflows",
-  },
-  tagging: {
-    icon: Tag,
-    labelKey: "settings.tab.tagging",
-    group: "workflows",
-  },
-  agent: {
-    icon: Robot,
-    labelKey: "settings.tab.agent",
-    group: "assistants",
-  },
-  account: {
-    icon: User,
-    labelKey: "settings.tab.account",
-    group: "preferences",
-  },
-  providers: {
-    icon: Plug,
-    labelKey: "settings.tab.providers",
-    group: "access",
-  },
-  api: {
-    icon: Key,
-    labelKey: "settings.tab.api",
-    group: "access",
-  },
-  admin: {
-    icon: HardDrive,
-    labelKey: "settings.tab.admin",
-    group: "system",
-  },
-  about: {
-    icon: Info,
-    labelKey: "settings.tab.about",
-    group: "system",
-  },
-};
-
 const SETTINGS_GROUPS = [
   { key: "workflows", labelKey: "settings.group.workflows" },
   { key: "assistants", labelKey: "settings.group.assistants" },
@@ -1411,7 +1326,7 @@ const SETTINGS_RAIL_ITEM_CLASS =
 const EXPANDABLE_SETTINGS_TABS: ReadonlySet<SettingsTab> = new Set(["admin"]);
 
 function SettingsPanelHeader({ tab, action }: { tab: SettingsTab; action?: React.ReactNode }) {
-  const { icon: Icon, labelKey } = SETTINGS_TAB_META[tab];
+  const { icon: Icon, labelKey } = SETTINGS_TABS[tab];
   return (
     <div className="mb-4 flex items-center gap-3 border-b border-border/50 pb-3">
       <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
@@ -1442,13 +1357,7 @@ export function SettingsModal() {
     setActiveTab(tab);
     track(TelemetryEvent.SettingsTabChanged, { tab });
   }, []);
-  const tabs = React.useMemo(
-    () =>
-      SETTINGS_TAB_ORDER.filter(
-        (tab) => (isAdmin || tab !== "admin") && (!isPhone || isPhoneSettingsTab(tab)),
-      ),
-    [isAdmin, isPhone],
-  );
+  const tabs = React.useMemo(() => visibleSettingsTabs(isAdmin), [isAdmin]);
   React.useEffect(() => {
     if (!tabs.includes(activeTab)) setActiveTab(isPhone ? "account" : "wizard");
   }, [activeTab, tabs, isPhone]);
@@ -1473,6 +1382,7 @@ export function SettingsModal() {
     <Dialog open={open} onOpenChange={setOpen} modal={!tutorialState.isVisible}>
       <DialogContent
         data-settings-text-buttons
+        aria-describedby={undefined}
         onEscapeKeyDown={(e) => {
           // Escape leaves full screen before it closes settings.
           if (expanded) {
@@ -1490,9 +1400,6 @@ export function SettingsModal() {
         <DialogHeader className="border-b border-border/40 px-4 py-3 pe-12 sm:px-5 sm:py-4">
           <div className="min-w-0">
             <DialogTitle>{msg("settings.title")}</DialogTitle>
-            <DialogDescription className="mt-1 text-xs">
-              {msg("settings.subtitle")}
-            </DialogDescription>
           </div>
         </DialogHeader>
 
@@ -1517,9 +1424,9 @@ export function SettingsModal() {
                   {msg(group.labelKey)}
                 </p>
                 {tabs
-                  .filter((tab) => SETTINGS_TAB_META[tab].group === group.key)
+                  .filter((tab) => SETTINGS_TABS[tab].group === group.key)
                   .map((tab) => {
-                    const { icon: Icon, labelKey } = SETTINGS_TAB_META[tab];
+                    const { icon: Icon, labelKey } = SETTINGS_TABS[tab];
                     return (
                       <TabsTrigger key={tab} value={tab} className={SETTINGS_RAIL_ITEM_CLASS}>
                         {tab === activeTab && (

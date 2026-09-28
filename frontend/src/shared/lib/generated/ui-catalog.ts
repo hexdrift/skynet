@@ -81,24 +81,30 @@ export type MessageKey =
   | "app.shell.logout"
   | "app.shell.menu"
   | "app.shell.menu_close"
+  | "app.shell.search.action.tour"
+  | "app.shell.search.actions"
   | "app.shell.search.button_aria"
   | "app.shell.search.command_key"
-  | "app.shell.search.dashboard"
   | "app.shell.search.description"
   | "app.shell.search.k_key"
   | "app.shell.search.kw.about"
   | "app.shell.search.kw.account"
   | "app.shell.search.kw.admin"
   | "app.shell.search.kw.agent"
+  | "app.shell.search.kw.analytics"
   | "app.shell.search.kw.api"
   | "app.shell.search.kw.dashboard"
   | "app.shell.search.kw.data"
   | "app.shell.search.kw.explore"
   | "app.shell.search.kw.new_optimization"
+  | "app.shell.search.kw.open_agent"
   | "app.shell.search.kw.privacy"
   | "app.shell.search.kw.providers"
+  | "app.shell.search.kw.sessions"
+  | "app.shell.search.kw.sign_out"
   | "app.shell.search.kw.storage"
   | "app.shell.search.kw.tagging"
+  | "app.shell.search.kw.tour"
   | "app.shell.search.kw.usage"
   | "app.shell.search.kw.wizard"
   | "app.shell.search.label"
@@ -196,7 +202,6 @@ export type MessageKey =
   | "auto.app.optimizations.id.page.9"
   | "auto.app.optimizations.id.page.literal.1"
   | "auto.app.optimizations.id.page.literal.2"
-  | "auto.app.optimizations.id.page.literal.3"
   | "auto.app.optimizations.id.page.literal.4"
   | "auto.app.optimizations.id.page.literal.5"
   | "auto.app.optimizations.id.page.literal.6"
@@ -582,13 +587,9 @@ export type MessageKey =
   | "auto.features.dashboard.components.analyticstab.1"
   | "auto.features.dashboard.components.analyticstab.11"
   | "auto.features.dashboard.components.analyticstab.15"
-  | "auto.features.dashboard.components.analyticstab.20"
-  | "auto.features.dashboard.components.analyticstab.21"
   | "auto.features.dashboard.components.analyticstab.22"
   | "auto.features.dashboard.components.analyticstab.24"
-  | "auto.features.dashboard.components.analyticstab.25"
   | "auto.features.dashboard.components.analyticstab.26"
-  | "auto.features.dashboard.components.analyticstab.27"
   | "auto.features.dashboard.components.analyticstab.28"
   | "auto.features.dashboard.components.analyticstab.29"
   | "auto.features.dashboard.components.analyticstab.3"
@@ -596,7 +597,6 @@ export type MessageKey =
   | "auto.features.dashboard.components.analyticstab.33"
   | "auto.features.dashboard.components.analyticstab.4"
   | "auto.features.dashboard.components.analyticstab.8"
-  | "auto.features.dashboard.components.analyticstab.literal.1"
   | "auto.features.dashboard.components.analyticstab.literal.2"
   | "auto.features.dashboard.components.analyticstab.literal.4"
   | "auto.features.dashboard.components.analyticstab.literal.5"
@@ -848,30 +848,11 @@ export type MessageKey =
   | "auto.features.optimizations.components.servechat.7"
   | "auto.features.optimizations.components.servechat.literal.1"
   | "auto.features.optimizations.components.servechat.literal.2"
-  | "auto.features.optimizations.components.stageinfomodal.1"
-  | "auto.features.optimizations.components.stageinfomodal.2"
-  | "auto.features.optimizations.components.stageinfomodal.3"
-  | "auto.features.optimizations.components.stageinfomodal.4"
-  | "auto.features.optimizations.components.stageinfomodal.5"
   | "auto.features.optimizations.components.ui.primitives.literal.1"
   | "auto.features.optimizations.components.ui.primitives.literal.2"
   | "auto.features.optimizations.constants.literal.1"
   | "auto.features.optimizations.constants.literal.2"
   | "auto.features.optimizations.constants.literal.3"
-  | "auto.features.optimizations.constants.literal.4"
-  | "auto.features.optimizations.constants.literal.5"
-  | "auto.features.optimizations.constants.literal.6"
-  | "auto.features.optimizations.constants.template.1"
-  | "auto.features.optimizations.constants.template.10"
-  | "auto.features.optimizations.constants.template.11"
-  | "auto.features.optimizations.constants.template.2"
-  | "auto.features.optimizations.constants.template.3"
-  | "auto.features.optimizations.constants.template.4"
-  | "auto.features.optimizations.constants.template.5"
-  | "auto.features.optimizations.constants.template.6"
-  | "auto.features.optimizations.constants.template.7"
-  | "auto.features.optimizations.constants.template.8"
-  | "auto.features.optimizations.constants.template.9"
   | "auto.features.sidebar.components.sidebar.10"
   | "auto.features.sidebar.components.sidebar.3"
   | "auto.features.sidebar.components.sidebar.4"
@@ -1424,7 +1405,6 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.77"
   | "auto.features.tutorial.components.concepts.guide.literal.78"
   | "auto.features.tutorial.components.concepts.guide.literal.79"
-  | "auto.features.tutorial.components.concepts.guide.literal.8"
   | "auto.features.tutorial.components.concepts.guide.literal.80"
   | "auto.features.tutorial.components.concepts.guide.literal.81"
   | "auto.features.tutorial.components.concepts.guide.literal.82"
@@ -1571,20 +1551,6 @@ export type MessageKey =
   | "auto.features.tutorial.lib.steps.template.47"
   | "auto.features.tutorial.lib.steps.template.8"
   | "auto.shared.charts.chart.utils.literal.1"
-  | "auto.shared.charts.dataset.vs.improvement.chart.1"
-  | "auto.shared.charts.dataset.vs.improvement.chart.2"
-  | "auto.shared.charts.dataset.vs.improvement.chart.literal.1"
-  | "auto.shared.charts.dataset.vs.improvement.chart.template.1"
-  | "auto.shared.charts.efficiency.chart.literal.1"
-  | "auto.shared.charts.efficiency.chart.literal.2"
-  | "auto.shared.charts.efficiency.chart.template.1"
-  | "auto.shared.charts.runtime.distribution.chart.literal.1"
-  | "auto.shared.charts.runtime.distribution.chart.literal.2"
-  | "auto.shared.charts.runtime.distribution.chart.template.1"
-  | "auto.shared.charts.scores.chart.literal.1"
-  | "auto.shared.charts.scores.chart.template.1"
-  | "auto.shared.charts.timeline.chart.literal.1"
-  | "auto.shared.charts.timeline.chart.template.1"
   | "auto.shared.lib.api.literal.1"
   | "auto.shared.lib.api.literal.10"
   | "auto.shared.lib.api.literal.11"
@@ -1611,11 +1577,37 @@ export type MessageKey =
   | "common.aria.missing_result"
   | "common.empty"
   | "dashboard.analytics.access_filter_clear"
+  | "dashboard.analytics.axis_minutes"
+  | "dashboard.analytics.axis_points"
   | "dashboard.analytics.by_access"
+  | "dashboard.analytics.by_module"
   | "dashboard.analytics.by_owner"
+  | "dashboard.analytics.col_date"
+  | "dashboard.analytics.col_name"
+  | "dashboard.analytics.col_range"
+  | "dashboard.analytics.col_share"
+  | "dashboard.analytics.improvement_histogram"
+  | "dashboard.analytics.kpi_median_detail"
+  | "dashboard.analytics.kpi_running_detail"
+  | "dashboard.analytics.kpi_success_detail"
+  | "dashboard.analytics.kpi_total"
+  | "dashboard.analytics.leaderboard"
+  | "dashboard.analytics.legend_other"
+  | "dashboard.analytics.no_successful_runs"
+  | "dashboard.analytics.open_job"
+  | "dashboard.analytics.optimizer_comparison"
+  | "dashboard.analytics.optimizer_filter_clear"
   | "dashboard.analytics.owner_filter_clear"
+  | "dashboard.analytics.range_filter_clear"
   | "dashboard.analytics.runs"
+  | "dashboard.analytics.section_breakdown"
+  | "dashboard.analytics.section_distributions"
   | "dashboard.analytics.sharing_breakdown"
+  | "dashboard.analytics.timeline_by_day"
+  | "dashboard.analytics.timeline_by_month"
+  | "dashboard.analytics.timeline_by_week"
+  | "dashboard.analytics.truncated"
+  | "dashboard.analytics.type_workflow"
   | "dashboard.col.owner"
   | "dashboard.col.role"
   | "dashboard.delete_failed"
@@ -1749,31 +1741,48 @@ export type MessageKey =
   | "explore.empty.title"
   | "explore.filter.grid"
   | "explore.filter.run"
-  | "explore.filters.apply"
   | "explore.filters.button"
   | "explore.filters.clear"
   | "explore.filters.close"
+  | "explore.filters.date.custom"
   | "explore.filters.date.from"
+  | "explore.filters.date.preset.30d"
+  | "explore.filters.date.preset.7d"
+  | "explore.filters.date.preset.90d"
+  | "explore.filters.date.range"
   | "explore.filters.date.to"
   | "explore.filters.empty_section"
+  | "explore.filters.field.any"
+  | "explore.filters.group.matches"
+  | "explore.filters.group.top"
+  | "explore.filters.picker.clear"
+  | "explore.filters.picker.placeholder.models"
+  | "explore.filters.picker.placeholder.modules"
+  | "explore.filters.picker.placeholder.optimizers"
   | "explore.filters.reset"
+  | "explore.filters.search.clear"
   | "explore.filters.section.date"
   | "explore.filters.section.models"
   | "explore.filters.section.modules"
   | "explore.filters.section.no_search_match"
+  | "explore.filters.section.none_in_selection"
   | "explore.filters.section.optimizers"
   | "explore.filters.section.search"
-  | "explore.filters.section.selected"
-  | "explore.filters.section.selected_many"
   | "explore.filters.section.types"
-  | "explore.filters.subtitle"
+  | "explore.filters.show_more"
+  | "explore.filters.show_results"
+  | "explore.filters.show_results_one"
   | "explore.filters.title"
+  | "explore.filters.trigger.date"
+  | "explore.filters.trigger.models"
+  | "explore.filters.trigger.modules"
+  | "explore.filters.trigger.optimizers"
+  | "explore.filters.trigger.types"
   | "explore.page.indicator"
   | "explore.page.jump"
   | "explore.page.next"
   | "explore.page.prev"
   | "explore.page.title"
-  | "explore.relative.now"
   | "explore.results.count.many"
   | "explore.results.count.one"
   | "explore.results.empty.clear_filters"
@@ -1789,8 +1798,8 @@ export type MessageKey =
   | "explore.search.clear"
   | "explore.search.placeholder"
   | "explore.sort.aria"
-  | "explore.sort.gain"
-  | "explore.sort.gain.tip"
+  | "explore.sort.oldest"
+  | "explore.sort.oldest.tip"
   | "explore.sort.recent"
   | "explore.sort.recent.tip"
   | "explore.sort.relevance"
@@ -1806,9 +1815,6 @@ export type MessageKey =
   | "export.table.failed"
   | "legal.privacy_link"
   | "legal.terms_link"
-  | "mobile.desktop_only.body"
-  | "mobile.desktop_only.home_cta"
-  | "mobile.desktop_only.title"
   | "mobile.nav.account"
   | "mobile.nav.aria"
   | "mobile.nav.home"
@@ -1821,6 +1827,7 @@ export type MessageKey =
   | "model_source.byok"
   | "model_source.byok_hint"
   | "model_source.manage_keys"
+  | "model_source.managed"
   | "not_found.back_dashboard"
   | "not_found.description"
   | "not_found.title"
@@ -1834,6 +1841,20 @@ export type MessageKey =
   | "optimization.code.tab_program"
   | "optimization.code.tab_workflow"
   | "optimization.code.workflow_intro"
+  | "optimization.config.all_generation_models"
+  | "optimization.config.all_reflection_models"
+  | "optimization.config.description"
+  | "optimization.config.expand"
+  | "optimization.config.model_endpoint"
+  | "optimization.config.model_pairs"
+  | "optimization.config.rows"
+  | "optimization.config.slide_general"
+  | "optimization.config.task_model"
+  | "optimization.config.token_source"
+  | "optimization.config.tool_source.dataset_snapshot"
+  | "optimization.config.tool_source.live_mcp"
+  | "optimization.config.workflow"
+  | "optimization.config.workflow_graph"
   | "optimization.delete.failed"
   | "optimization.file.parse_error"
   | "optimization.logged_metrics.baseline_col"
@@ -1890,10 +1911,6 @@ export type MessageKey =
   | "optimizations.react.chat_send_aria"
   | "optimizations.react.chat_stop_aria"
   | "optimizations.react.optimized_tools"
-  | "optimizations.reasoning_effort.high"
-  | "optimizations.reasoning_effort.low"
-  | "optimizations.reasoning_effort.medium"
-  | "optimizations.reasoning_effort.minimal"
   | "optimizations.reasoning_effort.short.med"
   | "optimizations.reasoning_effort.short.min"
   | "optimizations.reasoning_effort.tooltip"
@@ -1901,6 +1918,12 @@ export type MessageKey =
   | "optimizations.servechat.demo_label"
   | "optimizations.source_dataset.label"
   | "optimizations.source_dataset.view"
+  | "pipeline.stage.compile"
+  | "pipeline.stage.elapsed"
+  | "pipeline.stage.failed"
+  | "pipeline.stage.reflectiveSearch"
+  | "pipeline.stage.running"
+  | "pipeline.stage.skipped"
   | "search.clear"
   | "settings.about.api_url.label"
   | "settings.about.feedback.action"
@@ -1966,12 +1989,6 @@ export type MessageKey =
   | "settings.agent.settings_tool.update_failed"
   | "settings.agent.settings_tool.updated"
   | "settings.agent.settings_tool.updating"
-  | "settings.agent.shortcut.change"
-  | "settings.agent.shortcut.description"
-  | "settings.agent.shortcut.hint"
-  | "settings.agent.shortcut.label"
-  | "settings.agent.shortcut.recording"
-  | "settings.agent.shortcut.reserved_warning"
   | "settings.agent.trust.ask"
   | "settings.agent.trust.auto_safe"
   | "settings.agent.trust.description"
@@ -2069,7 +2086,6 @@ export type MessageKey =
   | "settings.keys.verify_failed_toast"
   | "settings.keys.verifying"
   | "settings.saved"
-  | "settings.subtitle"
   | "settings.tab.about"
   | "settings.tab.account"
   | "settings.tab.admin"
@@ -2237,6 +2253,7 @@ export type MessageKey =
   | "sidebar.resume"
   | "sidebar.resume.failed"
   | "sidebar.resume.success"
+  | "sidebar.row_menu"
   | "sidebar.shared.empty"
   | "sidebar.shared.empty.hint"
   | "sidebar.tab.aria"
@@ -2338,7 +2355,6 @@ export type MessageKey =
   | "submit.dataset.library_loaded"
   | "submit.dataset.library_or"
   | "submit.dataset.library_pick"
-  | "submit.dataset.library_picker_subtitle"
   | "submit.dataset.library_picker_title"
   | "submit.dataset.library_search"
   | "submit.dataset.library_search_empty"
@@ -2382,6 +2398,9 @@ export type MessageKey =
   | "submit.react.section_title"
   | "submit.react.tool_no_description"
   | "submit.react.tool_source_label"
+  | "submit.react.tools_access"
+  | "submit.react.tools_all"
+  | "submit.react.tools_count"
   | "submit.react.tools_list_label"
   | "submit.react.tools_next"
   | "submit.react.tools_prev"
@@ -2531,12 +2550,10 @@ export type MessageKey =
   | "tagger.library.save"
   | "tagger.library.save_failed"
   | "tagger.library.saved"
-  | "tagger.move.confirm_body"
   | "tagger.move.confirm_title"
   | "tagger.move.cta"
   | "tagger.move.failed"
   | "tagger.move.moved"
-  | "tagger.move.subtitle"
   | "tagger.move.title"
   | "tagger.page.title"
   | "tagger.results.back"
@@ -2550,7 +2567,6 @@ export type MessageKey =
   | "tagger.results.recap.ai_auto"
   | "tagger.results.recap.ai_confirmed"
   | "tagger.results.recap.human"
-  | "tagger.results.recap.subtitle"
   | "tagger.results.recap.title"
   | "tagger.results.recap.tokens"
   | "tagger.results.recap.tokens_hint"
@@ -2589,20 +2605,32 @@ export type MessageKey =
   | "tagger.setup.synthetic_pick"
   | "tagger.setup.synthetic_source_name"
   | "tagger.upload.parse_failed"
-  | "tooltip.analytics.dataset_size_vs_improvement"
-  | "tooltip.analytics.improvement_per_minute"
-  | "tooltip.analytics.runtime_minutes"
-  | "tooltip.analytics.runtime_vs_gain"
-  | "tooltip.analytics.score_comparison"
+  | "tooltip.analytics.dataset_buckets"
+  | "tooltip.analytics.improvement_histogram"
+  | "tooltip.analytics.leaderboard"
+  | "tooltip.analytics.optimizer_comparison"
+  | "tooltip.analytics.runtime_histogram"
   | "tooltip.analytics.submissions_per_day"
   | "tooltip.code.metric"
   | "tooltip.code.predictions_table"
   | "tooltip.code.signature"
   | "tooltip.code.signature_metric"
   | "tooltip.code.workflow"
+  | "tooltip.config.all_generation_models"
+  | "tooltip.config.all_reflection_models"
+  | "tooltip.config.compile_kwarg"
+  | "tooltip.config.description"
+  | "tooltip.config.model_pairs"
+  | "tooltip.config.module_kwarg"
+  | "tooltip.config.optimizer_kwarg"
   | "tooltip.config.section.data"
+  | "tooltip.config.section.general"
   | "tooltip.config.section.models"
   | "tooltip.config.section.summary"
+  | "tooltip.config.task_model"
+  | "tooltip.config.token_source"
+  | "tooltip.config.tool_access"
+  | "tooltip.config.workflow"
   | "tooltip.data.seed"
   | "tooltip.data.shuffle_explanation"
   | "tooltip.data.split.test"
@@ -2659,10 +2687,16 @@ export type MessageKey =
   | "tooltip.serve.integration_code"
   | "tooltip.serve.section_pair"
   | "tooltip.serve.section_run"
+  | "tooltip.submit.column_roles"
+  | "tooltip.submit.dataset_file"
+  | "tooltip.submit.dataset_size"
   | "tooltip.submit.depth"
   | "tooltip.submit.eval_rounds"
   | "tooltip.submit.merge"
   | "tooltip.submit.metric_calls"
+  | "tooltip.submit.name"
+  | "tooltip.submit.optimization_type"
+  | "tooltip.submit.privacy"
   | "tooltip.submit.pxn_parents"
   | "tooltip.submit.pxn_proposals"
   | "tooltip.submit.reflection_minibatch"
@@ -2672,6 +2706,7 @@ export type MessageKey =
   | "tooltip.tagger.multiclass_categories"
   | "tooltip.tagger.text_column"
   | "tooltip.tagger.upload_file"
+  | "trajectory.a11y.ghost_label"
   | "trajectory.a11y.node_label"
   | "trajectory.a11y.tree_label"
   | "trajectory.chat.recorded_count"
@@ -2756,7 +2791,6 @@ export type MessageKey =
   | "trajectory.scrubber.label"
   | "trajectory.scrubber.live"
   | "tutorial.menu.meta"
-  | "tutorial.menu.subtitle"
   | "tutorial.step.artifact.body"
   | "tutorial.step.artifact.title"
   | "tutorial.step.code.body"
@@ -2970,24 +3004,30 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "app.shell.logout": "התנתק/י",
   "app.shell.menu": "תפריט",
   "app.shell.menu_close": "סגור/סגרי את התפריט",
+  "app.shell.search.action.tour": "סיור מודרך",
+  "app.shell.search.actions": "פעולות",
   "app.shell.search.button_aria": "חיפוש בכל המערכת",
   "app.shell.search.command_key": "⌘",
-  "app.shell.search.dashboard": "לוח הבקרה",
   "app.shell.search.description": "חיפוש מהיר בין עמודים, פעולות והגדרות",
   "app.shell.search.k_key": "K",
   "app.shell.search.kw.about": "אודות גרסה version defaults",
   "app.shell.search.kw.account": "חשבון שפה שפות שפת הגדרות העדפות lite language preferences",
   "app.shell.search.kw.admin": "ניהול אחסון storage quota users",
   "app.shell.search.kw.agent": "סוכן פאנל assistant trust memory",
+  "app.shell.search.kw.analytics": "אנליטיקה גרפים סטטיסטיקה מגמות ביצועים analytics charts stats",
   "app.shell.search.kw.api": "אסימון טוקן מפתח api token developer integration",
   "app.shell.search.kw.dashboard": "ריצות, משימות, בית",
   "app.shell.search.kw.data": "דאטאסטים, תיוג, סשנים",
   "app.shell.search.kw.explore": "חיפוש, ציבורי, ריצות",
   "app.shell.search.kw.new_optimization": "הפעלה, פרומפט, מודל, אופטימיזציה",
+  "app.shell.search.kw.open_agent": "סוכן עוזר צ'אט שאלה עזרה agent assistant chat",
   "app.shell.search.kw.privacy": "פרטיות נתונים data analytics cache",
   "app.shell.search.kw.providers": "ספקים מפתחות מפתח keys openai anthropic",
+  "app.shell.search.kw.sessions": "סשנים תיוג תוויות סימון תיוג אוטומטי טייס אוטומטי רובריקה כיול labeling sessions autotag autopilot rubric",
+  "app.shell.search.kw.sign_out": "יציאה התנתקות sign out logout",
   "app.shell.search.kw.storage": "קבצים, אחסון, מכסה",
   "app.shell.search.kw.tagging": "תיוג תוויות labels copilot autopilot",
+  "app.shell.search.kw.tour": "סיור הדרכה מדריך התחלה עזרה tour tutorial guide onboarding",
   "app.shell.search.kw.usage": "שימוש עלות טוקנים spend cost tokens",
   "app.shell.search.kw.wizard": "אופטימיזציה מודלים optimization models",
   "app.shell.search.label": "חיפוש בכל המערכת…",
@@ -3085,7 +3125,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.app.optimizations.id.page.9": "ייצוא תוצאות",
   "auto.app.optimizations.id.page.literal.1": "לחץ/י להעתקה",
   "auto.app.optimizations.id.page.literal.2": "סריקה",
-  "auto.app.optimizations.id.page.literal.3": "ריצה",
   "auto.app.optimizations.id.page.literal.4": "שכפול",
   "auto.app.optimizations.id.page.literal.5": "בטל/י",
   "auto.app.optimizations.id.page.literal.6": "נקה/נקי היסטוריה",
@@ -3471,13 +3510,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.analyticstab.1": "גרפים בטעינה…",
   "auto.features.dashboard.components.analyticstab.11": "זמן ריצה ממוצע",
   "auto.features.dashboard.components.analyticstab.15": "שיפור מקסימלי",
-  "auto.features.dashboard.components.analyticstab.20": "סקירת ביצועים",
-  "auto.features.dashboard.components.analyticstab.21": "ציונים לפי ",
   "auto.features.dashboard.components.analyticstab.22": "סטטוסים",
   "auto.features.dashboard.components.analyticstab.24": "סוג ",
-  "auto.features.dashboard.components.analyticstab.25": "יעילות וזמני ריצה",
   "auto.features.dashboard.components.analyticstab.26": "התפלגות זמני ריצה",
-  "auto.features.dashboard.components.analyticstab.27": "יעילות: שיפור לדקה",
   "auto.features.dashboard.components.analyticstab.28": "גודל ",
   "auto.features.dashboard.components.analyticstab.29": " מול שיפור",
   "auto.features.dashboard.components.analyticstab.3": "נקה/נקי הכול",
@@ -3485,7 +3520,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.analyticstab.33": "מודלים פופולריים",
   "auto.features.dashboard.components.analyticstab.4": "אחוז הצלחה",
   "auto.features.dashboard.components.analyticstab.8": "שיפור ממוצע",
-  "auto.features.dashboard.components.analyticstab.literal.1": "הסר/הסירי את הסינון",
   "auto.features.dashboard.components.analyticstab.literal.2": "הסר/הסירי את הסינון",
   "auto.features.dashboard.components.analyticstab.literal.4": "הסר/הסירי את הסינון",
   "auto.features.dashboard.components.analyticstab.literal.5": "הסר/הסירי את הסינון",
@@ -3500,7 +3534,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.dashboard.components.dashboardheader.4": "פעילות",
   "auto.features.dashboard.components.dashboardheader.6": "הצליחו",
   "auto.features.dashboard.components.dashboardheader.7": "נכשלו",
-  "auto.features.dashboard.components.dashboardview.1": "סטטיסטיקות",
+  "auto.features.dashboard.components.dashboardview.1": "לוח שימוש",
   "auto.features.dashboard.components.deletedialogs.1": "למחוק ",
   "auto.features.dashboard.components.deletedialogs.2": " אחת? לא ניתן לבטל פעולה זו.",
   "auto.features.dashboard.components.deletedialogs.3": "למחוק ",
@@ -3737,30 +3771,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.optimizations.components.servechat.7": "סגור/סגרי",
   "auto.features.optimizations.components.servechat.literal.1": "ערוך/ערכי ושלח/שלחי שוב",
   "auto.features.optimizations.components.servechat.literal.2": "שלח/שלחי",
-  "auto.features.optimizations.components.stageinfomodal.1": "תוצאה",
-  "auto.features.optimizations.components.stageinfomodal.2": " על סט הבדיקה",
-  "auto.features.optimizations.components.stageinfomodal.3": "תוצאה סופית",
-  "auto.features.optimizations.components.stageinfomodal.4": "משופרת",
-  "auto.features.optimizations.components.stageinfomodal.5": "מ-",
   "auto.features.optimizations.components.ui.primitives.literal.1": "העתק/העתיקי",
   "auto.features.optimizations.components.ui.primitives.literal.2": "העתק/העתיקי",
   "auto.features.optimizations.constants.literal.1": "אימות",
   "auto.features.optimizations.constants.literal.2": "חלוקת דאטאסט",
   "auto.features.optimizations.constants.literal.3": "הערכה",
-  "auto.features.optimizations.constants.literal.4": "אימות הקלט",
-  "auto.features.optimizations.constants.literal.5": "חלוקת הדאטאסט",
-  "auto.features.optimizations.constants.literal.6": "הערכה סופית",
-  "auto.features.optimizations.constants.template.1": "בדיקה שכל הרכיבים תקינים לפני תחילת ה{p1}.",
-  "auto.features.optimizations.constants.template.10": "הרצת ה{p1} המשופרת על סט הבדיקה.",
-  "auto.features.optimizations.constants.template.11": "ה{p1} המשופרת רצה על סט הבדיקה — אותן דוגמאות שנמדדו בשלב ה{p2}. ההשוואה בין הציונים מראה את ה{p3} בפועל. אם ה{p4} המשופרת גרועה יותר מהמקורית, המערכת שומרת את ה{p5} המקורית.",
-  "auto.features.optimizations.constants.template.2": "ה{p1} של הקלט והפלט נבדקת מול מיפוי העמודות ב{p2}. {p3} נטענת ומאומתת. ה{p4} וה{p5} נבדקים לתאימות. אם נמצאת שגיאה, ה{p6} נעצרת כאן.",
-  "auto.features.optimizations.constants.template.3": "ה{p1} מחולק לשלושה סטים: {p2}, {p3} ו{p4}.",
-  "auto.features.optimizations.constants.template.4": "השורות מעורבבות באקראי עם זרע קבוע כדי להבטיח תוצאות זהות בכל {p1}. אחר כך הן מחולקות לפי היחסים שהוגדרו. סט הבדיקה נשמר בצד ולא משתתף בתהליך ה{p2}.",
-  "auto.features.optimizations.constants.template.5": "מדידת {p1}",
-  "auto.features.optimizations.constants.template.6": "הרצת ה{p1} ללא {p2} על סט הבדיקה.",
-  "auto.features.optimizations.constants.template.7": "ה{p1} רצה כפי שהיא — ללא הנדסת פרומפטים או דוגמאות — על כל {p2} בסט הבדיקה. {p3} מחשבת {p4} לכל {p5}, והממוצע הוא {p6}. ציון זה משמש כנקודת השוואה ל{p7} שה{p8} מביאה.",
-  "auto.features.optimizations.constants.template.8": "ה{p1} משפר את ה{p2} באמצעות סט האימון.",
-  "auto.features.optimizations.constants.template.9": "ה{p1} מנסה שילובים שונים של ניסוחי פרומפט, דוגמאות נבחרות וכללי מענה כדי למקסם את ציון המדידה על סט האימות. כל ניסיון מריץ את ה{p2} עם הגדרה שונה ומודד את התוצאה. בסיום נבחרת הגרסה הטובה ביותר.",
   "auto.features.sidebar.components.sidebar.10": "מחק/י",
   "auto.features.sidebar.components.sidebar.3": "מחיקת ",
   "auto.features.sidebar.components.sidebar.4": "האם למחוק את ה",
@@ -4313,7 +4328,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.77": "מודל המשוב סוקר מסלולי הרצה, ציונים ומשוב כתוב כדי לזהות שינוי שימושי.",
   "auto.features.tutorial.components.concepts.guide.literal.78": "שיפור:",
   "auto.features.tutorial.components.concepts.guide.literal.79": "GEPA מציע מועמד מתוקן ויכול למזג חלקים שימושיים של שני מועמדים כאשר המיזוג מופעל.",
-  "auto.features.tutorial.components.concepts.guide.literal.8": "Skynet מדריך DSPy",
   "auto.features.tutorial.components.concepts.guide.literal.80": ") של וריאציות מוצלחות.",
   "auto.features.tutorial.components.concepts.guide.literal.81": "עדכון Pareto:",
   "auto.features.tutorial.components.concepts.guide.literal.82": " מעדכנים את מאגר המועמדים ואת חזית ",
@@ -4422,7 +4436,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.literal.6": "נתונים מרכזיים",
   "auto.features.tutorial.lib.steps.literal.7": "ארבעה כרטיסים מסכמים את הפעילות: כל הריצות, ריצות פעילות, ריצות שהצליחו וריצות שנכשלו, לצד שיעורי הצלחה וכישלון.",
   "auto.features.tutorial.lib.steps.literal.8": "סרגל צד",
-  "auto.features.tutorial.lib.steps.literal.9": "סטטיסטיקות",
+  "auto.features.tutorial.lib.steps.literal.9": "לוח שימוש",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
   "auto.features.tutorial.lib.steps.template.14": "אלה שלבי ההגשה: פרטים בסיסיים, {p1}, פרמטרים, קוד, {p2}, סיכום ושליחה.",
   "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
@@ -4460,20 +4474,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.template.47": "גרפים אינטראקטיביים שמציגים {p1}, פילוח לפי סטטוס וסוג, התפלגות זמני ריצה מול שיפור, ציר זמן יומי ודירוג שימוש ב{p2}. לחיצה על עמודה בגרף מסננת את הרשימה ל{p3} הרלוונטית.",
   "auto.features.tutorial.lib.steps.template.8": "השוואת {p1}",
   "auto.shared.charts.chart.utils.literal.1": "אין עדיין נתונים",
-  "auto.shared.charts.dataset.vs.improvement.chart.1": "שורות:",
-  "auto.shared.charts.dataset.vs.improvement.chart.2": "שיפור:",
-  "auto.shared.charts.dataset.vs.improvement.chart.literal.1": "שיפור באחוזים",
-  "auto.shared.charts.dataset.vs.improvement.chart.template.1": "שורות ב{p1}",
-  "auto.shared.charts.efficiency.chart.literal.1": "שיפור לדקה",
-  "auto.shared.charts.efficiency.chart.literal.2": "שיפור לדקה",
-  "auto.shared.charts.efficiency.chart.template.1": "מזהה {p1}",
-  "auto.shared.charts.runtime.distribution.chart.literal.1": "זמן בדקות",
-  "auto.shared.charts.runtime.distribution.chart.literal.2": "זמן בדקות",
-  "auto.shared.charts.runtime.distribution.chart.template.1": "מזהה {p1}",
-  "auto.shared.charts.scores.chart.literal.1": "ציון באחוזים",
-  "auto.shared.charts.scores.chart.template.1": "אין עדיין {p1} שהושלמו",
-  "auto.shared.charts.timeline.chart.literal.1": "תאריך",
-  "auto.shared.charts.timeline.chart.template.1": "מספר {p1}",
   "auto.shared.lib.api.literal.1": "לא ניתן להתחבר לשרת. ודא/ודאי שהשרת פועל.",
   "auto.shared.lib.api.literal.10": "שגיאה בהפקת הקוד",
   "auto.shared.lib.api.literal.11": "לא ניתן להתחבר לשרת. ודא/ודאי שהשרת פועל.",
@@ -4500,11 +4500,37 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "common.aria.missing_result": "אין תוצאה",
   "common.empty": "—",
   "dashboard.analytics.access_filter_clear": "הסר/הסירי את הסינון לפי רמת גישה",
+  "dashboard.analytics.axis_minutes": "דקות",
+  "dashboard.analytics.axis_points": "נקודות אחוז",
   "dashboard.analytics.by_access": "לפי רמת גישה",
+  "dashboard.analytics.by_module": "לפי {term.module}",
   "dashboard.analytics.by_owner": "לפי בעלים",
+  "dashboard.analytics.col_date": "תאריך",
+  "dashboard.analytics.col_name": "שם",
+  "dashboard.analytics.col_range": "טווח",
+  "dashboard.analytics.col_share": "נתח",
+  "dashboard.analytics.improvement_histogram": "התפלגות השיפור",
+  "dashboard.analytics.kpi_median_detail": "חציון {p1}",
+  "dashboard.analytics.kpi_running_detail": "{p1} פעילות כרגע",
+  "dashboard.analytics.kpi_success_detail": "{p1} מתוך {p2} שהסתיימו",
+  "dashboard.analytics.kpi_total": "סה״כ {term.optimizationPlural}",
+  "dashboard.analytics.leaderboard": "ה{term.optimizationPlural} המובילות",
+  "dashboard.analytics.legend_other": "אחר",
+  "dashboard.analytics.no_successful_runs": "אין עדיין {term.optimizationPlural} שהצליחו",
+  "dashboard.analytics.open_job": "פתיחת ה{term.optimization}",
+  "dashboard.analytics.optimizer_comparison": "השוואת אופטימייזרים",
+  "dashboard.analytics.optimizer_filter_clear": "הסר/הסירי את הסינון לפי {term.optimizer}",
   "dashboard.analytics.owner_filter_clear": "הסר/הסירי את הסינון לפי בעלים",
+  "dashboard.analytics.range_filter_clear": "הסר/הסירי את סינון טווח התאריכים",
   "dashboard.analytics.runs": "ריצות",
+  "dashboard.analytics.section_breakdown": "סטטוסים וסוגים",
+  "dashboard.analytics.section_distributions": "התפלגויות",
   "dashboard.analytics.sharing_breakdown": "בעלים ורמות גישה",
+  "dashboard.analytics.timeline_by_day": "לפי יום",
+  "dashboard.analytics.timeline_by_month": "לפי חודש",
+  "dashboard.analytics.timeline_by_week": "לפי שבוע",
+  "dashboard.analytics.truncated": "נתונים חלקיים: הסריקה הגיעה למגבלת הבקשה, ולכן {term.optimizationPlural} ישנות יותר לא נספרו.",
+  "dashboard.analytics.type_workflow": "זרימת עבודה",
   "dashboard.col.owner": "בעלים",
   "dashboard.col.role": "תפקיד",
   "dashboard.delete_failed": "מחיקה נכשלה",
@@ -4638,31 +4664,48 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.empty.title": "עדיין אין ריצות",
   "explore.filter.grid": "{term.optimizationTypeGrid}",
   "explore.filter.run": "{term.optimizationTypeRun}",
-  "explore.filters.apply": "סיים/סיימי",
   "explore.filters.button": "מסננים",
   "explore.filters.clear": "נקה/נקי הכול",
   "explore.filters.close": "סגור/סגרי את המסננים",
+  "explore.filters.date.custom": "טווח מותאם אישית",
   "explore.filters.date.from": "מתאריך",
+  "explore.filters.date.preset.30d": "30 הימים האחרונים",
+  "explore.filters.date.preset.7d": "7 הימים האחרונים",
+  "explore.filters.date.preset.90d": "90 הימים האחרונים",
+  "explore.filters.date.range": "{from} – {to}",
   "explore.filters.date.to": "עד תאריך",
   "explore.filters.empty_section": "אין ערכים זמינים.",
+  "explore.filters.field.any": "הכל",
+  "explore.filters.group.matches": "{shown} מתוך {total} התאמות",
+  "explore.filters.group.top": "{shown} המובילים מתוך {total}",
+  "explore.filters.picker.clear": "ניקוי הבחירה",
+  "explore.filters.picker.placeholder.models": "חיפוש מודלים…",
+  "explore.filters.picker.placeholder.modules": "חיפוש מודולים…",
+  "explore.filters.picker.placeholder.optimizers": "חיפוש אופטימייזרים…",
   "explore.filters.reset": "אפס/י את המסננים",
+  "explore.filters.search.clear": "ניקוי החיפוש",
   "explore.filters.section.date": "טווח תאריכים",
   "explore.filters.section.models": "מודלים",
   "explore.filters.section.modules": "מודולים",
   "explore.filters.section.no_search_match": "אין התאמות לחיפוש.",
+  "explore.filters.section.none_in_selection": "אין ריצות בשילוב עם שאר המסננים.",
   "explore.filters.section.optimizers": "אופטימייזרים",
   "explore.filters.section.search": "חפש/חפשי בתוך {section}",
-  "explore.filters.section.selected": "{n} פעיל",
-  "explore.filters.section.selected_many": "{n} פעילים",
   "explore.filters.section.types": "סוג ריצה",
-  "explore.filters.subtitle": "שלב/שלבי מסננים כדי לדייק את החיפוש החופשי.",
+  "explore.filters.show_more": "הצגת עוד",
+  "explore.filters.show_results": "הצגת {n} ריצות",
+  "explore.filters.show_results_one": "הצגת ריצה אחת",
   "explore.filters.title": "מסננים",
+  "explore.filters.trigger.date": "תאריך",
+  "explore.filters.trigger.models": "מודל",
+  "explore.filters.trigger.modules": "מודול",
+  "explore.filters.trigger.optimizers": "אופטימייזר",
+  "explore.filters.trigger.types": "סוג",
   "explore.page.indicator": "עמוד {page} מתוך {total}",
   "explore.page.jump": "עבור/עברי לעמוד {page}",
   "explore.page.next": "הבא",
   "explore.page.prev": "הקודם",
   "explore.page.title": "חיפוש",
-  "explore.relative.now": "עכשיו",
   "explore.results.count.many": "{n} תוצאות",
   "explore.results.count.one": "תוצאה אחת",
   "explore.results.empty.clear_filters": "נקה/נקי את המסננים",
@@ -4678,9 +4721,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.search.clear": "נקה/נקי את החיפוש",
   "explore.search.placeholder": "חפש/חפשי אופטימיזציות לפי משימה, מודל או אופטימייזר",
   "explore.sort.aria": "מיון התוצאות",
-  "explore.sort.gain": "שיפור",
-  "explore.sort.gain.tip": "מיון לפי {term.scoreImprovement} — הפער בין {term.optimizedScore} ל{term.baselineScore}, מהגבוה לנמוך",
-  "explore.sort.recent": "אחרונות",
+  "explore.sort.oldest": "הישנות ביותר",
+  "explore.sort.oldest.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} הישנות ביותר מופיעות ראשונות",
+  "explore.sort.recent": "החדשות ביותר",
   "explore.sort.recent.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} החדשות ביותר מופיעות ראשונות",
   "explore.sort.relevance": "התאמה",
   "explore.sort.relevance.tip": "מיון לפי התאמה לכוונת החיפוש — התוצאות המתאימות ביותר מופיעות ראשונות",
@@ -4695,9 +4738,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "export.table.failed": "הייצוא נכשל",
   "legal.privacy_link": "מדיניות פרטיות",
   "legal.terms_link": "תנאי שימוש",
-  "mobile.desktop_only.body": "יצירת אופטימיזציות, העלאת דאטאסטים ותיוג הן עבודת שולחן — פתחו את Skynet במחשב נייד או שולחני כדי להמשיך. הריצות והתוצאות שלכם זמינות כאן בטלפון.",
-  "mobile.desktop_only.home_cta": "חזרה לדף הבית",
-  "mobile.desktop_only.title": "זה עובד הכי טוב במחשב",
   "mobile.nav.account": "חשבון",
   "mobile.nav.aria": "ניווט ראשי",
   "mobile.nav.home": "בית",
@@ -4710,6 +4750,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "model_source.byok": "המפתח שלך",
   "model_source.byok_hint": "ההרצות משתמשות במפתח הספק ששמרת, בלי מגבלת שימוש נוספת מצד Skynet.",
   "model_source.manage_keys": "ניהול מפתחות",
+  "model_source.managed": "חיבור מנוהל",
   "not_found.back_dashboard": "חזור/חזרי ללוח הבקרה",
   "not_found.description": "הכתובת שחיפשת לא קיימת או שהועברה למיקום אחר",
   "not_found.title": "הדף לא נמצא",
@@ -4723,6 +4764,20 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimization.code.tab_program": "תוכנית",
   "optimization.code.tab_workflow": "תהליך עבודה",
   "optimization.code.workflow_intro": "תהליך העבודה מקומפל לקוד DSPy, פונקציית המדידה, והגרף עצמו.",
+  "optimization.config.all_generation_models": "כל {term.generationModelPlural}",
+  "optimization.config.all_reflection_models": "כל מודלי המשוב",
+  "optimization.config.description": "תיאור",
+  "optimization.config.expand": "הצגת הטקסט המלא",
+  "optimization.config.model_endpoint": "נקודת קצה מותאמת",
+  "optimization.config.model_pairs": "זוגות מודלים",
+  "optimization.config.rows": "שורות",
+  "optimization.config.slide_general": "כללי",
+  "optimization.config.task_model": "מודל המשימה",
+  "optimization.config.token_source": "מקור המפתחות",
+  "optimization.config.tool_source.dataset_snapshot": "תמונת מצב מתוך ה{term.dataset}",
+  "optimization.config.tool_source.live_mcp": "שרת MCP חי",
+  "optimization.config.workflow": "זרימת עבודה",
+  "optimization.config.workflow_graph": "{nodes} צמתים · {edges} קשרים",
   "optimization.delete.failed": "מחיקה נכשלה",
   "optimization.file.parse_error": "שגיאה בפענוח הקובץ",
   "optimization.logged_metrics.baseline_col": "בסיס",
@@ -4779,10 +4834,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimizations.react.chat_send_aria": "שלח/שלחי הודעה",
   "optimizations.react.chat_stop_aria": "עצור/עצרי את השיחה",
   "optimizations.react.optimized_tools": "כלים מותאמים (ReAct)",
-  "optimizations.reasoning_effort.high": "גבוהה",
-  "optimizations.reasoning_effort.low": "נמוכה",
-  "optimizations.reasoning_effort.medium": "בינונית",
-  "optimizations.reasoning_effort.minimal": "מזערית",
   "optimizations.reasoning_effort.short.med": "בינ",
   "optimizations.reasoning_effort.short.min": "מזער",
   "optimizations.reasoning_effort.tooltip": "רמת מאמץ חשיבה: {label}",
@@ -4790,6 +4841,12 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimizations.servechat.demo_label": "{label} {index}",
   "optimizations.source_dataset.label": "מקור הנתונים: {term.dataset} מהספרייה",
   "optimizations.source_dataset.view": "מעבר ל{term.dataset}",
+  "pipeline.stage.compile": "קומפילציה",
+  "pipeline.stage.elapsed": "זמן מתחילת הריצה",
+  "pipeline.stage.failed": "נכשל",
+  "pipeline.stage.reflectiveSearch": "חיפוש רפלקטיבי",
+  "pipeline.stage.running": "בתהליך",
+  "pipeline.stage.skipped": "דולג",
   "search.clear": "נקה/נקי את החיפוש",
   "settings.about.api_url.label": "API URL",
   "settings.about.feedback.action": "שליחת משוב",
@@ -4855,12 +4912,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.agent.settings_tool.update_failed": "שינוי ההגדרות נכשל",
   "settings.agent.settings_tool.updated": "ההגדרות עודכנו",
   "settings.agent.settings_tool.updating": "מעדכן הגדרות",
-  "settings.agent.shortcut.change": "שנה/שני",
-  "settings.agent.shortcut.description": "קיצור לפתיחה וסגירה של פאנל הסוכן",
-  "settings.agent.shortcut.hint": "חלק מהקיצורים לא יעבדו כי הם שמורים לדפדפן.",
-  "settings.agent.shortcut.label": "קיצור מקלדת",
-  "settings.agent.shortcut.recording": "הקש/הקישי שילוב חדש…",
-  "settings.agent.shortcut.reserved_warning": "השילוב שנבחר שמור לדפדפן ולא נקלט. נסה/נסי Alt+ או Ctrl+Shift+",
   "settings.agent.trust.ask": "באישור בלבד",
   "settings.agent.trust.auto_safe": "אוטומטי רק בפעולות בטוחות",
   "settings.agent.trust.description": "אילו פעולות הסוכן יכול לבצע בלי לבקש אישור בכל פעם",
@@ -4958,7 +5009,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.keys.verify_failed_toast": "לא ניתן היה לאמת את המפתח. נסה/י שוב.",
   "settings.keys.verifying": "באימות…",
   "settings.saved": "ההגדרה נשמרה",
-  "settings.subtitle": "התאם/התאימי את ההעדפות וברירות המחדל",
   "settings.tab.about": "אודות",
   "settings.tab.account": "חשבון",
   "settings.tab.admin": "ניהול",
@@ -5126,6 +5176,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "sidebar.resume": "המשך/המשיכי",
   "sidebar.resume.failed": "לא ניתן להמשיך את ההרצה",
   "sidebar.resume.success": "ההרצה ממשיכה",
+  "sidebar.row_menu": "פעולות נוספות",
   "sidebar.shared.empty": "עדיין אין כאן ריצות משותפות",
   "sidebar.shared.empty.hint": "עמיתים יכולים לשתף איתכם ריצה מעמוד הפרטים שלה.",
   "sidebar.tab.aria": "סינון ריצות",
@@ -5227,7 +5278,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.dataset.library_loaded": "נטען «{name}» ({count} שורות)",
   "submit.dataset.library_or": "או",
   "submit.dataset.library_pick": "בחר/י מהספרייה",
-  "submit.dataset.library_picker_subtitle": "טען/טעני {term.dataset} שמור עם מיפוי העמודות שלו",
   "submit.dataset.library_picker_title": "בחירת {term.dataset} מהספרייה",
   "submit.dataset.library_search": "חיפוש {term.dataset}…",
   "submit.dataset.library_search_empty": "לא נמצאו דאטאסטים תואמים",
@@ -5271,6 +5321,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.react.section_title": "הגדרות סוכן ReAct",
   "submit.react.tool_no_description": "ללא תיאור",
   "submit.react.tool_source_label": "מקור הכלים",
+  "submit.react.tools_access": "גישה לכלים",
+  "submit.react.tools_all": "כל הכלים שהשרת מציע",
+  "submit.react.tools_count": "{p1} כלים מאושרים",
   "submit.react.tools_list_label": "כלים מחוברים",
   "submit.react.tools_next": "כלים הבאים",
   "submit.react.tools_prev": "כלים קודמים",
@@ -5420,12 +5473,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.library.save": "שמירה לספרייה",
   "tagger.library.save_failed": "שגיאה בשמירת הדאטאסט לספרייה",
   "tagger.library.saved": "«{name}» נשמר לספרייה",
-  "tagger.move.confirm_body": "הדאטה יישמר כדאטאסט חדש בספרייה, וסשן התיוג יימחק. לא ניתן לבטל את הפעולה.",
   "tagger.move.confirm_title": "להעביר לדאטאסטים?",
   "tagger.move.cta": "העברה לדאטאסטים",
   "tagger.move.failed": "שגיאה בהעברת הדאטה לדאטאסטים",
   "tagger.move.moved": "«{name}» הועבר לדאטאסטים",
-  "tagger.move.subtitle": "התיוג הושלם. העבירו את הדאטה לדאטאסטים לשימוש חוזר — סשן התיוג יימחק, והגדרות השיתוף יעברו יחד איתו.",
   "tagger.move.title": "העברה לספריית הדאטאסטים",
   "tagger.page.title": "תיוג טקסט",
   "tagger.results.back": "חזרה לתצוגה הכללית",
@@ -5439,7 +5490,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.results.recap.ai_auto": "תויגו אוטומטית",
   "tagger.results.recap.ai_confirmed": "תיוגי AI שאישרתם",
   "tagger.results.recap.human": "תויגו על ידיכם",
-  "tagger.results.recap.subtitle": "כל {total} השורות מתויגות. הנה מי עשה מה.",
   "tagger.results.recap.title": "הדאטה תויג",
   "tagger.results.recap.tokens": "אסימונים",
   "tagger.results.recap.tokens_hint": "צריכת התיוג האוטומטי",
@@ -5478,20 +5528,32 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.setup.synthetic_pick": "יצירת דאטאסט סינתטי",
   "tagger.setup.synthetic_source_name": "דאטאסט סינתטי",
   "tagger.upload.parse_failed": "טעינת הקובץ נכשלה",
-  "tooltip.analytics.dataset_size_vs_improvement": "האם יותר נתונים מובילים ל{term.scoreImprovement} טוב יותר — כל נקודה היא {term.optimization} אחת",
-  "tooltip.analytics.improvement_per_minute": "אחוזי {term.scoreImprovement} לכל דקת {term.optimizationTypeRun} — ערך גבוה משמעו {term.optimization} יעילה יותר",
-  "tooltip.analytics.runtime_minutes": "משך ה{term.optimizationTypeRun} בדקות לכל {term.optimization} שהושלמה",
-  "tooltip.analytics.runtime_vs_gain": "ניתוח זמני {term.optimizationTypeRun} ויעילות — כמה שיפור מתקבל ביחס לזמן",
-  "tooltip.analytics.score_comparison": "השוואת {term.baselineScore} מול ה{term.optimizedScore} לכל {term.optimization} שהושלמה",
-  "tooltip.analytics.submissions_per_day": "מספר ה{term.optimizationPlural} שהוגשו לפי יום",
+  "tooltip.analytics.dataset_buckets": "עמודות לכל טווח גודל {term.dataset}, והקו מציג את ה{term.scoreImprovement} הממוצע באותו טווח",
+  "tooltip.analytics.improvement_histogram": "כמה {term.optimizationPlural} הגיעו לכל טווח {term.scoreImprovement} (בנקודות אחוז)",
+  "tooltip.analytics.leaderboard": "ה{term.optimizationPlural} עם ה{term.scoreImprovement} הגבוה ביותר — לחיצה פותחת את הדף שלה",
+  "tooltip.analytics.optimizer_comparison": "אחוז הצלחה, שיפור ממוצע וזמן ריצה ממוצע לכל {term.optimizer} — לחיצה על שורה מסננת לפיו",
+  "tooltip.analytics.runtime_histogram": "כמה {term.optimizationPlural} הסתיימו בכל טווח זמן ריצה",
+  "tooltip.analytics.submissions_per_day": "מספר ה{term.optimizationPlural} שהוגשו בכל יום, שבוע או חודש — הרזולוציה נבחרת לפי טווח הזמן — בפילוח לפי הצלחה וכישלון",
   "tooltip.code.metric": "פונקציה שמודדת את איכות ה{term.prediction} — מחזירה {term.score} מספרי לכל {term.example}",
   "tooltip.code.predictions_table": "תוצאות הרצת ה{term.program} על דוגמאות הבדיקה — {term.score} לכל {term.example} וסיכום כולל",
   "tooltip.code.signature": "הגדרת שדות הקלט והפלט של ה{term.task} — מה ה{term.model} מקבל ומה הוא צריך להחזיר",
   "tooltip.code.signature_metric": "קוד המקור של ה{term.signature} ו{term.metric} שהוגדרו ל{term.optimization} זו",
   "tooltip.code.workflow": "תהליך העבודה כפי שקומפל ל{term.program} של DSPy — ה{term.signature} של כל צומת עם הפרומפט ההתחלתי שלו — לצד קוד ה{term.metric} והגרף עצמו",
+  "tooltip.config.all_generation_models": "האם ה{term.optimizationTypeGrid} השתמשה בכל {term.generationModelPlural} שהיו זמינים בעת השליחה, במקום ברשימה שנבחרה ידנית",
+  "tooltip.config.all_reflection_models": "האם ה{term.optimizationTypeGrid} השתמשה בכל מודלי המשוב שהיו זמינים בעת השליחה, במקום ברשימה שנבחרה ידנית",
+  "tooltip.config.compile_kwarg": "ארגומנט שהועבר לקריאת compile של ה{term.optimizer}",
+  "tooltip.config.description": "התיאור החופשי שהוזן בעת שליחת ה{term.optimization}",
+  "tooltip.config.model_pairs": "כמה צירופים של {term.generationModel} ו{term.reflectionModel} ה{term.optimizationTypeGrid} הריצה",
+  "tooltip.config.module_kwarg": "ארגומנט שהועבר לבנאי של ה{term.module}",
+  "tooltip.config.optimizer_kwarg": "ארגומנט שהועבר לבנאי של ה{term.optimizer}",
   "tooltip.config.section.data": "חלוקת ה{term.dataset} ל{term.splitTrain}, {term.splitVal} ו{term.splitTest}, והגדרות ערבוב",
+  "tooltip.config.section.general": "שם, סוג, נראות ומקור המפתחות, כפי שהוגדרו בעת שליחת ה{term.optimization}",
   "tooltip.config.section.models": "מודלי השפה שהוגדרו — {term.generationModelShort} לייצור תשובות, מודל משוב לניתוח שגיאות",
   "tooltip.config.section.summary": "ה{term.module}, ה{term.optimizer}, והפרמטרים שנבחרו ל{term.optimizationTypeRun} זו",
+  "tooltip.config.task_model": "מודל נוסף שנשמר בהגדרות הריצה, בנפרד מ{term.generationModel} ומ{term.reflectionModel}",
+  "tooltip.config.token_source": "פרטי הגישה שבהם רצו קריאות המודל: חיבור מנוהל שהגדיר מפעיל המערכת, או מפתח הספק המוצפן שלך",
+  "tooltip.config.tool_access": "אילו מהכלים שמקור הכלים מציע הסוכן הורשה להפעיל",
+  "tooltip.config.workflow": "גרף זרימת העבודה שה{term.optimization} שיפרה, לפי מספר הצמתים והקשרים",
   "tooltip.data.seed": "מספר התחלתי קבוע ששומר על אותה חלוקה ואותו ערבוב בכל הרצה חוזרת",
   "tooltip.data.shuffle_explanation": "מערבב את סדר השורות לפני ה{term.split}, כדי שסדר הקובץ לא ישפיע בטעות על התוצאות",
   "tooltip.data.split.test": "דוגמאות שמורות למדידה הסופית, אחרי שהפרומפט כבר נבחר",
@@ -5548,10 +5610,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tooltip.serve.integration_code": "דוגמאות קוד מוכנות להעתקה",
   "tooltip.serve.section_pair": "כתובת API וקטעי קוד לשילוב הזוג הנבחר באפליקציה שלך",
   "tooltip.serve.section_run": "כתובת API וקטעי קוד לשילוב ה{term.program} המשופרת באפליקציה שלך",
+  "tooltip.submit.column_roles": "קלט: מה שה{term.program} מקבלת בכל {term.example}. פלט: התשובה הנכונה שה{term.metric} משווה אליה. התעלמות: העמודה לא נכנסת לריצה",
+  "tooltip.submit.dataset_file": "הקובץ שהועלה. כל שורה בו היא {term.example} אחת שהריצה לומדת ממנה או נמדדת עליה",
+  "tooltip.submit.dataset_size": "כמה שורות ועמודות זוהו בקובץ. השורות מתחלקות בין {term.splitTrain}, {term.splitVal} ו{term.splitTest}",
   "tooltip.submit.depth": "כמה רחב החיפוש של GEPA: קל רץ מהר עם פחות ניסיונות; מעמיק בודק יותר אפשרויות ולוקח יותר זמן",
   "tooltip.submit.eval_rounds": "כמה פעמים להריץ הערכה מלאה כדי לבדוק מועמדים לפרומפט",
   "tooltip.submit.merge": "כשפעיל, GEPA יכול לבצע merge ולשלב רעיונות מכמה מועמדים טובים לפרומפט אחד",
   "tooltip.submit.metric_calls": "סך קריאות המדד (rollouts) שהריצה כולה רשאית לצרוך — יחידת התקציב מהמאמר של GEPA. הגדרה כאן עוקפת את סבבי ההערכה; בחירת עומק חיפוש עוקפת את שניהם",
+  "tooltip.submit.name": "שם קצר שמזהה את ה{term.optimization} ברשימת הריצות ובהשוואות. כדאי לציין מה מנסים לשפר",
+  "tooltip.submit.optimization_type": "{term.optimizationTypeRun} מבצעת {term.optimization} אחת עם זוג מודלים; {term.optimizationTypeGrid} חוזרת עליה לכל צירוף של {term.generationModel} ו{term.reflectionModel} ומשווה ביניהם",
+  "tooltip.submit.privacy": "פרטי: ה{term.optimization} לא מופיעה ב{term.exploreTitle}. ציבורי: היא מופיעה שם, וכל משתמש יכול למצוא אותה ולעיין בתוצאות",
   "tooltip.submit.pxn_parents": "כמה מועמדים שונים לשפר בכל סבב. ערך גבוה יותר בודק כיוונים מגוונים יותר, בעלות גבוהה יותר",
   "tooltip.submit.pxn_proposals": "כמה הצעות לייצר מכל מועמד. סך הכול נבדקים p×n מועמדים בכל סבב, במקביל",
   "tooltip.submit.reflection_minibatch": "כמה דוגמאות ה{term.model} בודק בכל סבב משוב כדי למצוא דפוסי שגיאה",
@@ -5561,6 +5629,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tooltip.tagger.multiclass_categories": "הגדר/הגדירי את הקטגוריות הזמינות לבחירה בזמן התיוג — לפחות שתיים",
   "tooltip.tagger.text_column": "בחר/י את העמודה שמכילה את הטקסט לתיוג. שאר העמודות יישמרו בייצוא",
   "tooltip.tagger.upload_file": "העלה/העלי קובץ CSV, JSON או Excel. כל שורה תהפוך לפריט לתיוג",
+  "trajectory.a11y.ghost_label": "הצעה שנדחתה ממועמד {parent}, ציון {score}",
   "trajectory.a11y.node_label": "מועמד {id}, דור {gen}, ציון {score}",
   "trajectory.a11y.tree_label": "עץ המועמדים של האופטימיזציה",
   "trajectory.chat.recorded_count": "{n} הודעות",
@@ -5645,7 +5714,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "trajectory.scrubber.label": "סינון לפי דור",
   "trajectory.scrubber.live": "חי",
   "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
-  "tutorial.menu.subtitle": "בחרו תהליך שתרצו להכיר. כל מדריך קצר וניתן להפעלה חוזרת.",
   "tutorial.step.artifact.body": "לשונית Artifact היא הפלט המשופר. אפשר לבדוק את הפרומפט הסופי, כלי ReAct שכווננו, קוד Flex שנכתב מחדש או צמתי workflow משופרים. מתפריט הייצוא מורידים תוכנית DSPy מוכנה להרצה, pickle כשזמין, JSON של הפרומפט, קוד Python משופר או CSV של הלוגים.",
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",
