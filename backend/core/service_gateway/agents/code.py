@@ -1422,18 +1422,25 @@ class ReactReplyStream:
     then feed every non-reasoning ``StreamResponse`` through ``reply_delta``.
     """
 
-    def __init__(self, program: dspy.Module, reply_field: str):
+    def __init__(self, program: dspy.Module, reply_field: str, lm: dspy.LM | None = None):
         """Bind to a constructed ReAct program and the signature's reply field.
 
         Args:
             program: The constructed ReAct/ReActV2 program (or subclass).
             reply_field: Output field carrying the user-visible reply — a
                 ``submit`` arg on ReActV2, an ``extract`` output on classic ReAct.
+            lm: The LM the loop runs on; defaults to the active ``dspy.settings.lm``.
         """
         self._program = program
         self._reply_field = reply_field
         self._uses_submit = react_uses_submit(program)
-        self._native = self._uses_submit and native_tool_calling_active()
+        lm = lm or getattr(dspy.settings, "lm", None)
+        # The adapter only sends native tools when the LM also claims support;
+        # otherwise it silently falls back to the text protocol, and a native
+        # listener would never see the reply.
+        self._native = (
+            self._uses_submit and native_tool_calling_active() and (lm is None or bool(lm.supports_function_calling))
+        )
         self._stream_field = "tool_calls" if self._uses_submit else reply_field
         if not self._uses_submit:
             self._extractor = None
@@ -2575,7 +2582,7 @@ async def _run_agent(
     # The user's ``reply`` rides a ``submit`` tool call on ReActV2 or a separate
     # ``extract`` predictor on classic ReAct; ``ReactReplyStream`` wires the right
     # listeners and decodes whichever shape into reply deltas.
-    reply_stream = ReactReplyStream(react, "reply")
+    reply_stream = ReactReplyStream(react, "reply", lm)
     program = dspy.streamify(
         react,
         stream_listeners=reply_stream.listeners(),
@@ -2846,7 +2853,7 @@ async def _run_workflow_agent(
         ],
         max_iters=8,
     )
-    reply_stream = ReactReplyStream(react, "reply")
+    reply_stream = ReactReplyStream(react, "reply", lm)
     program = dspy.streamify(
         react,
         stream_listeners=reply_stream.listeners(),

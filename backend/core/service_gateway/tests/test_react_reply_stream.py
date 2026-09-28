@@ -200,6 +200,26 @@ def test_submit_program_defaults_to_text_protocol(monkeypatch: pytest.MonkeyPatc
     assert not isinstance(stream.listeners()[0], NativeToolCallStreamListener)
 
 
+def test_native_adapter_falls_back_to_text_when_lm_lacks_tool_calling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The adapter sends no native tools to an LM without tool-calling, so the text extractor must stream."""
+    monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: True)
+    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    stream = ReactReplyStream(_SubmitProgram(base.react), "reply", SimpleNamespace(supports_function_calling=False))
+
+    assert stream._native is False
+    assert isinstance(stream._extractor, _SubmitArgExtractor)
+
+
+def test_native_listener_kept_when_lm_supports_tool_calling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An LM that claims tool-calling keeps the native listener."""
+    monkeypatch.setattr(code_module, "native_tool_calling_active", lambda: True)
+    base = REACT_CLASS(_Sig, tools=[_noop], max_iters=3)
+    stream = ReactReplyStream(_SubmitProgram(base.react), "reply", SimpleNamespace(supports_function_calling=True))
+
+    assert stream._native is True
+    assert isinstance(stream._extractor, _NativeSubmitArgExtractor)
+
+
 def test_native_submit_program_decodes_provider_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """Native calling: the submit call's provider ``arguments`` reconstruct the reply.
 

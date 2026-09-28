@@ -1769,7 +1769,7 @@ async def _drive_generalist_agent(
         # otherwise delegate to an ``aforward`` the class never defines
         # (AttributeError on the first turn), and classic ReAct's async path is
         # likewise bypassed — streaming behaviour and listeners are unchanged.
-        reply_stream = ReactReplyStream(react, "assistant_message")
+        reply_stream = ReactReplyStream(react, "assistant_message", lm)
         program = dspy.streamify(
             react,
             stream_listeners=reply_stream.listeners(),

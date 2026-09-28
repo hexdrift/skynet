@@ -194,7 +194,7 @@ async def _drive_react_chat(
         input_fields = list(signature_cls.input_fields)
         primary_out = output_fields[0] if output_fields else None
 
-        reply_stream = ReactReplyStream(program, primary_out) if primary_out else None
+        reply_stream = ReactReplyStream(program, primary_out, lm) if primary_out else None
         listeners = (
             reply_stream.listeners()
             if reply_stream is not None
