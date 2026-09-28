@@ -23,14 +23,12 @@ import {
   Play,
   Pause,
   HardDrive,
-  RocketLaunch,
   GridFour,
   Package,
 } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 
 import { Button } from "@/shared/ui/primitives/button";
-import { Badge } from "@/shared/ui/primitives/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/primitives/tabs";
 import { PingDot } from "@/shared/ui/ping-dot";
 import { markRecentSession } from "@/shared/lib/recent-session";
@@ -80,7 +78,6 @@ import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/shared/constants/job-statu
 import { registerTutorialHook } from "@/features/tutorial";
 import type { OptimizationStatusResponse, OptimizationPayloadResponse } from "@/shared/types/api";
 import type { SharedOptimizationData } from "@/shared/lib/api";
-import type { PipelineStage } from "../constants";
 import { extractScoresFromLogs } from "../lib/extract-scores";
 import { isReactModuleName } from "../lib/is-react-module";
 import { reconstructGridResult } from "../lib/reconstruct-grid";
@@ -92,7 +89,6 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { ConfigTab } from "./ConfigTab";
 import { CodeTab } from "./CodeTab";
 import { ArtifactTab } from "./ArtifactTab";
-import { StageInfoModal } from "./StageInfoModal";
 import { PairSelectionStrip } from "./PairSelectionStrip";
 import { OverviewTab } from "./OverviewTab";
 import { GridServeTab } from "./GridServeTab";
@@ -359,7 +355,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const [serveError, setServeError] = useState<string | null>(null);
-  const [stageModal, setStageModal] = useState<PipelineStage | null>(null);
 
   const activePairIndex =
     searchParams.get("pair") != null ? parseInt(searchParams.get("pair")!, 10) : null;
@@ -1067,22 +1062,12 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 />
               </span>
               <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
-                <Badge
-                  variant="outline"
-                  className="gap-1.5 border-[#C8A882]/45 bg-[#C8A882]/15 font-semibold text-[0.6875rem] text-[#3D2E22] [&>svg]:text-[#8a6d44]"
-                >
-                  {job.optimization_type === "grid_search" ? (
-                    <>
-                      <GridFour />
-                      {msg("auto.app.optimizations.id.page.literal.2")}
-                    </>
-                  ) : (
-                    <>
-                      <RocketLaunch />
-                      {msg("auto.app.optimizations.id.page.literal.3")}
-                    </>
-                  )}
-                </Badge>
+                {job.optimization_type === "grid_search" && (
+                  <span className="flex items-center gap-1.5">
+                    <GridFour className="size-3.5" />
+                    {msg("auto.app.optimizations.id.page.literal.2")}
+                  </span>
+                )}
                 <LiveElapsedBadge
                   isActive={isActive}
                   startedAt={startedAt}
@@ -1430,7 +1415,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
                 scorePoints={isPairContext ? pairScorePoints : scorePoints}
                 activePairIndex={activePairIndex}
                 activePair={activePair}
-                onStageClick={setStageModal}
                 onPairSelect={handlePairSelect}
                 onPairDeleted={handlePairDeleted}
                 trajectoryPreviewLayout={
@@ -1530,8 +1514,6 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
           </Tabs>
         );
       })()}
-
-      <StageInfoModal stage={stageModal} job={job} onClose={() => setStageModal(null)} />
     </div>
   );
 }

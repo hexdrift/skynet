@@ -18,6 +18,9 @@ export function detectStage(job: OptimizationStatusResponse): PipelineStage {
   // Check progress events (works for both single-run and grid search)
   if (eventNames.includes("optimized_evaluated") || eventNames.includes("grid_pair_completed"))
     return "done";
+  // Every flow (DSPy, react) fires this once its optimizer is done and the
+  // final held-out scoring of the winner begins.
+  if (eventNames.includes("evaluation_started")) return "evaluating";
   if (eventNames.includes("optimizer_progress")) return "optimizing";
   if (eventNames.includes("baseline_evaluated")) return "optimizing";
   if (eventNames.includes("grid_pair_started")) return "baseline";
@@ -34,7 +37,13 @@ export function detectStage(job: OptimizationStatusResponse): PipelineStage {
     eventNames.includes("candidate_rejected")
   )
     return "optimizing";
-  if (eventNames.includes("dataset_splits_ready")) return "baseline";
+  const splits = events.find((e) => e.event === "dataset_splits_ready");
+  if (splits) {
+    // A baseline is only measured on a test split, so without one the
+    // optimizer starts right after splitting.
+    if (splits.metrics?.test_examples === 0) return "optimizing";
+    return "baseline";
+  }
 
   // Fallback: use latest_metrics hints (e.g. tqdm from optimizer)
   if (metrics.tqdm_desc || metrics.tqdm_percent != null) return "optimizing";
@@ -69,6 +78,7 @@ export function detectPairStage(job: OptimizationStatusResponse, pairIndex: numb
   if (pairEventNames.includes("grid_pair_failed")) return "done";
   if (pairEventNames.includes("grid_pair_completed")) return "done";
   if (pairEventNames.includes("optimized_evaluated")) return "evaluating";
+  if (pairEventNames.includes("evaluation_started")) return "evaluating";
   if (pairEventNames.includes("baseline_evaluated")) return "optimizing";
   if (pairEventNames.includes("grid_pair_started")) return "baseline";
 
