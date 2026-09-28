@@ -105,7 +105,12 @@ export function TutorialMenu() {
         onCloseAutoFocus={(e) => {
           // Focus returning to the trigger opens its tooltip, which would then
           // sit above the tour's dimmed overlay for the whole first step.
-          if (trackChosenRef.current) e.preventDefault();
+          // The menu stays mounted between opens, so reset the flag or every
+          // later plain close would also skip returning focus to the trigger.
+          if (trackChosenRef.current) {
+            trackChosenRef.current = false;
+            e.preventDefault();
+          }
         }}
         className="z-50 w-[min(calc(100vw-24px),360px)] max-w-none origin-[var(--radix-popover-content-transform-origin)] rounded-2xl border border-border/40 bg-card py-1.5 shadow-[0_4px_24px_rgba(28,22,18,0.1)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none"
       >
