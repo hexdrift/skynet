@@ -703,36 +703,81 @@ export interface DashboardAnalyticsJob {
   created_at?: string | null;
 }
 
+export interface DashboardAnalyticsNameValue {
+  name: string;
+  value: number;
+}
+
+/**
+ * Histogram bucket for `[lower, upper)`; `null` marks an open end so the first
+ * and last buckets absorb every outlier.
+ */
+export interface DashboardAnalyticsRangeBucket {
+  lower: number | null;
+  upper: number | null;
+  count: number;
+  avg_improvement: number | null;
+}
+
+export interface DashboardAnalyticsOptimizerStat {
+  name: string;
+  count: number;
+  success_count: number;
+  success_rate: number;
+  avg_improvement: number | null;
+  avg_runtime_minutes: number | null;
+}
+
+export interface DashboardAnalyticsModelStat {
+  name: string;
+  count: number;
+  success_count: number;
+  success_rate: number;
+  avg_improvement: number | null;
+}
+
+export interface DashboardAnalyticsTimelineBucket {
+  date: string;
+  count: number;
+  success_count: number;
+  failed_count: number;
+}
+
+export type DashboardAnalyticsGranularity = "day" | "week" | "month";
+
 export interface DashboardAnalytics {
   filtered_total: number;
   status_counts: Record<string, number>;
   optimizer_counts: Record<string, number>;
   job_type_counts: Record<string, number>;
-  model_usage: Array<{ name: string; value: number }>;
-  owner_usage: Array<{ name: string; value: number }>;
-  access_usage: Array<{ name: string; value: number }>;
+  owner_usage: DashboardAnalyticsNameValue[];
+  access_usage: DashboardAnalyticsNameValue[];
+  module_counts: Record<string, number>;
   success_count: number;
   failed_count: number;
   running_count: number;
   terminal_count: number;
   success_rate: number;
+  // Improvement aggregates are percentage points, mixed across metric kinds.
   avg_improvement: number | null;
+  median_improvement: number | null;
+  best_improvement: number | null;
   avg_runtime_seconds: number | null;
   total_dataset_rows: number;
   total_pairs_run: number;
   grid_search_count: number;
   single_run_count: number;
-  best_improvement: number | null;
-  improvement_by_optimizer: Array<{ name: string; average: number; count: number }>;
-  runtime_minutes_by_optimizer: Array<{ name: string; average: number; count: number }>;
-  top_improvement: DashboardAnalyticsJob[];
-  runtime_distribution: DashboardAnalyticsJob[];
-  dataset_vs_improvement: DashboardAnalyticsJob[];
-  efficiency: DashboardAnalyticsJob[];
+  improvement_histogram: DashboardAnalyticsRangeBucket[];
+  runtime_histogram: DashboardAnalyticsRangeBucket[];
+  dataset_size_buckets: DashboardAnalyticsRangeBucket[];
+  optimizer_stats: DashboardAnalyticsOptimizerStat[];
+  model_stats: DashboardAnalyticsModelStat[];
   top_jobs_by_improvement: DashboardAnalyticsJob[];
-  timeline: Array<{ date: string; count: number }>;
+  timeline: DashboardAnalyticsTimelineBucket[];
+  timeline_granularity: DashboardAnalyticsGranularity;
   available_optimizers: string[];
   available_models: string[];
+  truncated: boolean;
 }
 
 export function getDashboardAnalytics(params?: {
@@ -740,22 +785,45 @@ export function getDashboardAnalytics(params?: {
   optimizer?: string;
   model?: string;
   status?: string;
-  optimization_id?: string;
   date?: string;
+  days?: number;
   include_shared?: boolean;
   owner?: string;
   access?: string;
+  date_to?: string;
+  job_type?: string;
+  module?: string;
+  improvement_min?: number | null;
+  improvement_max?: number | null;
+  runtime_min?: number | null;
+  runtime_max?: number | null;
+  dataset_min?: number | null;
+  dataset_max?: number | null;
 }) {
   const q = new URLSearchParams();
   if (params?.username) q.set("username", params.username);
   if (params?.optimizer) q.set("optimizer", params.optimizer);
   if (params?.model) q.set("model", params.model);
   if (params?.status) q.set("status", params.status);
-  if (params?.optimization_id) q.set("optimization_id", params.optimization_id);
   if (params?.date) q.set("date", params.date);
+  if (params?.date_to) q.set("date_to", params.date_to);
+  if (params?.days) q.set("days", String(params.days));
   if (params?.include_shared) q.set("include_shared", "true");
   if (params?.owner) q.set("owner", params.owner);
   if (params?.access) q.set("access", params.access);
+  if (params?.job_type) q.set("job_type", params.job_type);
+  if (params?.module) q.set("module", params.module);
+  for (const key of [
+    "improvement_min",
+    "improvement_max",
+    "runtime_min",
+    "runtime_max",
+    "dataset_min",
+    "dataset_max",
+  ] as const) {
+    const value = params?.[key];
+    if (value != null) q.set(key, String(value));
+  }
   const qs = q.toString();
   return cachedGet<DashboardAnalytics>(`/analytics/dashboard${qs ? `?${qs}` : ""}`);
 }

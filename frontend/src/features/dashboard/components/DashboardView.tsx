@@ -109,10 +109,17 @@ export function DashboardView() {
     activeTab,
     model: analyticsFilters.model,
     status: analyticsFilters.status,
-    jobId: analyticsFilters.jobId,
+    range: analyticsFilters.range,
+    optimizer: analyticsFilters.optimizer,
     date: analyticsFilters.date,
+    dateTo: analyticsFilters.dateTo,
     owner: analyticsFilters.owner,
     access: analyticsFilters.access,
+    jobType: analyticsFilters.jobType,
+    module: analyticsFilters.module,
+    improvement: analyticsFilters.improvement,
+    runtime: analyticsFilters.runtime,
+    dataset: analyticsFilters.dataset,
   });
 
   // Demo overlay state — tutorial injects fake data here so background
@@ -390,6 +397,7 @@ export function DashboardView() {
                   chartData={chartData}
                   filters={analyticsFilters}
                   sessionUser={sessionUser}
+                  onOpenJob={(id) => router.push(`/optimizations/${id}`)}
                 />
               </TabsContent>
             </Tabs>
